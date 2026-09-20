@@ -93,6 +93,7 @@ fn increment() -> ExecFn {
             vec![Stmt::Let {
                 var: out_id,
                 equation: out_is,
+                ty: None,
                 value: add_one(n.clone()),
             }],
             Tail::Value(Term::tuple(
@@ -108,7 +109,7 @@ fn increment() -> ExecFn {
 #[test]
 fn a_dependent_result_and_a_caller_that_reuses_its_evidence() {
     let world = world();
-    let mut program = Program::new(world.definitions);
+    let mut program = Program::new((*world.definitions).clone());
     let increment = program.declare(increment()).unwrap();
 
     // fn twice(n: u8) -> (out: u8, @[out == n.wrapping_add(1).wrapping_add(1)]) {
@@ -250,7 +251,7 @@ fn preserve(use_the_fact: bool) -> ExecFn {
 #[test]
 fn each_branch_of_an_if_learns_the_condition() {
     let world = world();
-    let mut program = Program::new(world.definitions);
+    let mut program = Program::new((*world.definitions).clone());
     assert!(program.declare(preserve(true)).is_ok());
     assert!(matches!(
         program.declare(preserve(false)),
@@ -264,7 +265,7 @@ fn an_enum_carries_the_decision_and_its_evidence() {
     //     if n == 0 { Classified::Zero(n, _) } else { Classified::NonZero(n, _) }
     // }
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     let (n_id, n) = var();
     let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
     let (when_false, when_true) = (HypId::fresh(), HypId::fresh());
@@ -417,6 +418,7 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
             Stmt::Let {
                 var: next_id,
                 equation: next_is,
+                ty: None,
                 value: add_one(i.clone()),
             },
             Stmt::Have {
@@ -485,7 +487,7 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
 #[test]
 fn a_loop_invariant_is_state_evidence() {
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     assert_eq!(
         program.declare(bounded_walk(&world, true)).map(|_| ()),
         Ok(())
@@ -525,7 +527,7 @@ fn a_divergent_function_may_advertise_a_proof_of_false() {
     // becomes a theorem: a kernel term has no way to name an ordinary
     // function, so no math function or lemma can call spin.
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     let spin = program.declare(spin(&world.prelude)).unwrap();
 
     let (impossible_id, impossible) = var();
@@ -558,7 +560,7 @@ fn returns_u8(params: Vec<VarId>, arity: usize, body: Block) -> ExecFn {
 #[test]
 fn control_flow_is_checked() {
     let world = world();
-    let mut program = Program::new(world.definitions);
+    let mut program = Program::new((*world.definitions).clone());
     let (out_id, out) = var();
 
     // A loop body that produces a value instead of breaking or continuing.
@@ -639,12 +641,13 @@ fn control_flow_is_checked() {
 #[test]
 fn a_ghost_cannot_reach_executable_data_or_control() {
     let world = world();
-    let mut program = Program::new(world.definitions);
+    let mut program = Program::new((*world.definitions).clone());
     // let k = of_nat(to_nat(n)) is a u8 that only logic can compute: to_nat
     // has no runtime form. So k is ghost.
     let ghost_let = |k: VarId, n: &Term| Stmt::Let {
         var: k,
         equation: HypId::fresh(),
+        ty: None,
         value: Term::of_nat(Term::to_nat(n.clone())),
     };
 
@@ -707,7 +710,7 @@ fn a_ghost_cannot_reach_executable_data_or_control() {
 #[test]
 fn calls_and_bindings_are_checked() {
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
 
     // fn needs_three(n: u8, h: @[n == 3]) -> u8 { n }
     let (n_id, n) = var();
@@ -758,7 +761,7 @@ fn calls_and_bindings_are_checked() {
     ));
     // A function cannot be called before it exists, so it cannot call itself.
     let later = {
-        let mut bigger = Program::new(Rc::clone(&world.definitions));
+        let mut bigger = Program::new((*world.definitions).clone());
         for _ in 0..3 {
             bigger.declare(increment()).unwrap();
         }
@@ -781,11 +784,13 @@ fn calls_and_bindings_are_checked() {
                 Stmt::Let {
                     var: x_id,
                     equation: HypId::fresh(),
+                    ty: None,
                     value: Term::U8(1),
                 },
                 Stmt::Let {
                     var: x_id,
                     equation: HypId::fresh(),
+                    ty: None,
                     value: Term::U8(2),
                 },
             ],
@@ -808,6 +813,7 @@ fn calls_and_bindings_are_checked() {
             vec![Stmt::Let {
                 var: inner_id,
                 equation: HypId::fresh(),
+                ty: None,
                 value: Term::U8(1),
             }],
             Tail::Value(Term::U8(0)),
@@ -951,7 +957,7 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
 #[test]
 fn a_bounded_for_may_call_ordinary_functions_and_carries_an_indexed_invariant() {
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     let increment = program.declare(increment()).unwrap();
     assert_eq!(
         program
@@ -992,7 +998,7 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
     //     }
     // }
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     let plain_state = || {
         Type::function(1, |params| match params {
             [] => Type::U8,
@@ -1049,7 +1055,7 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
 #[test]
 fn a_for_checks_its_bounds_and_state_shape() {
     let world = world();
-    let mut program = Program::new(Rc::clone(&world.definitions));
+    let mut program = Program::new((*world.definitions).clone());
     let build = |hi_is_ghost: bool, state: Type| {
         let (n_id, n) = var();
         let (k_id, k) = var();
@@ -1064,6 +1070,7 @@ fn a_for_checks_its_bounds_and_state_shape() {
                     Stmt::Let {
                         var: k_id,
                         equation: HypId::fresh(),
+                        ty: None,
                         value: Term::of_nat(Term::to_nat(n)),
                     },
                     Stmt::For(Box::new(ForStmt {
@@ -1124,7 +1131,7 @@ fn a_logical_only_function_cannot_be_called_from_executable_code() {
             |params| Term::of_nat(params[0].clone()),
         )
         .unwrap();
-    let mut program = Program::new(Rc::new(definitions));
+    let mut program = Program::new(definitions);
     let applied = Term::call(Term::Fn(narrow), vec![Term::nat(1)]);
     let leak = returns_u8(vec![], 0, block(vec![], Tail::Value(applied.clone())));
     assert_eq!(
@@ -1140,6 +1147,7 @@ fn a_logical_only_function_cannot_be_called_from_executable_code() {
             vec![Stmt::Let {
                 var: k_id,
                 equation: HypId::fresh(),
+                ty: None,
                 value: applied,
             }],
             Tail::Value(k),

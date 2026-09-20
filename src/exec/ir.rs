@@ -28,11 +28,13 @@ pub struct Block {
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    /// `let var = value`, for a pure, total value. The checker declares
-    /// `var` and assumes `var == value` as `equation`.
+    /// `let var: ty = value`, for a pure, total value. The checker declares
+    /// `var` and assumes `var == value` as `equation`; a proof has no
+    /// equation. When an annotation is given, the value must have that type.
     Let {
         var: VarId,
         equation: HypId,
+        ty: Option<Type>,
         value: Term,
     },
     /// `let hyp: @claim = proof`. The proof is checked where it stands, and

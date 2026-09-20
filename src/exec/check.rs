@@ -66,7 +66,7 @@ impl std::error::Error for ExecError {}
 /// itself, directly or indirectly.
 #[derive(Clone, Debug)]
 pub struct Program {
-    definitions: Rc<Definitions>,
+    definitions: Definitions,
     fns: Vec<ExecFn>,
 }
 
@@ -79,11 +79,26 @@ struct Target<'a> {
 }
 
 impl Program {
-    pub fn new(definitions: Rc<Definitions>) -> Self {
+    pub fn new(definitions: Definitions) -> Self {
         Self {
             definitions,
             fns: Vec::new(),
         }
+    }
+
+    pub fn definitions(&self) -> &Definitions {
+        &self.definitions
+    }
+
+    /// For adding kernel declarations between functions. Declarations only
+    /// grow, so functions already accepted stay accepted.
+    pub fn definitions_mut(&mut self) -> &mut Definitions {
+        &mut self.definitions
+    }
+
+    /// The signature of a declared function.
+    pub fn signature(&self, id: ExecFnId) -> Option<&Type> {
+        self.fns.get(id.0).map(|function| &function.signature)
     }
 
     /// Checks a function and, if it is accepted, declares it.
@@ -94,7 +109,7 @@ impl Program {
     }
 
     fn check_fn(&self, function: &ExecFn) -> Result<(), ExecError> {
-        let mut ctx = Context::with_definitions(Rc::clone(&self.definitions));
+        let mut ctx = Context::with_definitions(Rc::new(self.definitions.clone()));
         check_type(&mut ctx, &function.signature)?;
         let Type::Fn(params, _) = &function.signature else {
             return Err(ExecError::BadSignature);
@@ -169,10 +184,19 @@ impl Program {
             Stmt::Let {
                 var,
                 equation,
+                ty,
                 value,
             } => {
-                ctx.define_with(*var, *equation, value)?;
-                Ok(())
+                let found = ctx.define_with(*var, *equation, value)?;
+                match ty {
+                    Some(expected) if !same_type(&found, expected) => {
+                        Err(ExecError::Kernel(KernelError::TypeMismatch {
+                            expected: expected.clone(),
+                            found,
+                        }))
+                    }
+                    _ => Ok(()),
+                }
             }
             Stmt::Have { hyp, claim, proof } => {
                 check_proof(ctx, proof, claim)?;

@@ -127,7 +127,9 @@ impl Context {
     }
 
     /// An immutable `let`, as `define`, with chosen identities: declares
-    /// `var` and assumes `var == value` as `equation`. Returns the type.
+    /// `var` and assumes `var == value` as `equation`. Returns the type. When
+    /// the value is a proof, `var` is declared with its proof type and there
+    /// is no equation.
     pub fn define_with(
         &mut self,
         var: VarId,
@@ -137,6 +139,11 @@ impl Context {
         let ghost = infer_term(self, value, Mode::Executable).is_err();
         let ty = infer_term(self, value, Mode::Logical)?;
         self.declare_with(var, ty.clone(), ghost)?;
+        // A proof has no defining equation: equality between proofs is not a
+        // proposition, and nothing could depend on it.
+        if matches!(ty, Type::Proof(_)) {
+            return Ok(ty);
+        }
         let claim = Term::eq(ty.clone(), Term::Free(var), value.clone());
         match self.assume_with(equation, claim) {
             Ok(()) => Ok(ty),

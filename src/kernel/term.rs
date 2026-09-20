@@ -133,6 +133,33 @@ impl Type {
         }
     }
 
+    /// The tuple telescope whose fields are the given variables, in order: a
+    /// field's type may mention the variables before it.
+    pub fn tuple_over(fields: &[(VarId, Type)]) -> Type {
+        let mut vars = Vec::new();
+        let mut telescope = Vec::new();
+        for (var, ty) in fields {
+            telescope.push(ty.close_over(&vars));
+            vars.push(*var);
+        }
+        Self::Tuple(telescope)
+    }
+
+    /// The function type with the given parameters, in order, and a result
+    /// type that may mention all of them.
+    pub fn function_over(params: &[(VarId, Type)], result: &Type) -> Type {
+        let Self::Tuple(telescope) = Self::tuple_over(params) else {
+            unreachable!("tuple_over builds a tuple type")
+        };
+        let vars: Vec<VarId> = params.iter().map(|(var, _)| *var).collect();
+        Self::Fn(telescope, Box::new(result.close_over(&vars)))
+    }
+
+    /// The type with every occurrence of the context variable replaced.
+    pub fn replace_var(&self, var: VarId, replacement: &Term) -> Type {
+        self.close_over(&[var]).open(replacement)
+    }
+
     /// Replaces the outermost bound variable of a type.
     pub(super) fn open(&self, replacement: &Term) -> Type {
         self.rebind(
@@ -681,6 +708,90 @@ impl Term {
             );
         }
         term
+    }
+
+    /// The term with every occurrence of the context variable replaced.
+    pub fn replace_var(&self, var: VarId, replacement: &Term) -> Term {
+        self.close(var).open(replacement)
+    }
+
+    /// The term with every use of the context hypothesis replaced by a
+    /// proof of the same proposition.
+    pub fn replace_hyp(&self, hyp: HypId, replacement: &Proof) -> Term {
+        self.rebind(Depth::default(), Rebind::CloseHyp(hyp))
+            .subst_hyps(&[replacement])
+    }
+
+    /// A case whose arms were written against identities the caller chose:
+    /// each arm gives its payload variables, the identity of its fact, and
+    /// its body.
+    pub fn case_with(scrutinee: Term, result: Type, arms: Vec<(Vec<VarId>, HypId, Term)>) -> Self {
+        let arms = arms
+            .into_iter()
+            .map(|(vars, fact, body)| TermArm {
+                binders: vars.len() as u32,
+                body: body
+                    .close_over(&vars)
+                    .rebind(Depth::default(), Rebind::CloseHyp(fact)),
+            })
+            .collect();
+        Self::Case {
+            scrutinee: Box::new(scrutinee),
+            result,
+            arms,
+        }
+    }
+
+    /// A `for` written against identities the caller chose. `state` lists
+    /// the state variables with their types, which may mention `index` and
+    /// the state variables before them. `next` gives the state for the
+    /// following index, as one term per state variable, and may mention the
+    /// index, the state variables, and the two facts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_with(
+        index: VarId,
+        lower: HypId,
+        upper: HypId,
+        lo: Term,
+        hi: Term,
+        ordered: Proof,
+        state: &[(VarId, Type)],
+        init: Vec<Term>,
+        next: Vec<Term>,
+    ) -> Self {
+        let Type::Tuple(telescope) = Type::tuple_over(state) else {
+            unreachable!("tuple_over builds a tuple type")
+        };
+        let at = |i: &Term| -> Vec<Type> {
+            match Type::Tuple(telescope.clone()).replace_var(index, i) {
+                Type::Tuple(fields) => fields,
+                _ => unreachable!("replacing a variable preserves the shape of a type"),
+            }
+        };
+        let i = Self::Free(index);
+        let successor = Self::wrapping_add(i.clone(), Self::U8(1));
+        // The body sees the state as one tuple, so each state variable
+        // becomes a projection from it.
+        let whole = VarId::fresh();
+        let mut body = Self::Tuple(at(&successor), next);
+        for (position, (var, _)) in state.iter().enumerate() {
+            body = body.replace_var(*var, &Self::proj(Self::Free(whole), position));
+        }
+        let body = body
+            .close_over(&[index, whole])
+            .rebind(Depth::default().under_hyps(1), Rebind::CloseHyp(lower))
+            .rebind(Depth::default(), Rebind::CloseHyp(upper));
+        let Type::Tuple(state_fields) = Type::Tuple(telescope.clone()).close_over(&[index]) else {
+            unreachable!("closing preserves the shape of a type")
+        };
+        Self::For(Box::new(ForLoop {
+            init: Self::Tuple(at(&lo), init),
+            lo,
+            hi,
+            ordered,
+            state: state_fields,
+            body,
+        }))
     }
 
     /// Builds `exists (x: ty) { body(x) }`.

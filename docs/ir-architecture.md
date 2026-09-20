@@ -59,6 +59,8 @@ The logical annotations are kernel-level: propositions and ghost values are kern
 
 The typed tree carries identities for everything the checker will bind: each `let`'s variable and its defining equation, each branch's and arm's fact, each arm's payload variables, each loop's state variables, and each call's result. The elaborator writes proofs against these identities, and `lower` uses the same ones, which is what keeps a proof written against the typed tree valid in the check IR.
 
+The nodes that stand for a place or a call carry their type (a variable, a field access, a call), and the control forms carry their result type. That is enough to tell, for any expression, whether its value is a proof, which both `lower` and `erase` need to know. Types here are kernel types written over the identities of the binders in scope; `lower` turns a signature or a loop's state into the telescope the kernel wants.
+
 The body of a math function is a source-shaped tree too, because it is printed like any other function. `lower` turns it into a kernel `Term`.
 
 The metadata the typed tree needs for faithful printing is modest and lives in the tree naturally: identifier and field names, literal spellings (the lexer keeps them), and documentation comments on declarations.
@@ -90,7 +92,13 @@ Pure terms are typed by the kernel in `Executable` mode, which is what enforces 
 
 Both are defined by recursion on the typed tree, against one stated evaluation order: left to right, as the specification says.
 
-`lower` is a desugaring: `if` to `case` on `bool`, nested expressions to let-normal form, operators and methods to primitives, patterns to projections and case arms, each binder to the identity the typed tree already gave it.
+`lower` is a desugaring: `if` to `case` on `bool`, nested expressions to let-normal form, operators and methods to primitives, patterns to projections and case arms, each binder to the identity the typed tree already gave it. It works item by item, in a session: each struct, enum, and function is checked as it is declared, and the identity it receives is what later items use to refer to it. In detail:
+
+- A pure expression becomes a kernel term. An expression is pure when evaluating it always returns and transfers no control: no call to an ordinary function, no `loop`, no `break` or `continue`. A bounded `for` is pure when its body is, apart from the `continue` that ends it, and then it becomes the kernel's `for` term; otherwise it becomes a statement of the check IR. The body of a math function must be pure.
+- An expression that is not pure is put in let-normal form: each step that may not return becomes a statement, in source order, under the identity the typed tree gave it. A nested call such as `increment(increment(n).0)` is two statements, and the tree had already named both results, so a proof can speak of either.
+- A kernel term has no `let`. In a pure block, each `let` is substituted into what follows, and the equation it would have provided becomes an instance of reflexivity. In a block of the check IR, a `let` is a statement and keeps its equation.
+- A condition that is a negation, `a != b`, branches on the comparison `a == b` with the branches exchanged, because branch facts are about the comparison performed, which is what the kernel's reflection axioms speak of.
+- The kernel wants a proof-typed position inside a term to hold `proof(...)`. A proof-typed variable, field, or call is a fine expression in the source, as in `break (i, bound)`, so `lower` wraps it as `proof(of_term(...))`.
 
 `erase` is a projection that preserves shape exactly (specification section 11). Each type becomes its erased type. A ghost position does not disappear: it is filled by a named zero-sized marker, `Proved` for a proof and `Ghost` for any other ghost value, which in the core means a proposition. So field positions, tuple arity, parameter lists, and patterns are the same in the output as in the source, and `erase` never renumbers, collapses, or moves anything.
 
