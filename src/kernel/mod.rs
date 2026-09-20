@@ -6,14 +6,16 @@
 //! Every rule implemented here is stated, with exact premises and conclusion,
 //! in `docs/kernel-contract.md`; the two must change together.
 //!
-//! Implemented so far: gate K1 of `docs/core-plan.md`.
+//! Implemented so far: gates K1 and K2 of `docs/core-plan.md`.
 
 mod check;
 mod context;
+mod defs;
 mod error;
 mod term;
 
-pub use check::{check_proof, infer_proof, infer_term, same};
+pub use check::{check_proof, check_type, infer_proof, infer_term, same, same_type};
 pub use context::{Context, Mode};
+pub use defs::Definitions;
 pub use error::KernelError;
-pub use term::{HypId, HypRef, Prim, Proof, Term, Type, VarId};
+pub use term::{HypId, HypRef, Prim, Proof, StructId, Term, Type, VarId};

@@ -1,7 +1,10 @@
 //! The kernel context: an ordered list of executable variables, ghost
 //! variables, and hypotheses.
 
-use super::check::infer_term;
+use std::rc::Rc;
+
+use super::check::{check_type, infer_term};
+use super::defs::Definitions;
 use super::error::KernelError;
 use super::term::{HypId, Term, Type, VarId};
 
@@ -22,23 +25,56 @@ enum Entry {
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
+    definitions: Rc<Definitions>,
     entries: Vec<Entry>,
 }
 
 impl Context {
+    /// An empty context over no declarations.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Declares an executable variable. A variable of a ghost type is ghost
-    /// however it is declared.
-    pub fn declare(&mut self, ty: Type) -> VarId {
-        let ghost = ty.is_ghost();
-        self.push_var(ty, ghost)
+    pub fn with_definitions(definitions: Rc<Definitions>) -> Self {
+        Self {
+            definitions,
+            entries: Vec::new(),
+        }
     }
 
-    pub fn declare_ghost(&mut self, ty: Type) -> VarId {
-        self.push_var(ty, true)
+    pub(super) fn definitions(&self) -> Rc<Definitions> {
+        Rc::clone(&self.definitions)
+    }
+
+    /// Declares an executable variable. The type must be well formed here.
+    /// A variable of a ghost type is ghost however it is declared.
+    pub fn declare(&mut self, ty: Type) -> Result<VarId, KernelError> {
+        check_type(self, &ty)?;
+        let ghost = ty.is_ghost();
+        Ok(self.push_var(ty, ghost))
+    }
+
+    pub fn declare_ghost(&mut self, ty: Type) -> Result<VarId, KernelError> {
+        check_type(self, &ty)?;
+        Ok(self.push_var(ty, true))
+    }
+
+    /// An immutable logical `let`: declares `x` and assumes `x == value`.
+    /// This is `declare` followed by `assume` and adds no rule of its own;
+    /// the equation is how the let computation axiom reaches the kernel.
+    /// The variable is executable when `value` is an executable term.
+    pub fn define(&mut self, value: &Term) -> Result<(VarId, HypId), KernelError> {
+        let ghost = infer_term(self, value, Mode::Executable).is_err();
+        let ty = infer_term(self, value, Mode::Logical)?;
+        let var = self.push_var(ty.clone(), ghost || ty.is_ghost());
+        let equation = Term::eq(ty, Term::Free(var), value.clone());
+        match self.assume(equation) {
+            Ok(hyp) => Ok((var, hyp)),
+            Err(error) => {
+                self.entries.pop();
+                Err(error)
+            }
+        }
     }
 
     /// Adds a hypothesis. The proposition must be well formed here.

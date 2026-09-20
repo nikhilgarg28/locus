@@ -1,6 +1,7 @@
 //! Acceptance tests for kernel gate K1 (docs/core-plan.md): terms, the
 //! three-kinded context with upgrade, comparison up to renaming, equality
 //! with reflexivity and transport, and internal `Forall` and `Implies`.
+//! Gate K2 is tested in `tests/kernel_products.rs`.
 //! Every term here is written by hand; nothing comes from the parser.
 
 use locus::kernel::{
@@ -55,7 +56,7 @@ fn reflexivity_does_not_compute() {
 #[test]
 fn a_fact_in_scope_discharges_an_identical_goal_only() {
     let mut ctx = Context::new();
-    let n = Term::var(ctx.declare(Type::U8));
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
     let fact = ctx.assume(u8_eq(n.clone(), Term::U8(3))).unwrap();
 
     let same_goal = u8_eq(n.clone(), Term::U8(3));
@@ -72,8 +73,8 @@ fn a_fact_in_scope_discharges_an_identical_goal_only() {
 #[test]
 fn a_ghost_variable_is_rejected_in_an_executable_term() {
     let mut ctx = Context::new();
-    let n = ctx.declare(Type::U8);
-    let k = ctx.declare_ghost(Type::U8);
+    let n = ctx.declare(Type::U8).unwrap();
+    let k = ctx.declare_ghost(Type::U8).unwrap();
     let sum = Term::wrapping_add(Term::var(n), Term::var(k));
 
     assert_eq!(
@@ -92,8 +93,8 @@ fn a_ghost_variable_is_rejected_in_an_executable_term() {
 #[test]
 fn ghost_and_executable_variables_mix_freely_inside_a_proposition() {
     let mut ctx = Context::new();
-    let n = Term::var(ctx.declare(Type::U8));
-    let k = Term::var(ctx.declare_ghost(Type::U8));
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
+    let k = Term::var(ctx.declare_ghost(Type::U8).unwrap());
     let claim = u8_eq(n, Term::wrapping_add(k.clone(), k));
     assert_eq!(infer_term(&mut ctx, &claim, Mode::Logical), Ok(Type::Prop));
     assert!(ctx.assume(claim).is_ok());
@@ -102,7 +103,7 @@ fn ghost_and_executable_variables_mix_freely_inside_a_proposition() {
 #[test]
 fn propositions_are_ghost_by_type() {
     let mut ctx = Context::new();
-    let p = ctx.declare(Type::Prop);
+    let p = ctx.declare(Type::Prop).unwrap();
     assert_eq!(
         infer_term(&mut ctx, &Term::var(p), Mode::Executable),
         Err(KernelError::GhostInExecutable(p))
@@ -119,8 +120,8 @@ fn propositions_are_ghost_by_type() {
 #[test]
 fn symmetry_by_transport() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
-    let b = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
+    let b = Term::var(ctx.declare(Type::U8).unwrap());
     let h = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
 
     let proof = symmetry(Proof::hyp(h), a.clone());
@@ -130,9 +131,9 @@ fn symmetry_by_transport() {
 #[test]
 fn transitivity_by_transport() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
-    let b = Term::var(ctx.declare(Type::U8));
-    let c = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
+    let b = Term::var(ctx.declare(Type::U8).unwrap());
+    let c = Term::var(ctx.declare(Type::U8).unwrap());
     let ab = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
     let bc = ctx.assume(u8_eq(b, c.clone())).unwrap();
 
@@ -149,8 +150,8 @@ fn transitivity_by_transport() {
 #[test]
 fn congruence_by_transport() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
-    let b = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
+    let b = Term::var(ctx.declare(Type::U8).unwrap());
     let h = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
 
     let left = add_one(a.clone());
@@ -168,8 +169,8 @@ fn congruence_by_transport() {
 #[test]
 fn transport_rewrites_every_occurrence_the_template_names_and_no_other() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
-    let b = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
+    let b = Term::var(ctx.declare(Type::U8).unwrap());
     let h = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
     let aa = ctx.assume(u8_eq(a.clone(), a.clone())).unwrap();
 
@@ -186,8 +187,8 @@ fn transport_rewrites_every_occurrence_the_template_names_and_no_other() {
 #[test]
 fn transport_checks_its_premise() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
-    let b = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
+    let b = Term::var(ctx.declare(Type::U8).unwrap());
     let h = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
 
     // The premise must prove template[a]; Refl(b) proves template[b] instead.
@@ -206,7 +207,7 @@ fn transport_checks_its_premise() {
 #[test]
 fn transport_needs_an_equality_and_a_propositional_template() {
     let mut ctx = Context::new();
-    let a = Term::var(ctx.declare(Type::U8));
+    let a = Term::var(ctx.declare(Type::U8).unwrap());
     let claim = u8_eq(a.clone(), a.clone());
     let not_eq = ctx
         .assume(Term::implies(claim.clone(), claim.clone()))
@@ -235,8 +236,8 @@ fn transport_needs_an_equality_and_a_propositional_template() {
 fn equality_between_propositions_transports_a_proof() {
     // The shape of unfolding a predicate: from p == q and a proof of p, get q.
     let mut ctx = Context::new();
-    let p = Term::var(ctx.declare(Type::Prop));
-    let q = Term::var(ctx.declare(Type::Prop));
+    let p = Term::var(ctx.declare(Type::Prop).unwrap());
+    let q = Term::var(ctx.declare(Type::Prop).unwrap());
     let p_is_q = ctx
         .assume(Term::eq(Type::Prop, p.clone(), q.clone()))
         .unwrap();
@@ -251,7 +252,7 @@ fn equality_between_propositions_transports_a_proof() {
 #[test]
 fn implication_introduction_and_elimination() {
     let mut ctx = Context::new();
-    let n = Term::var(ctx.declare(Type::U8));
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
     let claim = u8_eq(n, Term::U8(3));
 
     let identity = Proof::implies_intro(claim.clone(), |h| h);
@@ -307,7 +308,7 @@ fn universal_introduction_and_elimination() {
     let proof = Proof::forall_intro(Type::U8, Proof::Refl);
     assert_eq!(check_proof(&mut ctx, &proof, &all_self_equal), Ok(()));
 
-    let n = Term::var(ctx.declare(Type::U8));
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
     let at_n = Proof::forall_elim(proof.clone(), add_one(n.clone()));
     assert_eq!(
         infer_proof(&mut ctx, &at_n),
@@ -328,7 +329,7 @@ fn universal_introduction_and_elimination() {
 fn generalization_cannot_capture_a_context_variable() {
     // From a fact about one particular n, "forall x, x == 3" must not follow.
     let mut ctx = Context::new();
-    let n = Term::var(ctx.declare(Type::U8));
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
     let fact = ctx.assume(u8_eq(n, Term::U8(3))).unwrap();
 
     let bogus = Proof::forall_intro(Type::U8, |_| Proof::hyp(fact));
@@ -395,8 +396,8 @@ fn nested_binders_in_proofs_line_up() {
     assert_eq!(check_proof(&mut ctx, &proof, &statement), Ok(()));
 
     // Instantiate it at two context variables and apply it to a fact.
-    let x = Term::var(ctx.declare(Type::U8));
-    let y = Term::var(ctx.declare(Type::U8));
+    let x = Term::var(ctx.declare(Type::U8).unwrap());
+    let y = Term::var(ctx.declare(Type::U8).unwrap());
     let xy = ctx.assume(u8_eq(x.clone(), y.clone())).unwrap();
     let used = Proof::implies_elim(
         Proof::forall_elim(Proof::forall_elim(proof, x.clone()), y.clone()),

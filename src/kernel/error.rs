@@ -28,6 +28,25 @@ pub enum KernelError {
         expected: Term,
         found: Term,
     },
+    /// A product value or pattern with the wrong number of fields.
+    FieldCount {
+        expected: usize,
+        found: usize,
+    },
+    NoSuchField {
+        index: usize,
+        fields: usize,
+    },
+    NotAProduct(Type),
+    UnknownStruct,
+    /// A proof field of a product value must be written as a proof.
+    ProofExpected(Term),
+    /// `OfTerm` needs a term whose type is a proof type.
+    NotAProofType(Type),
+    /// Equality between proofs is not a proposition.
+    EqualityAtProofType(Type),
+    /// A computation axiom was applied to a term it does not reduce.
+    NoComputationStep(Term),
     NotAnEquality(Term),
     NotAnImplication(Term),
     NotUniversal(Term),
@@ -63,6 +82,22 @@ impl fmt::Display for KernelError {
                     "expected a proof of {expected}, found a proof of {found}"
                 )
             }
+            Self::FieldCount { expected, found } => {
+                write!(f, "expected {expected} fields, found {found}")
+            }
+            Self::NoSuchField { index, fields } => {
+                write!(f, "no field {index} in a product of {fields} fields")
+            }
+            Self::NotAProduct(ty) => write!(f, "expected a tuple or struct type, found {ty}"),
+            Self::UnknownStruct => f.write_str("struct is not declared"),
+            Self::ProofExpected(term) => {
+                write!(f, "a proof field must be given as a proof, found {term}")
+            }
+            Self::NotAProofType(ty) => write!(f, "expected a term of proof type, found {ty}"),
+            Self::EqualityAtProofType(ty) => {
+                write!(f, "equality cannot be formed at the proof type {ty}")
+            }
+            Self::NoComputationStep(term) => write!(f, "no computation step applies to {term}"),
             Self::NotAnEquality(prop) => write!(f, "expected a proof of an equality, found {prop}"),
             Self::NotAnImplication(prop) => {
                 write!(f, "expected a proof of an implication, found {prop}")
