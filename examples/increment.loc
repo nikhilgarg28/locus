@@ -1,0 +1,9 @@
+fn increment(n: Nat) -> (out: Nat, @[out == n + 1]) {
+    let out = n + 1;
+    (out, _)
+}
+
+fn consume(n: Nat) -> Nat {
+    let (value, _) = increment(n);
+    value
+}

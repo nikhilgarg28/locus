@@ -1,0 +1,7 @@
+fn preserve(n: Nat) -> (out: Nat, @[out == n]) {
+    if n == 0 {
+        (0, _)
+    } else {
+        (n, _)
+    }
+}

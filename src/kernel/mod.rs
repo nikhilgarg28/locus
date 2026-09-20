@@ -1,0 +1,19 @@
+//! The Locus proof kernel.
+//!
+//! This module is independent of the surface syntax: it checks explicit
+//! kernel terms and nothing else. It performs no search, no inference beyond
+//! reading a proof's conclusion off its structure, and no normalization.
+//! Every rule implemented here is stated, with exact premises and conclusion,
+//! in `docs/kernel-contract.md`; the two must change together.
+//!
+//! Implemented so far: gate K1 of `docs/core-plan.md`.
+
+mod check;
+mod context;
+mod error;
+mod term;
+
+pub use check::{check_proof, infer_proof, infer_term, same};
+pub use context::{Context, Mode};
+pub use error::KernelError;
+pub use term::{HypId, HypRef, Prim, Proof, Term, Type, VarId};

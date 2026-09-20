@@ -1,0 +1,13 @@
+[package]
+name = "locus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "An experimental programming language with erased, kernel-checked proofs"
+publish = false
+
+[dependencies]
+annotate-snippets = "=0.12.16"
+
+[lints.rust]
+unsafe_code = "forbid"

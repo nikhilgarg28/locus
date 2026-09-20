@@ -1,0 +1,29 @@
+// These logical definitions construct claims; the final two transport or establish evidence.
+def positive(n: Nat) -> Prop {
+    [n > 0]
+}
+
+def outside_range(n: Nat) -> Prop {
+    let above_zero: Prop = [n > 0];
+    let below_ten: Prop = [n < 10];
+    let inside = above_zero && below_ten;
+    !inside
+}
+
+def either(p: Prop, q: Prop) -> Prop {
+    p || q
+}
+
+def implies(p: Prop, q: Prop) -> Prop {
+    p => q
+}
+
+def keep(p: Prop, evidence: @p) -> @p {
+    evidence
+}
+
+// Both the returned claim and its evidence are logical values.
+def reflexivity_claim(n: Nat) -> (claim: Prop, @claim) {
+    let claim: Prop = [n == n];
+    (claim, _)
+}
