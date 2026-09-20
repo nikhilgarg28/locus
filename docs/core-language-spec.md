@@ -1257,23 +1257,33 @@ The cases an implementation must test before this construct is relied on: an emp
 
 Erasure is a function on types and on terms, defined by recursion on their structure. Every Locus type erases to a simple type with no propositions and no dependency, and every well-typed term erases to a term of the erased type.
 
+Erasure preserves shape. A ghost position does not disappear: it is filled by a named zero-sized marker. Field positions, tuple arity, parameter lists, and patterns are therefore the same before and after, which is what lets the generated Rust read like the source. A marker has no runtime cost.
+
+~~~
+Proved     the erasure of a proof
+Ghost      the erasure of any other ghost value; in this fragment, a proposition
+~~~
+
 ### 11.1 Erasure of types
 
-A ghost type is Prop, a proof type, or a math function type with a ghost result (section 2.4). Ghost types have no erasure; positions of ghost type disappear.
+A ghost type is Prop, a proof type, or a math function type with a ghost result (section 2.4).
 
 ~~~
 |bool| = bool          |u8| = u8          |()| = ()
 
-|(F_1, ..., F_n)|            = the tuple of |F_i| for each non-ghost field, in order
-|struct S|                   = S with its ghost fields removed
-|enum E|                     = E with the ghost payload fields of each variant removed
-|fn(P_1, ..., P_n) -> R|     = fn(|P_i| for each non-ghost parameter) -> |R|
+|@P|   = Proved        |Prop| = Ghost
+|math fn(...) -> R|    = Proved when R is a proof type, Ghost when R is Prop
+
+|(F_1, ..., F_n)|             = (|F_1|, ..., |F_n|)
+|struct S|                    = S with each field's type erased
+|enum E|                      = E with each payload field's type erased
+|fn(P_1, ..., P_n) -> R|      = fn(|P_1|, ..., |P_n|) -> |R|
 |math fn(P_1, ..., P_n) -> R| = the same, when R is not ghost
 ~~~
 
-A result position of ghost type erases to unit, not to nothing: an ordinary fn returning a proof erases to a function returning (). A product with no executable fields erases to unit. Field names and binder names in types are dropped where Rust has no place for them. Whether removed fields should instead leave a zero-sized placeholder is open (section 15.2).
+Tuple binder names are dropped, since Rust tuples have none; struct field names are kept. Because dependency occurs only inside propositions, erasing a type never needs the value of any term.
 
-Because dependency occurs only inside propositions, erasing a type never needs the value of any term.
+Two refinements are expected later and change nothing here. With the ghost keyword, Ghost can carry the type of the data it stands for, Ghost<T>, which keeps that type visible and keeps a type parameter that occurs only in ghost fields in use. With generics, a type parameter instantiated with a ghost type is simply the corresponding marker.
 
 ### 11.2 Erasure of terms
 
@@ -1282,15 +1292,21 @@ Lowering an expression depends on two independent questions: whether its result 
 | Result needed at runtime? | Computation erasable? | Action |
 |---|---|---|
 | Yes | Either | Produce the runtime value. |
-| No | Yes | Omit the computation. |
-| No | No | Preserve the computation; discard its result. |
+| No | Yes | Omit the computation; the marker stands in its place. |
+| No | No | Preserve the computation; the marker is its value. |
 
-A total expression that produces a needed byte is compiled like any other: being erasable permits omission only when nothing needs the result. Accordingly there are two erasure functions. |e| is used where the value is needed and yields a term of the erased type. effects(e) is used where the value is not needed, that is, where e has a ghost type, and yields only the computations that must still run.
+A total expression that produces a needed byte is compiled like any other: being erasable permits omission only when nothing needs the result.
 
 ~~~
+|e|, for e of ghost type:
+    e is a variable                 the variable: a proof bound by a let or a pattern
+                                    is an ordinary binding of type Proved
+    e is erasable                   the marker for e's type: Proved or Ghost
+    otherwise                       { effects(e); marker }
+
 effects(e) = nothing                          when e is erasable
 effects(f(a_1, ..., a_n))                     when f is an ordinary fn:
-    evaluate the arguments as in the call rule below, call |f|, discard the result
+    the call itself, with its arguments erased; its value, a marker, is discarded
 effects(C(e_1, ..., e_n)), effects(math_f(e_1, ..., e_n)), effects(e.field), effects(p(e))
     = effects(e_1); ...; effects(e_n)         in order; C is any constructor, proof constructors included
 effects(if c { a } else { b })  = if |c| { effects(a) } else { effects(b) }
@@ -1299,42 +1315,33 @@ effects(match h { ... })        = nothing     a match on a proof is logical as a
 effects({ statements; e })      = the erased statements; effects(e)
 ~~~
 
-So And::Intro(spin(), existing_proof), where spin is an ordinary fn returning a proof, lowers to a call of spin whose result is discarded. It does not lower to nothing.
+So a hole, a lemma call, a proof constructor, or a rewrite erases to Proved, and a proposition literal to Ghost. And::Intro(spin(), existing_proof), where spin is an ordinary fn returning a proof, erases to { spin(); Proved }: the call still runs. A call such as spin() on its own needs no block at all, because its erased result type is already Proved.
+
+Everything else is erased by recursion, keeping its shape:
 
 ~~~
 |x| = x          |literal| = literal
-
-|let p: T = e; rest|
-    p binds only ghost names        effects(e); |rest|
-    otherwise                       let |p| = |e|; |rest|
-
-|f(a_1, ..., a_n)|
-    for each argument, left to right:
-        non-ghost parameter         evaluate |a_i| and keep the value
-        ghost parameter             run effects(a_i)
-    then call |f| with the kept values
-
-|(e_1, ..., e_n)|, |S { ... }|, |E::V(...)|
-    likewise, field by field in order: |e_i| for a non-ghost field, effects(e_i) for a ghost one
-
-|r.field|                    |r| projected at the field's position after erasure
-|match s { p_i => b_i }|     match |s| { |p_i| => |b_i| }      when s is data
-|match h { }|                trap                              an empty match used for its value
-|if c { a } else { b }|      if |c| { |a| } else { |b| }
-|loop (...) -> R { body }|   a loop over the non-ghost state, with |body|
-|for i in lo..hi (...) { body }|   a counted loop over the non-ghost state, with |body|
-|continue(n_1, ...)|, |break e|   as calls: |n_i| for non-ghost state, effects(n_i) for ghost state
+|let p: T = e; rest|           let |p| = |e|; |rest|
+|f(a_1, ..., a_n)|             |f|(|a_1|, ..., |a_n|)
+|(e_1, ..., e_n)|, |S { ... }|, |E::V(...)|     the same constructor over the erased fields
+|r.field|                      |r|.field, at the same position
+|match s { p_i => b_i }|       match |s| { |p_i| => |b_i| }      when s is data
+|match h { }|                  trap                              an empty match used for its value
+|if c { a } else { b }|        if |c| { |a| } else { |b| }
+|loop (...) -> R { body }|     a loop over the erased state, with |body|
+|for i in lo..hi (...) { body }|   a counted loop over the erased state, with |body|
+|continue(n_1, ...)|, |break e|    the same, over erased arguments
 ~~~
 
-The interpreter and the Rust generator should consume a representation in which these retained computations are already explicit, so that evaluation order is decided once, before erasure, and not rediscovered by each backend.
+A let that binds a proof stays a let, of a marker: let h: @[n != 0] = _; erases to let h = Proved;, and a later use of h is a use of that binding. Patterns keep every position; a sub-pattern at a ghost position is a name or a wildcard, or is irrefutable (section 5.2), so matching never inspects a marker. Arguments and fields are evaluated left to right, exactly as written, because nothing has been removed or moved.
 
-Patterns erase by dropping sub-patterns at ghost positions; section 5.2 guarantees that those are names, wildcards, or irrefutable, so dropping them never changes which arm is chosen. A math function whose signature is entirely ghost is removed, together with every call to it.
+A math function whose signature is entirely ghost, such as a lemma or a predicate, has no runtime form: its declaration is not emitted, and a call to it is an erasable ghost expression.
 
 Three properties are required of this definition, and are proof obligations of section 16:
 
 - Erasure preserves typing: a well-typed term erases to a term that is well typed at the erased type.
 - Erasure commutes with substitution.
-- No trap is ever evaluated: on every execution of a well-typed program, control never reaches an erased empty match. Rust function items delay their bodies, so a function whose only parameter was a proof of false still erases to a function, not to an eagerly evaluated trap.
+- No trap is ever evaluated: on every execution of a well-typed program, control never reaches an erased empty match.
 
 ### 11.3 Divergence is preserved
 
@@ -1635,12 +1642,11 @@ These are not decided. Each lists the current behavior of this document first. N
 1. Proposition literals use brackets, [n != 0], and in this fragment a bracketed expression is always a proposition literal (section 13). Brackets are array syntax in Rust, and [n > 0] is a valid Rust array expression. The alternative is to drop the literal form: where a Prop is expected, an expression is elaborated as a formula, and the proof type is written @(n != 0).
 2. Implication is spelled =>, which is also the match arm separator (section 13). The alternative is ==>.
 3. Supplying evidence of Q where evidence of P is expected is an error unless the two are identical (section 3.1). The alternative is to treat the mismatch as an implicit hole, asking the solver of section 12.3 for P with the supplied evidence in scope.
-4. Erased fields are removed from generated Rust and positions are renumbered (section 11). This is the working choice, made for readable output; ir-architecture.md lists the alternatives, a unit or named zero-sized placeholder per erased field, and what generics will add: a type parameter instantiated with a ghost type must erase to a unit, and a parameter left unused by erasure needs a PhantomData field.
-5. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.
-6. A hole does not search the prelude (section 12.3). A mechanism for marking lemmas that a hole may apply, with its own step budget, would shorten proofs at some cost in predictability.
-7. The spelling of the chain form (section 8.4). One candidate is the bracketed form trans[a =(p) b =(q) c] used by the explicit refinement calculus.
-8. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.
-9. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; rust-features.md tracks them.
+4. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.
+5. A hole does not search the prelude (section 12.3). A mechanism for marking lemmas that a hole may apply, with its own step budget, would shorten proofs at some cost in predictability.
+6. The spelling of the chain form (section 8.4). One candidate is the bracketed form trans[a =(p) b =(q) c] used by the explicit refinement calculus.
+7. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.
+8. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; rust-features.md tracks them.
 
 ## 16. Semantic completion status
 
@@ -1683,7 +1689,7 @@ The logical layer is closer to a restricted dependent type theory: propositions,
 
 A practical proposed route toward Rust interoperability is:
 
-1. Erase propositions and proofs as defined in section 11, generate ordinary Rust code, and compile it through Cargo. Use explicit mappings for runtime fields (section 15.2, item 4).
+1. Erase propositions and proofs as defined in section 11, generate ordinary Rust code, and compile it through Cargo. Ghost positions become the zero-sized markers Proved and Ghost, so the generated code keeps the shape of the source (section 11).
 2. Introduce explicit Rust imports for supported data and function signatures. Foreign code starts as executable code; it does not acquire a mathematical meaning or produce trusted proofs merely because it is callable.
 3. Extend ownership, borrowing, lifetimes, mutation, destruction, and panic/effect semantics as the supported interfaces require.
 4. Add generics and traits with explicit rules connecting executable operations to their logical specifications.
