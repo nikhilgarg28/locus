@@ -501,3 +501,82 @@ fn nonzero_is_now_expressible() {
         Err(KernelError::ProofMismatch { .. })
     ));
 }
+
+#[test]
+fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
+    // The else branch of the specification's bounded_walk (section 10.4):
+    //     let differs: @[i != limit] = _;
+    //     let below: @[i < limit] = lt_of_le_of_ne(i, limit, bound, differs);
+    //     let next = i.wrapping_add(1);
+    //     let next_bound: @[next <= limit] = step_stays_below(i, limit, below);
+    let (definitions, prelude, theory) = setup();
+    let mut ctx = Context::with_definitions(Rc::clone(&definitions));
+    let i = Term::var(ctx.declare(Type::U8).unwrap());
+    let limit = Term::var(ctx.declare(Type::U8).unwrap());
+    let bound = ctx
+        .assume(prelude.u8_le_prop(i.clone(), limit.clone()))
+        .unwrap();
+    let differs = ctx
+        .assume(prelude.not_prop(u8_eq(i.clone(), limit.clone())))
+        .unwrap();
+
+    let below = lemma(
+        theory.u8_lt_of_le_of_ne,
+        vec![
+            i.clone(),
+            limit.clone(),
+            Term::proof(Proof::hyp(bound)),
+            Term::proof(Proof::hyp(differs)),
+        ],
+    );
+    assert_eq!(
+        check_proof(
+            &mut ctx,
+            &below,
+            &prelude.u8_lt_prop(i.clone(), limit.clone())
+        ),
+        Ok(())
+    );
+
+    let (next, next_is) = ctx
+        .define(&Term::wrapping_add(i.clone(), Term::U8(1)))
+        .unwrap();
+    let at_successor = lemma(
+        theory.u8_succ_le_of_lt,
+        vec![i.clone(), limit.clone(), Term::proof(below)],
+    );
+    // The lemma speaks of i.wrapping_add(1); the let equation carries it to
+    // `next`, which is the step the elaborator inserts silently.
+    let next_bound = Proof::transport(
+        symm_at(&Type::U8, &Term::var(next), Proof::hyp(next_is)),
+        |hole| prelude.u8_le_prop(hole, limit.clone()),
+        at_successor,
+    );
+    assert_eq!(
+        check_proof(
+            &mut ctx,
+            &next_bound,
+            &prelude.u8_le_prop(Term::var(next), limit.clone())
+        ),
+        Ok(())
+    );
+
+    // The initial invariant, 0 <= limit, and nothing here is classical.
+    assert!(
+        check_proof(
+            &mut ctx,
+            &lemma(theory.u8_zero_le, vec![limit.clone()]),
+            &prelude.u8_le_prop(Term::U8(0), limit)
+        )
+        .is_ok()
+    );
+    for id in [
+        theory.nat_succ_add,
+        theory.nat_zero_or_succ,
+        theory.nat_le_succ_succ,
+        theory.u8_lt_of_le_of_ne,
+        theory.u8_succ_le_of_lt,
+    ] {
+        assert!(!definitions.is_classical(id));
+    }
+}
