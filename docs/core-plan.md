@@ -28,8 +28,8 @@ The batch table above groups the work by topic. The order in which it is done is
 
 1. **Kernel contract and kernel, together.** Work from hand-written kernel terms, independent of the parser. For each rule, write its exact premises and conclusion in [kernel-contract.md](kernel-contract.md) as the rule is implemented. This is the kernel part of batches 0.1 and 0.6.
 2. **Difficult boundaries early.** The gates below include the cases most likely to force a change of representation.
-3. **Typed executable representation and reference interpreter.** Keep executable evaluation order separate from logical proof construction, and make retained computations explicit in this representation before erasure (specification section 11.2). This is batch 0.5, fed by hand-built terms at first.
-4. **Erasure and divergence tests, then the frontend.** Batch 0.12's tests come before batches 0.3b and 0.4, which connect the parser and name resolution to the interfaces that exist by then. Surface elaboration, holes, and the prelude (batches 0.7 to 0.11) follow.
+3. **The intermediate representations.** [ir-architecture.md](ir-architecture.md) describes them. A source-shaped typed tree T is the one shared artifact. A trusted `lower` produces the check IR L, let-normal executable code over kernel terms, which the trusted exec checker walks while maintaining a kernel context. A trusted `erase` projects T to an erased tree E, which the reference interpreter runs and from which Rust is printed, so that the generated Rust reads like the source. Build L and the exec checker first, from hand-built programs; then T, `lower`, and `erase`; then the interpreter.
+4. **Erasure and divergence tests, then the frontend.** An interpreter for L that skips ghosts must agree with the interpreter for E on every program, including on running out of fuel. Batches 0.3b and 0.4 then connect the parser and name resolution to the interfaces that exist by then. Surface elaboration, holes, and the prelude (batches 0.7 to 0.11) follow.
 
 The kernel spike is split into acceptance gates. Each gate is small, and a later gate is not started until the earlier ones pass.
 
