@@ -636,7 +636,7 @@ fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
 
 /// Native evaluation of a primitive applied to literals. This is the
 /// implementation that must agree with the `u8` model.
-pub(super) fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
+pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
     Some(match (prim, arguments) {
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
         (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),

@@ -10,6 +10,7 @@
 
 use std::fmt;
 
+use crate::erased::{self, Module};
 use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Program};
 use crate::kernel::{
     Definitions, EnumId, FnId, HypId, KernelError, Prim, Proof, StructId, Term, Type, VarId,
@@ -61,7 +62,7 @@ impl fmt::Display for LowerError {
 impl std::error::Error for LowerError {}
 
 /// What a declared function became.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FnRef {
     Math(FnId),
     Exec(ExecFnId),
@@ -72,12 +73,14 @@ pub enum FnRef {
 #[derive(Clone, Debug)]
 pub struct Session {
     program: Program,
+    erased: Module,
 }
 
 impl Session {
     pub fn new(definitions: Definitions) -> Self {
         Self {
             program: Program::new(definitions),
+            erased: Module::default(),
         }
     }
 
@@ -85,9 +88,17 @@ impl Session {
         &self.program
     }
 
+    /// The erasure of every item accepted so far. An item is erased only
+    /// after its lowering has been checked, so nothing unverified is here.
+    pub fn erased(&self) -> &Module {
+        &self.erased
+    }
+
     pub fn declare_struct(&mut self, item: &StructItem) -> Result<StructId, LowerError> {
         let fields = telescope(&item.fields);
-        Ok(self.program.definitions_mut().declare_struct(&fields)?)
+        let id = self.program.definitions_mut().declare_struct(&fields)?;
+        self.erased.structs.push(erased::erase_struct(id, item));
+        Ok(id)
     }
 
     pub fn declare_enum(&mut self, item: &EnumItem) -> Result<EnumId, LowerError> {
@@ -96,10 +107,19 @@ impl Session {
             .iter()
             .map(|variant| telescope(&variant.payload))
             .collect();
-        Ok(self.program.definitions_mut().declare_enum(&variants)?)
+        let id = self.program.definitions_mut().declare_enum(&variants)?;
+        self.erased.enums.push(erased::erase_enum(id, item));
+        Ok(id)
     }
 
     pub fn declare_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {
+        let reference = self.check_fn(item)?;
+        let erased = erased::erase_fn(self.program.definitions(), reference, item);
+        self.erased.fns.extend(erased);
+        Ok(reference)
+    }
+
+    fn check_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {
         let params: Vec<(VarId, Type)> = item
             .params
             .iter()
