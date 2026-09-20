@@ -24,11 +24,7 @@ fn parse_reports_syntax_only_and_ast_is_available() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert!(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .contains("Inferred")
-    );
+    assert!(String::from_utf8(output.stdout).unwrap().contains("Hole"));
 }
 
 #[test]

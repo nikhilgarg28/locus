@@ -1,0 +1,62 @@
+// A lock that tolerates three wrong codes. The failure count never exceeds
+// the limit, and every function that hands the count on says so with evidence.
+
+enum Event {
+    Wrong,
+    Right,
+}
+
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+math fn within_limit(failures: u8) -> Prop {
+    [failures <= 3]
+}
+
+// One transition. The caller proves the bound once; the result carries it on.
+fn step(
+    lock: Lock,
+    bounded: @within_limit(lock.failures),
+    event: Event,
+) -> (next: Lock, @within_limit(next.failures)) {
+    match event {
+        Event::Right => (Lock { failures: 0, open: true }, _),
+        Event::Wrong => {
+            if lock.failures < 3 {
+                (Lock { failures: lock.failures.wrapping_add(1), open: false }, _)
+            } else {
+                (Lock { failures: lock.failures, open: false }, _)
+            }
+        }
+    }
+}
+
+// The code is right on the attempt numbered `correct`, and wrong otherwise.
+fn event_at(attempt: u8, correct: u8) -> Event {
+    if attempt == correct { Event::Right } else { Event::Wrong }
+}
+
+// The invariant is loop state: evidence travels beside the lock it describes.
+fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) {
+    for attempt in 0..attempts (
+        lock: Lock = Lock { failures: 0, open: false },
+        bounded: @within_limit(lock.failures) = _,
+    ) {
+        let (next, still_bounded) = step(lock, bounded, event_at(attempt, correct));
+        continue(next, still_bounded)
+    }
+}
+
+// Needs the bound: without it the subtraction could wrap.
+fn remaining(failures: u8, bounded: @within_limit(failures)) -> (left: u8, @[left <= 3]) {
+    (3.wrapping_sub(failures), _)
+}
+
+// The caller reuses the evidence `run` returned; nothing is proved twice.
+fn attempts_left(attempts: u8, correct: u8) -> u8 {
+    let (last, bounded) = run(attempts, correct);
+    let (left, _) = remaining(last.failures, bounded);
+    left
+}

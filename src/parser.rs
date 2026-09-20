@@ -5,7 +5,7 @@ use crate::diagnostic::{Applicability, Diagnostic, Suggestion};
 use crate::lexer::{Token, TokenKind as K, lex};
 use crate::source::{SourceFile, Span};
 
-const MAX_DEPTH: usize = 128;
+const MAX_DEPTH: usize = 64;
 const MAX_EXPRESSION_CHAIN: usize = 128;
 type ParseResult<T> = Result<T, ()>;
 
@@ -28,6 +28,8 @@ pub fn parse(source: &SourceFile) -> Parsed {
         tokens: lexed.tokens,
         position: 0,
         depth: 0,
+        no_struct: false,
+        for_header: false,
         diagnostics: lexed.diagnostics,
     }
     .program()
@@ -38,6 +40,11 @@ struct Parser<'a> {
     tokens: Vec<Token>,
     position: usize,
     depth: usize,
+    /// Set in the header of an `if`, `match`, or `for`, where `Name {` begins
+    /// the following block rather than a struct literal.
+    no_struct: bool,
+    /// Set in the bounds of a `for`, where `( ... ) {` is the state list.
+    for_header: bool,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -154,52 +161,213 @@ impl Parser<'_> {
         })
     }
 
+    /// `math` and `prop` are ordinary identifiers except where a declaration
+    /// or a function type can begin.
+    fn at_word(&self, word: &str) -> bool {
+        self.at(K::Name) && self.source.slice(self.current().span) == Some(word)
+    }
+
+    fn at_math_fn(&self) -> bool {
+        self.at_word("math") && self.peek(1) == K::Fn
+    }
+
+    fn declaration_start(&self) -> bool {
+        matches!(
+            self.current().kind,
+            K::Fn | K::Def | K::Const | K::Struct | K::Enum
+        ) || self.at_math_fn()
+            || (self.at_word("prop") && self.peek(1) == K::Name)
+    }
+
+    /// Inside delimiters a `{` can no longer be mistaken for a following block.
+    fn unrestricted<T>(
+        &mut self,
+        operation: impl FnOnce(&mut Self) -> ParseResult<T>,
+    ) -> ParseResult<T> {
+        let saved = (self.no_struct, self.for_header);
+        (self.no_struct, self.for_header) = (false, false);
+        let result = operation(self);
+        (self.no_struct, self.for_header) = saved;
+        result
+    }
+
+    fn header<T>(
+        &mut self,
+        for_header: bool,
+        operation: impl FnOnce(&mut Self) -> ParseResult<T>,
+    ) -> ParseResult<T> {
+        let saved = (self.no_struct, self.for_header);
+        (self.no_struct, self.for_header) = (true, for_header);
+        let result = operation(self);
+        (self.no_struct, self.for_header) = saved;
+        result
+    }
+
     fn declaration(&mut self) -> ParseResult<Declaration> {
         if self.attribute_start() {
             return self.unsupported_attribute();
         }
-        let start = self.current();
-        if !matches!(start.kind, K::Fn | K::Def | K::Const) {
-            return self.fail("expected a function (`fn`), logical definition (`def`), or constant (`const`) declaration");
+        if !self.declaration_start() {
+            return self.fail(
+                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, or `const`",
+            );
         }
-        self.bump();
-        let name = self.name()?;
-        if matches!(start.kind, K::Fn | K::Def) {
-            let parameters = self.parameters()?;
-            self.expect(K::Arrow)?;
-            let result = self.ty()?;
-            let body = self.block()?;
-            Ok(Declaration {
-                span: start.span.through(body.span),
-                kind: DeclarationKind::Function {
-                    mode: if start.kind == K::Def {
-                        FunctionMode::Logical
-                    } else {
-                        FunctionMode::Runtime
-                    },
-                    name,
-                    parameters,
-                    result,
-                    body,
-                },
-            })
-        } else {
-            self.expect(K::Colon)?;
-            let ty = self.ty()?;
-            self.expect(K::Equal)?;
-            let value = self.expression()?;
-            let end = self.semicolon(value.span, "constant declaration")?;
-            Ok(Declaration {
-                span: start.span.through(end.span),
-                kind: DeclarationKind::Constant { name, ty, value },
-            })
+        let start = self.bump();
+        match start.kind {
+            K::Fn => self.function(start, FunctionMode::Runtime),
+            K::Def => {
+                self.diagnostics.push(
+                    Diagnostic::error("L0113", "`def` was renamed to `math fn`", start.span)
+                        .note("a `math fn` is pure and total, so it can be used in propositions; it also runs when its body is executable")
+                        .suggest(Suggestion {
+                            message: "write `math fn`".into(),
+                            span: start.span,
+                            replacement: "math fn".into(),
+                            applicability: Applicability::MachineApplicable,
+                        }),
+                );
+                self.function(start, FunctionMode::Math)
+            }
+            K::Struct => {
+                let name = self.name()?;
+                let (fields, end) = self.parameter_list(K::LBrace, K::RBrace)?;
+                Ok(Declaration {
+                    span: start.span.through(end.span),
+                    kind: DeclarationKind::Struct { name, fields },
+                })
+            }
+            K::Enum => {
+                let name = self.name()?;
+                let opening = self.expect(K::LBrace)?;
+                let mut variants = Vec::new();
+                while !self.at(K::RBrace) && !self.at(K::Eof) {
+                    let name = self.name()?;
+                    let (fields, end) = self.variant_fields(name.span)?;
+                    variants.push(Variant {
+                        span: name.span.through(end),
+                        name,
+                        fields,
+                    });
+                    if self.eat(K::Comma).is_none() {
+                        break;
+                    }
+                }
+                let end = self.close(K::RBrace, opening)?;
+                Ok(Declaration {
+                    span: start.span.through(end.span),
+                    kind: DeclarationKind::Enum { name, variants },
+                })
+            }
+            K::Const => {
+                let name = self.name()?;
+                self.expect(K::Colon)?;
+                let ty = self.ty()?;
+                self.expect(K::Equal)?;
+                let value = self.expression()?;
+                let end = self.semicolon(value.span, "constant declaration")?;
+                Ok(Declaration {
+                    span: start.span.through(end.span),
+                    kind: DeclarationKind::Constant { name, ty, value },
+                })
+            }
+            // `declaration_start` leaves the two contextual words.
+            _ if self.at(K::Fn) => {
+                self.bump();
+                self.function(start, FunctionMode::Math)
+            }
+            _ => self.prop(start),
         }
     }
 
-    fn parameters(&mut self) -> ParseResult<Vec<Parameter>> {
+    fn function(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Declaration> {
+        let name = self.name()?;
+        let parameters = self.parameters()?;
+        self.expect(K::Arrow)?;
+        let result = self.ty()?;
+        let body = self.block()?;
+        Ok(Declaration {
+            span: start.span.through(body.span),
+            kind: DeclarationKind::Function {
+                mode,
+                name,
+                parameters,
+                result,
+                body,
+            },
+        })
+    }
+
+    fn prop(&mut self, start: Token) -> ParseResult<Declaration> {
+        let name = self.name()?;
+        let parameters = if self.at(K::LParen) {
+            self.parameters()?
+        } else {
+            Vec::new()
+        };
+        let opening = self.expect(K::LBrace)?;
+        let mut variants = Vec::new();
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
+            let name = self.name()?;
+            let (fields, mut end) = self.variant_fields(name.span)?;
+            let target = if self.eat(K::Colon).is_some() {
+                let at = self.expect(K::At)?;
+                let target = self.unrestricted(|parser| parser.proof_target(at))?;
+                end = target.span;
+                Some(target)
+            } else {
+                None
+            };
+            variants.push(PropVariant {
+                span: name.span.through(end),
+                name,
+                fields,
+                target,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBrace, opening)?;
+        Ok(Declaration {
+            span: start.span.through(end.span),
+            kind: DeclarationKind::Prop {
+                name,
+                parameters,
+                variants,
+            },
+        })
+    }
+
+    /// The optional `( fields )` of a variant, and where the variant ends.
+    fn variant_fields(&mut self, name: Span) -> ParseResult<(Vec<TypeField>, Span)> {
+        if !self.at(K::LParen) {
+            return Ok((Vec::new(), name));
+        }
+        let (fields, end) = self.type_fields()?;
+        Ok((fields, end.span))
+    }
+
+    fn type_fields(&mut self) -> ParseResult<(Vec<TypeField>, Token)> {
         let opening = self.expect(K::LParen)?;
-        let mut parameters = Vec::new();
+        let mut fields = Vec::new();
         while !self.at(K::RParen) && !self.at(K::Eof) {
+            fields.push(self.type_field()?);
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RParen, opening)?;
+        Ok((fields, end))
+    }
+
+    fn parameters(&mut self) -> ParseResult<Vec<Parameter>> {
+        Ok(self.parameter_list(K::LParen, K::RParen)?.0)
+    }
+
+    fn parameter_list(&mut self, open: K, close: K) -> ParseResult<(Vec<Parameter>, Token)> {
+        let opening = self.expect(open)?;
+        let mut parameters = Vec::new();
+        while !self.at(close) && !self.at(K::Eof) {
             let name = self.name()?;
             self.expect(K::Colon)?;
             let ty = self.ty()?;
@@ -212,8 +380,8 @@ impl Parser<'_> {
                 break;
             }
         }
-        self.close(K::RParen, opening)?;
-        Ok(parameters)
+        let end = self.close(close, opening)?;
+        Ok((parameters, end))
     }
 
     fn ty(&mut self) -> ParseResult<Type> {
@@ -223,6 +391,11 @@ impl Parser<'_> {
     fn ty_inner(&mut self) -> ParseResult<Type> {
         let start = self.current();
         match start.kind {
+            K::Fn => self.function_type(start, FunctionMode::Runtime),
+            K::Name if self.at_math_fn() => {
+                self.bump();
+                self.function_type(start, FunctionMode::Math)
+            }
             K::Name => {
                 let name = self.name()?;
                 Ok(Type {
@@ -232,36 +405,14 @@ impl Parser<'_> {
             }
             K::At => {
                 self.bump();
-                if !matches!(self.current().kind, K::Name | K::LBracket | K::LParen) {
-                    return self
-                        .fail("a proof type needs a proposition: `@claim` or `@[condition]`");
-                }
-                // Calls/member access may form a proposition; ungrouped binary
-                // operators cannot escape the explicit proposition literal.
-                let proposition = self.expression_bp(11)?;
+                let proposition = self.proof_target(start)?;
                 Ok(Type {
                     span: start.span.through(proposition.span),
                     kind: TypeKind::Proof(Box::new(proposition)),
                 })
             }
             K::Hash => self.hash_syntax(),
-            K::LBracket => {
-                self.bump();
-                let element = Box::new(self.ty()?);
-                let kind = if self.eat(K::Semicolon).is_some() {
-                    TypeKind::Array {
-                        element,
-                        length: Box::new(self.expression()?),
-                    }
-                } else {
-                    TypeKind::Slice(element)
-                };
-                let end = self.close(K::RBracket, start)?;
-                Ok(Type {
-                    span: start.span.through(end.span),
-                    kind,
-                })
-            }
+            K::LBracket => self.no_arrays(start.span),
             K::LParen => {
                 self.bump();
                 if let Some(end) = self.eat(K::RParen) {
@@ -308,8 +459,46 @@ impl Parser<'_> {
                     kind: TypeKind::Tuple(fields),
                 })
             }
-            _ => self.fail("expected a type such as `Nat`, `Prop`, a tuple, or `@[condition]`"),
+            _ => self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@[condition]`"),
         }
+    }
+
+    /// The proposition of a proof type. Calls and projections may follow a
+    /// name; other operators need the explicit proposition literal. A proof
+    /// type is often followed by a block, so `claim {` is not a struct literal.
+    fn proof_target(&mut self, at: Token) -> ParseResult<Expr> {
+        if !matches!(self.current().kind, K::Name | K::LBracket | K::LParen) {
+            self.diagnostics.push(Diagnostic::error(
+                "L0100",
+                "a proof type needs a proposition: `@claim` or `@[condition]`",
+                at.span,
+            ));
+            return Err(());
+        }
+        self.header(false, |parser| parser.expression_bp(11))
+    }
+
+    fn function_type(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Type> {
+        self.expect(K::Fn)?;
+        let (parameters, _) = self.type_fields()?;
+        self.expect(K::Arrow)?;
+        let result = self.ty()?;
+        Ok(Type {
+            span: start.span.through(result.span),
+            kind: TypeKind::Function {
+                mode,
+                parameters,
+                result: Box::new(result),
+            },
+        })
+    }
+
+    fn no_arrays<T>(&mut self, span: Span) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error("L0114", "arrays are not part of the core language", span)
+                .note("brackets hold exactly one proposition, as in `[x <= limit]`"),
+        );
+        Err(())
     }
 
     fn type_field(&mut self) -> ParseResult<TypeField> {
@@ -336,11 +525,78 @@ impl Parser<'_> {
     fn pattern_inner(&mut self) -> ParseResult<Pattern> {
         let start = self.current();
         match start.kind {
+            K::Name if self.peek(1) == K::PathSep => {
+                let path = self.path()?;
+                let (arguments, end) = if self.at(K::LParen) {
+                    let opening = self.bump();
+                    let mut arguments = Vec::new();
+                    while !self.at(K::RParen) && !self.at(K::Eof) {
+                        arguments.push(self.pattern()?);
+                        if self.eat(K::Comma).is_none() {
+                            break;
+                        }
+                    }
+                    let end = self.close(K::RParen, opening)?;
+                    (Some(arguments), end.span)
+                } else {
+                    (None, path.span)
+                };
+                Ok(Pattern {
+                    span: path.span.through(end),
+                    kind: PatternKind::Variant {
+                        path: Box::new(path),
+                        arguments,
+                    },
+                })
+            }
+            K::Name if self.peek(1) == K::LBrace => {
+                let name = self.name()?;
+                let opening = self.bump();
+                let mut fields = Vec::new();
+                while !self.at(K::RBrace) && !self.at(K::Eof) {
+                    let start = self.current().span;
+                    let name = if self.peek(1) == K::Colon {
+                        let name = self.name()?;
+                        self.bump();
+                        Some(name)
+                    } else {
+                        None
+                    };
+                    let pattern = self.pattern()?;
+                    fields.push(PatternField {
+                        span: start.through(pattern.span),
+                        name,
+                        pattern,
+                    });
+                    if self.eat(K::Comma).is_none() {
+                        break;
+                    }
+                }
+                let end = self.close(K::RBrace, opening)?;
+                Ok(Pattern {
+                    span: name.span.through(end.span),
+                    kind: PatternKind::Struct { name, fields },
+                })
+            }
             K::Name => {
                 let name = self.name()?;
                 Ok(Pattern {
                     span: name.span,
                     kind: PatternKind::Name(name),
+                })
+            }
+            K::True | K::False => {
+                self.bump();
+                Ok(Pattern {
+                    span: start.span,
+                    kind: PatternKind::Bool(start.kind == K::True),
+                })
+            }
+            K::Integer => {
+                self.bump();
+                Ok(Pattern {
+                    span: start.span,
+                    kind: PatternKind::Integer(self.source.slice(start.span).unwrap().into()),
                 })
             }
             K::Underscore => {
@@ -379,21 +635,33 @@ impl Parser<'_> {
                     kind: PatternKind::Tuple(patterns),
                 })
             }
-            _ => self.fail("expected a binding name, `_`, or tuple pattern"),
+            _ => self.fail("expected a pattern: a name, `_`, a literal, a tuple, or a constructor"),
         }
     }
 
-    fn block(&mut self) -> ParseResult<Block> {
-        self.nested(Self::block_inner)
+    fn path(&mut self) -> ParseResult<Path> {
+        let prefix = self.name()?;
+        self.expect(K::PathSep)?;
+        let name = self.name()?;
+        Ok(Path {
+            span: prefix.span.through(name.span),
+            prefix,
+            name,
+        })
     }
 
+    fn block(&mut self) -> ParseResult<Block> {
+        self.nested(|parser| parser.unrestricted(Self::block_inner))
+    }
+
+    #[inline(never)]
     fn block_inner(&mut self) -> ParseResult<Block> {
         let opening = self.expect(K::LBrace)?;
         let mut statements = Vec::new();
         let mut tail = None;
         while !self.at(K::RBrace) && !self.at(K::Eof) {
             // A declaration here usually means the preceding function lost its `}`.
-            if matches!(self.current().kind, K::Fn | K::Def | K::Const) {
+            if self.declaration_start() {
                 self.close(K::RBrace, opening)?;
             }
             let start = self.position;
@@ -439,6 +707,7 @@ impl Parser<'_> {
         })
     }
 
+    #[inline(never)]
     fn let_statement(&mut self) -> ParseResult<Statement> {
         let opening = self.expect(K::Let)?;
         let pattern = self.pattern()?;
@@ -486,52 +755,29 @@ impl Parser<'_> {
         self.nested(|parser| parser.expression_bp_inner(minimum))
     }
 
+    // Debug builds give every local its own stack slot, so the recursive
+    // functions below stay small and leave node construction to helpers.
     fn expression_bp_inner(&mut self, minimum: u8) -> ParseResult<Expr> {
         let mut left = self.prefix()?;
         let mut chain = 0;
         loop {
             if chain >= MAX_EXPRESSION_CHAIN {
-                self.diagnostics.push(
-                    Diagnostic::error(
-                        "L0108",
-                        "expression chain exceeds the parser limit",
-                        self.current().span,
-                    )
-                    .note("split this expression using local bindings"),
-                );
-                return Err(());
+                return self.chain_limit();
             }
+            chain += 1;
             if minimum <= 11 && self.at(K::LParen) {
-                let opening = self.bump();
-                let mut arguments = Vec::new();
-                while !self.at(K::RParen) && !self.at(K::Eof) {
-                    arguments.push(self.expression()?);
-                    if self.eat(K::Comma).is_none() {
-                        break;
-                    }
+                if self.for_header && self.state_list_follows() {
+                    break;
                 }
-                let closing = self.close(K::RParen, opening)?;
-                left = Expr {
-                    span: left.span.through(closing.span),
-                    kind: ExprKind::Call {
-                        callee: Box::new(left),
-                        arguments,
-                    },
-                };
-                chain += 1;
+                left = self.call(left)?;
                 continue;
             }
-            if minimum <= 11 && self.eat(K::Dot).is_some() {
-                let name = self.name()?;
-                left = Expr {
-                    span: left.span.through(name.span),
-                    kind: ExprKind::Member {
-                        value: Box::new(left),
-                        name,
-                    },
-                };
-                chain += 1;
+            if minimum <= 11 && self.at(K::Dot) {
+                left = self.member(left)?;
                 continue;
+            }
+            if self.at(K::Plus) {
+                return self.plus_retired();
             }
             let Some((operator, left_bp, right_bp)) = binary(self.current().kind) else {
                 break;
@@ -539,111 +785,224 @@ impl Parser<'_> {
             if left_bp < minimum {
                 break;
             }
-            if operator.is_comparison()
-                && matches!(&left.kind, ExprKind::Binary { operator: previous, .. } if previous.is_comparison())
-            {
-                self.diagnostics.push(
-                    Diagnostic::error(
-                        "L0103",
-                        "comparisons cannot be chained without parentheses",
-                        self.current().span,
-                    )
-                    .label(left.span, "the first comparison is here")
-                    .note("write each comparison separately and combine them with `&&`"),
-                );
-                return Err(());
-            }
-            let token = self.bump();
-            let right = self.expression_bp(right_bp)?;
-            left = Expr {
-                span: left.span.through(right.span),
-                kind: ExprKind::Binary {
-                    operator,
-                    operator_span: token.span,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                },
-            };
-            chain += 1;
+            left = self.binary(left, operator, right_bp)?;
         }
         Ok(left)
     }
 
+    #[inline(never)]
+    fn chain_limit<T>(&mut self) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0108",
+                "expression chain exceeds the parser limit",
+                self.current().span,
+            )
+            .note("split this expression using local bindings"),
+        );
+        Err(())
+    }
+
+    #[inline(never)]
+    fn plus_retired<T>(&mut self) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0112",
+                "`+` is not part of the core language",
+                self.current().span,
+            )
+            .note("u8 arithmetic says what happens on overflow: write `a.wrapping_add(b)`"),
+        );
+        Err(())
+    }
+
+    #[inline(never)]
+    fn call(&mut self, callee: Expr) -> ParseResult<Expr> {
+        let (arguments, closing) = self.arguments()?;
+        Ok(Expr {
+            span: callee.span.through(closing.span),
+            kind: ExprKind::Call {
+                callee: Box::new(callee),
+                arguments,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn member(&mut self, value: Expr) -> ParseResult<Expr> {
+        self.expect(K::Dot)?;
+        if let Some(index) = self.eat(K::Integer) {
+            return Ok(Expr {
+                span: value.span.through(index.span),
+                kind: ExprKind::Index {
+                    value: Box::new(value),
+                    index: self.source.slice(index.span).unwrap().into(),
+                    index_span: index.span,
+                },
+            });
+        }
+        let name = self.name()?;
+        Ok(Expr {
+            span: value.span.through(name.span),
+            kind: ExprKind::Member {
+                value: Box::new(value),
+                name,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn binary(&mut self, left: Expr, operator: BinaryOp, right_bp: u8) -> ParseResult<Expr> {
+        if operator.is_comparison()
+            && matches!(&left.kind, ExprKind::Binary { operator: previous, .. } if previous.is_comparison())
+        {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0103",
+                    "comparisons cannot be chained without parentheses",
+                    self.current().span,
+                )
+                .label(left.span, "the first comparison is here")
+                .note("write each comparison separately and combine them with `&&`"),
+            );
+            return Err(());
+        }
+        let token = self.bump();
+        let right = self.expression_bp(right_bp)?;
+        Ok(Expr {
+            span: left.span.through(right.span),
+            kind: ExprKind::Binary {
+                operator,
+                operator_span: token.span,
+                left: Box::new(left),
+                right: Box::new(right),
+            },
+        })
+    }
+
     fn prefix(&mut self) -> ParseResult<Expr> {
-        let start = self.current();
-        match start.kind {
-            K::Name => {
-                let name = self.name()?;
-                Ok(Expr {
-                    span: name.span,
-                    kind: ExprKind::Name(name),
-                })
-            }
-            K::Integer => {
-                self.bump();
-                Ok(Expr {
-                    span: start.span,
-                    kind: ExprKind::Integer(self.source.slice(start.span).unwrap().into()),
-                })
-            }
-            K::True | K::False => {
-                self.bump();
-                Ok(Expr {
-                    span: start.span,
-                    kind: ExprKind::Bool(start.kind == K::True),
-                })
-            }
-            K::Bang => {
-                self.bump();
-                let value = self.expression_bp(9)?;
-                Ok(Expr {
-                    span: start.span.through(value.span),
-                    kind: ExprKind::Not(Box::new(value)),
-                })
-            }
+        match self.current().kind {
+            K::Name if self.peek(1) == K::LBrace && !self.no_struct => self.struct_literal(),
+            K::Name | K::Integer | K::True | K::False | K::Underscore | K::Error => self.atom(),
+            K::Bang => self.not(),
             K::LParen => self.parenthesized(),
             K::LBracket => self.bracketed(),
-            K::LBrace => {
-                let block = self.block()?;
-                Ok(Expr {
-                    span: block.span,
-                    kind: ExprKind::Block(block),
-                })
-            }
+            K::LBrace => self.block_expression(),
             K::If => self.if_expression(),
-            K::Forall => {
-                self.bump();
-                let parameters = self.parameters()?;
-                if parameters.is_empty() {
-                    return self.fail("`forall` needs at least one parameter");
-                }
-                let body = self.block()?;
-                Ok(Expr {
-                    span: start.span.through(body.span),
-                    kind: ExprKind::Forall { parameters, body },
-                })
-            }
+            K::Match => self.match_expression(),
+            K::Loop => self.loop_expression(),
+            K::For => self.for_expression(),
+            K::Break => self.break_expression(),
+            K::Continue => self.continue_expression(),
+            K::Forall | K::Exists => self.quantifier(),
             K::At => self.proof(),
             K::Hash => self.hash_syntax(),
-            K::Underscore => {
-                self.bump();
-                Ok(Expr {
-                    span: start.span,
-                    kind: ExprKind::Proof(ProofRequest::Inferred),
-                })
-            }
-            K::Error => {
-                self.bump();
-                Ok(Expr {
-                    span: start.span,
-                    kind: ExprKind::Error,
-                })
-            }
             _ => self.fail("expected an expression"),
         }
     }
 
+    #[inline(never)]
+    fn atom(&mut self) -> ParseResult<Expr> {
+        if self.at(K::Name) && self.peek(1) == K::PathSep {
+            let path = self.path()?;
+            return Ok(Expr {
+                span: path.span,
+                kind: ExprKind::Path(Box::new(path)),
+            });
+        }
+        if self.at(K::Name) {
+            let name = self.name()?;
+            return Ok(Expr {
+                span: name.span,
+                kind: ExprKind::Name(name),
+            });
+        }
+        let token = self.bump();
+        Ok(Expr {
+            span: token.span,
+            kind: match token.kind {
+                K::Integer => ExprKind::Integer(self.source.slice(token.span).unwrap().into()),
+                K::True | K::False => ExprKind::Bool(token.kind == K::True),
+                K::Underscore => ExprKind::Hole,
+                _ => ExprKind::Error,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn not(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        let value = self.expression_bp(9)?;
+        Ok(Expr {
+            span: start.span.through(value.span),
+            kind: ExprKind::Not(Box::new(value)),
+        })
+    }
+
+    #[inline(never)]
+    fn block_expression(&mut self) -> ParseResult<Expr> {
+        let block = self.block()?;
+        Ok(Expr {
+            span: block.span,
+            kind: ExprKind::Block(block),
+        })
+    }
+
+    #[inline(never)]
+    fn break_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        if matches!(self.current().kind, K::Semicolon | K::RBrace | K::Comma) {
+            return self.fail("`break` needs the value the loop produces");
+        }
+        let value = self.expression()?;
+        Ok(Expr {
+            span: start.span.through(value.span),
+            kind: ExprKind::Break(Box::new(value)),
+        })
+    }
+
+    #[inline(never)]
+    fn continue_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        if !self.at(K::LParen) {
+            return self.fail(
+                "`continue` needs the next loop state, as in `continue(next)`; write `continue()` when the loop has no state",
+            );
+        }
+        let (arguments, closing) = self.arguments()?;
+        Ok(Expr {
+            span: start.span.through(closing.span),
+            kind: ExprKind::Continue(arguments),
+        })
+    }
+
+    #[inline(never)]
+    fn quantifier(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        let parameters = self.parameters()?;
+        if parameters.is_empty() {
+            return self.fail(format!(
+                "{} needs at least one parameter",
+                start.kind.description()
+            ));
+        }
+        let body = self.block()?;
+        Ok(Expr {
+            span: start.span.through(body.span),
+            kind: if start.kind == K::Forall {
+                ExprKind::Forall { parameters, body }
+            } else {
+                ExprKind::Exists { parameters, body }
+            },
+        })
+    }
+
     fn parenthesized(&mut self) -> ParseResult<Expr> {
+        self.unrestricted(Self::parenthesized_inner)
+    }
+
+    #[inline(never)]
+    fn parenthesized_inner(&mut self) -> ParseResult<Expr> {
         let opening = self.expect(K::LParen)?;
         if let Some(end) = self.eat(K::RParen) {
             return Ok(Expr {
@@ -673,10 +1032,11 @@ impl Parser<'_> {
         })
     }
 
+    #[inline(never)]
     fn if_expression(&mut self) -> ParseResult<Expr> {
         self.nested(|parser| {
             let opening = parser.expect(K::If)?;
-            let condition = parser.expression()?;
+            let condition = parser.header(false, Self::expression)?;
             let then_branch = parser.block()?;
             if !parser.at(K::Else) {
                 return parser.fail("an `if` expression requires an `else` branch");
@@ -702,83 +1062,219 @@ impl Parser<'_> {
         })
     }
 
+    /// `@` begins a proof type; there is no proof expression spelled with it.
     fn proof(&mut self) -> ParseResult<Expr> {
         let start = self.expect(K::At)?;
-        if !self.at(K::LBrace) {
-            self.diagnostics.push(Diagnostic::error(
-                "L0110", "a proof expression uses `@{ ... }` or `_`", start.span,
-            ).note("`@claim` and `@[condition]` are types; request evidence with `let evidence: @claim = _;`"));
-            return Err(());
-        }
-        let opening = self.bump();
-        let mut commands = Vec::new();
-        while !self.at(K::RBrace) && !self.at(K::Eof) {
-            // Let the enclosing block recover at the next declaration/binding.
-            if matches!(self.current().kind, K::Fn | K::Def | K::Const | K::Let) {
-                self.close(K::RBrace, opening)?;
-            }
-            let before = self.position;
-            match self.proof_command() {
-                Ok(command) => commands.push(command),
-                Err(()) => self.recover_statement(),
-            }
-            if self.position == before && !self.at(K::RBrace) && !self.at(K::Eof) {
-                self.bump();
-            }
-        }
-        let end = self.close(K::RBrace, opening)?;
-        Ok(Expr {
-            span: start.span.through(end.span),
-            kind: ExprKind::Proof(ProofRequest::Block { commands }),
-        })
+        let mut diagnostic = Diagnostic::error(
+            "L0110",
+            "`@` begins a proof type, not an expression",
+            start.span,
+        );
+        diagnostic = if self.at(K::LBrace) {
+            diagnostic.note("proof blocks `@{ ... }` were retired; evidence is an ordinary expression, and `_` asks the elaborator to find it")
+        } else {
+            diagnostic.note("`@claim` and `@[condition]` are types; request evidence with `let evidence: @claim = _;`")
+        };
+        self.diagnostics.push(diagnostic);
+        Err(())
     }
 
+    #[inline(never)]
     fn bracketed(&mut self) -> ParseResult<Expr> {
         let opening = self.expect(K::LBracket)?;
-        if let Some(end) = self.eat(K::RBracket) {
-            return Ok(Expr {
-                span: opening.span.through(end.span),
-                kind: ExprKind::Array(Vec::new()),
-            });
+        if self.at(K::RBracket) {
+            return self.no_arrays(opening.span.through(self.current().span));
         }
-        let first = self.expression()?;
-        let kind = if self.eat(K::Semicolon).is_some() {
-            ExprKind::RepeatArray {
-                value: Box::new(first),
-                count: Box::new(self.expression()?),
-            }
-        } else if self.eat(K::Comma).is_some() {
-            let mut elements = vec![first];
-            while !self.at(K::RBracket) && !self.at(K::Eof) {
-                elements.push(self.expression()?);
-                if self.eat(K::Comma).is_none() {
-                    break;
-                }
-            }
-            ExprKind::Array(elements)
-        } else {
-            // Keep the contents neutral until an expected type is available.
-            ExprKind::Bracket(Box::new(first))
-        };
+        let formula = self.unrestricted(Self::expression)?;
+        if matches!(self.current().kind, K::Comma | K::Semicolon) {
+            return self.no_arrays(self.current().span);
+        }
         let end = self.close(K::RBracket, opening)?;
         Ok(Expr {
             span: opening.span.through(end.span),
-            kind,
+            kind: ExprKind::Proposition(Box::new(formula)),
         })
     }
 
-    fn proof_command(&mut self) -> ParseResult<ProofCommand> {
-        let name = self.name()?;
-        let mut arguments = Vec::new();
-        while !matches!(self.current().kind, K::Semicolon | K::RBrace | K::Eof) {
-            arguments.push(self.expression()?);
+    #[inline(never)]
+    fn arguments(&mut self) -> ParseResult<(Vec<Expr>, Token)> {
+        self.unrestricted(|parser| {
+            let opening = parser.expect(K::LParen)?;
+            let mut arguments = Vec::new();
+            while !parser.at(K::RParen) && !parser.at(K::Eof) {
+                arguments.push(parser.expression()?);
+                if parser.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            let closing = parser.close(K::RParen, opening)?;
+            Ok((arguments, closing))
+        })
+    }
+
+    /// In the bounds of a `for`, the parenthesized group directly before the
+    /// body is the state list, not a call on the upper bound.
+    fn state_list_follows(&self) -> bool {
+        let mut depth = 0usize;
+        for (offset, token) in self.tokens[self.position..].iter().enumerate() {
+            match token.kind {
+                K::LParen | K::LBrace | K::LBracket => depth += 1,
+                K::RParen | K::RBrace | K::RBracket => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self.peek(offset + 1) == K::LBrace;
+                    }
+                }
+                K::Eof => return false,
+                _ => {}
+            }
         }
-        let previous = arguments.last().map_or(name.span, |argument| argument.span);
-        let end = self.semicolon(previous, "proof command")?;
-        Ok(ProofCommand {
+        false
+    }
+
+    #[inline(never)]
+    fn struct_literal(&mut self) -> ParseResult<Expr> {
+        let name = self.name()?;
+        let opening = self.expect(K::LBrace)?;
+        let fields = self.unrestricted(|parser| {
+            let mut fields = Vec::new();
+            while !parser.at(K::RBrace) && !parser.at(K::Eof) {
+                let start = parser.current().span;
+                let name = if parser.peek(1) == K::Colon {
+                    let name = parser.name()?;
+                    parser.bump();
+                    Some(name)
+                } else {
+                    None
+                };
+                let value = parser.expression()?;
+                fields.push(ValueField {
+                    span: start.through(value.span),
+                    name,
+                    value,
+                });
+                if parser.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            Ok(fields)
+        })?;
+        let end = self.close(K::RBrace, opening)?;
+        Ok(Expr {
             span: name.span.through(end.span),
-            name,
-            arguments,
+            kind: ExprKind::Struct { name, fields },
+        })
+    }
+
+    #[inline(never)]
+    fn match_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::Match)?;
+        let scrutinee = self.header(false, Self::expression)?;
+        let opening = self.expect(K::LBrace)?;
+        let arms = self.unrestricted(|parser| {
+            let mut arms = Vec::new();
+            while !parser.at(K::RBrace) && !parser.at(K::Eof) {
+                let pattern = parser.pattern()?;
+                if !parser.at(K::Implies) {
+                    return parser.fail("expected `=>` between a match arm's pattern and its body");
+                }
+                parser.bump();
+                let body = parser.expression()?;
+                let block_like = matches!(body.kind, ExprKind::Block(_));
+                arms.push(MatchArm {
+                    span: pattern.span.through(body.span),
+                    pattern,
+                    body,
+                });
+                // As in Rust, the comma is optional after an arm that is a block.
+                if parser.eat(K::Comma).is_none() && !block_like {
+                    break;
+                }
+            }
+            Ok(arms)
+        })?;
+        let end = self.close(K::RBrace, opening)?;
+        Ok(Expr {
+            span: start.span.through(end.span),
+            kind: ExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn loop_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::Loop)?;
+        if !self.at(K::LParen) {
+            return self.fail(
+                "a `loop` lists its state and result type: `loop (state: T = initial) -> R { ... }`",
+            );
+        }
+        let state = self.state_parameters()?;
+        self.expect(K::Arrow)?;
+        let result = self.ty()?;
+        let body = self.block()?;
+        Ok(Expr {
+            span: start.span.through(body.span),
+            kind: ExprKind::Loop {
+                state,
+                result: Box::new(result),
+                body,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn for_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::For)?;
+        let index = self.name()?;
+        self.expect(K::In)?;
+        let lower = self.header(true, Self::expression)?;
+        self.expect(K::DotDot)?;
+        let upper = self.header(true, Self::expression)?;
+        if !self.at(K::LParen) {
+            return self.fail(
+                "a `for` lists its state before the body: `for i in lo..hi (state: T = initial) { ... }`; write `()` when there is none",
+            );
+        }
+        let state = self.state_parameters()?;
+        let body = self.block()?;
+        Ok(Expr {
+            span: start.span.through(body.span),
+            kind: ExprKind::For {
+                index,
+                lower: Box::new(lower),
+                upper: Box::new(upper),
+                state,
+                body,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn state_parameters(&mut self) -> ParseResult<Vec<StateParameter>> {
+        self.unrestricted(|parser| {
+            let opening = parser.expect(K::LParen)?;
+            let mut state = Vec::new();
+            while !parser.at(K::RParen) && !parser.at(K::Eof) {
+                let name = parser.name()?;
+                parser.expect(K::Colon)?;
+                let ty = parser.ty()?;
+                parser.expect(K::Equal)?;
+                let initial = parser.expression()?;
+                state.push(StateParameter {
+                    span: name.span.through(initial.span),
+                    name,
+                    ty,
+                    initial,
+                });
+                if parser.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            parser.close(K::RParen, opening)?;
+            Ok(state)
         })
     }
 
@@ -788,7 +1284,7 @@ impl Parser<'_> {
         }
         self.diagnostics.push(Diagnostic::error(
             "L0111", "`#` is no longer proof syntax", self.current().span,
-        ).note("use `@claim` or `@[condition]` for proof types, `@{ ... }` for proof blocks, and `_` for automatic proof requests"));
+        ).note("use `@claim` or `@[condition]` for proof types, and `_` to ask the elaborator for evidence"));
         Err(())
     }
 
@@ -800,7 +1296,7 @@ impl Parser<'_> {
 
     fn unsupported_attribute<T>(&mut self) -> ParseResult<T> {
         self.diagnostics.push(Diagnostic::error("L0105", "attributes are reserved but not supported in the initial core", self.current().span)
-            .note("proof types use `@claim` or `@[condition]`, proof blocks use `@{ ... }`, and automatic proof requests use `_`"));
+            .note("proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence"));
         Err(())
     }
 
@@ -808,7 +1304,7 @@ impl Parser<'_> {
         let mut depth = 0usize;
         while !self.at(K::Eof) {
             let kind = self.current().kind;
-            if depth == 0 && matches!(kind, K::Fn | K::Def | K::Const) {
+            if depth == 0 && self.declaration_start() {
                 return;
             }
             match kind {
@@ -825,7 +1321,7 @@ impl Parser<'_> {
         while !self.at(K::Eof) {
             let kind = self.current().kind;
             if depth == 0 {
-                if matches!(kind, K::RBrace | K::Let | K::Fn | K::Def | K::Const) {
+                if kind == K::RBrace || kind == K::Let || self.declaration_start() {
                     return;
                 }
                 if kind == K::Semicolon {
@@ -854,7 +1350,6 @@ fn binary(kind: K) -> Option<(BinaryOp, u8, u8)> {
         K::LessEqual => (BinaryOp::LessEqual, 5, 6),
         K::Greater => (BinaryOp::Greater, 5, 6),
         K::GreaterEqual => (BinaryOp::GreaterEqual, 5, 6),
-        K::Plus => (BinaryOp::Add, 7, 8),
         _ => return None,
     })
 }

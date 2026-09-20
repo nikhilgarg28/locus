@@ -8,6 +8,14 @@ pub struct Name {
     pub span: Span,
 }
 
+/// `Prefix::name`: an enum variant or a proof constructor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Path {
+    pub prefix: Name,
+    pub name: Name,
+    pub span: Span,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Program {
     pub declarations: Vec<Declaration>,
@@ -28,6 +36,19 @@ pub enum DeclarationKind {
         result: Type,
         body: Block,
     },
+    Struct {
+        name: Name,
+        fields: Vec<Parameter>,
+    },
+    Enum {
+        name: Name,
+        variants: Vec<Variant>,
+    },
+    Prop {
+        name: Name,
+        parameters: Vec<Parameter>,
+        variants: Vec<PropVariant>,
+    },
     Constant {
         name: Name,
         ty: Type,
@@ -35,17 +56,34 @@ pub enum DeclarationKind {
     },
 }
 
-/// Declared execution phase; semantic phase checking follows name resolution.
+/// `fn` may diverge and runs; `math fn` is pure, total, and usable in logic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FunctionMode {
     Runtime,
-    Logical,
+    Math,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parameter {
     pub name: Name,
     pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Variant {
+    pub name: Name,
+    pub fields: Vec<TypeField>,
+    pub span: Span,
+}
+
+/// A way of proving a declared proposition. `target` is the proposition after
+/// `: @`, present when the variant proves the proposition at particular indices.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropVariant {
+    pub name: Name,
+    pub fields: Vec<TypeField>,
+    pub target: Option<Expr>,
     pub span: Span,
 }
 
@@ -61,12 +99,12 @@ pub enum TypeKind {
     Unit,
     Group(Box<Type>),
     Tuple(Vec<TypeField>),
-    Array {
-        element: Box<Type>,
-        length: Box<Expr>,
-    },
-    Slice(Box<Type>),
     Proof(Box<Expr>),
+    Function {
+        mode: FunctionMode,
+        parameters: Vec<TypeField>,
+        result: Box<Type>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,8 +125,27 @@ pub enum PatternKind {
     Name(Name),
     Wildcard,
     Unit,
+    Bool(bool),
+    Integer(String),
     Group(Box<Pattern>),
     Tuple(Vec<Pattern>),
+    Struct {
+        name: Name,
+        fields: Vec<PatternField>,
+    },
+    /// `arguments` is `None` for a variant written without parentheses.
+    Variant {
+        path: Box<Path>,
+        arguments: Option<Vec<Pattern>>,
+    },
+}
+
+/// `name: pattern`, or the shorthand `name` when `name` is `None`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatternField {
+    pub name: Option<Name>,
+    pub pattern: Pattern,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,18 +181,19 @@ pub struct Expr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExprKind {
     Name(Name),
+    Path(Box<Path>),
     Integer(String),
     Bool(bool),
     Unit,
+    /// `_`: evidence the elaborator is asked to find.
+    Hole,
     Group(Box<Expr>),
     Tuple(Vec<Expr>),
-    /// `[e]`: elaboration chooses a proposition or singleton array from context.
-    Bracket(Box<Expr>),
-    /// Empty or comma-marked array syntax; never a proposition literal.
-    Array(Vec<Expr>),
-    RepeatArray {
-        value: Box<Expr>,
-        count: Box<Expr>,
+    /// `[formula]`: a proposition literal.
+    Proposition(Box<Expr>),
+    Struct {
+        name: Name,
+        fields: Vec<ValueField>,
     },
     Block(Block),
     If {
@@ -143,7 +201,29 @@ pub enum ExprKind {
         then_branch: Block,
         else_branch: Box<Expr>,
     },
+    Match {
+        scrutinee: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
+    Loop {
+        state: Vec<StateParameter>,
+        result: Box<Type>,
+        body: Block,
+    },
+    For {
+        index: Name,
+        lower: Box<Expr>,
+        upper: Box<Expr>,
+        state: Vec<StateParameter>,
+        body: Block,
+    },
+    Break(Box<Expr>),
+    Continue(Vec<Expr>),
     Forall {
+        parameters: Vec<Parameter>,
+        body: Block,
+    },
+    Exists {
         parameters: Vec<Parameter>,
         body: Block,
     },
@@ -162,13 +242,41 @@ pub enum ExprKind {
         value: Box<Expr>,
         name: Name,
     },
-    Proof(ProofRequest),
+    /// `value.0`
+    Index {
+        value: Box<Expr>,
+        index: String,
+        index_span: Span,
+    },
     Error,
+}
+
+/// `name: value`, or the shorthand `name` when `name` is `None`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValueField {
+    pub name: Option<Name>,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+/// `name: Type = initial` in a `loop` or `for` header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateParameter {
+    pub name: Name,
+    pub ty: Type,
+    pub initial: Expr,
+    pub span: Span,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOp {
-    Add,
     Equal,
     NotEqual,
     Less,
@@ -192,17 +300,4 @@ impl BinaryOp {
                 | Self::GreaterEqual
         )
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ProofRequest {
-    Inferred,
-    Block { commands: Vec<ProofCommand> },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProofCommand {
-    pub name: Name,
-    pub arguments: Vec<Expr>,
-    pub span: Span,
 }

@@ -1,36 +1,39 @@
-def same(x: Nat, y: Nat) -> Prop {
+math fn same(x: u8, y: u8) -> Prop {
     [x == y]
 }
 
 const equality_is_reflexive: Prop = [
-    forall (n: Nat) { n == n }
+    forall (n: u8) { n == n }
 ];
 
 const equality_is_transitive: Prop = [
-    forall (x: Nat, y: Nat, z: Nat) {
+    forall (x: u8, y: u8, z: u8) {
         same(x, y) && same(y, z) => same(x, z)
     }
 ];
 
-fn increment_preserves_equality(
-    x: Nat,
-    y: Nat,
+const some_byte_is_zero: Prop = [
+    exists (n: u8) { n == 0 }
+];
+
+// Evidence is an ordinary expression: here, a rewrite along `equal`.
+math fn increment_preserves_equality(
+    x: u8,
+    y: u8,
     equal: @same(x, y),
-) -> @[x + 1 == y + 1] {
-    @{
-        rewrite equal;
-        reflexivity;
-    }
+) -> @[x.wrapping_add(1) == y.wrapping_add(1)] {
+    let plain: @[x == y] = unfold(same, equal);
+    rewrite(plain, _)
 }
 
-fn self_equal(n: Nat) -> @[n == n] {
+math fn self_equal(n: u8) -> @[n == n] {
     let claim: Prop = [n == n];
     let evidence: @claim = _;
     evidence
 }
 
 // A call returning Prop can be used directly as a proof type's target.
-fn increment(n: Nat) -> (out: Nat, @same(out, n + 1)) {
-    let out = n + 1;
+fn increment(n: u8) -> (out: u8, @same(out, n.wrapping_add(1))) {
+    let out = n.wrapping_add(1);
     (out, _)
 }
