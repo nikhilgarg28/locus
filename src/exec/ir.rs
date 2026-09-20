@@ -69,28 +69,32 @@ pub enum Stmt {
         result: Type,
         body: Block,
     },
-    /// `let var = for index in lo..hi (vars: state = init) { body }`.
-    ///
-    /// `state` is a function type from the index to the state's tuple type,
-    /// `math fn(u8) -> (A_0, ..., A_n)`, which is how a state type mentions
-    /// the index: an invariant can say what holds after `index` steps.
-    /// `ordered` proves `lo <= hi`. The body sees the index, abstract state,
-    /// and the facts `lo <= index` (`lower`) and `index < hi` (`upper`), and
-    /// must end every path in `continue` with the state for `index + 1`.
-    /// There is no `break`. `var` is the state at `hi`.
-    For {
-        var: VarId,
-        index: VarId,
-        lower: HypId,
-        upper: HypId,
-        lo: Term,
-        hi: Term,
-        ordered: Proof,
-        state: Type,
-        vars: Vec<VarId>,
-        init: Vec<Term>,
-        body: Block,
-    },
+    /// A bounded `for`; see `ForStmt`.
+    For(Box<ForStmt>),
+}
+
+/// `let var = for index in lo..hi (vars: state = init) { body }`.
+///
+/// `state` is a function type from the index to the state's tuple type,
+/// `math fn(u8) -> (A_0, ..., A_n)`, which is how a state type mentions the
+/// index: an invariant can say what holds after `index` steps. `ordered`
+/// proves `lo <= hi`. The body sees the index, abstract state, and the facts
+/// `lo <= index` (`lower`) and `index < hi` (`upper`), and must end every
+/// path in `continue` with the state for `index + 1`. There is no `break`.
+/// `var` is the state at `hi`.
+#[derive(Clone, Debug)]
+pub struct ForStmt {
+    pub var: VarId,
+    pub index: VarId,
+    pub lower: HypId,
+    pub upper: HypId,
+    pub lo: Term,
+    pub hi: Term,
+    pub ordered: Proof,
+    pub state: Type,
+    pub vars: Vec<VarId>,
+    pub init: Vec<Term>,
+    pub body: Block,
 }
 
 /// One arm of a match: the payload's identities, the identity of the fact

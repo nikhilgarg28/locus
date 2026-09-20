@@ -11,7 +11,7 @@ use crate::kernel::{
     check_type, check_values, infer_term, same_type, telescope_entry, variant_term,
 };
 
-use super::ir::{Arm, Block, ExecFn, ExecFnId, Stmt, Tail};
+use super::ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Stmt, Tail};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
@@ -219,19 +219,20 @@ impl Program {
                 checked?;
                 Ok(ctx.declare_with(*var, result.clone(), false)?)
             }
-            Stmt::For {
-                var,
-                index,
-                lower,
-                upper,
-                lo,
-                hi,
-                ordered,
-                state,
-                vars,
-                init,
-                body,
-            } => {
+            Stmt::For(looped) => {
+                let ForStmt {
+                    var,
+                    index,
+                    lower,
+                    upper,
+                    lo,
+                    hi,
+                    ordered,
+                    state,
+                    vars,
+                    init,
+                    body,
+                } = &**looped;
                 let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
                 for bound in [lo, hi] {
                     expect(ctx, bound, &Type::U8)?;

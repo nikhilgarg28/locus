@@ -10,4 +10,4 @@ mod check;
 mod ir;
 
 pub use check::{ExecError, Program};
-pub use ir::{Arm, Block, ExecFn, ExecFnId, Stmt, Tail};
+pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Stmt, Tail};

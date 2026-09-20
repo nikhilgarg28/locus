@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use locus::exec::{Arm, Block, ExecError, ExecFn, ExecFnId, Program, Stmt, Tail};
+use locus::exec::{Arm, Block, ExecError, ExecFn, ExecFnId, ForStmt, Program, Stmt, Tail};
 use locus::kernel::derive::symm_at;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
@@ -915,7 +915,7 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
         }),
         params: vec![n_id],
         body: block(
-            vec![Stmt::For {
+            vec![Stmt::For(Box::new(ForStmt {
                 var: done_id,
                 index: i_id,
                 lower: HypId::fresh(),
@@ -941,7 +941,7 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
                     ],
                     tail,
                 ),
-            }],
+            }))],
             // The state at the final index n is exactly the declared result.
             Tail::Value(done),
         ),
@@ -1015,7 +1015,7 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
                     init: vec![],
                     result: Type::U8,
                     body: block(
-                        vec![Stmt::For {
+                        vec![Stmt::For(Box::new(ForStmt {
                             var: swept_id,
                             index: i_id,
                             lower: HypId::fresh(),
@@ -1027,7 +1027,7 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
                             vars: vec![VarId::fresh()],
                             init: vec![Term::U8(0)],
                             body: block(vec![], inner_tail(i)),
-                        }],
+                        }))],
                         Tail::Break(Term::proj(swept, 0)),
                     ),
                 }],
@@ -1066,7 +1066,7 @@ fn a_for_checks_its_bounds_and_state_shape() {
                         equation: HypId::fresh(),
                         value: Term::of_nat(Term::to_nat(n)),
                     },
-                    Stmt::For {
+                    Stmt::For(Box::new(ForStmt {
                         var: done_id,
                         index: VarId::fresh(),
                         lower: HypId::fresh(),
@@ -1078,7 +1078,7 @@ fn a_for_checks_its_bounds_and_state_shape() {
                         vars: vec![VarId::fresh()],
                         init: vec![Term::U8(0)],
                         body: block(vec![], Tail::Continue(vec![Term::U8(0)])),
-                    },
+                    })),
                 ],
                 Tail::Value(Term::proj(done, 0)),
             ),
