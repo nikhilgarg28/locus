@@ -69,6 +69,8 @@ pub enum KernelError {
     NotExistential(Term),
     /// Excluded middle needs the prelude's `Or` and `False`.
     NoPrelude,
+    /// Input nested more deeply than the kernel accepts.
+    TooDeep,
     /// A placeholder left by the evaluator was offered as a proof.
     OmittedProof,
     /// Evaluation needs a term with no free variables.
@@ -160,6 +162,7 @@ impl fmt::Display for KernelError {
                 write!(f, "expected an existential proposition, found {prop}")
             }
             Self::NoPrelude => f.write_str("excluded middle needs the prelude declarations"),
+            Self::TooDeep => f.write_str("input is nested more deeply than the kernel accepts"),
             Self::OmittedProof => f.write_str("an omitted proof proves nothing"),
             Self::NotClosed(term) => write!(f, "evaluation met the free variable {term}"),
             Self::NotPlainData(ty) => {

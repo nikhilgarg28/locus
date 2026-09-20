@@ -12,6 +12,7 @@ mod check;
 mod classical;
 mod context;
 mod defs;
+mod depth;
 pub mod derive;
 mod error;
 mod eval;
@@ -23,6 +24,7 @@ pub use check::{check_proof, check_type, infer_proof, infer_term, same, same_typ
 pub use classical::proof_is_classical;
 pub use context::{Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
+pub use depth::MAX_DEPTH;
 pub use error::KernelError;
 pub use nat::Natural;
 pub use term::{

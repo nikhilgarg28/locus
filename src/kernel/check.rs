@@ -3,6 +3,7 @@
 
 use super::context::{Context, Mode};
 use super::defs::Prelude;
+use super::depth::check_depth;
 use super::error::KernelError;
 use super::eval::{Evaluator, is_plain_data};
 use super::term::{Axiom, ForLoop, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
@@ -93,7 +94,7 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 }
 
 /// Checks that a type is well formed in the context.
-pub fn check_type(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
+pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
         Type::Bool | Type::U8 | Type::Nat | Type::Prop => Ok(()),
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
@@ -123,7 +124,7 @@ pub(super) fn check_telescope(ctx: &mut Context, fields: &[Type]) -> Result<(), 
     let mut result = Ok(());
     for index in 0..fields.len() {
         let ty = field_type(fields, index, |j| Term::Free(earlier[j]));
-        result = check_type(ctx, &ty);
+        result = type_ok(ctx, &ty);
         if result.is_err() {
             break;
         }
@@ -134,274 +135,374 @@ pub(super) fn check_telescope(ctx: &mut Context, fields: &[Type]) -> Result<(), 
 }
 
 /// Infers the type of a term, rejecting ill-formed terms.
-pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
     match term {
-        Term::Free(id) => {
-            let (ty, ghost) = ctx.var(*id).ok_or(KernelError::UnknownVariable(*id))?;
-            if mode == Mode::Executable && ghost {
-                return Err(KernelError::GhostInExecutable(*id));
-            }
-            Ok(ty.clone())
-        }
+        Term::Free(..) => type_of_free(ctx, term, mode),
         Term::Bound(_) => Err(KernelError::DanglingBound),
         Term::Bool(_) => Ok(Type::Bool),
         Term::U8(_) => Ok(Type::U8),
-        Term::Nat(_) => {
-            ghost_former(mode, &Type::Nat)?;
-            Ok(Type::Nat)
-        }
-        Term::Prim(prim, arguments) => {
-            let (parameters, result) = prim_signature(*prim);
-            if arguments.len() != parameters.len() {
-                return Err(KernelError::WrongArity {
-                    expected: parameters.len(),
-                    found: arguments.len(),
-                });
-            }
-            ghost_former(mode, &result)?;
-            for (argument, parameter) in arguments.iter().zip(parameters) {
-                expect_type(ctx, argument, parameter, mode)?;
-            }
-            Ok(result)
-        }
-        Term::Eq(ty, left, right) => {
-            ghost_former(mode, &Type::Prop)?;
-            check_type(ctx, ty)?;
-            if matches!(ty, Type::Proof(_)) {
-                return Err(KernelError::EqualityAtProofType(ty.clone()));
-            }
-            expect_type(ctx, left, ty, Mode::Logical)?;
-            expect_type(ctx, right, ty, Mode::Logical)?;
-            Ok(Type::Prop)
-        }
-        Term::Implies(premise, conclusion) => {
-            ghost_former(mode, &Type::Prop)?;
-            expect_type(ctx, premise, &Type::Prop, Mode::Logical)?;
-            expect_type(ctx, conclusion, &Type::Prop, Mode::Logical)?;
-            Ok(Type::Prop)
-        }
-        Term::Forall(ty, body) => {
-            ghost_former(mode, &Type::Prop)?;
-            check_type(ctx, ty)?;
-            let scope = ctx.len();
-            let var = ctx.push_bound(ty.clone());
-            let result = expect_type(
-                ctx,
-                &body.open(&Term::Free(var)),
-                &Type::Prop,
-                Mode::Logical,
-            );
-            ctx.truncate(scope);
-            result?;
-            Ok(Type::Prop)
-        }
-        Term::Tuple(fields, values) => {
-            check_telescope(ctx, fields)?;
-            check_fields(ctx, fields, values, mode)?;
-            Ok(Type::Tuple(fields.clone()))
-        }
-        Term::Struct(id, values) => {
-            let definitions = ctx.definitions();
-            let fields = definitions
-                .struct_fields(*id)
-                .ok_or(KernelError::UnknownStruct)?;
-            check_fields(ctx, fields, values, mode)?;
-            Ok(Type::Struct(*id))
-        }
-        Term::Proj(target, index) => {
-            let target_type = infer_term(ctx, target, mode)?;
-            let definitions = ctx.definitions();
-            let fields = match &target_type {
-                Type::Tuple(fields) => fields.as_slice(),
-                Type::Struct(id) => definitions
-                    .struct_fields(*id)
-                    .ok_or(KernelError::UnknownStruct)?,
-                _ => return Err(KernelError::NotAProduct(target_type)),
-            };
-            if *index >= fields.len() {
-                return Err(KernelError::NoSuchField {
-                    index: *index,
-                    fields: fields.len(),
-                });
-            }
-            // Earlier fields are named by projecting from the same target,
-            // unless the target is literally a product value: then they are
-            // its own field values, which is the type the constructor rule
-            // checked field `index` against. That keeps the projection axiom
-            // well typed for a nested dependent product.
-            let ty = match &**target {
-                Term::Tuple(_, values) | Term::Struct(_, values) => {
-                    field_type(fields, *index, |j| values[j].clone())
-                }
-                _ => field_type(fields, *index, |j| Term::proj((**target).clone(), j)),
-            };
-            ghost_former(mode, &ty)?;
-            Ok(ty)
-        }
-        Term::Proof(proof) => {
-            let ty = Type::proof(infer_proof(ctx, proof)?);
-            ghost_former(mode, &ty)?;
-            Ok(ty)
-        }
-        Term::Fn(id) => {
-            let definitions = ctx.definitions();
-            let decl = definitions
-                .function(*id)
-                .ok_or(KernelError::UnknownFunction)?;
-            let ty = Type::Fn(decl.params.clone(), Box::new(decl.result.clone()));
-            ghost_former(mode, &ty)?;
-            Ok(ty)
-        }
-        Term::Call(callee, arguments) => {
-            let callee_type = infer_term(ctx, callee, mode)?;
-            let Type::Fn(params, result) = callee_type else {
-                return Err(KernelError::NotAFunction(callee_type));
-            };
-            check_fields(ctx, &params, arguments, mode)?;
-            // The result type is the last entry of the parameter telescope.
-            let mut telescope = params;
-            telescope.push(*result);
-            let ty = field_type(&telescope, arguments.len(), |j| arguments[j].clone());
-            ghost_former(mode, &ty)?;
-            Ok(ty)
-        }
-        Term::Variant(id, index, payload) => {
-            let definitions = ctx.definitions();
-            let variants = definitions
-                .enum_variants(*id)
-                .ok_or(KernelError::UnknownEnum)?;
-            let fields = variants.get(*index).ok_or(KernelError::NoSuchVariant {
-                index: *index,
-                variants: variants.len(),
-            })?;
-            check_fields(ctx, fields, payload, mode)?;
-            Ok(Type::Enum(*id))
-        }
-        Term::Case {
-            scrutinee,
-            result,
-            arms,
-        } => {
-            let scrutinee_type = infer_term(ctx, scrutinee, mode)?;
-            let variants = data_variants(ctx, &scrutinee_type)
-                .ok_or_else(|| KernelError::NotCaseable((**scrutinee).clone()))?;
-            check_type(ctx, result)?;
-            if matches!(result, Type::Proof(_)) {
-                return Err(KernelError::ProofResult(result.clone()));
-            }
-            ghost_former(mode, result)?;
-            if arms.len() != variants.len() {
-                return Err(KernelError::ArmCount {
-                    expected: variants.len(),
-                    found: arms.len(),
-                });
-            }
-            for (arm, payload) in arms.iter().zip(&variants) {
-                if arm.binders as usize != payload.len() {
-                    return Err(KernelError::ArmBinders {
-                        expected: (payload.len(), 0),
-                        found: (arm.binders as usize, 0),
-                    });
-                }
-                let scope = ctx.len();
-                let mut vars: Vec<VarId> = Vec::new();
-                for index in 0..payload.len() {
-                    let ty = field_type(payload, index, |j| Term::Free(vars[j]));
-                    // A payload variable is executable exactly when the case
-                    // is and its field has a runtime representation.
-                    let ghost = mode == Mode::Logical || ty.is_ghost();
-                    vars.push(ctx.push_local(ty, ghost));
-                }
-                let body = arm.body.instantiate(vars.len(), |j| Term::Free(vars[j]));
-                let checked = expect_type(ctx, &body, result, mode);
-                ctx.truncate(scope);
-                checked?;
-            }
-            Ok(result.clone())
-        }
-        Term::PropApp(id, arguments) => {
-            ghost_former(mode, &Type::Prop)?;
-            let definitions = ctx.definitions();
-            let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
-            if arguments.len() != decl.params.len() {
-                return Err(KernelError::FieldCount {
-                    expected: decl.params.len(),
-                    found: arguments.len(),
-                });
-            }
-            for (argument, param) in arguments.iter().zip(&decl.params) {
-                expect_type(ctx, argument, param, Mode::Logical)?;
-            }
-            Ok(Type::Prop)
-        }
-        Term::Exists(ty, body) => {
-            ghost_former(mode, &Type::Prop)?;
-            check_type(ctx, ty)?;
-            let scope = ctx.len();
-            let var = ctx.push_bound(ty.clone());
-            let result = expect_type(
-                ctx,
-                &body.open(&Term::Free(var)),
-                &Type::Prop,
-                Mode::Logical,
-            );
-            ctx.truncate(scope);
-            result?;
-            Ok(Type::Prop)
-        }
-        Term::Absurd(proof, ty) => {
-            let prop = infer_proof(ctx, proof)?;
-            let empty = match &prop {
-                Term::PropApp(id, _) => ctx
-                    .definitions()
-                    .prop(*id)
-                    .is_some_and(|decl| decl.variants.is_empty()),
-                _ => false,
-            };
-            if !empty {
-                return Err(KernelError::NotEmpty(prop));
-            }
-            check_type(ctx, ty)?;
-            ghost_former(mode, ty)?;
-            Ok(ty.clone())
-        }
-        Term::For(looped) => {
-            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
-            let (lo, hi) = (&looped.lo, &looped.hi);
-            expect_type(ctx, lo, &Type::U8, mode)?;
-            expect_type(ctx, hi, &Type::U8, mode)?;
-            // Ordered bounds make the final index hi, so the result type
-            // needs no case distinction.
-            check_proof(
-                ctx,
-                &looped.ordered,
-                &prelude.u8_le_prop(lo.clone(), hi.clone()),
-            )?;
-            let state_at = |index: &Term| Type::Tuple(looped.state.clone()).open(index);
-            expect_type(ctx, &looped.init, &state_at(lo), mode)?;
-
-            let scope = ctx.len();
-            let local = mode == Mode::Logical;
-            let index = ctx.push_local(Type::U8, local);
-            let i = Term::Free(index);
-            let mut checked = check_type(ctx, &state_at(&i));
-            if checked.is_ok() {
-                let state = ctx.push_local(state_at(&i), local);
-                let lower = ctx.push_hyp(prelude.u8_le_prop(lo.clone(), i.clone()));
-                let upper = ctx.push_hyp(prelude.u8_lt_prop(i.clone(), hi.clone()));
-                let body = looped
-                    .body
-                    .instantiate(2, |j| Term::Free([index, state][j]))
-                    .open_hyps(&[lower, upper]);
-                // i < hi, so the successor does not wrap.
-                let next = Term::wrapping_add(i, Term::U8(1));
-                checked = expect_type(ctx, &body, &state_at(&next), mode);
-            }
-            ctx.truncate(scope);
-            checked?;
-            Ok(state_at(hi))
-        }
+        Term::Nat(_) => ghost_former(mode, &Type::Nat).map(|()| Type::Nat),
+        Term::Prim(..) => type_of_prim(ctx, term, mode),
+        Term::Eq(..) => type_of_eq(ctx, term, mode),
+        Term::Implies(..) => type_of_implies(ctx, term, mode),
+        Term::Forall(..) => type_of_forall(ctx, term, mode),
+        Term::Tuple(..) => type_of_tuple(ctx, term, mode),
+        Term::Struct(..) => type_of_struct(ctx, term, mode),
+        Term::Proj(..) => type_of_proj(ctx, term, mode),
+        Term::Proof(..) => type_of_proof(ctx, term, mode),
+        Term::Fn(..) => type_of_fn(ctx, term, mode),
+        Term::Call(..) => type_of_call(ctx, term, mode),
+        Term::Variant(..) => type_of_variant(ctx, term, mode),
+        Term::Case { .. } => type_of_case(ctx, term, mode),
+        Term::PropApp(..) => type_of_prop_app(ctx, term, mode),
+        Term::Exists(..) => type_of_exists(ctx, term, mode),
+        Term::Absurd(..) => type_of_absurd(ctx, term, mode),
+        Term::For(..) => type_of_for(ctx, term, mode),
     }
+}
+
+#[inline(never)]
+fn type_of_free(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Free(id) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let (ty, ghost) = ctx.var(*id).ok_or(KernelError::UnknownVariable(*id))?;
+    if mode == Mode::Executable && ghost {
+        return Err(KernelError::GhostInExecutable(*id));
+    }
+    Ok(ty.clone())
+}
+
+#[inline(never)]
+fn type_of_prim(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Prim(prim, arguments) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let (parameters, result) = prim_signature(*prim);
+    if arguments.len() != parameters.len() {
+        return Err(KernelError::WrongArity {
+            expected: parameters.len(),
+            found: arguments.len(),
+        });
+    }
+    ghost_former(mode, &result)?;
+    for (argument, parameter) in arguments.iter().zip(parameters) {
+        expect_type(ctx, argument, parameter, mode)?;
+    }
+    Ok(result)
+}
+
+#[inline(never)]
+fn type_of_eq(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Eq(ty, left, right) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    ghost_former(mode, &Type::Prop)?;
+    type_ok(ctx, ty)?;
+    if matches!(ty, Type::Proof(_)) {
+        return Err(KernelError::EqualityAtProofType(ty.clone()));
+    }
+    expect_type(ctx, left, ty, Mode::Logical)?;
+    expect_type(ctx, right, ty, Mode::Logical)?;
+    Ok(Type::Prop)
+}
+
+#[inline(never)]
+fn type_of_implies(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Implies(premise, conclusion) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    ghost_former(mode, &Type::Prop)?;
+    expect_type(ctx, premise, &Type::Prop, Mode::Logical)?;
+    expect_type(ctx, conclusion, &Type::Prop, Mode::Logical)?;
+    Ok(Type::Prop)
+}
+
+#[inline(never)]
+fn type_of_forall(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Forall(ty, body) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    ghost_former(mode, &Type::Prop)?;
+    type_ok(ctx, ty)?;
+    let scope = ctx.len();
+    let var = ctx.push_bound(ty.clone());
+    let result = expect_type(
+        ctx,
+        &body.open(&Term::Free(var)),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    result?;
+    Ok(Type::Prop)
+}
+
+#[inline(never)]
+fn type_of_tuple(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Tuple(fields, values) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    check_telescope(ctx, fields)?;
+    check_fields(ctx, fields, values, mode)?;
+    Ok(Type::Tuple(fields.clone()))
+}
+
+#[inline(never)]
+fn type_of_struct(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Struct(id, values) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let definitions = ctx.definitions();
+    let fields = definitions
+        .struct_fields(*id)
+        .ok_or(KernelError::UnknownStruct)?;
+    check_fields(ctx, fields, values, mode)?;
+    Ok(Type::Struct(*id))
+}
+
+#[inline(never)]
+fn type_of_proj(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Proj(target, index) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let target_type = term_type(ctx, target, mode)?;
+    let definitions = ctx.definitions();
+    let fields = match &target_type {
+        Type::Tuple(fields) => fields.as_slice(),
+        Type::Struct(id) => definitions
+            .struct_fields(*id)
+            .ok_or(KernelError::UnknownStruct)?,
+        _ => return Err(KernelError::NotAProduct(target_type)),
+    };
+    if *index >= fields.len() {
+        return Err(KernelError::NoSuchField {
+            index: *index,
+            fields: fields.len(),
+        });
+    }
+    // Earlier fields are named by projecting from the same target,
+    // unless the target is literally a product value: then they are
+    // its own field values, which is the type the constructor rule
+    // checked field `index` against. That keeps the projection axiom
+    // well typed for a nested dependent product.
+    let ty = match &**target {
+        Term::Tuple(_, values) | Term::Struct(_, values) => {
+            field_type(fields, *index, |j| values[j].clone())
+        }
+        _ => field_type(fields, *index, |j| Term::proj((**target).clone(), j)),
+    };
+    ghost_former(mode, &ty)?;
+    Ok(ty)
+}
+
+#[inline(never)]
+fn type_of_proof(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Proof(proof) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let ty = Type::proof(proof_claim(ctx, proof)?);
+    ghost_former(mode, &ty)?;
+    Ok(ty)
+}
+
+#[inline(never)]
+fn type_of_fn(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Fn(id) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let definitions = ctx.definitions();
+    let decl = definitions
+        .function(*id)
+        .ok_or(KernelError::UnknownFunction)?;
+    let ty = Type::Fn(decl.params.clone(), Box::new(decl.result.clone()));
+    ghost_former(mode, &ty)?;
+    Ok(ty)
+}
+
+#[inline(never)]
+fn type_of_call(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Call(callee, arguments) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let callee_type = term_type(ctx, callee, mode)?;
+    let Type::Fn(params, result) = callee_type else {
+        return Err(KernelError::NotAFunction(callee_type));
+    };
+    check_fields(ctx, &params, arguments, mode)?;
+    // The result type is the last entry of the parameter telescope.
+    let mut telescope = params;
+    telescope.push(*result);
+    let ty = field_type(&telescope, arguments.len(), |j| arguments[j].clone());
+    ghost_former(mode, &ty)?;
+    Ok(ty)
+}
+
+#[inline(never)]
+fn type_of_variant(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Variant(id, index, payload) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let definitions = ctx.definitions();
+    let variants = definitions
+        .enum_variants(*id)
+        .ok_or(KernelError::UnknownEnum)?;
+    let fields = variants.get(*index).ok_or(KernelError::NoSuchVariant {
+        index: *index,
+        variants: variants.len(),
+    })?;
+    check_fields(ctx, fields, payload, mode)?;
+    Ok(Type::Enum(*id))
+}
+
+#[inline(never)]
+fn type_of_case(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Case {
+        scrutinee,
+        result,
+        arms,
+    } = term
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let scrutinee_type = term_type(ctx, scrutinee, mode)?;
+    let variants = data_variants(ctx, &scrutinee_type)
+        .ok_or_else(|| KernelError::NotCaseable((**scrutinee).clone()))?;
+    type_ok(ctx, result)?;
+    if matches!(result, Type::Proof(_)) {
+        return Err(KernelError::ProofResult(result.clone()));
+    }
+    ghost_former(mode, result)?;
+    if arms.len() != variants.len() {
+        return Err(KernelError::ArmCount {
+            expected: variants.len(),
+            found: arms.len(),
+        });
+    }
+    for (arm, payload) in arms.iter().zip(&variants) {
+        if arm.binders as usize != payload.len() {
+            return Err(KernelError::ArmBinders {
+                expected: (payload.len(), 0),
+                found: (arm.binders as usize, 0),
+            });
+        }
+        let scope = ctx.len();
+        let mut vars: Vec<VarId> = Vec::new();
+        for index in 0..payload.len() {
+            let ty = field_type(payload, index, |j| Term::Free(vars[j]));
+            // A payload variable is executable exactly when the case
+            // is and its field has a runtime representation.
+            let ghost = mode == Mode::Logical || ty.is_ghost();
+            vars.push(ctx.push_local(ty, ghost));
+        }
+        let body = arm.body.instantiate(vars.len(), |j| Term::Free(vars[j]));
+        let checked = expect_type(ctx, &body, result, mode);
+        ctx.truncate(scope);
+        checked?;
+    }
+    Ok(result.clone())
+}
+
+#[inline(never)]
+fn type_of_prop_app(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::PropApp(id, arguments) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    ghost_former(mode, &Type::Prop)?;
+    let definitions = ctx.definitions();
+    let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
+    if arguments.len() != decl.params.len() {
+        return Err(KernelError::FieldCount {
+            expected: decl.params.len(),
+            found: arguments.len(),
+        });
+    }
+    for (argument, param) in arguments.iter().zip(&decl.params) {
+        expect_type(ctx, argument, param, Mode::Logical)?;
+    }
+    Ok(Type::Prop)
+}
+
+#[inline(never)]
+fn type_of_exists(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Exists(ty, body) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    ghost_former(mode, &Type::Prop)?;
+    type_ok(ctx, ty)?;
+    let scope = ctx.len();
+    let var = ctx.push_bound(ty.clone());
+    let result = expect_type(
+        ctx,
+        &body.open(&Term::Free(var)),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    result?;
+    Ok(Type::Prop)
+}
+
+#[inline(never)]
+fn type_of_absurd(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::Absurd(proof, ty) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let prop = proof_claim(ctx, proof)?;
+    let empty = match &prop {
+        Term::PropApp(id, _) => ctx
+            .definitions()
+            .prop(*id)
+            .is_some_and(|decl| decl.variants.is_empty()),
+        _ => false,
+    };
+    if !empty {
+        return Err(KernelError::NotEmpty(prop));
+    }
+    type_ok(ctx, ty)?;
+    ghost_former(mode, ty)?;
+    Ok(ty.clone())
+}
+
+#[inline(never)]
+fn type_of_for(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    let Term::For(looped) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    let (lo, hi) = (&looped.lo, &looped.hi);
+    expect_type(ctx, lo, &Type::U8, mode)?;
+    expect_type(ctx, hi, &Type::U8, mode)?;
+    // Ordered bounds make the final index hi, so the result type
+    // needs no case distinction.
+    proof_of(
+        ctx,
+        &looped.ordered,
+        &prelude.u8_le_prop(lo.clone(), hi.clone()),
+    )?;
+    let state_at = |index: &Term| Type::Tuple(looped.state.clone()).open(index);
+    expect_type(ctx, &looped.init, &state_at(lo), mode)?;
+
+    let scope = ctx.len();
+    let local = mode == Mode::Logical;
+    let index = ctx.push_local(Type::U8, local);
+    let i = Term::Free(index);
+    let mut checked = type_ok(ctx, &state_at(&i));
+    if checked.is_ok() {
+        let state = ctx.push_local(state_at(&i), local);
+        let lower = ctx.push_hyp(prelude.u8_le_prop(lo.clone(), i.clone()));
+        let upper = ctx.push_hyp(prelude.u8_lt_prop(i.clone(), hi.clone()));
+        let body = looped
+            .body
+            .instantiate(2, |j| Term::Free([index, state][j]))
+            .open_hyps(&[lower, upper]);
+        // i < hi, so the successor does not wrap.
+        let next = Term::wrapping_add(i, Term::U8(1));
+        checked = expect_type(ctx, &body, &state_at(&next), mode);
+    }
+    ctx.truncate(scope);
+    checked?;
+    Ok(state_at(hi))
 }
 
 /// The payload telescopes of a data type that supports case analysis:
@@ -470,7 +571,7 @@ fn check_arm_with(
         .collect();
     let goal = goal(&vars);
     let result = if (arm.vars as usize, arm.hyps as usize) == (vars.len(), hyps.len()) {
-        check_proof(ctx, &arm.body.open_arm(&vars, &hyps), &goal)
+        proof_of(ctx, &arm.body.open_arm(&vars, &hyps), &goal)
     } else {
         Err(KernelError::ArmBinders {
             expected: (vars.len(), hyps.len()),
@@ -635,7 +736,7 @@ fn check_fields(
                 let Term::Proof(proof) = value else {
                     return Err(KernelError::ProofExpected(value.clone()));
                 };
-                check_proof(ctx, proof, prop)?;
+                proof_of(ctx, proof, prop)?;
             }
             _ if expected.is_ghost() => expect_type(ctx, value, &expected, Mode::Logical)?,
             _ => expect_type(ctx, value, &expected, mode)?,
@@ -650,7 +751,7 @@ pub(super) fn expect_type(
     expected: &Type,
     mode: Mode,
 ) -> Result<(), KernelError> {
-    let found = infer_term(ctx, term, mode)?;
+    let found = term_type(ctx, term, mode)?;
     if same_type(&found, expected) {
         Ok(())
     } else {
@@ -663,427 +764,560 @@ pub(super) fn expect_type(
 
 /// Reads off the proposition a proof proves, checking every step.
 /// The result is well formed in `ctx`.
-pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
     match proof {
         Proof::Hyp(HypRef::Free(id)) => ctx
             .hyp(*id)
             .cloned()
             .ok_or(KernelError::UnknownHypothesis(*id)),
         Proof::Hyp(HypRef::Bound(_)) => Err(KernelError::DanglingBound),
-        Proof::OfTerm(term) => match infer_term(ctx, term, Mode::Logical)? {
+        Proof::OfTerm(term) => match term_type(ctx, term, Mode::Logical)? {
             Type::Proof(prop) => Ok(*prop),
             other => Err(KernelError::NotAProofType(other)),
         },
-        Proof::Refl(term) => {
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            if matches!(ty, Type::Proof(_)) {
-                return Err(KernelError::EqualityAtProofType(ty));
-            }
-            Ok(Term::eq(ty, term.clone(), term.clone()))
-        }
-        Proof::Transport {
-            eq,
-            template,
-            proof,
-        } => {
-            let equality = infer_proof(ctx, eq)?;
-            let Term::Eq(ty, left, right) = equality else {
-                return Err(KernelError::NotAnEquality(equality));
-            };
-            let scope = ctx.len();
-            let hole = ctx.push_bound(ty);
-            let well_formed = expect_type(
-                ctx,
-                &template.open(&Term::Free(hole)),
-                &Type::Prop,
-                Mode::Logical,
-            );
-            ctx.truncate(scope);
-            well_formed?;
-            check_proof(ctx, proof, &template.open(&left))?;
-            Ok(template.open(&right))
-        }
-        Proof::ImpliesIntro { hyp, body } => {
-            expect_type(ctx, hyp, &Type::Prop, Mode::Logical)?;
-            let scope = ctx.len();
-            let id = ctx.push_hyp(hyp.clone());
-            let conclusion = infer_proof(ctx, &body.open_hyp(id));
-            ctx.truncate(scope);
-            Ok(Term::implies(hyp.clone(), conclusion?))
-        }
-        Proof::ImpliesElim(implication, premise) => {
-            let prop = infer_proof(ctx, implication)?;
-            let Term::Implies(expected, conclusion) = prop else {
-                return Err(KernelError::NotAnImplication(prop));
-            };
-            check_proof(ctx, premise, &expected)?;
-            Ok(*conclusion)
-        }
-        Proof::ForallIntro { ty, body } => {
-            check_type(ctx, ty)?;
-            let scope = ctx.len();
-            let var = ctx.push_bound(ty.clone());
-            let instance = infer_proof(ctx, &body.open_var(&Term::Free(var)));
-            ctx.truncate(scope);
-            Ok(Term::Forall(ty.clone(), Box::new(instance?.close(var))))
-        }
-        Proof::ForallElim(universal, argument) => {
-            let prop = infer_proof(ctx, universal)?;
-            let Term::Forall(ty, body) = prop else {
-                return Err(KernelError::NotUniversal(prop));
-            };
-            expect_type(ctx, argument, &ty, Mode::Logical)?;
-            Ok(body.open(argument))
-        }
-        Proof::Projection(term) => {
-            let Term::Proj(target, index) = term else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let (Term::Tuple(_, values) | Term::Struct(_, values)) = &**target else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            if matches!(ty, Type::Proof(_)) {
-                return Err(KernelError::EqualityAtProofType(ty));
-            }
-            // Projection from a literal product is typed by the product's
-            // own field values, so the value has exactly this type.
-            let value = &values[*index];
-            if !same_type(&infer_term(ctx, value, Mode::Logical)?, &ty) {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            }
-            Ok(Term::eq(ty, term.clone(), value.clone()))
-        }
-        Proof::Literal(term) => {
-            let Term::Prim(prim, arguments) = term else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let value = evaluate_primitive(*prim, arguments)
-                .ok_or_else(|| KernelError::NoComputationStep(term.clone()))?;
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            Ok(Term::eq(ty, term.clone(), value))
-        }
-        Proof::Definition(term) => {
-            let Term::Call(callee, arguments) = term else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let Term::Fn(id) = &**callee else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            if matches!(ty, Type::Proof(_)) {
-                return Err(KernelError::EqualityAtProofType(ty));
-            }
-            let definitions = ctx.definitions();
-            let decl = definitions
-                .function(*id)
-                .ok_or(KernelError::UnknownFunction)?;
-            let unfolded = decl
-                .body
-                .instantiate(arguments.len(), |j| arguments[j].clone());
-            Ok(Term::eq(ty, term.clone(), unfolded))
-        }
-        Proof::CaseStep(term) => {
-            let Term::Case {
-                scrutinee, arms, ..
-            } = term
-            else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let Some((index, payload)) = known_constructor(scrutinee) else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            let chosen = arms[index]
-                .body
-                .instantiate(payload.len(), |j| payload[j].clone());
-            Ok(Term::eq(ty, term.clone(), chosen))
-        }
-        Proof::Construct {
-            prop,
-            variant,
-            params,
-            payload,
-        } => {
-            let definitions = ctx.definitions();
-            let decl = definitions.prop(*prop).ok_or(KernelError::UnknownProp)?;
-            let chosen = decl
-                .variants
-                .get(*variant)
-                .ok_or(KernelError::NoSuchVariant {
-                    index: *variant,
-                    variants: decl.variants.len(),
-                })?;
-            let expected_params = if chosen.with_params {
-                decl.params.len()
-            } else {
-                0
-            };
-            if params.len() != expected_params {
-                return Err(KernelError::FieldCount {
-                    expected: expected_params,
-                    found: params.len(),
-                });
-            }
-            let values: Vec<Term> = params.iter().chain(payload).cloned().collect();
-            check_fields(ctx, &chosen.telescope, &values, Mode::Logical)?;
-            let arguments = if chosen.with_params {
-                params.clone()
-            } else {
-                chosen
-                    .conclusion
-                    .iter()
-                    .map(|argument| argument.instantiate(payload.len(), |j| payload[j].clone()))
-                    .collect()
-            };
-            Ok(Term::PropApp(*prop, arguments))
-        }
-        Proof::CaseProof {
-            scrutinee,
-            goal,
-            arms,
-        } => {
-            let proved = infer_proof(ctx, scrutinee)?;
-            let Term::PropApp(id, arguments) = &proved else {
-                return Err(KernelError::NotCaseable(proved));
-            };
-            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
-            let definitions = ctx.definitions();
-            let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
-            expect_arm_count(arms, decl.variants.len())?;
-            for (arm, variant) in arms.iter().zip(&decl.variants) {
-                if variant.with_params {
-                    // The parameters are the scrutinee's own arguments, so
-                    // there is nothing to equate.
-                    let params = decl.params.len();
-                    check_arm(
-                        ctx,
-                        arm,
-                        variant.telescope.len() - params,
-                        |index, vars| {
-                            field_type(&variant.telescope, params + index, |j| {
-                                if j < params {
-                                    arguments[j].clone()
-                                } else {
-                                    Term::Free(vars[j - params])
-                                }
-                            })
-                        },
-                        |_| Vec::new(),
-                        goal,
-                    )?;
-                } else {
-                    // One index equation per parameter: the scrutinee's
-                    // argument equals the variant's stated one.
-                    check_arm(
-                        ctx,
-                        arm,
-                        variant.telescope.len(),
-                        |index, vars| {
-                            field_type(&variant.telescope, index, |j| Term::Free(vars[j]))
-                        },
-                        |vars| {
-                            let stated = variant
-                                .conclusion
-                                .iter()
-                                .map(|term| term.instantiate(vars.len(), |j| Term::Free(vars[j])));
-                            decl.params
-                                .iter()
-                                .zip(arguments)
-                                .zip(stated)
-                                .map(|((ty, actual), stated)| {
-                                    Term::eq(ty.clone(), actual.clone(), stated)
-                                })
-                                .collect()
-                        },
-                        goal,
-                    )?;
-                }
-            }
-            Ok(goal.clone())
-        }
-        Proof::CaseData {
-            scrutinee,
-            goal,
-            arms,
-        } => {
-            let ty = infer_term(ctx, scrutinee, Mode::Logical)?;
-            let variants = data_variants(ctx, &ty)
-                .ok_or_else(|| KernelError::NotCaseable(scrutinee.clone()))?;
-            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
-            expect_arm_count(arms, variants.len())?;
-            for (index, (arm, payload)) in arms.iter().zip(&variants).enumerate() {
-                check_arm(
-                    ctx,
-                    arm,
-                    payload.len(),
-                    |field, vars| field_type(payload, field, |j| Term::Free(vars[j])),
-                    |vars| {
-                        let built = vars.iter().copied().map(Term::Free).collect();
-                        vec![Term::eq(
-                            ty.clone(),
-                            scrutinee.clone(),
-                            constructor(&ty, index, built),
-                        )]
-                    },
-                    goal,
-                )?;
-            }
-            Ok(goal.clone())
-        }
-        Proof::ExistsIntro {
-            prop,
-            witness,
-            proof,
-        } => {
-            expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
-            let Term::Exists(ty, body) = prop else {
-                return Err(KernelError::NotExistential(prop.clone()));
-            };
-            expect_type(ctx, witness, ty, Mode::Logical)?;
-            check_proof(ctx, proof, &body.open(witness))?;
-            Ok(prop.clone())
-        }
-        Proof::ExistsElim { exists, goal, arm } => {
-            let proved = infer_proof(ctx, exists)?;
-            let Term::Exists(ty, body) = &proved else {
-                return Err(KernelError::NotExistential(proved));
-            };
-            // The goal is checked before the witness exists, so it cannot
-            // mention the witness.
-            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
-            check_arm(
-                ctx,
-                arm,
-                1,
-                |_, _| ty.clone(),
-                |vars| vec![body.open(&Term::Free(vars[0]))],
-                goal,
-            )?;
-            Ok(goal.clone())
-        }
-        Proof::ExcludedMiddle(prop) => {
-            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
-            expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
-            Ok(prelude.or_prop(prop.clone(), prelude.not_prop(prop.clone())))
-        }
-        Proof::ForEmpty(term) => {
-            let Term::For(looped) = term else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            if !same(&looped.lo, &looped.hi) {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            }
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            Ok(Term::eq(ty, term.clone(), looped.init.clone()))
-        }
-        Proof::ForStep {
-            looped,
-            lower,
-            upper,
-        } => {
-            let no_step = || KernelError::NoComputationStep(looped.clone());
-            let Term::For(this) = looped else {
-                return Err(no_step());
-            };
-            let Term::Prim(Prim::WrappingAdd, bound) = &this.hi else {
-                return Err(no_step());
-            };
-            let [h, Term::U8(1)] = bound.as_slice() else {
-                return Err(no_step());
-            };
-            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
-            let ty = infer_term(ctx, looped, Mode::Logical)?;
-            check_proof(ctx, lower, &prelude.u8_le_prop(this.lo.clone(), h.clone()))?;
-            check_proof(ctx, upper, &prelude.u8_lt_prop(h.clone(), this.hi.clone()))?;
-            // The loop up to h. Its body is the same term, now read under the
-            // hypothesis i < h; a body whose proofs rely on the old upper
-            // bound does not type-check here, and then there is no step.
-            let previous = Term::For(Box::new(ForLoop {
-                hi: h.clone(),
-                ordered: (**lower).clone(),
-                ..(**this).clone()
-            }));
-            let arguments = [h.clone(), previous];
-            let unrolled = this
-                .body
-                .instantiate(2, |j| arguments[j].clone())
-                .subst_hyps(&[&**lower, &**upper]);
-            match infer_term(ctx, &unrolled, Mode::Logical) {
-                Ok(found) if same_type(&found, &ty) => Ok(Term::eq(ty, looped.clone(), unrolled)),
-                _ => Err(no_step()),
-            }
-        }
+        Proof::Refl(..) => claim_of_refl(ctx, proof),
+        Proof::Transport { .. } => claim_of_transport(ctx, proof),
+        Proof::ImpliesIntro { .. } => claim_of_implies_intro(ctx, proof),
+        Proof::ImpliesElim(..) => claim_of_implies_elim(ctx, proof),
+        Proof::ForallIntro { .. } => claim_of_forall_intro(ctx, proof),
+        Proof::ForallElim(..) => claim_of_forall_elim(ctx, proof),
+        Proof::Projection(..) => claim_of_projection(ctx, proof),
+        Proof::Literal(..) => claim_of_literal(ctx, proof),
+        Proof::Definition(..) => claim_of_definition(ctx, proof),
+        Proof::CaseStep(..) => claim_of_case_step(ctx, proof),
+        Proof::Construct { .. } => claim_of_construct(ctx, proof),
+        Proof::CaseProof { .. } => claim_of_case_proof(ctx, proof),
+        Proof::CaseData { .. } => claim_of_case_data(ctx, proof),
+        Proof::ExistsIntro { .. } => claim_of_exists_intro(ctx, proof),
+        Proof::ExistsElim { .. } => claim_of_exists_elim(ctx, proof),
+        Proof::ExcludedMiddle(..) => claim_of_excluded_middle(ctx, proof),
+        Proof::ForEmpty(..) => claim_of_for_empty(ctx, proof),
+        Proof::ForStep { .. } => claim_of_for_step(ctx, proof),
         Proof::Omitted => Err(KernelError::OmittedProof),
-        Proof::Evaluate(term) => {
-            let ty = infer_term(ctx, term, Mode::Logical)?;
-            let definitions = ctx.definitions();
-            if !is_plain_data(&definitions, &ty) {
-                return Err(KernelError::NotPlainData(ty));
-            }
-            let value = Evaluator::new(&definitions).eval(term)?;
-            Ok(Term::eq(ty, term.clone(), value))
-        }
-        Proof::EvaluateAll(body) => {
-            let scope = ctx.len();
-            let var = ctx.push_bound(Type::U8);
-            let typed = expect_type(
-                ctx,
-                &body.open(&Term::Free(var)),
-                &Type::Bool,
-                Mode::Logical,
-            );
-            ctx.truncate(scope);
-            typed?;
-            let definitions = ctx.definitions();
-            // One evaluator for all cases: the step budget covers the whole
-            // claim, not each byte.
-            let mut evaluator = Evaluator::new(&definitions);
-            for byte in 0..=255u8 {
-                let case = body.open(&Term::U8(byte));
-                if evaluator.eval(&case)? != Term::Bool(true) {
-                    return Err(KernelError::Refuted(Term::U8(byte)));
-                }
-            }
-            let claim = Term::eq(Type::Bool, body.clone(), Term::Bool(true));
-            Ok(Term::Forall(Type::U8, Box::new(claim)))
-        }
+        Proof::Evaluate(..) => claim_of_evaluate(ctx, proof),
+        Proof::EvaluateAll(..) => claim_of_evaluate_all(ctx, proof),
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
-        Proof::NatInduction {
-            motive,
-            base,
-            step,
-            target,
-        } => {
-            let scope = ctx.len();
-            let hole = ctx.push_bound(Type::Nat);
-            let well_formed = expect_type(
-                ctx,
-                &motive.open(&Term::Free(hole)),
-                &Type::Prop,
-                Mode::Logical,
-            );
-            ctx.truncate(scope);
-            well_formed?;
-            expect_type(ctx, target, &Type::Nat, Mode::Logical)?;
-            check_proof(ctx, base, &motive.open(&Term::nat(0)))?;
-            check_arm_with(
-                ctx,
-                step,
-                1,
-                |_, _| Type::Nat,
-                |vars| vec![motive.open(&Term::Free(vars[0]))],
-                |vars| motive.open(&Term::succ(Term::Free(vars[0]))),
-            )?;
-            Ok(motive.open(target))
-        }
+        Proof::NatInduction { .. } => claim_of_nat_induction(ctx, proof),
     }
 }
 
+#[inline(never)]
+fn claim_of_refl(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Refl(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    if matches!(ty, Type::Proof(_)) {
+        return Err(KernelError::EqualityAtProofType(ty));
+    }
+    Ok(Term::eq(ty, term.clone(), term.clone()))
+}
+
+#[inline(never)]
+fn claim_of_transport(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Transport {
+        eq,
+        template,
+        proof,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let equality = proof_claim(ctx, eq)?;
+    let Term::Eq(ty, left, right) = equality else {
+        return Err(KernelError::NotAnEquality(equality));
+    };
+    let scope = ctx.len();
+    let hole = ctx.push_bound(ty);
+    let well_formed = expect_type(
+        ctx,
+        &template.open(&Term::Free(hole)),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    well_formed?;
+    proof_of(ctx, proof, &template.open(&left))?;
+    Ok(template.open(&right))
+}
+
+#[inline(never)]
+fn claim_of_implies_intro(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ImpliesIntro { hyp, body } = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    expect_type(ctx, hyp, &Type::Prop, Mode::Logical)?;
+    let scope = ctx.len();
+    let id = ctx.push_hyp(hyp.clone());
+    let conclusion = proof_claim(ctx, &body.open_hyp(id));
+    ctx.truncate(scope);
+    Ok(Term::implies(hyp.clone(), conclusion?))
+}
+
+#[inline(never)]
+fn claim_of_implies_elim(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ImpliesElim(implication, premise) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let prop = proof_claim(ctx, implication)?;
+    let Term::Implies(expected, conclusion) = prop else {
+        return Err(KernelError::NotAnImplication(prop));
+    };
+    proof_of(ctx, premise, &expected)?;
+    Ok(*conclusion)
+}
+
+#[inline(never)]
+fn claim_of_forall_intro(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ForallIntro { ty, body } = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    type_ok(ctx, ty)?;
+    let scope = ctx.len();
+    let var = ctx.push_bound(ty.clone());
+    let instance = proof_claim(ctx, &body.open_var(&Term::Free(var)));
+    ctx.truncate(scope);
+    Ok(Term::Forall(ty.clone(), Box::new(instance?.close(var))))
+}
+
+#[inline(never)]
+fn claim_of_forall_elim(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ForallElim(universal, argument) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let prop = proof_claim(ctx, universal)?;
+    let Term::Forall(ty, body) = prop else {
+        return Err(KernelError::NotUniversal(prop));
+    };
+    expect_type(ctx, argument, &ty, Mode::Logical)?;
+    Ok(body.open(argument))
+}
+
+#[inline(never)]
+fn claim_of_projection(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Projection(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let Term::Proj(target, index) = term else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let (Term::Tuple(_, values) | Term::Struct(_, values)) = &**target else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    if matches!(ty, Type::Proof(_)) {
+        return Err(KernelError::EqualityAtProofType(ty));
+    }
+    // Projection from a literal product is typed by the product's
+    // own field values, so the value has exactly this type.
+    let value = &values[*index];
+    if !same_type(&term_type(ctx, value, Mode::Logical)?, &ty) {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    }
+    Ok(Term::eq(ty, term.clone(), value.clone()))
+}
+
+#[inline(never)]
+fn claim_of_literal(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Literal(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let Term::Prim(prim, arguments) = term else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let value = evaluate_primitive(*prim, arguments)
+        .ok_or_else(|| KernelError::NoComputationStep(term.clone()))?;
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    Ok(Term::eq(ty, term.clone(), value))
+}
+
+#[inline(never)]
+fn claim_of_definition(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Definition(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let Term::Call(callee, arguments) = term else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let Term::Fn(id) = &**callee else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    if matches!(ty, Type::Proof(_)) {
+        return Err(KernelError::EqualityAtProofType(ty));
+    }
+    let definitions = ctx.definitions();
+    let decl = definitions
+        .function(*id)
+        .ok_or(KernelError::UnknownFunction)?;
+    let unfolded = decl
+        .body
+        .instantiate(arguments.len(), |j| arguments[j].clone());
+    Ok(Term::eq(ty, term.clone(), unfolded))
+}
+
+#[inline(never)]
+fn claim_of_case_step(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::CaseStep(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let Term::Case {
+        scrutinee, arms, ..
+    } = term
+    else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let Some((index, payload)) = known_constructor(scrutinee) else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    let chosen = arms[index]
+        .body
+        .instantiate(payload.len(), |j| payload[j].clone());
+    Ok(Term::eq(ty, term.clone(), chosen))
+}
+
+#[inline(never)]
+fn claim_of_construct(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Construct {
+        prop,
+        variant,
+        params,
+        payload,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let definitions = ctx.definitions();
+    let decl = definitions.prop(*prop).ok_or(KernelError::UnknownProp)?;
+    let chosen = decl
+        .variants
+        .get(*variant)
+        .ok_or(KernelError::NoSuchVariant {
+            index: *variant,
+            variants: decl.variants.len(),
+        })?;
+    let expected_params = if chosen.with_params {
+        decl.params.len()
+    } else {
+        0
+    };
+    if params.len() != expected_params {
+        return Err(KernelError::FieldCount {
+            expected: expected_params,
+            found: params.len(),
+        });
+    }
+    let values: Vec<Term> = params.iter().chain(payload).cloned().collect();
+    check_fields(ctx, &chosen.telescope, &values, Mode::Logical)?;
+    let arguments = if chosen.with_params {
+        params.clone()
+    } else {
+        chosen
+            .conclusion
+            .iter()
+            .map(|argument| argument.instantiate(payload.len(), |j| payload[j].clone()))
+            .collect()
+    };
+    Ok(Term::PropApp(*prop, arguments))
+}
+
+#[inline(never)]
+fn claim_of_case_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::CaseProof {
+        scrutinee,
+        goal,
+        arms,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let proved = proof_claim(ctx, scrutinee)?;
+    let Term::PropApp(id, arguments) = &proved else {
+        return Err(KernelError::NotCaseable(proved));
+    };
+    expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+    let definitions = ctx.definitions();
+    let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
+    expect_arm_count(arms, decl.variants.len())?;
+    for (arm, variant) in arms.iter().zip(&decl.variants) {
+        if variant.with_params {
+            // The parameters are the scrutinee's own arguments, so
+            // there is nothing to equate.
+            let params = decl.params.len();
+            check_arm(
+                ctx,
+                arm,
+                variant.telescope.len() - params,
+                |index, vars| {
+                    field_type(&variant.telescope, params + index, |j| {
+                        if j < params {
+                            arguments[j].clone()
+                        } else {
+                            Term::Free(vars[j - params])
+                        }
+                    })
+                },
+                |_| Vec::new(),
+                goal,
+            )?;
+        } else {
+            // One index equation per parameter: the scrutinee's
+            // argument equals the variant's stated one.
+            check_arm(
+                ctx,
+                arm,
+                variant.telescope.len(),
+                |index, vars| field_type(&variant.telescope, index, |j| Term::Free(vars[j])),
+                |vars| {
+                    let stated = variant
+                        .conclusion
+                        .iter()
+                        .map(|term| term.instantiate(vars.len(), |j| Term::Free(vars[j])));
+                    decl.params
+                        .iter()
+                        .zip(arguments)
+                        .zip(stated)
+                        .map(|((ty, actual), stated)| Term::eq(ty.clone(), actual.clone(), stated))
+                        .collect()
+                },
+                goal,
+            )?;
+        }
+    }
+    Ok(goal.clone())
+}
+
+#[inline(never)]
+fn claim_of_case_data(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::CaseData {
+        scrutinee,
+        goal,
+        arms,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let ty = term_type(ctx, scrutinee, Mode::Logical)?;
+    let variants =
+        data_variants(ctx, &ty).ok_or_else(|| KernelError::NotCaseable(scrutinee.clone()))?;
+    expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+    expect_arm_count(arms, variants.len())?;
+    for (index, (arm, payload)) in arms.iter().zip(&variants).enumerate() {
+        check_arm(
+            ctx,
+            arm,
+            payload.len(),
+            |field, vars| field_type(payload, field, |j| Term::Free(vars[j])),
+            |vars| {
+                let built = vars.iter().copied().map(Term::Free).collect();
+                vec![Term::eq(
+                    ty.clone(),
+                    scrutinee.clone(),
+                    constructor(&ty, index, built),
+                )]
+            },
+            goal,
+        )?;
+    }
+    Ok(goal.clone())
+}
+
+#[inline(never)]
+fn claim_of_exists_intro(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ExistsIntro {
+        prop,
+        witness,
+        proof,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
+    let Term::Exists(ty, body) = prop else {
+        return Err(KernelError::NotExistential(prop.clone()));
+    };
+    expect_type(ctx, witness, ty, Mode::Logical)?;
+    proof_of(ctx, proof, &body.open(witness))?;
+    Ok(prop.clone())
+}
+
+#[inline(never)]
+fn claim_of_exists_elim(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ExistsElim { exists, goal, arm } = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let proved = proof_claim(ctx, exists)?;
+    let Term::Exists(ty, body) = &proved else {
+        return Err(KernelError::NotExistential(proved));
+    };
+    // The goal is checked before the witness exists, so it cannot
+    // mention the witness.
+    expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+    check_arm(
+        ctx,
+        arm,
+        1,
+        |_, _| ty.clone(),
+        |vars| vec![body.open(&Term::Free(vars[0]))],
+        goal,
+    )?;
+    Ok(goal.clone())
+}
+
+#[inline(never)]
+fn claim_of_excluded_middle(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ExcludedMiddle(prop) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
+    Ok(prelude.or_prop(prop.clone(), prelude.not_prop(prop.clone())))
+}
+
+#[inline(never)]
+fn claim_of_for_empty(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ForEmpty(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let Term::For(looped) = term else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    if !same(&looped.lo, &looped.hi) {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    }
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    Ok(Term::eq(ty, term.clone(), looped.init.clone()))
+}
+
+#[inline(never)]
+fn claim_of_for_step(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::ForStep {
+        looped,
+        lower,
+        upper,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let no_step = || KernelError::NoComputationStep(looped.clone());
+    let Term::For(this) = looped else {
+        return Err(no_step());
+    };
+    let Term::Prim(Prim::WrappingAdd, bound) = &this.hi else {
+        return Err(no_step());
+    };
+    let [h, Term::U8(1)] = bound.as_slice() else {
+        return Err(no_step());
+    };
+    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    let ty = term_type(ctx, looped, Mode::Logical)?;
+    proof_of(ctx, lower, &prelude.u8_le_prop(this.lo.clone(), h.clone()))?;
+    proof_of(ctx, upper, &prelude.u8_lt_prop(h.clone(), this.hi.clone()))?;
+    // The loop up to h. Its body is the same term, now read under the
+    // hypothesis i < h; a body whose proofs rely on the old upper
+    // bound does not type-check here, and then there is no step.
+    let previous = Term::For(Box::new(ForLoop {
+        hi: h.clone(),
+        ordered: (**lower).clone(),
+        ..(**this).clone()
+    }));
+    let arguments = [h.clone(), previous];
+    let unrolled = this
+        .body
+        .instantiate(2, |j| arguments[j].clone())
+        .subst_hyps(&[&**lower, &**upper]);
+    match term_type(ctx, &unrolled, Mode::Logical) {
+        Ok(found) if same_type(&found, &ty) => Ok(Term::eq(ty, looped.clone(), unrolled)),
+        _ => Err(no_step()),
+    }
+}
+
+#[inline(never)]
+fn claim_of_evaluate(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::Evaluate(term) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    let definitions = ctx.definitions();
+    if !is_plain_data(&definitions, &ty) {
+        return Err(KernelError::NotPlainData(ty));
+    }
+    let value = Evaluator::new(&definitions).eval(term)?;
+    Ok(Term::eq(ty, term.clone(), value))
+}
+
+#[inline(never)]
+fn claim_of_evaluate_all(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::EvaluateAll(body) = proof else {
+        unreachable!("dispatched on this variant")
+    };
+    let scope = ctx.len();
+    let var = ctx.push_bound(Type::U8);
+    let typed = expect_type(
+        ctx,
+        &body.open(&Term::Free(var)),
+        &Type::Bool,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    typed?;
+    let definitions = ctx.definitions();
+    // One evaluator for all cases: the step budget covers the whole
+    // claim, not each byte.
+    let mut evaluator = Evaluator::new(&definitions);
+    for byte in 0..=255u8 {
+        let case = body.open(&Term::U8(byte));
+        if evaluator.eval(&case)? != Term::Bool(true) {
+            return Err(KernelError::Refuted(Term::U8(byte)));
+        }
+    }
+    let claim = Term::eq(Type::Bool, body.clone(), Term::Bool(true));
+    Ok(Term::Forall(Type::U8, Box::new(claim)))
+}
+
+#[inline(never)]
+fn claim_of_nat_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::NatInduction {
+        motive,
+        base,
+        step,
+        target,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let scope = ctx.len();
+    let hole = ctx.push_bound(Type::Nat);
+    let well_formed = expect_type(
+        ctx,
+        &motive.open(&Term::Free(hole)),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    well_formed?;
+    expect_type(ctx, target, &Type::Nat, Mode::Logical)?;
+    proof_of(ctx, base, &motive.open(&Term::nat(0)))?;
+    check_arm_with(
+        ctx,
+        step,
+        1,
+        |_, _| Type::Nat,
+        |vars| vec![motive.open(&Term::Free(vars[0]))],
+        |vars| motive.open(&Term::succ(Term::Free(vars[0]))),
+    )?;
+    Ok(motive.open(target))
+}
+
 /// Accepts `proof` as a proof of `expected`, which must be a proposition.
-pub fn check_proof(ctx: &mut Context, proof: &Proof, expected: &Term) -> Result<(), KernelError> {
+pub(super) fn proof_of(
+    ctx: &mut Context,
+    proof: &Proof,
+    expected: &Term,
+) -> Result<(), KernelError> {
     expect_type(ctx, expected, &Type::Prop, Mode::Logical)?;
-    let found = infer_proof(ctx, proof)?;
+    let found = proof_claim(ctx, proof)?;
     if same(&found, expected) {
         Ok(())
     } else {
@@ -1092,4 +1326,32 @@ pub fn check_proof(ctx: &mut Context, proof: &Proof, expected: &Term) -> Result<
             found: Box::new(found),
         })
     }
+}
+
+// --- Public entry points ------------------------------------------------------
+//
+// Each measures its input before any recursive function sees it.
+
+/// Checks that a type is well formed in the context.
+pub fn check_type(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
+    check_depth([ty.into()])?;
+    type_ok(ctx, ty)
+}
+
+/// Infers the type of a term, rejecting ill-formed terms.
+pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    check_depth([term.into()])?;
+    term_type(ctx, term, mode)
+}
+
+/// Reads off the proposition a proof proves, checking every step.
+pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    check_depth([proof.into()])?;
+    proof_claim(ctx, proof)
+}
+
+/// Accepts `proof` as a proof of `expected`, which must be a proposition.
+pub fn check_proof(ctx: &mut Context, proof: &Proof, expected: &Term) -> Result<(), KernelError> {
+    check_depth([proof.into(), expected.into()])?;
+    proof_of(ctx, proof, expected)
 }

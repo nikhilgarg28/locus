@@ -913,80 +913,221 @@ impl Term {
     }
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Term {
-        let each = |terms: &[Term]| terms.iter().map(|term| term.rebind(depth, op)).collect();
         match self {
-            Self::Free(id) => match op {
-                Rebind::CloseVar(var) if var == *id => Self::Bound(depth.vars),
-                _ => self.clone(),
-            },
-            Self::Bound(bound) => match op {
-                Rebind::OpenVar { index, replacement } if *bound == depth.vars + index => {
-                    replacement.clone()
-                }
-                _ => self.clone(),
-            },
+            Self::Free(..) => self.rebind_free(depth, op),
+            Self::Bound(..) => self.rebind_bound(depth, op),
             Self::Bool(_) | Self::U8(_) | Self::Nat(_) => self.clone(),
-            Self::Prim(prim, arguments) => Self::Prim(*prim, each(arguments)),
-            Self::Eq(ty, left, right) => Self::Eq(
-                ty.rebind(depth, op),
-                Box::new(left.rebind(depth, op)),
-                Box::new(right.rebind(depth, op)),
-            ),
-            Self::Implies(premise, conclusion) => Self::Implies(
-                Box::new(premise.rebind(depth, op)),
-                Box::new(conclusion.rebind(depth, op)),
-            ),
-            Self::Forall(ty, body) => Self::Forall(
-                ty.rebind(depth, op),
-                Box::new(body.rebind(depth.under_vars(1), op)),
-            ),
-            Self::Tuple(fields, values) => {
-                let Type::Tuple(fields) = Type::Tuple(fields.clone()).rebind(depth, op) else {
-                    unreachable!("rebinding preserves the shape of a type")
-                };
-                Self::Tuple(fields, each(values))
-            }
-            Self::Struct(id, values) => Self::Struct(*id, each(values)),
-            Self::Proj(target, index) => Self::Proj(Box::new(target.rebind(depth, op)), *index),
-            Self::Proof(proof) => Self::Proof(Box::new(proof.rebind(depth, op))),
+            Self::Prim(..) => self.rebind_prim(depth, op),
+            Self::Eq(..) => self.rebind_eq(depth, op),
+            Self::Implies(..) => self.rebind_implies(depth, op),
+            Self::Forall(..) => self.rebind_forall(depth, op),
+            Self::Tuple(..) => self.rebind_tuple(depth, op),
+            Self::Struct(..) => self.rebind_struct(depth, op),
+            Self::Proj(..) => self.rebind_proj(depth, op),
+            Self::Proof(..) => self.rebind_proof(depth, op),
             Self::Fn(_) => self.clone(),
-            Self::Call(callee, arguments) => {
-                Self::Call(Box::new(callee.rebind(depth, op)), each(arguments))
-            }
-            Self::Variant(id, index, payload) => Self::Variant(*id, *index, each(payload)),
-            Self::Case {
-                scrutinee,
-                result,
-                arms,
-            } => Self::Case {
-                scrutinee: Box::new(scrutinee.rebind(depth, op)),
-                result: result.rebind(depth, op),
-                arms: arms
-                    .iter()
-                    .map(|arm| TermArm {
-                        binders: arm.binders,
-                        body: arm.body.rebind(depth.under_vars(arm.binders), op),
-                    })
-                    .collect(),
-            },
-            Self::PropApp(id, arguments) => Self::PropApp(*id, each(arguments)),
-            Self::Exists(ty, body) => Self::Exists(
-                ty.rebind(depth, op),
-                Box::new(body.rebind(depth.under_vars(1), op)),
-            ),
-            Self::Absurd(proof, ty) => {
-                Self::Absurd(Box::new(proof.rebind(depth, op)), ty.rebind(depth, op))
-            }
-            Self::For(looped) => Self::For(Box::new(ForLoop {
-                lo: looped.lo.rebind(depth, op),
-                hi: looped.hi.rebind(depth, op),
-                ordered: looped.ordered.rebind(depth, op),
-                state: rebind_telescope(&looped.state, depth.under_vars(1), op),
-                init: looped.init.rebind(depth, op),
-                body: looped.body.rebind(depth.under(2, 2), op),
-            })),
+            Self::Call(..) => self.rebind_call(depth, op),
+            Self::Variant(..) => self.rebind_variant(depth, op),
+            Self::Case { .. } => self.rebind_case(depth, op),
+            Self::PropApp(..) => self.rebind_prop_app(depth, op),
+            Self::Exists(..) => self.rebind_exists(depth, op),
+            Self::Absurd(..) => self.rebind_absurd(depth, op),
+            Self::For(..) => self.rebind_for(depth, op),
         }
     }
+
+    #[inline(never)]
+    fn rebind_free(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Free(id) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        match op {
+            Rebind::CloseVar(var) if var == *id => Self::Bound(depth.vars),
+            _ => self.clone(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_bound(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Bound(bound) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        match op {
+            Rebind::OpenVar { index, replacement } if *bound == depth.vars + index => {
+                replacement.clone()
+            }
+            _ => self.clone(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_prim(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Prim(prim, arguments) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Prim(*prim, rebind_each(depth, op, arguments))
+    }
+
+    #[inline(never)]
+    fn rebind_eq(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Eq(ty, left, right) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Eq(
+            ty.rebind(depth, op),
+            Box::new(left.rebind(depth, op)),
+            Box::new(right.rebind(depth, op)),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_implies(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Implies(premise, conclusion) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Implies(
+            Box::new(premise.rebind(depth, op)),
+            Box::new(conclusion.rebind(depth, op)),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_forall(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Forall(ty, body) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Forall(
+            ty.rebind(depth, op),
+            Box::new(body.rebind(depth.under_vars(1), op)),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_tuple(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Tuple(fields, values) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        {
+            let Type::Tuple(fields) = Type::Tuple(fields.clone()).rebind(depth, op) else {
+                unreachable!("rebinding preserves the shape of a type")
+            };
+            Self::Tuple(fields, rebind_each(depth, op, values))
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_struct(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Struct(id, values) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Struct(*id, rebind_each(depth, op, values))
+    }
+
+    #[inline(never)]
+    fn rebind_proj(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Proj(target, index) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Proj(Box::new(target.rebind(depth, op)), *index)
+    }
+
+    #[inline(never)]
+    fn rebind_proof(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Proof(proof) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Proof(Box::new(proof.rebind(depth, op)))
+    }
+
+    #[inline(never)]
+    fn rebind_call(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Call(callee, arguments) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        {
+            Self::Call(
+                Box::new(callee.rebind(depth, op)),
+                rebind_each(depth, op, arguments),
+            )
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_variant(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Variant(id, index, payload) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Variant(*id, *index, rebind_each(depth, op, payload))
+    }
+
+    #[inline(never)]
+    fn rebind_case(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Case {
+            scrutinee,
+            result,
+            arms,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Case {
+            scrutinee: Box::new(scrutinee.rebind(depth, op)),
+            result: result.rebind(depth, op),
+            arms: arms
+                .iter()
+                .map(|arm| TermArm {
+                    binders: arm.binders,
+                    body: arm.body.rebind(depth.under_vars(arm.binders), op),
+                })
+                .collect(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_prop_app(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::PropApp(id, arguments) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::PropApp(*id, rebind_each(depth, op, arguments))
+    }
+
+    #[inline(never)]
+    fn rebind_exists(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Exists(ty, body) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Exists(
+            ty.rebind(depth, op),
+            Box::new(body.rebind(depth.under_vars(1), op)),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_absurd(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::Absurd(proof, ty) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Absurd(Box::new(proof.rebind(depth, op)), ty.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_for(&self, depth: Depth, op: Rebind<'_>) -> Term {
+        let Self::For(looped) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::For(Box::new(ForLoop {
+            lo: looped.lo.rebind(depth, op),
+            hi: looped.hi.rebind(depth, op),
+            ordered: looped.ordered.rebind(depth, op),
+            state: rebind_telescope(&looped.state, depth.under_vars(1), op),
+            init: looped.init.rebind(depth, op),
+            body: looped.body.rebind(depth.under(2, 2), op),
+        }))
+    }
+}
+
+fn rebind_each(depth: Depth, op: Rebind<'_>, terms: &[Term]) -> Vec<Term> {
+    terms.iter().map(|term| term.rebind(depth, op)).collect()
 }
 
 /// The type of field `index` of a telescope, with each earlier field `j`
@@ -1150,119 +1291,326 @@ impl Proof {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Proof {
         match self {
-            Self::Hyp(HypRef::Free(id)) => match op {
-                Rebind::CloseHyp(target) if target == *id => Self::Hyp(HypRef::Bound(depth.hyps)),
-                _ => self.clone(),
-            },
-            Self::Hyp(HypRef::Bound(bound)) => match op {
-                Rebind::OpenHyp { index, id } if *bound == depth.hyps + index => {
-                    Self::Hyp(HypRef::Free(id))
-                }
-                Rebind::SubstHyp { index, replacement } if *bound == depth.hyps + index => {
-                    replacement.clone()
-                }
-                _ => self.clone(),
-            },
-            Self::OfTerm(term) => Self::OfTerm(term.rebind(depth, op)),
-            Self::Refl(term) => Self::Refl(term.rebind(depth, op)),
-            Self::Transport {
-                eq,
-                template,
-                proof,
-            } => Self::Transport {
-                eq: Box::new(eq.rebind(depth, op)),
-                template: template.rebind(depth.under_vars(1), op),
-                proof: Box::new(proof.rebind(depth, op)),
-            },
-            Self::ImpliesIntro { hyp, body } => Self::ImpliesIntro {
-                hyp: hyp.rebind(depth, op),
-                body: Box::new(body.rebind(depth.under_hyp(), op)),
-            },
-            Self::ImpliesElim(implication, premise) => Self::ImpliesElim(
-                Box::new(implication.rebind(depth, op)),
-                Box::new(premise.rebind(depth, op)),
-            ),
-            Self::ForallIntro { ty, body } => Self::ForallIntro {
-                ty: ty.rebind(depth, op),
-                body: Box::new(body.rebind(depth.under_vars(1), op)),
-            },
-            Self::ForallElim(universal, argument) => Self::ForallElim(
-                Box::new(universal.rebind(depth, op)),
-                argument.rebind(depth, op),
-            ),
-            Self::Projection(term) => Self::Projection(term.rebind(depth, op)),
-            Self::Literal(term) => Self::Literal(term.rebind(depth, op)),
-            Self::Definition(term) => Self::Definition(term.rebind(depth, op)),
-            Self::CaseStep(term) => Self::CaseStep(term.rebind(depth, op)),
-            Self::Construct {
-                prop,
-                variant,
-                params,
-                payload,
-            } => Self::Construct {
-                prop: *prop,
-                variant: *variant,
-                params: params.iter().map(|term| term.rebind(depth, op)).collect(),
-                payload: payload.iter().map(|term| term.rebind(depth, op)).collect(),
-            },
-            Self::CaseProof {
-                scrutinee,
-                goal,
-                arms,
-            } => Self::CaseProof {
-                scrutinee: Box::new(scrutinee.rebind(depth, op)),
-                goal: goal.rebind(depth, op),
-                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
-            },
-            Self::CaseData {
-                scrutinee,
-                goal,
-                arms,
-            } => Self::CaseData {
-                scrutinee: scrutinee.rebind(depth, op),
-                goal: goal.rebind(depth, op),
-                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
-            },
-            Self::ExistsIntro {
-                prop,
-                witness,
-                proof,
-            } => Self::ExistsIntro {
-                prop: prop.rebind(depth, op),
-                witness: witness.rebind(depth, op),
-                proof: Box::new(proof.rebind(depth, op)),
-            },
-            Self::ExistsElim { exists, goal, arm } => Self::ExistsElim {
-                exists: Box::new(exists.rebind(depth, op)),
-                goal: goal.rebind(depth, op),
-                arm: arm.rebind(depth, op),
-            },
-            Self::ExcludedMiddle(prop) => Self::ExcludedMiddle(prop.rebind(depth, op)),
-            Self::ForEmpty(term) => Self::ForEmpty(term.rebind(depth, op)),
-            Self::ForStep {
-                looped,
-                lower,
-                upper,
-            } => Self::ForStep {
-                looped: looped.rebind(depth, op),
-                lower: Box::new(lower.rebind(depth, op)),
-                upper: Box::new(upper.rebind(depth, op)),
-            },
+            Self::Hyp(HypRef::Free(_)) => self.rebind_hyp(depth, op),
+            Self::Hyp(HypRef::Bound(_)) => self.rebind_hyp_2(depth, op),
+            Self::OfTerm(..) => self.rebind_of_term(depth, op),
+            Self::Refl(..) => self.rebind_refl(depth, op),
+            Self::Transport { .. } => self.rebind_transport(depth, op),
+            Self::ImpliesIntro { .. } => self.rebind_implies_intro(depth, op),
+            Self::ImpliesElim(..) => self.rebind_implies_elim(depth, op),
+            Self::ForallIntro { .. } => self.rebind_forall_intro(depth, op),
+            Self::ForallElim(..) => self.rebind_forall_elim(depth, op),
+            Self::Projection(..) => self.rebind_projection(depth, op),
+            Self::Literal(..) => self.rebind_literal(depth, op),
+            Self::Definition(..) => self.rebind_definition(depth, op),
+            Self::CaseStep(..) => self.rebind_case_step(depth, op),
+            Self::Construct { .. } => self.rebind_construct(depth, op),
+            Self::CaseProof { .. } => self.rebind_case_proof(depth, op),
+            Self::CaseData { .. } => self.rebind_case_data(depth, op),
+            Self::ExistsIntro { .. } => self.rebind_exists_intro(depth, op),
+            Self::ExistsElim { .. } => self.rebind_exists_elim(depth, op),
+            Self::ExcludedMiddle(..) => self.rebind_excluded_middle(depth, op),
+            Self::ForEmpty(..) => self.rebind_for_empty(depth, op),
+            Self::ForStep { .. } => self.rebind_for_step(depth, op),
             Self::Omitted => Self::Omitted,
-            Self::Evaluate(term) => Self::Evaluate(term.rebind(depth, op)),
-            Self::EvaluateAll(body) => Self::EvaluateAll(body.rebind(depth.under_vars(1), op)),
-            Self::Axiom(axiom) => Self::Axiom(axiom.map(|term| term.rebind(depth, op))),
-            Self::NatInduction {
-                motive,
-                base,
-                step,
-                target,
-            } => Self::NatInduction {
-                motive: motive.rebind(depth.under_vars(1), op),
-                base: Box::new(base.rebind(depth, op)),
-                step: step.rebind(depth, op),
-                target: target.rebind(depth, op),
-            },
+            Self::Evaluate(..) => self.rebind_evaluate(depth, op),
+            Self::EvaluateAll(..) => self.rebind_evaluate_all(depth, op),
+            Self::Axiom(..) => self.rebind_axiom(depth, op),
+            Self::NatInduction { .. } => self.rebind_nat_induction(depth, op),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_hyp(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Hyp(HypRef::Free(id)) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        match op {
+            Rebind::CloseHyp(target) if target == *id => Self::Hyp(HypRef::Bound(depth.hyps)),
+            _ => self.clone(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_hyp_2(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Hyp(HypRef::Bound(bound)) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        match op {
+            Rebind::OpenHyp { index, id } if *bound == depth.hyps + index => {
+                Self::Hyp(HypRef::Free(id))
+            }
+            Rebind::SubstHyp { index, replacement } if *bound == depth.hyps + index => {
+                replacement.clone()
+            }
+            _ => self.clone(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_of_term(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::OfTerm(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::OfTerm(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_refl(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Refl(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Refl(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_transport(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Transport {
+            eq,
+            template,
+            proof,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Transport {
+            eq: Box::new(eq.rebind(depth, op)),
+            template: template.rebind(depth.under_vars(1), op),
+            proof: Box::new(proof.rebind(depth, op)),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_implies_intro(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ImpliesIntro { hyp, body } = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ImpliesIntro {
+            hyp: hyp.rebind(depth, op),
+            body: Box::new(body.rebind(depth.under_hyp(), op)),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_implies_elim(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ImpliesElim(implication, premise) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ImpliesElim(
+            Box::new(implication.rebind(depth, op)),
+            Box::new(premise.rebind(depth, op)),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_forall_intro(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ForallIntro { ty, body } = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ForallIntro {
+            ty: ty.rebind(depth, op),
+            body: Box::new(body.rebind(depth.under_vars(1), op)),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_forall_elim(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ForallElim(universal, argument) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ForallElim(
+            Box::new(universal.rebind(depth, op)),
+            argument.rebind(depth, op),
+        )
+    }
+
+    #[inline(never)]
+    fn rebind_projection(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Projection(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Projection(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_literal(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Literal(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Literal(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_definition(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Definition(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Definition(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_case_step(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::CaseStep(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::CaseStep(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_construct(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Construct {
+            prop,
+            variant,
+            params,
+            payload,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Construct {
+            prop: *prop,
+            variant: *variant,
+            params: params.iter().map(|term| term.rebind(depth, op)).collect(),
+            payload: payload.iter().map(|term| term.rebind(depth, op)).collect(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_case_proof(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::CaseProof {
+            scrutinee,
+            goal,
+            arms,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::CaseProof {
+            scrutinee: Box::new(scrutinee.rebind(depth, op)),
+            goal: goal.rebind(depth, op),
+            arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_case_data(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::CaseData {
+            scrutinee,
+            goal,
+            arms,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::CaseData {
+            scrutinee: scrutinee.rebind(depth, op),
+            goal: goal.rebind(depth, op),
+            arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_exists_intro(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ExistsIntro {
+            prop,
+            witness,
+            proof,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ExistsIntro {
+            prop: prop.rebind(depth, op),
+            witness: witness.rebind(depth, op),
+            proof: Box::new(proof.rebind(depth, op)),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_exists_elim(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ExistsElim { exists, goal, arm } = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ExistsElim {
+            exists: Box::new(exists.rebind(depth, op)),
+            goal: goal.rebind(depth, op),
+            arm: arm.rebind(depth, op),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_excluded_middle(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ExcludedMiddle(prop) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ExcludedMiddle(prop.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_for_empty(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ForEmpty(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ForEmpty(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_for_step(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::ForStep {
+            looped,
+            lower,
+            upper,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::ForStep {
+            looped: looped.rebind(depth, op),
+            lower: Box::new(lower.rebind(depth, op)),
+            upper: Box::new(upper.rebind(depth, op)),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_evaluate(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Evaluate(term) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Evaluate(term.rebind(depth, op))
+    }
+
+    #[inline(never)]
+    fn rebind_evaluate_all(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::EvaluateAll(body) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::EvaluateAll(body.rebind(depth.under_vars(1), op))
+    }
+
+    #[inline(never)]
+    fn rebind_axiom(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Axiom(axiom) = self else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Axiom(axiom.map(|term| term.rebind(depth, op)))
+    }
+
+    #[inline(never)]
+    fn rebind_nat_induction(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::NatInduction {
+            motive,
+            base,
+            step,
+            target,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::NatInduction {
+            motive: motive.rebind(depth.under_vars(1), op),
+            base: Box::new(base.rebind(depth, op)),
+            step: step.rebind(depth, op),
+            target: target.rebind(depth, op),
         }
     }
 }

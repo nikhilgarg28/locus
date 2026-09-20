@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers all six kernel gates, **K1** to **K6**, of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), `tests/kernel_numbers.rs` (K5), and `tests/kernel_loops.rs` (K6). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers all six kernel gates, **K1** to **K6**, of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), `tests/kernel_numbers.rs` (K5), `tests/kernel_loops.rs` (K6), `tests/kernel_evaluation.rs` (evaluation and the range successor axiom), and `tests/kernel_depth.rs` (the depth bound). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -30,7 +30,7 @@ Terms. A proposition is a term of type `Prop`; there is no separate syntactic cl
 t ::= x                     a context variable, by identity
     | #i                    a bound variable, by de Bruijn index
     | true | false | 0..255
-    | 0n, 1n, ...           Nat literals
+    | 0n, 1n, ...           Nat literals, of arbitrary size
     | wrapping_add(t, t) | wrapping_sub(t, t)
     | u8_eq(t, t) | u8_lt(t, t) | u8_le(t, t)     the runtime comparisons, of type bool
     | to_nat(t) | of_nat(t) | succ(t) | nat_add(t, t)
@@ -82,6 +82,10 @@ p ::= h                     a context hypothesis, by identity
     | exists_elim(p, G, arm)
     | excluded_middle(P)
     | for_empty(t)          computation axiom
+    | for_step(t, p, p)     computation axiom
+    | evaluate(t)           big-step evaluation of a closed term
+    | evaluate_all(t)       a claim about every byte, by 256 evaluations; t binds #0
+    | omitted               left by the evaluator; proves nothing
     | axiom(...)            an axiom of Nat or of the u8 model
     | nat_induction(M, p, arm, t)
 ~~~
@@ -136,7 +140,7 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `forall (#: A) { P }` | mode is `Logical`; `A` is a type; for a fresh ghost `x : A`, `P[x] : Prop` in `Logical` mode | `Prop` |
 | `(t_0, ..., t_n) : (A_0, ..., A_n)` | the telescope is a type; the field rule below holds | `(A_0, ..., A_n)` |
 | `S { t_0, ..., t_n }` | `S` is declared with fields `(A_0, ..., A_n)`; the field rule below holds | `struct S` |
-| `t.i` | `t : (A_0, ..., A_n)` or `t : struct S` in the same mode; `i <= n`. In `Executable` mode the result type is not ghost. | `A_i[t.0, ..., t.(i-1)]` |
+| `t.i` | `t : (A_0, ..., A_n)` or `t : struct S` in the same mode; `i <= n`. In `Executable` mode the result type is not ghost. | `A_i[t.0, ..., t.(i-1)]`, or, when `t` is literally a product value with fields `v_0, ..., v_n`, `A_i[v_0, ..., v_{i-1}]` |
 | `proof(p)` | mode is `Logical`; `p` proves `P` | `@P` |
 | `E::i(t_0, ..., t_n)` | `E` is declared and has a variant `i` with payload `(A_0, ..., A_n)`; the field rule holds for the payload, in the same mode | `enum E` |
 | `case t : R { arms }` | `t : bool` or `t : enum E` in the same mode; `R` is a type, is not a proof type, and in `Executable` mode is not ghost; there is exactly one arm per variant, in order (`false`, `true` for `bool`); arm `i` binds exactly the payload of variant `i`, and with those variables added its body has type `R` in the same mode | `R` |
@@ -178,10 +182,10 @@ The kernel reads the proposition off the proof. It never searches.
 | `forall_intro(A, p)` | with a fresh ghost `x : A` added, `p[x]` proves `P` | `forall (#: A) { close(P, x) }` |
 | `forall_elim(f, t)` | `f` proves `forall (#: A) { P }`; `t : A` in `Logical` mode | `P[t]` |
 | `of_term(t)` | `t : @P` in `Logical` mode | `P` |
-| `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type; `v_i : A` | `c.i ==[A] v_i` |
+| `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type | `c.i ==[A] v_i` |
 | `definition(f(t_0, ..., t_n))` | the callee is literally a declared function `f` with parameters `x_0, ..., x_n` and body `b`; `f(t_0, ..., t_n) : A` in `Logical` mode; `A` is not a proof type | `f(t_0, ..., t_n) ==[A] b[t_0, ..., t_n]` |
 | `case_step(case c : R { arms })` | `c` is literally `false`, `true`, or `E::i(v_0, ..., v_n)`; the case is well typed in `Logical` mode | `case c ... ==[R] arm_i[v_0, ..., v_n]` |
-| `literal(op(args))` | `op` is a primitive and every argument is a literal of the right type; for `succ` and `nat_add` the result fits the `Nat` literal range | `op(args) ==[A] r`, where `r` is the literal the native evaluation below produces and `A` is the primitive's result type |
+| `literal(op(args))` | `op` is a primitive and every argument is a literal of the right type | `op(args) ==[A] r`, where `r` is the literal the native evaluation below produces and `A` is the primitive's result type |
 
 ### Declared propositions
 
@@ -247,9 +251,26 @@ Two loops that differ only in the proof that their bounds are ordered are the sa
 |---|---|---|
 | `for_empty(f)` | `f` is a `for` whose `lo` and `hi` are the same term, and is well typed | `f ==[S(lo)] init` |
 
-The successor case of the range axiom, `for lo..succ(hi) == body[hi, for lo..hi]`, is not yet a rule. With an index-dependent state the two sides have types that are equal only up to `wrapping_add(i, 1) == succ`, and the kernel has no transport between types. The invariant rule above is what verification of a loop uses; the missing axiom only matters for computing a loop's value on literals. It can be added for index-independent state without new machinery.
+| `for_step(f, lower, upper)` | `f` is a well-typed `for` over `lo..wrapping_add(h, 1)`, with the successor written exactly so; `lower` proves `u8_le(lo, h)`; `upper` proves `u8_lt(h, wrapping_add(h, 1))`; the unrolled right side below is well typed at the type of `f` | `f ==[S(wrapping_add(h, 1))] body[h, g, lower, upper]`, where `g` is the same `for` over `lo..h` with `lower` as its ordering proof |
+
+Stating the successor case with the bound in successor form is what makes it work for index-dependent state: the body at index `h` has type `S(wrapping_add(h, 1))`, which is the type of `f`, so no transport between types is needed. `upper` says the successor does not wrap. The loop `g` reuses the body under the hypothesis `i < h`; a body whose proofs depend on the particular upper bound does not type-check there, and then there is no step. `for_empty` and `for_step` compute a loop symbolically; on literals, `evaluate` below is the practical route, because a literal bound cannot be rewritten into successor form inside a `for` that carries a proof about it.
 
 Soundness of the typing rule is by induction on `hi - lo` in the intended model. It is a separate rule from `nat_induction` on purpose: one recursion rule computes and erases to a loop, the other only proves and is erased.
+
+### Evaluation
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `evaluate(t)` | `t : A` in `Logical` mode; `A` is plain data: `bool`, `u8`, `Nat`, or a tuple, struct, or enum built only from those; `t` has no free variable; evaluation finishes within the step budget with value `v` | `t ==[A] v` |
+| `evaluate_all(b)` | for a fresh ghost `x : u8`, `b[x] : bool`; for each byte `k`, `b[k]` evaluates to `true`, all within one step budget | `forall (#: u8) { b ==[bool] true }` |
+
+Evaluation is big-step and call-by-value: primitives by native evaluation, a call by instantiating the function's body, `case` by choosing the arm of the evaluated scrutinee, projection from the evaluated product, and `for` by running the body for each index from `lo` to `hi`. It is a shortcut for a chain of the computation axioms and is the one place the kernel computes. It takes no part in comparing terms.
+
+Proofs are never evaluated. The evaluator replaces each `proof(p)` it meets by `proof(omitted)`, so a loop state that carries proofs about the previous state does not grow. `omitted` proves nothing: checking it is an error. Because `evaluate` offers only plain data, no omitted proof can appear in a conclusion. To evaluate the data of a proof-carrying value, project it first: `evaluate(count_up(200).0)`.
+
+A failing case of `evaluate_all` is reported with the byte that refutes it. With `reflect`, a proved `forall (x: u8) { u8_le(x, 255) == true }` becomes a fact about the ordering of any byte.
+
+The budget is 2,000,000 evaluation steps, counted in steps and never in time, so that acceptance does not depend on the machine. Exceeding it is an error distinct from refutation.
 
 ### Nat
 
@@ -303,7 +324,7 @@ where `P` is `a ==[u8] b`, `u8_lt(a, b)`, or `u8_le(a, b)` respectively. With `c
 
 All of these axioms need the prelude, because they are stated with `False` and the orderings.
 
-`src/kernel/theory.rs` begins the kernel-level prelude: associativity of addition and `0 + a == a` by induction; reflexivity, `0 <= a`, and transitivity of `nat_le`; and the corresponding facts about `u8_le`. These are declared lemmas, checked by the kernel when they are declared, and not trusted. A fact about the ordering of three byte variables is obtained by reasoning about their models, never by enumerating bytes. The lemmas `bounded_walk` needs beyond `u8_zero_le` (strict order from `<=` and `!=`, and the successor step) need cancellation and commutativity of addition first, and belong to the prelude batch of the plan.
+`src/kernel/theory.rs` begins the kernel-level prelude: associativity of addition, `0 + a == a`, and `succ(a) + b == succ(a + b)` by induction; every natural is zero or a successor, which serves as case analysis on `Nat`; reflexivity, `0 <= a`, transitivity, and monotonicity of `succ` for `nat_le`; the corresponding facts about `u8_le`; and the two lemmas the specification's `bounded_walk` uses, `u8_le(i, limit) => (i == limit => False) => u8_lt(i, limit)` and `u8_lt(i, limit) => u8_le(wrapping_add(i, 1), limit)`. The second shows through the model of `wrapping_add` that the successor of a byte below another does not wrap. These are declared lemmas, checked by the kernel when they are declared, and not trusted. A fact about the ordering of three byte variables is obtained by reasoning about their models, never by enumerating bytes.
 
 ### Notes on the rules
 
@@ -311,11 +332,11 @@ Using a lemma needs no rule of its own: a call to a lemma is a term of proof typ
 
 `projection`, `literal`, `definition`, and `case_step` are the computation axioms of specification section 12.2 that exist so far; the `let` axiom is a hypothesis, as described under Context. Each is a single step validated by matching the shape of its term. They are used through `transport`, and the elaborator will insert them silently.
 
-The premise `v_i : A` of `projection` matters only for a nested dependent product: the projection's type names earlier fields as `c.j`, while the value's own type names them as `v_j`. The step is offered only when the two types are already the same. Bridging them would need transport between types, which the kernel does not have.
+Projection from a literal product is typed by the product's own field values, which is the type the constructor rule checked field `i` against. So `v_i : A` always holds in `projection`, including for a nested dependent product whose inner type mentions an outer field.
 
 `definition` is the only way a function body ever becomes visible. At type `Prop` it is how a predicate is unfolded, and at a function type it gives equations such as `select() == successor`. The call must name the declared function directly: a call through a variable or through another call has no defining equation until the callee has been rewritten to a function name.
 
-`literal` evaluates natively: `u8::wrapping_add`, `u8::wrapping_sub`, `==`, `<`, `<=` on bytes; widening for `to_nat`; remainder modulo 256 for `of_nat`; checked `u64` addition for `succ` and `nat_add`. A `Nat` literal is a `u64`; arithmetic that would leave that range has no step. Arbitrary precision is a later refinement. This evaluation must agree with the model below, and `tests/kernel_numbers.rs` checks that it does.
+`literal` evaluates natively: `u8::wrapping_add`, `u8::wrapping_sub`, `==`, `<`, `<=` on bytes; widening for `to_nat`; the low byte for `of_nat`; and arbitrary-precision addition for `succ` and `nat_add` (`src/kernel/nat.rs`), so those always have a step. This evaluation must agree with the model below, and `tests/kernel_numbers.rs` checks that it does.
 
 `check(ctx, p, P)` requires `P : Prop`, infers the proposition `p` proves, and accepts when the two are the same term.
 
@@ -338,7 +359,15 @@ Constructor disjointness and injectivity are not rules. `tests/kernel_cases.rs` 
 
 `src/kernel/derive.rs` builds proofs out of the rules above and is not trusted: `symm`, `trans`, `rewrite`, `unfold`, and `fold`. Each computes a transport template by abstracting occurrences of a term, and the kernel checks the result like any other proof. These are the elaborator forms of specification section 8.4. Their loops are bounded by a step count.
 
-They act on closed occurrences only. A call that mentions a variable bound inside the proposition, as in `forall x { is_three(x) }`, is left alone; reaching it takes `forall_elim`, the rewrite, and `forall_intro`, which is left to the elaborator.
+`unfold` and `fold` reach a call that mentions a bound variable, as in `forall x { is_three(x) }`, by going under `forall` and `exists` and into the conclusion of an implication, and rebuilding the binder around the rewritten body. `fold` follows the shape of its goal and unfolds an implication's premise on the way in. A call inside the arguments of a declared proposition, or under a binder within the premise of an implication, is not reached. `rewrite` needs no descent, because the term it replaces is closed. `Chain` builds an equational chain a link at a time.
+
+## Depth bound
+
+Checking, comparison, and substitution are recursive. Every public entry point (`check_type`, `infer_term`, `infer_proof`, `check_proof`, `Context::declare`, `assume`, `define`, and the declaration functions) first measures its input with an explicit work list, without recursion, and rejects input nested more than `MAX_DEPTH` = 256 levels deep, counting types, terms, and proofs together.
+
+The number comes from measurement in an unoptimized build on a 2 MiB thread stack: nested arithmetic and nested quantifiers check at depth 800, and the worst shape found, a chain of transports, at 500 but not 600. To get there, the two judgments and the binder traversals are written as small dispatchers that call one function per rule or per variant; as single large matches, an unoptimized build reserved stack for every arm at once and overflowed near depth 150. A long equational argument should be a balanced tree of transitivity steps, or separate lemmas, not one chain.
+
+The bound is on input. A term built by substitution during checking can be deeper than any input, by at most the input depth for each substitution a proof performs. Dropping a very deep term is recursive in Rust itself; the parser's own nesting limit keeps such terms from arising from source text.
 
 ## Invariants the implementation maintains
 
@@ -351,14 +380,13 @@ They act on closed occurrences only. A call that mentions a variable bound insid
 
 Symmetry, transitivity, and congruence of equality are not rules. They are derived from `refl` and `transport`, and `tests/kernel.rs` derives each of them.
 
-All six kernel gates are implemented. Known gaps, each recorded where it arises above: the successor case of the range computation axiom; the projection axiom for nested dependent products; rewriting under binders in the derived forms; `Nat` literals beyond `u64`; and a depth bound on checking.
-
+All six kernel gates are implemented, and the gaps recorded when they were finished are closed. What remains, each noted where it arises above: `for_step` has no step for a body whose proofs depend on the particular upper bound; the derived forms do not reach inside a declared proposition's arguments or under a binder in an implication's premise; the depth bound covers input, not terms produced by substitution; and there is no transport between types, which nothing has needed so far because a dependent product can be rebuilt field by field.
 
 One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2 was built the kernel had no `!=`, which needs `False` from K4, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
 
 ## Trusted base
 
-`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations and the prelude's definitions), the axioms of `Nat` and of the `u8` model, and the native evaluation behind `literal` together with its agreement with that model. `src/kernel/derive.rs`, `src/kernel/classical.rs`, and `src/kernel/theory.rs` are not part of it.
+`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations and the prelude's definitions), the axioms of `Nat` and of the `u8` model, the native evaluation behind `literal` together with its agreement with that model, `src/kernel/nat.rs` (literal arithmetic), `src/kernel/eval.rs` (the evaluator), and `src/kernel/depth.rs` (the depth bound). `src/kernel/derive.rs`, `src/kernel/classical.rs`, and `src/kernel/theory.rs` are not part of it.
 
 Agreement is tested exhaustively. For every pair of bytes, `tests/kernel_numbers.rs` has the kernel check that the native `wrapping_add` result equals `of_nat(to_nat(a) + to_nat(b))` evaluated step by step, that adding the subtrahend back to the native `wrapping_sub` result restores the minuend, and that whatever the native `<` answers, the matching fact about the models is provable. `of_nat` and `to_nat` are checked against their axioms on literals. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
 

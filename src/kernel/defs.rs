@@ -7,9 +7,10 @@
 
 use std::rc::Rc;
 
-use super::check::{check_telescope, check_type, expect_type, same_types};
+use super::check::{check_telescope, expect_type, same_types, type_ok};
 use super::classical::term_is_classical;
 use super::context::{Context, Mode};
+use super::depth::check_depth;
 use super::error::KernelError;
 use super::term::{EnumId, FnId, PropId, StructId, Term, Type, VarId, field_type};
 
@@ -270,6 +271,7 @@ impl Definitions {
         let mut ctx = Context::with_definitions(Rc::new(self.clone()));
         let mut payloads = Vec::new();
         for variant in variants {
+            check_depth([variant.into()])?;
             let Type::Tuple(fields) = variant else {
                 return Err(KernelError::NotAProduct(variant.clone()));
             };
@@ -291,7 +293,8 @@ impl Definitions {
     ) -> Result<PropId, KernelError> {
         let mut ctx = Context::with_definitions(Rc::new(self.clone()));
         for param in &params {
-            check_type(&mut ctx, param)?;
+            check_depth([param.into()])?;
+            type_ok(&mut ctx, param)?;
             if matches!(param, Type::Proof(_)) {
                 return Err(KernelError::ProofParameter(param.clone()));
             }
@@ -300,6 +303,7 @@ impl Definitions {
         for variant in variants {
             decls.push(match variant {
                 PropVariant::Params(telescope) => {
+                    check_depth([(&telescope).into()])?;
                     let Type::Tuple(telescope) = telescope else {
                         return Err(KernelError::NotAProduct(telescope));
                     };
@@ -321,6 +325,9 @@ impl Definitions {
                     payload,
                     conclusion,
                 } => {
+                    check_depth(
+                        std::iter::once((&payload).into()).chain(conclusion.iter().map(Into::into)),
+                    )?;
                     let Type::Tuple(telescope) = payload else {
                         return Err(KernelError::NotAProduct(payload));
                     };
@@ -365,6 +372,7 @@ impl Definitions {
     /// Declares a struct with the fields of the given tuple type. The fields
     /// must be well formed with no variables in scope.
     pub fn declare_struct(&mut self, fields: &Type) -> Result<StructId, KernelError> {
+        check_depth([fields.into()])?;
         let Type::Tuple(fields) = fields else {
             return Err(KernelError::NotAProduct(fields.clone()));
         };
@@ -384,6 +392,7 @@ impl Definitions {
         signature: &Type,
         body: impl FnOnce(&[Term]) -> Term,
     ) -> Result<FnId, KernelError> {
+        check_depth([signature.into()])?;
         let Type::Fn(params, result) = signature else {
             return Err(KernelError::NotAFunction(signature.clone()));
         };
@@ -399,6 +408,7 @@ impl Definitions {
         }
         let arguments: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
         let body = body(&arguments);
+        check_depth([(&body).into()])?;
         let expected = field_type(&telescope, params.len(), |j| Term::Free(vars[j]));
         expect_type(&mut ctx, &body, &expected, Mode::Logical)?;
 
