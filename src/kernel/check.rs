@@ -2,8 +2,9 @@
 //! `docs/kernel-contract.md`.
 
 use super::context::{Context, Mode};
+use super::defs::Prelude;
 use super::error::KernelError;
-use super::term::{HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
+use super::term::{Axiom, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
 /// The kernel's only comparison of terms: equality up to renaming of bound
 /// variables, which the locally nameless representation makes structural, and
@@ -20,6 +21,7 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Bound(l), Term::Bound(r)) => l == r,
         (Term::Bool(l), Term::Bool(r)) => l == r,
         (Term::U8(l), Term::U8(r)) => l == r,
+        (Term::Nat(l), Term::Nat(r)) => l == r,
         (Term::Prim(lp, la), Term::Prim(rp, ra)) => lp == rp && all(la, ra),
         (Term::Eq(lt, ll, lr), Term::Eq(rt, rl, rr)) => {
             same_type(lt, rt) && same(ll, rl) && same(lr, rr)
@@ -64,7 +66,10 @@ pub fn same(left: &Term, right: &Term) -> bool {
 
 pub fn same_type(left: &Type, right: &Type) -> bool {
     match (left, right) {
-        (Type::Bool, Type::Bool) | (Type::U8, Type::U8) | (Type::Prop, Type::Prop) => true,
+        (Type::Bool, Type::Bool)
+        | (Type::U8, Type::U8)
+        | (Type::Nat, Type::Nat)
+        | (Type::Prop, Type::Prop) => true,
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
         (Type::Struct(l), Type::Struct(r)) => l == r,
@@ -81,7 +86,7 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 /// Checks that a type is well formed in the context.
 pub fn check_type(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
-        Type::Bool | Type::U8 | Type::Prop => Ok(()),
+        Type::Bool | Type::U8 | Type::Nat | Type::Prop => Ok(()),
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
         Type::Tuple(fields) => check_telescope(ctx, fields),
         Type::Struct(id) => ctx
@@ -132,17 +137,23 @@ pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
         Term::Bound(_) => Err(KernelError::DanglingBound),
         Term::Bool(_) => Ok(Type::Bool),
         Term::U8(_) => Ok(Type::U8),
-        Term::Prim(Prim::WrappingAdd | Prim::WrappingSub, arguments) => {
-            if arguments.len() != 2 {
+        Term::Nat(_) => {
+            ghost_former(mode, &Type::Nat)?;
+            Ok(Type::Nat)
+        }
+        Term::Prim(prim, arguments) => {
+            let (parameters, result) = prim_signature(*prim);
+            if arguments.len() != parameters.len() {
                 return Err(KernelError::WrongArity {
-                    expected: 2,
+                    expected: parameters.len(),
                     found: arguments.len(),
                 });
             }
-            for argument in arguments {
-                expect_type(ctx, argument, &Type::U8, mode)?;
+            ghost_former(mode, &result)?;
+            for (argument, parameter) in arguments.iter().zip(parameters) {
+                expect_type(ctx, argument, parameter, mode)?;
             }
-            Ok(Type::U8)
+            Ok(result)
         }
         Term::Eq(ty, left, right) => {
             ghost_former(mode, &Type::Prop)?;
@@ -377,8 +388,21 @@ fn check_arm(
     arm: &ProofArm,
     payload_len: usize,
     field: impl Fn(usize, &[VarId]) -> Type,
-    hypotheses: impl Fn(&[VarId]) -> Vec<Term>,
+    hypotheses: impl FnMut(&[VarId]) -> Vec<Term>,
     goal: &Term,
+) -> Result<(), KernelError> {
+    check_arm_with(ctx, arm, payload_len, field, hypotheses, |_| goal.clone())
+}
+
+/// As `check_arm`, for a goal that mentions the arm's own variables, which
+/// only induction needs.
+fn check_arm_with(
+    ctx: &mut Context,
+    arm: &ProofArm,
+    payload_len: usize,
+    field: impl Fn(usize, &[VarId]) -> Type,
+    mut hypotheses: impl FnMut(&[VarId]) -> Vec<Term>,
+    goal: impl FnOnce(&[VarId]) -> Term,
 ) -> Result<(), KernelError> {
     let scope = ctx.len();
     let mut vars: Vec<VarId> = Vec::new();
@@ -390,8 +414,9 @@ fn check_arm(
         .into_iter()
         .map(|prop| ctx.push_hyp(prop))
         .collect();
+    let goal = goal(&vars);
     let result = if (arm.vars as usize, arm.hyps as usize) == (vars.len(), hyps.len()) {
-        check_proof(ctx, &arm.body.open_arm(&vars, &hyps), goal)
+        check_proof(ctx, &arm.body.open_arm(&vars, &hyps), &goal)
     } else {
         Err(KernelError::ArmBinders {
             expected: (vars.len(), hyps.len()),
@@ -410,6 +435,118 @@ fn expect_arm_count(arms: &[ProofArm], variants: usize) -> Result<(), KernelErro
             expected: variants,
             found: arms.len(),
         })
+    }
+}
+
+fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
+    match prim {
+        Prim::WrappingAdd | Prim::WrappingSub => (&[Type::U8, Type::U8], Type::U8),
+        Prim::U8Eq | Prim::U8Lt | Prim::U8Le => (&[Type::U8, Type::U8], Type::Bool),
+        Prim::ToNat => (&[Type::U8], Type::Nat),
+        Prim::OfNat => (&[Type::Nat], Type::U8),
+        Prim::Succ => (&[Type::Nat], Type::Nat),
+        Prim::NatAdd => (&[Type::Nat, Type::Nat], Type::Nat),
+    }
+}
+
+/// Native evaluation of a primitive applied to literals. This is the
+/// implementation that must agree with the `u8` model.
+fn evaluate(prim: Prim, arguments: &[Term]) -> Option<Term> {
+    Some(match (prim, arguments) {
+        (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
+        (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
+        (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
+        (Prim::U8Lt, [Term::U8(a), Term::U8(b)]) => Term::Bool(a < b),
+        (Prim::U8Le, [Term::U8(a), Term::U8(b)]) => Term::Bool(a <= b),
+        (Prim::ToNat, [Term::U8(a)]) => Term::Nat(u64::from(*a)),
+        (Prim::OfNat, [Term::Nat(n)]) => Term::U8((n % 256) as u8),
+        (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.checked_add(1)?),
+        (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.checked_add(*b)?),
+        _ => return None,
+    })
+}
+
+/// The proposition an axiom states, after typing its arguments.
+fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError> {
+    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    let expected = match axiom {
+        Axiom::NatAddZero(_)
+        | Axiom::NatAddSucc(..)
+        | Axiom::NatSuccInjective(..)
+        | Axiom::NatSuccNotZero(_)
+        | Axiom::ToOfNat(_)
+        | Axiom::OfNatWrap(_) => Some(Type::Nat),
+        Axiom::ToNatBound(_)
+        | Axiom::OfToNat(_)
+        | Axiom::WrappingAddModel(..)
+        | Axiom::WrappingSubModel(..) => Some(Type::U8),
+        Axiom::Reflect(..) => None,
+    };
+    if let Some(expected) = &expected {
+        for term in axiom.terms() {
+            expect_type(ctx, term, expected, Mode::Logical)?;
+        }
+    }
+    let nat_eq = |left: Term, right: Term| Term::eq(Type::Nat, left, right);
+    let u8_eq = |left: Term, right: Term| Term::eq(Type::U8, left, right);
+    let bound = Term::Nat(256);
+    Ok(match axiom.clone() {
+        Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::Nat(0)), a),
+        Axiom::NatAddSucc(a, b) => nat_eq(
+            Term::nat_add(a.clone(), Term::succ(b.clone())),
+            Term::succ(Term::nat_add(a, b)),
+        ),
+        Axiom::NatSuccInjective(a, b) => Term::implies(
+            nat_eq(Term::succ(a.clone()), Term::succ(b.clone())),
+            nat_eq(a, b),
+        ),
+        Axiom::NatSuccNotZero(a) => prelude.not_prop(nat_eq(Term::succ(a), Term::Nat(0))),
+        Axiom::ToNatBound(x) => prelude.nat_lt_prop(Term::to_nat(x), bound),
+        Axiom::OfToNat(x) => u8_eq(Term::of_nat(Term::to_nat(x.clone())), x),
+        Axiom::ToOfNat(n) => Term::implies(
+            prelude.nat_lt_prop(n.clone(), bound),
+            nat_eq(Term::to_nat(Term::of_nat(n.clone())), n),
+        ),
+        Axiom::OfNatWrap(n) => u8_eq(
+            Term::of_nat(Term::nat_add(n.clone(), bound)),
+            Term::of_nat(n),
+        ),
+        Axiom::WrappingAddModel(a, b) => u8_eq(
+            Term::wrapping_add(a.clone(), b.clone()),
+            Term::of_nat(Term::nat_add(Term::to_nat(a), Term::to_nat(b))),
+        ),
+        Axiom::WrappingSubModel(a, b) => u8_eq(
+            Term::wrapping_add(Term::wrapping_sub(a.clone(), b.clone()), b),
+            a,
+        ),
+        Axiom::Reflect(comparison, flag) => {
+            expect_type(ctx, &comparison, &Type::Bool, Mode::Logical)?;
+            let claim = comparison_claim(&prelude, &comparison)
+                .ok_or_else(|| KernelError::NoComputationStep(comparison.clone()))?;
+            let observed = Term::eq(Type::Bool, comparison, Term::Bool(flag));
+            if flag {
+                Term::implies(observed, claim)
+            } else {
+                Term::implies(observed, prelude.not_prop(claim))
+            }
+        }
+    })
+}
+
+/// The proposition a runtime comparison decides.
+fn comparison_claim(prelude: &Prelude, comparison: &Term) -> Option<Term> {
+    let Term::Prim(prim, arguments) = comparison else {
+        return None;
+    };
+    let [left, right] = arguments.as_slice() else {
+        return None;
+    };
+    let (left, right) = (left.clone(), right.clone());
+    match prim {
+        Prim::U8Eq => Some(Term::eq(Type::U8, left, right)),
+        Prim::U8Lt => Some(prelude.u8_lt_prop(left, right)),
+        Prim::U8Le => Some(prelude.u8_le_prop(left, right)),
+        _ => None,
     }
 }
 
@@ -568,14 +705,10 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             let Term::Prim(prim, arguments) = term else {
                 return Err(KernelError::NoComputationStep(term.clone()));
             };
-            let [Term::U8(left), Term::U8(right)] = arguments.as_slice() else {
-                return Err(KernelError::NoComputationStep(term.clone()));
-            };
-            let value = match prim {
-                Prim::WrappingAdd => left.wrapping_add(*right),
-                Prim::WrappingSub => left.wrapping_sub(*right),
-            };
-            Ok(Term::eq(Type::U8, term.clone(), Term::U8(value)))
+            let value = evaluate(*prim, arguments)
+                .ok_or_else(|| KernelError::NoComputationStep(term.clone()))?;
+            let ty = infer_term(ctx, term, Mode::Logical)?;
+            Ok(Term::eq(ty, term.clone(), value))
         }
         Proof::Definition(term) => {
             let Term::Call(callee, arguments) = term else {
@@ -780,6 +913,35 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
             expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
             Ok(prelude.or_prop(prop.clone(), prelude.not_prop(prop.clone())))
+        }
+        Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
+        Proof::NatInduction {
+            motive,
+            base,
+            step,
+            target,
+        } => {
+            let scope = ctx.len();
+            let hole = ctx.push_bound(Type::Nat);
+            let well_formed = expect_type(
+                ctx,
+                &motive.open(&Term::Free(hole)),
+                &Type::Prop,
+                Mode::Logical,
+            );
+            ctx.truncate(scope);
+            well_formed?;
+            expect_type(ctx, target, &Type::Nat, Mode::Logical)?;
+            check_proof(ctx, base, &motive.open(&Term::Nat(0)))?;
+            check_arm_with(
+                ctx,
+                step,
+                1,
+                |_, _| Type::Nat,
+                |vars| vec![motive.open(&Term::Free(vars[0]))],
+                |vars| motive.open(&Term::succ(Term::Free(vars[0]))),
+            )?;
+            Ok(motive.open(target))
         }
     }
 }

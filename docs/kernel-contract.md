@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers kernel gates **K1** to **K4** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), and `tests/kernel_cases.rs` (K4). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers kernel gates **K1** to **K5** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), and `tests/kernel_numbers.rs` (K5). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -10,6 +10,7 @@ Types:
 
 ~~~
 Type ::= bool | u8 | Prop
+       | Nat                      internal natural numbers
        | @P                       the proofs of the proposition P
        | (A_0, A_1, ..., A_n)     a telescope: A_i may mention fields 0..i-1
        | struct S                 a declared struct, by identity
@@ -17,7 +18,7 @@ Type ::= bool | u8 | Prop
        | math fn(A_0, ..., A_n) -> R     parameters form a telescope; R may mention all of them
 ~~~
 
-`Prop` and `@P` are ghost types: they have no runtime representation. A function type is ghost when its result type is: such a function is a predicate or a proof. Only total functions have kernel types; an ordinary `fn` never reaches the kernel. A term occurs inside a type only inside some `@P`. A value can therefore change what a later proof field says, and never what data a product holds.
+`Prop`, `@P`, and `Nat` are ghost types: they have no runtime representation. `Nat` is internal to the kernel: it is the model of `u8` and the domain of induction, and a source program cannot name it. A function type is ghost when its result type is: such a function is a predicate or a proof. Only total functions have kernel types; an ordinary `fn` never reaches the kernel. A term occurs inside a type only inside some `@P`. A value can therefore change what a later proof field says, and never what data a product holds.
 
 In a telescope, field `i` is under `i` binders: `#0` in it is field `i - 1`, `#1` is field `i - 2`, and so on. `A_i[v_0, ..., v_{i-1}]` below means field `i`'s type with each earlier field replaced by the given term.
 
@@ -29,7 +30,10 @@ Terms. A proposition is a term of type `Prop`; there is no separate syntactic cl
 t ::= x                     a context variable, by identity
     | #i                    a bound variable, by de Bruijn index
     | true | false | 0..255
+    | 0n, 1n, ...           Nat literals
     | wrapping_add(t, t) | wrapping_sub(t, t)
+    | u8_eq(t, t) | u8_lt(t, t) | u8_le(t, t)     the runtime comparisons, of type bool
+    | to_nat(t) | of_nat(t) | succ(t) | nat_add(t, t)
     | t ==[A] t             equality at type A
     | t => t
     | forall (#: A) { t }   binds #0 in its body
@@ -76,6 +80,8 @@ p ::= h                     a context hypothesis, by identity
     | exists_intro(P, t, p)
     | exists_elim(p, G, arm)
     | excluded_middle(P)
+    | axiom(...)            an axiom of Nat or of the u8 model
+    | nat_induction(M, p, arm, t)
 ~~~
 
 An arm of a proof-level case binds some term variables and some hypotheses, and states how many of each.
@@ -118,6 +124,11 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `true`, `false` | | `bool` |
 | `0..255` | | `u8` |
 | `wrapping_add(a, b)`, `wrapping_sub(a, b)` | exactly two arguments; `a : u8` and `b : u8` in the same mode | `u8` |
+| `u8_eq(a, b)`, `u8_lt(a, b)`, `u8_le(a, b)` | `a : u8` and `b : u8` in the same mode | `bool` |
+| `0n, 1n, ...` | mode is `Logical` | `Nat` |
+| `to_nat(a)` | mode is `Logical`; `a : u8` | `Nat` |
+| `of_nat(n)` | `n : Nat`, which is only possible in `Logical` mode | `u8` |
+| `succ(n)`, `nat_add(n, m)` | mode is `Logical`; the arguments have type `Nat` | `Nat` |
 | `a ==[A] b` | mode is `Logical`; `A` is a type and not a proof type; `a : A` and `b : A` in `Logical` mode | `Prop` |
 | `P => Q` | mode is `Logical`; `P : Prop` and `Q : Prop` in `Logical` mode | `Prop` |
 | `forall (#: A) { P }` | mode is `Logical`; `A` is a type; for a fresh ghost `x : A`, `P[x] : Prop` in `Logical` mode | `Prop` |
@@ -168,7 +179,7 @@ The kernel reads the proposition off the proof. It never searches.
 | `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type; `v_i : A` | `c.i ==[A] v_i` |
 | `definition(f(t_0, ..., t_n))` | the callee is literally a declared function `f` with parameters `x_0, ..., x_n` and body `b`; `f(t_0, ..., t_n) : A` in `Logical` mode; `A` is not a proof type | `f(t_0, ..., t_n) ==[A] b[t_0, ..., t_n]` |
 | `case_step(case c : R { arms })` | `c` is literally `false`, `true`, or `E::i(v_0, ..., v_n)`; the case is well typed in `Logical` mode | `case c ... ==[R] arm_i[v_0, ..., v_n]` |
-| `literal(op(a, b))` | `op` is `wrapping_add` or `wrapping_sub`; `a` and `b` are `u8` literals | `op(a, b) ==[u8] r`, where `r` is the result modulo 256 |
+| `literal(op(args))` | `op` is a primitive and every argument is a literal of the right type; for `succ` and `nat_add` the result fits the `Nat` literal range | `op(args) ==[A] r`, where `r` is the literal the native evaluation below produces and `A` is the primitive's result type |
 
 ### Declared propositions
 
@@ -214,6 +225,60 @@ The prelude declares `True`, `False`, `And`, and `Or` by this mechanism, before 
 
 `proof_is_classical` reports whether a proof uses this rule, directly or through a declared function, and each function declaration records the same about its body. This is bookkeeping for auditing, not a check.
 
+### Nat
+
+`Nat` has the literals, `succ`, and `nat_add`. Its rules are Peano's, with addition:
+
+| Axiom | Premises | Conclusion |
+|---|---|---|
+| `nat_add_zero(a)` | `a : Nat` | `a + 0 == a` |
+| `nat_add_succ(a, b)` | `a, b : Nat` | `a + succ(b) == succ(a + b)` |
+| `nat_succ_injective(a, b)` | `a, b : Nat` | `succ(a) == succ(b) => a == b` |
+| `nat_succ_not_zero(a)` | `a : Nat` | `succ(a) == 0 => False` |
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `nat_induction(M, base, step, t)` | for a fresh ghost `x : Nat`, `M[x] : Prop`; `t : Nat`; `base` proves `M[0]`; `step` binds a fresh ghost `n : Nat` and the hypothesis `M[n]`, and proves `M[succ(n)]` | `M[t]` |
+
+Literals connect to `succ` through `literal`: `succ(3n) == 4n`. Induction is the proof-level recursion rule. It has no runtime content. There is no term-level recursion over `Nat`.
+
+The orderings are not primitive. The prelude defines them as ordinary math functions, and the kernel knows their identities only because the axioms below are stated with them:
+
+~~~
+nat_le(a, b) := exists k { a + k == b }
+nat_lt(a, b) := nat_le(succ(a), b)
+u8_le(a, b)  := nat_le(to_nat(a), to_nat(b))
+u8_lt(a, b)  := nat_lt(to_nat(a), to_nat(b))
+~~~
+
+### The model of u8
+
+A `u8` is a natural number below 256. `to_nat` is the inclusion and `of_nat` is reduction modulo 256. Six axioms say so, and each is true in that reading:
+
+| Axiom | Premises | Conclusion |
+|---|---|---|
+| `to_nat_bound(x)` | `x : u8` | `nat_lt(to_nat(x), 256)` |
+| `of_to_nat(x)` | `x : u8` | `of_nat(to_nat(x)) == x` |
+| `to_of_nat(n)` | `n : Nat` | `nat_lt(n, 256) => to_nat(of_nat(n)) == n` |
+| `of_nat_wrap(n)` | `n : Nat` | `of_nat(n + 256) == of_nat(n)` |
+| `wrapping_add_model(a, b)` | `a, b : u8` | `wrapping_add(a, b) == of_nat(to_nat(a) + to_nat(b))` |
+| `wrapping_sub_model(a, b)` | `a, b : u8` | `wrapping_add(wrapping_sub(a, b), b) == a` |
+
+`to_of_nat` and `of_nat_wrap` together pin `of_nat` down as reduction modulo 256 without a `mod` operator, and `wrapping_sub` is characterized as the inverse of `wrapping_add` without subtraction on `Nat`. Injectivity of `to_nat` follows from `of_to_nat` by congruence.
+
+Reflection connects a runtime comparison to the proposition it decides:
+
+| Axiom | Premises | Conclusion |
+|---|---|---|
+| `reflect(c, true)` | `c` is `u8_eq(a, b)`, `u8_lt(a, b)`, or `u8_le(a, b)`, and `c : bool` | `c == true => P` |
+| `reflect(c, false)` | the same | `c == false => (P => False)` |
+
+where `P` is `a ==[u8] b`, `u8_lt(a, b)`, or `u8_le(a, b)` respectively. With `case_data` on the comparison, these give each branch of an `if` its fact, and the two together decide `P` without excluded middle. The converse directions are derivable from them.
+
+All of these axioms need the prelude, because they are stated with `False` and the orderings.
+
+`src/kernel/theory.rs` begins the kernel-level prelude: associativity of addition and `0 + a == a` by induction; reflexivity, `0 <= a`, and transitivity of `nat_le`; and the corresponding facts about `u8_le`. These are declared lemmas, checked by the kernel when they are declared, and not trusted. A fact about the ordering of three byte variables is obtained by reasoning about their models, never by enumerating bytes. The lemmas `bounded_walk` needs beyond `u8_zero_le` (strict order from `<=` and `!=`, and the successor step) need cancellation and commutativity of addition first, and belong to the prelude batch of the plan.
+
 ### Notes on the rules
 
 Using a lemma needs no rule of its own: a call to a lemma is a term of proof type, so `of_term(lemma(args))` proves the instantiated conclusion. A lemma has no defining equation, because equality at its proof type cannot be formed; nothing is lost, since proofs are irrelevant.
@@ -224,7 +289,7 @@ The premise `v_i : A` of `projection` matters only for a nested dependent produc
 
 `definition` is the only way a function body ever becomes visible. At type `Prop` it is how a predicate is unfolded, and at a function type it gives equations such as `select() == successor`. The call must name the declared function directly: a call through a variable or through another call has no defining equation until the callee has been rewritten to a function name.
 
-`literal` evaluates with Rust's `u8::wrapping_add` and `u8::wrapping_sub`. Gate K5 adds the model of `u8` that this evaluation must agree with.
+`literal` evaluates natively: `u8::wrapping_add`, `u8::wrapping_sub`, `==`, `<`, `<=` on bytes; widening for `to_nat`; remainder modulo 256 for `of_nat`; checked `u64` addition for `succ` and `nat_add`. A `Nat` literal is a `u64`; arithmetic that would leave that range has no step. Arbitrary precision is a later refinement. This evaluation must agree with the model below, and `tests/kernel_numbers.rs` checks that it does.
 
 `check(ctx, p, P)` requires `P : Prop`, infers the proposition `p` proves, and accepts when the two are the same term.
 
@@ -264,13 +329,14 @@ Not yet present, by gate:
 
 | Gate | Adds |
 |---|---|
-| K5 | Internal `Nat` with induction; the `u8` model, reflection lemmas, native evaluation |
 | K6 | The range-iteration rule |
 
 One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2 was built the kernel had no `!=`, which needs `False` from K4, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
 
 ## Trusted base
 
-`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations and the prelude), and Rust's wrapping `u8` arithmetic behind `literal`. `src/kernel/derive.rs` and `src/kernel/classical.rs` are not part of it. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
+`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations and the prelude's definitions), the axioms of `Nat` and of the `u8` model, and the native evaluation behind `literal` together with its agreement with that model. `src/kernel/derive.rs`, `src/kernel/classical.rs`, and `src/kernel/theory.rs` are not part of it.
+
+Agreement is tested exhaustively. For every pair of bytes, `tests/kernel_numbers.rs` has the kernel check that the native `wrapping_add` result equals `of_nat(to_nat(a) + to_nat(b))` evaluated step by step, that adding the subtrahend back to the native `wrapping_sub` result restores the minuend, and that whatever the native `<` answers, the matching fact about the models is provable. `of_nat` and `to_nat` are checked against their axioms on literals. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
 
 Known limit: checking is recursive and has no depth bound yet. Hand-written terms cannot exhaust the stack; this must be addressed before the kernel accepts terms produced from untrusted source text.

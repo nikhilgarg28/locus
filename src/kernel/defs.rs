@@ -85,6 +85,14 @@ pub struct Prelude {
     pub falsehood: PropId,
     pub and: PropId,
     pub or: PropId,
+    /// `nat_le(a, b) := exists k { a + k == b }`
+    pub nat_le: FnId,
+    /// `nat_lt(a, b) := nat_le(succ(a), b)`
+    pub nat_lt: FnId,
+    /// `u8_le(a, b) := nat_le(to_nat(a), to_nat(b))`
+    pub u8_le: FnId,
+    /// `u8_lt(a, b) := nat_lt(to_nat(a), to_nat(b))`
+    pub u8_lt: FnId,
 }
 
 impl Prelude {
@@ -102,6 +110,22 @@ impl Prelude {
 
     pub fn or_prop(&self, left: Term, right: Term) -> Term {
         Term::PropApp(self.or, vec![left, right])
+    }
+
+    pub fn nat_le_prop(&self, left: Term, right: Term) -> Term {
+        Term::call(Term::Fn(self.nat_le), vec![left, right])
+    }
+
+    pub fn nat_lt_prop(&self, left: Term, right: Term) -> Term {
+        Term::call(Term::Fn(self.nat_lt), vec![left, right])
+    }
+
+    pub fn u8_le_prop(&self, left: Term, right: Term) -> Term {
+        Term::call(Term::Fn(self.u8_le), vec![left, right])
+    }
+
+    pub fn u8_lt_prop(&self, left: Term, right: Term) -> Term {
+        Term::call(Term::Fn(self.u8_lt), vec![left, right])
     }
 
     /// `!p` abbreviates `p => False`.
@@ -183,11 +207,54 @@ impl Definitions {
                 ],
             )
             .expect("prelude Or");
+        // The orderings are ordinary definitions over the Nat model. The
+        // kernel names them because the u8 axioms are stated with them.
+        let relation = |over: Type| {
+            Type::function(2, move |params| match params {
+                [] | [_] => over.clone(),
+                _ => Type::Prop,
+            })
+        };
+        let nat_le = definitions
+            .declare_fn(&relation(Type::Nat), |params| {
+                let (a, b) = (params[0].clone(), params[1].clone());
+                Term::exists(Type::Nat, |k| Term::eq(Type::Nat, Term::nat_add(a, k), b))
+            })
+            .expect("prelude nat_le");
+        let nat_lt = definitions
+            .declare_fn(&relation(Type::Nat), |params| {
+                Term::call(
+                    Term::Fn(nat_le),
+                    vec![Term::succ(params[0].clone()), params[1].clone()],
+                )
+            })
+            .expect("prelude nat_lt");
+        let lifted = |relation: FnId| {
+            move |params: &[Term]| {
+                Term::call(
+                    Term::Fn(relation),
+                    vec![
+                        Term::to_nat(params[0].clone()),
+                        Term::to_nat(params[1].clone()),
+                    ],
+                )
+            }
+        };
+        let u8_le = definitions
+            .declare_fn(&relation(Type::U8), lifted(nat_le))
+            .expect("prelude u8_le");
+        let u8_lt = definitions
+            .declare_fn(&relation(Type::U8), lifted(nat_lt))
+            .expect("prelude u8_lt");
         let prelude = Prelude {
             truth,
             falsehood,
             and,
             or,
+            nat_le,
+            nat_lt,
+            u8_le,
+            u8_lt,
         };
         definitions.prelude = Some(prelude);
         (definitions, prelude)

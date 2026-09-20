@@ -63,6 +63,9 @@ pub struct FnId(pub(super) usize);
 pub enum Type {
     Bool,
     U8,
+    /// Natural numbers. Internal to the kernel: the model of `u8` and the
+    /// domain of induction. It has no runtime representation, so it is ghost.
+    Nat,
     /// The type of propositions. Every value of this type is ghost.
     Prop,
     /// `@P`: the type of proofs of the proposition `P`. Ghost.
@@ -85,7 +88,7 @@ impl Type {
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
         match self {
-            Self::Prop | Self::Proof(_) => true,
+            Self::Prop | Self::Proof(_) | Self::Nat => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
             Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) | Self::Enum(_) => false,
@@ -141,7 +144,9 @@ impl Type {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Type {
         match self {
-            Self::Bool | Self::U8 | Self::Prop | Self::Struct(_) | Self::Enum(_) => self.clone(),
+            Self::Bool | Self::U8 | Self::Nat | Self::Prop | Self::Struct(_) | Self::Enum(_) => {
+                self.clone()
+            }
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
             Self::Tuple(fields) => Self::Tuple(rebind_telescope(fields, depth, op)),
             Self::Fn(params, result) => Self::Fn(
@@ -162,8 +167,100 @@ fn rebind_telescope(fields: &[Type], depth: Depth, op: Rebind<'_>) -> Vec<Type> 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prim {
+    /// `u8, u8 -> u8`
     WrappingAdd,
     WrappingSub,
+    /// `u8, u8 -> bool`: the runtime comparisons.
+    U8Eq,
+    U8Lt,
+    U8Le,
+    /// `u8 -> Nat`: the model of a byte.
+    ToNat,
+    /// `Nat -> u8`: reduction modulo 256.
+    OfNat,
+    /// `Nat -> Nat`
+    Succ,
+    /// `Nat, Nat -> Nat`
+    NatAdd,
+}
+
+impl Prim {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::WrappingAdd => "wrapping_add",
+            Self::WrappingSub => "wrapping_sub",
+            Self::U8Eq => "u8_eq",
+            Self::U8Lt => "u8_lt",
+            Self::U8Le => "u8_le",
+            Self::ToNat => "to_nat",
+            Self::OfNat => "of_nat",
+            Self::Succ => "succ",
+            Self::NatAdd => "nat_add",
+        }
+    }
+}
+
+/// The axioms of the internal `Nat` and of the `u8` model. Each takes terms
+/// and yields a fixed proposition about them; see `docs/kernel-contract.md`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Axiom {
+    /// `a + 0 == a`
+    NatAddZero(Term),
+    /// `a + succ(b) == succ(a + b)`
+    NatAddSucc(Term, Term),
+    /// `succ(a) == succ(b) => a == b`
+    NatSuccInjective(Term, Term),
+    /// `succ(a) == 0 => False`
+    NatSuccNotZero(Term),
+    /// `to_nat(x) < 256`
+    ToNatBound(Term),
+    /// `of_nat(to_nat(x)) == x`
+    OfToNat(Term),
+    /// `n < 256 => to_nat(of_nat(n)) == n`
+    ToOfNat(Term),
+    /// `of_nat(n + 256) == of_nat(n)`
+    OfNatWrap(Term),
+    /// `a.wrapping_add(b) == of_nat(to_nat(a) + to_nat(b))`
+    WrappingAddModel(Term, Term),
+    /// `a.wrapping_sub(b).wrapping_add(b) == a`
+    WrappingSubModel(Term, Term),
+    /// For a comparison `c` and its proposition `P`: `c == true => P` when
+    /// the flag is true, `c == false => (P => False)` when it is false.
+    Reflect(Term, bool),
+}
+
+impl Axiom {
+    fn map(&self, f: impl Fn(&Term) -> Term) -> Axiom {
+        match self {
+            Self::NatAddZero(a) => Self::NatAddZero(f(a)),
+            Self::NatAddSucc(a, b) => Self::NatAddSucc(f(a), f(b)),
+            Self::NatSuccInjective(a, b) => Self::NatSuccInjective(f(a), f(b)),
+            Self::NatSuccNotZero(a) => Self::NatSuccNotZero(f(a)),
+            Self::ToNatBound(x) => Self::ToNatBound(f(x)),
+            Self::OfToNat(x) => Self::OfToNat(f(x)),
+            Self::ToOfNat(n) => Self::ToOfNat(f(n)),
+            Self::OfNatWrap(n) => Self::OfNatWrap(f(n)),
+            Self::WrappingAddModel(a, b) => Self::WrappingAddModel(f(a), f(b)),
+            Self::WrappingSubModel(a, b) => Self::WrappingSubModel(f(a), f(b)),
+            Self::Reflect(c, flag) => Self::Reflect(f(c), *flag),
+        }
+    }
+
+    pub(super) fn terms(&self) -> Vec<&Term> {
+        match self {
+            Self::NatAddZero(a)
+            | Self::NatSuccNotZero(a)
+            | Self::ToNatBound(a)
+            | Self::OfToNat(a)
+            | Self::ToOfNat(a)
+            | Self::OfNatWrap(a)
+            | Self::Reflect(a, _) => vec![a],
+            Self::NatAddSucc(a, b)
+            | Self::NatSuccInjective(a, b)
+            | Self::WrappingAddModel(a, b)
+            | Self::WrappingSubModel(a, b) => vec![a, b],
+        }
+    }
 }
 
 /// Data terms and propositions. A proposition is a term of type `Prop`.
@@ -173,6 +270,9 @@ pub enum Term {
     Bound(u32),
     Bool(bool),
     U8(u8),
+    /// A `Nat` literal. Literal arithmetic that would exceed this range has
+    /// no computation step; arbitrary precision is a later refinement.
+    Nat(u64),
     Prim(Prim, Vec<Term>),
     /// `a == b` at the given type.
     Eq(Type, Box<Term>, Box<Term>),
@@ -312,6 +412,17 @@ pub enum Proof {
     },
     /// `p || !p`, for the prelude's `Or` and `False`.
     ExcludedMiddle(Term),
+    /// An axiom of `Nat` or of the `u8` model.
+    Axiom(Axiom),
+    /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
+    /// `motive[0]`; `step` binds `n` and the hypothesis `motive[n]` and
+    /// proves `motive[succ(n)]`. Concludes `motive[target]`.
+    NatInduction {
+        motive: Term,
+        base: Box<Proof>,
+        step: ProofArm,
+        target: Term,
+    },
 }
 
 /// How many binders of each kind enclose the current position.
@@ -392,6 +503,26 @@ impl Term {
 
     pub fn wrapping_sub(left: Term, right: Term) -> Self {
         Self::Prim(Prim::WrappingSub, vec![left, right])
+    }
+
+    pub fn prim(prim: Prim, arguments: Vec<Term>) -> Self {
+        Self::Prim(prim, arguments)
+    }
+
+    pub fn to_nat(byte: Term) -> Self {
+        Self::Prim(Prim::ToNat, vec![byte])
+    }
+
+    pub fn of_nat(number: Term) -> Self {
+        Self::Prim(Prim::OfNat, vec![number])
+    }
+
+    pub fn succ(number: Term) -> Self {
+        Self::Prim(Prim::Succ, vec![number])
+    }
+
+    pub fn nat_add(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::NatAdd, vec![left, right])
     }
 
     /// A tuple value of the given tuple type.
@@ -479,7 +610,12 @@ impl Term {
         let all = |terms: &[Term]| terms.iter().all(|term| term.closed_at(depth));
         match self {
             Self::Bound(index) => *index < depth,
-            Self::Free(_) | Self::Bool(_) | Self::U8(_) | Self::Proof(_) | Self::Fn(_) => true,
+            Self::Free(_)
+            | Self::Bool(_)
+            | Self::U8(_)
+            | Self::Nat(_)
+            | Self::Proof(_)
+            | Self::Fn(_) => true,
             Self::Prim(_, arguments) => all(arguments),
             Self::Eq(_, left, right) => left.closed_at(depth) && right.closed_at(depth),
             Self::Implies(premise, conclusion) => {
@@ -518,6 +654,7 @@ impl Term {
             | Self::Bound(_)
             | Self::Bool(_)
             | Self::U8(_)
+            | Self::Nat(_)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => None,
@@ -567,6 +704,7 @@ impl Term {
             | Self::Bound(_)
             | Self::Bool(_)
             | Self::U8(_)
+            | Self::Nat(_)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => self.clone(),
@@ -632,7 +770,7 @@ impl Term {
                 }
                 _ => self.clone(),
             },
-            Self::Bool(_) | Self::U8(_) => self.clone(),
+            Self::Bool(_) | Self::U8(_) | Self::Nat(_) => self.clone(),
             Self::Prim(prim, arguments) => Self::Prim(*prim, each(arguments)),
             Self::Eq(ty, left, right) => Self::Eq(
                 ty.rebind(depth, op),
@@ -741,6 +879,23 @@ impl Proof {
         Self::ForallIntro {
             ty,
             body: Box::new(body),
+        }
+    }
+
+    /// Builds an induction. `motive(n)` is the claim about `n`; `step(n, ih)`
+    /// proves the claim about `succ(n)` from `ih`, the claim about `n`.
+    pub fn nat_induction(
+        motive: impl FnOnce(Term) -> Term,
+        base: Proof,
+        step: impl FnOnce(Term, Proof) -> Proof,
+        target: Term,
+    ) -> Self {
+        let hole = VarId::fresh();
+        Self::NatInduction {
+            motive: motive(Term::Free(hole)).close(hole),
+            base: Box::new(base),
+            step: Self::arm(1, 1, |vars, hyps| step(vars[0].clone(), hyps[0].clone())),
+            target,
         }
     }
 
@@ -901,6 +1056,18 @@ impl Proof {
                 arm: arm.rebind(depth, op),
             },
             Self::ExcludedMiddle(prop) => Self::ExcludedMiddle(prop.rebind(depth, op)),
+            Self::Axiom(axiom) => Self::Axiom(axiom.map(|term| term.rebind(depth, op))),
+            Self::NatInduction {
+                motive,
+                base,
+                step,
+                target,
+            } => Self::NatInduction {
+                motive: motive.rebind(depth.under_vars(1), op),
+                base: Box::new(base.rebind(depth, op)),
+                step: step.rebind(depth, op),
+                target: target.rebind(depth, op),
+            },
         }
     }
 }
@@ -923,6 +1090,7 @@ impl fmt::Display for Type {
         match self {
             Self::Bool => f.write_str("bool"),
             Self::U8 => f.write_str("u8"),
+            Self::Nat => f.write_str("Nat"),
             Self::Prop => f.write_str("Prop"),
             Self::Proof(prop) => write!(f, "@{prop}"),
             Self::Tuple(fields) => {
@@ -962,12 +1130,9 @@ impl fmt::Display for Term {
             Self::Bound(index) => write!(f, "#{index}"),
             Self::Bool(value) => write!(f, "{value}"),
             Self::U8(value) => write!(f, "{value}"),
+            Self::Nat(value) => write!(f, "{value}n"),
             Self::Prim(prim, arguments) => {
-                let name = match prim {
-                    Prim::WrappingAdd => "wrapping_add",
-                    Prim::WrappingSub => "wrapping_sub",
-                };
-                write!(f, "{name}(")?;
+                write!(f, "{}(", prim.name())?;
                 write_list(f, arguments)?;
                 f.write_str(")")
             }
