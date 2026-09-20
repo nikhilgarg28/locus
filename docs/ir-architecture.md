@@ -144,7 +144,32 @@ Both consume the erased tree.
 
 The reference interpreter comes first. It is small, needs no toolchain in tests, gives the semantics an executable definition, and has a fuel counter so that divergence is observable: "the caller of a divergent function still diverges after erasure" is tested as running out of fuel, not as returning a value. It takes the meaning of the primitives from the kernel's native evaluation, so logic and execution share one definition. It does not reuse the kernel's term evaluator, which is trusted and covers total terms only.
 
-Rust generation is a printer over the erased tree, tested by compiling its output and comparing results with the interpreter.
+Rust generation is a printer over the erased tree, tested by compiling its output with rustc under `-D warnings`, running it, and comparing what it prints with the interpreter's results.
+
+The two loop forms have no direct Rust spelling and are printed through mutable state. The state lives in variables of its own, and each iteration rebinds the source's names from them, so a `let` in the body that shadows a state name cannot disturb the loop, as in Locus:
+
+~~~
+fn bounded_walk(limit: u8) -> (u8, Proved) {
+    let mut state_i: u8 = 0;
+    let mut state_bound: Proved = Proved;
+    loop {
+        let i = state_i;
+        let bound = state_bound;
+        if i == limit {
+            break (i, bound);
+        } else {
+            let differs = Proved;
+            let below = Proved;
+            let next = i.wrapping_add(1);
+            let next_bound = Proved;
+            (state_i, state_bound) = (next, next_bound);
+            continue;
+        }
+    }
+}
+~~~
+
+The right side of the assignment is evaluated in full before any state changes, which is what `continue(next...)` means. These temporaries are the kind of modest departure from the source that is accepted where it makes correctness simple. Every value in the core is immutable and freely reusable, so generated structs and enums derive `Copy`.
 
 ## The trusted base
 
@@ -153,6 +178,9 @@ The kernel; the exec checker; `lower`; `erase`; the Rust printer; and the Rust t
 Compared with checking a lowered core directly, `lower` has moved into the trusted base. In exchange the typed tree is much closer to the source than a lowered core is, so the distance between what was written and what was verified is smaller.
 
 ## Build order
+
+Steps 1 to 5 are done for hand-built typed trees; step 6 is next.
+
 
 1. Kernel: give the arms of a term-level `case` the hypothesis `scrutinee == variant(payload)`, so that a math function's branches know what an executable `match` arm knows.
 2. The check IR and the exec checker, driven by hand-built programs: `increment`, `preserve`, `classify`, `bounded_walk`, and `spin` with its caller.

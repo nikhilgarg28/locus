@@ -129,6 +129,7 @@ pub enum EExpr {
     },
     Match {
         scrutinee: Box<EExpr>,
+        enum_name: String,
         arms: Vec<EArm>,
     },
     Block(EBlock),

@@ -268,7 +268,9 @@ impl<'m> Interpreter<'m> {
                 Value::Bool(false) => return self.block(else_block),
                 _ => return stuck("a condition that is not a bool"),
             },
-            EExpr::Match { scrutinee, arms } => {
+            EExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 let Value::Variant(_, index, payload) = value!(self.expr(scrutinee)) else {
                     return stuck("a match on something that is not a variant");
                 };

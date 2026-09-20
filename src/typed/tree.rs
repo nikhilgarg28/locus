@@ -167,6 +167,7 @@ pub enum Expr {
     /// variant's payload.
     Match {
         scrutinee: Box<Expr>,
+        enum_name: String,
         arms: Vec<MatchArm>,
         ty: Type,
         result: VarId,

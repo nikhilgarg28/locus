@@ -211,9 +211,13 @@ impl Eraser<'_> {
                 else_block: self.block(else_block),
             },
             Expr::Match {
-                scrutinee, arms, ..
+                scrutinee,
+                enum_name,
+                arms,
+                ..
             } => EExpr::Match {
                 scrutinee: Box::new(self.expr(scrutinee)),
+                enum_name: enum_name.clone(),
                 arms: arms
                     .iter()
                     .map(|arm| EArm {

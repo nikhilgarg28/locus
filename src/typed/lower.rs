@@ -547,6 +547,7 @@ fn anf_form(expr: &Expr, out: &mut Vec<exec::Stmt>) -> Result<Term, LowerError> 
             arms,
             ty,
             result,
+            ..
         } => {
             let scrutinee = anf(scrutinee, out)?;
             out.push(exec::Stmt::Match {

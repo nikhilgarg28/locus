@@ -5,10 +5,8 @@ mod common;
 
 use common::*;
 use locus::exec::ExecError;
-use locus::kernel::{Axiom, HypId, KernelError, Prelude, Prim, Proof, Term, Type, VarId};
-use locus::typed::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, LowerError, MatchArm, VariantItem,
-};
+use locus::kernel::{HypId, KernelError, Proof, Term, Type, VarId};
+use locus::typed::{Binder, Expr, FnItem, FnRef, LowerError};
 
 #[test]
 fn a_nested_call_is_named_by_the_tree_and_sequenced_by_lowering() {
@@ -195,115 +193,14 @@ fn a_math_function_must_be_pure() {
 
 #[test]
 fn an_enum_a_match_and_negated_conditions() {
-    // enum Classified { Zero(value: u8, @[value == 0]), NonZero(value: u8, @[value != 0]) }
     let (mut session, prelude, _) = setup();
-    let payload = |claim: fn(&Prelude, Term) -> Term| {
-        let value = Binder::new("value", Type::U8);
-        let evidence = Binder::new("evidence", Type::proof(claim(&prelude, value.term())));
-        vec![value, evidence]
-    };
-    let classified = session
-        .declare_enum(&EnumItem {
-            name: "Classified".into(),
-            variants: vec![
-                VariantItem {
-                    name: "Zero".into(),
-                    payload: payload(|_, value| u8_eq(value, Term::U8(0))),
-                },
-                VariantItem {
-                    name: "NonZero".into(),
-                    payload: payload(|prelude, value| prelude.not_prop(u8_eq(value, Term::U8(0)))),
-                },
-            ],
-        })
-        .unwrap();
-
-    // fn classify(n: u8) -> Classified {
-    //     if n != 0 { Classified::NonZero(n, _) } else { Classified::Zero(n, _) }
-    // }
-    // The condition is a negation, so the then branch is the one where the
-    // comparison n == 0 came out false.
-    let n = Binder::new("n", Type::U8);
-    let comparison = Term::prim(Prim::U8Eq, vec![n.term(), Term::U8(0)]);
-    let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
-    let reflect = |flag: bool, fact: HypId| {
-        Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison.clone(), flag)),
-            Proof::hyp(fact),
-        )
-    };
-    let variant = |index: usize, name: &str, evidence: Proof| Expr::Variant {
-        id: classified,
-        enum_name: "Classified".into(),
-        index,
-        variant_name: name.into(),
-        payload: vec![Expr::var(&n), Expr::Proof(evidence)],
-    };
-    let classify = FnItem {
-        name: "classify".into(),
-        math: false,
-        params: vec![n.clone()],
-        result: Type::Enum(classified),
-        body: Block {
-            stmts: vec![],
-            tail: Some(Box::new(Expr::If {
-                condition: Box::new(Expr::Compare {
-                    op: CompareOp::Ne,
-                    left: Box::new(Expr::var(&n)),
-                    right: Box::new(Expr::U8(0)),
-                }),
-                then_fact,
-                else_fact,
-                then_block: block(vec![], variant(1, "NonZero", reflect(false, then_fact))),
-                else_block: block(vec![], variant(0, "Zero", reflect(true, else_fact))),
-                ty: Type::Enum(classified),
-                result: VarId::fresh(),
-            })),
-        },
-    };
-    let classify_id = exec_id(session.declare_fn(&classify).unwrap());
-
-    // fn zero_or_self(m: u8) -> u8 {
-    //     match classify(m) { Classified::Zero(v, h) => v, Classified::NonZero(v, h) => v }
-    // }
-    let m = Binder::new("m", Type::U8);
-    let arm = |name: &str, claim: fn(&Prelude, Term) -> Term| {
-        let v = Binder::new("v", Type::U8);
-        let h = Binder::new("h", Type::proof(claim(&prelude, v.term())));
-        MatchArm {
-            variant_name: name.into(),
-            payload: vec![v.clone(), h],
-            fact: HypId::fresh(),
-            body: block(vec![], Expr::var(&v)),
-        }
-    };
-    let caller = FnItem {
-        name: "zero_or_self".into(),
-        math: false,
-        params: vec![m.clone()],
-        result: Type::U8,
-        body: Block {
-            stmts: vec![],
-            tail: Some(Box::new(Expr::Match {
-                scrutinee: Box::new(Expr::CallFn {
-                    id: classify_id,
-                    name: "classify".into(),
-                    arguments: vec![Expr::var(&m)],
-                    result: VarId::fresh(),
-                    ty: Type::Enum(classified),
-                }),
-                arms: vec![
-                    arm("Zero", |_, v| u8_eq(v, Term::U8(0))),
-                    arm("NonZero", |prelude, v| {
-                        prelude.not_prop(u8_eq(v, Term::U8(0)))
-                    }),
-                ],
-                ty: Type::U8,
-                result: VarId::fresh(),
-            })),
-        },
-    };
-    assert!(session.declare_fn(&caller).is_ok());
+    let classified = session.declare_enum(&classified_enum(prelude)).unwrap();
+    let classify_id = exec_id(session.declare_fn(&classify(classified)).unwrap());
+    assert!(
+        session
+            .declare_fn(&zero_or_self(prelude, classified, classify_id))
+            .is_ok()
+    );
 }
 
 #[test]

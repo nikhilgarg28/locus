@@ -284,7 +284,9 @@ impl Checker<'_> {
                 let else_type = self.block(else_block)?;
                 return join(then_type, else_type, "the branches of an if");
             }
-            EExpr::Match { scrutinee, arms } => {
+            EExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 let EType::Enum(id) = self.value(scrutinee, "a scrutinee")? else {
                     return fail("a match on something that is not an enum");
                 };
