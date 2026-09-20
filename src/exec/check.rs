@@ -28,8 +28,13 @@ pub enum ExecError {
     /// A match needs a `bool` or an enum, one arm per variant, each binding
     /// exactly its variant's payload.
     BadMatch,
-    /// A loop's state identities do not match its state telescope.
+    /// A loop's state identities do not match its state telescope, or a
+    /// `for`'s state is not a function from the index to a tuple type.
     BadLoopState,
+    /// `break` where the nearest enclosing iteration is a `for`.
+    BreakInFor,
+    /// A `for` is stated with the prelude's orderings.
+    NoPrelude,
 }
 
 impl From<KernelError> for ExecError {
@@ -48,6 +53,8 @@ impl fmt::Display for ExecError {
             Self::NoEnclosingLoop => f.write_str("break or continue outside a loop"),
             Self::BadMatch => f.write_str("the arms do not match the scrutinee's variants"),
             Self::BadLoopState => f.write_str("the loop state does not match its telescope"),
+            Self::BreakInFor => f.write_str("a bounded for has no break"),
+            Self::NoPrelude => f.write_str("a bounded for needs the prelude declarations"),
         }
     }
 }
@@ -63,10 +70,12 @@ pub struct Program {
     fns: Vec<ExecFn>,
 }
 
-/// The loop that `break` and `continue` refer to.
+/// The iteration that `break` and `continue` refer to. `state` is what a
+/// `continue` must supply. A `for` has no `break`, so it has no result here.
+#[derive(Clone, Copy)]
 struct Target<'a> {
     state: &'a Type,
-    result: &'a Type,
+    result: Option<&'a Type>,
 }
 
 impl Program {
@@ -138,7 +147,7 @@ impl Program {
             }
             Tail::Break(value) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
-                expect(ctx, value, target.result)
+                expect(ctx, value, target.result.ok_or(ExecError::BreakInFor)?)
             }
             Tail::Continue(next) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
@@ -210,7 +219,81 @@ impl Program {
                 checked?;
                 Ok(ctx.declare_with(*var, result.clone(), false)?)
             }
+            Stmt::For {
+                var,
+                index,
+                lower,
+                upper,
+                lo,
+                hi,
+                ordered,
+                state,
+                vars,
+                init,
+                body,
+            } => {
+                let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
+                for bound in [lo, hi] {
+                    expect(ctx, bound, &Type::U8)?;
+                }
+                // Ordered bounds make the final index hi.
+                check_proof(ctx, ordered, &prelude.u8_le_prop(lo.clone(), hi.clone()))?;
+                check_type(ctx, state)?;
+                let state_at = |at: &Term| match state {
+                    Type::Fn(params, _) if params.as_slice() == [Type::U8] => {
+                        telescope_entry(state, 1, std::slice::from_ref(at))
+                            .filter(|ty| matches!(ty, Type::Tuple(_)))
+                            .ok_or(ExecError::BadLoopState)
+                    }
+                    _ => Err(ExecError::BadLoopState),
+                };
+                check_values(ctx, &state_at(lo)?, init, Mode::Executable)?;
+
+                let scope = ctx.checkpoint();
+                let checked = (|| {
+                    ctx.declare_with(*index, Type::U8, false)?;
+                    let i = Term::var(*index);
+                    let current = state_at(&i)?;
+                    // index < hi, so the successor does not wrap.
+                    let next = state_at(&Term::wrapping_add(i.clone(), Term::U8(1)))?;
+                    self.declare_state(ctx, &current, vars)?;
+                    ctx.assume_with(*lower, prelude.u8_le_prop(lo.clone(), i.clone()))?;
+                    ctx.assume_with(*upper, prelude.u8_lt_prop(i, hi.clone()))?;
+                    let mut inner = loops.to_vec();
+                    inner.push(Target {
+                        state: &next,
+                        result: None,
+                    });
+                    self.check_block(ctx, body, None, &inner)
+                })();
+                ctx.rollback(scope);
+                checked?;
+                Ok(ctx.declare_with(*var, state_at(hi)?, false)?)
+            }
         }
+    }
+
+    /// Declares abstract state variables for a state telescope: the body of
+    /// an iteration does not know the initial values.
+    fn declare_state(
+        &self,
+        ctx: &mut Context,
+        state: &Type,
+        vars: &[crate::kernel::VarId],
+    ) -> Result<(), ExecError> {
+        let Type::Tuple(fields) = state else {
+            return Err(ExecError::BadLoopState);
+        };
+        if fields.len() != vars.len() {
+            return Err(ExecError::BadLoopState);
+        }
+        let mut bound: Vec<Term> = Vec::new();
+        for (index, id) in vars.iter().enumerate() {
+            let ty = telescope_entry(state, index, &bound).ok_or(ExecError::BadLoopState)?;
+            ctx.declare_with(*id, ty, false)?;
+            bound.push(Term::var(*id));
+        }
+        Ok(())
     }
 
     fn check_loop_body(
@@ -222,27 +305,12 @@ impl Program {
         body: &Block,
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
-        let Type::Tuple(fields) = state else {
-            return Err(ExecError::BadLoopState);
-        };
-        if fields.len() != vars.len() {
-            return Err(ExecError::BadLoopState);
-        }
-        // Abstract state: the body does not know the initial values.
-        let mut bound: Vec<Term> = Vec::new();
-        for (index, id) in vars.iter().enumerate() {
-            let ty = telescope_entry(state, index, &bound).ok_or(ExecError::BadLoopState)?;
-            ctx.declare_with(*id, ty, false)?;
-            bound.push(Term::var(*id));
-        }
-        let mut inner: Vec<Target<'_>> = loops
-            .iter()
-            .map(|target| Target {
-                state: target.state,
-                result: target.result,
-            })
-            .collect();
-        inner.push(Target { state, result });
+        self.declare_state(ctx, state, vars)?;
+        let mut inner = loops.to_vec();
+        inner.push(Target {
+            state,
+            result: Some(result),
+        });
         self.check_block(ctx, body, None, &inner)
     }
 

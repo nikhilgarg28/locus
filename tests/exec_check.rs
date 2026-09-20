@@ -834,3 +834,278 @@ fn calls_and_bindings_are_checked() {
         Err(ExecError::Kernel(KernelError::UnknownVariable(_)))
     ));
 }
+
+// --- Bounded for ----------------------------------------------------------------
+
+/// The state `(acc: u8, same: @[acc == i])` as a function of the index.
+fn counting_state() -> Type {
+    Type::function(1, |params| match params {
+        [] => Type::U8,
+        [i] => {
+            let i = i.clone();
+            Type::tuple(move |earlier| match earlier {
+                [] => Some(Type::U8),
+                [acc] => Some(Type::proof(u8_eq(acc.clone(), i.clone()))),
+                _ => None,
+            })
+        }
+        _ => unreachable!(),
+    })
+}
+
+fn counted_result(n: &Term) -> Type {
+    let n = n.clone();
+    Type::tuple(move |earlier| match earlier {
+        [] => Some(Type::U8),
+        [total] => Some(Type::proof(u8_eq(total.clone(), n.clone()))),
+        _ => None,
+    })
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum CountBug {
+    None,
+    StaleInvariant,
+    Breaks,
+    FallsThrough,
+    Unordered,
+}
+
+/// fn count_by_calls(n: u8) -> (total: u8, same: @[total == n]) {
+///     for i in 0..n (acc: u8 = 0, same: @[acc == i] = _) {
+///         let r = increment(acc);          // an ordinary call in the body
+///         continue(r.0, _);                // r.0 == acc + 1 == i + 1
+///     }
+/// }
+fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
+    let (n_id, n) = var();
+    let (i_id, i) = var();
+    let (acc_id, acc) = var();
+    let (same_id, same) = var();
+    let (r_id, r) = var();
+    let (done_id, done) = var();
+    let advanced = HypId::fresh();
+    let stepped = Term::proj(r.clone(), 0);
+    // r.1 : r.0 == acc + 1, and same : acc == i, give r.0 == i + 1.
+    let left = stepped.clone();
+    let proof = Proof::transport(
+        Proof::OfTerm(same.clone()),
+        |hole| u8_eq(left.clone(), add_one(hole)),
+        Proof::OfTerm(Term::proj(r, 1)),
+    );
+    let tail = match bug {
+        CountBug::Breaks => Tail::Break(Term::U8(0)),
+        CountBug::FallsThrough => Tail::Value(Term::U8(0)),
+        CountBug::StaleInvariant => {
+            Tail::Continue(vec![stepped.clone(), Term::proof(Proof::OfTerm(same))])
+        }
+        _ => Tail::Continue(vec![stepped.clone(), Term::proof(Proof::hyp(advanced))]),
+    };
+    let ordered = if bug == CountBug::Unordered {
+        // A true fact, about the wrong bounds.
+        lemma(world.theory.u8_le_refl, vec![n.clone()])
+    } else {
+        lemma(world.theory.u8_zero_le, vec![n.clone()])
+    };
+    ExecFn {
+        signature: Type::function(1, |params| match params {
+            [] => Type::U8,
+            [n] => counted_result(n),
+            _ => unreachable!(),
+        }),
+        params: vec![n_id],
+        body: block(
+            vec![Stmt::For {
+                var: done_id,
+                index: i_id,
+                lower: HypId::fresh(),
+                upper: HypId::fresh(),
+                lo: Term::U8(0),
+                hi: n,
+                ordered,
+                state: counting_state(),
+                vars: vec![acc_id, same_id],
+                init: vec![Term::U8(0), Term::proof(Proof::Refl(Term::U8(0)))],
+                body: block(
+                    vec![
+                        Stmt::Call {
+                            var: r_id,
+                            callee: increment,
+                            arguments: vec![acc],
+                        },
+                        Stmt::Have {
+                            hyp: advanced,
+                            claim: u8_eq(stepped, add_one(i)),
+                            proof,
+                        },
+                    ],
+                    tail,
+                ),
+            }],
+            // The state at the final index n is exactly the declared result.
+            Tail::Value(done),
+        ),
+    }
+}
+
+#[test]
+fn a_bounded_for_may_call_ordinary_functions_and_carries_an_indexed_invariant() {
+    let world = world();
+    let mut program = Program::new(Rc::clone(&world.definitions));
+    let increment = program.declare(increment()).unwrap();
+    assert_eq!(
+        program
+            .declare(count_by_calls(&world, increment, CountBug::None))
+            .map(|_| ()),
+        Ok(())
+    );
+    // The invariant is about the index, so the old evidence does not carry.
+    assert!(matches!(
+        program.declare(count_by_calls(&world, increment, CountBug::StaleInvariant)),
+        Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
+    ));
+    assert_eq!(
+        program
+            .declare(count_by_calls(&world, increment, CountBug::Breaks))
+            .map(|_| ()),
+        Err(ExecError::BreakInFor)
+    );
+    assert_eq!(
+        program
+            .declare(count_by_calls(&world, increment, CountBug::FallsThrough))
+            .map(|_| ()),
+        Err(ExecError::FallsThrough)
+    );
+    // The bounds must be shown to be ordered, by a proof about these bounds.
+    assert!(matches!(
+        program.declare(count_by_calls(&world, increment, CountBug::Unordered)),
+        Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
+    ));
+}
+
+#[test]
+fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
+    // fn twice_over(n: u8) -> u8 {
+    //     loop () -> u8 {
+    //         let swept = for i in 0..n (last: u8 = 0) { continue(i) };
+    //         break swept.0;
+    //     }
+    // }
+    let world = world();
+    let mut program = Program::new(Rc::clone(&world.definitions));
+    let plain_state = || {
+        Type::function(1, |params| match params {
+            [] => Type::U8,
+            _ => Type::Tuple(vec![Type::U8]),
+        })
+    };
+    let build = |inner_tail: fn(Term) -> Tail| {
+        let (n_id, n) = var();
+        let (i_id, i) = var();
+        let (swept_id, swept) = var();
+        let (out_id, out) = var();
+        returns_u8(
+            vec![n_id],
+            1,
+            block(
+                vec![Stmt::Loop {
+                    var: out_id,
+                    state: Type::Tuple(vec![]),
+                    vars: vec![],
+                    init: vec![],
+                    result: Type::U8,
+                    body: block(
+                        vec![Stmt::For {
+                            var: swept_id,
+                            index: i_id,
+                            lower: HypId::fresh(),
+                            upper: HypId::fresh(),
+                            lo: Term::U8(0),
+                            hi: n.clone(),
+                            ordered: lemma(world.theory.u8_zero_le, vec![n]),
+                            state: plain_state(),
+                            vars: vec![VarId::fresh()],
+                            init: vec![Term::U8(0)],
+                            body: block(vec![], inner_tail(i)),
+                        }],
+                        Tail::Break(Term::proj(swept, 0)),
+                    ),
+                }],
+                Tail::Value(out),
+            ),
+        )
+    };
+    // Inside the for, continue belongs to the for: it takes the for's state.
+    assert!(program.declare(build(|i| Tail::Continue(vec![i]))).is_ok());
+    // The loop's own continue takes no arguments, so this is not it.
+    assert!(program.declare(build(|_| Tail::Continue(vec![]))).is_err());
+    // And break does not reach past the for to the loop.
+    assert_eq!(
+        program.declare(build(Tail::Break)).map(|_| ()),
+        Err(ExecError::BreakInFor)
+    );
+}
+
+#[test]
+fn a_for_checks_its_bounds_and_state_shape() {
+    let world = world();
+    let mut program = Program::new(Rc::clone(&world.definitions));
+    let build = |hi_is_ghost: bool, state: Type| {
+        let (n_id, n) = var();
+        let (k_id, k) = var();
+        let (done_id, done) = var();
+        let hi = if hi_is_ghost { k.clone() } else { n.clone() };
+        returns_u8(
+            vec![n_id],
+            1,
+            block(
+                vec![
+                    // k is a u8 only logic can compute, hence ghost.
+                    Stmt::Let {
+                        var: k_id,
+                        equation: HypId::fresh(),
+                        value: Term::of_nat(Term::to_nat(n)),
+                    },
+                    Stmt::For {
+                        var: done_id,
+                        index: VarId::fresh(),
+                        lower: HypId::fresh(),
+                        upper: HypId::fresh(),
+                        lo: Term::U8(0),
+                        hi: hi.clone(),
+                        ordered: lemma(world.theory.u8_zero_le, vec![hi]),
+                        state,
+                        vars: vec![VarId::fresh()],
+                        init: vec![Term::U8(0)],
+                        body: block(vec![], Tail::Continue(vec![Term::U8(0)])),
+                    },
+                ],
+                Tail::Value(Term::proj(done, 0)),
+            ),
+        )
+    };
+    let plain_state = || {
+        Type::function(1, |params| match params {
+            [] => Type::U8,
+            _ => Type::Tuple(vec![Type::U8]),
+        })
+    };
+    assert!(program.declare(build(false, plain_state())).is_ok());
+    // A ghost cannot decide how many times executable code runs.
+    assert!(matches!(
+        program.declare(build(true, plain_state())),
+        Err(ExecError::Kernel(KernelError::GhostInExecutable(_)))
+    ));
+    // The state must be a function from the index to a tuple type.
+    assert_eq!(
+        program
+            .declare(build(false, Type::Tuple(vec![Type::U8])))
+            .map(|_| ()),
+        Err(ExecError::BadLoopState)
+    );
+    let not_a_tuple = Type::function(1, |_| Type::U8);
+    assert_eq!(
+        program.declare(build(false, not_a_tuple)).map(|_| ()),
+        Err(ExecError::BadLoopState)
+    );
+}

@@ -69,6 +69,28 @@ pub enum Stmt {
         result: Type,
         body: Block,
     },
+    /// `let var = for index in lo..hi (vars: state = init) { body }`.
+    ///
+    /// `state` is a function type from the index to the state's tuple type,
+    /// `math fn(u8) -> (A_0, ..., A_n)`, which is how a state type mentions
+    /// the index: an invariant can say what holds after `index` steps.
+    /// `ordered` proves `lo <= hi`. The body sees the index, abstract state,
+    /// and the facts `lo <= index` (`lower`) and `index < hi` (`upper`), and
+    /// must end every path in `continue` with the state for `index + 1`.
+    /// There is no `break`. `var` is the state at `hi`.
+    For {
+        var: VarId,
+        index: VarId,
+        lower: HypId,
+        upper: HypId,
+        lo: Term,
+        hi: Term,
+        ordered: Proof,
+        state: Type,
+        vars: Vec<VarId>,
+        init: Vec<Term>,
+        body: Block,
+    },
 }
 
 /// One arm of a match: the payload's identities, the identity of the fact
@@ -85,9 +107,11 @@ pub struct Arm {
 pub enum Tail {
     /// The block's result.
     Value(Term),
-    /// Leaves the nearest enclosing loop with its result.
+    /// Leaves the nearest enclosing loop with its result. Not available when
+    /// the nearest enclosing iteration is a `for`.
     Break(Term),
-    /// Starts the nearest enclosing loop's next iteration with this state.
+    /// Starts the next iteration of the nearest enclosing loop or `for` with
+    /// this state.
     Continue(Vec<Term>),
     /// A match in tail position: each arm is a block of the same kind.
     Match { scrutinee: Term, arms: Vec<Arm> },

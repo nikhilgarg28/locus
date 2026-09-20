@@ -70,7 +70,7 @@ Initially the typed tree has flat patterns only: one constructor deep, as the ke
 The check IR exists to be checked. It is never printed or run in production.
 
 - Types are kernel `Type`s. Pure subexpressions are kernel `Term`s. Every ghost position holds a kernel `Proof`.
-- An ordinary `fn` body is in let-normal form. Every intermediate result of a computation that may diverge has a name. The right side of a binding is a pure kernel term, a call to an ordinary `fn`, or a control form (`match`, `loop`, `for`). A block ends in a value, `break`, `continue`, or a `match` of blocks.
+- An ordinary `fn` body is in let-normal form. Every intermediate result of a computation that may diverge has a name. The right side of a binding is a pure kernel term, a call to an ordinary `fn`, or a control form (`match`, `loop`, `for`). A `for` here is for a body that is not pure, one that calls ordinary functions; a `for` with a pure body is a kernel term. Its state is given as a function type from the index to the state's tuple type, which is how a state type mentions the index. A block ends in a value, `break`, `continue`, or a `match` of blocks.
 - A math function body is a kernel `Term`.
 
 Let-normal form makes the trusted checker a simple walk that maintains a kernel `Context`, which is specification section 6.3 made concrete:
@@ -82,6 +82,7 @@ Let-normal form makes the trusted checker a simple walk that maintains a kernel 
 | `let x = f(args)`, `f` an ordinary `fn` | check the arguments against `f`'s parameters; declare `x : R[args]` with no defining equation |
 | a `match` arm | declare the payload variables and assume `scrutinee == variant(payload)` |
 | a `loop` | declare abstract state variables; `continue` arguments and the initial values are checked against the state telescope, `break` values against the result type |
+| a bounded `for` | check that the bounds are executable bytes and that the given proof shows `lo <= hi`; check the initial values against the state at `lo`; declare the index and abstract state at the index, and assume `lo <= index` and `index < hi`; `continue` arguments are checked against the state at `index + 1`; there is no `break`; the result is the state at `hi` |
 
 Pure terms are typed by the kernel in `Executable` mode, which is what enforces the ghost rules: a ghost variable cannot be the scrutinee of an executable match, an executable argument, or executable data. A value returned by a call is an opaque variable; evidence returned with it is reached by projection. Nothing about termination is checked, and a math function cannot mention an ordinary `fn` at all, because kernel terms have no way to name one.
 
