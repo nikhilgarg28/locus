@@ -47,6 +47,14 @@ impl HypId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StructId(pub(super) usize);
 
+/// Identity of a declared enum; see `Definitions`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EnumId(pub(super) usize);
+
+/// Identity of a declared proposition; see `Definitions`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PropId(pub(super) usize);
+
 /// Identity of a declared math function; see `Definitions`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FnId(pub(super) usize);
@@ -66,6 +74,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     /// A declared struct. Nominal: two declarations are different types.
     Struct(StructId),
+    /// A declared enum. Nominal.
+    Enum(EnumId),
     /// A total function type. The parameters form a telescope and the result
     /// type is under all of them. Ordinary `fn` never reaches the kernel.
     Fn(Vec<Type>, Box<Type>),
@@ -78,7 +88,7 @@ impl Type {
             Self::Prop | Self::Proof(_) => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
-            Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) => false,
+            Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) | Self::Enum(_) => false,
         }
     }
 
@@ -131,7 +141,7 @@ impl Type {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Type {
         match self {
-            Self::Bool | Self::U8 | Self::Prop | Self::Struct(_) => self.clone(),
+            Self::Bool | Self::U8 | Self::Prop | Self::Struct(_) | Self::Enum(_) => self.clone(),
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
             Self::Tuple(fields) => Self::Tuple(rebind_telescope(fields, depth, op)),
             Self::Fn(params, result) => Self::Fn(
@@ -183,6 +193,43 @@ pub enum Term {
     Fn(FnId),
     /// Application of a term of function type.
     Call(Box<Term>, Vec<Term>),
+    /// A value of a declared enum: the variant's index and its payload.
+    Variant(EnumId, usize, Vec<Term>),
+    /// Case analysis on a `bool` (arms: false, true) or an enum (one arm per
+    /// variant, in declaration order). The result type does not depend on
+    /// the scrutinee and is not a proof type.
+    Case {
+        scrutinee: Box<Term>,
+        result: Type,
+        arms: Vec<TermArm>,
+    },
+    /// A declared proposition applied to its arguments.
+    PropApp(PropId, Vec<Term>),
+    /// Binds `Bound(0)` in its body.
+    Exists(Type, Box<Term>),
+    /// A value of any type, from a proof of a proposition with no variants.
+    /// It marks a point that is never reached.
+    Absurd(Box<Proof>, Type),
+}
+
+/// Builds the body of a term-level case arm from its payload variables.
+pub type ArmBuilder<'a> = Box<dyn FnOnce(&[Term]) -> Term + 'a>;
+
+/// An arm of a term-level case. The body is under `binders` binders, one per
+/// payload field of the variant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TermArm {
+    pub binders: u32,
+    pub body: Term,
+}
+
+/// An arm of a proof-level case. The body is under `vars` term binders and
+/// `hyps` hypothesis binders.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofArm {
+    pub vars: u32,
+    pub hyps: u32,
+    pub body: Box<Proof>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,6 +271,47 @@ pub enum Proof {
     /// Computation axiom: `f(args) == body[params := args]`, the defining
     /// equation of a declared math function, for the given call.
     Definition(Term),
+    /// Computation axiom: a case on a known constructor equals its arm.
+    CaseStep(Term),
+    /// A constructor of a declared proposition. `params` instantiates the
+    /// proposition's parameters for a variant without a stated conclusion and
+    /// is empty for a variant with one.
+    Construct {
+        prop: PropId,
+        variant: usize,
+        params: Vec<Term>,
+        payload: Vec<Term>,
+    },
+    /// Case analysis on a proof of a declared proposition. Each arm binds its
+    /// variant's payload and, for a variant with a stated conclusion, one
+    /// index equation per parameter.
+    CaseProof {
+        scrutinee: Box<Proof>,
+        goal: Term,
+        arms: Vec<ProofArm>,
+    },
+    /// Case analysis on data, to prove a goal. Each arm binds its variant's
+    /// payload and the hypothesis `scrutinee == variant(payload)`.
+    CaseData {
+        scrutinee: Term,
+        goal: Term,
+        arms: Vec<ProofArm>,
+    },
+    /// `prop` is `exists (x: A) { B }`; `proof` proves `B[witness]`.
+    ExistsIntro {
+        prop: Term,
+        witness: Term,
+        proof: Box<Proof>,
+    },
+    /// The arm binds the witness and the hypothesis that it satisfies the
+    /// body. The goal cannot mention the witness.
+    ExistsElim {
+        exists: Box<Proof>,
+        goal: Term,
+        arm: ProofArm,
+    },
+    /// `p || !p`, for the prelude's `Or` and `False`.
+    ExcludedMiddle(Term),
 }
 
 /// How many binders of each kind enclose the current position.
@@ -236,6 +324,13 @@ pub(super) struct Depth {
 impl Depth {
     fn at(vars: u32) -> Self {
         Self { vars, hyps: 0 }
+    }
+
+    fn under_hyps(self, count: u32) -> Self {
+        Self {
+            hyps: self.hyps + count,
+            ..self
+        }
     }
 
     fn under_vars(self, count: u32) -> Self {
@@ -263,7 +358,11 @@ pub(super) enum Rebind<'a> {
         replacement: &'a Term,
     },
     CloseVar(VarId),
-    OpenHyp(HypId),
+    /// Replace the bound hypothesis `index` binders out.
+    OpenHyp {
+        index: u32,
+        id: HypId,
+    },
     CloseHyp(HypId),
 }
 
@@ -315,6 +414,34 @@ impl Term {
         Self::Call(Box::new(callee), arguments)
     }
 
+    /// Builds `exists (x: ty) { body(x) }`.
+    pub fn exists(ty: Type, body: impl FnOnce(Term) -> Term) -> Self {
+        let var = VarId::fresh();
+        let body = body(Self::Free(var)).close(var);
+        Self::Exists(ty, Box::new(body))
+    }
+
+    /// Builds a case. Each arm is given its payload arity and receives that
+    /// many payload variables.
+    pub fn case(scrutinee: Term, result: Type, arms: Vec<(usize, ArmBuilder<'_>)>) -> Self {
+        let arms = arms
+            .into_iter()
+            .map(|(arity, body)| {
+                let vars: Vec<VarId> = (0..arity).map(|_| VarId::fresh()).collect();
+                let payload: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
+                TermArm {
+                    binders: arity as u32,
+                    body: body(&payload).close_over(&vars),
+                }
+            })
+            .collect();
+        Self::Case {
+            scrutinee: Box::new(scrutinee),
+            result,
+            arms,
+        }
+    }
+
     /// Puts a term under binders for `vars`, as `Type::close_over`.
     pub(super) fn close_over(&self, vars: &[VarId]) -> Term {
         let count = vars.len() as u32;
@@ -362,6 +489,18 @@ impl Term {
             Self::Tuple(_, values) | Self::Struct(_, values) => all(values),
             Self::Proj(target, _) => target.closed_at(depth),
             Self::Call(callee, arguments) => callee.closed_at(depth) && all(arguments),
+            Self::Variant(_, _, payload) => all(payload),
+            Self::Case {
+                scrutinee, arms, ..
+            } => {
+                scrutinee.closed_at(depth)
+                    && arms
+                        .iter()
+                        .all(|arm| arm.body.closed_at(depth + arm.binders))
+            }
+            Self::PropApp(_, arguments) => all(arguments),
+            Self::Exists(_, body) => body.closed_at(depth + 1),
+            Self::Absurd(_, _) => true,
         }
     }
 
@@ -380,7 +519,16 @@ impl Term {
             | Self::Bool(_)
             | Self::U8(_)
             | Self::Proof(_)
-            | Self::Fn(_) => None,
+            | Self::Fn(_)
+            | Self::Absurd(_, _) => None,
+            Self::Variant(_, _, payload) => first(payload, wanted),
+            Self::Case {
+                scrutinee, arms, ..
+            } => scrutinee
+                .find(wanted)
+                .or_else(|| arms.iter().find_map(|arm| arm.body.find(wanted))),
+            Self::PropApp(_, arguments) => first(arguments, wanted),
+            Self::Exists(_, body) => body.find(wanted),
             Self::Prim(_, arguments) => first(arguments, wanted),
             Self::Eq(_, left, right) => left.find(wanted).or_else(|| right.find(wanted)),
             Self::Implies(premise, conclusion) => {
@@ -420,7 +568,26 @@ impl Term {
             | Self::Bool(_)
             | Self::U8(_)
             | Self::Proof(_)
-            | Self::Fn(_) => self.clone(),
+            | Self::Fn(_)
+            | Self::Absurd(_, _) => self.clone(),
+            Self::Variant(id, index, payload) => Self::Variant(*id, *index, each(payload)),
+            Self::Case {
+                scrutinee,
+                result,
+                arms,
+            } => Self::Case {
+                scrutinee: boxed(scrutinee, depth),
+                result: result.clone(),
+                arms: arms
+                    .iter()
+                    .map(|arm| TermArm {
+                        binders: arm.binders,
+                        body: arm.body.abstract_at(is_target, depth + arm.binders),
+                    })
+                    .collect(),
+            },
+            Self::PropApp(id, arguments) => Self::PropApp(*id, each(arguments)),
+            Self::Exists(ty, body) => Self::Exists(ty.clone(), boxed(body, depth + 1)),
             Self::Prim(prim, arguments) => Self::Prim(*prim, each(arguments)),
             Self::Eq(ty, left, right) => {
                 Self::Eq(ty.clone(), boxed(left, depth), boxed(right, depth))
@@ -492,6 +659,30 @@ impl Term {
             Self::Fn(_) => self.clone(),
             Self::Call(callee, arguments) => {
                 Self::Call(Box::new(callee.rebind(depth, op)), each(arguments))
+            }
+            Self::Variant(id, index, payload) => Self::Variant(*id, *index, each(payload)),
+            Self::Case {
+                scrutinee,
+                result,
+                arms,
+            } => Self::Case {
+                scrutinee: Box::new(scrutinee.rebind(depth, op)),
+                result: result.rebind(depth, op),
+                arms: arms
+                    .iter()
+                    .map(|arm| TermArm {
+                        binders: arm.binders,
+                        body: arm.body.rebind(depth.under_vars(arm.binders), op),
+                    })
+                    .collect(),
+            },
+            Self::PropApp(id, arguments) => Self::PropApp(*id, each(arguments)),
+            Self::Exists(ty, body) => Self::Exists(
+                ty.rebind(depth, op),
+                Box::new(body.rebind(depth.under_vars(1), op)),
+            ),
+            Self::Absurd(proof, ty) => {
+                Self::Absurd(Box::new(proof.rebind(depth, op)), ty.rebind(depth, op))
             }
         }
     }
@@ -568,7 +759,59 @@ impl Proof {
     }
 
     pub(super) fn open_hyp(&self, id: HypId) -> Proof {
-        self.rebind(Depth::default(), Rebind::OpenHyp(id))
+        self.rebind(Depth::default(), Rebind::OpenHyp { index: 0, id })
+    }
+
+    /// Instantiates an arm body that is under `vars.len()` term binders and
+    /// `hyps.len()` hypothesis binders.
+    pub(super) fn open_arm(&self, vars: &[VarId], hyps: &[HypId]) -> Proof {
+        let mut proof = self.clone();
+        for (j, var) in vars.iter().enumerate() {
+            proof = proof.rebind(
+                Depth::default(),
+                Rebind::OpenVar {
+                    index: (vars.len() - 1 - j) as u32,
+                    replacement: &Term::Free(*var),
+                },
+            );
+        }
+        for (j, id) in hyps.iter().enumerate() {
+            proof = proof.rebind(
+                Depth::default(),
+                Rebind::OpenHyp {
+                    index: (hyps.len() - 1 - j) as u32,
+                    id: *id,
+                },
+            );
+        }
+        proof
+    }
+
+    /// Builds an arm whose body receives `vars` payload variables and `hyps`
+    /// hypotheses.
+    pub fn arm(
+        vars: usize,
+        hyps: usize,
+        body: impl FnOnce(&[Term], &[Proof]) -> Proof,
+    ) -> ProofArm {
+        let var_ids: Vec<VarId> = (0..vars).map(|_| VarId::fresh()).collect();
+        let hyp_ids: Vec<HypId> = (0..hyps).map(|_| HypId::fresh()).collect();
+        let terms: Vec<Term> = var_ids.iter().copied().map(Term::Free).collect();
+        let proofs: Vec<Proof> = hyp_ids.iter().copied().map(Proof::hyp).collect();
+        let mut proof = body(&terms, &proofs);
+        for (j, var) in var_ids.iter().enumerate() {
+            let depth = Depth::at((vars - 1 - j) as u32);
+            proof = proof.rebind(depth, Rebind::CloseVar(*var));
+        }
+        for (j, id) in hyp_ids.iter().enumerate() {
+            let depth = Depth::default().under_hyps((hyps - 1 - j) as u32);
+            proof = proof.rebind(depth, Rebind::CloseHyp(*id));
+        }
+        ProofArm {
+            vars: vars as u32,
+            hyps: hyps as u32,
+            body: Box::new(proof),
+        }
     }
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Proof {
@@ -577,8 +820,10 @@ impl Proof {
                 Rebind::CloseHyp(target) if target == *id => Self::Hyp(HypRef::Bound(depth.hyps)),
                 _ => self.clone(),
             },
-            Self::Hyp(HypRef::Bound(index)) => match op {
-                Rebind::OpenHyp(id) if *index == depth.hyps => Self::Hyp(HypRef::Free(id)),
+            Self::Hyp(HypRef::Bound(bound)) => match op {
+                Rebind::OpenHyp { index, id } if *bound == depth.hyps + index => {
+                    Self::Hyp(HypRef::Free(id))
+                }
                 _ => self.clone(),
             },
             Self::OfTerm(term) => Self::OfTerm(term.rebind(depth, op)),
@@ -611,6 +856,64 @@ impl Proof {
             Self::Projection(term) => Self::Projection(term.rebind(depth, op)),
             Self::Literal(term) => Self::Literal(term.rebind(depth, op)),
             Self::Definition(term) => Self::Definition(term.rebind(depth, op)),
+            Self::CaseStep(term) => Self::CaseStep(term.rebind(depth, op)),
+            Self::Construct {
+                prop,
+                variant,
+                params,
+                payload,
+            } => Self::Construct {
+                prop: *prop,
+                variant: *variant,
+                params: params.iter().map(|term| term.rebind(depth, op)).collect(),
+                payload: payload.iter().map(|term| term.rebind(depth, op)).collect(),
+            },
+            Self::CaseProof {
+                scrutinee,
+                goal,
+                arms,
+            } => Self::CaseProof {
+                scrutinee: Box::new(scrutinee.rebind(depth, op)),
+                goal: goal.rebind(depth, op),
+                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+            },
+            Self::CaseData {
+                scrutinee,
+                goal,
+                arms,
+            } => Self::CaseData {
+                scrutinee: scrutinee.rebind(depth, op),
+                goal: goal.rebind(depth, op),
+                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+            },
+            Self::ExistsIntro {
+                prop,
+                witness,
+                proof,
+            } => Self::ExistsIntro {
+                prop: prop.rebind(depth, op),
+                witness: witness.rebind(depth, op),
+                proof: Box::new(proof.rebind(depth, op)),
+            },
+            Self::ExistsElim { exists, goal, arm } => Self::ExistsElim {
+                exists: Box::new(exists.rebind(depth, op)),
+                goal: goal.rebind(depth, op),
+                arm: arm.rebind(depth, op),
+            },
+            Self::ExcludedMiddle(prop) => Self::ExcludedMiddle(prop.rebind(depth, op)),
+        }
+    }
+}
+
+impl ProofArm {
+    fn rebind(&self, depth: Depth, op: Rebind<'_>) -> ProofArm {
+        ProofArm {
+            vars: self.vars,
+            hyps: self.hyps,
+            body: Box::new(
+                self.body
+                    .rebind(depth.under_vars(self.vars).under_hyps(self.hyps), op),
+            ),
         }
     }
 }
@@ -630,6 +933,7 @@ impl fmt::Display for Type {
                 f.write_str(")")
             }
             Self::Struct(StructId(id)) => write!(f, "struct#{id}"),
+            Self::Enum(EnumId(id)) => write!(f, "enum#{id}"),
             Self::Fn(params, result) => {
                 f.write_str("math fn(")?;
                 for param in params {
@@ -688,6 +992,27 @@ impl fmt::Display for Term {
                 write_list(f, arguments)?;
                 f.write_str(")")
             }
+            Self::Variant(EnumId(id), index, payload) => {
+                write!(f, "enum#{id}::{index}(")?;
+                write_list(f, payload)?;
+                f.write_str(")")
+            }
+            Self::Case {
+                scrutinee, arms, ..
+            } => {
+                write!(f, "match {scrutinee} {{ ")?;
+                for arm in arms {
+                    write!(f, "{}, ", arm.body)?;
+                }
+                f.write_str("}")
+            }
+            Self::PropApp(PropId(id), arguments) => {
+                write!(f, "prop#{id}(")?;
+                write_list(f, arguments)?;
+                f.write_str(")")
+            }
+            Self::Exists(ty, body) => write!(f, "exists (#: {ty}) {{ {body} }}"),
+            Self::Absurd(_, ty) => write!(f, "absurd: {ty}"),
         }
     }
 }

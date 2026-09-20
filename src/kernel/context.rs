@@ -106,6 +106,11 @@ impl Context {
         self.push_var(ty, true)
     }
 
+    /// A variable bound by an executable construct, such as a case arm.
+    pub(super) fn push_local(&mut self, ty: Type, ghost: bool) -> VarId {
+        self.push_var(ty, ghost)
+    }
+
     pub(super) fn len(&self) -> usize {
         self.entries.len()
     }

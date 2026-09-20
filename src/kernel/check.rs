@@ -3,7 +3,7 @@
 
 use super::context::{Context, Mode};
 use super::error::KernelError;
-use super::term::{HypRef, Prim, Proof, Term, Type, field_type};
+use super::term::{HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
 /// The kernel's only comparison of terms: equality up to renaming of bound
 /// variables, which the locally nameless representation makes structural, and
@@ -31,6 +31,33 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Proj(lt, li), Term::Proj(rt, ri)) => li == ri && same(lt, rt),
         (Term::Fn(l), Term::Fn(r)) => l == r,
         (Term::Call(lc, la), Term::Call(rc, ra)) => same(lc, rc) && all(la, ra),
+        (Term::Variant(le, li, lp), Term::Variant(re, ri, rp)) => {
+            le == re && li == ri && all(lp, rp)
+        }
+        (
+            Term::Case {
+                scrutinee: ls,
+                result: lr,
+                arms: la,
+            },
+            Term::Case {
+                scrutinee: rs,
+                result: rr,
+                arms: ra,
+            },
+        ) => {
+            same(ls, rs)
+                && same_type(lr, rr)
+                && la.len() == ra.len()
+                && la
+                    .iter()
+                    .zip(ra)
+                    .all(|(l, r)| l.binders == r.binders && same(&l.body, &r.body))
+        }
+        (Term::PropApp(li, la), Term::PropApp(ri, ra)) => li == ri && all(la, ra),
+        (Term::Exists(lt, lb), Term::Exists(rt, rb)) => same_type(lt, rt) && same(lb, rb),
+        // Two unreachable values of one type: the proofs are irrelevant.
+        (Term::Absurd(_, lt), Term::Absurd(_, rt)) => same_type(lt, rt),
         _ => false,
     }
 }
@@ -41,12 +68,13 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
         (Type::Struct(l), Type::Struct(r)) => l == r,
+        (Type::Enum(l), Type::Enum(r)) => l == r,
         (Type::Fn(lp, lr), Type::Fn(rp, rr)) => same_types(lp, rp) && same_type(lr, rr),
         _ => false,
     }
 }
 
-fn same_types(left: &[Type], right: &[Type]) -> bool {
+pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
     left.len() == right.len() && left.iter().zip(right).all(|(l, r)| same_type(l, r))
 }
 
@@ -61,6 +89,11 @@ pub fn check_type(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
             .struct_fields(*id)
             .map(|_| ())
             .ok_or(KernelError::UnknownStruct),
+        Type::Enum(id) => ctx
+            .definitions()
+            .enum_variants(*id)
+            .map(|_| ())
+            .ok_or(KernelError::UnknownEnum),
         Type::Fn(params, result) => {
             let mut telescope = params.clone();
             telescope.push((**result).clone());
@@ -203,6 +236,180 @@ pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
             ghost_former(mode, &ty)?;
             Ok(ty)
         }
+        Term::Variant(id, index, payload) => {
+            let definitions = ctx.definitions();
+            let variants = definitions
+                .enum_variants(*id)
+                .ok_or(KernelError::UnknownEnum)?;
+            let fields = variants.get(*index).ok_or(KernelError::NoSuchVariant {
+                index: *index,
+                variants: variants.len(),
+            })?;
+            check_fields(ctx, fields, payload, mode)?;
+            Ok(Type::Enum(*id))
+        }
+        Term::Case {
+            scrutinee,
+            result,
+            arms,
+        } => {
+            let scrutinee_type = infer_term(ctx, scrutinee, mode)?;
+            let variants = data_variants(ctx, &scrutinee_type)
+                .ok_or_else(|| KernelError::NotCaseable((**scrutinee).clone()))?;
+            check_type(ctx, result)?;
+            if matches!(result, Type::Proof(_)) {
+                return Err(KernelError::ProofResult(result.clone()));
+            }
+            ghost_former(mode, result)?;
+            if arms.len() != variants.len() {
+                return Err(KernelError::ArmCount {
+                    expected: variants.len(),
+                    found: arms.len(),
+                });
+            }
+            for (arm, payload) in arms.iter().zip(&variants) {
+                if arm.binders as usize != payload.len() {
+                    return Err(KernelError::ArmBinders {
+                        expected: (payload.len(), 0),
+                        found: (arm.binders as usize, 0),
+                    });
+                }
+                let scope = ctx.len();
+                let mut vars: Vec<VarId> = Vec::new();
+                for index in 0..payload.len() {
+                    let ty = field_type(payload, index, |j| Term::Free(vars[j]));
+                    // A payload variable is executable exactly when the case
+                    // is and its field has a runtime representation.
+                    let ghost = mode == Mode::Logical || ty.is_ghost();
+                    vars.push(ctx.push_local(ty, ghost));
+                }
+                let body = arm.body.instantiate(vars.len(), |j| Term::Free(vars[j]));
+                let checked = expect_type(ctx, &body, result, mode);
+                ctx.truncate(scope);
+                checked?;
+            }
+            Ok(result.clone())
+        }
+        Term::PropApp(id, arguments) => {
+            ghost_former(mode, &Type::Prop)?;
+            let definitions = ctx.definitions();
+            let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
+            if arguments.len() != decl.params.len() {
+                return Err(KernelError::FieldCount {
+                    expected: decl.params.len(),
+                    found: arguments.len(),
+                });
+            }
+            for (argument, param) in arguments.iter().zip(&decl.params) {
+                expect_type(ctx, argument, param, Mode::Logical)?;
+            }
+            Ok(Type::Prop)
+        }
+        Term::Exists(ty, body) => {
+            ghost_former(mode, &Type::Prop)?;
+            check_type(ctx, ty)?;
+            let scope = ctx.len();
+            let var = ctx.push_bound(ty.clone());
+            let result = expect_type(
+                ctx,
+                &body.open(&Term::Free(var)),
+                &Type::Prop,
+                Mode::Logical,
+            );
+            ctx.truncate(scope);
+            result?;
+            Ok(Type::Prop)
+        }
+        Term::Absurd(proof, ty) => {
+            let prop = infer_proof(ctx, proof)?;
+            let empty = match &prop {
+                Term::PropApp(id, _) => ctx
+                    .definitions()
+                    .prop(*id)
+                    .is_some_and(|decl| decl.variants.is_empty()),
+                _ => false,
+            };
+            if !empty {
+                return Err(KernelError::NotEmpty(prop));
+            }
+            check_type(ctx, ty)?;
+            ghost_former(mode, ty)?;
+            Ok(ty.clone())
+        }
+    }
+}
+
+/// The payload telescopes of a data type that supports case analysis:
+/// `bool`, with the variants `false` and `true`, or a declared enum.
+fn data_variants(ctx: &Context, ty: &Type) -> Option<Vec<Vec<Type>>> {
+    match ty {
+        Type::Bool => Some(vec![Vec::new(), Vec::new()]),
+        Type::Enum(id) => ctx
+            .definitions()
+            .enum_variants(*id)
+            .map(<[Vec<Type>]>::to_vec),
+        _ => None,
+    }
+}
+
+/// Variant `index` of a case-able data type, applied to a payload.
+fn constructor(ty: &Type, index: usize, payload: Vec<Term>) -> Term {
+    match ty {
+        Type::Enum(id) => Term::Variant(*id, index, payload),
+        _ => Term::Bool(index == 1),
+    }
+}
+
+/// The variant index and payload of a term that is literally a constructor.
+fn known_constructor(term: &Term) -> Option<(usize, &[Term])> {
+    match term {
+        Term::Bool(value) => Some((usize::from(*value), &[])),
+        Term::Variant(_, index, payload) => Some((*index, payload)),
+        _ => None,
+    }
+}
+
+/// Checks one arm of a proof-level case: binds the payload, then the
+/// hypotheses the payload gives rise to, and checks the body against the
+/// goal. Everything bound is removed again.
+fn check_arm(
+    ctx: &mut Context,
+    arm: &ProofArm,
+    payload_len: usize,
+    field: impl Fn(usize, &[VarId]) -> Type,
+    hypotheses: impl Fn(&[VarId]) -> Vec<Term>,
+    goal: &Term,
+) -> Result<(), KernelError> {
+    let scope = ctx.len();
+    let mut vars: Vec<VarId> = Vec::new();
+    for index in 0..payload_len {
+        let ty = field(index, &vars);
+        vars.push(ctx.push_bound(ty));
+    }
+    let hyps: Vec<_> = hypotheses(&vars)
+        .into_iter()
+        .map(|prop| ctx.push_hyp(prop))
+        .collect();
+    let result = if (arm.vars as usize, arm.hyps as usize) == (vars.len(), hyps.len()) {
+        check_proof(ctx, &arm.body.open_arm(&vars, &hyps), goal)
+    } else {
+        Err(KernelError::ArmBinders {
+            expected: (vars.len(), hyps.len()),
+            found: (arm.vars as usize, arm.hyps as usize),
+        })
+    };
+    ctx.truncate(scope);
+    result
+}
+
+fn expect_arm_count(arms: &[ProofArm], variants: usize) -> Result<(), KernelError> {
+    if arms.len() == variants {
+        Ok(())
+    } else {
+        Err(KernelError::ArmCount {
+            expected: variants,
+            found: arms.len(),
+        })
     }
 }
 
@@ -390,6 +597,190 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
                 .instantiate(arguments.len(), |j| arguments[j].clone());
             Ok(Term::eq(ty, term.clone(), unfolded))
         }
+        Proof::CaseStep(term) => {
+            let Term::Case {
+                scrutinee, arms, ..
+            } = term
+            else {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            };
+            let Some((index, payload)) = known_constructor(scrutinee) else {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            };
+            let ty = infer_term(ctx, term, Mode::Logical)?;
+            let chosen = arms[index]
+                .body
+                .instantiate(payload.len(), |j| payload[j].clone());
+            Ok(Term::eq(ty, term.clone(), chosen))
+        }
+        Proof::Construct {
+            prop,
+            variant,
+            params,
+            payload,
+        } => {
+            let definitions = ctx.definitions();
+            let decl = definitions.prop(*prop).ok_or(KernelError::UnknownProp)?;
+            let chosen = decl
+                .variants
+                .get(*variant)
+                .ok_or(KernelError::NoSuchVariant {
+                    index: *variant,
+                    variants: decl.variants.len(),
+                })?;
+            let expected_params = if chosen.with_params {
+                decl.params.len()
+            } else {
+                0
+            };
+            if params.len() != expected_params {
+                return Err(KernelError::FieldCount {
+                    expected: expected_params,
+                    found: params.len(),
+                });
+            }
+            let values: Vec<Term> = params.iter().chain(payload).cloned().collect();
+            check_fields(ctx, &chosen.telescope, &values, Mode::Logical)?;
+            let arguments = if chosen.with_params {
+                params.clone()
+            } else {
+                chosen
+                    .conclusion
+                    .iter()
+                    .map(|argument| argument.instantiate(payload.len(), |j| payload[j].clone()))
+                    .collect()
+            };
+            Ok(Term::PropApp(*prop, arguments))
+        }
+        Proof::CaseProof {
+            scrutinee,
+            goal,
+            arms,
+        } => {
+            let proved = infer_proof(ctx, scrutinee)?;
+            let Term::PropApp(id, arguments) = &proved else {
+                return Err(KernelError::NotCaseable(proved));
+            };
+            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+            let definitions = ctx.definitions();
+            let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
+            expect_arm_count(arms, decl.variants.len())?;
+            for (arm, variant) in arms.iter().zip(&decl.variants) {
+                if variant.with_params {
+                    // The parameters are the scrutinee's own arguments, so
+                    // there is nothing to equate.
+                    let params = decl.params.len();
+                    check_arm(
+                        ctx,
+                        arm,
+                        variant.telescope.len() - params,
+                        |index, vars| {
+                            field_type(&variant.telescope, params + index, |j| {
+                                if j < params {
+                                    arguments[j].clone()
+                                } else {
+                                    Term::Free(vars[j - params])
+                                }
+                            })
+                        },
+                        |_| Vec::new(),
+                        goal,
+                    )?;
+                } else {
+                    // One index equation per parameter: the scrutinee's
+                    // argument equals the variant's stated one.
+                    check_arm(
+                        ctx,
+                        arm,
+                        variant.telescope.len(),
+                        |index, vars| {
+                            field_type(&variant.telescope, index, |j| Term::Free(vars[j]))
+                        },
+                        |vars| {
+                            let stated = variant
+                                .conclusion
+                                .iter()
+                                .map(|term| term.instantiate(vars.len(), |j| Term::Free(vars[j])));
+                            decl.params
+                                .iter()
+                                .zip(arguments)
+                                .zip(stated)
+                                .map(|((ty, actual), stated)| {
+                                    Term::eq(ty.clone(), actual.clone(), stated)
+                                })
+                                .collect()
+                        },
+                        goal,
+                    )?;
+                }
+            }
+            Ok(goal.clone())
+        }
+        Proof::CaseData {
+            scrutinee,
+            goal,
+            arms,
+        } => {
+            let ty = infer_term(ctx, scrutinee, Mode::Logical)?;
+            let variants = data_variants(ctx, &ty)
+                .ok_or_else(|| KernelError::NotCaseable(scrutinee.clone()))?;
+            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+            expect_arm_count(arms, variants.len())?;
+            for (index, (arm, payload)) in arms.iter().zip(&variants).enumerate() {
+                check_arm(
+                    ctx,
+                    arm,
+                    payload.len(),
+                    |field, vars| field_type(payload, field, |j| Term::Free(vars[j])),
+                    |vars| {
+                        let built = vars.iter().copied().map(Term::Free).collect();
+                        vec![Term::eq(
+                            ty.clone(),
+                            scrutinee.clone(),
+                            constructor(&ty, index, built),
+                        )]
+                    },
+                    goal,
+                )?;
+            }
+            Ok(goal.clone())
+        }
+        Proof::ExistsIntro {
+            prop,
+            witness,
+            proof,
+        } => {
+            expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
+            let Term::Exists(ty, body) = prop else {
+                return Err(KernelError::NotExistential(prop.clone()));
+            };
+            expect_type(ctx, witness, ty, Mode::Logical)?;
+            check_proof(ctx, proof, &body.open(witness))?;
+            Ok(prop.clone())
+        }
+        Proof::ExistsElim { exists, goal, arm } => {
+            let proved = infer_proof(ctx, exists)?;
+            let Term::Exists(ty, body) = &proved else {
+                return Err(KernelError::NotExistential(proved));
+            };
+            // The goal is checked before the witness exists, so it cannot
+            // mention the witness.
+            expect_type(ctx, goal, &Type::Prop, Mode::Logical)?;
+            check_arm(
+                ctx,
+                arm,
+                1,
+                |_, _| ty.clone(),
+                |vars| vec![body.open(&Term::Free(vars[0]))],
+                goal,
+            )?;
+            Ok(goal.clone())
+        }
+        Proof::ExcludedMiddle(prop) => {
+            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+            expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
+            Ok(prelude.or_prop(prop.clone(), prelude.not_prop(prop.clone())))
+        }
     }
 }
 
@@ -401,8 +792,8 @@ pub fn check_proof(ctx: &mut Context, proof: &Proof, expected: &Term) -> Result<
         Ok(())
     } else {
         Err(KernelError::ProofMismatch {
-            expected: expected.clone(),
-            found,
+            expected: Box::new(expected.clone()),
+            found: Box::new(found),
         })
     }
 }

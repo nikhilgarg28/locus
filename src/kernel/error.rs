@@ -25,8 +25,8 @@ pub enum KernelError {
     },
     /// A proof proves a different proposition from the one required.
     ProofMismatch {
-        expected: Term,
-        found: Term,
+        expected: Box<Term>,
+        found: Box<Term>,
     },
     /// A product value or pattern with the wrong number of fields.
     FieldCount {
@@ -40,6 +40,35 @@ pub enum KernelError {
     NotAProduct(Type),
     UnknownStruct,
     UnknownFunction,
+    UnknownEnum,
+    UnknownProp,
+    NoSuchVariant {
+        index: usize,
+        variants: usize,
+    },
+    /// A case must have exactly one arm per variant, each binding exactly
+    /// what its variant provides.
+    ArmCount {
+        expected: usize,
+        found: usize,
+    },
+    ArmBinders {
+        expected: (usize, usize),
+        found: (usize, usize),
+    },
+    /// Case analysis needs a `bool`, an enum, or a proof of a declared
+    /// proposition.
+    NotCaseable(Term),
+    /// A parameter of a declared proposition cannot be a proof.
+    ProofParameter(Type),
+    /// A term-level case cannot have a proof type as its result; case
+    /// analysis that produces a proof is a proof rule.
+    ProofResult(Type),
+    /// Absurdity needs a proof of a proposition with no variants.
+    NotEmpty(Term),
+    NotExistential(Term),
+    /// Excluded middle needs the prelude's `Or` and `False`.
+    NoPrelude,
     NotAFunction(Type),
     /// A derived form exceeded its step budget.
     StepLimit,
@@ -95,6 +124,34 @@ impl fmt::Display for KernelError {
             Self::NotAProduct(ty) => write!(f, "expected a tuple or struct type, found {ty}"),
             Self::UnknownStruct => f.write_str("struct is not declared"),
             Self::UnknownFunction => f.write_str("function is not declared"),
+            Self::UnknownEnum => f.write_str("enum is not declared"),
+            Self::UnknownProp => f.write_str("proposition is not declared"),
+            Self::NoSuchVariant { index, variants } => {
+                write!(f, "no variant {index} among {variants} variants")
+            }
+            Self::ArmCount { expected, found } => {
+                write!(f, "expected {expected} arms, found {found}")
+            }
+            Self::ArmBinders { expected, found } => write!(
+                f,
+                "an arm binds {} variables and {} hypotheses, expected {} and {}",
+                found.0, found.1, expected.0, expected.1
+            ),
+            Self::NotCaseable(term) => write!(f, "case analysis does not apply to {term}"),
+            Self::ProofParameter(ty) => {
+                write!(f, "a proposition parameter cannot have the proof type {ty}")
+            }
+            Self::ProofResult(ty) => {
+                write!(
+                    f,
+                    "a term-level case cannot have the proof type {ty} as its result"
+                )
+            }
+            Self::NotEmpty(prop) => write!(f, "{prop} is not a proposition with no variants"),
+            Self::NotExistential(prop) => {
+                write!(f, "expected an existential proposition, found {prop}")
+            }
+            Self::NoPrelude => f.write_str("excluded middle needs the prelude declarations"),
             Self::NotAFunction(ty) => write!(f, "expected a function type, found {ty}"),
             Self::StepLimit => f.write_str("derived form exceeded its step budget"),
             Self::ProofExpected(term) => {

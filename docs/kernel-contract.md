@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers kernel gates **K1**, **K2**, and **K3** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), and `tests/kernel_functions.rs` (K3). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers kernel gates **K1** to **K4** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), and `tests/kernel_cases.rs` (K4). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -13,6 +13,7 @@ Type ::= bool | u8 | Prop
        | @P                       the proofs of the proposition P
        | (A_0, A_1, ..., A_n)     a telescope: A_i may mention fields 0..i-1
        | struct S                 a declared struct, by identity
+       | enum E                   a declared enum, by identity
        | math fn(A_0, ..., A_n) -> R     parameters form a telescope; R may mention all of them
 ~~~
 
@@ -20,7 +21,7 @@ Type ::= bool | u8 | Prop
 
 In a telescope, field `i` is under `i` binders: `#0` in it is field `i - 1`, `#1` is field `i - 2`, and so on. `A_i[v_0, ..., v_{i-1}]` below means field `i`'s type with each earlier field replaced by the given term.
 
-Declarations. A struct declaration is a closed telescope. A math function declaration is a closed function type and a body. Each declaration is checked against the declarations that precede it, so a struct cannot mention itself and a function cannot call itself, directly or indirectly. Kernel terms contain no loop, so every declared function is total by construction. Structs are nominal: two declarations with identical fields are different types. Tuple types are structural, and the names a source program gives tuple fields do not exist here.
+Declarations. A struct declaration is a closed telescope. An enum declaration is a list of variants, each a closed payload telescope. A proposition declaration is described under Declared propositions below. A math function declaration is a closed function type and a body. Each declaration is checked against the declarations that precede it, so a struct, enum, or proposition cannot mention itself and a function cannot call itself, directly or indirectly. Kernel terms contain no loop, so every declared function is total by construction. Structs are nominal: two declarations with identical fields are different types. Tuple types are structural, and the names a source program gives tuple fields do not exist here.
 
 Terms. A proposition is a term of type `Prop`; there is no separate syntactic class.
 
@@ -38,6 +39,11 @@ t ::= x                     a context variable, by identity
     | proof(p)              a proof used as a value
     | f                     a declared math function, as a value
     | t(t_0, ..., t_n)      application
+    | E::i(t_0, ..., t_n)   variant i of a declared enum
+    | case t : R { arm_0, ..., arm_n }     arm_i binds the payload of variant i
+    | N(t_0, ..., t_n)      a declared proposition applied to arguments
+    | exists (#: A) { t }   binds #0 in its body
+    | absurd(p) : A         a value of any type from a proof of an empty proposition
 ~~~
 
 A tuple value carries its type because a dependent telescope cannot be inferred from the values alone.
@@ -63,7 +69,16 @@ p ::= h                     a context hypothesis, by identity
     | projection(t)         computation axiom
     | literal(t)            computation axiom
     | definition(t)         computation axiom
+    | case_step(t)          computation axiom
+    | construct(N, i, params, payload)     variant i of a declared proposition
+    | case_proof(p, G, arms)    case analysis on a proof
+    | case_data(t, G, arms)     case analysis on data
+    | exists_intro(P, t, p)
+    | exists_elim(p, G, arm)
+    | excluded_middle(P)
 ~~~
+
+An arm of a proof-level case binds some term variables and some hypotheses, and states how many of each.
 
 Hypotheses bound by `implies_intro` are indexed separately from term variables.
 
@@ -91,6 +106,7 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `@P` | `P : Prop` in `Logical` mode |
 | `(A_0, ..., A_n)` | for each `i`, with fresh ghost variables `x_0 : A_0, ..., x_{i-1} : A_{i-1}[...]` added, `A_i[x_0, ..., x_{i-1}]` is a type |
 | `struct S` | `S` is declared |
+| `enum E` | `E` is declared |
 | `math fn(A_0, ..., A_n) -> R` | `(A_0, ..., A_n, R)` is a well-formed telescope |
 
 ## Term typing: `ctx |- t : A` in a mode
@@ -109,8 +125,15 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `S { t_0, ..., t_n }` | `S` is declared with fields `(A_0, ..., A_n)`; the field rule below holds | `struct S` |
 | `t.i` | `t : (A_0, ..., A_n)` or `t : struct S` in the same mode; `i <= n`. In `Executable` mode the result type is not ghost. | `A_i[t.0, ..., t.(i-1)]` |
 | `proof(p)` | mode is `Logical`; `p` proves `P` | `@P` |
+| `E::i(t_0, ..., t_n)` | `E` is declared and has a variant `i` with payload `(A_0, ..., A_n)`; the field rule holds for the payload, in the same mode | `enum E` |
+| `case t : R { arms }` | `t : bool` or `t : enum E` in the same mode; `R` is a type, is not a proof type, and in `Executable` mode is not ghost; there is exactly one arm per variant, in order (`false`, `true` for `bool`); arm `i` binds exactly the payload of variant `i`, and with those variables added its body has type `R` in the same mode | `R` |
+| `N(t_0, ..., t_n)` | mode is `Logical`; `N` is declared with parameters `(A_0, ..., A_n)`; each `t_j : A_j` in `Logical` mode | `Prop` |
+| `exists (#: A) { P }` | as `forall` | `Prop` |
+| `absurd(p) : A` | `p` proves `N(...)` where `N` is declared with no variants; `A` is a type; in `Executable` mode `A` is not ghost | `A` |
 | `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost. | `F` |
 | `t(t_0, ..., t_n)` | `t : math fn(A_0, ..., A_n) -> R` in the same mode; the field rule below holds for the arguments against the parameters. In `Executable` mode the result type is not ghost. | `R[t_0, ..., t_n]` |
+
+In an executable `case`, a payload variable is executable when its field has a runtime representation and ghost otherwise; in a logical `case` every payload variable is ghost. The result type of a `case` does not depend on the scrutinee. A `case` cannot scrutinize a proof and cannot have a proof type as its result: case analysis that inspects or produces proofs is a proof rule, below. `absurd` is the match with no arms used for its value; it marks a point that is never reached.
 
 Function declaration. `math fn f(x_0: A_0, ..., x_n: A_n) -> R { body }` is accepted when its function type is well formed with no variables in scope, and, with fresh ghost variables for the parameters, `body : R[x_0, ..., x_n]` in `Logical` mode. A lemma is a function whose result type is a proof type; its body has the form `proof(p)`.
 
@@ -144,11 +167,58 @@ The kernel reads the proposition off the proof. It never searches.
 | `of_term(t)` | `t : @P` in `Logical` mode | `P` |
 | `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type; `v_i : A` | `c.i ==[A] v_i` |
 | `definition(f(t_0, ..., t_n))` | the callee is literally a declared function `f` with parameters `x_0, ..., x_n` and body `b`; `f(t_0, ..., t_n) : A` in `Logical` mode; `A` is not a proof type | `f(t_0, ..., t_n) ==[A] b[t_0, ..., t_n]` |
+| `case_step(case c : R { arms })` | `c` is literally `false`, `true`, or `E::i(v_0, ..., v_n)`; the case is well typed in `Logical` mode | `case c ... ==[R] arm_i[v_0, ..., v_n]` |
 | `literal(op(a, b))` | `op` is `wrapping_add` or `wrapping_sub`; `a` and `b` are `u8` literals | `op(a, b) ==[u8] r`, where `r` is the result modulo 256 |
+
+### Declared propositions
+
+`prop N(x_0: A_0, ..., x_n: A_n) { variants }` is accepted when each `A_j` is a type that is not a proof type, and each variant has one of two shapes:
+
+- A variant without a stated conclusion has a payload telescope that may mention the parameters. It proves `N` at whatever parameters it is given.
+- A variant with a stated conclusion has a closed payload telescope `(B_0, ..., B_m)` and arguments `c_0, ..., c_n` under it, with each `c_j : A_j`. It proves exactly `N(c_0, ..., c_n)`. The parameters are not in scope in it.
+
+A parameter cannot be a proof, so no parameter type depends on an earlier parameter, and index equations are independent. A conclusion is a list of arguments for `N`, not a proposition, so a variant cannot conclude anything but `N`; the surface rule that says so is enforced by the representation. A payload cannot mention `N`, because `N` has no identity until its declaration is accepted.
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `construct(N, i, (t_0..t_n), payload)`, variant `i` without a stated conclusion | the field rule holds for `(t_0, ..., t_n, payload...)` against the parameters followed by the payload telescope | `N(t_0, ..., t_n)` |
+| `construct(N, i, (), payload)`, variant `i` with a stated conclusion | the field rule holds for the payload | `N(c_0[payload], ..., c_n[payload])` |
+| `case_proof(p, G, arms)` | `p` proves `N(a_0, ..., a_n)`; `G : Prop` in the current context; one arm per variant, in order; each arm proves `G` under the bindings below | `G` |
+| `case_data(t, G, arms)` | `t : bool` or `t : enum E` in `Logical` mode, of type `T`; `G : Prop` in the current context; one arm per variant; arm `i` binds fresh ghost payload variables `ys` and the hypothesis `t ==[T] variant_i(ys)`, and proves `G` | `G` |
+
+What an arm of `case_proof` binds:
+
+- for a variant without a stated conclusion: payload variables whose types are the payload telescope with the parameters replaced by `a_0, ..., a_n`, and no hypotheses;
+- for a variant with a stated conclusion: payload variables `ys`, then one hypothesis per parameter, `a_j ==[A_j] c_j[ys]`. These are the index equations. There is no equation about the scrutinee itself: under proof irrelevance it would say nothing.
+
+`G` is checked before anything is bound, so it cannot mention a payload variable, and it does not depend on the proof being analyzed. A proposition with no variants has a `case_proof` with no arms, which proves any `G`.
+
+The result of `case_proof` is a proof by construction, and every arm is a kernel proof, hence total. The specification's restrictions on a match over a proof, that its result is a proof and that its arms are total logical computations, therefore cannot be violated in kernel terms; rejecting surface programs that try is the elaborator's job.
+
+The prelude declares `True`, `False`, `And`, and `Or` by this mechanism, before anything else, and records their identities. `!P` is `P => False`.
+
+### Exists
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `exists_intro(P, t, p)` | `P` is `exists (#: A) { B }` and `P : Prop`; `t : A` in `Logical` mode; `p` proves `B[t]` | `P` |
+| `exists_elim(p, G, arm)` | `p` proves `exists (#: A) { B }`; `G : Prop` in the current context; the arm binds a fresh ghost `w : A` and the hypothesis `B[w]`, and proves `G` | `G` |
+
+`G` cannot mention the witness, and the result is a proof: an existential cannot be mined for data.
+
+### Excluded middle
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `excluded_middle(P)` | the declarations include the prelude; `P : Prop` | `Or(P, P => False)` |
+
+`proof_is_classical` reports whether a proof uses this rule, directly or through a declared function, and each function declaration records the same about its body. This is bookkeeping for auditing, not a check.
+
+### Notes on the rules
 
 Using a lemma needs no rule of its own: a call to a lemma is a term of proof type, so `of_term(lemma(args))` proves the instantiated conclusion. A lemma has no defining equation, because equality at its proof type cannot be formed; nothing is lost, since proofs are irrelevant.
 
-`projection`, `literal`, and `definition` are the computation axioms of specification section 12.2 that exist so far; the `let` axiom is a hypothesis, as described under Context. Each is a single step validated by matching the shape of its term. They are used through `transport`, and the elaborator will insert them silently.
+`projection`, `literal`, `definition`, and `case_step` are the computation axioms of specification section 12.2 that exist so far; the `let` axiom is a hypothesis, as described under Context. Each is a single step validated by matching the shape of its term. They are used through `transport`, and the elaborator will insert them silently.
 
 The premise `v_i : A` of `projection` matters only for a nested dependent product: the projection's type names earlier fields as `c.j`, while the value's own type names them as `v_j`. The step is offered only when the two types are already the same. Bridging them would need transport between types, which the kernel does not have.
 
@@ -171,6 +241,8 @@ There is no unfolding, no evaluation, and no normalization. A hypothesis `is_thr
 
 Proof irrelevance is sound as a syntactic check because of the field rule: in a well-typed term, every position of proof type inside a product value holds a `proof(p)`, equality at a proof type cannot be formed, and no other term former has a proof-typed argument. Two product values with the same data and different proofs are therefore the same term, and `refl` proves them equal with no proof step.
 
+Constructor disjointness and injectivity are not rules. `tests/kernel_cases.rs` derives `Red == Green => False` and `Byte(a) == Byte(b) => a == b` from `case_step`, `transport`, and a `case` that sends the constructors to different results.
+
 ## Derived forms
 
 `src/kernel/derive.rs` builds proofs out of the rules above and is not trusted: `symm`, `trans`, `rewrite`, `unfold`, and `fold`. Each computes a transport template by abstracting occurrences of a term, and the kernel checks the result like any other proof. These are the elaborator forms of specification section 8.4. Their loops are bounded by a step count.
@@ -192,14 +264,13 @@ Not yet present, by gate:
 
 | Gate | Adds |
 |---|---|
-| K4 | Enums and the case rule with arm evidence; declared props and the index-equation case rule; `Exists`; excluded middle with dependency recording |
 | K5 | Internal `Nat` with induction; the `u8` model, reflection lemmas, native evaluation |
 | K6 | The range-iteration rule |
 
-One K2 acceptance condition is stated in the plan in terms of `NonZero`. The kernel has no `!=` until K4 brings `False`, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
+One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2 was built the kernel had no `!=`, which needs `False` from K4, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
 
 ## Trusted base
 
-`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations), and Rust's wrapping `u8` arithmetic behind `literal`. `src/kernel/derive.rs` is not part of it. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
+`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations and the prelude), and Rust's wrapping `u8` arithmetic behind `literal`. `src/kernel/derive.rs` and `src/kernel/classical.rs` are not part of it. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
 
 Known limit: checking is recursive and has no depth bound yet. Hand-written terms cannot exhaust the stack; this must be addressed before the kernel accepts terms produced from untrusted source text.

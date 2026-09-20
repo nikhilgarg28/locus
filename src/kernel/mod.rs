@@ -6,9 +6,10 @@
 //! Every rule implemented here is stated, with exact premises and conclusion,
 //! in `docs/kernel-contract.md`; the two must change together.
 //!
-//! Implemented so far: gates K1 to K3 of `docs/core-plan.md`.
+//! Implemented so far: gates K1 to K4 of `docs/core-plan.md`.
 
 mod check;
+mod classical;
 mod context;
 mod defs;
 pub mod derive;
@@ -16,7 +17,11 @@ mod error;
 mod term;
 
 pub use check::{check_proof, check_type, infer_proof, infer_term, same, same_type};
+pub use classical::proof_is_classical;
 pub use context::{Context, Mode};
-pub use defs::Definitions;
+pub use defs::{Definitions, Prelude, PropVariant};
 pub use error::KernelError;
-pub use term::{FnId, HypId, HypRef, Prim, Proof, StructId, Term, Type, VarId};
+pub use term::{
+    ArmBuilder, EnumId, FnId, HypId, HypRef, Prim, Proof, ProofArm, PropId, StructId, Term,
+    TermArm, Type, VarId,
+};
