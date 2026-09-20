@@ -223,8 +223,17 @@ pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
                     fields: fields.len(),
                 });
             }
-            // Earlier fields are named by projecting from the same target.
-            let ty = field_type(fields, *index, |j| Term::proj((**target).clone(), j));
+            // Earlier fields are named by projecting from the same target,
+            // unless the target is literally a product value: then they are
+            // its own field values, which is the type the constructor rule
+            // checked field `index` against. That keeps the projection axiom
+            // well typed for a nested dependent product.
+            let ty = match &**target {
+                Term::Tuple(_, values) | Term::Struct(_, values) => {
+                    field_type(fields, *index, |j| values[j].clone())
+                }
+                _ => field_type(fields, *index, |j| Term::proj((**target).clone(), j)),
+            };
             ghost_former(mode, &ty)?;
             Ok(ty)
         }
@@ -502,10 +511,10 @@ fn evaluate(prim: Prim, arguments: &[Term]) -> Option<Term> {
         (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
         (Prim::U8Lt, [Term::U8(a), Term::U8(b)]) => Term::Bool(a < b),
         (Prim::U8Le, [Term::U8(a), Term::U8(b)]) => Term::Bool(a <= b),
-        (Prim::ToNat, [Term::U8(a)]) => Term::Nat(u64::from(*a)),
-        (Prim::OfNat, [Term::Nat(n)]) => Term::U8((n % 256) as u8),
-        (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.checked_add(1)?),
-        (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.checked_add(*b)?),
+        (Prim::ToNat, [Term::U8(a)]) => Term::nat(u64::from(*a)),
+        (Prim::OfNat, [Term::Nat(n)]) => Term::U8(n.low_byte()),
+        (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.succ()),
+        (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.add(b)),
         _ => return None,
     })
 }
@@ -533,9 +542,9 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
     }
     let nat_eq = |left: Term, right: Term| Term::eq(Type::Nat, left, right);
     let u8_eq = |left: Term, right: Term| Term::eq(Type::U8, left, right);
-    let bound = Term::Nat(256);
+    let bound = Term::nat(256);
     Ok(match axiom.clone() {
-        Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::Nat(0)), a),
+        Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a),
         Axiom::NatAddSucc(a, b) => nat_eq(
             Term::nat_add(a.clone(), Term::succ(b.clone())),
             Term::succ(Term::nat_add(a, b)),
@@ -544,7 +553,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
             nat_eq(Term::succ(a.clone()), Term::succ(b.clone())),
             nat_eq(a, b),
         ),
-        Axiom::NatSuccNotZero(a) => prelude.not_prop(nat_eq(Term::succ(a), Term::Nat(0))),
+        Axiom::NatSuccNotZero(a) => prelude.not_prop(nat_eq(Term::succ(a), Term::nat(0))),
         Axiom::ToNatBound(x) => prelude.nat_lt_prop(Term::to_nat(x), bound),
         Axiom::OfToNat(x) => u8_eq(Term::of_nat(Term::to_nat(x.clone())), x),
         Axiom::ToOfNat(n) => Term::implies(
@@ -736,9 +745,8 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             if matches!(ty, Type::Proof(_)) {
                 return Err(KernelError::EqualityAtProofType(ty));
             }
-            // The projection names earlier fields as projections, the value
-            // names them directly; the step is offered only when the two
-            // types already coincide.
+            // Projection from a literal product is typed by the product's
+            // own field values, so the value has exactly this type.
             let value = &values[*index];
             if !same_type(&infer_term(ctx, value, Mode::Logical)?, &ty) {
                 return Err(KernelError::NoComputationStep(term.clone()));
@@ -986,7 +994,7 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             ctx.truncate(scope);
             well_formed?;
             expect_type(ctx, target, &Type::Nat, Mode::Logical)?;
-            check_proof(ctx, base, &motive.open(&Term::Nat(0)))?;
+            check_proof(ctx, base, &motive.open(&Term::nat(0)))?;
             check_arm_with(
                 ctx,
                 step,

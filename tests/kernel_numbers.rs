@@ -100,11 +100,11 @@ fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
 
 /// A kernel proof that `nat_le(x, y)` for literals with `x <= y`.
 fn literal_le(prelude: &Prelude, x: u64, y: u64) -> Proof {
-    let (left, right) = (Term::Nat(x), Term::Nat(y));
+    let (left, right) = (Term::nat(x), Term::nat(y));
     let body = Term::exists(Type::Nat, |k| {
         nat_eq(Term::nat_add(left.clone(), k), right.clone())
     });
-    let witness = Term::Nat(y - x);
+    let witness = Term::nat(y - x);
     let sum = Proof::Literal(Term::nat_add(left.clone(), witness.clone()));
     fold_claim(
         &prelude.nat_le_prop(left.clone(), right.clone()),
@@ -119,7 +119,7 @@ fn literal_le(prelude: &Prelude, x: u64, y: u64) -> Proof {
 /// A kernel proof that `nat_lt(x, y)` for literals with `x < y`.
 fn literal_lt(prelude: &Prelude, x: u64, y: u64) -> Proof {
     // nat_lt(x, y) unfolds to nat_le(succ(x), y); succ(x) evaluates to x + 1.
-    let (left, right) = (Term::Nat(x), Term::Nat(y));
+    let (left, right) = (Term::nat(x), Term::nat(y));
     let evaluated = Proof::Literal(Term::succ(left.clone()));
     let at_successor = Proof::transport(
         symm_at(&Type::Nat, &Term::succ(left.clone()), evaluated),
@@ -139,7 +139,7 @@ fn onto_bytes(
 ) -> Proof {
     let (first, second) = if swap { (b, a) } else { (a, b) };
     let model = |byte: u8| Term::to_nat(Term::U8(byte));
-    let second_literal = Term::Nat(u64::from(second));
+    let second_literal = Term::nat(u64::from(second));
     let first_done = Proof::transport(
         symm_at(&Type::Nat, &model(first), Proof::Literal(model(first))),
         |hole| claim(hole, second_literal.clone()),
@@ -208,7 +208,7 @@ fn native_arithmetic_agrees_with_the_model_for_every_pair_of_bytes() {
             // wrapping_add: the native answer must be what the model axiom
             // says, of_nat(to_nat(a) + to_nat(b)), evaluated step by step.
             let native = literal(&mut ctx, Term::wrapping_add(x.clone(), y.clone()));
-            let (na, nb) = (Term::Nat(u64::from(a)), Term::Nat(u64::from(b)));
+            let (na, nb) = (Term::nat(u64::from(a)), Term::nat(u64::from(b)));
             let sum = Term::nat_add(na.clone(), nb.clone());
             let by_model = Chain::new(Type::U8, Term::wrapping_add(x.clone(), y.clone()))
                 .step(Proof::Axiom(Axiom::WrappingAddModel(x.clone(), y.clone())))
@@ -243,19 +243,19 @@ fn native_conversions_agree_with_the_model_axioms() {
         other => panic!("no literal step: {other:?}"),
     };
     for n in 0..1024u64 {
-        let byte = literal(Term::of_nat(Term::Nat(n)));
+        let byte = literal(Term::of_nat(Term::nat(n)));
         // n < 256 => to_nat(of_nat(n)) == n
         if n < 256 {
-            assert_eq!(literal(Term::to_nat(byte.clone())), Term::Nat(n));
+            assert_eq!(literal(Term::to_nat(byte.clone())), Term::nat(n));
         }
         // of_nat(n + 256) == of_nat(n)
-        let wrapped = literal(Term::nat_add(Term::Nat(n), Term::Nat(256)));
+        let wrapped = literal(Term::nat_add(Term::nat(n), Term::nat(256)));
         assert_eq!(literal(Term::of_nat(wrapped)), byte);
         // to_nat(x) < 256, and of_nat(to_nat(x)) == x
         let Term::Nat(model) = literal(Term::to_nat(byte.clone())) else {
             panic!()
         };
-        assert!(model < 256);
+        assert!(model.to_u64().is_some_and(|model| model < 256));
         assert_eq!(literal(Term::of_nat(Term::Nat(model))), byte);
     }
 }
@@ -267,8 +267,8 @@ fn induction_checks_its_base_and_its_step() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(definitions);
     let n = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
-    let zero = Term::Nat(0);
-    let claim = |k: Term| nat_eq(Term::nat_add(Term::Nat(0), k.clone()), k);
+    let zero = Term::nat(0);
+    let claim = |k: Term| nat_eq(Term::nat_add(Term::nat(0), k.clone()), k);
 
     // The lemma, and the same induction written inline.
     assert_eq!(
@@ -282,9 +282,9 @@ fn induction_checks_its_base_and_its_step() {
     let step = |k: Term, ih: Proof| {
         Chain::new(
             Type::Nat,
-            Term::nat_add(Term::Nat(0), Term::succ(k.clone())),
+            Term::nat_add(Term::nat(0), Term::succ(k.clone())),
         )
-        .step(Proof::Axiom(Axiom::NatAddSucc(Term::Nat(0), k)))
+        .step(Proof::Axiom(Axiom::NatAddSucc(Term::nat(0), k)))
         .rewrite(Term::succ, ih)
         .finish()
     };
@@ -338,16 +338,16 @@ fn successor_is_injective_and_never_zero() {
     let mut ctx = Context::with_definitions(definitions);
 
     // 1 == 0 => False: 1 is succ(0), and no successor is zero.
-    let one_is_zero = nat_eq(Term::Nat(1), Term::Nat(0));
+    let one_is_zero = nat_eq(Term::nat(1), Term::nat(0));
     let refuted = Proof::implies_intro(one_is_zero.clone(), |h| {
-        let one = Proof::Literal(Term::succ(Term::Nat(0)));
+        let one = Proof::Literal(Term::succ(Term::nat(0)));
         let succ_is_zero = Proof::transport(
-            symm_at(&Type::Nat, &Term::succ(Term::Nat(0)), one),
-            |hole| nat_eq(hole, Term::Nat(0)),
+            symm_at(&Type::Nat, &Term::succ(Term::nat(0)), one),
+            |hole| nat_eq(hole, Term::nat(0)),
             h,
         );
         Proof::implies_elim(
-            Proof::Axiom(Axiom::NatSuccNotZero(Term::Nat(0))),
+            Proof::Axiom(Axiom::NatSuccNotZero(Term::nat(0))),
             succ_is_zero,
         )
     });
@@ -393,7 +393,7 @@ fn nat_is_ghost_and_axioms_are_typed() {
     );
     // An axiom about bytes does not accept a Nat, and conversely.
     assert!(matches!(
-        infer_proof(&mut ctx, &Proof::Axiom(Axiom::ToNatBound(Term::Nat(3)))),
+        infer_proof(&mut ctx, &Proof::Axiom(Axiom::ToNatBound(Term::nat(3)))),
         Err(KernelError::TypeMismatch { .. })
     ));
     assert!(matches!(
@@ -407,15 +407,22 @@ fn nat_is_ghost_and_axioms_are_typed() {
     // The axioms are stated with the prelude's orderings.
     let mut bare = Context::new();
     assert_eq!(
-        infer_proof(&mut bare, &Proof::Axiom(Axiom::NatAddZero(Term::Nat(1)))),
+        infer_proof(&mut bare, &Proof::Axiom(Axiom::NatAddZero(Term::nat(1)))),
         Err(KernelError::NoPrelude)
     );
-    // Literal arithmetic beyond the literal range has no step.
-    let overflow = Term::succ(Term::Nat(u64::MAX));
-    assert!(matches!(
-        infer_proof(&mut ctx, &Proof::Literal(overflow)),
-        Err(KernelError::NoComputationStep(_))
-    ));
+    // Nat literals are not machine integers: arithmetic continues past u64.
+    let past = Term::succ(Term::nat(u64::MAX));
+    let Ok(Term::Eq(_, _, value)) = infer_proof(&mut ctx, &Proof::Literal(past)) else {
+        panic!("succ has a literal step at any size")
+    };
+    assert_eq!(value.to_string(), "18446744073709551616n");
+    assert_eq!(
+        infer_proof(&mut ctx, &Proof::Literal(Term::of_nat(*value))),
+        Ok(u8_eq(
+            Term::of_nat(Term::Nat(locus::kernel::Natural::from(u64::MAX).succ())),
+            Term::U8(0)
+        ))
+    );
 }
 
 #[test]

@@ -14,6 +14,7 @@ mod context;
 mod defs;
 pub mod derive;
 mod error;
+mod nat;
 mod term;
 pub mod theory;
 
@@ -22,6 +23,7 @@ pub use classical::proof_is_classical;
 pub use context::{Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
 pub use error::KernelError;
+pub use nat::Natural;
 pub use term::{
     ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,
     StructId, Term, TermArm, Type, VarId,

@@ -70,7 +70,7 @@ fn signature(
 
 pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theory, KernelError> {
     let prelude = *prelude;
-    let zero = Term::Nat(0);
+    let zero = Term::nat(0);
 
     // (a + b) + c == a + (b + c), by induction on c.
     let assoc_claim = |a: &Term, b: &Term, c: &Term| nat_eq(add(&add(a, b), c), add(a, &add(b, c)));
@@ -115,7 +115,7 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
     )?;
 
     // 0 + a == a, by induction on a.
-    let zero_add_claim = |a: &Term| nat_eq(add(&Term::Nat(0), a), a.clone());
+    let zero_add_claim = |a: &Term| nat_eq(add(&Term::nat(0), a), a.clone());
     let nat_zero_add = definitions.declare_fn(
         &signature(Type::Nat, 1, vec![], |p| zero_add_claim(&p[0])),
         |p| {
@@ -162,7 +162,7 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
     )?;
 
     let nat_zero_le = definitions.declare_fn(
-        &signature(Type::Nat, 1, vec![], |p| le(&Term::Nat(0), &p[0])),
+        &signature(Type::Nat, 1, vec![], |p| le(&Term::nat(0), &p[0])),
         |p| {
             let a = &p[0];
             let proof = lemma(nat_zero_add, vec![a.clone()]);

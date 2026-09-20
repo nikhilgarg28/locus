@@ -454,3 +454,49 @@ fn a_later_field_may_depend_on_two_earlier_fields_under_a_quantifier() {
     let value = Term::tuple(&ty, vec![p.clone(), q.clone(), Term::proof(evidence)]);
     assert_eq!(infer_term(&mut ctx, &value, Mode::Executable), Ok(ty));
 }
+
+#[test]
+fn projection_computes_through_a_nested_dependent_product() {
+    // (a: u8, inner: (b: u8, @[b == a])): the inner type mentions the outer
+    // field. Projecting the inner product out of a literal value is typed by
+    // that value's own fields, so the projection axiom applies.
+    let mut ctx = Context::new();
+    let inner_for = |a: Term| {
+        Type::tuple(move |earlier| match earlier {
+            [] => Some(Type::U8),
+            [b] => Some(Type::proof(u8_eq(b.clone(), a.clone()))),
+            _ => None,
+        })
+    };
+    let outer = Type::tuple(|earlier| match earlier {
+        [] => Some(Type::U8),
+        [a] => Some(inner_for(a.clone())),
+        _ => None,
+    });
+    let three = Term::U8(3);
+    let inner_value = Term::tuple(
+        &inner_for(three.clone()),
+        vec![three.clone(), Term::proof(Proof::Refl(three.clone()))],
+    );
+    let value = Term::tuple(&outer, vec![three.clone(), inner_value.clone()]);
+    assert_eq!(
+        infer_term(&mut ctx, &value, Mode::Executable),
+        Ok(outer.clone())
+    );
+
+    let projected = Term::proj(value, 1);
+    assert_eq!(
+        infer_term(&mut ctx, &projected, Mode::Logical),
+        Ok(inner_for(three.clone()))
+    );
+    assert_eq!(
+        infer_proof(&mut ctx, &Proof::Projection(projected.clone())),
+        Ok(Term::eq(inner_for(three), projected, inner_value))
+    );
+    // From a variable, earlier fields are still named by projection.
+    let r = Term::var(ctx.declare(outer).unwrap());
+    assert_eq!(
+        infer_term(&mut ctx, &Term::proj(r.clone(), 1), Mode::Logical),
+        Ok(inner_for(Term::proj(r, 0)))
+    );
+}

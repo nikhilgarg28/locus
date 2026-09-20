@@ -15,6 +15,8 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::nat::Natural;
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 fn fresh_id() -> u64 {
@@ -281,9 +283,8 @@ pub enum Term {
     Bound(u32),
     Bool(bool),
     U8(u8),
-    /// A `Nat` literal. Literal arithmetic that would exceed this range has
-    /// no computation step; arbitrary precision is a later refinement.
-    Nat(u64),
+    /// A `Nat` literal, of arbitrary size.
+    Nat(Natural),
     Prim(Prim, Vec<Term>),
     /// `a == b` at the given type.
     Eq(Type, Box<Term>, Box<Term>),
@@ -545,6 +546,11 @@ impl Term {
 
     pub fn prim(prim: Prim, arguments: Vec<Term>) -> Self {
         Self::Prim(prim, arguments)
+    }
+
+    /// A `Nat` literal.
+    pub fn nat(value: u64) -> Self {
+        Self::Nat(Natural::from(value))
     }
 
     pub fn to_nat(byte: Term) -> Self {
