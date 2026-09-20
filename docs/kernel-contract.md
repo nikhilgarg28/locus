@@ -150,7 +150,7 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost. | `F` |
 | `t(t_0, ..., t_n)` | `t : math fn(A_0, ..., A_n) -> R` in the same mode; the field rule below holds for the arguments against the parameters. In `Executable` mode the result type is not ghost. | `R[t_0, ..., t_n]` |
 
-Each arm's hypothesis is the same fact `case_data` gives its arms, so a branch of a math function knows what a branch of executable code knows, and a proof field in an arm can use it. It is a hypothesis, so it can occur only inside proofs, and it has no runtime content.
+In an arm's fact, a payload variable `y` standing in a proof field appears as `proof(of_term(y))`, so that the fact is itself well formed under the field rule. Each arm's hypothesis is the same fact `case_data` gives its arms, so a branch of a math function knows what a branch of executable code knows, and a proof field in an arm can use it. It is a hypothesis, so it can occur only inside proofs, and it has no runtime content.
 
 In an executable `case`, a payload variable is executable when its field has a runtime representation and ghost otherwise; in a logical `case` every payload variable is ghost. The result type of a `case` does not depend on the scrutinee. A `case` cannot scrutinize a proof and cannot have a proof type as its result: case analysis that inspects or produces proofs is a proof rule, below. `absurd` is the match with no arms used for its value; it marks a point that is never reached.
 

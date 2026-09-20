@@ -465,6 +465,36 @@ fn a_payload_with_a_proof_field_gives_each_arm_its_evidence() {
         ],
     };
     assert_eq!(check_proof(&mut ctx, &uses_evidence, &goal), Ok(()));
+
+    // The arm's fact is itself a well-formed proposition: its proof field is
+    // in the canonical form proof(of_term(h)), not the bare variable.
+    let c = Term::var(ctx.declare(Type::Enum(checked)).unwrap());
+    let fact_is_well_formed = Proof::CaseData {
+        scrutinee: c.clone(),
+        goal: goal.clone(),
+        arms: vec![
+            Proof::arm(0, 1, |_, _| truth(&prelude)),
+            Proof::arm(2, 1, |payload, facts| {
+                let stated = Term::eq(
+                    Type::Enum(checked),
+                    c.clone(),
+                    Term::Variant(
+                        checked,
+                        1,
+                        vec![
+                            payload[0].clone(),
+                            Term::proof(Proof::OfTerm(payload[1].clone())),
+                        ],
+                    ),
+                );
+                Proof::implies_elim(
+                    Proof::implies_intro(stated, |_| truth(&prelude)),
+                    facts[0].clone(),
+                )
+            }),
+        ],
+    };
+    assert_eq!(check_proof(&mut ctx, &fact_is_well_formed, &goal), Ok(()));
 }
 
 #[test]

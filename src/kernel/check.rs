@@ -396,11 +396,10 @@ fn type_of_case(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
             vars.push(ctx.push_local(ty, ghost));
         }
         // The arm knows which variant it has.
-        let built = vars.iter().copied().map(Term::Free).collect();
         let fact = ctx.push_hyp(Term::eq(
             scrutinee_type.clone(),
             (**scrutinee).clone(),
-            constructor(&scrutinee_type, index, built),
+            constructor_of_vars(&scrutinee_type, index, &vars, payload),
         ));
         let body = arm
             .body
@@ -534,6 +533,22 @@ fn constructor(ty: &Type, index: usize, payload: Vec<Term>) -> Term {
         Type::Enum(id) => Term::Variant(*id, index, payload),
         _ => Term::Bool(index == 1),
     }
+}
+
+/// Variant `index` applied to payload variables, as it appears in an arm's
+/// fact. A proof field holds `proof(of_term(x))`, not the bare variable: a
+/// proof-typed position inside a term always holds a `Term::Proof`, which is
+/// what lets comparison ignore proofs without knowing types.
+fn constructor_of_vars(ty: &Type, index: usize, vars: &[VarId], payload: &[Type]) -> Term {
+    let built = vars
+        .iter()
+        .zip(payload)
+        .map(|(var, field)| match field {
+            Type::Proof(_) => Term::proof(Proof::OfTerm(Term::Free(*var))),
+            _ => Term::Free(*var),
+        })
+        .collect();
+    constructor(ty, index, built)
 }
 
 /// The variant index and payload of a term that is literally a constructor.
@@ -1123,11 +1138,10 @@ fn claim_of_case_data(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelEr
             payload.len(),
             |field, vars| field_type(payload, field, |j| Term::Free(vars[j])),
             |vars| {
-                let built = vars.iter().copied().map(Term::Free).collect();
                 vec![Term::eq(
                     ty.clone(),
                     scrutinee.clone(),
-                    constructor(&ty, index, built),
+                    constructor_of_vars(&ty, index, vars, payload),
                 )]
             },
             goal,
@@ -1367,4 +1381,71 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
 pub fn check_proof(ctx: &mut Context, proof: &Proof, expected: &Term) -> Result<(), KernelError> {
     check_depth([proof.into(), expected.into()])?;
     proof_of(ctx, proof, expected)
+}
+
+/// Checks a call against a function type that is not a declared kernel
+/// function: the arguments against the parameter telescope, by the field
+/// rule, and returns the result type instantiated at them. The exec checker
+/// uses this for calls to ordinary functions.
+pub fn check_call(
+    ctx: &mut Context,
+    signature: &Type,
+    arguments: &[Term],
+    mode: Mode,
+) -> Result<Type, KernelError> {
+    check_depth(std::iter::once(signature.into()).chain(arguments.iter().map(Into::into)))?;
+    type_ok(ctx, signature)?;
+    let Type::Fn(params, result) = signature else {
+        return Err(KernelError::NotAFunction(signature.clone()));
+    };
+    check_fields(ctx, params, arguments, mode)?;
+    let mut telescope = params.clone();
+    telescope.push((**result).clone());
+    Ok(field_type(&telescope, arguments.len(), |j| {
+        arguments[j].clone()
+    }))
+}
+
+/// Checks values against a tuple telescope by the field rule, without
+/// building the tuple: a loop's initial state and `continue` arguments.
+pub fn check_values(
+    ctx: &mut Context,
+    telescope: &Type,
+    values: &[Term],
+    mode: Mode,
+) -> Result<(), KernelError> {
+    check_depth(std::iter::once(telescope.into()).chain(values.iter().map(Into::into)))?;
+    type_ok(ctx, telescope)?;
+    let Type::Tuple(fields) = telescope else {
+        return Err(KernelError::NotAProduct(telescope.clone()));
+    };
+    check_fields(ctx, fields, values, mode)
+}
+
+/// The type of entry `index` of a telescope with the earlier entries
+/// replaced by `earlier`. For a function type, entry `params.len()` is the
+/// result type.
+pub fn telescope_entry(telescope: &Type, index: usize, earlier: &[Term]) -> Option<Type> {
+    let entries: Vec<Type> = match telescope {
+        Type::Tuple(fields) => fields.clone(),
+        Type::Fn(params, result) => {
+            let mut entries = params.clone();
+            entries.push((**result).clone());
+            entries
+        }
+        _ => return None,
+    };
+    (index < entries.len() && earlier.len() >= index)
+        .then(|| field_type(&entries, index, |j| earlier[j].clone()))
+}
+
+/// The payload telescopes of a type that supports case analysis, and the
+/// term for one of its variants applied to payload variables, as it appears
+/// in an arm's fact.
+pub fn case_variants(ctx: &Context, ty: &Type) -> Option<Vec<Vec<Type>>> {
+    data_variants(ctx, ty)
+}
+
+pub fn variant_term(ty: &Type, index: usize, vars: &[VarId], payload: &[Type]) -> Term {
+    constructor_of_vars(ty, index, vars, payload)
 }

@@ -20,9 +20,12 @@ mod nat;
 mod term;
 pub mod theory;
 
-pub use check::{check_proof, check_type, infer_proof, infer_term, same, same_type};
+pub use check::{
+    case_variants, check_call, check_proof, check_type, check_values, infer_proof, infer_term,
+    same, same_type, telescope_entry, variant_term,
+};
 pub use classical::proof_is_classical;
-pub use context::{Context, Mode};
+pub use context::{Checkpoint, Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
 pub use depth::MAX_DEPTH;
 pub use error::KernelError;

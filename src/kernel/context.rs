@@ -17,6 +17,10 @@ pub enum Mode {
     Logical,
 }
 
+/// A point in a context to roll back to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Checkpoint(usize);
+
 #[derive(Clone, Debug)]
 enum Entry {
     Var { id: VarId, ty: Type, ghost: bool },
@@ -87,6 +91,71 @@ impl Context {
             });
         }
         Ok(self.push_hyp(prop))
+    }
+
+    // --- Bindings whose identities the caller chose ---------------------------
+    //
+    // The exec checker walks a program whose binders already have
+    // identities, because the program's proofs refer to them. An identity
+    // may be bound once in a context.
+
+    /// Declares `id`. It is ghost when asked to be or when its type is.
+    pub fn declare_with(&mut self, id: VarId, ty: Type, ghost: bool) -> Result<(), KernelError> {
+        check_type(self, &ty)?;
+        if self.var(id).is_some() {
+            return Err(KernelError::DuplicateBinding);
+        }
+        let ghost = ghost || ty.is_ghost();
+        self.entries.push(Entry::Var { id, ty, ghost });
+        Ok(())
+    }
+
+    /// Assumes `prop` as the hypothesis `id`.
+    pub fn assume_with(&mut self, id: HypId, prop: Term) -> Result<(), KernelError> {
+        let ty = infer_term(self, &prop, Mode::Logical)?;
+        if ty != Type::Prop {
+            return Err(KernelError::TypeMismatch {
+                expected: Type::Prop,
+                found: ty,
+            });
+        }
+        if self.hyp(id).is_some() {
+            return Err(KernelError::DuplicateBinding);
+        }
+        self.entries.push(Entry::Hyp { id, prop });
+        Ok(())
+    }
+
+    /// An immutable `let`, as `define`, with chosen identities: declares
+    /// `var` and assumes `var == value` as `equation`. Returns the type.
+    pub fn define_with(
+        &mut self,
+        var: VarId,
+        equation: HypId,
+        value: &Term,
+    ) -> Result<Type, KernelError> {
+        let ghost = infer_term(self, value, Mode::Executable).is_err();
+        let ty = infer_term(self, value, Mode::Logical)?;
+        self.declare_with(var, ty.clone(), ghost)?;
+        let claim = Term::eq(ty.clone(), Term::Free(var), value.clone());
+        match self.assume_with(equation, claim) {
+            Ok(()) => Ok(ty),
+            Err(error) => {
+                self.entries.pop();
+                Err(error)
+            }
+        }
+    }
+
+    /// The current extent of the context, to return to with `rollback`.
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint(self.entries.len())
+    }
+
+    /// Leaves the scope of everything added since the checkpoint. Removing
+    /// entries cannot make anything provable that was not.
+    pub fn rollback(&mut self, checkpoint: Checkpoint) {
+        self.entries.truncate(checkpoint.0);
     }
 
     fn push_var(&mut self, ty: Type, ghost: bool) -> VarId {
