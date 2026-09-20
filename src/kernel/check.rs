@@ -29,6 +29,8 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Tuple(lf, lv), Term::Tuple(rf, rv)) => same_types(lf, rf) && all(lv, rv),
         (Term::Struct(li, lv), Term::Struct(ri, rv)) => li == ri && all(lv, rv),
         (Term::Proj(lt, li), Term::Proj(rt, ri)) => li == ri && same(lt, rt),
+        (Term::Fn(l), Term::Fn(r)) => l == r,
+        (Term::Call(lc, la), Term::Call(rc, ra)) => same(lc, rc) && all(la, ra),
         _ => false,
     }
 }
@@ -39,6 +41,7 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
         (Type::Struct(l), Type::Struct(r)) => l == r,
+        (Type::Fn(lp, lr), Type::Fn(rp, rr)) => same_types(lp, rp) && same_type(lr, rr),
         _ => false,
     }
 }
@@ -58,6 +61,11 @@ pub fn check_type(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
             .struct_fields(*id)
             .map(|_| ())
             .ok_or(KernelError::UnknownStruct),
+        Type::Fn(params, result) => {
+            let mut telescope = params.clone();
+            telescope.push((**result).clone());
+            check_telescope(ctx, &telescope)
+        }
     }
 }
 
@@ -173,6 +181,28 @@ pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
             ghost_former(mode, &ty)?;
             Ok(ty)
         }
+        Term::Fn(id) => {
+            let definitions = ctx.definitions();
+            let decl = definitions
+                .function(*id)
+                .ok_or(KernelError::UnknownFunction)?;
+            let ty = Type::Fn(decl.params.clone(), Box::new(decl.result.clone()));
+            ghost_former(mode, &ty)?;
+            Ok(ty)
+        }
+        Term::Call(callee, arguments) => {
+            let callee_type = infer_term(ctx, callee, mode)?;
+            let Type::Fn(params, result) = callee_type else {
+                return Err(KernelError::NotAFunction(callee_type));
+            };
+            check_fields(ctx, &params, arguments, mode)?;
+            // The result type is the last entry of the parameter telescope.
+            let mut telescope = params;
+            telescope.push(*result);
+            let ty = field_type(&telescope, arguments.len(), |j| arguments[j].clone());
+            ghost_former(mode, &ty)?;
+            Ok(ty)
+        }
     }
 }
 
@@ -216,7 +246,7 @@ fn check_fields(
     Ok(())
 }
 
-fn expect_type(
+pub(super) fn expect_type(
     ctx: &mut Context,
     term: &Term,
     expected: &Type,
@@ -339,6 +369,26 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
                 Prim::WrappingSub => left.wrapping_sub(*right),
             };
             Ok(Term::eq(Type::U8, term.clone(), Term::U8(value)))
+        }
+        Proof::Definition(term) => {
+            let Term::Call(callee, arguments) = term else {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            };
+            let Term::Fn(id) = &**callee else {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            };
+            let ty = infer_term(ctx, term, Mode::Logical)?;
+            if matches!(ty, Type::Proof(_)) {
+                return Err(KernelError::EqualityAtProofType(ty));
+            }
+            let definitions = ctx.definitions();
+            let decl = definitions
+                .function(*id)
+                .ok_or(KernelError::UnknownFunction)?;
+            let unfolded = decl
+                .body
+                .instantiate(arguments.len(), |j| arguments[j].clone());
+            Ok(Term::eq(ty, term.clone(), unfolded))
         }
     }
 }

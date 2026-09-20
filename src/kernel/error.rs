@@ -39,6 +39,10 @@ pub enum KernelError {
     },
     NotAProduct(Type),
     UnknownStruct,
+    UnknownFunction,
+    NotAFunction(Type),
+    /// A derived form exceeded its step budget.
+    StepLimit,
     /// A proof field of a product value must be written as a proof.
     ProofExpected(Term),
     /// `OfTerm` needs a term whose type is a proof type.
@@ -90,6 +94,9 @@ impl fmt::Display for KernelError {
             }
             Self::NotAProduct(ty) => write!(f, "expected a tuple or struct type, found {ty}"),
             Self::UnknownStruct => f.write_str("struct is not declared"),
+            Self::UnknownFunction => f.write_str("function is not declared"),
+            Self::NotAFunction(ty) => write!(f, "expected a function type, found {ty}"),
+            Self::StepLimit => f.write_str("derived form exceeded its step budget"),
             Self::ProofExpected(term) => {
                 write!(f, "a proof field must be given as a proof, found {term}")
             }

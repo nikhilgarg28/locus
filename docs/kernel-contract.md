@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers kernel gates **K1** and **K2** of [the core plan](core-plan.md). Tests for K1 are in `tests/kernel.rs` and for K2 in `tests/kernel_products.rs`. The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers kernel gates **K1**, **K2**, and **K3** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), and `tests/kernel_functions.rs` (K3). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -13,13 +13,14 @@ Type ::= bool | u8 | Prop
        | @P                       the proofs of the proposition P
        | (A_0, A_1, ..., A_n)     a telescope: A_i may mention fields 0..i-1
        | struct S                 a declared struct, by identity
+       | math fn(A_0, ..., A_n) -> R     parameters form a telescope; R may mention all of them
 ~~~
 
-`Prop` and `@P` are ghost types: they have no runtime representation. A term occurs inside a type only inside some `@P`. A value can therefore change what a later proof field says, and never what data a product holds.
+`Prop` and `@P` are ghost types: they have no runtime representation. A function type is ghost when its result type is: such a function is a predicate or a proof. Only total functions have kernel types; an ordinary `fn` never reaches the kernel. A term occurs inside a type only inside some `@P`. A value can therefore change what a later proof field says, and never what data a product holds.
 
 In a telescope, field `i` is under `i` binders: `#0` in it is field `i - 1`, `#1` is field `i - 2`, and so on. `A_i[v_0, ..., v_{i-1}]` below means field `i`'s type with each earlier field replaced by the given term.
 
-Declarations. A struct declaration is a closed telescope. It is checked against the declarations that precede it, so a struct cannot mention itself, directly or indirectly. Structs are nominal: two declarations with identical fields are different types. Tuple types are structural, and the names a source program gives tuple fields do not exist here.
+Declarations. A struct declaration is a closed telescope. A math function declaration is a closed function type and a body. Each declaration is checked against the declarations that precede it, so a struct cannot mention itself and a function cannot call itself, directly or indirectly. Kernel terms contain no loop, so every declared function is total by construction. Structs are nominal: two declarations with identical fields are different types. Tuple types are structural, and the names a source program gives tuple fields do not exist here.
 
 Terms. A proposition is a term of type `Prop`; there is no separate syntactic class.
 
@@ -35,6 +36,8 @@ t ::= x                     a context variable, by identity
     | S { t_0, ..., t_n }
     | t.i                   positional projection
     | proof(p)              a proof used as a value
+    | f                     a declared math function, as a value
+    | t(t_0, ..., t_n)      application
 ~~~
 
 A tuple value carries its type because a dependent telescope cannot be inferred from the values alone.
@@ -59,6 +62,7 @@ p ::= h                     a context hypothesis, by identity
     | of_term(t)            a term of proof type, used as a proof
     | projection(t)         computation axiom
     | literal(t)            computation axiom
+    | definition(t)         computation axiom
 ~~~
 
 Hypotheses bound by `implies_intro` are indexed separately from term variables.
@@ -87,6 +91,7 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `@P` | `P : Prop` in `Logical` mode |
 | `(A_0, ..., A_n)` | for each `i`, with fresh ghost variables `x_0 : A_0, ..., x_{i-1} : A_{i-1}[...]` added, `A_i[x_0, ..., x_{i-1}]` is a type |
 | `struct S` | `S` is declared |
+| `math fn(A_0, ..., A_n) -> R` | `(A_0, ..., A_n, R)` is a well-formed telescope |
 
 ## Term typing: `ctx |- t : A` in a mode
 
@@ -104,8 +109,12 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `S { t_0, ..., t_n }` | `S` is declared with fields `(A_0, ..., A_n)`; the field rule below holds | `struct S` |
 | `t.i` | `t : (A_0, ..., A_n)` or `t : struct S` in the same mode; `i <= n`. In `Executable` mode the result type is not ghost. | `A_i[t.0, ..., t.(i-1)]` |
 | `proof(p)` | mode is `Logical`; `p` proves `P` | `@P` |
+| `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost. | `F` |
+| `t(t_0, ..., t_n)` | `t : math fn(A_0, ..., A_n) -> R` in the same mode; the field rule below holds for the arguments against the parameters. In `Executable` mode the result type is not ghost. | `R[t_0, ..., t_n]` |
 
-The field rule. There are exactly as many values as fields. For each `i` in order, let `E = A_i[t_0, ..., t_{i-1}]`:
+Function declaration. `math fn f(x_0: A_0, ..., x_n: A_n) -> R { body }` is accepted when its function type is well formed with no variables in scope, and, with fresh ghost variables for the parameters, `body : R[x_0, ..., x_n]` in `Logical` mode. A lemma is a function whose result type is a proof type; its body has the form `proof(p)`.
+
+The field rule. It applies to the fields of a product value and to the arguments of a call. There are exactly as many values as fields. For each `i` in order, let `E = A_i[t_0, ..., t_{i-1}]`:
 
 - if `E` is `@P`, then `t_i` must have the form `proof(p)` and `p` must prove `P`;
 - if `E` is another ghost type, `t_i : E` in `Logical` mode;
@@ -117,7 +126,7 @@ Requiring the literal form `proof(p)` in every proof field is what makes proof i
 
 A proposition former, a `proof(p)`, or a projection of a ghost field in `Executable` mode is rejected: a term of ghost type has no runtime value. Inside a proposition former the mode is always `Logical`, which is the upgrade rule of specification section 2.4.
 
-Equality may be formed at any type except a proof type, including `Prop` and product types.
+Equality may be formed at any type except a proof type, including `Prop`, product types, and function types. There is no extensionality rule: nothing concludes `f == g` from `forall x, f(x) == g(x)`, and nothing concludes `P == Q` from `P => Q` and `Q => P`.
 
 ## Proof checking: `ctx |- p proves P`
 
@@ -134,11 +143,16 @@ The kernel reads the proposition off the proof. It never searches.
 | `forall_elim(f, t)` | `f` proves `forall (#: A) { P }`; `t : A` in `Logical` mode | `P[t]` |
 | `of_term(t)` | `t : @P` in `Logical` mode | `P` |
 | `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type; `v_i : A` | `c.i ==[A] v_i` |
+| `definition(f(t_0, ..., t_n))` | the callee is literally a declared function `f` with parameters `x_0, ..., x_n` and body `b`; `f(t_0, ..., t_n) : A` in `Logical` mode; `A` is not a proof type | `f(t_0, ..., t_n) ==[A] b[t_0, ..., t_n]` |
 | `literal(op(a, b))` | `op` is `wrapping_add` or `wrapping_sub`; `a` and `b` are `u8` literals | `op(a, b) ==[u8] r`, where `r` is the result modulo 256 |
 
-`projection` and `literal` are the computation axioms of specification section 12.2 that exist so far; the `let` axiom is a hypothesis, as described under Context. Each is a single step validated by matching the shape of its term. They are used through `transport`, and the elaborator will insert them silently.
+Using a lemma needs no rule of its own: a call to a lemma is a term of proof type, so `of_term(lemma(args))` proves the instantiated conclusion. A lemma has no defining equation, because equality at its proof type cannot be formed; nothing is lost, since proofs are irrelevant.
+
+`projection`, `literal`, and `definition` are the computation axioms of specification section 12.2 that exist so far; the `let` axiom is a hypothesis, as described under Context. Each is a single step validated by matching the shape of its term. They are used through `transport`, and the elaborator will insert them silently.
 
 The premise `v_i : A` of `projection` matters only for a nested dependent product: the projection's type names earlier fields as `c.j`, while the value's own type names them as `v_j`. The step is offered only when the two types are already the same. Bridging them would need transport between types, which the kernel does not have.
+
+`definition` is the only way a function body ever becomes visible. At type `Prop` it is how a predicate is unfolded, and at a function type it gives equations such as `select() == successor`. The call must name the declared function directly: a call through a variable or through another call has no defining equation until the callee has been rewritten to a function name.
 
 `literal` evaluates with Rust's `u8::wrapping_add` and `u8::wrapping_sub`. Gate K5 adds the model of `u8` that this evaluation must agree with.
 
@@ -153,9 +167,15 @@ The premise `v_i : A` of `projection` matters only for a nested dependent produc
 
 The same relation on types compares the propositions inside `@P` and the fields of telescopes with it.
 
-There is no unfolding, no evaluation, and no normalization. `refl(2)` does not prove `wrapping_add(1, 1) == 2`; `literal(wrapping_add(1, 1))` does. `refl(3)` does not prove `(3, true).0 == 3`; `projection((3, true).0)` does.
+There is no unfolding, no evaluation, and no normalization. A hypothesis `is_three(n)` does not prove `n == 3`; transport along `definition(is_three(n))` does. `refl(2)` does not prove `wrapping_add(1, 1) == 2`; `literal(wrapping_add(1, 1))` does. `refl(3)` does not prove `(3, true).0 == 3`; `projection((3, true).0)` does.
 
 Proof irrelevance is sound as a syntactic check because of the field rule: in a well-typed term, every position of proof type inside a product value holds a `proof(p)`, equality at a proof type cannot be formed, and no other term former has a proof-typed argument. Two product values with the same data and different proofs are therefore the same term, and `refl` proves them equal with no proof step.
+
+## Derived forms
+
+`src/kernel/derive.rs` builds proofs out of the rules above and is not trusted: `symm`, `trans`, `rewrite`, `unfold`, and `fold`. Each computes a transport template by abstracting occurrences of a term, and the kernel checks the result like any other proof. These are the elaborator forms of specification section 8.4. Their loops are bounded by a step count.
+
+They act on closed occurrences only. A call that mentions a variable bound inside the proposition, as in `forall x { is_three(x) }`, is left alone; reaching it takes `forall_elim`, the rewrite, and `forall_intro`, which is left to the elaborator.
 
 ## Invariants the implementation maintains
 
@@ -172,7 +192,6 @@ Not yet present, by gate:
 
 | Gate | Adds |
 |---|---|
-| K3 | Math functions and defining equations; `unfold`, `fold`, `rewrite` as transports; function values and types; `Prop` fields |
 | K4 | Enums and the case rule with arm evidence; declared props and the index-equation case rule; `Exists`; excluded middle with dependency recording |
 | K5 | Internal `Nat` with induction; the `u8` model, reflection lemmas, native evaluation |
 | K6 | The range-iteration rule |
@@ -181,6 +200,6 @@ One K2 acceptance condition is stated in the plan in terms of `NonZero`. The ker
 
 ## Trusted base
 
-`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations), and Rust's wrapping `u8` arithmetic behind `literal`. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
+`src/kernel/check.rs` (the rules and the comparison), `src/kernel/term.rs` (opening and closing binders, and telescope instantiation), `src/kernel/context.rs` (lookup and scoping), `src/kernel/defs.rs` (declarations), and Rust's wrapping `u8` arithmetic behind `literal`. `src/kernel/derive.rs` is not part of it. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
 
 Known limit: checking is recursive and has no depth bound yet. Hand-written terms cannot exhaust the stack; this must be addressed before the kernel accepts terms produced from untrusted source text.

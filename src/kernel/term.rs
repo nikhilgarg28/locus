@@ -47,6 +47,10 @@ impl HypId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StructId(pub(super) usize);
 
+/// Identity of a declared math function; see `Definitions`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FnId(pub(super) usize);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     Bool,
@@ -62,12 +66,20 @@ pub enum Type {
     Tuple(Vec<Type>),
     /// A declared struct. Nominal: two declarations are different types.
     Struct(StructId),
+    /// A total function type. The parameters form a telescope and the result
+    /// type is under all of them. Ordinary `fn` never reaches the kernel.
+    Fn(Vec<Type>, Box<Type>),
 }
 
 impl Type {
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
-        matches!(self, Self::Prop | Self::Proof(_))
+        match self {
+            Self::Prop | Self::Proof(_) => true,
+            // A function into a ghost type is a proof or a predicate.
+            Self::Fn(_, result) => result.is_ghost(),
+            Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) => false,
+        }
     }
 
     pub fn proof(prop: Term) -> Self {
@@ -81,32 +93,61 @@ impl Type {
         let mut telescope = Vec::new();
         loop {
             let earlier: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
-            let Some(mut ty) = fields(&earlier) else {
+            let Some(ty) = fields(&earlier) else {
                 return Self::Tuple(telescope);
             };
-            // Field `i` sees earlier field `j` as index `i - 1 - j`.
-            let count = vars.len() as u32;
-            for (j, var) in vars.iter().enumerate() {
-                ty = ty.rebind(Depth::at(count - 1 - j as u32), Rebind::CloseVar(*var));
+            telescope.push(ty.close_over(&vars));
+            vars.push(VarId::fresh());
+        }
+    }
+
+    /// Builds a function type of the given arity. `signature(params)` is
+    /// called with 0, 1, ..., `arity` parameters in scope: the first `arity`
+    /// calls return parameter types and the last returns the result type.
+    pub fn function(arity: usize, mut signature: impl FnMut(&[Term]) -> Type) -> Self {
+        let mut vars: Vec<VarId> = Vec::new();
+        let mut telescope = Vec::new();
+        loop {
+            let earlier: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
+            let ty = signature(&earlier).close_over(&vars);
+            if vars.len() == arity {
+                return Self::Fn(telescope, Box::new(ty));
             }
             telescope.push(ty);
             vars.push(VarId::fresh());
         }
     }
 
+    /// Puts a type under binders for `vars`: variable `j` of `n` becomes
+    /// index `n - 1 - j`.
+    pub(super) fn close_over(&self, vars: &[VarId]) -> Type {
+        let count = vars.len() as u32;
+        let mut ty = self.clone();
+        for (j, var) in vars.iter().enumerate() {
+            ty = ty.rebind(Depth::at(count - 1 - j as u32), Rebind::CloseVar(*var));
+        }
+        ty
+    }
+
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Type {
         match self {
             Self::Bool | Self::U8 | Self::Prop | Self::Struct(_) => self.clone(),
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
-            Self::Tuple(fields) => Self::Tuple(
-                fields
-                    .iter()
-                    .enumerate()
-                    .map(|(index, field)| field.rebind(depth.under_vars(index as u32), op))
-                    .collect(),
+            Self::Tuple(fields) => Self::Tuple(rebind_telescope(fields, depth, op)),
+            Self::Fn(params, result) => Self::Fn(
+                rebind_telescope(params, depth, op),
+                Box::new(result.rebind(depth.under_vars(params.len() as u32), op)),
             ),
         }
     }
+}
+
+fn rebind_telescope(fields: &[Type], depth: Depth, op: Rebind<'_>) -> Vec<Type> {
+    fields
+        .iter()
+        .enumerate()
+        .map(|(index, field)| field.rebind(depth.under_vars(index as u32), op))
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +179,10 @@ pub enum Term {
     /// value has this form, which is what lets comparison ignore proofs
     /// without knowing any types.
     Proof(Box<Proof>),
+    /// A declared math function used as a value.
+    Fn(FnId),
+    /// Application of a term of function type.
+    Call(Box<Term>, Vec<Term>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +221,9 @@ pub enum Proof {
     Projection(Term),
     /// Computation axiom: `op(literals) == literal`, by native evaluation.
     Literal(Term),
+    /// Computation axiom: `f(args) == body[params := args]`, the defining
+    /// equation of a declared math function, for the given call.
+    Definition(Term),
 }
 
 /// How many binders of each kind enclose the current position.
@@ -263,6 +311,131 @@ impl Term {
         Self::Proof(Box::new(proof))
     }
 
+    pub fn call(callee: Term, arguments: Vec<Term>) -> Self {
+        Self::Call(Box::new(callee), arguments)
+    }
+
+    /// Puts a term under binders for `vars`, as `Type::close_over`.
+    pub(super) fn close_over(&self, vars: &[VarId]) -> Term {
+        let count = vars.len() as u32;
+        let mut term = self.clone();
+        for (j, var) in vars.iter().enumerate() {
+            term = term.rebind(Depth::at(count - 1 - j as u32), Rebind::CloseVar(*var));
+        }
+        term
+    }
+
+    /// Instantiates a term that is under `count` binders: binder `j` is
+    /// replaced by `value(j)`, which must be locally closed.
+    pub(super) fn instantiate(&self, count: usize, value: impl Fn(usize) -> Term) -> Term {
+        let mut term = self.clone();
+        for j in 0..count {
+            let replacement = value(j);
+            term = term.rebind(
+                Depth::default(),
+                Rebind::OpenVar {
+                    index: (count - 1 - j) as u32,
+                    replacement: &replacement,
+                },
+            );
+        }
+        term
+    }
+
+    /// Whether the term has no dangling bound index. Types and proofs inside
+    /// it are not inspected; this is used only to choose rewrite targets.
+    pub(super) fn is_closed(&self) -> bool {
+        self.closed_at(0)
+    }
+
+    fn closed_at(&self, depth: u32) -> bool {
+        let all = |terms: &[Term]| terms.iter().all(|term| term.closed_at(depth));
+        match self {
+            Self::Bound(index) => *index < depth,
+            Self::Free(_) | Self::Bool(_) | Self::U8(_) | Self::Proof(_) | Self::Fn(_) => true,
+            Self::Prim(_, arguments) => all(arguments),
+            Self::Eq(_, left, right) => left.closed_at(depth) && right.closed_at(depth),
+            Self::Implies(premise, conclusion) => {
+                premise.closed_at(depth) && conclusion.closed_at(depth)
+            }
+            Self::Forall(_, body) => body.closed_at(depth + 1),
+            Self::Tuple(_, values) | Self::Struct(_, values) => all(values),
+            Self::Proj(target, _) => target.closed_at(depth),
+            Self::Call(callee, arguments) => callee.closed_at(depth) && all(arguments),
+        }
+    }
+
+    /// The first subterm, outermost and leftmost, that satisfies `wanted`.
+    /// Types and proofs inside the term are not searched.
+    pub(super) fn find(&self, wanted: &impl Fn(&Term) -> bool) -> Option<&Term> {
+        fn first<'a>(terms: &'a [Term], wanted: &impl Fn(&Term) -> bool) -> Option<&'a Term> {
+            terms.iter().find_map(|term| term.find(wanted))
+        }
+        if wanted(self) {
+            return Some(self);
+        }
+        match self {
+            Self::Free(_)
+            | Self::Bound(_)
+            | Self::Bool(_)
+            | Self::U8(_)
+            | Self::Proof(_)
+            | Self::Fn(_) => None,
+            Self::Prim(_, arguments) => first(arguments, wanted),
+            Self::Eq(_, left, right) => left.find(wanted).or_else(|| right.find(wanted)),
+            Self::Implies(premise, conclusion) => {
+                premise.find(wanted).or_else(|| conclusion.find(wanted))
+            }
+            Self::Forall(_, body) => body.find(wanted),
+            Self::Tuple(_, values) | Self::Struct(_, values) => first(values, wanted),
+            Self::Proj(target, _) => target.find(wanted),
+            Self::Call(callee, arguments) => {
+                callee.find(wanted).or_else(|| first(arguments, wanted))
+            }
+        }
+    }
+
+    /// A template whose hole stands for every occurrence of `target` that
+    /// `is_target` recognizes. `target` must be locally closed. Occurrences
+    /// inside types and proofs are left alone, which keeps the template
+    /// valid: opening it with `target` gives back this term.
+    pub(super) fn abstract_over(&self, is_target: &impl Fn(&Term) -> bool) -> Term {
+        self.abstract_at(is_target, 0)
+    }
+
+    fn abstract_at(&self, is_target: &impl Fn(&Term) -> bool, depth: u32) -> Term {
+        if is_target(self) {
+            return Self::Bound(depth);
+        }
+        let each = |terms: &[Term]| -> Vec<Term> {
+            terms
+                .iter()
+                .map(|term| term.abstract_at(is_target, depth))
+                .collect()
+        };
+        let boxed = |term: &Term, depth: u32| Box::new(term.abstract_at(is_target, depth));
+        match self {
+            Self::Free(_)
+            | Self::Bound(_)
+            | Self::Bool(_)
+            | Self::U8(_)
+            | Self::Proof(_)
+            | Self::Fn(_) => self.clone(),
+            Self::Prim(prim, arguments) => Self::Prim(*prim, each(arguments)),
+            Self::Eq(ty, left, right) => {
+                Self::Eq(ty.clone(), boxed(left, depth), boxed(right, depth))
+            }
+            Self::Implies(premise, conclusion) => {
+                Self::Implies(boxed(premise, depth), boxed(conclusion, depth))
+            }
+            Self::Forall(ty, body) => Self::Forall(ty.clone(), boxed(body, depth + 1)),
+            Self::Tuple(fields, values) => Self::Tuple(fields.clone(), each(values)),
+            Self::Struct(id, values) => Self::Struct(*id, each(values)),
+            Self::Proj(target, index) => Self::Proj(boxed(target, depth), *index),
+            Self::Call(callee, arguments) => Self::Call(boxed(callee, depth), each(arguments)),
+        }
+    }
+
     /// Replaces the outermost bound variable with a locally closed term.
     pub(super) fn open(&self, replacement: &Term) -> Term {
         self.rebind(
@@ -316,6 +489,10 @@ impl Term {
             Self::Struct(id, values) => Self::Struct(*id, each(values)),
             Self::Proj(target, index) => Self::Proj(Box::new(target.rebind(depth, op)), *index),
             Self::Proof(proof) => Self::Proof(Box::new(proof.rebind(depth, op))),
+            Self::Fn(_) => self.clone(),
+            Self::Call(callee, arguments) => {
+                Self::Call(Box::new(callee.rebind(depth, op)), each(arguments))
+            }
         }
     }
 }
@@ -433,6 +610,7 @@ impl Proof {
             ),
             Self::Projection(term) => Self::Projection(term.rebind(depth, op)),
             Self::Literal(term) => Self::Literal(term.rebind(depth, op)),
+            Self::Definition(term) => Self::Definition(term.rebind(depth, op)),
         }
     }
 }
@@ -452,6 +630,13 @@ impl fmt::Display for Type {
                 f.write_str(")")
             }
             Self::Struct(StructId(id)) => write!(f, "struct#{id}"),
+            Self::Fn(params, result) => {
+                f.write_str("math fn(")?;
+                for param in params {
+                    write!(f, "{param}, ")?;
+                }
+                write!(f, ") -> {result}")
+            }
         }
     }
 }
@@ -497,6 +682,12 @@ impl fmt::Display for Term {
             }
             Self::Proj(target, index) => write!(f, "{target}.{index}"),
             Self::Proof(_) => f.write_str("<proof>"),
+            Self::Fn(FnId(id)) => write!(f, "fn#{id}"),
+            Self::Call(callee, arguments) => {
+                write!(f, "{callee}(")?;
+                write_list(f, arguments)?;
+                f.write_str(")")
+            }
         }
     }
 }
