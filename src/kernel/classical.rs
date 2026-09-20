@@ -40,6 +40,7 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
         } => term(scrutinee) || arms(cases),
         Proof::ExistsIntro { witness, proof, .. } => term(witness) || sub(proof),
         Proof::ExistsElim { exists, arm, .. } => sub(exists) || sub(&arm.body),
+        Proof::ForEmpty(inner) => term(inner),
         Proof::Axiom(axiom) => axiom.terms().into_iter().any(term),
         Proof::NatInduction {
             base, step, target, ..
@@ -66,6 +67,13 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
         Term::Eq(_, left, right) | Term::Implies(left, right) => sub(left) || sub(right),
         Term::Forall(_, body) | Term::Exists(_, body) | Term::Proj(body, _) => sub(body),
         Term::Call(callee, arguments) => sub(callee) || any(arguments),
+        Term::For(looped) => {
+            proof_is_classical(definitions, &looped.ordered)
+                || sub(&looped.lo)
+                || sub(&looped.hi)
+                || sub(&looped.init)
+                || sub(&looped.body)
+        }
         Term::Case {
             scrutinee, arms, ..
         } => sub(scrutinee) || arms.iter().any(|arm| sub(&arm.body)),

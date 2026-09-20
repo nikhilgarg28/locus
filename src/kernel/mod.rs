@@ -6,7 +6,7 @@
 //! Every rule implemented here is stated, with exact premises and conclusion,
 //! in `docs/kernel-contract.md`; the two must change together.
 //!
-//! Implemented so far: gates K1 to K5 of `docs/core-plan.md`.
+//! Implemented so far: gates K1 to K6 of `docs/core-plan.md`.
 
 mod check;
 mod classical;
@@ -23,6 +23,6 @@ pub use context::{Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
 pub use error::KernelError;
 pub use term::{
-    ArmBuilder, Axiom, EnumId, FnId, HypId, HypRef, Prim, Proof, ProofArm, PropId, StructId, Term,
-    TermArm, Type, VarId,
+    ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,
+    StructId, Term, TermArm, Type, VarId,
 };

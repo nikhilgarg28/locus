@@ -131,6 +131,17 @@ impl Type {
         }
     }
 
+    /// Replaces the outermost bound variable of a type.
+    pub(super) fn open(&self, replacement: &Term) -> Type {
+        self.rebind(
+            Depth::default(),
+            Rebind::OpenVar {
+                index: 0,
+                replacement,
+            },
+        )
+    }
+
     /// Puts a type under binders for `vars`: variable `j` of `n` becomes
     /// index `n - 1 - j`.
     pub(super) fn close_over(&self, vars: &[VarId]) -> Type {
@@ -310,6 +321,26 @@ pub enum Term {
     /// A value of any type, from a proof of a proposition with no variants.
     /// It marks a point that is never reached.
     Absurd(Box<Proof>, Type),
+    /// Iteration over the byte range `lo..hi`, the term-level recursion rule.
+    For(Box<ForLoop>),
+}
+
+/// `for i in lo..hi (state = init) { body }`.
+///
+/// The state is a tuple whose telescope is under one binder, the index, so
+/// an invariant may relate the state to the progress made. `body` is under
+/// two term binders, the index (`Bound(1)`) and the current state
+/// (`Bound(0)`), and two hypothesis binders, `lo <= i` (`Bound(1)`) and
+/// `i < hi` (`Bound(0)`). It produces the state for index `i + 1`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForLoop {
+    pub lo: Term,
+    pub hi: Term,
+    /// Proves `u8_le(lo, hi)`.
+    pub ordered: Proof,
+    pub state: Vec<Type>,
+    pub init: Term,
+    pub body: Term,
 }
 
 /// Builds the body of a term-level case arm from its payload variables.
@@ -412,6 +443,9 @@ pub enum Proof {
     },
     /// `p || !p`, for the prelude's `Or` and `False`.
     ExcludedMiddle(Term),
+    /// Computation axiom: a `for` over an empty range equals its initial
+    /// state.
+    ForEmpty(Term),
     /// An axiom of `Nat` or of the `u8` model.
     Axiom(Axiom),
     /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
@@ -449,6 +483,10 @@ impl Depth {
             vars: self.vars + count,
             ..self
         }
+    }
+
+    pub(super) fn under(self, vars: u32, hyps: u32) -> Self {
+        self.under_vars(vars).under_hyps(hyps)
     }
 
     fn under_hyp(self) -> Self {
@@ -545,6 +583,59 @@ impl Term {
         Self::Call(Box::new(callee), arguments)
     }
 
+    /// Builds a `for`. `state(i)` is the state's tuple type at index `i`;
+    /// `body(i, s, lower, upper)` receives the index, the current state, and
+    /// proofs of `lo <= i` and `i < hi`, and returns the next state.
+    pub fn for_range(
+        lo: Term,
+        hi: Term,
+        ordered: Proof,
+        state: impl FnOnce(Term) -> Type,
+        init: Term,
+        body: impl FnOnce(Term, Term, Proof, Proof) -> Term,
+    ) -> Self {
+        let index = VarId::fresh();
+        let state = match state(Self::Free(index)).close_over(&[index]) {
+            Type::Tuple(fields) => fields,
+            _ => panic!("the state of a for is a tuple type"),
+        };
+        let (i, s) = (VarId::fresh(), VarId::fresh());
+        let (lower, upper) = (HypId::fresh(), HypId::fresh());
+        let body = body(
+            Self::Free(i),
+            Self::Free(s),
+            Proof::hyp(lower),
+            Proof::hyp(upper),
+        )
+        .close_over(&[i, s])
+        .rebind(Depth::default().under_hyps(1), Rebind::CloseHyp(lower))
+        .rebind(Depth::default(), Rebind::CloseHyp(upper));
+        Self::For(Box::new(ForLoop {
+            lo,
+            hi,
+            ordered,
+            state,
+            init,
+            body,
+        }))
+    }
+
+    /// Instantiates the hypotheses a term is under: binder `j` of
+    /// `hyps.len()` is replaced by `hyps[j]`.
+    pub(super) fn open_hyps(&self, hyps: &[HypId]) -> Term {
+        let mut term = self.clone();
+        for (j, id) in hyps.iter().enumerate() {
+            term = term.rebind(
+                Depth::default(),
+                Rebind::OpenHyp {
+                    index: (hyps.len() - 1 - j) as u32,
+                    id: *id,
+                },
+            );
+        }
+        term
+    }
+
     /// Builds `exists (x: ty) { body(x) }`.
     pub fn exists(ty: Type, body: impl FnOnce(Term) -> Term) -> Self {
         let var = VarId::fresh();
@@ -637,6 +728,12 @@ impl Term {
             Self::PropApp(_, arguments) => all(arguments),
             Self::Exists(_, body) => body.closed_at(depth + 1),
             Self::Absurd(_, _) => true,
+            Self::For(looped) => {
+                looped.lo.closed_at(depth)
+                    && looped.hi.closed_at(depth)
+                    && looped.init.closed_at(depth)
+                    && looped.body.closed_at(depth + 2)
+            }
         }
     }
 
@@ -666,6 +763,12 @@ impl Term {
                 .or_else(|| arms.iter().find_map(|arm| arm.body.find(wanted))),
             Self::PropApp(_, arguments) => first(arguments, wanted),
             Self::Exists(_, body) => body.find(wanted),
+            Self::For(looped) => looped
+                .lo
+                .find(wanted)
+                .or_else(|| looped.hi.find(wanted))
+                .or_else(|| looped.init.find(wanted))
+                .or_else(|| looped.body.find(wanted)),
             Self::Prim(_, arguments) => first(arguments, wanted),
             Self::Eq(_, left, right) => left.find(wanted).or_else(|| right.find(wanted)),
             Self::Implies(premise, conclusion) => {
@@ -726,6 +829,14 @@ impl Term {
             },
             Self::PropApp(id, arguments) => Self::PropApp(*id, each(arguments)),
             Self::Exists(ty, body) => Self::Exists(ty.clone(), boxed(body, depth + 1)),
+            Self::For(looped) => Self::For(Box::new(ForLoop {
+                lo: looped.lo.abstract_at(is_target, depth),
+                hi: looped.hi.abstract_at(is_target, depth),
+                ordered: looped.ordered.clone(),
+                state: looped.state.clone(),
+                init: looped.init.abstract_at(is_target, depth),
+                body: looped.body.abstract_at(is_target, depth + 2),
+            })),
             Self::Prim(prim, arguments) => Self::Prim(*prim, each(arguments)),
             Self::Eq(ty, left, right) => {
                 Self::Eq(ty.clone(), boxed(left, depth), boxed(right, depth))
@@ -822,6 +933,14 @@ impl Term {
             Self::Absurd(proof, ty) => {
                 Self::Absurd(Box::new(proof.rebind(depth, op)), ty.rebind(depth, op))
             }
+            Self::For(looped) => Self::For(Box::new(ForLoop {
+                lo: looped.lo.rebind(depth, op),
+                hi: looped.hi.rebind(depth, op),
+                ordered: looped.ordered.rebind(depth, op),
+                state: rebind_telescope(&looped.state, depth.under_vars(1), op),
+                init: looped.init.rebind(depth, op),
+                body: looped.body.rebind(depth.under(2, 2), op),
+            })),
         }
     }
 }
@@ -1056,6 +1175,7 @@ impl Proof {
                 arm: arm.rebind(depth, op),
             },
             Self::ExcludedMiddle(prop) => Self::ExcludedMiddle(prop.rebind(depth, op)),
+            Self::ForEmpty(term) => Self::ForEmpty(term.rebind(depth, op)),
             Self::Axiom(axiom) => Self::Axiom(axiom.map(|term| term.rebind(depth, op))),
             Self::NatInduction {
                 motive,
@@ -1178,6 +1298,11 @@ impl fmt::Display for Term {
             }
             Self::Exists(ty, body) => write!(f, "exists (#: {ty}) {{ {body} }}"),
             Self::Absurd(_, ty) => write!(f, "absurd: {ty}"),
+            Self::For(looped) => write!(
+                f,
+                "for # in {}..{} ({}) {{ {} }}",
+                looped.lo, looped.hi, looped.init, looped.body
+            ),
         }
     }
 }

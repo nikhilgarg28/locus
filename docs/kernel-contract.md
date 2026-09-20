@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers kernel gates **K1** to **K5** of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), and `tests/kernel_numbers.rs` (K5). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers all six kernel gates, **K1** to **K6**, of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), `tests/kernel_numbers.rs` (K5), and `tests/kernel_loops.rs` (K6). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -48,6 +48,7 @@ t ::= x                     a context variable, by identity
     | N(t_0, ..., t_n)      a declared proposition applied to arguments
     | exists (#: A) { t }   binds #0 in its body
     | absurd(p) : A         a value of any type from a proof of an empty proposition
+    | for # in t..t (S = t) { t }     range iteration; see below
 ~~~
 
 A tuple value carries its type because a dependent telescope cannot be inferred from the values alone.
@@ -80,6 +81,7 @@ p ::= h                     a context hypothesis, by identity
     | exists_intro(P, t, p)
     | exists_elim(p, G, arm)
     | excluded_middle(P)
+    | for_empty(t)          computation axiom
     | axiom(...)            an axiom of Nat or of the u8 model
     | nat_induction(M, p, arm, t)
 ~~~
@@ -225,6 +227,30 @@ The prelude declares `True`, `False`, `And`, and `Or` by this mechanism, before 
 
 `proof_is_classical` reports whether a proof uses this rule, directly or through a declared function, and each function declaration records the same about its body. This is bookkeeping for auditing, not a check.
 
+### Range iteration
+
+`for i in lo..hi (s : S(i) = init) { body }` is the term-level recursion rule. `S(i)` is a tuple telescope under one binder, the index. `body` binds the index `i`, the current state `s`, and two hypotheses.
+
+| Term | Premises | Type |
+|---|---|---|
+| `for i in lo..hi (s = init) { body }` | the declarations include the prelude; `lo : u8` and `hi : u8` in the same mode; the attached proof proves `u8_le(lo, hi)`; `init : S(lo)` in the same mode; for a fresh `i : u8`, `S(i)` is a type; with `i : u8`, `s : S(i)`, and the hypotheses `u8_le(lo, i)` and `u8_lt(i, hi)` added, `body : S(wrapping_add(i, 1))` in the same mode | `S(hi)` |
+
+In `Executable` mode `i` and `s` are executable variables; in `Logical` mode they are ghost. The ghost fields of `s` are ghost either way, by the projection rule.
+
+The index may change what the state's proofs say and never what data the state holds, because a term occurs in a type only inside `@P`. So the erasure of `S(i)` does not depend on `i`, and a loop whose invariant varies with the index erases to a plain loop over one fixed state type. That is what makes this rule erasable, and it holds by construction.
+
+Ordered bounds make the final index `hi`, so the result type needs no case distinction. A reversed range is not a type error in itself; it is rejected because no proof of `u8_le(lo, hi)` can be supplied. Since `i < hi`, the successor in the body's type never wraps. A half-open byte range cannot have 255 as an index.
+
+Two loops that differ only in the proof that their bounds are ordered are the same term.
+
+| Proof | Premises | Conclusion |
+|---|---|---|
+| `for_empty(f)` | `f` is a `for` whose `lo` and `hi` are the same term, and is well typed | `f ==[S(lo)] init` |
+
+The successor case of the range axiom, `for lo..succ(hi) == body[hi, for lo..hi]`, is not yet a rule. With an index-dependent state the two sides have types that are equal only up to `wrapping_add(i, 1) == succ`, and the kernel has no transport between types. The invariant rule above is what verification of a loop uses; the missing axiom only matters for computing a loop's value on literals. It can be added for index-independent state without new machinery.
+
+Soundness of the typing rule is by induction on `hi - lo` in the intended model. It is a separate rule from `nat_induction` on purpose: one recursion rule computes and erases to a loop, the other only proves and is erased.
+
 ### Nat
 
 `Nat` has the literals, `succ`, and `nat_add`. Its rules are Peano's, with addition:
@@ -325,11 +351,8 @@ They act on closed occurrences only. A call that mentions a variable bound insid
 
 Symmetry, transitivity, and congruence of equality are not rules. They are derived from `refl` and `transport`, and `tests/kernel.rs` derives each of them.
 
-Not yet present, by gate:
+All six kernel gates are implemented. Known gaps, each recorded where it arises above: the successor case of the range computation axiom; the projection axiom for nested dependent products; rewriting under binders in the derived forms; `Nat` literals beyond `u64`; and a depth bound on checking.
 
-| Gate | Adds |
-|---|---|
-| K6 | The range-iteration rule |
 
 One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2 was built the kernel had no `!=`, which needs `False` from K4, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
 

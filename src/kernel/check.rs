@@ -58,6 +58,14 @@ pub fn same(left: &Term, right: &Term) -> bool {
         }
         (Term::PropApp(li, la), Term::PropApp(ri, ra)) => li == ri && all(la, ra),
         (Term::Exists(lt, lb), Term::Exists(rt, rb)) => same_type(lt, rt) && same(lb, rb),
+        // The proof that the bounds are ordered is irrelevant.
+        (Term::For(l), Term::For(r)) => {
+            same(&l.lo, &r.lo)
+                && same(&l.hi, &r.hi)
+                && same_types(&l.state, &r.state)
+                && same(&l.init, &r.init)
+                && same(&l.body, &r.body)
+        }
         // Two unreachable values of one type: the proofs are irrelevant.
         (Term::Absurd(_, lt), Term::Absurd(_, rt)) => same_type(lt, rt),
         _ => false,
@@ -346,6 +354,42 @@ pub fn infer_term(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
             check_type(ctx, ty)?;
             ghost_former(mode, ty)?;
             Ok(ty.clone())
+        }
+        Term::For(looped) => {
+            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+            let (lo, hi) = (&looped.lo, &looped.hi);
+            expect_type(ctx, lo, &Type::U8, mode)?;
+            expect_type(ctx, hi, &Type::U8, mode)?;
+            // Ordered bounds make the final index hi, so the result type
+            // needs no case distinction.
+            check_proof(
+                ctx,
+                &looped.ordered,
+                &prelude.u8_le_prop(lo.clone(), hi.clone()),
+            )?;
+            let state_at = |index: &Term| Type::Tuple(looped.state.clone()).open(index);
+            expect_type(ctx, &looped.init, &state_at(lo), mode)?;
+
+            let scope = ctx.len();
+            let local = mode == Mode::Logical;
+            let index = ctx.push_local(Type::U8, local);
+            let i = Term::Free(index);
+            let mut checked = check_type(ctx, &state_at(&i));
+            if checked.is_ok() {
+                let state = ctx.push_local(state_at(&i), local);
+                let lower = ctx.push_hyp(prelude.u8_le_prop(lo.clone(), i.clone()));
+                let upper = ctx.push_hyp(prelude.u8_lt_prop(i.clone(), hi.clone()));
+                let body = looped
+                    .body
+                    .instantiate(2, |j| Term::Free([index, state][j]))
+                    .open_hyps(&[lower, upper]);
+                // i < hi, so the successor does not wrap.
+                let next = Term::wrapping_add(i, Term::U8(1));
+                checked = expect_type(ctx, &body, &state_at(&next), mode);
+            }
+            ctx.truncate(scope);
+            checked?;
+            Ok(state_at(hi))
         }
     }
 }
@@ -913,6 +957,16 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
             expect_type(ctx, prop, &Type::Prop, Mode::Logical)?;
             Ok(prelude.or_prop(prop.clone(), prelude.not_prop(prop.clone())))
+        }
+        Proof::ForEmpty(term) => {
+            let Term::For(looped) = term else {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            };
+            if !same(&looped.lo, &looped.hi) {
+                return Err(KernelError::NoComputationStep(term.clone()));
+            }
+            let ty = infer_term(ctx, term, Mode::Logical)?;
+            Ok(Term::eq(ty, term.clone(), looped.init.clone()))
         }
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
         Proof::NatInduction {
