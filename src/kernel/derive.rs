@@ -6,15 +6,18 @@
 //! section 8.4, plus symmetry and transitivity of equality. Each works out a
 //! transport template by abstracting occurrences of a term.
 //!
-//! Limit: an occurrence that mentions a variable bound inside the
-//! proposition, such as the call in `forall x { nonzero(x) }`, is not closed
-//! and is left alone. Reaching under a quantifier takes a `forall_elim`,
-//! the rewrite, and a `forall_intro`; the elaborator will do that.
+//! `unfold` and `fold` reach calls that mention a bound variable, such as the
+//! one in `forall x { nonzero(x) }`, by going under `forall` and `exists`
+//! and into the conclusion of an implication, rebuilding the binder around
+//! the rewritten body. A call inside a declared proposition's arguments, or
+//! under a binder within the premise of an implication, is not reached.
+//! `rewrite` needs no such descent: the term it replaces is closed, and a
+//! closed term is found wherever it occurs.
 
 use super::check::{infer_proof, same};
 use super::context::Context;
 use super::error::KernelError;
-use super::term::{FnId, Proof, Term, Type};
+use super::term::{FnId, Proof, ProofArm, Term, Type};
 
 /// Bounds the unfolding loops below in steps, never in time.
 const STEP_LIMIT: usize = 10_000;
@@ -67,19 +70,15 @@ fn is_call_to(term: &Term, id: FnId) -> bool {
     matches!(term, Term::Call(callee, _) if **callee == Term::Fn(id)) && term.is_closed()
 }
 
-/// From `proof: P`, a proof of `P` with every closed call to `id` replaced
-/// by the function's body.
-pub fn unfold(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Proof, KernelError> {
+/// One round of unfolding at the top of a proposition: every closed call to
+/// `id`, outermost first, until none is left. `None` when there was none.
+fn unfold_closed(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Option<Proof>, KernelError> {
     let mut prop = infer_proof(ctx, proof)?;
     let mut proof = proof.clone();
     let mut unfolded_any = false;
     for _ in 0..STEP_LIMIT {
         let Some(call) = prop.find(&|term| is_call_to(term, id)).cloned() else {
-            return if unfolded_any {
-                Ok(proof)
-            } else {
-                Err(KernelError::NoComputationStep(prop))
-            };
+            return Ok(unfolded_any.then_some(proof));
         };
         let step = Proof::Definition(call.clone());
         let (_, body) = equation(ctx, &step)?;
@@ -95,9 +94,93 @@ pub fn unfold(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Proof, Kerne
     Err(KernelError::StepLimit)
 }
 
-/// From `proof: P`, a proof of `goal`, where unfolding every closed call to
-/// `id` in `goal` gives `P`. The kernel checks that it does.
-pub fn fold(ctx: &mut Context, id: FnId, proof: &Proof, goal: &Term) -> Result<Proof, KernelError> {
+/// Unfolds at the top, then under `forall`, under `exists`, and in the
+/// conclusion of an implication, where a call may mention the bound
+/// variable. Returns the new proof and whether anything changed.
+fn unfold_deep(ctx: &mut Context, id: FnId, proof: Proof) -> Result<(Proof, bool), KernelError> {
+    let (proof, changed) = match unfold_closed(ctx, id, &proof)? {
+        Some(unfolded) => (unfolded, true),
+        None => (proof, false),
+    };
+    let scope = ctx.len();
+    let result = match infer_proof(ctx, &proof)? {
+        Term::Forall(ty, _) => {
+            let var = ctx.push_bound(ty.clone());
+            let instance = Proof::forall_elim(proof.clone(), Term::Free(var));
+            unfold_deep(ctx, id, instance).map(|(inner, inner_changed)| {
+                let rebuilt = Proof::ForallIntro {
+                    ty,
+                    body: Box::new(inner.close_var(var)),
+                };
+                (rebuilt, inner_changed)
+            })
+        }
+        Term::Implies(premise, _) => {
+            let hyp = ctx.push_hyp((*premise).clone());
+            let applied = Proof::implies_elim(proof.clone(), Proof::hyp(hyp));
+            unfold_deep(ctx, id, applied).map(|(inner, inner_changed)| {
+                let rebuilt = Proof::ImpliesIntro {
+                    hyp: *premise,
+                    body: Box::new(inner.close_hyp(hyp)),
+                };
+                (rebuilt, inner_changed)
+            })
+        }
+        Term::Exists(ty, body) => {
+            let var = ctx.push_bound(ty.clone());
+            let hyp = ctx.push_hyp(body.open(&Term::Free(var)));
+            match unfold_deep(ctx, id, Proof::hyp(hyp)) {
+                Ok((inner, true)) => infer_proof(ctx, &inner).map(|unfolded| {
+                    let goal = Term::Exists(ty, Box::new(unfolded.close(var)));
+                    let arm = Proof::ExistsIntro {
+                        prop: goal.clone(),
+                        witness: Term::Free(var),
+                        proof: Box::new(inner),
+                    };
+                    let rebuilt = Proof::ExistsElim {
+                        exists: Box::new(proof.clone()),
+                        goal,
+                        arm: ProofArm {
+                            vars: 1,
+                            hyps: 1,
+                            body: Box::new(arm.close_var(var).close_hyp(hyp)),
+                        },
+                    };
+                    (rebuilt, true)
+                }),
+                Ok((_, false)) => Ok((proof.clone(), false)),
+                Err(error) => Err(error),
+            }
+        }
+        _ => Ok((proof.clone(), false)),
+    };
+    ctx.truncate(scope);
+    let (rebuilt, inner_changed) = result?;
+    if inner_changed {
+        Ok((rebuilt, true))
+    } else {
+        Ok((proof, changed))
+    }
+}
+
+/// From `proof: P`, a proof of `P` with every call to `id` replaced by the
+/// function's body, including calls under `forall` and `exists` and in the
+/// conclusion of an implication.
+pub fn unfold(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Proof, KernelError> {
+    match unfold_deep(ctx, id, proof.clone())? {
+        (unfolded, true) => Ok(unfolded),
+        (_, false) => Err(KernelError::NoComputationStep(infer_proof(ctx, proof)?)),
+    }
+}
+
+/// Folds closed calls only: the goal's closed calls, unfolded, must give the
+/// proposition `proof` proves.
+fn fold_closed(
+    ctx: &mut Context,
+    id: FnId,
+    proof: &Proof,
+    goal: &Term,
+) -> Result<Option<Proof>, KernelError> {
     // Unfold the goal step by step, remembering each step, then replay the
     // steps backwards from the given proof.
     let mut steps = Vec::new();
@@ -113,7 +196,7 @@ pub fn fold(ctx: &mut Context, id: FnId, proof: &Proof, goal: &Term) -> Result<P
         steps.push((symm(ctx, &step)?, template));
     }
     if steps.is_empty() {
-        return Err(KernelError::NoComputationStep(goal.clone()));
+        return Ok(None);
     }
     let mut proof = proof.clone();
     for (eq, template) in steps.into_iter().rev() {
@@ -123,7 +206,86 @@ pub fn fold(ctx: &mut Context, id: FnId, proof: &Proof, goal: &Term) -> Result<P
             proof: Box::new(proof),
         };
     }
-    Ok(proof)
+    Ok(Some(proof))
+}
+
+/// Follows the shape of the goal: under `forall` and `exists`, and across an
+/// implication, whose premise is unfolded on the way in.
+fn fold_deep(
+    ctx: &mut Context,
+    id: FnId,
+    proof: Proof,
+    goal: &Term,
+) -> Result<(Proof, bool), KernelError> {
+    let scope = ctx.len();
+    let result = match goal {
+        Term::Forall(ty, body) => {
+            let var = ctx.push_bound(ty.clone());
+            let instance = Proof::forall_elim(proof, Term::Free(var));
+            fold_deep(ctx, id, instance, &body.open(&Term::Free(var))).map(|(inner, changed)| {
+                let rebuilt = Proof::ForallIntro {
+                    ty: ty.clone(),
+                    body: Box::new(inner.close_var(var)),
+                };
+                (rebuilt, changed)
+            })
+        }
+        Term::Implies(premise, conclusion) => {
+            let hyp = ctx.push_hyp((**premise).clone());
+            unfold_deep(ctx, id, Proof::hyp(hyp)).and_then(|(unfolded_premise, premise_changed)| {
+                let applied = Proof::implies_elim(proof, unfolded_premise);
+                fold_deep(ctx, id, applied, conclusion).map(|(inner, changed)| {
+                    let rebuilt = Proof::ImpliesIntro {
+                        hyp: (**premise).clone(),
+                        body: Box::new(inner.close_hyp(hyp)),
+                    };
+                    (rebuilt, changed || premise_changed)
+                })
+            })
+        }
+        Term::Exists(ty, body) => match infer_proof(ctx, &proof) {
+            Ok(Term::Exists(_, unfolded_body)) => {
+                let var = ctx.push_bound(ty.clone());
+                let hyp = ctx.push_hyp(unfolded_body.open(&Term::Free(var)));
+                fold_deep(ctx, id, Proof::hyp(hyp), &body.open(&Term::Free(var))).map(
+                    |(inner, changed)| {
+                        let arm = Proof::ExistsIntro {
+                            prop: goal.clone(),
+                            witness: Term::Free(var),
+                            proof: Box::new(inner),
+                        };
+                        let rebuilt = Proof::ExistsElim {
+                            exists: Box::new(proof),
+                            goal: goal.clone(),
+                            arm: ProofArm {
+                                vars: 1,
+                                hyps: 1,
+                                body: Box::new(arm.close_var(var).close_hyp(hyp)),
+                            },
+                        };
+                        (rebuilt, changed)
+                    },
+                )
+            }
+            Ok(other) => Err(KernelError::NotExistential(other)),
+            Err(error) => Err(error),
+        },
+        _ => fold_closed(ctx, id, &proof, goal).map(|folded| match folded {
+            Some(folded) => (folded, true),
+            None => (proof, false),
+        }),
+    };
+    ctx.truncate(scope);
+    result
+}
+
+/// From `proof: P`, a proof of `goal`, where unfolding every call to `id` in
+/// `goal` gives `P`. The kernel checks that it does.
+pub fn fold(ctx: &mut Context, id: FnId, proof: &Proof, goal: &Term) -> Result<Proof, KernelError> {
+    match fold_deep(ctx, id, proof.clone(), goal)? {
+        (folded, true) => Ok(folded),
+        (_, false) => Err(KernelError::NoComputationStep(goal.clone())),
+    }
 }
 
 // --- Builders that need no context ------------------------------------------

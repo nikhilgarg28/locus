@@ -1072,6 +1072,16 @@ impl Proof {
         Self::ForallElim(Box::new(universal), argument)
     }
 
+    /// Turns a context variable into the outermost bound term variable.
+    pub(super) fn close_var(&self, var: VarId) -> Proof {
+        self.rebind(Depth::default(), Rebind::CloseVar(var))
+    }
+
+    /// Turns a context hypothesis into the outermost bound hypothesis.
+    pub(super) fn close_hyp(&self, id: HypId) -> Proof {
+        self.rebind(Depth::default(), Rebind::CloseHyp(id))
+    }
+
     pub(super) fn open_var(&self, replacement: &Term) -> Proof {
         self.rebind(
             Depth::default(),

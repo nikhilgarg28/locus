@@ -486,3 +486,52 @@ fn rewrite_replaces_every_closed_occurrence() {
         Err(KernelError::NoComputationStep(_))
     ));
 }
+
+#[test]
+fn unfold_and_fold_reach_calls_under_binders() {
+    let mut definitions = Definitions::new();
+    let is_three = declare_is_three(&mut definitions);
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    let claim = |x: Term| call(is_three, vec![x]);
+    let body = |x: Term| u8_eq(x, Term::U8(3));
+
+    // forall x { is_three(x) => is_three(x) }: the calls mention x.
+    let folded = Term::forall(Type::U8, |x| Term::implies(claim(x.clone()), claim(x)));
+    let unfolded = Term::forall(Type::U8, |x| Term::implies(body(x.clone()), body(x)));
+    let h = ctx.assume(folded.clone()).unwrap();
+    let opened = unfold(&mut ctx, is_three, &Proof::hyp(h)).unwrap();
+    assert_eq!(check_proof(&mut ctx, &opened, &unfolded), Ok(()));
+    let closed = fold(&mut ctx, is_three, &opened, &folded).unwrap();
+    assert_eq!(check_proof(&mut ctx, &closed, &folded), Ok(()));
+
+    // exists x { is_three(x) }
+    let some_folded = Term::exists(Type::U8, claim);
+    let some_unfolded = Term::exists(Type::U8, body);
+    let e = ctx.assume(some_folded.clone()).unwrap();
+    let opened = unfold(&mut ctx, is_three, &Proof::hyp(e)).unwrap();
+    assert_eq!(check_proof(&mut ctx, &opened, &some_unfolded), Ok(()));
+    let closed = fold(&mut ctx, is_three, &opened, &some_folded).unwrap();
+    assert_eq!(check_proof(&mut ctx, &closed, &some_folded), Ok(()));
+
+    // A closed call and a bound one together, two binders deep.
+    let n = Term::var(ctx.declare(Type::U8).unwrap());
+    let mixed = Term::implies(
+        claim(n.clone()),
+        Term::forall(Type::U8, |x| {
+            Term::exists(Type::U8, |y| Term::implies(claim(x.clone()), claim(y)))
+        }),
+    );
+    let mixed_unfolded = Term::implies(
+        body(n),
+        Term::forall(Type::U8, |x| {
+            Term::exists(Type::U8, |y| Term::implies(body(x.clone()), body(y)))
+        }),
+    );
+    let m = ctx.assume(mixed.clone()).unwrap();
+    let opened = unfold(&mut ctx, is_three, &Proof::hyp(m)).unwrap();
+    assert_eq!(check_proof(&mut ctx, &opened, &mixed_unfolded), Ok(()));
+    let closed = fold(&mut ctx, is_three, &opened, &mixed).unwrap();
+    assert_eq!(check_proof(&mut ctx, &closed, &mixed), Ok(()));
+    // Nothing is left behind in the context by the descent.
+    assert!(check_proof(&mut ctx, &Proof::hyp(m), &mixed).is_ok());
+}
