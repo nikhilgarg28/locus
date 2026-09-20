@@ -133,11 +133,13 @@ fn a_closed_term_evaluates_in_one_step() {
         vec![
             (
                 0,
-                Box::new(|_| Term::tuple(&pair_type, vec![Term::U8(0), Term::Bool(false)])),
+                Box::new(|_, _| Term::tuple(&pair_type, vec![Term::U8(0), Term::Bool(false)])),
             ),
             (
                 0,
-                Box::new(|_| Term::tuple(&pair_type, vec![add_one(Term::U8(6)), Term::Bool(true)])),
+                Box::new(|_, _| {
+                    Term::tuple(&pair_type, vec![add_one(Term::U8(6)), Term::Bool(true)])
+                }),
             ),
         ],
     );

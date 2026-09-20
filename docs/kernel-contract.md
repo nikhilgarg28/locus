@@ -143,12 +143,14 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `t.i` | `t : (A_0, ..., A_n)` or `t : struct S` in the same mode; `i <= n`. In `Executable` mode the result type is not ghost. | `A_i[t.0, ..., t.(i-1)]`, or, when `t` is literally a product value with fields `v_0, ..., v_n`, `A_i[v_0, ..., v_{i-1}]` |
 | `proof(p)` | mode is `Logical`; `p` proves `P` | `@P` |
 | `E::i(t_0, ..., t_n)` | `E` is declared and has a variant `i` with payload `(A_0, ..., A_n)`; the field rule holds for the payload, in the same mode | `enum E` |
-| `case t : R { arms }` | `t : bool` or `t : enum E` in the same mode; `R` is a type, is not a proof type, and in `Executable` mode is not ghost; there is exactly one arm per variant, in order (`false`, `true` for `bool`); arm `i` binds exactly the payload of variant `i`, and with those variables added its body has type `R` in the same mode | `R` |
+| `case t : R { arms }` | `t : bool` or `t : enum E` in the same mode; `R` is a type, is not a proof type, and in `Executable` mode is not ghost; there is exactly one arm per variant, in order (`false`, `true` for `bool`); arm `i` binds exactly the payload of variant `i` as variables `ys`, together with the hypothesis `t ==[T] variant_i(ys)` where `T` is the scrutinee's type, and with those added its body has type `R` in the same mode | `R` |
 | `N(t_0, ..., t_n)` | mode is `Logical`; `N` is declared with parameters `(A_0, ..., A_n)`; each `t_j : A_j` in `Logical` mode | `Prop` |
 | `exists (#: A) { P }` | as `forall` | `Prop` |
 | `absurd(p) : A` | `p` proves `N(...)` where `N` is declared with no variants; `A` is a type; in `Executable` mode `A` is not ghost | `A` |
 | `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost. | `F` |
 | `t(t_0, ..., t_n)` | `t : math fn(A_0, ..., A_n) -> R` in the same mode; the field rule below holds for the arguments against the parameters. In `Executable` mode the result type is not ghost. | `R[t_0, ..., t_n]` |
+
+Each arm's hypothesis is the same fact `case_data` gives its arms, so a branch of a math function knows what a branch of executable code knows, and a proof field in an arm can use it. It is a hypothesis, so it can occur only inside proofs, and it has no runtime content.
 
 In an executable `case`, a payload variable is executable when its field has a runtime representation and ghost otherwise; in a logical `case` every payload variable is ghost. The result type of a `case` does not depend on the scrutinee. A `case` cannot scrutinize a proof and cannot have a proof type as its result: case analysis that inspects or produces proofs is a proof rule, below. `absurd` is the match with no arms used for its value; it marks a point that is never reached.
 
@@ -184,7 +186,7 @@ The kernel reads the proposition off the proof. It never searches.
 | `of_term(t)` | `t : @P` in `Logical` mode | `P` |
 | `projection(c.i)` | `c` is literally a tuple or struct value with fields `v_0, ..., v_n`; `c.i : A` in `Logical` mode; `A` is not a proof type | `c.i ==[A] v_i` |
 | `definition(f(t_0, ..., t_n))` | the callee is literally a declared function `f` with parameters `x_0, ..., x_n` and body `b`; `f(t_0, ..., t_n) : A` in `Logical` mode; `A` is not a proof type | `f(t_0, ..., t_n) ==[A] b[t_0, ..., t_n]` |
-| `case_step(case c : R { arms })` | `c` is literally `false`, `true`, or `E::i(v_0, ..., v_n)`; the case is well typed in `Logical` mode | `case c ... ==[R] arm_i[v_0, ..., v_n]` |
+| `case_step(case c : R { arms })` | `c` is literally `false`, `true`, or `E::i(v_0, ..., v_n)`; the case is well typed in `Logical` mode | `case c ... ==[R] arm_i[v_0, ..., v_n]`, with the arm's hypothesis replaced by `refl(c)` |
 | `literal(op(args))` | `op` is a primitive and every argument is a literal of the right type | `op(args) ==[A] r`, where `r` is the literal the native evaluation below produces and `A` is the primitive's result type |
 
 ### Declared propositions

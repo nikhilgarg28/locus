@@ -344,11 +344,14 @@ pub struct ForLoop {
     pub body: Term,
 }
 
-/// Builds the body of a term-level case arm from its payload variables.
-pub type ArmBuilder<'a> = Box<dyn FnOnce(&[Term]) -> Term + 'a>;
+/// Builds the body of a term-level case arm from its payload variables and
+/// the proof that the scrutinee is this arm's variant applied to them.
+pub type ArmBuilder<'a> = Box<dyn FnOnce(&[Term], Proof) -> Term + 'a>;
 
-/// An arm of a term-level case. The body is under `binders` binders, one per
-/// payload field of the variant.
+/// An arm of a term-level case. The body is under `binders` term binders, one
+/// per payload field of the variant, and one hypothesis binder: the fact that
+/// the scrutinee equals this variant applied to the payload. A branch of a
+/// math function therefore knows what a branch of executable code knows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TermArm {
     pub binders: u32,
@@ -688,16 +691,19 @@ impl Term {
     }
 
     /// Builds a case. Each arm is given its payload arity and receives that
-    /// many payload variables.
+    /// many payload variables, and the proof of its arm fact.
     pub fn case(scrutinee: Term, result: Type, arms: Vec<(usize, ArmBuilder<'_>)>) -> Self {
         let arms = arms
             .into_iter()
             .map(|(arity, body)| {
                 let vars: Vec<VarId> = (0..arity).map(|_| VarId::fresh()).collect();
                 let payload: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
+                let fact = HypId::fresh();
                 TermArm {
                     binders: arity as u32,
-                    body: body(&payload).close_over(&vars),
+                    body: body(&payload, Proof::hyp(fact))
+                        .close_over(&vars)
+                        .rebind(Depth::default(), Rebind::CloseHyp(fact)),
                 }
             })
             .collect();
@@ -1077,7 +1083,7 @@ impl Term {
                 .iter()
                 .map(|arm| TermArm {
                     binders: arm.binders,
-                    body: arm.body.rebind(depth.under_vars(arm.binders), op),
+                    body: arm.body.rebind(depth.under(arm.binders, 1), op),
                 })
                 .collect(),
         }

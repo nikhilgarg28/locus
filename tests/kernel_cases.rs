@@ -149,8 +149,8 @@ fn a_match_on_a_proof_can_only_produce_a_proof() {
         scrutinee,
         Type::U8,
         vec![
-            (1, Box::new(|_| Term::U8(0))),
-            (1, Box::new(|_| Term::U8(1))),
+            (1, Box::new(|_, _| Term::U8(0))),
+            (1, Box::new(|_, _| Term::U8(1))),
         ],
     );
     assert!(matches!(
@@ -164,8 +164,8 @@ fn a_match_on_a_proof_can_only_produce_a_proof() {
         l,
         trivial.clone(),
         vec![
-            (0, Box::new(|_| Term::proof(truth(&prelude)))),
-            (0, Box::new(|_| Term::proof(truth(&prelude)))),
+            (0, Box::new(|_, _| Term::proof(truth(&prelude)))),
+            (0, Box::new(|_, _| Term::proof(truth(&prelude)))),
         ],
     );
     assert_eq!(
@@ -245,8 +245,8 @@ fn constructor_disjointness_and_injectivity_are_derived() {
             value,
             Type::Prop,
             vec![
-                (0, Box::new(|_| prelude.truth_prop())),
-                (0, Box::new(|_| prelude.falsehood_prop())),
+                (0, Box::new(|_, _| prelude.truth_prop())),
+                (0, Box::new(|_, _| prelude.falsehood_prop())),
             ],
         )
     };
@@ -290,8 +290,8 @@ fn constructor_disjointness_and_injectivity_are_derived() {
             value,
             Type::U8,
             vec![
-                (0, Box::new(|_| Term::U8(0))),
-                (1, Box::new(|payload| payload[0].clone())),
+                (0, Box::new(|_, _| Term::U8(0))),
+                (1, Box::new(|payload, _| payload[0].clone())),
             ],
         )
     };
@@ -357,8 +357,8 @@ fn if_is_case_on_bool_and_each_branch_learns_the_condition() {
         b.clone(),
         Type::U8,
         vec![
-            (0, Box::new(|_| Term::U8(10))),
-            (0, Box::new(|_| Term::U8(20))),
+            (0, Box::new(|_, _| Term::U8(10))),
+            (0, Box::new(|_, _| Term::U8(20))),
         ],
     );
     assert_eq!(
@@ -369,8 +369,8 @@ fn if_is_case_on_bool_and_each_branch_learns_the_condition() {
         Term::Bool(true),
         Type::U8,
         vec![
-            (0, Box::new(|_| Term::U8(10))),
-            (0, Box::new(|_| Term::U8(20))),
+            (0, Box::new(|_, _| Term::U8(10))),
+            (0, Box::new(|_, _| Term::U8(20))),
         ],
     );
     assert_eq!(
@@ -440,8 +440,8 @@ fn a_payload_with_a_proof_field_gives_each_arm_its_evidence() {
         c.clone(),
         Type::U8,
         vec![
-            (0, Box::new(|_| Term::U8(0))),
-            (2, Box::new(|payload| payload[0].clone())),
+            (0, Box::new(|_, _| Term::U8(0))),
+            (2, Box::new(|payload, _| payload[0].clone())),
         ],
     );
     assert_eq!(infer_term(&mut ctx, &take, Mode::Executable), Ok(Type::U8));
@@ -474,7 +474,7 @@ fn arms_must_match_the_declaration() {
     let mut ctx = Context::with_definitions(Rc::new(definitions));
     let l = Term::var(ctx.declare(Type::Enum(light)).unwrap());
 
-    let one_arm = Term::case(l.clone(), Type::U8, vec![(0, Box::new(|_| Term::U8(0)))]);
+    let one_arm = Term::case(l.clone(), Type::U8, vec![(0, Box::new(|_, _| Term::U8(0)))]);
     assert_eq!(
         infer_term(&mut ctx, &one_arm, Mode::Logical),
         Err(KernelError::ArmCount {
@@ -486,8 +486,8 @@ fn arms_must_match_the_declaration() {
         l.clone(),
         Type::U8,
         vec![
-            (1, Box::new(|_| Term::U8(0))),
-            (0, Box::new(|_| Term::U8(0))),
+            (1, Box::new(|_, _| Term::U8(0))),
+            (0, Box::new(|_, _| Term::U8(0))),
         ],
     );
     assert!(matches!(
@@ -751,4 +751,113 @@ fn comparison_covers_the_new_terms() {
         &Term::exists(Type::U8, |y| u8_eq(y.clone(), y)),
     ));
     assert!(!same(&prelude.truth_prop(), &prelude.falsehood_prop()));
+}
+
+#[test]
+fn a_branch_of_a_math_function_knows_which_branch_it_is() {
+    // math fn preserve(n: u8) -> (out: u8, @[out == n]) {
+    //     if n == 0 { (0, _) } else { (n, _) }
+    // }
+    // The first hole needs the branch fact: the comparison was true, so
+    // n == 0, so 0 == n.
+    use locus::kernel::{Axiom, Prim};
+    let (mut definitions, _) = Definitions::with_prelude();
+    let result_for = |n: &Term| {
+        let n = n.clone();
+        Type::tuple(move |earlier| match earlier {
+            [] => Some(Type::U8),
+            [out] => Some(Type::proof(u8_eq(out.clone(), n.clone()))),
+            _ => None,
+        })
+    };
+    let signature = Type::function(1, |params| match params {
+        [] => Type::U8,
+        [n] => result_for(n),
+        _ => unreachable!(),
+    });
+    let body = |n: &Term, use_the_fact: bool| {
+        let n = n.clone();
+        let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+        let result = result_for(&n);
+        let (result_true, result_false) = (result.clone(), result.clone());
+        let (n_true, n_false) = (n.clone(), n.clone());
+        let reflected = comparison.clone();
+        Term::case(
+            comparison,
+            result,
+            vec![
+                // false: return n itself
+                (
+                    0,
+                    Box::new(move |_, _| {
+                        Term::tuple(
+                            &result_false,
+                            vec![n_false.clone(), Term::proof(Proof::Refl(n_false))],
+                        )
+                    }),
+                ),
+                // true: return 0, with 0 == n from the arm's fact
+                (
+                    0,
+                    Box::new(move |_, fact| {
+                        let n_is_zero = Proof::implies_elim(
+                            Proof::Axiom(Axiom::Reflect(reflected, true)),
+                            fact,
+                        );
+                        let zero_is_n = Proof::transport(
+                            n_is_zero,
+                            |hole| u8_eq(hole, n_true.clone()),
+                            Proof::Refl(n_true.clone()),
+                        );
+                        let evidence = if use_the_fact {
+                            zero_is_n
+                        } else {
+                            Proof::Refl(Term::U8(0))
+                        };
+                        Term::tuple(&result_true, vec![Term::U8(0), Term::proof(evidence)])
+                    }),
+                ),
+            ],
+        )
+    };
+    assert!(
+        definitions
+            .declare_fn(&signature, |params| body(&params[0], true))
+            .is_ok()
+    );
+    // Without the fact the branch cannot justify returning 0.
+    assert!(matches!(
+        definitions.declare_fn(&signature, |params| body(&params[0], false)),
+        Err(KernelError::ProofMismatch { .. })
+    ));
+
+    // The fact is discharged by reflexivity when the case reduces, and the
+    // whole function evaluates.
+    let preserve = definitions
+        .declare_fn(&signature, |params| body(&params[0], true))
+        .unwrap();
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    for byte in [0u8, 7] {
+        let out = Term::proj(Term::call(Term::Fn(preserve), vec![Term::U8(byte)]), 0);
+        assert_eq!(
+            check_proof(
+                &mut ctx,
+                &Proof::Evaluate(out.clone()),
+                &u8_eq(out, Term::U8(byte))
+            ),
+            Ok(())
+        );
+    }
+    let reduced = Term::case(
+        Term::Bool(true),
+        Type::U8,
+        vec![
+            (0, Box::new(|_, _| Term::U8(1))),
+            (0, Box::new(|_, _| Term::U8(2))),
+        ],
+    );
+    assert_eq!(
+        infer_proof(&mut ctx, &Proof::CaseStep(reduced.clone())),
+        Ok(u8_eq(reduced, Term::U8(2)))
+    );
 }

@@ -379,7 +379,7 @@ fn type_of_case(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
             found: arms.len(),
         });
     }
-    for (arm, payload) in arms.iter().zip(&variants) {
+    for (index, (arm, payload)) in arms.iter().zip(&variants).enumerate() {
         if arm.binders as usize != payload.len() {
             return Err(KernelError::ArmBinders {
                 expected: (payload.len(), 0),
@@ -395,7 +395,17 @@ fn type_of_case(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
             let ghost = mode == Mode::Logical || ty.is_ghost();
             vars.push(ctx.push_local(ty, ghost));
         }
-        let body = arm.body.instantiate(vars.len(), |j| Term::Free(vars[j]));
+        // The arm knows which variant it has.
+        let built = vars.iter().copied().map(Term::Free).collect();
+        let fact = ctx.push_hyp(Term::eq(
+            scrutinee_type.clone(),
+            (**scrutinee).clone(),
+            constructor(&scrutinee_type, index, built),
+        ));
+        let body = arm
+            .body
+            .instantiate(vars.len(), |j| Term::Free(vars[j]))
+            .open_hyps(&[fact]);
         let checked = expect_type(ctx, &body, result, mode);
         ctx.truncate(scope);
         checked?;
@@ -971,9 +981,12 @@ fn claim_of_case_step(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelEr
         return Err(KernelError::NoComputationStep(term.clone()));
     };
     let ty = term_type(ctx, term, Mode::Logical)?;
+    // The arm's fact, scrutinee == variant(payload), holds by reflexivity.
+    let fact = Proof::Refl((**scrutinee).clone());
     let chosen = arms[index]
         .body
-        .instantiate(payload.len(), |j| payload[j].clone());
+        .instantiate(payload.len(), |j| payload[j].clone())
+        .subst_hyps(&[&fact]);
     Ok(Term::eq(ty, term.clone(), chosen))
 }
 
