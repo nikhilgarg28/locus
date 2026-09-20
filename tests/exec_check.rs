@@ -1109,3 +1109,44 @@ fn a_for_checks_its_bounds_and_state_shape() {
         Err(ExecError::BadLoopState)
     );
 }
+
+#[test]
+fn a_logical_only_function_cannot_be_called_from_executable_code() {
+    // The reviewer's counterexample: fn leak() -> u8 { narrow(1) } where
+    // math fn narrow(n: Nat) -> u8 { of_nat(n) }.
+    let (mut definitions, _) = Definitions::with_prelude();
+    let narrow = definitions
+        .declare_fn(
+            &Type::function(1, |params| match params {
+                [] => Type::Nat,
+                _ => Type::U8,
+            }),
+            |params| Term::of_nat(params[0].clone()),
+        )
+        .unwrap();
+    let mut program = Program::new(Rc::new(definitions));
+    let applied = Term::call(Term::Fn(narrow), vec![Term::nat(1)]);
+    let leak = returns_u8(vec![], 0, block(vec![], Tail::Value(applied.clone())));
+    assert_eq!(
+        program.declare(leak).map(|_| ()),
+        Err(ExecError::Kernel(KernelError::LogicalFunctionInExecutable))
+    );
+    // Bound by a let, its value is ghost, and so cannot be returned either.
+    let (k_id, k) = var();
+    let via_let = returns_u8(
+        vec![],
+        0,
+        block(
+            vec![Stmt::Let {
+                var: k_id,
+                equation: HypId::fresh(),
+                value: applied,
+            }],
+            Tail::Value(k),
+        ),
+    );
+    assert!(matches!(
+        program.declare(via_let),
+        Err(ExecError::Kernel(KernelError::GhostInExecutable(_)))
+    ));
+}

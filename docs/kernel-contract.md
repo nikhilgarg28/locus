@@ -147,7 +147,7 @@ Terms are typed in one of two modes. `Logical` is the upgraded reading of the co
 | `N(t_0, ..., t_n)` | mode is `Logical`; `N` is declared with parameters `(A_0, ..., A_n)`; each `t_j : A_j` in `Logical` mode | `Prop` |
 | `exists (#: A) { P }` | as `forall` | `Prop` |
 | `absurd(p) : A` | `p` proves `N(...)` where `N` is declared with no variants; `A` is a type; in `Executable` mode `A` is not ghost | `A` |
-| `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost. | `F` |
+| `f` | `f` is declared with type `F`. In `Executable` mode `F` is not ghost and `f` is executable, as defined under function declaration below. | `F` |
 | `t(t_0, ..., t_n)` | `t : math fn(A_0, ..., A_n) -> R` in the same mode; the field rule below holds for the arguments against the parameters. In `Executable` mode the result type is not ghost. | `R[t_0, ..., t_n]` |
 
 In an arm's fact, a payload variable `y` standing in a proof field appears as `proof(of_term(y))`, so that the fact is itself well formed under the field rule. Each arm's hypothesis is the same fact `case_data` gives its arms, so a branch of a math function knows what a branch of executable code knows, and a proof field in an arm can use it. It is a hypothesis, so it can occur only inside proofs, and it has no runtime content.
@@ -155,6 +155,8 @@ In an arm's fact, a payload variable `y` standing in a proof field appears as `p
 In an executable `case`, a payload variable is executable when its field has a runtime representation and ghost otherwise; in a logical `case` every payload variable is ghost. The result type of a `case` does not depend on the scrutinee. A `case` cannot scrutinize a proof and cannot have a proof type as its result: case analysis that inspects or produces proofs is a proof rule, below. `absurd` is the match with no arms used for its value; it marks a point that is never reached.
 
 Function declaration. `math fn f(x_0: A_0, ..., x_n: A_n) -> R { body }` is accepted when its function type is well formed with no variables in scope, and, with fresh ghost variables for the parameters, `body : R[x_0, ..., x_n]` in `Logical` mode. A lemma is a function whose result type is a proof type; its body has the form `proof(p)`.
+
+A declared function is *executable* when its result type is not ghost and its body also has type `R[x_0, ..., x_n]` in `Executable` mode, with each parameter ghost exactly when its type is ghost. Otherwise it is logical-only, and naming it in `Executable` mode is an error. The signature alone cannot decide this. `math fn narrow(n: Nat) -> u8 { of_nat(n) }` has an executable result, but its body needs the ghost `n`, so a call to it would turn an erased number into a byte: `narrow(0)` and `narrow(1)` differ in the logic while their erased calls are identical. Being logical-only propagates: a function whose body calls `narrow` is logical-only too. A ghost parameter that the result does not depend on does no harm. `Definitions::is_executable` reports the classification.
 
 The field rule. It applies to the fields of a product value and to the arguments of a call. There are exactly as many values as fields. For each `i` in order, let `E = A_i[t_0, ..., t_{i-1}]`:
 

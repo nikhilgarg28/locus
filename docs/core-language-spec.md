@@ -595,7 +595,7 @@ Thus an ordinary fn can return a proof, but invoking that fn is an executable co
 
 ### 6.2 Math functions are dual-use
 
-A math fn is written once and used in both worlds. It is callable from logic because it is total. It is also compiled and callable at runtime whenever its parameters and result contain executable data. A math fn whose signature consists only of Prop, proof, or other ghost positions is purely logical and is erased entirely. No separate keyword distinguishes the two cases.
+A math fn is written once and used in both worlds. It is callable from logic because it is total. It is also compiled and callable at runtime when it has a runtime form: its result is executable data, and its body is an executable expression in which the parameters of ghost type are ghost. A math fn whose result is a Prop or a proof, or whose body needs a ghost value to compute its result, is purely logical: it is erased entirely and cannot be named in executable code. The signature alone does not decide this, and the restriction survives function boundaries: a function that calls a purely logical function to compute its result is purely logical too. No separate keyword distinguishes the two cases.
 
 A lemma is a math fn returning a proof. A predicate is a math fn returning Prop.
 

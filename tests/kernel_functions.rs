@@ -535,3 +535,64 @@ fn unfold_and_fold_reach_calls_under_binders() {
     // Nothing is left behind in the context by the descent.
     assert!(check_proof(&mut ctx, &Proof::hyp(m), &mixed).is_ok());
 }
+
+#[test]
+fn a_function_that_needs_a_ghost_to_compute_has_no_runtime_form() {
+    // math fn narrow(n: Nat) -> u8 { of_nat(n) }: a fine logical function,
+    // but a call to it would turn an erased number into a byte.
+    let mut definitions = Definitions::new();
+    let nat_to_u8 = Type::function(1, |params| match params {
+        [] => Type::Nat,
+        _ => Type::U8,
+    });
+    let narrow = definitions
+        .declare_fn(&nat_to_u8, |params| Term::of_nat(params[0].clone()))
+        .unwrap();
+    // The restriction survives function boundaries: a caller is logical-only
+    // too, even though its own signature is all executable data.
+    let through = definitions
+        .declare_fn(&u8_to_u8(), |params| {
+            call(narrow, vec![Term::to_nat(params[0].clone())])
+        })
+        .unwrap();
+    let successor = declare_successor(&mut definitions);
+    // A Nat parameter that the result does not depend on does no harm.
+    let ignores = definitions.declare_fn(&nat_to_u8, |_| Term::U8(7)).unwrap();
+    assert!(!definitions.is_executable(narrow));
+    assert!(!definitions.is_executable(through));
+    assert!(definitions.is_executable(successor));
+    assert!(definitions.is_executable(ignores));
+
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    let n = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
+    let x = Term::var(ctx.declare(Type::U8).unwrap());
+    for (term, allowed) in [
+        (call(narrow, vec![n.clone()]), false),
+        (call(narrow, vec![Term::nat(1)]), false),
+        (call(through, vec![x.clone()]), false),
+        (Term::Fn(narrow), false),
+        (call(ignores, vec![n.clone()]), true),
+        (call(successor, vec![x.clone()]), true),
+    ] {
+        assert_eq!(
+            infer_term(&mut ctx, &term, Mode::Executable).is_ok(),
+            allowed,
+            "{term}"
+        );
+        // Every one of them is an ordinary logical term.
+        assert!(infer_term(&mut ctx, &term, Mode::Logical).is_ok());
+    }
+    assert_eq!(
+        infer_term(&mut ctx, &call(narrow, vec![n]), Mode::Executable),
+        Err(KernelError::LogicalFunctionInExecutable)
+    );
+    // Logic still computes with it: narrow(0) and narrow(1) differ, which is
+    // exactly why no erased program may depend on the call.
+    for k in [0u8, 1] {
+        let applied = call(narrow, vec![Term::nat(u64::from(k))]);
+        assert_eq!(
+            infer_proof(&mut ctx, &Proof::Evaluate(applied.clone())),
+            Ok(u8_eq(applied, Term::U8(k)))
+        );
+    }
+}

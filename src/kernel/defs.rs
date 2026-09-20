@@ -145,6 +145,9 @@ pub(super) struct FnDecl {
     pub(super) body: Term,
     /// Whether the body uses excluded middle, directly or through a call.
     pub(super) classical: bool,
+    /// Whether the function has a runtime form: its body is an executable
+    /// term when its ghost-typed parameters are ghost.
+    pub(super) executable: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -401,10 +404,14 @@ impl Definitions {
         telescope.push((**result).clone());
         check_telescope(&mut ctx, &telescope)?;
 
+        // A parameter is ghost exactly when its type is. That makes no
+        // difference to the logical check, and it is what the executable
+        // check below needs.
         let mut vars = Vec::new();
         for index in 0..params.len() {
             let ty = field_type(&telescope, index, |j| Term::Free(vars[j]));
-            vars.push(ctx.push_bound(ty));
+            let ghost = ty.is_ghost();
+            vars.push(ctx.push_local(ty, ghost));
         }
         let arguments: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
         let body = body(&arguments);
@@ -412,12 +419,21 @@ impl Definitions {
         let expected = field_type(&telescope, params.len(), |j| Term::Free(vars[j]));
         expect_type(&mut ctx, &body, &expected, Mode::Logical)?;
 
+        // The function has a runtime form only if its body is itself an
+        // executable term. Otherwise a ghost argument could reach executable
+        // data through the call: `f(n: Nat) -> u8 { of_nat(n) }` would turn a
+        // ghost number into a byte. Such a function is still a perfectly
+        // good logical function; it is just not callable at runtime.
+        let executable = !expected.is_ghost()
+            && expect_type(&mut ctx, &body, &expected, Mode::Executable).is_ok();
+
         let classical = term_is_classical(self, &body);
         self.fns.push(FnDecl {
             params: params.clone(),
             result: (**result).clone(),
             body: body.close_over(&vars),
             classical,
+            executable,
         });
         Ok(FnId(self.fns.len() - 1))
     }
@@ -426,6 +442,13 @@ impl Definitions {
     /// the functions it calls.
     pub fn is_classical(&self, id: FnId) -> bool {
         self.fns.get(id.0).is_some_and(|decl| decl.classical)
+    }
+
+    /// Whether the function may be named in executable code. A function whose
+    /// result is ghost, or whose body needs a ghost value to compute its
+    /// result, is logical-only.
+    pub fn is_executable(&self, id: FnId) -> bool {
+        self.fns.get(id.0).is_some_and(|decl| decl.executable)
     }
 
     pub(super) fn enum_variants(&self, id: EnumId) -> Option<&[Vec<Type>]> {

@@ -13,6 +13,9 @@ pub enum KernelError {
     DanglingBound,
     /// A ghost variable occurs where a runtime value is required.
     GhostInExecutable(VarId),
+    /// A math function with no runtime form is named where a runtime value
+    /// is required: its body needs a ghost value to compute its result.
+    LogicalFunctionInExecutable,
     /// A term of a ghost type occurs where a runtime value is required.
     GhostTypeInExecutable(Type),
     TypeMismatch {
@@ -108,6 +111,9 @@ impl fmt::Display for KernelError {
                     f,
                     "ghost variable {id:?} used where a runtime value is required"
                 )
+            }
+            Self::LogicalFunctionInExecutable => {
+                f.write_str("a logical-only function used where a runtime value is required")
             }
             Self::GhostTypeInExecutable(ty) => {
                 write!(

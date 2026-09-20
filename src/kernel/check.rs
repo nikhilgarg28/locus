@@ -317,6 +317,11 @@ fn type_of_fn(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kernel
         .ok_or(KernelError::UnknownFunction)?;
     let ty = Type::Fn(decl.params.clone(), Box::new(decl.result.clone()));
     ghost_former(mode, &ty)?;
+    // The type alone does not decide this: a function into executable data
+    // may still need a ghost value to compute it.
+    if mode == Mode::Executable && !decl.executable {
+        return Err(KernelError::LogicalFunctionInExecutable);
+    }
     Ok(ty)
 }
 
