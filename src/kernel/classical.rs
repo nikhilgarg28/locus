@@ -14,13 +14,15 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
     let arms = |arms: &[ProofArm]| arms.iter().any(|arm| sub(&arm.body));
     match proof {
         Proof::ExcludedMiddle(_) => true,
-        Proof::Hyp(_) => false,
+        Proof::Hyp(_) | Proof::Omitted => false,
         Proof::OfTerm(inner)
         | Proof::Refl(inner)
         | Proof::Projection(inner)
         | Proof::Literal(inner)
         | Proof::Definition(inner)
-        | Proof::CaseStep(inner) => term(inner),
+        | Proof::CaseStep(inner)
+        | Proof::Evaluate(inner)
+        | Proof::EvaluateAll(inner) => term(inner),
         Proof::Transport { eq, proof, .. } => sub(eq) || sub(proof),
         Proof::ImpliesIntro { body, .. } | Proof::ForallIntro { body, .. } => sub(body),
         Proof::ImpliesElim(left, right) => sub(left) || sub(right),
@@ -41,6 +43,11 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
         Proof::ExistsIntro { witness, proof, .. } => term(witness) || sub(proof),
         Proof::ExistsElim { exists, arm, .. } => sub(exists) || sub(&arm.body),
         Proof::ForEmpty(inner) => term(inner),
+        Proof::ForStep {
+            looped,
+            lower,
+            upper,
+        } => term(looped) || sub(lower) || sub(upper),
         Proof::Axiom(axiom) => axiom.terms().into_iter().any(term),
         Proof::NatInduction {
             base, step, target, ..

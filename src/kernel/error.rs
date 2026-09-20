@@ -69,6 +69,14 @@ pub enum KernelError {
     NotExistential(Term),
     /// Excluded middle needs the prelude's `Or` and `False`.
     NoPrelude,
+    /// A placeholder left by the evaluator was offered as a proof.
+    OmittedProof,
+    /// Evaluation needs a term with no free variables.
+    NotClosed(Term),
+    /// Evaluation offers only results that are plain data.
+    NotPlainData(Type),
+    /// Evaluation found a case where the claim is false.
+    Refuted(Term),
     NotAFunction(Type),
     /// A derived form exceeded its step budget.
     StepLimit,
@@ -152,6 +160,12 @@ impl fmt::Display for KernelError {
                 write!(f, "expected an existential proposition, found {prop}")
             }
             Self::NoPrelude => f.write_str("excluded middle needs the prelude declarations"),
+            Self::OmittedProof => f.write_str("an omitted proof proves nothing"),
+            Self::NotClosed(term) => write!(f, "evaluation met the free variable {term}"),
+            Self::NotPlainData(ty) => {
+                write!(f, "evaluation offers only plain data, and {ty} is not")
+            }
+            Self::Refuted(term) => write!(f, "refuted by evaluation at {term}"),
             Self::NotAFunction(ty) => write!(f, "expected a function type, found {ty}"),
             Self::StepLimit => f.write_str("derived form exceeded its step budget"),
             Self::ProofExpected(term) => {

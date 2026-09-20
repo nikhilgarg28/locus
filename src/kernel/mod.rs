@@ -14,6 +14,7 @@ mod context;
 mod defs;
 pub mod derive;
 mod error;
+mod eval;
 mod nat;
 mod term;
 pub mod theory;

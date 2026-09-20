@@ -4,7 +4,8 @@
 use super::context::{Context, Mode};
 use super::defs::Prelude;
 use super::error::KernelError;
-use super::term::{Axiom, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
+use super::eval::{Evaluator, is_plain_data};
+use super::term::{Axiom, ForLoop, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
 /// The kernel's only comparison of terms: equality up to renaming of bound
 /// variables, which the locally nameless representation makes structural, and
@@ -504,7 +505,7 @@ fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
 
 /// Native evaluation of a primitive applied to literals. This is the
 /// implementation that must agree with the `u8` model.
-fn evaluate(prim: Prim, arguments: &[Term]) -> Option<Term> {
+pub(super) fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
     Some(match (prim, arguments) {
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
         (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
@@ -757,7 +758,7 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             let Term::Prim(prim, arguments) = term else {
                 return Err(KernelError::NoComputationStep(term.clone()));
             };
-            let value = evaluate(*prim, arguments)
+            let value = evaluate_primitive(*prim, arguments)
                 .ok_or_else(|| KernelError::NoComputationStep(term.clone()))?;
             let ty = infer_term(ctx, term, Mode::Logical)?;
             Ok(Term::eq(ty, term.clone(), value))
@@ -975,6 +976,77 @@ pub fn infer_proof(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError
             }
             let ty = infer_term(ctx, term, Mode::Logical)?;
             Ok(Term::eq(ty, term.clone(), looped.init.clone()))
+        }
+        Proof::ForStep {
+            looped,
+            lower,
+            upper,
+        } => {
+            let no_step = || KernelError::NoComputationStep(looped.clone());
+            let Term::For(this) = looped else {
+                return Err(no_step());
+            };
+            let Term::Prim(Prim::WrappingAdd, bound) = &this.hi else {
+                return Err(no_step());
+            };
+            let [h, Term::U8(1)] = bound.as_slice() else {
+                return Err(no_step());
+            };
+            let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+            let ty = infer_term(ctx, looped, Mode::Logical)?;
+            check_proof(ctx, lower, &prelude.u8_le_prop(this.lo.clone(), h.clone()))?;
+            check_proof(ctx, upper, &prelude.u8_lt_prop(h.clone(), this.hi.clone()))?;
+            // The loop up to h. Its body is the same term, now read under the
+            // hypothesis i < h; a body whose proofs rely on the old upper
+            // bound does not type-check here, and then there is no step.
+            let previous = Term::For(Box::new(ForLoop {
+                hi: h.clone(),
+                ordered: (**lower).clone(),
+                ..(**this).clone()
+            }));
+            let arguments = [h.clone(), previous];
+            let unrolled = this
+                .body
+                .instantiate(2, |j| arguments[j].clone())
+                .subst_hyps(&[&**lower, &**upper]);
+            match infer_term(ctx, &unrolled, Mode::Logical) {
+                Ok(found) if same_type(&found, &ty) => Ok(Term::eq(ty, looped.clone(), unrolled)),
+                _ => Err(no_step()),
+            }
+        }
+        Proof::Omitted => Err(KernelError::OmittedProof),
+        Proof::Evaluate(term) => {
+            let ty = infer_term(ctx, term, Mode::Logical)?;
+            let definitions = ctx.definitions();
+            if !is_plain_data(&definitions, &ty) {
+                return Err(KernelError::NotPlainData(ty));
+            }
+            let value = Evaluator::new(&definitions).eval(term)?;
+            Ok(Term::eq(ty, term.clone(), value))
+        }
+        Proof::EvaluateAll(body) => {
+            let scope = ctx.len();
+            let var = ctx.push_bound(Type::U8);
+            let typed = expect_type(
+                ctx,
+                &body.open(&Term::Free(var)),
+                &Type::Bool,
+                Mode::Logical,
+            );
+            ctx.truncate(scope);
+            typed?;
+            let definitions = ctx.definitions();
+            // One evaluator for all cases: the step budget covers the whole
+            // claim, not each byte.
+            let mut evaluator = Evaluator::new(&definitions);
+            for byte in 0..=255u8 {
+                let case = body.open(&Term::U8(byte));
+                if evaluator.eval(&case)? != Term::Bool(true) {
+                    return Err(KernelError::Refuted(Term::U8(byte)));
+                }
+            }
+            let claim = Term::eq(Type::Bool, body.clone(), Term::Bool(true));
+            Ok(Term::Forall(Type::U8, Box::new(claim)))
         }
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
         Proof::NatInduction {

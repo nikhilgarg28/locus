@@ -447,6 +447,23 @@ pub enum Proof {
     /// Computation axiom: a `for` over an empty range equals its initial
     /// state.
     ForEmpty(Term),
+    /// Computation axiom: a `for` whose upper bound is `h.wrapping_add(1)`
+    /// equals its body at index `h` applied to the `for` up to `h`. `lower`
+    /// proves `lo <= h` and `upper` proves `h < h.wrapping_add(1)`.
+    ForStep {
+        looped: Term,
+        lower: Box<Proof>,
+        upper: Box<Proof>,
+    },
+    /// A proof the evaluator discarded. It proves nothing: checking it is an
+    /// error. It exists so that evaluation can drop the contents of proofs,
+    /// which it never inspects, without changing the shape of a value.
+    Omitted,
+    /// Big-step evaluation of a closed term whose type is plain data.
+    Evaluate(Term),
+    /// `forall (x: u8) { body == true }`, by evaluating all 256 cases. The
+    /// body binds `Bound(0)`.
+    EvaluateAll(Term),
     /// An axiom of `Nat` or of the `u8` model.
     Axiom(Axiom),
     /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
@@ -512,6 +529,12 @@ pub(super) enum Rebind<'a> {
     OpenHyp {
         index: u32,
         id: HypId,
+    },
+    /// Replace the bound hypothesis `index` binders out with a locally
+    /// closed proof.
+    SubstHyp {
+        index: u32,
+        replacement: &'a Proof,
     },
     CloseHyp(HypId),
 }
@@ -624,6 +647,21 @@ impl Term {
             init,
             body,
         }))
+    }
+
+    /// As `open_hyps`, replacing each hypothesis binder by a proof.
+    pub(super) fn subst_hyps(&self, proofs: &[&Proof]) -> Term {
+        let mut term = self.clone();
+        for (j, replacement) in proofs.iter().enumerate() {
+            term = term.rebind(
+                Depth::default(),
+                Rebind::SubstHyp {
+                    index: (proofs.len() - 1 - j) as u32,
+                    replacement,
+                },
+            );
+        }
+        term
     }
 
     /// Instantiates the hypotheses a term is under: binder `j` of
@@ -1024,6 +1062,12 @@ impl Proof {
         }
     }
 
+    /// Builds `forall (x: u8) { body(x) == true }` by evaluation.
+    pub fn evaluate_all(body: impl FnOnce(Term) -> Term) -> Self {
+        let var = VarId::fresh();
+        Self::EvaluateAll(body(Term::Free(var)).close(var))
+    }
+
     pub fn forall_elim(universal: Proof, argument: Term) -> Self {
         Self::ForallElim(Box::new(universal), argument)
     }
@@ -1104,6 +1148,9 @@ impl Proof {
                 Rebind::OpenHyp { index, id } if *bound == depth.hyps + index => {
                     Self::Hyp(HypRef::Free(id))
                 }
+                Rebind::SubstHyp { index, replacement } if *bound == depth.hyps + index => {
+                    replacement.clone()
+                }
                 _ => self.clone(),
             },
             Self::OfTerm(term) => Self::OfTerm(term.rebind(depth, op)),
@@ -1182,6 +1229,18 @@ impl Proof {
             },
             Self::ExcludedMiddle(prop) => Self::ExcludedMiddle(prop.rebind(depth, op)),
             Self::ForEmpty(term) => Self::ForEmpty(term.rebind(depth, op)),
+            Self::ForStep {
+                looped,
+                lower,
+                upper,
+            } => Self::ForStep {
+                looped: looped.rebind(depth, op),
+                lower: Box::new(lower.rebind(depth, op)),
+                upper: Box::new(upper.rebind(depth, op)),
+            },
+            Self::Omitted => Self::Omitted,
+            Self::Evaluate(term) => Self::Evaluate(term.rebind(depth, op)),
+            Self::EvaluateAll(body) => Self::EvaluateAll(body.rebind(depth.under_vars(1), op)),
             Self::Axiom(axiom) => Self::Axiom(axiom.map(|term| term.rebind(depth, op))),
             Self::NatInduction {
                 motive,
