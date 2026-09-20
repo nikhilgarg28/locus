@@ -451,6 +451,14 @@ impl Definitions {
         self.fns.get(id.0).is_some_and(|decl| decl.executable)
     }
 
+    /// A declared function's arity and body, for an interpreter. The body is
+    /// under one binder per parameter: the last parameter is `Bound(0)`.
+    pub fn function_body(&self, id: FnId) -> Option<(usize, &Term)> {
+        self.fns
+            .get(id.0)
+            .map(|decl| (decl.params.len(), &decl.body))
+    }
+
     pub(super) fn enum_variants(&self, id: EnumId) -> Option<&[Vec<Type>]> {
         self.enums.get(id.0).map(|decl| decl.variants.as_slice())
     }

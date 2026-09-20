@@ -96,6 +96,11 @@ impl Program {
         &mut self.definitions
     }
 
+    /// A declared function, for an interpreter.
+    pub fn function(&self, id: ExecFnId) -> Option<&ExecFn> {
+        self.fns.get(id.0)
+    }
+
     /// The signature of a declared function.
     pub fn signature(&self, id: ExecFnId) -> Option<&Type> {
         self.fns.get(id.0).map(|function| &function.signature)

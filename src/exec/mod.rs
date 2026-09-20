@@ -7,7 +7,9 @@
 //! the kernel statements of specification section 6.3. It is trusted.
 
 mod check;
+mod interp;
 mod ir;
 
 pub use check::{ExecError, Program};
+pub use interp::CheckInterpreter;
 pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Stmt, Tail};
