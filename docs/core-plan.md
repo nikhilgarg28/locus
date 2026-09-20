@@ -22,6 +22,34 @@ The target is the fragment in [the core language specification](core-language-sp
 
 Diagnostics are part of each batch: preserve requirement origins, report Locus-level goals, distinguish failed search from refutation, test errors and any machine-applicable fixes. Recovery nodes support diagnostics only; any error prevents successful compilation.
 
+## What this milestone is for, and how it will be judged
+
+The central promise is that someone can write familiar code, state meaningful facts about it, and get understandable help establishing them. The kernel is a foundation for that; the experience from source to executable is what decides whether the language succeeds. Until that has been tested, the core feature set holds steady.
+
+**The test.** One polished end-to-end example: source code for a small bounded state machine; a result that carries evidence; a caller that reuses that evidence; useful diagnostics for an intentional mistake; and matching interpreted and generated behavior. Everything between here and there serves that example.
+
+**Boundaries to protect.**
+
+- Dependency is restricted to propositions. A value may change what a later proof field asserts and never the runtime layout. Dependent results, validated data, and loop invariants all rest on this one mechanism. A new feature must earn its place inside the boundary before the type system is widened.
+- Loop invariants are evidence in loop state: initialization supplies it, and each iteration supplies it again.
+- Ghost data is part of the logical value, so two logical values can share a runtime representation. That is kept, and it will resurface in equality, serialization, mutation, and foreign interfaces. Each future expansion of ghost data must come with a concrete use case.
+- This milestone is a language for verified immutable computation. Ownership, aliasing, destruction, and mutation raise questions it cannot answer, above all which state a proof describes after another reference changes storage. Before promising broad Rust compatibility, test the extension with one narrow borrowing-and-mutation example.
+
+**Acceptance criteria for the proof-writing experience.** The hand-built proofs so far show that the rules compose, not that the `let`-based surface is pleasant. Removing normalization from the kernel moved work into elaboration: projection, substitution, unfolding, and equality transport still have to happen somewhere, and if users must repair them by hand, friendly syntax will not save the experience.
+
+- Routine rearrangements, such as introducing a local variable, destructuring a tuple, or extracting a helper, require little or no proof repair when the interfaces involved stay equivalent.
+- An unsolved `_` shows the expected claim, the useful facts available, and the remaining gap.
+
+Both are to be exercised by the first integrated examples, not deferred to a tooling milestone.
+
+**Measure before large proofs are normal.** Predictable checking is not the same as fast compilation, and making every computation step explicit can produce a great deal of evidence. Track separately: time spent constructing proofs; the size of the resulting proof terms; time and memory spent checking them; and the cost of rechecking after a small edit. Checked lemma reuse and stable interfaces will matter early. Do not optimize the representation before there are numbers.
+
+**Preferences, not constraints.**
+
+- Generated Rust resembling the source is a strong preference. Temporary bindings and modest structural changes are acceptable where they make evaluation order or the correctness of erasure simpler.
+- `Proved` and `Ghost` are internal representations. They do not dictate the eventual public Rust interface.
+- The typed tree's two branches keep the output readable at a real cost in trust: a sound kernel cannot establish that the checked program and the executed program agree. Differential testing of the two branches is the next step for exactly that reason.
+
 ## Order of work
 
 The batch table above groups the work by topic. The order in which it is done is different: the kernel comes first, from hand-written terms, and the frontend is realigned last, against a kernel interface that has already survived the hard examples. The next milestone is a working, deliberately small checker, not a larger specification.
