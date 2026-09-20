@@ -29,6 +29,7 @@ pub use context::{Checkpoint, Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
 pub use depth::MAX_DEPTH;
 pub use error::KernelError;
+pub use eval::MAX_EVAL_DEPTH;
 pub use nat::Natural;
 pub use term::{
     ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,

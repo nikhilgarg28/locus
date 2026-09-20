@@ -78,6 +78,8 @@ pub enum KernelError {
     TooDeep,
     /// A placeholder left by the evaluator was offered as a proof.
     OmittedProof,
+    /// Evaluation nested more deeply than the kernel allows.
+    EvaluationTooDeep,
     /// Evaluation needs a term with no free variables.
     NotClosed(Term),
     /// Evaluation offers only results that are plain data.
@@ -173,6 +175,9 @@ impl fmt::Display for KernelError {
             Self::DuplicateBinding => f.write_str("the identity is already bound in this context"),
             Self::TooDeep => f.write_str("input is nested more deeply than the kernel accepts"),
             Self::OmittedProof => f.write_str("an omitted proof proves nothing"),
+            Self::EvaluationTooDeep => {
+                f.write_str("evaluation nested more deeply than the kernel allows")
+            }
             Self::NotClosed(term) => write!(f, "evaluation met the free variable {term}"),
             Self::NotPlainData(ty) => {
                 write!(f, "evaluation offers only plain data, and {ty} is not")

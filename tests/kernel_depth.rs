@@ -83,3 +83,51 @@ fn deeper_input_is_rejected_before_any_recursion() {
         Err(KernelError::TooDeep)
     );
 }
+
+/// `count` functions, each two nodes deep, each calling the one before.
+fn call_chain(count: usize) -> (Definitions, Term) {
+    let mut definitions = Definitions::new();
+    let signature = Type::function(0, |_| Type::U8);
+    let mut previous = definitions.declare_fn(&signature, |_| Term::U8(0)).unwrap();
+    for _ in 0..count {
+        previous = definitions
+            .declare_fn(&signature, |_| {
+                Term::wrapping_add(Term::call(Term::Fn(previous), vec![]), Term::U8(1))
+            })
+            .unwrap();
+    }
+    (definitions, Term::call(Term::Fn(previous), vec![]))
+}
+
+#[test]
+fn evaluation_depth_is_bounded_independently_of_input_depth() {
+    use locus::kernel::MAX_EVAL_DEPTH;
+    use std::rc::Rc;
+    // A thousand small functions: every input is shallow, but evaluating the
+    // last one nests through all of them. This must be an error, not a
+    // stack overflow.
+    let (definitions, last) = call_chain(1000);
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    assert_eq!(
+        infer_proof(&mut ctx, &Proof::Evaluate(last)),
+        Err(KernelError::EvaluationTooDeep)
+    );
+
+    // A chain that fits evaluates, even when the evaluation begins at the
+    // bottom of a proof nested nearly as deeply as input may be: the two
+    // share one stack.
+    let fits = MAX_EVAL_DEPTH / 2 - 2;
+    let (definitions, last) = call_chain(fits);
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    let value = Term::U8((fits % 256) as u8);
+    let goal = Term::eq(Type::U8, last.clone(), value);
+    let wrapped = (0..MAX_DEPTH - 16).fold(Proof::Evaluate(last.clone()), |proof, _| {
+        let left = last.clone();
+        Proof::transport(
+            Proof::Refl(Term::U8(0)),
+            |_| Term::eq(Type::U8, left.clone(), Term::U8((fits % 256) as u8)),
+            proof,
+        )
+    });
+    assert_eq!(check_proof(&mut ctx, &wrapped, &goal), Ok(()));
+}

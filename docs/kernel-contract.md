@@ -274,7 +274,7 @@ Proofs are never evaluated. The evaluator replaces each `proof(p)` it meets by `
 
 A failing case of `evaluate_all` is reported with the byte that refutes it. With `reflect`, a proved `forall (x: u8) { u8_le(x, 255) == true }` becomes a fact about the ordering of any byte.
 
-The budget is 2,000,000 evaluation steps, counted in steps and never in time, so that acceptance does not depend on the machine. Exceeding it is an error distinct from refutation.
+Evaluation has two budgets, both counted and neither timed, so that acceptance does not depend on the machine: 2,000,000 steps, and a nesting depth of 200. Exceeding either is an error distinct from refutation. The depth budget exists because a call evaluates the callee's body: a chain of a thousand small functions, each calling the next, is shallow as input and a thousand levels deep to evaluate, which would otherwise exhaust the stack long before the step budget. Iterations of a `for` run one after another, so a long loop costs steps and not depth. Measured in an unoptimized build on a 2 MiB thread stack, evaluation alone nests 500 levels in every shape tried and overflows at 700 in the worst; the bound is well under half of that because evaluation can begin at the bottom of a proof that is itself nested up to the input depth bound, and the two share one stack. A test does exactly that.
 
 ### Nat
 
@@ -384,7 +384,7 @@ The bound is on input. A term built by substitution during checking can be deepe
 
 Symmetry, transitivity, and congruence of equality are not rules. They are derived from `refl` and `transport`, and `tests/kernel.rs` derives each of them.
 
-All six kernel gates are implemented, and the gaps recorded when they were finished are closed. What remains, each noted where it arises above: `for_step` has no step for a body whose proofs depend on the particular upper bound; the derived forms do not reach inside a declared proposition's arguments or under a binder in an implication's premise; the depth bound covers input, not terms produced by substitution; and there is no transport between types, which nothing has needed so far because a dependent product can be rebuilt field by field.
+All six kernel gates are implemented, and the gaps recorded when they were finished are closed. What remains, each noted where it arises above: the evaluator is recursive and bounded by a depth budget rather than written with an explicit stack, so a legitimate computation nested more than 200 deep is refused; `for_step` has no step for a body whose proofs depend on the particular upper bound; the derived forms do not reach inside a declared proposition's arguments or under a binder in an implication's premise; the depth bound covers input, not terms produced by substitution; and there is no transport between types, which nothing has needed so far because a dependent product can be rebuilt field by field.
 
 One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2 was built the kernel had no `!=`, which needs `False` from K4, so the test uses a struct whose proof field is an equation, `a.wrapping_add(b) == 10`, to the same effect.
 
