@@ -9,15 +9,22 @@ the projects and tasks. This tool is for working on it outside a browser.
     python3 tools/atlas.py put NAME FILE      replace a document's text ("-" reads standard input)
     python3 tools/atlas.py dump DIR           write every document, and the roadmap, as markdown files
     python3 tools/atlas.py tasks              the projects and their tasks
+    python3 tools/atlas.py serve [PORT]       open the atlas from a local address, where it can save
+                                              itself as changes are made, in any browser
+
+Add --file PATH to work on a copy other than atlas.html, and --no-open to serve without opening a browser.
 
 Only the data block of atlas.html is rewritten, in the layout the page itself
 saves, and its revision is raised so that an open page notices the change.
 """
 import datetime
+import http.server
 import json
+import os
 import pathlib
 import re
 import sys
+import webbrowser
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ATLAS = ROOT / "atlas.html"
@@ -67,9 +74,85 @@ def roadmap(data):
     return "\n".join(lines).rstrip() + "\n"
 
 
+def revision_of(text):
+    match = BLOCK.search(text)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(2))["meta"]["rev"]
+    except (ValueError, KeyError):
+        return None
+
+
+def serve(port, open_browser):
+    """Serves the atlas on this machine only, and writes what the page sends back."""
+    allowed_hosts = {"localhost:%d" % port, "127.0.0.1:%d" % port}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def reply(self, status, body, kind="application/json"):
+            data = body.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", kind + "; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def ours(self):
+            # A page on another site cannot set this header without asking first, and is not answered.
+            return self.headers.get("Host") in allowed_hosts and self.headers.get("X-Atlas") == "1"
+
+        def do_GET(self):
+            path = self.path.split("?")[0]
+            if path == "/":
+                self.send_response(302)
+                self.send_header("Location", "/atlas.html")
+                self.end_headers()
+            elif path == "/atlas.html":
+                self.reply(200, ATLAS.read_text(encoding="utf-8"), "text/html")
+            elif path == "/__atlas/info" and self.ours():
+                self.reply(200, json.dumps({"atlas": True, "rev": revision_of(ATLAS.read_text(encoding="utf-8"))}))
+            else:
+                self.reply(404, "{}")
+
+        def do_POST(self):
+            if self.path != "/__atlas/save" or not self.ours():
+                return self.reply(404, "{}")
+            text = self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode("utf-8")
+            rev = revision_of(text)
+            if rev is None or not text.startswith("<!DOCTYPE html>"):
+                return self.reply(400, "this is not an atlas")
+            scratch = ATLAS.with_name(ATLAS.name + ".saving")
+            scratch.write_text(text, encoding="utf-8")
+            os.replace(scratch, ATLAS)
+            self.reply(200, json.dumps({"rev": rev}))
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    address = "http://localhost:%d/atlas.html" % port
+    print("serving %s at %s (Ctrl+C to stop)" % (ATLAS, address))
+    if open_browser:
+        webbrowser.open(address)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
+    global ATLAS
     args = sys.argv[1:]
+    if "--file" in args:
+        at = args.index("--file")
+        ATLAS = pathlib.Path(args[at + 1]).resolve()
+        del args[at:at + 2]
+    open_browser = "--no-open" not in args
+    args = [a for a in args if a != "--no-open"]
     command = args[0] if args else "list"
+    if command == "serve":
+        return serve(int(args[1]) if len(args) > 1 else 8765, open_browser)
     text, match, data = load()
     if command == "list":
         for doc in data["docs"]:

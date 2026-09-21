@@ -111,7 +111,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
 .menu-btn{display:none}
 @media (max-width:900px){
   #app{grid-template-columns:1fr} .side{position:fixed;z-index:40;width:280px;left:-300px;transition:left .2s;box-shadow:var(--shadow)} .side.open{left:0}
-  main{padding:18px 16px 70px} .doc{grid-template-columns:1fr} .toc{display:none} .grid.c2,.grid.c3{grid-template-columns:1fr} .editor{grid-template-columns:1fr;height:auto} .editor textarea{height:50vh} .editor .preview{max-height:50vh}
+  main{padding:58px 16px 70px} .doc{grid-template-columns:1fr} .toc{display:none} .grid.c2,.grid.c3{grid-template-columns:1fr} .editor{grid-template-columns:1fr;height:auto} .editor textarea{height:50vh} .editor .preview{max-height:50vh}
   .menu-btn{display:inline-flex;position:fixed;top:10px;right:12px;z-index:45} .board{grid-template-columns:repeat(4,260px)}
 }
 @media print{.side,.edit-sec,.toc,.menu-btn{display:none!important} #app{display:block} main{padding:0}}
@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 5,
-  "savedAt": "2026-09-21T19:41:53.000Z",
+  "rev": 7,
+  "savedAt": "2026-09-21T19:50:25.000Z",
   "nextTask": 86,
   "nextId": 179,
   "taskPrefix": "LOC"
@@ -5046,8 +5046,9 @@ const projectById = id => DB.projects.find(p => p.id === id);
 const taskKey = t => DB.meta.taskPrefix + '-' + t.n;
 
 function touch() {
-  dirty = true;
+  dirty = true; changes += 1;
   renderSaveState();
+  scheduleAutosave();
   clearTimeout(touch.timer);
   touch.timer = setTimeout(() => {
     try { localStorage.setItem('locus-atlas-draft', JSON.stringify({rev: baseRev, at: now(), data: serialize(DB)})); } catch (e) { /* storage may be unavailable */ }
@@ -5079,38 +5080,84 @@ function revisionOf(text) {
   if (start < 0 || end < 0) return null;
   try { return JSON.parse(text.slice(start + FILE_2.length, end)).meta.rev; } catch (e) { return null; }
 }
-async function save() {
-  const previous = {rev: DB.meta.rev, savedAt: DB.meta.savedAt};
+// Two ways to write the file without asking each time: through `tools/atlas.py serve`, which
+// works in any browser, or through a file handle the browser was given once.
+let serverMode = false, handleReady = false, saving = false, changes = 0, conflict = null, autosaveError = '';
+let autosaveOn = true;
+try { autosaveOn = localStorage.getItem('locus-atlas-autosave') !== 'off'; } catch (e) { /* ignore */ }
+const SERVER = {headers: {'X-Atlas': '1'}, cache: 'no-store'};
+const canWrite = () => serverMode || (fileHandle && handleReady);
+async function revisionOnDisk() {
+  if (serverMode) return (await (await fetch('/__atlas/info', SERVER)).json()).rev;
+  if (fileHandle) return revisionOf(await (await fileHandle.getFile()).text());
+  return null;
+}
+async function writeFile(text) {
+  if (serverMode) {
+    const r = await fetch('/__atlas/save', {method: 'POST', headers: {'X-Atlas': '1', 'Content-Type': 'text/html'}, body: text});
+    if (!r.ok) throw new Error('the server answered ' + r.status + ' ' + (await r.text()));
+    return;
+  }
+  const w = await fileHandle.createWritable(); await w.write(text); await w.close();
+}
+async function prepare() {
   try {
-    if (window.showSaveFilePicker) {
-      if (!fileHandle) { try { fileHandle = await idb('readonly', s => s.get('handle')); } catch (e) { fileHandle = null; } }
-      if (fileHandle && (await fileHandle.requestPermission({mode: 'readwrite'})) !== 'granted') fileHandle = null;
-      if (!fileHandle) {
-        fileHandle = await window.showSaveFilePicker({suggestedName: 'atlas.html', types: [{description: 'HTML', accept: {'text/html': ['.html']}}]});
-        try { await idb('readwrite', s => s.put(fileHandle, 'handle')); } catch (e) { /* remembered for this session only */ }
-      }
-      // Something else may have written the file since this page read it.
-      const onDisk = revisionOf(await (await fileHandle.getFile()).text());
-      if (onDisk != null && onDisk !== baseRev && !confirm('The file on disk has changed since this page loaded it: it is at revision ' + onDisk + ', and this page started from revision ' + baseRev + '. Saving now replaces what is on disk. Reload the page instead to see those changes.\n\nSave anyway?')) return;
-      DB.meta.rev = Math.max(DB.meta.rev, onDisk || 0) + 1; DB.meta.savedAt = now();
-      const w = await fileHandle.createWritable(); await w.write(buildFile()); await w.close();
-      toast('Saved to ' + fileHandle.name);
-    } else {
-      DB.meta.rev += 1; DB.meta.savedAt = now();
-      const text = buildFile();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([text], {type: 'text/html'})); a.download = 'atlas.html';
-      document.body.appendChild(a); a.click(); a.remove();
-      toast('Downloaded atlas.html. Replace the old file with it.');
-    }
-    dirty = false; baseRev = DB.meta.rev;
-    try { localStorage.removeItem('locus-atlas-draft'); } catch (e) { /* ignore */ }
-  } catch (e) {
-    DB.meta.rev = previous.rev; DB.meta.savedAt = previous.savedAt;
-    if (e && e.name !== 'AbortError') toast('Could not save: ' + e.message);
+    if (/^http/.test(location.protocol)) { const r = await fetch('/__atlas/info', SERVER); serverMode = r.ok && (await r.json()).atlas === true; }
+  } catch (e) { serverMode = false; }
+  if (!serverMode && window.showSaveFilePicker) {
+    try {
+      fileHandle = await idb('readonly', s => s.get('handle'));
+      handleReady = !!fileHandle && (await fileHandle.queryPermission({mode: 'readwrite'})) === 'granted';
+    } catch (e) { fileHandle = null; }
   }
   renderSaveState();
 }
+// manual: the person asked for it, so the browser may be asked for the file and questions may be put.
+// Otherwise this is autosave, which writes only when it can do so silently.
+async function save(manual) {
+  if (saving) return;
+  if (!manual && (!autosaveOn || !dirty || conflict != null || !canWrite())) return;
+  saving = true;
+  const previous = {rev: DB.meta.rev, savedAt: DB.meta.savedAt}, started = changes;
+  try {
+    if (!serverMode) {
+      if (!window.showSaveFilePicker) {
+        DB.meta.rev += 1; DB.meta.savedAt = now();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([buildFile()], {type: 'text/html'})); a.download = 'atlas.html';
+        document.body.appendChild(a); a.click(); a.remove();
+        toast('Downloaded atlas.html. Replace the old file with it.');
+        dirty = false; baseRev = DB.meta.rev; return;
+      }
+      if (fileHandle && !handleReady) handleReady = (await fileHandle.requestPermission({mode: 'readwrite'})) === 'granted';
+      if (!fileHandle || !handleReady) {
+        fileHandle = await window.showSaveFilePicker({suggestedName: 'atlas.html', types: [{description: 'HTML', accept: {'text/html': ['.html']}}]});
+        handleReady = true;
+        try { await idb('readwrite', s => s.put(fileHandle, 'handle')); } catch (e) { /* remembered for this session only */ }
+      }
+    }
+    // Something else may have written the file since this page read it.
+    const onDisk = await revisionOnDisk();
+    if (onDisk != null && onDisk !== baseRev) {
+      if (!manual) { conflict = onDisk; return; }
+      if (!confirm('The file on disk has changed since this page loaded it: it is at revision ' + onDisk + ', and this page started from revision ' + baseRev + '. Saving now replaces what is on disk. Reload the page instead to see those changes.\n\nSave anyway?')) return;
+    }
+    DB.meta.rev = Math.max(DB.meta.rev, onDisk || 0) + 1; DB.meta.savedAt = now();
+    await writeFile(buildFile());
+    baseRev = DB.meta.rev; conflict = null; autosaveError = '';
+    dirty = changes !== started;
+    if (!dirty) { try { localStorage.removeItem('locus-atlas-draft'); } catch (e) { /* ignore */ } }
+    if (manual) toast(serverMode ? 'Saved' : 'Saved to ' + fileHandle.name);
+  } catch (e) {
+    DB.meta.rev = previous.rev; DB.meta.savedAt = previous.savedAt;
+    if (e && e.name !== 'AbortError') { if (manual) toast('Could not save: ' + e.message); else autosaveError = e.message; }
+  } finally {
+    saving = false;
+    renderSaveState();
+    if (dirty) scheduleAutosave();
+  }
+}
+function scheduleAutosave() { clearTimeout(scheduleAutosave.timer); scheduleAutosave.timer = setTimeout(() => save(false), 1200); }
 function draft() {
   try {
     const d = JSON.parse(localStorage.getItem('locus-atlas-draft') || 'null');
@@ -5262,8 +5309,25 @@ function modal(html) { closeModal(); const m = document.createElement('div'); m.
 function closeModal() { const m = $('#modal'); if (m) m.remove(); }
 function renderSaveState() {
   const el = $('#save-state'); if (!el) return;
-  el.className = 'state' + (dirty ? ' dirty' : '');
-  el.textContent = dirty ? 'Unsaved changes' : (DB.meta.savedAt ? 'Saved ' + ago(DB.meta.savedAt) + ', revision ' + DB.meta.rev : 'Not saved from the browser yet');
+  let text, cls = 'state';
+  if (conflict != null) { cls += ' dirty'; text = 'The file changed on disk (revision ' + conflict + '). Autosave is paused: reload the page to see those changes, or press Save file to replace them.'; }
+  else if (saving) text = 'Saving';
+  else if (dirty) { cls += ' dirty'; text = autosaveError ? 'Not saved: ' + autosaveError : 'Unsaved changes'; }
+  else text = DB.meta.savedAt ? 'Saved ' + ago(DB.meta.savedAt) + ', revision ' + DB.meta.rev : 'Not saved yet';
+  el.className = cls; el.textContent = text;
+  // The sidebar may be folded away, so a paused autosave is also said at the top of the page.
+  let note = $('#conflict-note');
+  if (conflict == null) { if (note) note.remove(); }
+  else if (!note && $('#main')) {
+    note = document.createElement('div'); note.id = 'conflict-note'; note.className = 'banner';
+    note.innerHTML = '<span>The file changed on disk since this page loaded it, so autosave is paused. Reload to see those changes, which loses what was changed here since the last save, or save over what is on disk.</span><span class="row"><button class="btn small primary" data-act="reload">Reload</button><button class="btn small" data-act="save">Save over it</button></span>';
+    $('#main').prepend(note);
+  }
+  const hint = $('#autosave-hint'); if (!hint) return;
+  const box = $('#autosave'); if (box) box.checked = autosaveOn;
+  hint.textContent = !autosaveOn ? '' : canWrite() ? (serverMode ? 'Changes are written to the file as you make them.' : 'Changes are written to ' + fileHandle.name + ' as you make them.')
+    : window.showSaveFilePicker ? 'Starts after one press of Save file, which shows the browser where the file is.'
+    : 'This browser cannot write the file itself. Run python3 tools/atlas.py serve and open the page from there.';
 }
 function pill(table, id, color) { return '<span class="pill" style="--c:var(--' + (color || id) + ')">' + esc(label(table, id)) + '</span>'; }
 function stackedBar(table, counts) {
@@ -5302,6 +5366,7 @@ function renderShell() {
           DB.docs.filter(d => (d.group || 'Docs') === g).map(d => '<a href="#/doc/' + d.id + '"' + on((r[0] === 'doc' || r[0] === 'edit') && r[1] === d.id) + '>' + esc(d.title) + '</a>').join('')).join('') +
       '</nav>' +
       '<div class="savebox"><div id="save-state" class="state"></div>' +
+        '<label class="tiny"><input type="checkbox" id="autosave" data-change="autosave"> Autosave</label><div id="autosave-hint" class="tiny muted"></div>' +
         '<div class="row"><button class="btn primary" data-act="save">Save file</button><button class="btn ghost small" data-act="theme">Theme</button><button class="btn ghost small" data-act="help">Help</button></div></div>' +
     '</aside>' +
     '<main id="main"></main><button class="btn menu-btn" data-act="menu">Menu</button>';
@@ -5323,6 +5388,7 @@ function render() {
   else main.innerHTML = banner + viewHome();
   if (r[0] === 'doc' && r[2]) { const t = document.getElementById('h-' + r[2]); if (t) t.scrollIntoView(); } else if (r[0] !== 'edit') window.scrollTo(0, 0);
   if (r[0] === 'edit') wireEditor();
+  renderSaveState();
 }
 
 // ---------------------------------------------------------------- home
@@ -5532,11 +5598,11 @@ function viewSearch(q) {
 // ---------------------------------------------------------------- events
 const val = id => { const e = document.getElementById(id); return e ? e.value : ''; };
 const HELP = '<h2>How this file works</h2><div class="md"><p>Everything is inside this one HTML file: the documents, the language status table, the projects and tasks, and the program that shows them. Nothing is sent anywhere.</p>' +
-  '<p><strong>Saving.</strong> Press Save file, or Cmd/Ctrl+S. In Chrome, Edge and Arc the first save asks where the file is; choose this file, and later saves write to it directly. In other browsers a new copy is downloaded, to put in place of the old one. Unsaved edits are also kept in the browser, and offered back if the page is closed before saving.</p>' +
+  '<p><strong>Saving.</strong> With Autosave on, every change is written to the file a moment after it is made. There are two ways the page can write the file. Opened from <code>python3 tools/atlas.py serve</code>, it writes through that program, in any browser, with nothing to set up. Opened directly in Chrome, Edge or Arc, press Save file once and choose this file; from then on the page writes to it, and the browser may remember the permission for next time. In other browsers, opened directly, Save file downloads a copy to put in place of the old one. Cmd/Ctrl+S saves at once. Unsaved edits are also kept in the browser and offered back if the page is closed before they are written.</p>' +
   '<p><strong>One copy.</strong> The documents live only here. <code>python3 tools/atlas.py</code> reads and writes them from the command line: <code>list</code>, <code>show NAME</code>, <code>put NAME FILE</code>, and <code>dump DIR</code> to write them all out as markdown for reading elsewhere. If the file changes on disk while this page is open, saving says so before replacing it.</p>' +
   '<p><strong>Keys.</strong> <code>/</code> search, Cmd/Ctrl+S save, Esc close.</p></div><div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Close</button></div>';
 const ACTIONS = {
-  save, close: closeModal,
+  save: () => save(true), close: closeModal, reload: () => { dirty = false; location.reload(); },
   menu: () => $('#side').classList.toggle('open'),
   theme: () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; try { localStorage.setItem('locus-atlas-theme', next); } catch (e) { /* ignore */ } },
   help: () => modal(HELP),
@@ -5602,6 +5668,7 @@ document.addEventListener('change', e => {
   if (el.dataset.change === 'feature-status') { const f = DB.features.find(x => x.id === el.dataset.id); f.status = el.value; f.updated = now(); touch(); render(); }
   if (el.dataset.change === 'board-project') { boardProject = el.value; render(); }
   if (el.dataset.change === 'board-canceled') { showCanceled = el.checked; render(); }
+  if (el.dataset.change === 'autosave') { autosaveOn = el.checked; try { localStorage.setItem('locus-atlas-autosave', autosaveOn ? 'on' : 'off'); } catch (err) { /* ignore */ } renderSaveState(); if (autosaveOn) scheduleAutosave(); }
 });
 document.addEventListener('input', e => {
   if (e.target.dataset.input !== 'board-text') return;
@@ -5615,7 +5682,7 @@ document.addEventListener('submit', e => {
   addTask({title, project: form.dataset.project}); render(); const f = $('.quick input'); if (f) f.focus();
 });
 document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (route()[0] === 'edit') applyEdit(); save(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (route()[0] === 'edit') applyEdit(); save(true); return; }
   if (e.key === 'Escape') return closeModal();
   if (e.key === 'Enter' && e.target.id === 'q') return go('#/search/' + encodeURIComponent(e.target.value));
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) { e.preventDefault(); const q = $('#q'); if (q) q.focus(); }
@@ -5638,6 +5705,7 @@ document.title = DB.meta.title;
 // For checking from the console that what would be saved is what is expected.
 window.__atlas = {buildFile, data: () => DB};
 render();
+prepare();
 })();
 </script>
 </body>

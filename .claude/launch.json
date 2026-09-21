@@ -4,7 +4,12 @@
     {
       "name": "atlas",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1"],
+      "runtimeArgs": [
+        "tools/atlas.py",
+        "serve",
+        "8765",
+        "--no-open"
+      ],
       "port": 8765
     }
   ]

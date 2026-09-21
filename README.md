@@ -11,7 +11,7 @@ fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
 }
 ```
 
-**Everything else is in [atlas.html](atlas.html).** Open it in a browser: it holds the design notes, the language specification, the architecture, the kernel contract, a table of what is built and what is left, and the projects and tasks, and it is where they are edited. `python3 tools/atlas.py` reads and writes the same documents from the command line.
+**Everything else is in [atlas.html](atlas.html).** Open it in a browser: it holds the design notes, the language specification, the architecture, the kernel contract, a table of what is built and what is left, and the projects and tasks, and it is where they are edited. `python3 tools/atlas.py serve` opens it from a local address, where it saves itself as changes are made, in any browser; the same tool reads and writes the documents from the command line.
 
 ```sh
 cargo run -- check examples/lock.lc --holes    # types and proofs; every `_` and how it was filled
