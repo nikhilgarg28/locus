@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 24,
-  "savedAt": "2026-09-21T21:57:33.000Z",
+  "rev": 25,
+  "savedAt": "2026-09-21T22:03:29.000Z",
   "nextTask": 151,
   "nextId": 266,
   "taskPrefix": "LOC",
@@ -3099,7 +3099,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- What Rust sees takes no evidence. It takes plain data and checks it at runtime, returning an Option or a Result, or it takes a validated type, one whose fields are private and whose every constructor Rust can reach validates. Returning evidence to Rust is harmless once nothing Rust can call accepts any.",
     "- Proved and Ghost still have no public constructor. That stops casual misuse and is no part of the guarantee.",
     "",
-    "How a function is marked visible to Locus and not to Rust is open (LOC-150).",
+    "Visibility uses Rust's own restricted forms, pub(super), pub(in path), and pub(crate), and one checked rule: a function that takes evidence may be visible no further than the root of the generated modules. Plain pub means exported to Rust, and on a function that takes evidence it is an error that offers the two ways out, a narrower visibility or a validated type. In a crate that mixes Locus and hand-written Rust the programmer writes pub(in crate::verified), or pub(super) when the modules are siblings under the generated root; in a crate that is all Locus, pub(crate) is already right. Every spelling means what it means in Rust, and the surface Rust sees is what is marked plain pub. Not covered yet: one Locus crate calling the evidence-taking functions of another, for which Rust has no visibility; that waits for packages.",
     "",
     "Plan: LOC-137, LOC-135, LOC-19.",
     "",
@@ -3134,7 +3134,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:51:51.000Z"
+   "updated": "2026-09-21T22:03:29.000Z"
   },
   {
    "id": "target-examples",
@@ -6270,12 +6270,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t265",
    "n": 150,
    "title": "Decide how a function is marked visible to other Locus modules but not exported to Rust",
-   "status": "todo",
+   "status": "done",
    "priority": 2,
    "project": "p89",
-   "notes": "Target language: What is generated. Rust's pub(crate) would let hand-written Rust in the same crate call it, so it does not serve. Either the signature decides (a pub function that takes evidence is emitted visible to generated modules only), or there is an explicit spelling.\n\nProposal (21 September): no new syntax. Rust already has restricted visibility: pub(super), pub(in path), pub(crate). One checked rule does the work: a function that takes evidence may be visible no further than the root of the generated modules. Plain pub on such a function is an error that says so and offers the two ways out, a narrower visibility or a validated type. In a crate that mixes Locus and hand-written Rust the programmer writes pub(in crate::verified), or pub(super) when the modules are siblings under a generated root; in a crate that is all Locus, pub(crate) is already right. Every spelling means what it means in Rust. Not covered: one Locus crate calling evidence-taking functions of another. Rust has no visibility meaning \"generated code in other crates\", so that would rest on a hidden name and a convention, as serde's __private does, and on locus audit. Alternatives considered: inferring it from the signature (implicit, and a small change to a signature would silently change what is exported); an #[export] attribute with pub meaning less than it does in Rust; and pub(locus), which is not Rust syntax.",
+   "notes": "Decided 21 September: Rust's restricted visibility, with one checked rule. Target language: What is generated.\n\nTarget language: What is generated. Rust's pub(crate) would let hand-written Rust in the same crate call it, so it does not serve. Either the signature decides (a pub function that takes evidence is emitted visible to generated modules only), or there is an explicit spelling.\n\nProposal (21 September): no new syntax. Rust already has restricted visibility: pub(super), pub(in path), pub(crate). One checked rule does the work: a function that takes evidence may be visible no further than the root of the generated modules. Plain pub on such a function is an error that says so and offers the two ways out, a narrower visibility or a validated type. In a crate that mixes Locus and hand-written Rust the programmer writes pub(in crate::verified), or pub(super) when the modules are siblings under a generated root; in a crate that is all Locus, pub(crate) is already right. Every spelling means what it means in Rust. Not covered: one Locus crate calling evidence-taking functions of another. Rust has no visibility meaning \"generated code in other crates\", so that would rest on a hidden name and a convention, as serde's __private does, and on locus audit. Alternatives considered: inferring it from the signature (implicit, and a small change to a signature would silently change what is exported); an #[export] attribute with pub meaning less than it does in Rust; and pub(locus), which is not Rust syntax.",
    "created": "2026-09-21T21:51:51.000Z",
-   "updated": "2026-09-21T21:57:33.000Z"
+   "updated": "2026-09-21T22:03:29.000Z"
   }
  ]
 }
