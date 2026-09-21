@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 19,
-  "savedAt": "2026-09-21T21:35:37.000Z",
-  "nextTask": 147,
-  "nextId": 262,
+  "rev": 20,
+  "savedAt": "2026-09-21T21:40:52.000Z",
+  "nextTask": 149,
+  "nextId": 264,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -2890,8 +2890,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "What Locus adds to Rust, in full, so that the list can be kept short:",
     "",
     "- Tokens: none. Every token Locus uses is a token of Rust, which is what keeps a locus! { ... } macro possible. One case needs care there: Rust reads pair.0.1 as a name, a dot, and the number 0.1, and splits it while parsing.",
-    "- Words: forall and exists are reserved by Locus, and prop is a keyword only where a declaration can begin. math goes when promises replace math fn. Every keyword of Rust is reserved as well. Int, Prop, Seq, and Ghost are names of types, and prove!, old!, recurse!, and the rest are names of forms, none of them keywords. Whether forall and exists need to be keywords is open (LOC-146).",
-    "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @(out == n)), with each name in scope in the fields after it; => as implication inside a formula; the quantifiers; declarations of propositions, including a variant that states which proposition it proves; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
+    "- Words: prop, a keyword only where a declaration can begin, and whether even that is needed is open (LOC-148). math goes when promises replace math fn. Every keyword of Rust is reserved. Int, Prop, Seq, and Ghost are names of types, forall and exists are names of functions of the logic, and prove!, old!, recurse!, and the rest are names of forms; none of these are keywords.",
+    "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @(out == n)), with each name in scope in the fields after it; => as implication inside a formula; declarations of propositions, including a variant that states which proposition it proves; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
     "- Attributes: the promises and derive. An attribute's contents are free-form in Rust.",
     "",
     "The loop with a state list, continue with arguments, and the for with a state list were additions of the same kind, and go when let mut arrives.",
@@ -2904,7 +2904,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Evidence is accepted where a claim is wanted only when it is evidence of exactly that claim, after computing. Computing means what the kernel decision has always meant by it: a name bound by let is replaced by what it stands for, a projection of a written tuple or struct and a match on a written constructor are carried out, and arithmetic on literals is done. It is a fixed procedure and not a search. Nothing else happens by itself: no fact is used to reach another, and no function is unfolded unless unfold! or fold! asks. The programmer states a step with prove!, and the forms rewrite!, unfold!, and fold! do the rest. This settles open question 3 against the bridging the elaborator does today.",
     "- Opening a dependent pattern types each part over the names the pattern binds. In let (next, still) = step(...), still has the type @within_limit(next.failures), not a type about step(...).0. This too is a fixed step, and without it evidence that comes out of a call could never be used.",
     "",
-    "Plan: LOC-88, LOC-77, LOC-115, LOC-140, LOC-139.",
+    "- A quantifier is a name applied to a closure: forall(|x: u8| x \u003c= 255) and exists(|x: u8| x == 0), with several parameters for several variables. This is Rust syntax, a call that takes a closure, so forall and exists are ordinary names of the logic and not keywords, and the form fits the logic-only lambdas expected later. The closure is never run; its body is a formula.",
+    "",
+    "Plan: LOC-88, LOC-77, LOC-115, LOC-140, LOC-139, LOC-147.",
     "",
     "## Values and types",
     "",
@@ -3123,7 +3125,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:35:37.000Z"
+   "updated": "2026-09-21T21:40:52.000Z"
   },
   {
    "id": "target-examples",
@@ -6215,12 +6217,34 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t261",
    "n": 146,
    "title": "Decide whether forall and exists stay keywords, or become names that take a closure",
+   "status": "done",
+   "priority": 1,
+   "project": "p89",
+   "notes": "Decided 21 September: names that take a closure. LOC-147.\n\nTarget language: The rule about Rust. forall(|x: u8| x \u003c= 255) is plain Rust syntax, a call that takes a closure, where forall (x: u8) { x \u003c= 255 } is not. It would leave prop as the only word Locus adds, and it fits the logic-only lambdas expected later. The closure is never run.",
+   "created": "2026-09-21T21:35:37.000Z",
+   "updated": "2026-09-21T21:40:52.000Z"
+  },
+  {
+   "id": "t262",
+   "n": 147,
+   "title": "Quantifiers as names that take a closure: forall(|x: u8| ...) and exists(|x: u8| ...)",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Target language: The rule about Rust. forall and exists stop being keywords; the closure is never run. Migration diagnostic for forall (x: T) { ... }.",
+   "created": "2026-09-21T21:40:52.000Z",
+   "updated": "2026-09-21T21:40:52.000Z"
+  },
+  {
+   "id": "t263",
+   "n": 148,
+   "title": "Decide whether a declared proposition is written as an attribute on an enum, so that prop is not a keyword",
    "status": "todo",
    "priority": 1,
    "project": "p89",
-   "notes": "Target language: The rule about Rust. forall(|x: u8| x \u003c= 255) is plain Rust syntax, a call that takes a closure, where forall (x: u8) { x \u003c= 255 } is not. It would leave prop as the only word Locus adds, and it fits the logic-only lambdas expected later. The closure is never run.",
-   "created": "2026-09-21T21:35:37.000Z",
-   "updated": "2026-09-21T21:35:37.000Z"
+   "notes": "Proposal, 21 September. A proposition is an enum whose values are its proofs, which is how it was first explained, so write it as one:\n\n    #[prop(n: u32)]\n    enum Small {\n        #[proves(Small(0))]\n        Zero,\n        Below { bound: @(n \u003c 10) },\n    }\n\nThe parameters go in the attribute; a variant that proves the proposition at particular arguments says so with #[proves(...)], and one without it proves it at the parameters; fields with names use Rust's struct-like variants. Everything but the @ types is Rust syntax. Use is unchanged: @Small(n), Small::Zero, match on evidence. It is erased whole. Observation: until recursion arrives, a declared proposition adds names and not power, since without recursion it can be written with ||, &&, and exists; what it is really for is inductive predicates.",
+   "created": "2026-09-21T21:40:52.000Z",
+   "updated": "2026-09-21T21:40:52.000Z"
   }
  ]
 }
