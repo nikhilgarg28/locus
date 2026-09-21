@@ -9,11 +9,18 @@
 //! one the checker will build, with the same identities, so that it can ask
 //! the kernel what a term's type is and test a proof before using it.
 
+mod blocks;
+mod calls;
+mod control;
+mod data;
 mod env;
 mod exprs;
 mod items;
 mod logic;
+mod loops;
+mod operators;
 mod order;
+mod patterns;
 mod proofs;
 mod show;
 mod solve;

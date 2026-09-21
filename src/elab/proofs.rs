@@ -8,8 +8,9 @@ use crate::kernel::{HypId, Proof, Term, Type, VarId, infer_proof};
 use crate::source::Span;
 use crate::typed::{Binder, Expr, FnRef, value_term};
 
+use super::control::Branch;
 use super::env::{Elab, Env, FnInfo, Global, PropInfo, substitute};
-use super::exprs::{Branch, Value};
+use super::exprs::Value;
 
 impl Env<'_> {
     /// The kernel proof an evidence-typed value stands for.
