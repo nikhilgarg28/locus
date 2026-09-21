@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 43,
-  "savedAt": "2026-09-21T23:23:22.000Z",
+  "rev": 44,
+  "savedAt": "2026-09-21T23:27:10.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6876,23 +6876,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t270",
    "n": 154,
    "title": "S1 · The lexer tokenizes as Rust: every keyword reserved, string literals, integer literals in full",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Syntax. Wave 2.\nDepends on: H2 (LOC-152).\nUnblocks: S2 (LOC-155).\nCovers: LOC-91, LOC-94, LOC-95.\n\nScope. Reserve every strict and reserved Rust keyword. String literals with Rust escapes. Integer literals in decimal, hex, octal, and binary, with underscores and suffixes. Rust tokens Locus does not use yet (lifetimes, compound assignment, shifts, char and float literals) are recognized and reported as not in Locus yet, so that no Rust source produces a confusing token error.\n\nTests.\n- A table test over every Rust keyword: using it as a name is an error with a code.\n- A table of literals with value and suffix, including the largest of each type and one past it.\n- Each not-yet token has a test of its message.\n- The case H1 found, fn move(ref: u8), is a rejected corpus file.\n\nDone when. A Rust programmer who pastes Rust gets either a parse or a plain statement that the construct is not in Locus yet.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. Every Rust keyword reserved (L0115, with a fix), a not-in-Locus-yet family (L0005 from the lexer, L0116 from the parser) with one message per construct, integer literals of any size as kernel::Natural with a suffix, string literals with Rust escapes (L0006, L0007), attributes skipped with L0105. Note for S3 to S5: the stack margin was recovered by moving keyword checks into #[inline(never)] helpers and narrowing Token; keep doing that.\n\nLane: Syntax. Wave 2.\nDepends on: H2 (LOC-152).\nUnblocks: S2 (LOC-155).\nCovers: LOC-91, LOC-94, LOC-95.\n\nScope. Reserve every strict and reserved Rust keyword. String literals with Rust escapes. Integer literals in decimal, hex, octal, and binary, with underscores and suffixes. Rust tokens Locus does not use yet (lifetimes, compound assignment, shifts, char and float literals) are recognized and reported as not in Locus yet, so that no Rust source produces a confusing token error.\n\nTests.\n- A table test over every Rust keyword: using it as a name is an error with a code.\n- A table of literals with value and suffix, including the largest of each type and one past it.\n- Each not-yet token has a test of its message.\n- The case H1 found, fn move(ref: u8), is a rejected corpus file.\n\nDone when. A Rust programmer who pastes Rust gets either a parse or a plain statement that the construct is not in Locus yet.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:56:33.000Z"
+   "updated": "2026-09-21T23:27:10.000Z"
   },
   {
    "id": "t271",
    "n": 155,
    "title": "S2 · Built-in forms and the formula grammar: prop!, prove!, @P, forall and exists, rewrite!, unfold!, fold!",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 3.\nDepends on: S1 (LOC-154).\nUnblocks: S3 (LOC-156), E1 (LOC-167), E10 (LOC-190).\nCovers: LOC-80, LOC-88, LOC-149, LOC-77, LOC-78.\n\nScope. Parse name!(...) for the closed list of forms. Formulas, with forall (x: T) { ... }, exists, and =>, are parsed only inside prop!(...), prove!(...), and @(...). @P takes a name, an application, or a parenthesized formula. [P], @[P], and the bare rewrite, unfold, and fold go, each with a migration diagnostic that carries a fix. prove!(P) elaborates as a claim filled where it stands. Examples and tests are respelled.\n\nTests.\n- Every elaborator test passes after respelling, with the same proofs found.\n- Each old spelling gives its migration diagnostic; applying the fix gives a file that parses, tested by applying it.\n- forall and exists are ordinary names outside a formula; => outside a formula or a match arm is rejected; an unknown form names the closed list.\n\nDone when. Brackets are free for arrays, and the source has no token Rust lacks.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:27:10.000Z"
   },
   {
    "id": "t272",
@@ -7242,7 +7242,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "doing",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. Accepting a changed proof of a true claim is harmless, and a changed proof may validly prove some other proposition, so neither is a finding. What would be a finding is a proof accepted for a false claim. For every proof the corpus produces, the test makes claims known to be false (the negation of the original where that is closed or bounded, and perturbed claims refuted by evaluation over a small domain) and checks them against the original proof and against random changes of one node of it: another hypothesis, another axiom argument, a swapped subproof.\n\nTests.\n- The kernel rejects every pairing of a proof with a claim known to be false.\n- A changed proof checked against the original claim may be accepted; the count is printed, for interest only.\n- Runs over every proof in the corpus, so it grows with the language.\n\nDone when. A standing check on the one component everything trusts.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. Accepting a changed proof of a true claim is harmless, and a changed proof may validly prove some other proposition, so neither is a finding. What would be a finding is a proof accepted for a false claim. For every proof the corpus produces, the test makes claims known to be false (the negation of the original where that is closed or bounded, and perturbed claims refuted by evaluation over a small domain) and checks them against the original proof and against random changes of one node of it: another hypothesis, another axiom argument, a swapped subproof.\n\nTests.\n- The kernel rejects every pairing of a proof with a claim known to be false.\n- A changed proof checked against the original claim may be accepted; the count is printed, for interest only.\n- Runs over every proof in the corpus, so it grows with the language.\n- Covers the Int forms of K2 (rebased after K2 landed).\n\nDone when. A standing check on the one component everything trusts.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
    "updated": "2026-09-21T22:53:26.000Z"
   },
