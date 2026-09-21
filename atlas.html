@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 46,
-  "savedAt": "2026-09-21T23:34:49.000Z",
+  "rev": 47,
+  "savedAt": "2026-09-21T23:37:20.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2388,10 +2388,18 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Erasure preserves the outcome of a call. If the check-IR program returns a value, the erased program returns the same value, with every ghost position filled by its marker. If the check-IR program panics, the erased program panics with the same message, and nothing that would have run after the panic runs in either. If the check-IR program does not return, the erased program does not return either. Fuel is not part of this statement. It belongs to the interpreters, which are test oracles, and it exists so that a test of a program that does not return ends. Running out of fuel means only that a run saw neither a value nor a panic within its budget. The two interpreters spend fuel at different rates, so a comparison in which either side ran out of fuel is inconclusive. The same holds for a compiled program that was killed at its timeout. Neither is agreement, and neither is evidence that the program diverges.",
     "",
-    "Both interpreters return one type, Outcome: a value, a panic with its message, or out of fuel. Nothing in the check IR can panic yet; the erased tree has a panic expression that only hand-built trees reach. The corpus runner calls every run line under catch_unwind in two builds of the generated Rust, with overflow checks on and off, and restarts the program after a run line that goes silent for the length of the timeout."
+    "Both interpreters return one type, Outcome: a value, a panic with its message, or out of fuel. Nothing in the check IR can panic yet; the erased tree has a panic expression that only hand-built trees reach. The corpus runner calls every run line under catch_unwind in two builds of the generated Rust, with overflow checks on and off, and restarts the program after a run line that goes silent for the length of the timeout.",
+    "",
+    "## What the checker of the check IR enforces",
+    "",
+    "The checker of the check IR decides, with the kernel, what is accepted, and it decides two more ways a block may end and four promises. A block may end in return, and the value is then checked against the function's result type in the context of that point, by the same path as the value of the body; a return may stand at any depth, inside loops, bounded fors and match arms included, and like break it produces no value, so a loop body may end in it. A block may end in a panic with its message, and nothing follows it; without a promise the checker demands nothing of it, and a proof that is given anyway is checked. A function carries its promises, and each one it makes is enforced when it is declared, so that a later use of a promise rests on the checker and not on the elaborator. Under no_panic every panic ending must carry a proof of the prelude's False that checks in the context of that point, and every function called must promise no_panic. Under terminates the body may contain no loop and no bounded for anywhere, and every function called must promise terminates; a function is checked against those declared before it, so recursion is already impossible. Under no_io and under no_alloc every function called must make the same promise, and the place where a primitive that performs I/O or allocates would be refused is marked, since the core has none yet. A match in statement position all of whose arms leave still declares its variable at the declared type, which is sound because nothing after it is reachable.",
+    "",
+    "## Diagnostics are golden",
+    "",
+    "Every rejected file under tests/corpus/reject has a NAME.stderr beside it holding exactly what locus check prints for it, and a test compares them; LOCUS_BLESS=1 rewrites the goldens, and the diff is reviewed like code. A second test fails if any error code in the source has no rejected file."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "kernel-contract",
@@ -6976,23 +6984,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t277",
    "n": 161,
    "title": "K3 · Int division and remainder: truncating, total, with x / 0 == 0",
-   "status": "todo",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 3.\nDepends on: K2 (LOC-160).\nUnblocks: K4 (LOC-162).\nCovers: LOC-119.\n\nScope. The axioms, as formulas over all a and b in Int. (1) a == (a / b) * b + a % b, with no condition. (2) a / 0 == 0. From these a % 0 == a follows and is not a separate axiom. (3) 0 \u003c b gives -b \u003c a % b and a % b \u003c b; b \u003c 0 gives b \u003c a % b and a % b \u003c -b. (4) 0 \u003c= a gives 0 \u003c= a % b; a \u003c= 0 gives a % b \u003c= 0. For b not zero, (1), (3), and (4) determine the quotient and remainder uniquely, and they are Rust's.\n\nTests.\n- The four sign combinations and zero, as named tests, including a % 0 == a derived from (1) and (2) inside the kernel.\n- Evaluation against Rust's / and % on i128 at random for a divisor that is not zero, and against the formulas for a zero divisor.\n- A flooring instance, -7 / 2 == -4, is refuted by evaluation.\n- Near misses: the bound of (3) stated without its condition on b is rejected, and would be false at b == 0.\n\nDone when. Int division means what Rust's means wherever Rust's is defined.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. int_div and int_rem, eight axioms named in the Kernel contract (int_div_rem, int_div_zero, four remainder bounds, two sign axioms), each true at every b including zero and each bound false at b == 0 without its condition, which the tests refute. a % 0 == a derived in 33 nodes. Division is charged steps by operand size. Noted for later: Proof::Literal computes a primitive without a step budget, so literal(int_mul(huge, huge)) does unbounded work; a small K-lane follow-up.\n\nLane: Kernel. Wave 3.\nDepends on: K2 (LOC-160).\nUnblocks: K4 (LOC-162).\nCovers: LOC-119.\n\nScope. The axioms, as formulas over all a and b in Int. (1) a == (a / b) * b + a % b, with no condition. (2) a / 0 == 0. From these a % 0 == a follows and is not a separate axiom. (3) 0 \u003c b gives -b \u003c a % b and a % b \u003c b; b \u003c 0 gives b \u003c a % b and a % b \u003c -b. (4) 0 \u003c= a gives 0 \u003c= a % b; a \u003c= 0 gives a % b \u003c= 0. For b not zero, (1), (3), and (4) determine the quotient and remainder uniquely, and they are Rust's.\n\nTests.\n- The four sign combinations and zero, as named tests, including a % 0 == a derived from (1) and (2) inside the kernel.\n- Evaluation against Rust's / and % on i128 at random for a divisor that is not zero, and against the formulas for a zero divisor.\n- A flooring instance, -7 / 2 == -4, is refuted by evaluation.\n- Near misses: the bound of (3) stated without its condition on b is rejected, and would be false at b == 0.\n\nDone when. Int division means what Rust's means wherever Rust's is defined.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:19:59.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "t278",
    "n": 162,
    "title": "K4 · A model for each machine integer type, from one table",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Kernel. Wave 4.\nDepends on: K3 (LOC-161).\nUnblocks: K5 (LOC-163), K7 (LOC-165), K8 (LOC-166), E5 (LOC-171).\nCovers: LOC-120, LOC-145.\n\nScope. For u8 to u64 and i8 to i64: a view to Int, a wrap from Int, the range of the view, and the round trips. as between machine types is the wrap of the view. The u8 model over Nat is restated over Int and its separate axioms are removed, so the contract holds one schema and not a list per type.\n\nTests.\n- The 8-bit types exhaustively against Rust: every value for the view and round trip, every pair of types for as.\n- The wider types at a boundary set (0, 1, MAX, MAX - 1, MIN, MIN + 1, -1, powers of two and their neighbours) and at random.\n- Every existing kernel_numbers test passes on the new model.\n\nDone when. What the logic says about a machine value is what Rust computes, tested where it can be tested exhaustively and at the edges where it cannot.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "t279",
@@ -7152,23 +7160,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t293",
    "n": 177,
    "title": "M1 · The check IR gains return and panic as ways a block ends",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 3.\nDepends on: M0 (LOC-176), E4 (LOC-170).\nUnblocks: M2 (LOC-178), E10 (LOC-190).\nCovers: LOC-142, LOC-93.\n\nScope. src/exec only: the IR, its checker, and its interpreter. At a return the checker demands the function's result type; at a panic it demands nothing, or under no_panic evidence that the point is unreachable.\n\nTests.\n- Programs built by hand in the IR, as exec_check does today: a return inside a branch, a panic inside a branch, both.\n- A return with the wrong evidence is rejected at the return.\n- Architecture's account of the trusted base is updated.\n- All four promises are enforced by the checker, no_io and no_alloc included, each with a hand-built function that breaks it.\n- The erased check still checks the arms and statements that follow a never-yielding expression, which E4 stopped doing.\n- A let bound to a panic gets a type in the generated Rust, so that inference cannot fail (E0282).\n\nDone when. The checker is ready before any surface syntax reaches it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. Promises on ExecFn, enforced by the checker: no_panic (callees and a proof of False at every panic), terminates (no loop or for anywhere, callees), no_io and no_alloc (callees). Tail::Return checked against the result type at that point; Tail::Panic with an optional proof. Both interpreters unwind a return. EExpr::Return in the erased tree, tested three ways. The erased check again checks everything after a never-yielding value, and bindings carry their type so the printer can annotate a let whose value diverges. Note for M3: LoopUnderTerminates refuses a bounded for too, as designed; relaxing it is one condition.\n\nLane: Mutation. Wave 3.\nDepends on: M0 (LOC-176), E4 (LOC-170).\nUnblocks: M2 (LOC-178), E10 (LOC-190).\nCovers: LOC-142, LOC-93.\n\nScope. src/exec only: the IR, its checker, and its interpreter. At a return the checker demands the function's result type; at a panic it demands nothing, or under no_panic evidence that the point is unreachable.\n\nTests.\n- Programs built by hand in the IR, as exec_check does today: a return inside a branch, a panic inside a branch, both.\n- A return with the wrong evidence is rejected at the return.\n- Architecture's account of the trusted base is updated.\n- All four promises are enforced by the checker, no_io and no_alloc included, each with a hand-built function that breaks it.\n- The erased check still checks the arms and statements that follow a never-yielding expression, which E4 stopped doing.\n- A let bound to a panic gets a type in the generated Rust, so that inference cannot fail (E0282).\n\nDone when. The checker is ready before any surface syntax reaches it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:57.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "t294",
    "n": 178,
    "title": "M2 · let mut and assignment, lowered to versions",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n- Case 9: the right side changes what the left side names; lo == 3 and hi == 7 three ways. The same for the two argument orders.\n- Case 10: both arms assign and refresh, and the condition reads the entry version.\n- The assigned set, on the check IR lowering produces and through both interpreters: an outer binding assigned in a nested block; a field write counting for its root; a local let mut inside a branch staying local; a shadowing binding assigned while the outer one is not, and the reverse.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "t295",
@@ -7273,12 +7281,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t304",
    "n": 188,
    "title": "R3 · Golden diagnostics, and a test that every error code is exercised",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. The rendered diagnostic of every rejected corpus file is stored and compared. A meta test lists the error codes in the source and fails if one has no rejected file.\n\nTests.\n- LOCUS_BLESS=1 rewrites the goldens; the diff is reviewed like code.\n\nDone when. Diagnostics are the product for an author, human or AI, and change only on purpose.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September, with a follow-up for the S1 messages. tests/diagnostics_golden.rs renders every rejected file through the library and compares with NAME.stderr; a second test checks the binary prints the same; LOCUS_BLESS=1 rewrites. A meta test scans src for L-codes and fails if one has no rejected file: 50 codes before S1, all covered, 105 files. Thirteen diagnostics judged misleading are listed in the task and should be fixed as reviewed golden diffs (see the list below).\n\nMisleading diagnostics found while writing the goldens, to fix later as golden diffs:\n1. L0299 (the checker rejected this) surfaces kernel messages: an if with evidence branches points at the function name; let next = continue(...) says break and continue may only end a block; [h == g] on two proofs, evidence returned from an enum payload, fold toward @q(1) leaking a VarId, and g(1).1 on a dependent tuple all reach L0299.\n2. unexpected_character.lc: the parser's L0102 is printed before the lexer's L0001 that caused it.\n3. evidence_as_proposition_parameter.lc: a prop parameter naming an earlier parameter gives L0204 unknown name rather than L0225.\n4. false_in_one_case.lc: after the arm's equation the claim computes to 7 \u003c= 6 and the note says nothing known speaks of it, although n == 7 is known; no counterexample note for a closed false claim.\n5. reversed_range.lc: nothing says the obligation comes from the range 5..n.\n6. L0216/L0220 span a whole block instead of the offending statement; L0215 spans a whole loop.\n7. L0208 labels only the path, not the wrong pattern list; L0228 points at the argument, not the call.\n8. L0206 (_ asks for evidence) says nothing about what to write instead.\n9. The nesting and chain limit errors could name the limit.\n10. unknown_enum.lc gives unknown name for Light::Red where unknown enum would match the neighbouring wording.\n\nLane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. The rendered diagnostic of every rejected corpus file is stored and compared. A meta test lists the error codes in the source and fails if one has no rejected file.\n\nTests.\n- LOCUS_BLESS=1 rewrites the goldens; the diff is reviewed like code.\n\nDone when. Diagnostics are the product for an author, human or AI, and change only on purpose.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:57.000Z"
+   "updated": "2026-09-21T23:37:20.000Z"
   },
   {
    "id": "t305",
