@@ -1644,12 +1644,31 @@ These are not decided. Each lists the current behavior of this document first. N
 
 1. Proposition literals use brackets, [n != 0], and in this fragment a bracketed expression is always a proposition literal (section 13). Brackets are array syntax in Rust, and [n > 0] is a valid Rust array expression. The alternative is to drop the literal form: where a Prop is expected, an expression is elaborated as a formula, and the proof type is written @(n != 0).
 2. Implication is spelled =>, which is also the match arm separator (section 13). The alternative is ==>.
-3. Supplying evidence of Q where evidence of P is expected is an error unless the two are identical (section 3.1). The alternative is to treat the mismatch as an implicit hole, asking the solver of section 12.3 for P with the supplied evidence in scope.
+3. Supplying evidence of Q where evidence of P is expected is an error unless the two are identical (section 3.1). The alternative is to treat the mismatch as an implicit hole, asking the solver of section 12.3 for P with the supplied evidence in scope. The implementation does the alternative, because a name bound by destructuring a result would otherwise never fit where evidence about that name is wanted; whether the specification should follow is still to be decided.
 4. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.
 5. A hole does not search the prelude (section 12.3). A mechanism for marking lemmas that a hole may apply, with its own step budget, would shorten proofs at some cost in predictability.
 6. The spelling of the chain form (section 8.4). One candidate is the bracketed form trans[a =(p) b =(q) c] used by the explicit refinement calculus.
 7. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.
 8. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; rust-features.md tracks them.
+
+### 15.3 Accepted directions, not yet specified
+
+These were agreed in design discussion and are not yet worked into the sections above, which still describe fn and math fn. The details, in particular spelling, remain open. [positioning.md](positioning.md) gives the use case that motivates them: a header that a person reviews, and an implementation that is checked against it.
+
+1. Effects are a small closed list fixed by the language: div (may not return), panic (may abort), alloc (allocates), and io (interacts with the world, including time and randomness). There are no user-defined effects and no effect handlers, which would need runtime machinery that plain Rust does not have. Mutation is visible in types and is not an effect. Being ghost is a separate axis: an effect says what happens at runtime, and ghost says what exists at runtime. Classical reasoning is reported by an audit, not tracked as an effect.
+2. A function has no effects unless its signature says otherwise, so that the strongest promise is the default and a reviewer sees every weakening. Effects are declared with a built-in attribute:
+
+~~~
+#[may(div, alloc)]
+fn run(attempts: u8) -> u8 { ... }
+~~~
+
+3. Attributes are a closed, built-in set interpreted by the compiler. Locus has no macros and no user-defined attributes. Attribute syntax is chosen because it is Rust syntax.
+4. Effects are inferred for a body, as the union of what its constructs and callees may do, and checked to be within what the signature declares. A foreign declaration states its effects and is trusted. Only div bears on the soundness of the logic, and the logic is protected from it by construction, since only total kernel terms appear in propositions. The other effects are claims about runtime behavior, enforced by a table from constructs to effects and a subset check at each call, in the check IR so that the check is on the trusted path.
+5. A function may appear in a proposition exactly when its declared effects are empty or only alloc. Such a function always returns and is deterministic, so f(x) denotes one value. The rule reads the signature and never the body. A function that may diverge cannot appear in a proposition, because its result type may promise anything; the result of calling it is a fresh variable that exists only after the call returns, as now.
+6. What the logic knows about f(x) is, always, what the result type says, so that f(x).1 is evidence about f(x).0; and, where the body of f is visible, its defining equation as well. Visibility of the equation follows visibility of the body. Within one file every body is visible. Once headers exist, a function whose body is in the header is known by its definition, which is right for the vocabulary of a specification, and a function given there only by its signature is known by its contract. No separate control of unfolding is planned; it can be revisited.
+7. With the above, math fn carries no information of its own. That a function may use Prop, quantifiers, and later Int, and need not be executable, follows from its types, which the kernel already classifies. The type math fn(x: A) -> B becomes a function type with no effects; function types carry effects too. The keyword stays until effects are implemented, then becomes shorthand for a function without effects, and is then removed.
+8. Promising termination for a function that uses loop or recursion needs a termination measure. Its form is under discussion.
 
 ## 16. Semantic completion status
 
