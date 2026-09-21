@@ -35,7 +35,19 @@ pub(super) struct EnumInfo {
 pub(super) struct PropInfo {
     pub id: PropId,
     pub name: String,
-    pub params: Vec<Type>,
+    pub params: Vec<Binder>,
+    pub variants: Vec<PropVariantInfo>,
+}
+
+#[derive(Debug)]
+pub(super) struct PropVariantInfo {
+    pub name: String,
+    /// Over the proposition's parameters when there is no conclusion, and
+    /// over nothing but the earlier payload when there is one.
+    pub payload: Vec<Binder>,
+    /// The arguments at which this variant proves the proposition, over the
+    /// payload. Absent when it proves it at the parameters themselves.
+    pub conclusion: Option<Vec<Term>>,
 }
 
 #[derive(Debug)]
@@ -45,13 +57,14 @@ pub(super) struct FnInfo {
     pub params: Vec<Binder>,
     /// Over the parameters' identities.
     pub result: Type,
+    /// Declared with `const`: used by name, without a call.
+    pub constant: bool,
 }
 
 #[derive(Clone, Debug)]
 pub(super) enum Global {
     Struct(Rc<StructInfo>),
     Enum(Rc<EnumInfo>),
-    #[allow(dead_code)]
     Prop(Rc<PropInfo>),
     Fn(Rc<FnInfo>),
 }
@@ -95,7 +108,6 @@ pub(super) struct Env<'a> {
     pub source: &'a SourceFile,
     pub session: Session,
     pub prelude: Prelude,
-    #[allow(dead_code)]
     pub theory: Theory,
     pub globals: HashMap<String, Global>,
     /// Items that were rejected; a mention of one is not reported again.
@@ -305,10 +317,32 @@ impl Env<'_> {
         })
     }
 
+    pub fn prop_by_id(&self, id: PropId) -> Option<Rc<PropInfo>> {
+        self.globals.values().find_map(|global| match global {
+            Global::Prop(info) if info.id == id => Some(Rc::clone(info)),
+            _ => None,
+        })
+    }
+
     pub fn fn_by_id(&self, id: FnId) -> Option<Rc<FnInfo>> {
         self.globals.values().find_map(|global| match global {
             Global::Fn(info) if info.reference == FnRef::Math(id) => Some(Rc::clone(info)),
             _ => None,
         })
+    }
+}
+
+/// Replaces identities the elaborator chose with the ones a binder supplies.
+pub(super) fn substitute(proof: Proof, vars: &[(VarId, Term)], hyps: &[(HypId, Proof)]) -> Proof {
+    let mut wrapped = Term::proof(proof);
+    for (id, term) in vars {
+        wrapped = wrapped.replace_var(*id, term);
+    }
+    for (id, proof) in hyps {
+        wrapped = wrapped.replace_hyp(*id, proof);
+    }
+    match wrapped {
+        Term::Proof(proof) => *proof,
+        _ => unreachable!("substitution keeps the shape of a term"),
     }
 }

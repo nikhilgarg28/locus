@@ -16,14 +16,15 @@ const some_byte_is_zero: Prop = [
     exists (n: u8) { n == 0 }
 ];
 
-// Evidence is an ordinary expression: here, a rewrite along `equal`.
+// Evidence is an ordinary expression. `unfold` is written out here; a `_`
+// performs the same step on its own.
 math fn increment_preserves_equality(
     x: u8,
     y: u8,
     equal: @same(x, y),
 ) -> @[x.wrapping_add(1) == y.wrapping_add(1)] {
     let plain: @[x == y] = unfold(same, equal);
-    rewrite(plain, _)
+    _
 }
 
 math fn self_equal(n: u8) -> @[n == n] {

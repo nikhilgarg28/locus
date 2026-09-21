@@ -22,17 +22,12 @@ pub(super) fn dependency_order(program: &Program) -> (Vec<usize>, Vec<usize>) {
     let edges: Vec<Vec<usize>> = program
         .declarations
         .iter()
-        .enumerate()
-        .map(|(index, declaration)| {
+        .map(|declaration| {
             let mut names = HashSet::new();
             Mentions(&mut names).declaration(declaration);
             let mut edges: Vec<usize> = names
                 .iter()
                 .filter_map(|name| index_of.get(name.as_str()).copied())
-                .filter(|target| {
-                    // A proposition may mention itself: `Even(n)` inside `Even`.
-                    *target != index || !matches!(declaration.kind, DeclarationKind::Prop { .. })
-                })
                 .collect();
             edges.sort_unstable();
             edges
@@ -127,7 +122,13 @@ impl Mentions<'_> {
                     .for_each(|parameter| self.ty(&parameter.ty));
                 for variant in variants {
                     variant.fields.iter().for_each(|field| self.ty(&field.ty));
-                    variant.target.iter().for_each(|target| self.expr(target));
+                    // `: @Name(arguments)` names the proposition being
+                    // declared, which is not a use of it.
+                    if let Some(ExprKind::Call { arguments, .. }) =
+                        variant.target.as_ref().map(|target| &target.kind)
+                    {
+                        arguments.iter().for_each(|argument| self.expr(argument));
+                    }
                 }
             }
             DeclarationKind::Constant { ty, value, .. } => {

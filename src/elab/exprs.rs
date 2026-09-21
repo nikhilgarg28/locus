@@ -24,7 +24,7 @@ pub(super) struct Value {
 }
 
 impl Value {
-    fn new(expr: Expr, ty: Type) -> Self {
+    pub fn new(expr: Expr, ty: Type) -> Self {
         Self {
             expr,
             ty,
@@ -96,7 +96,7 @@ impl Env<'_> {
                     expr.span,
                 ),
             },
-            ExprKind::Name(name) => self.name(name),
+            ExprKind::Name(name) => self.name(name, expected),
             ExprKind::Hole => match expected {
                 Some(Type::Proof(claim)) => {
                     let proof = self.solve(claim, expr.span, None)?;
@@ -219,8 +219,10 @@ impl Env<'_> {
                 ))
             }
             ExprKind::Struct { name, fields } => self.struct_literal(name, fields, expr.span),
-            ExprKind::Path(path) => self.variant(path, &[], expr.span),
-            ExprKind::Call { callee, arguments } => self.call(callee, arguments, expr.span),
+            ExprKind::Path(path) => self.variant(path, &[], expected, expr.span),
+            ExprKind::Call { callee, arguments } => {
+                self.call(callee, arguments, expected, expr.span)
+            }
             ExprKind::Member { value, name } => {
                 let target = self.infer(value)?;
                 let Type::Struct(id) = &target.ty else {
@@ -350,7 +352,7 @@ impl Env<'_> {
         }
     }
 
-    fn name(&mut self, name: &ast::Name) -> Elab<Value> {
+    fn name(&mut self, name: &ast::Name, expected: Option<&Type>) -> Elab<Value> {
         if let Some(local) = self.lookup(&name.text) {
             if local.poisoned {
                 return Err(());
@@ -365,7 +367,11 @@ impl Env<'_> {
                 ty,
             ));
         }
-        match self.globals.get(&name.text) {
+        match self.globals.get(&name.text).cloned() {
+            Some(Global::Fn(info)) if info.constant => self.call_fn(&info, &[], name.span),
+            Some(Global::Fn(info)) if matches!(expected, Some(Type::Proof(_))) => {
+                self.function_as_evidence(&info, name.span)
+            }
             Some(Global::Fn(_)) => self.fail(
                 "L0290",
                 "a function used as a value is not supported yet; call it",
@@ -452,7 +458,7 @@ impl Env<'_> {
     /// Checks arguments against a telescope of parameter types, written over
     /// the identities `ids`: each argument's term replaces its parameter in
     /// the types that follow. On return `tys` no longer mentions `ids`.
-    fn arguments(
+    pub fn arguments(
         &mut self,
         arguments: &[ast::Expr],
         ids: &[VarId],
@@ -602,13 +608,18 @@ impl Env<'_> {
         }
     }
 
-    fn variant(&mut self, path: &ast::Path, arguments: &[ast::Expr], span: Span) -> Elab<Value> {
+    fn variant(
+        &mut self,
+        path: &ast::Path,
+        arguments: &[ast::Expr],
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
         let Some((info, index)) = self.enum_variant(path)? else {
-            return self.fail(
-                "L0290",
-                "proof constructors are not supported by the elaborator yet",
-                span,
-            );
+            let Some(Global::Prop(info)) = self.globals.get(&path.prefix.text).cloned() else {
+                unreachable!("`enum_variant` saw a proposition")
+            };
+            return self.construct(&info, path, arguments, expected, span);
         };
         let payload = &info.variants[index].1;
         let ids: Vec<VarId> = payload.iter().map(|binder| binder.id).collect();
@@ -627,9 +638,15 @@ impl Env<'_> {
         ))
     }
 
-    fn call(&mut self, callee: &ast::Expr, arguments: &[ast::Expr], span: Span) -> Elab<Value> {
+    fn call(
+        &mut self,
+        callee: &ast::Expr,
+        arguments: &[ast::Expr],
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
         match &callee.kind {
-            ExprKind::Path(path) => self.variant(path, arguments, span),
+            ExprKind::Path(path) => self.variant(path, arguments, expected, span),
             ExprKind::Member { value, name } => self.method(value, name, arguments, span),
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
                 match self.globals.get(&name.text).cloned() {
@@ -644,6 +661,9 @@ impl Env<'_> {
                         name.span,
                     ),
                     None if self.failed.contains(&name.text) => Err(()),
+                    None if matches!(name.text.as_str(), "rewrite" | "unfold" | "fold") => {
+                        self.proof_form(&name.text, arguments, expected, span)
+                    }
                     None => self.fail(
                         "L0204",
                         format!("unknown function `{}`", name.text),
@@ -651,11 +671,10 @@ impl Env<'_> {
                     ),
                 }
             }
-            _ => self.fail(
-                "L0290",
-                "applying a value, such as a proof of a `forall`, is not supported yet",
-                callee.span,
-            ),
+            _ => {
+                let callee = self.infer(callee)?;
+                self.apply(callee, arguments, span)
+            }
         }
     }
 
@@ -736,8 +755,8 @@ impl Env<'_> {
             return self.fail("L0208", message, span);
         }
         let mut terms = Vec::new();
-        for (argument, ty) in arguments.iter().zip(&info.params) {
-            let value = self.check(argument, ty)?;
+        for (argument, param) in arguments.iter().zip(&info.params) {
+            let value = self.check(argument, &param.ty)?;
             terms.push(self.term(&value, argument.span)?);
         }
         Ok(Term::PropApp(info.id, terms))
@@ -774,7 +793,7 @@ impl Env<'_> {
 
     // --- Branching ----------------------------------------------------------------
 
-    fn branch(
+    pub fn branch(
         &mut self,
         branch: &Branch<'_>,
         expected: Option<&Type>,
@@ -881,14 +900,12 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let scrutinee_value = self.infer(scrutinee)?;
+        if matches!(scrutinee_value.ty, Type::Proof(_)) {
+            return self.match_evidence(scrutinee_value, scrutinee.span, arms, expected, span);
+        }
         let Type::Enum(id) = &scrutinee_value.ty else {
             let shown = self.show_type(&scrutinee_value.ty);
-            let message = match &scrutinee_value.ty {
-                Type::Proof(_) => {
-                    "`match` on evidence is not supported by the elaborator yet".to_string()
-                }
-                _ => format!("`match` takes apart an enum, and this is `{shown}`"),
-            };
+            let message = format!("`match` takes apart an enum or evidence, and this is `{shown}`");
             return self.fail("L0212", message, scrutinee.span);
         };
         let info = self.enum_by_id(*id).expect("an enum type was declared");

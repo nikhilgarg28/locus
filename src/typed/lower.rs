@@ -13,7 +13,8 @@ use std::fmt;
 use crate::erased::{self, Module};
 use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Program};
 use crate::kernel::{
-    Definitions, EnumId, FnId, HypId, KernelError, Prim, Proof, StructId, Term, Type, VarId,
+    Definitions, EnumId, FnId, HypId, KernelError, Prim, Proof, PropId, PropVariant, StructId,
+    Term, Type, VarId,
 };
 
 use super::tree::{
@@ -110,6 +111,19 @@ impl Session {
         let id = self.program.definitions_mut().declare_enum(&variants)?;
         self.erased.enums.push(erased::erase_enum(id, item));
         Ok(id)
+    }
+
+    /// A declared proposition is wholly logical: the kernel checks it and
+    /// nothing is emitted.
+    pub fn declare_prop(
+        &mut self,
+        params: Vec<Type>,
+        variants: Vec<PropVariant>,
+    ) -> Result<PropId, LowerError> {
+        Ok(self
+            .program
+            .definitions_mut()
+            .declare_prop(params, variants)?)
     }
 
     pub fn declare_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {

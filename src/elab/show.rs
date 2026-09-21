@@ -4,7 +4,7 @@
 
 use crate::kernel::{Mode, Prim, Term, Type, infer_term};
 
-use super::env::{Env, Global};
+use super::env::Env;
 
 /// Binding strength, loosest first.
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
@@ -278,13 +278,11 @@ impl Env<'_> {
                 [p, q] if *id == prelude.or => self.binary("||", Level::Or, at, p, q, bound),
                 _ => {
                     let name = self
-                        .globals
-                        .values()
-                        .find_map(|global| match global {
-                            Global::Prop(info) if info.id == *id => Some(info.name.clone()),
-                            _ => None,
-                        })
-                        .unwrap_or_else(|| "prop".into());
+                        .prop_by_id(*id)
+                        .map_or_else(|| "prop".into(), |info| info.name.clone());
+                    if arguments.is_empty() {
+                        return name;
+                    }
                     format!("{name}({})", self.list(arguments, bound))
                 }
             },

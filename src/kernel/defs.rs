@@ -451,6 +451,13 @@ impl Definitions {
         self.fns.get(id.0).is_some_and(|decl| decl.executable)
     }
 
+    /// A declared function's type.
+    pub fn signature(&self, id: FnId) -> Option<Type> {
+        self.fns
+            .get(id.0)
+            .map(|decl| Type::Fn(decl.params.clone(), Box::new(decl.result.clone())))
+    }
+
     /// A declared function's arity and body, for an interpreter. The body is
     /// under one binder per parameter: the last parameter is `Bound(0)`.
     pub fn function_body(&self, id: FnId) -> Option<(usize, &Term)> {

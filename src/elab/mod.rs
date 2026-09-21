@@ -14,6 +14,7 @@ mod exprs;
 mod items;
 mod logic;
 mod order;
+mod proofs;
 mod show;
 mod solve;
 mod types;

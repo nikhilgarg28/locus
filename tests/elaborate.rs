@@ -57,6 +57,8 @@ fn the_acceptance_examples_check() {
     for example in [
         include_str!("../examples/increment.loc"),
         include_str!("../examples/preserve.loc"),
+        include_str!("../examples/proofs.loc"),
+        include_str!("../examples/propositions.loc"),
         LOCK,
     ] {
         accepted(example);
@@ -426,4 +428,139 @@ fn a_reversed_range_is_rejected_for_want_of_evidence() {
             if 5 <= n { for i in 5..n () { continue() } } else { () }
         }",
     );
+}
+
+// Evidence written out, with the specification's examples (sections 7.3 and 8).
+
+#[test]
+fn matching_on_evidence_gives_each_arm_its_index_equations() {
+    accepted(
+        "prop SmallPrime(n: u8) {
+            Two: @SmallPrime(2),
+            Three: @SmallPrime(3),
+            Five: @SmallPrime(5),
+            Seven: @SmallPrime(7),
+        }
+        math fn small_prime_is_small(n: u8, h: @SmallPrime(n)) -> @[n <= 7] {
+            match h {
+                SmallPrime::Two => _,
+                SmallPrime::Three => _,
+                SmallPrime::Five => _,
+                SmallPrime::Seven => _,
+            }
+        }
+        math fn seven_is(h: @SmallPrime(7)) -> @[7 <= 7] { small_prime_is_small(7, h) }
+        math fn five() -> @SmallPrime(5) { SmallPrime::Five }",
+    );
+    // The equations are what make the arms provable.
+    let (codes, full) = rejected(
+        "prop SmallPrime(n: u8) { Two: @SmallPrime(2), Seven: @SmallPrime(7) }
+        math fn too_small(n: u8, h: @SmallPrime(n)) -> @[n <= 6] {
+            match h { SmallPrime::Two => _, SmallPrime::Seven => _ }
+        }",
+    );
+    assert_eq!(codes, ["L0230"]);
+    assert!(full.contains("cannot show `n <= 6`"), "{full}");
+    assert!(
+        full.contains("after computing, the claim is `7 <= 6`"),
+        "{full}"
+    );
+}
+
+#[test]
+fn connectives_are_built_and_taken_apart_by_their_constructors() {
+    accepted(
+        "math fn swap(p: Prop, q: Prop, h: @[p || q]) -> @[q || p] {
+            match h {
+                Or::Left(hp) => Or::Right(hp),
+                Or::Right(hq) => Or::Left(hq),
+            }
+        }
+        math fn both(p: Prop, q: Prop, hp: @p, hq: @q) -> @[q && p] { And::Intro(hq, hp) }
+        math fn first(p: Prop, q: Prop, h: @[p && q]) -> @p {
+            match h { And::Intro(hp, _) => hp }
+        }
+        math fn anything(p: Prop, h: @[false]) -> @p { match h {} }
+        fn unreachable(n: u8, h: @[false]) -> u8 { match h {} }",
+    );
+    // A hole does the same within its budget.
+    accepted(
+        "math fn swap(p: Prop, q: Prop, h: @[p && q]) -> @[q && p] { _ }
+        math fn weaken(p: Prop, q: Prop, hq: @q) -> @[p || q] { _ }
+        math fn curry(p: Prop, q: Prop, hq: @q) -> @[p => q && q] { _ }
+        math fn modus(p: Prop, q: Prop, hp: @p, h: @[!p]) -> @[false] { _ }
+        math fn ordered() -> @[forall (x: u8) { x <= 3 => x < 4 }] { _ }",
+    );
+}
+
+#[test]
+fn evidence_cannot_choose_a_value() {
+    let (codes, full) = rejected(
+        "fn pick(p: Prop, q: Prop, h: @[p || q]) -> u8 {
+            match h { Or::Left(_) => 0, Or::Right(_) => 1 }
+        }",
+    );
+    assert_eq!(codes, ["L0227"]);
+    assert!(full.contains("only to produce other evidence"), "{full}");
+}
+
+#[test]
+fn a_math_fn_is_evidence_of_its_general_claim_and_evidence_is_applied() {
+    accepted(
+        "math fn self_equal(x: u8) -> @[x == x] { _ }
+        math fn all_self_equal() -> @[forall (x: u8) { x == x }] { self_equal }
+
+        math fn at_most_nine_helper(limit: u8, h: @[limit <= 9], x: u8, hx: @[x <= limit]) -> @[x <= 9] {
+            u8_le_trans(x, limit, 9, hx, h)
+        }
+        math fn at_most_nine(limit: u8, h: @[limit <= 9]) -> @[forall (x: u8) { x <= limit => x <= 9 }] {
+            let general: @[forall (l: u8) { l <= 9 => forall (x: u8) { x <= l => x <= 9 } }] =
+                at_most_nine_helper;
+            general(limit)(h)
+        }
+        math fn use_it(h: @[forall (x: u8) { x <= 255 }], n: u8) -> @[n <= 255] { h(n) }",
+    );
+    let (codes, full) = rejected("math fn f(h: @[1 == 1], n: u8) -> @[1 == 1] { h(n) }");
+    assert_eq!(codes, ["L0228"]);
+    assert!(full.contains("takes no argument"), "{full}");
+}
+
+#[test]
+fn rewrite_unfold_and_fold_are_the_explicit_forms() {
+    accepted(
+        "math fn nonzero(x: u8) -> Prop { [x != 0] }
+        math fn use_nonzero(n: u8, h: @nonzero(n)) -> @[n != 0] { unfold(nonzero, h) }
+        math fn make_nonzero(n: u8, h: @[n != 0]) -> @nonzero(n) { fold(nonzero, h) }
+        math fn moved(a: u8, b: u8, same: @[a == b], small: @[a <= 9]) -> @[b <= 9] {
+            rewrite(same, small)
+        }",
+    );
+    let (codes, full) = rejected(
+        "math fn nonzero(x: u8) -> Prop { [x != 0] }
+        math fn f(n: u8, h: @[n != 0]) -> @nonzero(n) { let folded = fold(nonzero, h); folded }",
+    );
+    assert_eq!(codes, ["L0229"]);
+    assert!(full.contains("needs to know the claim"), "{full}");
+}
+
+#[test]
+fn a_constant_is_used_by_name() {
+    let result = accepted(
+        "const LIMIT: u8 = 3;
+        const limit_is_small: Prop = [LIMIT <= 9];
+        math fn known() -> @limit_is_small { _ }
+        fn clamp(n: u8) -> (out: u8, @[out <= LIMIT]) {
+            if n <= LIMIT { (n, _) } else { (LIMIT, _) }
+        }",
+    );
+    assert_eq!(call(&result, "clamp", &[2]), "(2, Proved)");
+    assert_eq!(call(&result, "clamp", &[200]), "(3, Proved)");
+}
+
+#[test]
+fn a_constructor_needs_to_know_what_it_proves() {
+    let (codes, _) =
+        rejected("math fn f(p: Prop, q: Prop, hp: @p) -> () { let h = Or::Left(hp); () }");
+    assert_eq!(codes, ["L0226"]);
+    accepted("math fn f(p: Prop, q: Prop, hp: @p) -> () { let h: @[p || q] = Or::Left(hp); () }");
 }

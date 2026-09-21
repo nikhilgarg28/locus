@@ -6,12 +6,13 @@ use std::rc::Rc;
 use crate::ast::{self, DeclarationKind, FunctionMode};
 use crate::diagnostic::Diagnostic;
 use crate::kernel::theory;
-use crate::kernel::{Context, Definitions};
+use crate::kernel::{Context, Definitions, PropVariant, Type};
 use crate::source::{SourceFile, Span};
 use crate::typed::{Binder, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
 
-use super::env::{Elab, EnumInfo, Env, FnInfo, Global, StructInfo};
+use super::env::{Elab, EnumInfo, Env, FnInfo, Global, PropInfo, PropVariantInfo, StructInfo};
 use super::order::{declared_name, dependency_order};
+use super::types::tuple_over;
 
 /// One `_`, or one conversion of evidence: whether it was filled, by which
 /// tier of the search, and what that cost.
@@ -67,6 +68,9 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         labels: HashMap::new(),
         total: false,
     };
+
+    env.declare_builtin_props();
+    env.declare_builtin_lemmas();
 
     let mut seen: HashMap<&str, Span> = HashMap::new();
     let mut duplicates = HashSet::new();
@@ -215,52 +219,283 @@ impl Env<'_> {
                 body,
             } => {
                 let math = *mode == FunctionMode::Math;
-                self.start_item(math);
-                let mut params: Vec<Binder> = Vec::new();
-                for parameter in parameters {
-                    if params
-                        .iter()
-                        .any(|earlier| earlier.name == parameter.name.text)
-                    {
-                        let message =
-                            format!("parameter `{}` is declared twice", parameter.name.text);
-                        return self.fail("L0202", message, parameter.name.span);
-                    }
-                    let ty = self.ty(&parameter.ty)?;
-                    let binder = Binder::new(&parameter.name.text, ty);
-                    self.declare(&binder, false, parameter.span)?;
-                    params.push(binder);
-                }
-                let result_ty = self.ty(result)?;
-                let (block, _, _) = self.block(body, Some(&result_ty))?;
-                let item = FnItem {
-                    name: name.text.clone(),
-                    math,
-                    params: params.clone(),
-                    result: result_ty.clone(),
-                    body: block,
-                };
-                let reference = match self.session.declare_fn(&item) {
-                    Ok(reference) => reference,
-                    Err(error) => return self.internal(error, name.span),
-                };
-                Ok(Global::Fn(Rc::new(FnInfo {
-                    reference,
-                    name: name.text.clone(),
-                    params,
-                    result: result_ty,
-                })))
+                self.function(name, math, parameters, result, Body::Block(body), false)
             }
-            DeclarationKind::Prop { name, .. } => self.fail(
-                "L0290",
-                "`prop` declarations are not supported by the elaborator yet",
-                name.span,
-            ),
-            DeclarationKind::Constant { name, .. } => self.fail(
-                "L0290",
-                "`const` declarations are not supported by the elaborator yet",
-                name.span,
+            DeclarationKind::Constant { name, ty, value } => {
+                self.function(name, true, &[], ty, Body::Expr(value), true)
+            }
+            DeclarationKind::Prop {
+                name,
+                parameters,
+                variants,
+            } => self.prop(name, parameters, variants),
+        }
+    }
+
+    fn function(
+        &mut self,
+        name: &ast::Name,
+        math: bool,
+        parameters: &[ast::Parameter],
+        result: &ast::Type,
+        body: Body<'_>,
+        constant: bool,
+    ) -> Elab<Global> {
+        self.start_item(math);
+        let mut params: Vec<Binder> = Vec::new();
+        for parameter in parameters {
+            if params
+                .iter()
+                .any(|earlier| earlier.name == parameter.name.text)
+            {
+                let message = format!("parameter `{}` is declared twice", parameter.name.text);
+                return self.fail("L0202", message, parameter.name.span);
+            }
+            let ty = self.ty(&parameter.ty)?;
+            let binder = Binder::new(&parameter.name.text, ty);
+            self.declare(&binder, false, parameter.span)?;
+            params.push(binder);
+        }
+        let result_ty = self.ty(result)?;
+        let block = match body {
+            Body::Block(block) => self.block(block, Some(&result_ty))?.0,
+            Body::Expr(value) => {
+                let value = self.check(value, &result_ty)?;
+                crate::typed::Block {
+                    stmts: Vec::new(),
+                    tail: Some(Box::new(value.expr)),
+                }
+            }
+        };
+        let item = FnItem {
+            name: name.text.clone(),
+            math,
+            params: params.clone(),
+            result: result_ty.clone(),
+            body: block,
+        };
+        let reference = match self.session.declare_fn(&item) {
+            Ok(reference) => reference,
+            Err(error) => return self.internal(error, name.span),
+        };
+        Ok(Global::Fn(Rc::new(FnInfo {
+            reference,
+            name: name.text.clone(),
+            params,
+            result: result_ty,
+            constant,
+        })))
+    }
+
+    fn prop(
+        &mut self,
+        name: &ast::Name,
+        parameters: &[ast::Parameter],
+        variants: &[ast::PropVariant],
+    ) -> Elab<Global> {
+        self.start_item(true);
+        let mut params: Vec<Binder> = Vec::new();
+        for parameter in parameters {
+            let ty = self.ty(&parameter.ty)?;
+            if matches!(ty, Type::Proof(_)) {
+                return self.fail(
+                    "L0225",
+                    "a proposition's parameter is data or a `Prop`; evidence belongs in a variant",
+                    parameter.ty.span,
+                );
+            }
+            params.push(Binder::new(&parameter.name.text, ty));
+        }
+        let mut infos: Vec<PropVariantInfo> = Vec::new();
+        let mut kernel_variants = Vec::new();
+        for variant in variants {
+            if infos
+                .iter()
+                .any(|earlier| earlier.name == variant.name.text)
+            {
+                let message = format!("variant `{}` is declared twice", variant.name.text);
+                return self.fail("L0202", message, variant.name.span);
+            }
+            self.start_item(true);
+            let fields = variant
+                .fields
+                .iter()
+                .map(|field| (field.name.as_ref(), &field.ty, field.span));
+            match &variant.target {
+                None => {
+                    // The parameters are in scope in the payload.
+                    for param in &params {
+                        self.declare(param, true, variant.span)?;
+                    }
+                    let payload = self.telescope(fields)?;
+                    let mut telescope = params.clone();
+                    telescope.extend(payload.iter().cloned());
+                    kernel_variants.push(PropVariant::Params(tuple_over(&telescope)));
+                    infos.push(PropVariantInfo {
+                        name: variant.name.text.clone(),
+                        payload,
+                        conclusion: None,
+                    });
+                }
+                Some(target) => {
+                    let payload = self.telescope(fields)?;
+                    let arguments = self.stated_conclusion(name, target)?;
+                    let mut conclusion = Vec::new();
+                    if arguments.len() != params.len() {
+                        let message = format!(
+                            "`{}` takes {} argument(s), and {} were given",
+                            name.text,
+                            params.len(),
+                            arguments.len()
+                        );
+                        return self.fail("L0208", message, target.span);
+                    }
+                    for (argument, param) in arguments.iter().zip(&params) {
+                        let value = self.check(argument, &param.ty)?;
+                        conclusion.push(self.term(&value, argument.span)?);
+                    }
+                    let ids: Vec<_> = payload.iter().map(|binder| binder.id).collect();
+                    let stated = conclusion.clone();
+                    kernel_variants.push(PropVariant::indexed(tuple_over(&payload), |given| {
+                        stated
+                            .iter()
+                            .map(|term| {
+                                ids.iter()
+                                    .zip(given)
+                                    .fold(term.clone(), |term, (id, given)| {
+                                        term.replace_var(*id, given)
+                                    })
+                            })
+                            .collect()
+                    }));
+                    infos.push(PropVariantInfo {
+                        name: variant.name.text.clone(),
+                        payload,
+                        conclusion: Some(conclusion),
+                    });
+                }
+            }
+        }
+        let param_types = params.iter().map(|param| param.ty.clone()).collect();
+        let id = match self.session.declare_prop(param_types, kernel_variants) {
+            Ok(id) => id,
+            Err(error) => return self.internal(error, name.span),
+        };
+        Ok(Global::Prop(Rc::new(PropInfo {
+            id,
+            name: name.text.clone(),
+            params,
+            variants: infos,
+        })))
+    }
+
+    /// The arguments of `: @Name(arguments)` on a variant of `Name`.
+    fn stated_conclusion<'e>(
+        &mut self,
+        name: &ast::Name,
+        target: &'e ast::Expr,
+    ) -> Elab<&'e [ast::Expr]> {
+        let (callee, arguments): (&ast::Expr, &[ast::Expr]) = match &target.kind {
+            ast::ExprKind::Call { callee, arguments } => (callee, arguments),
+            _ => (target, &[]),
+        };
+        match &callee.kind {
+            ast::ExprKind::Name(written) if written.text == name.text => Ok(arguments),
+            _ => self.fail(
+                "L0225",
+                format!("a variant of `{0}` proves `{0}(...)`", name.text),
+                target.span,
             ),
         }
     }
+
+    /// The checked lemmas about `u8` ordering, callable by name. They are
+    /// what an ordering step between two unknowns is written with.
+    pub(super) fn declare_builtin_lemmas(&mut self) {
+        let theory = self.theory;
+        let lemmas = [
+            ("u8_le_refl", theory.u8_le_refl),
+            ("u8_zero_le", theory.u8_zero_le),
+            ("u8_le_trans", theory.u8_le_trans),
+            ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
+            ("u8_succ_le_of_lt", theory.u8_succ_le_of_lt),
+        ];
+        for (name, id) in lemmas {
+            let signature = self
+                .session
+                .program()
+                .definitions()
+                .signature(id)
+                .expect("the theory declared it");
+            let Type::Fn(declared, _) = &signature else {
+                unreachable!("a signature is a function type")
+            };
+            let mut params: Vec<Binder> = Vec::new();
+            for index in 0..=declared.len() {
+                let earlier: Vec<_> = params.iter().map(Binder::term).collect();
+                let ty = crate::kernel::telescope_entry(&signature, index, &earlier)
+                    .expect("the index is within the signature");
+                params.push(Binder::new(&format!("x{index}"), ty));
+            }
+            let result = params.pop().expect("the result was pushed last").ty;
+            self.globals.insert(
+                name.to_string(),
+                Global::Fn(Rc::new(FnInfo {
+                    reference: FnRef::Math(id),
+                    name: name.to_string(),
+                    params,
+                    result,
+                    constant: false,
+                })),
+            );
+        }
+    }
+
+    /// The propositions the language itself provides, under their source names.
+    pub(super) fn declare_builtin_props(&mut self) {
+        let prelude = self.prelude;
+        let prop = |name: &str| Binder::new(name, Type::Prop);
+        let evidence = |name: &str, of: &Binder| Binder::new(name, Type::proof(of.term()));
+        let variant = |name: &str, payload: Vec<Binder>| PropVariantInfo {
+            name: name.to_string(),
+            payload,
+            conclusion: None,
+        };
+        let (p, q) = (prop("p"), prop("q"));
+        let and = vec![variant(
+            "Intro",
+            vec![evidence("left", &p), evidence("right", &q)],
+        )];
+        let or = vec![
+            variant("Left", vec![evidence("left", &p)]),
+            variant("Right", vec![evidence("right", &q)]),
+        ];
+        let builtins = [
+            (
+                "True",
+                prelude.truth,
+                Vec::new(),
+                vec![variant("Intro", Vec::new())],
+            ),
+            ("False", prelude.falsehood, Vec::new(), Vec::new()),
+            ("And", prelude.and, vec![p.clone(), q.clone()], and),
+            ("Or", prelude.or, vec![p, q], or),
+        ];
+        for (name, id, params, variants) in builtins {
+            self.globals.insert(
+                name.to_string(),
+                Global::Prop(Rc::new(PropInfo {
+                    id,
+                    name: name.to_string(),
+                    params,
+                    variants,
+                })),
+            );
+        }
+    }
+}
+
+enum Body<'a> {
+    Block(&'a ast::Block),
+    Expr(&'a ast::Expr),
 }

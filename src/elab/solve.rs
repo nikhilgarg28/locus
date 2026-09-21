@@ -26,7 +26,7 @@ use crate::kernel::{
 };
 use crate::source::Span;
 
-use super::env::{Elab, Env, Fact};
+use super::env::{Elab, Env, Fact, substitute};
 use super::items::HoleReport;
 
 const STEP_LIMIT: usize = 400;
@@ -36,6 +36,26 @@ const STEP_LIMIT: usize = 400;
 struct Step {
     eq: Proof,
     template: Term,
+}
+
+/// An equation in scope read as a rewrite of `name` to `value`.
+struct Rewrite {
+    /// The fact it came from, which it must not rewrite.
+    source: usize,
+    name: Term,
+    value: Term,
+    eq: Proof,
+}
+
+/// Carries evidence of a claim along the steps that rewrote the claim.
+fn forward(proof: Proof, steps: Vec<Step>) -> Proof {
+    steps
+        .into_iter()
+        .fold(proof, |proof, step| Proof::Transport {
+            eq: Box::new(step.eq),
+            template: step.template,
+            proof: Box::new(proof),
+        })
 }
 
 /// A claim read as the outcome of a test: `test == outcome`.
@@ -80,34 +100,28 @@ impl Env<'_> {
     }
 
     fn attempt(&mut self, goal: &Term) -> Attempt {
-        let found = |proof, tier| Attempt {
-            proof: Some(proof),
-            tier,
-            counterexample: None,
-        };
         if let Some(fact) = self.facts.iter().rev().find(|fact| same(&fact.claim, goal)) {
-            return found(fact.proof.clone(), "fact");
+            return Attempt {
+                proof: Some(fact.proof.clone()),
+                tier: "fact",
+                counterexample: None,
+            };
         }
-        let (normal_goal, goal_steps) = self.normalize(goal, None);
-        let facts: Vec<Fact> =
-            self.facts
-                .clone()
-                .iter()
-                .enumerate()
-                .map(|(index, fact)| {
-                    let (claim, steps) = self.normalize(&fact.claim, Some(index));
-                    let proof = steps.into_iter().fold(fact.proof.clone(), |proof, step| {
-                        Proof::Transport {
-                            eq: Box::new(step.eq),
-                            template: step.template,
-                            proof: Box::new(proof),
-                        }
-                    });
-                    Fact { proof, claim }
-                })
-                .collect();
+        let (known, rewrites) = self.knowledge();
+        let (normal_goal, goal_steps) = self.normalize(goal, &rewrites, None);
+        let mut facts: Vec<Fact> = known
+            .iter()
+            .enumerate()
+            .map(|(index, fact)| {
+                let (claim, steps) = self.normalize(&fact.claim, &rewrites, Some(index));
+                Fact {
+                    proof: forward(fact.proof.clone(), steps),
+                    claim,
+                }
+            })
+            .collect();
         let mut counterexample = None;
-        let (proof, tier) = match self.prove(&normal_goal, &facts, &mut counterexample, 0) {
+        let (proof, tier) = match self.prove(&normal_goal, &mut facts, &mut counterexample, 0) {
             Some((proof, tier)) => (Some(proof), tier),
             None => (None, "unsolved"),
         };
@@ -131,11 +145,16 @@ impl Env<'_> {
 
     // --- Normalization ----------------------------------------------------------
 
-    /// The equations `name == value` in scope, latest first, read as
-    /// rewrites from left to right. A name is a variable or a field of one:
-    /// what a `let` bound, or a part of what a call returned. `except` is the
-    /// fact being normalized, which must not rewrite itself away.
-    fn definitions_in_scope(&self, except: Option<usize>) -> Vec<(Term, Term, Proof)> {
+    /// The term with projections, matches and literal arithmetic computed.
+    pub fn computed(&mut self, term: &Term) -> Term {
+        self.compute(term, false).0
+    }
+
+    /// What is known, with every claim computed and conjunctions taken
+    /// apart, and the rewrites it gives: the equations `name == value`, read
+    /// from left to right, latest first. A name is a variable or a field of
+    /// one: what a `let` bound, or a part of what a call returned.
+    fn knowledge(&mut self) -> (Vec<Fact>, Vec<Rewrite>) {
         fn is_name(term: &Term) -> bool {
             match term {
                 Term::Free(_) => true,
@@ -143,63 +162,112 @@ impl Env<'_> {
                 _ => false,
             }
         }
-        self.facts
+        let mut known = Vec::new();
+        for fact in self.facts.clone() {
+            let (claim, steps) = self.compute(&fact.claim, true);
+            let proof = forward(fact.proof, steps);
+            self.take_apart(Fact { proof, claim }, &mut known);
+        }
+        let rewrites = known
             .iter()
             .enumerate()
             .rev()
-            .filter(|(index, _)| Some(*index) != except)
-            .filter_map(|(_, fact)| match &fact.claim {
+            .filter_map(|(source, fact)| match &fact.claim {
                 Term::Eq(_, left, right)
                     if is_name(left) && right.find(&|term| same(term, left)).is_none() =>
                 {
-                    Some(((**left).clone(), (**right).clone(), fact.proof.clone()))
+                    Some(Rewrite {
+                        source,
+                        name: (**left).clone(),
+                        value: (**right).clone(),
+                        eq: fact.proof.clone(),
+                    })
                 }
                 _ => None,
             })
-            .collect()
+            .collect();
+        (known, rewrites)
     }
 
-    fn normalize(&mut self, term: &Term, except: Option<usize>) -> (Term, Vec<Step>) {
-        self.normalize_with(term, except, true)
+    /// Evidence of `p && q` is evidence of `p` and evidence of `q`.
+    fn take_apart(&self, fact: Fact, known: &mut Vec<Fact>) {
+        match &fact.claim {
+            Term::PropApp(id, arguments) if *id == self.prelude.and => {
+                for (index, part) in arguments.iter().enumerate() {
+                    let proof = Proof::CaseProof {
+                        scrutinee: Box::new(fact.proof.clone()),
+                        goal: part.clone(),
+                        arms: vec![Proof::arm(2, 0, |parts, _| {
+                            Proof::OfTerm(parts[index].clone())
+                        })],
+                    };
+                    self.take_apart(
+                        Fact {
+                            proof,
+                            claim: part.clone(),
+                        },
+                        known,
+                    );
+                }
+            }
+            _ => known.push(fact),
+        }
     }
 
-    /// `thorough` also replaces `let` names and unfolds functions; without
-    /// it only projections, matches and literal arithmetic are computed.
-    fn normalize_with(
+    /// Rewrites names to what they stand for and computes, until neither
+    /// applies. `except` is the fact being normalized, which must not
+    /// rewrite itself away.
+    fn normalize(
         &mut self,
         term: &Term,
+        rewrites: &[Rewrite],
         except: Option<usize>,
-        thorough: bool,
     ) -> (Term, Vec<Step>) {
         let mut term = term.clone();
         let mut steps = Vec::new();
-        let definitions = if thorough {
-            self.definitions_in_scope(except)
-        } else {
-            Vec::new()
-        };
-        // A value may mention a name defined later in the list, so go round
-        // until nothing changes; the step limit bounds a cycle of equations.
-        let mut changed = true;
-        while changed && steps.len() < STEP_LIMIT {
-            changed = false;
-            for (name, value, eq) in &definitions {
-                if term.find(&|candidate| same(candidate, name)).is_none() {
-                    continue;
+        loop {
+            let before = steps.len();
+            // A value may mention a name defined later in the list, so go
+            // round until nothing changes; the limit bounds a cycle.
+            let mut changed = true;
+            while changed && steps.len() < STEP_LIMIT {
+                changed = false;
+                for rewrite in rewrites {
+                    if Some(rewrite.source) == except
+                        || term
+                            .find(&|candidate| same(candidate, &rewrite.name))
+                            .is_none()
+                    {
+                        continue;
+                    }
+                    let template = term.abstract_over(&|candidate| same(candidate, &rewrite.name));
+                    term = template.open(&rewrite.value);
+                    steps.push(Step {
+                        eq: rewrite.eq.clone(),
+                        template,
+                    });
+                    changed = true;
                 }
-                let template = term.abstract_over(&|candidate| same(candidate, name));
-                term = template.open(value);
-                steps.push(Step {
-                    eq: eq.clone(),
-                    template,
-                });
-                changed = true;
+            }
+            let (computed, more) = self.compute(&term, true);
+            term = computed;
+            steps.extend(more);
+            if steps.len() == before || steps.len() >= STEP_LIMIT {
+                return (term, steps);
             }
         }
+    }
+
+    /// Computes projections of written tuples and structs, matches on
+    /// written constructors, and arithmetic on literals; with `unfold`, also
+    /// calls of the program's own math functions.
+    fn compute(&mut self, term: &Term, unfold: bool) -> (Term, Vec<Step>) {
+        let mut term = term.clone();
+        let mut steps = Vec::new();
         for _ in 0..STEP_LIMIT {
             let Some(redex) = term
                 .find(&|candidate| {
-                    self.computes(candidate) && (thorough || !matches!(candidate, Term::Call(..)))
+                    self.computes(candidate) && (unfold || !matches!(candidate, Term::Call(..)))
                 })
                 .cloned()
             else {
@@ -250,33 +318,41 @@ impl Env<'_> {
     fn prove(
         &mut self,
         goal: &Term,
-        facts: &[Fact],
+        facts: &mut Vec<Fact>,
         counterexample: &mut Option<(Term, u8)>,
         depth: usize,
     ) -> Option<(Proof, &'static str)> {
         if let Some(fact) = facts.iter().rev().find(|fact| same(&fact.claim, goal)) {
             return Some((fact.proof.clone(), "fact after normalizing"));
         }
+        if let Term::Eq(_, left, right) = goal
+            && same(left, right)
+        {
+            return Some((Proof::Refl((**left).clone()), "reflexivity"));
+        }
+        if let Some(wanted) = self.as_test(goal)
+            && let Some((evidence, tier)) = self.prove_test(&wanted, facts, counterexample)
+        {
+            return Some((self.reflect_test(goal, &wanted, evidence), tier));
+        }
+        if depth >= 8 {
+            return None;
+        }
+        let prelude = self.prelude;
         match goal {
-            Term::Eq(_, left, right) if same(left, right) => {
-                return Some((Proof::Refl((**left).clone()), "reflexivity"));
-            }
-            Term::PropApp(id, arguments) if *id == self.prelude.truth => {
-                let _ = arguments;
-                return Some((
-                    Proof::Construct {
-                        prop: *id,
-                        variant: 0,
-                        params: Vec::new(),
-                        payload: Vec::new(),
-                    },
-                    "trivial",
-                ));
-            }
-            Term::PropApp(id, arguments) if *id == self.prelude.and && depth < 8 => {
+            Term::PropApp(id, _) if *id == prelude.truth => Some((
+                Proof::Construct {
+                    prop: *id,
+                    variant: 0,
+                    params: Vec::new(),
+                    payload: Vec::new(),
+                },
+                "trivial",
+            )),
+            Term::PropApp(id, arguments) if *id == prelude.and => {
                 let (left, _) = self.prove(&arguments[0], facts, counterexample, depth + 1)?;
                 let (right, _) = self.prove(&arguments[1], facts, counterexample, depth + 1)?;
-                return Some((
+                Some((
                     Proof::Construct {
                         prop: *id,
                         variant: 0,
@@ -284,13 +360,76 @@ impl Env<'_> {
                         payload: vec![Term::proof(left), Term::proof(right)],
                     },
                     "conjunction",
-                ));
+                ))
             }
-            _ => {}
+            Term::PropApp(id, arguments) if *id == prelude.or => (0..2).find_map(|side| {
+                let (proof, _) = self.prove(&arguments[side], facts, counterexample, depth + 1)?;
+                Some((
+                    Proof::Construct {
+                        prop: *id,
+                        variant: side,
+                        params: arguments.clone(),
+                        payload: vec![Term::proof(proof)],
+                    },
+                    "disjunction",
+                ))
+            }),
+            // Evidence of `p => q` is evidence of `q` that may use `p`.
+            Term::Implies(premise, conclusion) => {
+                let scope = self.ctx.checkpoint();
+                let assumed = self.ctx.assume((**premise).clone()).ok()?;
+                let known = facts.len();
+                self.take_apart(
+                    Fact {
+                        proof: Proof::hyp(assumed),
+                        claim: (**premise).clone(),
+                    },
+                    facts,
+                );
+                let body = self.prove(conclusion, facts, counterexample, depth + 1);
+                facts.truncate(known);
+                self.ctx.rollback(scope);
+                let (body, _) = body?;
+                Some((
+                    Proof::implies_intro((**premise).clone(), |given| {
+                        substitute(body, &[], &[(assumed, given)])
+                    }),
+                    "implication",
+                ))
+            }
+            Term::Forall(ty, body) => {
+                let scope = self.ctx.checkpoint();
+                let variable = self.ctx.declare_ghost(ty.clone()).ok()?;
+                let instance = body.open(&Term::Free(variable));
+                let proof = self.prove(&instance, facts, counterexample, depth + 1);
+                self.ctx.rollback(scope);
+                let (proof, _) = proof?;
+                Some((
+                    Proof::forall_intro(ty.clone(), |given| {
+                        substitute(proof, &[(variable, given)], &[])
+                    }),
+                    "generalization",
+                ))
+            }
+            // `False` follows from a refuted fact whose claim can be shown.
+            Term::PropApp(id, _) if *id == prelude.falsehood => {
+                let refuted: Vec<Fact> = facts
+                    .iter()
+                    .filter(|fact| {
+                        matches!(&fact.claim, Term::Implies(_, conclusion) if **conclusion == prelude.falsehood_prop())
+                    })
+                    .cloned()
+                    .collect();
+                refuted.into_iter().find_map(|fact| {
+                    let Term::Implies(premise, _) = &fact.claim else {
+                        return None;
+                    };
+                    let (premise, _) = self.prove(premise, facts, counterexample, depth + 1)?;
+                    Some((Proof::implies_elim(fact.proof, premise), "contradiction"))
+                })
+            }
+            _ => None,
         }
-        let wanted = self.as_test(goal)?;
-        let (evidence, tier) = self.prove_test(&wanted, facts, counterexample)?;
-        Some((self.reflect_test(goal, &wanted, evidence), tier))
     }
 
     /// Reads a claim as the outcome of a runtime test, when it is one.
@@ -562,7 +701,7 @@ impl Env<'_> {
     ) {
         // The claim as stated, with the values written for its names put in
         // their fields; then the claim with everything computed.
-        let (stated, _) = self.normalize_with(goal, None, false);
+        let stated = self.computed(goal);
         let claim = self.show(&stated);
         let mut diagnostic = match given {
             Some(given) => {
@@ -575,7 +714,8 @@ impl Env<'_> {
             }
             None => Diagnostic::error("L0230", format!("cannot show `{claim}`"), span),
         };
-        let (normal, _) = self.normalize(goal, None);
+        let (known_facts, rewrites) = self.knowledge();
+        let (normal, _) = self.normalize(goal, &rewrites, None);
         let normal_text = self.show(&normal);
         if normal_text != claim {
             diagnostic = diagnostic.note(format!("after computing, the claim is `{normal_text}`"));
@@ -590,14 +730,12 @@ impl Env<'_> {
         let mut subjects = Vec::new();
         free_variables(&normal, &mut subjects);
         let mut known = Vec::new();
-        for (index, fact) in self.facts.clone().iter().enumerate().rev() {
-            // A `let` equation is shown by substitution, not as a fact.
-            if matches!(&fact.claim, Term::Eq(_, left, _) if matches!(**left, Term::Free(_)))
-                && !matches!(&fact.claim, Term::Eq(Type::Bool, ..))
-            {
+        for (index, fact) in known_facts.iter().enumerate().rev() {
+            // An equation for a name is shown by substitution, not as a fact.
+            if rewrites.iter().any(|rewrite| rewrite.source == index) {
                 continue;
             }
-            let (normal_fact, _) = self.normalize(&fact.claim, Some(index));
+            let (normal_fact, _) = self.normalize(&fact.claim, &rewrites, Some(index));
             let mut theirs = Vec::new();
             free_variables(&normal_fact, &mut theirs);
             if !theirs.iter().any(|variable| subjects.contains(variable)) {
