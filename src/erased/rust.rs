@@ -24,6 +24,15 @@
 //!
 //! Every value in the core is immutable and freely reusable, so structs and
 //! enums derive `Copy`.
+//!
+//! A panic is printed as `panic!("{}", "message")`. The message is an
+//! argument and never the format string, so its braces mean nothing to
+//! `panic!`, and it is written as Rust's `{:?}` writes a string, which is a
+//! string literal for any text. Whatever follows a panic in evaluation order
+//! is still printed, as it is for a trap: the rest of a block, the other
+//! arguments of a call, the call itself. Rust warns that such code is
+//! unreachable, and the header allows exactly that on purpose, since the
+//! printer keeps the shape of the source and does not prune it.
 
 use std::fmt::Write;
 
@@ -112,8 +121,9 @@ pub fn print_module(module: &Module) -> String {
     indent(&printer.out)
 }
 
-/// Indents by brace depth. The printer emits one statement per line and no
-/// string literals, so counting braces is exact.
+/// Indents by brace depth. The printer emits one statement per line, and a
+/// string literal, which is the message of a panic or of a trap, stays on
+/// its line, so counting the braces outside literals is exact.
 fn indent(source: &str) -> String {
     let mut out = String::new();
     let mut depth = 0usize;
@@ -128,11 +138,29 @@ fn indent(source: &str) -> String {
             out.push_str(line);
         }
         out.push('\n');
-        let opens = line.matches('{').count();
-        let closes = line.matches('}').count() - usize::from(closes_first);
-        depth = (depth + opens).saturating_sub(closes);
+        let (opens, closes) = braces(line);
+        depth = (depth + opens).saturating_sub(closes - usize::from(closes_first));
     }
     out
+}
+
+/// The opening and closing braces of a line, outside its string literals.
+fn braces(line: &str) -> (usize, usize) {
+    let (mut opens, mut closes) = (0, 0);
+    let mut in_literal = false;
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if in_literal => {
+                chars.next();
+            }
+            '"' => in_literal = !in_literal,
+            '{' if !in_literal => opens += 1,
+            '}' if !in_literal => closes += 1,
+            _ => {}
+        }
+    }
+    (opens, closes)
 }
 
 fn tuple_of(items: &[String]) -> String {
@@ -285,6 +313,7 @@ impl Printer<'_> {
             EExpr::Proved => "Proved".into(),
             EExpr::Ghost => "Ghost".into(),
             EExpr::Trap => "unreachable!(\"shown never to be reached\")".into(),
+            EExpr::Panic { message } => format!("panic!(\"{{}}\", {message:?})"),
             EExpr::Tuple(fields) => tuple_of(&self.all(fields)),
             EExpr::Struct { name, fields, .. } => {
                 let fields: Vec<String> = fields

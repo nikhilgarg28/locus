@@ -7,8 +7,14 @@
 //!
 //! A proof evaluates to `Proved` and anything else with no runtime form to
 //! `Ghost`, without being looked into, which is what skipping means here.
+//!
+//! A call ends in the same `Outcome` as in the other interpreter: a value, a
+//! panic with its message, or out of fuel. The check IR has no construct that
+//! panics yet, so nothing here produces `Outcome::Panic`; the case is part of
+//! the type so that the two interpreters are compared as outcomes from now
+//! on, and the construct arrives with the checked semantics of panics.
 
-use crate::erased::{RunError, Value};
+use crate::erased::{Outcome, RunError, Stop, Value, outcome};
 use crate::kernel::{ForLoop, Prim, Term, VarId, evaluate_primitive};
 use crate::typed::FnRef;
 
@@ -33,8 +39,8 @@ pub struct CheckInterpreter<'p> {
     bound: Vec<Value>,
 }
 
-fn stuck<T>(why: impl Into<String>) -> Result<T, RunError> {
-    Err(RunError::Stuck(why.into()))
+fn stuck<T>(why: impl Into<String>) -> Result<T, Stop> {
+    Err(RunError::Stuck(why.into()).into())
 }
 
 impl<'p> CheckInterpreter<'p> {
@@ -48,9 +54,13 @@ impl<'p> CheckInterpreter<'p> {
         }
     }
 
-    pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, RunError> {
+    pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
+        outcome(self.enter(callee, arguments))
+    }
+
+    fn enter(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, Stop> {
         if self.depth >= MAX_CALL_DEPTH {
-            return Err(RunError::TooDeep);
+            return Err(RunError::TooDeep.into());
         }
         self.depth += 1;
         let result = match callee {
@@ -61,11 +71,7 @@ impl<'p> CheckInterpreter<'p> {
         result
     }
 
-    fn call_math(
-        &mut self,
-        id: crate::kernel::FnId,
-        arguments: Vec<Value>,
-    ) -> Result<Value, RunError> {
+    fn call_math(&mut self, id: crate::kernel::FnId, arguments: Vec<Value>) -> Result<Value, Stop> {
         let Some((arity, body)) = self.program.definitions().function_body(id) else {
             return stuck("a call to an undeclared math function");
         };
@@ -81,11 +87,7 @@ impl<'p> CheckInterpreter<'p> {
         result
     }
 
-    fn call_exec(
-        &mut self,
-        id: super::ir::ExecFnId,
-        arguments: Vec<Value>,
-    ) -> Result<Value, RunError> {
+    fn call_exec(&mut self, id: super::ir::ExecFnId, arguments: Vec<Value>) -> Result<Value, Stop> {
         let Some(function) = self.program.function(id) else {
             return stuck("a call to an undeclared function");
         };
@@ -106,9 +108,9 @@ impl<'p> CheckInterpreter<'p> {
         }
     }
 
-    fn spend(&mut self) -> Result<(), RunError> {
+    fn spend(&mut self) -> Result<(), Stop> {
         if self.fuel == 0 {
-            return Err(RunError::OutOfFuel);
+            return Err(Stop::OutOfFuel);
         }
         self.fuel -= 1;
         Ok(())
@@ -116,14 +118,14 @@ impl<'p> CheckInterpreter<'p> {
 
     // --- Statements -------------------------------------------------------------
 
-    fn block(&mut self, block: &Block) -> Result<Flow, RunError> {
+    fn block(&mut self, block: &Block) -> Result<Flow, Stop> {
         let scope = self.free.len();
         let result = self.block_in_scope(block);
         self.free.truncate(scope);
         result
     }
 
-    fn block_in_scope(&mut self, block: &Block) -> Result<Flow, RunError> {
+    fn block_in_scope(&mut self, block: &Block) -> Result<Flow, Stop> {
         for stmt in &block.stmts {
             if let Some(flow) = self.stmt(stmt)? {
                 return Ok(flow);
@@ -138,7 +140,7 @@ impl<'p> CheckInterpreter<'p> {
     }
 
     /// Runs a statement. `Some` is a control transfer out of a nested arm.
-    fn stmt(&mut self, stmt: &Stmt) -> Result<Option<Flow>, RunError> {
+    fn stmt(&mut self, stmt: &Stmt) -> Result<Option<Flow>, Stop> {
         self.spend()?;
         match stmt {
             Stmt::Let { var, value, .. } => {
@@ -153,7 +155,7 @@ impl<'p> CheckInterpreter<'p> {
                 arguments,
             } => {
                 let arguments = self.terms(arguments)?;
-                let value = self.call(FnRef::Exec(*callee), arguments)?;
+                let value = self.enter(FnRef::Exec(*callee), arguments)?;
                 self.free.push((*var, value));
             }
             Stmt::Match {
@@ -218,7 +220,7 @@ impl<'p> CheckInterpreter<'p> {
         current: Vec<Value>,
         index: Option<(VarId, Value)>,
         body: &Block,
-    ) -> Result<Flow, RunError> {
+    ) -> Result<Flow, Stop> {
         if vars.len() != current.len() {
             return stuck("continue with the wrong number of state values");
         }
@@ -230,7 +232,7 @@ impl<'p> CheckInterpreter<'p> {
         result
     }
 
-    fn arms(&mut self, scrutinee: &Term, arms: &[Arm]) -> Result<Flow, RunError> {
+    fn arms(&mut self, scrutinee: &Term, arms: &[Arm]) -> Result<Flow, Stop> {
         let (index, payload) = match self.term(scrutinee)? {
             Value::Bool(flag) => (usize::from(flag), Vec::new()),
             Value::Variant(_, index, payload) => (index, payload),
@@ -251,11 +253,11 @@ impl<'p> CheckInterpreter<'p> {
 
     // --- Kernel terms ---------------------------------------------------------------
 
-    fn terms(&mut self, terms: &[Term]) -> Result<Vec<Value>, RunError> {
+    fn terms(&mut self, terms: &[Term]) -> Result<Vec<Value>, Stop> {
         terms.iter().map(|term| self.term(term)).collect()
     }
 
-    fn term(&mut self, term: &Term) -> Result<Value, RunError> {
+    fn term(&mut self, term: &Term) -> Result<Value, Stop> {
         self.spend()?;
         Ok(match term {
             Term::Free(id) => match self.free.iter().rev().find(|(var, _)| var == id) {
@@ -280,7 +282,7 @@ impl<'p> CheckInterpreter<'p> {
             | Term::Exists(..)
             | Term::PropApp(..)
             | Term::Fn(_) => Value::Ghost,
-            Term::Absurd(..) => return Err(RunError::Trap),
+            Term::Absurd(..) => return Err(RunError::Trap.into()),
             Term::Prim(prim, operands) => {
                 let operands = self.terms(operands)?;
                 primitive(*prim, &operands)?
@@ -304,7 +306,7 @@ impl<'p> CheckInterpreter<'p> {
                     return stuck("a call through a function value");
                 };
                 let arguments = self.terms(arguments)?;
-                self.call(FnRef::Math(*id), arguments)?
+                self.enter(FnRef::Math(*id), arguments)?
             }
             Term::Case {
                 scrutinee, arms, ..
@@ -327,7 +329,7 @@ impl<'p> CheckInterpreter<'p> {
         })
     }
 
-    fn for_term(&mut self, looped: &ForLoop) -> Result<Value, RunError> {
+    fn for_term(&mut self, looped: &ForLoop) -> Result<Value, Stop> {
         let (Value::U8(lo), Value::U8(hi)) = (self.term(&looped.lo)?, self.term(&looped.hi)?)
         else {
             return stuck("a for bound that is not a u8");
@@ -349,7 +351,7 @@ impl<'p> CheckInterpreter<'p> {
 
 /// A primitive with a runtime meaning is evaluated as the kernel evaluates
 /// it. One without, or one applied to a ghost, is ghost.
-fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, RunError> {
+fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
     let terms: Option<Vec<Term>> = operands
         .iter()
         .map(|operand| match operand {

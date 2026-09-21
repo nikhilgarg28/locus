@@ -42,8 +42,22 @@ struct Checker<'m> {
 }
 
 /// The type of an expression, or `None` when it never yields a value
-/// because it transfers control or traps.
+/// because it transfers control, traps, or panics. An expression that never
+/// yields is accepted wherever a value of any type is expected, and an
+/// expression that needs the value of one that never yields never yields
+/// either: `f(panic!("..."))` does not call `f`.
 type Yield = Option<EType>;
+
+/// The type of a subexpression whose value is needed; when there is none,
+/// the expression being checked never yields.
+macro_rules! needed {
+    ($found:expr) => {
+        match $found {
+            Some(ty) => ty,
+            None => return Ok(None),
+        }
+    };
+}
 
 pub fn check_module(module: &Module) -> Result<(), TypeError> {
     let signatures = module
@@ -110,9 +124,11 @@ impl Checker<'_> {
         for stmt in &block.stmts {
             match stmt {
                 EStmt::Let { pattern, value } => {
-                    if let Some(ty) = self.expr(value)? {
-                        self.bind(pattern, &ty)?;
-                    }
+                    // Nothing after a `let` whose value never yields is
+                    // reached, and its names have no types to be checked
+                    // with, so the block ends here and never yields.
+                    let ty = needed!(self.expr(value)?);
+                    self.bind(pattern, &ty)?;
                 }
                 EStmt::Expr(expr) => {
                     self.expr(expr)?;
@@ -142,42 +158,64 @@ impl Checker<'_> {
         }
     }
 
-    /// A subexpression whose value is needed.
-    fn value(&mut self, expr: &EExpr, what: &str) -> Result<EType, TypeError> {
-        match self.expr(expr)? {
-            Some(ty) => Ok(ty),
-            None => fail(format!("{what} never yields a value")),
-        }
-    }
-
-    fn values(&mut self, exprs: &[EExpr], what: &str) -> Result<Vec<EType>, TypeError> {
-        exprs.iter().map(|expr| self.value(expr, what)).collect()
-    }
-
-    fn arguments(
+    /// Subexpressions whose values are all needed. Every one is checked, and
+    /// there are types only when every one yields.
+    fn values<'e>(
         &mut self,
-        arguments: &[EExpr],
-        expected: &[EType],
-        what: &str,
-    ) -> Result<(), TypeError> {
-        let found = self.values(arguments, what)?;
-        if found == expected {
-            Ok(())
-        } else {
-            fail(format!("{what}: found {found:?}, expected {expected:?}"))
-        }
-    }
-
-    fn state(&mut self, state: &[(VarId, String, EType, EExpr)]) -> Result<Vec<EType>, TypeError> {
-        let mut types = Vec::new();
-        for (_, name, ty, init) in state {
-            let found = self.value(init, "an initial state value")?;
-            if &found != ty {
-                return fail(format!("state {name} starts as {found:?}, declared {ty:?}"));
+        exprs: impl IntoIterator<Item = &'e EExpr>,
+    ) -> Result<Option<Vec<EType>>, TypeError> {
+        let mut types = Some(Vec::new());
+        for expr in exprs {
+            match (self.expr(expr)?, &mut types) {
+                (Some(ty), Some(types)) => types.push(ty),
+                _ => types = None,
             }
-            types.push(ty.clone());
         }
         Ok(types)
+    }
+
+    /// Values for positions of known types: one for each position, and each
+    /// that yields has the type of its position. `None` when one never
+    /// yields.
+    fn arguments<'e>(
+        &mut self,
+        arguments: impl IntoIterator<Item = &'e EExpr>,
+        expected: &[EType],
+        what: &str,
+    ) -> Result<Option<()>, TypeError> {
+        let mut yields = Some(());
+        let mut count = 0;
+        for (position, argument) in arguments.into_iter().enumerate() {
+            count += 1;
+            match (self.expr(argument)?, expected.get(position)) {
+                (Some(found), Some(expected)) if found != *expected => {
+                    return fail(format!(
+                        "{what}: found {found:?} at {position}, expected {expected:?}"
+                    ));
+                }
+                (None, _) => yields = None,
+                _ => {}
+            }
+        }
+        if count != expected.len() {
+            return fail(format!(
+                "{what}: found {count} value(s), expected {}",
+                expected.len()
+            ));
+        }
+        Ok(yields)
+    }
+
+    /// The declared types of a loop's state, and `None` beside them when an
+    /// initial value never yields.
+    fn state(
+        &mut self,
+        state: &[(VarId, String, EType, EExpr)],
+    ) -> Result<(Vec<EType>, Option<()>), TypeError> {
+        let types: Vec<EType> = state.iter().map(|(_, _, ty, _)| ty.clone()).collect();
+        let inits = state.iter().map(|(_, _, _, init)| init);
+        let yields = self.arguments(inits, &types, "the initial loop state")?;
+        Ok((types, yields))
     }
 
     fn expr(&mut self, expr: &EExpr) -> Result<Yield, TypeError> {
@@ -190,15 +228,15 @@ impl Checker<'_> {
             EExpr::U8(_) => EType::U8,
             EExpr::Proved => EType::Proved,
             EExpr::Ghost => EType::Ghost,
-            EExpr::Trap => return Ok(None),
-            EExpr::Tuple(fields) => EType::Tuple(self.values(fields, "a tuple field")?),
+            EExpr::Trap | EExpr::Panic { .. } => return Ok(None),
+            EExpr::Tuple(fields) => EType::Tuple(needed!(self.values(fields)?)),
             EExpr::Struct { id, name, fields } => {
                 let Some(decl) = self.module.structs.iter().find(|decl| decl.id == *id) else {
                     return fail(format!("struct {name} was not emitted"));
                 };
                 let expected: Vec<EType> = decl.fields.iter().map(|(_, ty)| ty.clone()).collect();
-                let values: Vec<EExpr> = fields.iter().map(|(_, value)| value.clone()).collect();
-                self.arguments(&values, &expected, &format!("the fields of {name}"))?;
+                let values = fields.iter().map(|(_, value)| value);
+                needed!(self.arguments(values, &expected, &format!("the fields of {name}"))?);
                 EType::Struct(*id)
             }
             EExpr::Variant {
@@ -215,15 +253,15 @@ impl Checker<'_> {
                     return fail(format!("{enum_name} has no variant {index}"));
                 };
                 let expected = variant.payload.clone();
-                self.arguments(
+                needed!(self.arguments(
                     payload,
                     &expected,
                     &format!("the payload of {}", variant.name),
-                )?;
+                )?);
                 EType::Enum(*id)
             }
             EExpr::Field { target, index, .. } => {
-                let fields = match self.value(target, "a projected value")? {
+                let fields = match needed!(self.expr(target)?) {
                     EType::Tuple(fields) => fields,
                     EType::Struct(id) => match self.module.structs.iter().find(|d| d.id == id) {
                         Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -244,18 +282,15 @@ impl Checker<'_> {
                 if !matches!(prim, Prim::WrappingAdd | Prim::WrappingSub) {
                     return fail(format!("{} has no runtime form", prim.name()));
                 }
-                let mut operands = vec![self.value(receiver, "a receiver")?];
-                operands.extend(self.values(arguments, "an argument")?);
+                let operands = std::iter::once(&**receiver).chain(arguments);
+                let operands = needed!(self.values(operands)?);
                 if operands != [EType::U8, EType::U8] {
                     return fail(format!("{} applied to {operands:?}", prim.name()));
                 }
                 EType::U8
             }
             EExpr::Compare { left, right, .. } => {
-                let operands = [
-                    self.value(left, "a compared value")?,
-                    self.value(right, "a compared value")?,
-                ];
+                let operands = needed!(self.values([&**left, &**right])?);
                 if operands != [EType::U8, EType::U8] {
                     return fail(format!("a comparison of {operands:?}"));
                 }
@@ -269,7 +304,7 @@ impl Checker<'_> {
                 let Some((params, result)) = self.signatures.get(callee).cloned() else {
                     return fail(format!("{name} was not emitted"));
                 };
-                self.arguments(arguments, &params, &format!("the arguments of {name}"))?;
+                needed!(self.arguments(arguments, &params, &format!("the arguments of {name}"))?);
                 result
             }
             EExpr::If {
@@ -277,17 +312,21 @@ impl Checker<'_> {
                 then_block,
                 else_block,
             } => {
-                if self.value(condition, "a condition")? != EType::Bool {
+                let condition = self.expr(condition)?;
+                if condition.as_ref().is_some_and(|ty| *ty != EType::Bool) {
                     return fail("a condition that is not a bool");
                 }
                 let then_type = self.block(then_block)?;
                 let else_type = self.block(else_block)?;
-                return join(then_type, else_type, "the branches of an if");
+                let joined = join(then_type, else_type, "the branches of an if")?;
+                return Ok(condition.and(joined));
             }
             EExpr::Match {
                 scrutinee, arms, ..
             } => {
-                let EType::Enum(id) = self.value(scrutinee, "a scrutinee")? else {
+                // With a scrutinee that never yields there is no enum to check
+                // the arms against, and no arm runs.
+                let EType::Enum(id) = needed!(self.expr(scrutinee)?) else {
                     return fail("a match on something that is not an enum");
                 };
                 let Some(decl) = self.module.enums.iter().find(|decl| decl.id == id) else {
@@ -318,8 +357,9 @@ impl Checker<'_> {
                 result,
                 body,
             } => {
-                let types = self.state(state)?;
+                let (types, yields) = self.state(state)?;
                 self.iterate(state, types, Some(result.clone()), body, None)?;
+                needed!(yields);
                 result.clone()
             }
             EExpr::For {
@@ -329,13 +369,16 @@ impl Checker<'_> {
                 state,
                 body,
             } => {
-                for bound in [lo, hi] {
-                    if self.value(bound, "a bound")? != EType::U8 {
-                        return fail("a for bound that is not a u8");
-                    }
+                let bounds = self.values([&**lo, &**hi])?;
+                if bounds
+                    .as_ref()
+                    .is_some_and(|tys| tys != &[EType::U8, EType::U8])
+                {
+                    return fail("a for bound that is not a u8");
                 }
-                let types = self.state(state)?;
+                let (types, yields) = self.state(state)?;
                 self.iterate(state, types.clone(), None, body, Some(index.0))?;
+                needed!(bounds.and(yields));
                 EType::Tuple(types)
             }
             EExpr::Break(value) => {
@@ -345,7 +388,7 @@ impl Checker<'_> {
                 let Some(result) = target.result else {
                     return fail("break inside a for");
                 };
-                let found = self.value(value, "a break value")?;
+                let found = needed!(self.expr(value)?);
                 if found != result {
                     return fail(format!("break with {found:?}, the loop yields {result:?}"));
                 }

@@ -1,10 +1,14 @@
 //! The reference interpreter for the erased tree. It gives the semantics an
 //! executable definition and serves as a test oracle; it is not trusted.
 //!
-//! Evaluation is left to right and call by value. A fuel counter makes
-//! divergence observable: a program that does not return runs out of fuel
-//! instead of hanging. The meaning of the primitives is the kernel's native
-//! evaluation, so logic and execution share one definition.
+//! Evaluation is left to right and call by value. A call ends in one of
+//! three ways, its `Outcome`: it returns a value, it panics with a message,
+//! or it runs out of fuel. A fuel counter makes divergence observable: a
+//! program that does not return runs out of fuel instead of hanging. Out of
+//! fuel is not a fourth behaviour of the program: it says that this run saw
+//! neither a value nor a panic within its budget, and nothing more. The
+//! meaning of the primitives is the kernel's native evaluation, so logic and
+//! execution share one definition.
 
 use std::fmt;
 
@@ -24,10 +28,36 @@ pub enum Value {
     Variant(EnumId, usize, Vec<Value>),
 }
 
+/// How a call ended. Both interpreters answer with this type, so comparing
+/// them is an equality of outcomes, except that `OutOfFuel` is the absence of
+/// an answer and agrees with nothing, itself included.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// The call returned.
+    Value(Value),
+    /// The call panicked, with this message. The panic passed through every
+    /// construct that was being evaluated and nothing after it ran.
+    Panic(String),
+    /// The call did not end within the fuel it was given.
+    OutOfFuel,
+}
+
+impl Outcome {
+    /// The outcome as the compiled program's harness prints it: a value as
+    /// Rust's `{:?}` would, a panic as `panic: message`.
+    pub fn debug(&self, module: &Module) -> String {
+        match self {
+            Self::Value(value) => value.debug(module),
+            Self::Panic(message) => format!("panic: {message}"),
+            Self::OutOfFuel => "out of fuel".into(),
+        }
+    }
+}
+
+/// The interpreter could not run the program. None of these is an outcome of
+/// the program.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RunError {
-    /// The program did not return within the fuel it was given.
-    OutOfFuel,
     /// Calls nested more deeply than the interpreter allows.
     TooDeep,
     /// Control reached a point the program was shown never to reach.
@@ -39,7 +69,6 @@ pub enum RunError {
 impl fmt::Display for RunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OutOfFuel => f.write_str("out of fuel"),
             Self::TooDeep => f.write_str("calls nested too deeply"),
             Self::Trap => f.write_str("reached a trap"),
             Self::Stuck(why) => write!(f, "stuck: {why}"),
@@ -48,6 +77,33 @@ impl fmt::Display for RunError {
 }
 
 impl std::error::Error for RunError {}
+
+/// Why evaluation stopped short of a value. It travels as the error of every
+/// step of an interpreter, so `?` passes a panic out through whatever was
+/// being evaluated, in evaluation order, just as it passes out of fuel.
+#[derive(Debug)]
+pub(crate) enum Stop {
+    Panic(String),
+    OutOfFuel,
+    Error(RunError),
+}
+
+impl From<RunError> for Stop {
+    fn from(error: RunError) -> Self {
+        Self::Error(error)
+    }
+}
+
+/// What a whole call amounts to: a panic and out of fuel are outcomes, and
+/// anything else that stopped it is an error.
+pub(crate) fn outcome(result: Result<Value, Stop>) -> Result<Outcome, RunError> {
+    match result {
+        Ok(value) => Ok(Outcome::Value(value)),
+        Err(Stop::Panic(message)) => Ok(Outcome::Panic(message)),
+        Err(Stop::OutOfFuel) => Ok(Outcome::OutOfFuel),
+        Err(Stop::Error(error)) => Err(error),
+    }
+}
 
 /// How evaluating an expression ended.
 enum Flow {
@@ -65,8 +121,8 @@ pub struct Interpreter<'m> {
     env: Vec<(VarId, Value)>,
 }
 
-fn stuck<T>(why: impl Into<String>) -> Result<T, RunError> {
-    Err(RunError::Stuck(why.into()))
+fn stuck<T>(why: impl Into<String>) -> Result<T, Stop> {
+    Err(RunError::Stuck(why.into()).into())
 }
 
 /// Evaluates a subexpression whose value is needed, passing a control
@@ -95,7 +151,11 @@ impl<'m> Interpreter<'m> {
     }
 
     /// Calls a function of the module.
-    pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, RunError> {
+    pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
+        outcome(self.enter(callee, arguments))
+    }
+
+    fn enter(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, Stop> {
         let Some(function) = self.module.fns.iter().find(|f| f.reference == callee) else {
             return stuck("a call to a function that was not emitted");
         };
@@ -103,7 +163,7 @@ impl<'m> Interpreter<'m> {
             return stuck(format!("{} called with the wrong arity", function.name));
         }
         if self.depth >= MAX_CALL_DEPTH {
-            return Err(RunError::TooDeep);
+            return Err(RunError::TooDeep.into());
         }
         // A function body sees its parameters and nothing of its caller.
         let saved = std::mem::take(&mut self.env);
@@ -123,22 +183,22 @@ impl<'m> Interpreter<'m> {
         }
     }
 
-    fn spend(&mut self) -> Result<(), RunError> {
+    fn spend(&mut self) -> Result<(), Stop> {
         if self.fuel == 0 {
-            return Err(RunError::OutOfFuel);
+            return Err(Stop::OutOfFuel);
         }
         self.fuel -= 1;
         Ok(())
     }
 
-    fn block(&mut self, block: &EBlock) -> Result<Flow, RunError> {
+    fn block(&mut self, block: &EBlock) -> Result<Flow, Stop> {
         let scope = self.env.len();
         let result = self.block_in_scope(block);
         self.env.truncate(scope);
         result
     }
 
-    fn block_in_scope(&mut self, block: &EBlock) -> Result<Flow, RunError> {
+    fn block_in_scope(&mut self, block: &EBlock) -> Result<Flow, Stop> {
         for stmt in &block.stmts {
             match stmt {
                 EStmt::Let { pattern, value } => {
@@ -156,7 +216,7 @@ impl<'m> Interpreter<'m> {
         }
     }
 
-    fn bind(&mut self, pattern: &EPattern, value: Value) -> Result<(), RunError> {
+    fn bind(&mut self, pattern: &EPattern, value: Value) -> Result<(), Stop> {
         match (pattern, value) {
             (EPattern::Wildcard, _) => Ok(()),
             (EPattern::Bind { id, .. }, value) => {
@@ -174,7 +234,7 @@ impl<'m> Interpreter<'m> {
     }
 
     /// Evaluates expressions left to right, stopping at a control transfer.
-    fn all(&mut self, exprs: &[EExpr]) -> Result<Result<Vec<Value>, Flow>, RunError> {
+    fn all(&mut self, exprs: &[EExpr]) -> Result<Result<Vec<Value>, Flow>, Stop> {
         let mut values = Vec::new();
         for expr in exprs {
             match self.expr(expr)? {
@@ -185,7 +245,7 @@ impl<'m> Interpreter<'m> {
         Ok(Ok(values))
     }
 
-    fn expr(&mut self, expr: &EExpr) -> Result<Flow, RunError> {
+    fn expr(&mut self, expr: &EExpr) -> Result<Flow, Stop> {
         self.spend()?;
         Ok(Flow::Value(match expr {
             EExpr::Var { id, name } => match self.env.iter().rev().find(|(var, _)| var == id) {
@@ -196,7 +256,8 @@ impl<'m> Interpreter<'m> {
             EExpr::U8(value) => Value::U8(*value),
             EExpr::Proved => Value::Proved,
             EExpr::Ghost => Value::Ghost,
-            EExpr::Trap => return Err(RunError::Trap),
+            EExpr::Trap => return Err(RunError::Trap.into()),
+            EExpr::Panic { message } => return Err(Stop::Panic(message.clone())),
             EExpr::Tuple(fields) => match self.all(fields)? {
                 Ok(values) => Value::Tuple(values),
                 Err(flow) => return Ok(flow),
@@ -256,7 +317,7 @@ impl<'m> Interpreter<'m> {
             EExpr::Call {
                 callee, arguments, ..
             } => match self.all(arguments)? {
-                Ok(values) => self.call(*callee, values)?,
+                Ok(values) => self.enter(*callee, values)?,
                 Err(flow) => return Ok(flow),
             },
             EExpr::If {
@@ -340,7 +401,7 @@ impl<'m> Interpreter<'m> {
     fn initial(
         &mut self,
         state: &[(VarId, String, super::tree::EType, EExpr)],
-    ) -> Result<Result<Vec<Value>, Flow>, RunError> {
+    ) -> Result<Result<Vec<Value>, Flow>, Stop> {
         let exprs: Vec<EExpr> = state.iter().map(|(_, _, _, init)| init.clone()).collect();
         self.all(&exprs)
     }
@@ -352,7 +413,7 @@ impl<'m> Interpreter<'m> {
         current: Vec<Value>,
         index: Option<(VarId, Value)>,
         body: &EBlock,
-    ) -> Result<Flow, RunError> {
+    ) -> Result<Flow, Stop> {
         if state.len() != current.len() {
             return stuck("continue with the wrong number of state values");
         }
@@ -367,7 +428,7 @@ impl<'m> Interpreter<'m> {
 }
 
 /// The kernel's native evaluation of a primitive, on interpreter values.
-fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, RunError> {
+fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
     let terms: Option<Vec<Term>> = operands
         .iter()
         .map(|operand| match operand {

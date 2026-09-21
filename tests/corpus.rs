@@ -6,6 +6,8 @@
 //! ~~~text
 //! //~ proofs: 8                          the number of proofs found
 //! //~ run: attempts_left(2, 9) => 1      a call and its result
+//! //~ run: f(255) => panic               a call that panics
+//! //~ run: f(255) => panic: no room      ... with exactly this message
 //! //~ rust: pub fn run(n: u8) -> u8 {    text the generated Rust contains
 //! //~ error: L0204                       an error reported on this line
 //! //~^ error: L0204 unknown name         ... on the line above; `^^` is two
@@ -18,37 +20,62 @@
 //! parsed, elaborated, and checked, every run line is called in the check-IR
 //! interpreter and in the erased-tree interpreter, and its Rust is printed.
 //! The Rust of all accepted files goes into one source file, each in a `mod`
-//! of its own, with a `main` that prints every run line's result; rustc runs
-//! once, with `-D warnings`, and the output is compared with the same
+//! of its own, with a `main` that prints one line for every run line: the
+//! value, or `panic: ` and the message of a panic it caught. rustc runs
+//! twice, with `-D warnings`: once with overflow checks on and once with
+//! them off. Each program is run, and its output is compared with the same
 //! expectations.
+//!
+//! A run line has three outcomes and a fourth thing that is not one. It
+//! holds, it fails, or it is inconclusive: an interpreter ran out of fuel,
+//! or the compiled program went without an answer for `TIMEOUT` and was
+//! killed. Inconclusive is never a pass, never a failure, and never evidence
+//! that the program diverges; it is counted and printed. A program that was
+//! killed is started again from the run line after the one it was in, so the
+//! rest of the batch is still compared.
 //!
 //! Values in a run line are written as the interpreters print them, which is
 //! also how Rust's `{:?}` prints them: `7`, `true`, `()`, `(1, Proved)`,
 //! `Lock { failures: 0, open: false }`, `Wrong`, `NonZero(7, Proved)`. An
 //! argument may name its enum, as in `Event::Wrong`; a result is compared as
-//! text. `=> panic` is read, and reported as not supported until panics
-//! exist.
+//! text. A panic's message is written on one line, with `\n` for a newline
+//! and `\\` for a backslash. No surface syntax panics yet, so `=> panic` is
+//! tested below on erased trees that were given a panic by hand.
 //!
 //! `examine` takes a file's name and text and returns every failure in it,
 //! not the first, so the runner is tested on itself below with files whose
 //! expectations are wrong.
 
 use std::fmt;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 use locus::diagnostic::Diagnostic;
 use locus::elab::elaborate;
-use locus::erased::{EType, Interpreter, Module, RunError, Value, check_module, print_module};
-use locus::exec::CheckInterpreter;
+use locus::erased::{
+    EBlock, EExpr, EStmt, EType, Interpreter, Module, Outcome, RunError, Value, check_module,
+    print_module,
+};
+use locus::exec::{CheckInterpreter, Program};
 use locus::parser::parse;
 use locus::source::{SourceFile, SourceMap};
 
 /// Steps an interpreter may take on one run line.
 const FUEL: u64 = 10_000_000;
 
-/// One expectation that did not hold. Line 0 means the file as a whole.
+/// How long the compiled program may go without printing an answer before
+/// it is killed and the run line it was in is inconclusive. Generous, since
+/// being wrong about this costs a comparison and being slow costs nothing
+/// when nothing hangs.
+const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// One expectation that did not hold, or one that could not be decided. Line
+/// 0 means the file as a whole.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Failure {
     file: String,
@@ -69,7 +96,97 @@ impl fmt::Display for Failure {
 enum Expected {
     /// The result, as `Value::debug` prints it.
     Value(String),
-    Panic,
+    /// A panic, with exactly this message when the run line gives one.
+    Panic(Option<String>),
+}
+
+impl fmt::Display for Expected {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Value(value) => f.write_str(value),
+            Self::Panic(None) => f.write_str("panic"),
+            Self::Panic(Some(message)) => write!(f, "panic: {message}"),
+        }
+    }
+}
+
+/// What a run line did, in an interpreter or in the compiled program.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Observed {
+    /// As `Value::debug` and Rust's `{:?}` print it.
+    Value(String),
+    /// The message, on one line.
+    Panic(String),
+    /// Out of fuel, or killed at the timeout, with which. Not an outcome of
+    /// the program: it may return, panic, or do neither.
+    NoAnswer(String),
+    /// It could not be run: an interpreter's error, or a program that died.
+    Failed(String),
+}
+
+impl fmt::Display for Observed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Value(value) => f.write_str(value),
+            Self::Panic(message) => write!(f, "panic: {message}"),
+            Self::NoAnswer(why) => write!(f, "no answer: {why}"),
+            Self::Failed(why) => write!(f, "error: {why}"),
+        }
+    }
+}
+
+/// A panic's message as the one line it is printed and expected on.
+fn one_line(message: &str) -> String {
+    message
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+impl Observed {
+    fn of_interpreter(result: Result<Outcome, RunError>, module: &Module, fuel: u64) -> Self {
+        match result {
+            Ok(Outcome::Value(value)) => Self::Value(value.debug(module)),
+            Ok(Outcome::Panic(message)) => Self::Panic(one_line(&message)),
+            Ok(Outcome::OutOfFuel) => Self::NoAnswer(format!("out of fuel after {fuel} steps")),
+            Err(error) => Self::Failed(error.to_string()),
+        }
+    }
+
+    /// A line the compiled program printed. No value begins with `panic: `.
+    fn of_line(line: &str) -> Self {
+        match line.strip_prefix("panic: ") {
+            Some(message) => Self::Panic(message.into()),
+            None => Self::Value(line.into()),
+        }
+    }
+}
+
+enum Verdict {
+    Holds,
+    /// What is wrong, to follow the name of the call.
+    Fails(String),
+    /// Why nothing was learned, to follow the name of the call.
+    Inconclusive(String),
+}
+
+/// An expectation against what was seen. Outcomes are compared as outcomes:
+/// a value with a value, a panic with a panic and then the messages. No
+/// answer is compared with nothing, so out of fuel can neither satisfy
+/// `=> panic` nor contradict `=> 7`.
+fn judge(expected: &Expected, observed: &Observed) -> Verdict {
+    let holds = match (expected, observed) {
+        (_, Observed::NoAnswer(_)) => return Verdict::Inconclusive(format!("gave {observed}")),
+        (Expected::Value(expected), Observed::Value(value)) => expected == value,
+        (Expected::Panic(None), Observed::Panic(_)) => true,
+        (Expected::Panic(Some(expected)), Observed::Panic(message)) => expected == message,
+        _ => false,
+    };
+    if holds {
+        Verdict::Holds
+    } else {
+        Verdict::Fails(format!("is `{observed}`, expected `{expected}`"))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,8 +234,11 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 Some((call, expected)) => Ok(Directive::Run {
                     call: call.trim().into(),
                     expected: match expected.trim() {
-                        "panic" => Expected::Panic,
-                        other => Expected::Value(other.into()),
+                        "panic" => Expected::Panic(None),
+                        other => match other.strip_prefix("panic:") {
+                            Some(message) => Expected::Panic(Some(message.trim().into())),
+                            None => Expected::Value(other.into()),
+                        },
                     },
                 }),
                 None => Err("a run line reads `f(arguments) => value`".into()),
@@ -169,13 +289,67 @@ struct CompiledRun {
     line: usize,
     /// The call as a Rust expression, from outside the module.
     call: String,
-    expected: String,
+    expected: Expected,
+}
+
+/// How the compiled program treats arithmetic overflow. The harness is built
+/// once for each, because overflow is where a debug build and a release
+/// build of the same Rust differ: a panic in one and wrapping in the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Overflow {
+    Checked,
+    Wrapping,
+}
+
+impl Overflow {
+    const ALL: [Self; 2] = [Self::Checked, Self::Wrapping];
+
+    fn flag(self) -> &'static str {
+        match self {
+            Self::Checked => "overflow-checks=on",
+            Self::Wrapping => "overflow-checks=off",
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Checked => "overflow checks on",
+            Self::Wrapping => "overflow checks off",
+        }
+    }
+}
+
+impl CompiledRun {
+    /// What the run line expects of a build. Nothing in the language
+    /// overflows yet, so a run line has one expectation and every build must
+    /// meet it; an expectation that depends on the build belongs here.
+    fn expected_in(&self, _build: Overflow) -> &Expected {
+        &self.expected
+    }
+}
+
+/// What came of comparing: what is wrong, and what could not be decided.
+#[derive(Default)]
+struct Report {
+    failures: Vec<Failure>,
+    inconclusive: Vec<Failure>,
 }
 
 struct Examined {
     failures: Vec<Failure>,
+    /// Run lines an interpreter ran out of fuel on. Not failures.
+    inconclusive: Vec<Failure>,
     /// Present when the file was accepted.
     compiled: Option<Compiled>,
+}
+
+/// What the directives of an accepted file are checked against.
+struct Subject<'a> {
+    module: &'a Module,
+    /// The check IR the erased tree is compared with. An erased tree that
+    /// was built by hand has none, and runs in its own interpreter only.
+    program: Option<&'a Program>,
+    proofs: usize,
 }
 
 /// Everything wrong with one file, short of compiling its Rust. A panic
@@ -188,12 +362,30 @@ fn examine(name: &str, text: &str) -> Examined {
             line: 0,
             message: "the pipeline panicked on this file".into(),
         }],
+        inconclusive: Vec::new(),
         compiled: None,
     })
 }
 
-fn examine_inner(name: &str, text: &str) -> Examined {
+/// The directives of a text, and what is wrong with those that are not.
+fn directives_of(name: &str, text: &str) -> (Vec<(usize, Directive)>, Vec<Failure>) {
+    let mut found = Vec::new();
     let mut failures = Vec::new();
+    for (line, directive) in directives(text) {
+        match directive {
+            Ok(directive) => found.push((line, directive)),
+            Err(message) => failures.push(Failure {
+                file: name.into(),
+                line,
+                message,
+            }),
+        }
+    }
+    (found, failures)
+}
+
+fn examine_inner(name: &str, text: &str) -> Examined {
+    let (found, mut failures) = directives_of(name, text);
     let mut fail = |line: usize, message: String| {
         failures.push(Failure {
             file: name.into(),
@@ -201,13 +393,6 @@ fn examine_inner(name: &str, text: &str) -> Examined {
             message,
         });
     };
-    let mut found = Vec::new();
-    for (line, directive) in directives(text) {
-        match directive {
-            Ok(directive) => found.push((line, directive)),
-            Err(why) => fail(line, why),
-        }
-    }
 
     let mut sources = SourceMap::default();
     let file = sources.add(name, text);
@@ -241,11 +426,54 @@ fn examine_inner(name: &str, text: &str) -> Examined {
     else {
         return Examined {
             failures,
+            inconclusive: Vec::new(),
             compiled: None,
         };
     };
+    let subject = Subject {
+        module: elaborated.session.erased(),
+        program: Some(elaborated.session.program()),
+        proofs: elaborated.holes.len(),
+    };
+    let mut examined = examine_accepted(name, found, &subject, FUEL);
+    failures.append(&mut examined.failures);
+    examined.failures = failures;
+    examined
+}
 
-    let module = elaborated.session.erased();
+/// An erased tree that did not come from its text, with the text's
+/// directives: the way to a run line that panics while no source does.
+fn examine_tree(name: &str, text: &str, module: &Module, fuel: u64) -> Examined {
+    let (found, mut failures) = directives_of(name, text);
+    let subject = Subject {
+        module,
+        program: None,
+        proofs: 0,
+    };
+    let mut examined = examine_accepted(name, found, &subject, fuel);
+    failures.append(&mut examined.failures);
+    examined.failures = failures;
+    examined
+}
+
+/// The directives of an accepted file against what it became: the erased
+/// tree is type checked and printed, and every run line is called in each
+/// interpreter there is.
+fn examine_accepted(
+    name: &str,
+    found: Vec<(usize, Directive)>,
+    subject: &Subject,
+    fuel: u64,
+) -> Examined {
+    let module = subject.module;
+    let mut failures = Vec::new();
+    let mut inconclusive = Vec::new();
+    let remark = |line: usize, message: String| Failure {
+        file: name.into(),
+        line,
+        message,
+    };
+    let mut fail = |line: usize, message: String| failures.push(remark(line, message));
     if let Err(error) = check_module(module) {
         fail(0, format!("the erased tree is not well typed: {error:?}"));
     }
@@ -259,7 +487,7 @@ fn examine_inner(name: &str, text: &str) -> Examined {
     for (at, directive) in found {
         match directive {
             Directive::Proofs(expected) => {
-                let proofs = elaborated.holes.len();
+                let proofs = subject.proofs;
                 if proofs != expected {
                     fail(
                         at,
@@ -276,10 +504,6 @@ fn examine_inner(name: &str, text: &str) -> Examined {
                 }
             }
             Directive::Run { call, expected } => {
-                let Expected::Value(expected) = expected else {
-                    fail(at, "`=> panic` is not supported until panics exist".into());
-                    continue;
-                };
                 let (function, arguments) = match parse_call(&call, module) {
                     Ok(parsed) => parsed,
                     Err(why) => {
@@ -289,28 +513,26 @@ fn examine_inner(name: &str, text: &str) -> Examined {
                 };
                 // A function of the erased tree was accepted, so it has a reference.
                 let reference = module.fns[function].reference;
-                let shown = |result: Result<Value, RunError>| match result {
-                    Ok(value) => value.debug(module),
-                    Err(error) => format!("error: {error}"),
-                };
                 let results = [
-                    (
-                        "check-IR interpreter",
-                        CheckInterpreter::new(elaborated.session.program(), FUEL)
-                            .call(reference, arguments.clone()),
-                    ),
-                    (
+                    subject.program.map(|program| {
+                        (
+                            "check-IR interpreter",
+                            CheckInterpreter::new(program, fuel).call(reference, arguments.clone()),
+                        )
+                    }),
+                    Some((
                         "erased-tree interpreter",
-                        Interpreter::new(module, FUEL).call(reference, arguments.clone()),
-                    ),
+                        Interpreter::new(module, fuel).call(reference, arguments.clone()),
+                    )),
                 ];
-                for (interpreter, result) in results {
-                    let result = shown(result);
-                    if result != expected {
-                        fail(
-                            at,
-                            format!("{interpreter}: `{call}` is `{result}`, expected `{expected}`"),
-                        );
+                for (interpreter, result) in results.into_iter().flatten() {
+                    let observed = Observed::of_interpreter(result, module, fuel);
+                    match judge(&expected, &observed) {
+                        Verdict::Holds => {}
+                        Verdict::Fails(why) => fail(at, format!("{interpreter}: `{call}` {why}")),
+                        Verdict::Inconclusive(why) => {
+                            inconclusive.push(remark(at, format!("{interpreter}: `{call}` {why}")));
+                        }
                     }
                 }
                 let arguments: Vec<String> = arguments
@@ -333,6 +555,7 @@ fn examine_inner(name: &str, text: &str) -> Examined {
     }
     Examined {
         failures,
+        inconclusive,
         compiled: Some(compiled),
     }
 }
@@ -621,6 +844,40 @@ fn rust_value(value: &Value, module: &Module, path: &str) -> String {
     }
 }
 
+/// What the harness answers a run line with: its value as `{:?}` prints it,
+/// or `panic: ` and the message of the panic it caught, on one line as
+/// `one_line` writes it. Each answer is flushed, so that what was answered
+/// before the program is killed is not lost, and the program starts from the
+/// run line it is given, so that it can be started again past the one it was
+/// killed in.
+const ANSWER: &str = r#"
+fn answer<T: std::fmt::Debug>(index: usize, from: usize, call: fn() -> T) {
+    use std::io::Write;
+    if index < from {
+        return;
+    }
+    let line = match std::panic::catch_unwind(call) {
+        Ok(value) => format!("{value:?}"),
+        Err(payload) => {
+            let message = match (payload.downcast_ref::<&str>(), payload.downcast_ref::<String>()) {
+                (Some(message), _) => message.to_string(),
+                (_, Some(message)) => message.clone(),
+                _ => "a panic with no message".to_string(),
+            };
+            let message = message.replace('\\', "\\\\").replace('\n', "\\n").replace('\r', "\\r");
+            format!("panic: {message}")
+        }
+    };
+    let mut out = std::io::stdout().lock();
+    writeln!(out, "{line}").and_then(|()| out.flush()).expect("stdout is open");
+}
+
+fn main() {
+    // A panic is caught and answered with; nothing about it goes to stderr.
+    std::panic::set_hook(Box::new(|_| {}));
+    let from = std::env::args().nth(1).map_or(0, |from| from.parse().expect("an index"));
+"#;
+
 /// One Rust program for every accepted file. Each file's Rust is a module,
 /// because names collide otherwise; the printer's header opens with inner
 /// attributes, which a module may begin with as a crate may, so what the
@@ -633,86 +890,196 @@ fn harness(compiled: &[Compiled]) -> String {
         source.push_str(&file.rust);
         source.push_str("}\n");
     }
-    source.push_str("\nfn main() {\n");
-    for run in compiled.iter().flat_map(|file| &file.runs) {
-        source.push_str(&format!("    println!(\"{{:?}}\", {});\n", run.call));
+    let runs: Vec<&CompiledRun> = compiled.iter().flat_map(|file| &file.runs).collect();
+    if runs.is_empty() {
+        source.push_str("\nfn main() {}\n");
+        return source;
+    }
+    source.push_str(ANSWER);
+    for (index, run) in runs.iter().enumerate() {
+        source.push_str(&format!("    answer({index}, from, || {});\n", run.call));
     }
     source.push_str("}\n");
     source
 }
 
-/// The compiled program prints one line for each run line, in order.
-fn compare_output(compiled: &[Compiled], output: &str) -> Vec<Failure> {
-    let mut failures = Vec::new();
-    let mut lines = output.lines();
+/// What one build answered against every run line, in order.
+fn compare(compiled: &[Compiled], build: Overflow, observed: &[Observed]) -> Report {
+    let mut report = Report::default();
+    let mut observed = observed.iter();
     for file in compiled {
         for run in &file.runs {
-            let message = match lines.next() {
-                Some(line) if line == run.expected => continue,
-                Some(line) => format!(
-                    "compiled Rust: `{}` is `{line}`, expected `{}`",
-                    run.call, run.expected
-                ),
-                None => format!("compiled Rust: `{}` printed nothing", run.call),
-            };
-            failures.push(Failure {
+            let remark = |message: String| Failure {
                 file: file.file.clone(),
                 line: run.line,
-                message,
-            });
+                message: format!("compiled Rust, {}: `{}` {message}", build.name(), run.call),
+            };
+            let Some(observed) = observed.next() else {
+                report.failures.push(remark("was not answered".into()));
+                continue;
+            };
+            match judge(run.expected_in(build), observed) {
+                Verdict::Holds => {}
+                Verdict::Fails(why) => report.failures.push(remark(why)),
+                Verdict::Inconclusive(why) => report.inconclusive.push(remark(why)),
+            }
         }
     }
-    let extra = lines.count();
+    let extra = observed.count();
     if extra > 0 {
-        failures.push(Failure {
+        report.failures.push(Failure {
             file: "the compiled program".into(),
             line: 0,
-            message: format!("printed {extra} line(s) more than there are run lines"),
+            message: format!(
+                "{}: {extra} answer(s) more than there are run lines",
+                build.name()
+            ),
         });
     }
-    failures
+    report
 }
 
-/// Compiles the harness with one call to rustc, runs it, and compares.
-fn compile_and_compare(compiled: &[Compiled]) -> Vec<Failure> {
-    let whole = |message: String| {
-        vec![Failure {
-            file: "the compiled program".into(),
-            line: 0,
-            message,
-        }]
+/// How a run of the compiled program ended.
+enum Ended {
+    Exited(ExitStatus, String),
+    /// Killed, having printed nothing for the length of the timeout.
+    Killed,
+}
+
+/// Runs the program from a run line on, and returns the lines it printed.
+fn run_from(binary: &Path, from: usize, timeout: Duration) -> (Vec<String>, Ended) {
+    let mut child = Command::new(binary)
+        .arg(from.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the program runs");
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let mut stderr = child.stderr.take().expect("stderr is piped");
+    let (send, receive) = mpsc::channel();
+    let reader = thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let errors = thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text);
+        text
+    });
+    let mut lines = Vec::new();
+    let killed = loop {
+        match receive.recv_timeout(timeout) {
+            Ok(line) => lines.push(line),
+            Err(RecvTimeoutError::Timeout) => break true,
+            Err(RecvTimeoutError::Disconnected) => break false,
+        }
     };
+    if killed {
+        let _ = child.kill();
+    }
+    let status = child.wait().expect("the program ends");
+    // Whatever it printed between the timeout and being killed.
+    reader.join().expect("the reader ends");
+    lines.extend(receive.try_iter());
+    let stderr = errors.join().expect("the reader ends");
+    let ended = if killed {
+        Ended::Killed
+    } else {
+        Ended::Exited(status, stderr)
+    };
+    (lines, ended)
+}
+
+/// Every run line's answer from one build. When the program stops short, the
+/// run line it was in gets no answer, or an error if the program died, and
+/// the program is started again from the next.
+fn observe(binary: &Path, total: usize, timeout: Duration) -> Vec<Observed> {
+    let mut observed = Vec::new();
+    while observed.len() < total {
+        let (lines, ended) = run_from(binary, observed.len(), timeout);
+        observed.extend(lines.iter().map(|line| Observed::of_line(line)));
+        if observed.len() >= total {
+            break;
+        }
+        observed.push(match ended {
+            Ended::Killed => {
+                Observed::NoAnswer(format!("killed after {timeout:?} without an answer"))
+            }
+            Ended::Exited(status, stderr) if !status.success() => {
+                Observed::Failed(format!("the program exited with {status}: {stderr}"))
+            }
+            Ended::Exited(..) => Observed::Failed("the program printed nothing for it".into()),
+        });
+    }
+    observed
+}
+
+/// Compiles the harness once for each way of treating overflow, which is two
+/// calls to rustc, runs each program, and compares. `name` keeps the files
+/// of one batch apart from another's.
+fn compile_and_compare(compiled: &[Compiled], name: &str, timeout: Duration) -> Report {
+    let mut report = Report::default();
     let source = harness(compiled);
     let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let source_path = directory.join("locus_corpus.rs");
-    let binary_path = directory.join("locus_corpus");
+    let source_path = directory.join(format!("{name}.rs"));
     std::fs::write(&source_path, &source).unwrap();
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
-    let compile = Command::new(rustc)
-        .args(["--edition", "2021", "-D", "warnings", "-o"])
-        .arg(&binary_path)
-        .arg(&source_path)
-        .output()
-        .expect("rustc runs");
-    if !compile.status.success() {
-        return whole(format!(
-            "rustc rejected {}:\n{}",
-            source_path.display(),
-            String::from_utf8_lossy(&compile.stderr)
-        ));
+    let total = compiled.iter().map(|file| file.runs.len()).sum();
+    for build in Overflow::ALL {
+        let binary_path = directory.join(format!("{name}_{build:?}").to_lowercase());
+        let compile = Command::new(&rustc)
+            .args([
+                "--edition",
+                "2021",
+                "-D",
+                "warnings",
+                "-C",
+                build.flag(),
+                "-o",
+            ])
+            .arg(&binary_path)
+            .arg(&source_path)
+            .output()
+            .expect("rustc runs");
+        if !compile.status.success() {
+            report.failures.push(Failure {
+                file: "the compiled program".into(),
+                line: 0,
+                message: format!(
+                    "{}: rustc rejected {}:\n{}",
+                    build.name(),
+                    source_path.display(),
+                    String::from_utf8_lossy(&compile.stderr)
+                ),
+            });
+            // The other build is of the same source.
+            break;
+        }
+        let observed = observe(&binary_path, total, timeout);
+        let compared = compare(compiled, build, &observed);
+        report.failures.extend(compared.failures);
+        report.inconclusive.extend(compared.inconclusive);
     }
-    let run = Command::new(&binary_path)
-        .output()
-        .expect("the program runs");
-    let mut failures = compare_output(compiled, &String::from_utf8_lossy(&run.stdout));
-    if !run.status.success() {
-        failures.extend(whole(format!(
-            "exited with {}:\n{}",
-            run.status,
-            String::from_utf8_lossy(&run.stderr)
-        )));
+    report
+}
+
+/// Inconclusive run lines are counted and printed whether or not the test
+/// fails, past the capture of a passing test's output.
+fn print_inconclusive(inconclusive: &[Failure]) {
+    if inconclusive.is_empty() {
+        return;
     }
-    failures
+    let listed: Vec<String> = inconclusive.iter().map(Failure::to_string).collect();
+    let _ = writeln!(
+        std::io::stderr(),
+        "{} inconclusive comparison(s) in the corpus, neither passed nor failed:\n{}",
+        inconclusive.len(),
+        listed.join("\n")
+    );
 }
 
 /// The `.lc` files of a directory of the repository, in order, with their text.
@@ -737,6 +1104,7 @@ fn files_in(directory: &str) -> Vec<(String, String)> {
 #[test]
 fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
     let mut failures = Vec::new();
+    let mut inconclusive = Vec::new();
     let mut compiled = Vec::new();
     let mut examples = Vec::new();
     for (directory, rejects) in [
@@ -758,6 +1126,7 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
             }
             let examined = examine(&name, &text);
             failures.extend(examined.failures);
+            inconclusive.extend(examined.inconclusive);
             compiled.extend(examined.compiled);
             if directory == "examples" {
                 examples.push(name);
@@ -774,7 +1143,10 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
             "examples/propositions.lc",
         ]
     );
-    failures.extend(compile_and_compare(&compiled));
+    let report = compile_and_compare(&compiled, "locus_corpus", TIMEOUT);
+    failures.extend(report.failures);
+    inconclusive.extend(report.inconclusive);
+    print_inconclusive(&inconclusive);
     let listed: Vec<String> = failures.iter().map(Failure::to_string).collect();
     assert!(
         failures.is_empty(),
@@ -894,7 +1266,8 @@ fn every_failure_in_a_file_is_reported() {
             "6: `increment(true)`: expected a `u8`, found `true`",
             "7: `increment(1, 2)`: more than 1 value(s) before `)`",
             "8: `decrement(1)`: there is no `decrement` in the erased tree; a function that exists only in proofs cannot be run",
-            "9: `=> panic` is not supported until panics exist",
+            "9: check-IR interpreter: `increment(1)` is `(2, Proved)`, expected `panic`",
+            "9: erased-tree interpreter: `increment(1)` is `(2, Proved)`, expected `panic`",
             "11: the generated Rust does not contain `pub fn decrement`",
         ]
     );
@@ -945,31 +1318,399 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     );
     let compiled = [examine("memory.lc", &text).compiled.unwrap()];
     let failures = |output: &str| -> Vec<String> {
-        compare_output(&compiled, output)
-            .iter()
-            .map(Failure::to_string)
-            .collect()
+        let observed: Vec<Observed> = output.lines().map(Observed::of_line).collect();
+        let report = compare(&compiled, Overflow::Checked, &observed);
+        assert!(report.inconclusive.is_empty());
+        report.failures.iter().map(Failure::to_string).collect()
     };
     assert_eq!(failures("(2, Proved)\n(3, Proved)\n"), Vec::<String>::new());
     assert_eq!(
         failures("(2, Proved)\n(4, Proved)\n"),
         [
-            "memory.lc:5: compiled Rust: `memory::increment(2)` is `(4, Proved)`, expected `(3, Proved)`"
+            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `(4, Proved)`, expected `(3, Proved)`"
+        ]
+    );
+    assert_eq!(
+        failures("(2, Proved)\npanic: attempt to add with overflow\n"),
+        [
+            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `panic: attempt to add with overflow`, expected `(3, Proved)`"
         ]
     );
     assert_eq!(
         failures("(2, Proved)\n"),
-        ["memory.lc:5: compiled Rust: `memory::increment(2)` printed nothing"]
+        ["memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` was not answered"]
     );
     assert_eq!(
         failures("(2, Proved)\n(3, Proved)\n7\n"),
-        ["the compiled program: printed 1 line(s) more than there are run lines"]
+        ["the compiled program: overflow checks on: 1 answer(s) more than there are run lines"]
     );
-    // The harness is one program: a module for the file, and the calls.
+    // The harness is one program: a module for the file, and the calls, each
+    // under `catch_unwind`.
     let source = harness(&compiled);
     assert!(
         source.contains("mod memory {\n// Generated by Locus."),
         "{source}"
     );
-    assert!(source.contains("    println!(\"{:?}\", memory::increment(2));\n"));
+    assert!(source.contains("    answer(1, from, || memory::increment(2));\n"));
+    assert!(source.contains("std::panic::catch_unwind(call)"));
+    // A batch with no run lines is a program all the same.
+    assert!(harness(&[]).ends_with("fn main() {}\n"));
+}
+
+// Panics. No source panics yet, so the erased tree of a source is given its
+// panics by hand: every call of `panics(k)` becomes a panic with message `k`.
+
+const PANICS: &str = "\
+enum Event { Wrong, Right(u8) }
+
+fn panics(which: u8) -> u8 { which }
+
+fn second(a: u8, b: u8) -> u8 { b }
+
+fn in_let(n: u8) -> u8 {
+    let m = panics(0);
+    m
+}
+
+fn in_argument(n: u8) -> u8 { second(n, panics(1)) }
+
+fn first_argument_first(n: u8) -> u8 { second(panics(2), panics(1)) }
+
+fn in_tuple(n: u8) -> (u8, u8, u8) { (n, panics(3), n.wrapping_add(1)) }
+
+fn in_arm(event: Event) -> u8 {
+    match event {
+        Event::Wrong => panics(4),
+        Event::Right(n) => n,
+    }
+}
+
+fn after_three(n: u8) -> u8 {
+    loop (i: u8 = 0) -> u8 {
+        if i == n {
+            break i
+        } else {
+            let _ = if i == 3 { panics(5) } else { i };
+            continue(i.wrapping_add(1))
+        }
+    }
+}
+
+fn at_the_top(n: u8) -> u8 {
+    if n == 255 { panics(6) } else { n.wrapping_add(1) }
+}
+
+fn through_a_call(n: u8) -> u8 { second(at_the_top(n), 7) }
+";
+
+const MESSAGES: [&str; 7] = [
+    "in a let",
+    "in an argument",
+    "the first argument",
+    "in a tuple",
+    "say \"hi\" to {n}, }{ and {{ and \\ too",
+    "two\nlines",
+    "f(255)",
+];
+
+const PANICS_RUNS: &str = r#"
+//~ run: in_let(1) => panic: in a let
+//~ run: in_argument(1) => panic: in an argument
+//~ run: first_argument_first(1) => panic: the first argument
+//~ run: in_tuple(1) => panic: in a tuple
+//~ run: in_arm(Wrong) => panic: say "hi" to {n}, }{ and {{ and \\ too
+//~ run: in_arm(Right(9)) => 9
+//~ run: after_three(3) => 3
+//~ run: after_three(4) => panic: two\nlines
+//~ run: at_the_top(254) => 255
+//~ run: at_the_top(255) => panic
+//~ run: at_the_top(255) => panic: f(255)
+//~ run: through_a_call(255) => panic: f(255)
+//~ run: through_a_call(1) => 7
+//~ rust: Event::Wrong => {
+//~ rust: panic!("{}", "say \"hi\" to {n}, }{ and {{ and \\ too")
+//~ rust: panic!("{}", "two\nlines")
+"#;
+
+/// The erased tree of `PANICS`, with its panics.
+fn panicking_module() -> Module {
+    let mut sources = SourceMap::default();
+    let file = sources.add("panics.lc", PANICS);
+    let source = sources.get(file);
+    let elaborated = elaborate(source, &parse(source).program);
+    assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
+    let mut module = elaborated.session.erased().clone();
+    for function in &mut module.fns {
+        plant_in_block(&mut function.body);
+    }
+    assert_eq!(check_module(&module), Ok(()));
+    module
+}
+
+fn plant_in_block(block: &mut EBlock) {
+    for stmt in &mut block.stmts {
+        match stmt {
+            EStmt::Let { value, .. } => plant(value),
+            EStmt::Expr(expr) => plant(expr),
+        }
+    }
+    if let Some(tail) = &mut block.tail {
+        plant(tail);
+    }
+}
+
+fn plant(expr: &mut EExpr) {
+    match expr {
+        EExpr::Call {
+            name, arguments, ..
+        } if name == "panics" => {
+            let [EExpr::U8(which)] = arguments.as_slice() else {
+                panic!("`panics` takes a literal")
+            };
+            *expr = EExpr::Panic {
+                message: MESSAGES[usize::from(*which)].into(),
+            };
+        }
+        EExpr::Var { .. }
+        | EExpr::Bool(_)
+        | EExpr::U8(_)
+        | EExpr::Proved
+        | EExpr::Ghost
+        | EExpr::Trap
+        | EExpr::Panic { .. } => {}
+        EExpr::Tuple(exprs)
+        | EExpr::Variant { payload: exprs, .. }
+        | EExpr::Call {
+            arguments: exprs, ..
+        }
+        | EExpr::Continue(exprs) => exprs.iter_mut().for_each(plant),
+        EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
+        EExpr::Field { target: inner, .. } | EExpr::Break(inner) => plant(inner),
+        EExpr::Method {
+            receiver,
+            arguments,
+            ..
+        } => {
+            plant(receiver);
+            arguments.iter_mut().for_each(plant);
+        }
+        EExpr::Compare { left, right, .. } => {
+            plant(left);
+            plant(right);
+        }
+        EExpr::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            plant(condition);
+            plant_in_block(then_block);
+            plant_in_block(else_block);
+        }
+        EExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            plant(scrutinee);
+            arms.iter_mut()
+                .for_each(|arm| plant_in_block(&mut arm.body));
+        }
+        EExpr::Block(block) => plant_in_block(block),
+        EExpr::Loop { state, body, .. } => {
+            state.iter_mut().for_each(|(_, _, _, init)| plant(init));
+            plant_in_block(body);
+        }
+        EExpr::For {
+            lo,
+            hi,
+            state,
+            body,
+            ..
+        } => {
+            plant(lo);
+            plant(hi);
+            state.iter_mut().for_each(|(_, _, _, init)| plant(init));
+            plant_in_block(body);
+        }
+    }
+}
+
+fn listed(remarks: &[Failure]) -> Vec<String> {
+    remarks.iter().map(Failure::to_string).collect()
+}
+
+#[test]
+fn trees_that_panic_agree_with_their_compiled_rust_message_included() {
+    let module = panicking_module();
+    let text = format!("{PANICS}{PANICS_RUNS}");
+    let right = examine_tree("panics.lc", &text, &module, FUEL);
+    assert_eq!(listed(&right.failures), Vec::<String>::new());
+    assert_eq!(listed(&right.inconclusive), Vec::<String>::new());
+    // The braces of a message are not the printer's: what follows the
+    // message with more `{` than `}` is indented as it would be without it.
+    let rust = &right.compiled.as_ref().unwrap().rust;
+    assert!(
+        rust.contains("\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut state_i: u8 = 0;\n"),
+        "{rust}"
+    );
+
+    // The same tree with expectations that are wrong in each way there is:
+    // a panic where it returns, another message, and a value where it
+    // panics. The interpreter says so, and so does each build.
+    let wrong_runs = "\
+//~ run: at_the_top(1) => panic
+//~ run: at_the_top(255) => panic: f(254)
+//~ run: at_the_top(255) => 0
+//~ run: at_the_top(255) => panic: f(255)
+";
+    let wrong = examine_tree("wrong.lc", wrong_runs, &module, FUEL);
+    assert_eq!(
+        listed(&wrong.failures),
+        [
+            "wrong.lc:1: erased-tree interpreter: `at_the_top(1)` is `2`, expected `panic`",
+            "wrong.lc:2: erased-tree interpreter: `at_the_top(255)` is `panic: f(255)`, expected `panic: f(254)`",
+            "wrong.lc:3: erased-tree interpreter: `at_the_top(255)` is `panic: f(255)`, expected `0`",
+        ]
+    );
+
+    let compiled = [right.compiled.unwrap(), wrong.compiled.unwrap()];
+    let report = compile_and_compare(&compiled, "locus_corpus_panics", TIMEOUT);
+    assert_eq!(listed(&report.inconclusive), Vec::<String>::new());
+    let expected: Vec<String> = ["overflow checks on", "overflow checks off"]
+        .iter()
+        .flat_map(|build| {
+            [
+                format!(
+                    "wrong.lc:1: compiled Rust, {build}: `wrong::at_the_top(1)` is `2`, expected `panic`"
+                ),
+                format!(
+                    "wrong.lc:2: compiled Rust, {build}: `wrong::at_the_top(255)` is `panic: f(255)`, expected `panic: f(254)`"
+                ),
+                format!(
+                    "wrong.lc:3: compiled Rust, {build}: `wrong::at_the_top(255)` is `panic: f(255)`, expected `0`"
+                ),
+            ]
+        })
+        .collect();
+    assert_eq!(listed(&report.failures), expected);
+}
+
+#[test]
+fn out_of_fuel_is_inconclusive_and_is_not_a_panic() {
+    // `after_three(200)` panics in its fourth iteration, and with fuel for
+    // fewer it has done neither that nor anything else. Whatever the run
+    // line expects, the answer is that there is none. A call that needs less
+    // fuel is still compared.
+    let module = panicking_module();
+    let runs = "\
+//~ run: after_three(200) => panic
+//~ run: after_three(200) => panic: two\\nlines
+//~ run: after_three(200) => 200
+//~ run: at_the_top(1) => 2
+";
+    let examined = examine_tree("fuel.lc", runs, &module, 25);
+    assert_eq!(listed(&examined.failures), Vec::<String>::new());
+    assert_eq!(
+        listed(&examined.inconclusive),
+        [
+            "fuel.lc:1: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
+            "fuel.lc:2: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
+            "fuel.lc:3: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
+        ]
+    );
+    // With fuel, the first two hold and the third is wrong.
+    let examined = examine_tree("fuel.lc", runs, &module, FUEL);
+    assert_eq!(
+        listed(&examined.failures),
+        [
+            "fuel.lc:3: erased-tree interpreter: `after_three(200)` is `panic: two\\nlines`, expected `200`"
+        ]
+    );
+    assert!(examined.inconclusive.is_empty());
+}
+
+#[test]
+fn a_run_line_that_never_answers_is_inconclusive_and_the_rest_are_compared() {
+    let text = "\
+fn forever(n: u8) -> u8 {
+    loop (i: u8 = n) -> u8 {
+        continue(i.wrapping_add(1))
+    }
+}
+
+fn next(n: u8) -> u8 { n.wrapping_add(1) }
+
+//~ run: next(1) => 2
+//~ run: forever(1) => 7
+//~ run: next(2) => 3
+//~ run: forever(2) => panic
+//~ run: next(3) => 9
+";
+    // In the interpreters, out of fuel: inconclusive, whatever was expected.
+    let (found, _) = directives_of("forever.lc", text);
+    let mut sources = SourceMap::default();
+    let file = sources.add("forever.lc", text);
+    let source = sources.get(file);
+    let elaborated = elaborate(source, &parse(source).program);
+    assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
+    let subject = Subject {
+        module: elaborated.session.erased(),
+        program: Some(elaborated.session.program()),
+        proofs: 0,
+    };
+    let examined = examine_accepted("forever.lc", found, &subject, 10_000);
+    let by_interpreter = |line: usize, call: &str| {
+        ["check-IR interpreter", "erased-tree interpreter"].map(|interpreter| {
+            format!(
+                "forever.lc:{line}: {interpreter}: `{call}` gave no answer: out of fuel after 10000 steps"
+            )
+        })
+    };
+    assert_eq!(
+        listed(&examined.inconclusive),
+        [
+            by_interpreter(10, "forever(1)"),
+            by_interpreter(12, "forever(2)")
+        ]
+        .concat()
+    );
+    assert_eq!(
+        listed(&examined.failures),
+        [
+            "forever.lc:13: check-IR interpreter: `next(3)` is `4`, expected `9`",
+            "forever.lc:13: erased-tree interpreter: `next(3)` is `4`, expected `9`",
+        ]
+    );
+
+    // Compiled, each `forever` is killed at the timeout, which is short
+    // here. It is inconclusive, and the run lines after it are compared: the
+    // last one fails, in both builds.
+    let timeout = Duration::from_secs(2);
+    let report = compile_and_compare(
+        &[examined.compiled.unwrap()],
+        "locus_corpus_forever",
+        timeout,
+    );
+    let builds = ["overflow checks on", "overflow checks off"];
+    let killed = |build: &str, line: usize, call: &str| {
+        format!(
+            "forever.lc:{line}: compiled Rust, {build}: `{call}` gave no answer: killed after 2s without an answer"
+        )
+    };
+    assert_eq!(
+        listed(&report.inconclusive),
+        builds
+            .map(|build| {
+                [
+                    killed(build, 10, "forever::forever(1)"),
+                    killed(build, 12, "forever::forever(2)"),
+                ]
+            })
+            .concat()
+    );
+    assert_eq!(
+        listed(&report.failures),
+        builds.map(|build| format!(
+            "forever.lc:13: compiled Rust, {build}: `forever::next(3)` is `4`, expected `9`"
+        ))
+    );
 }

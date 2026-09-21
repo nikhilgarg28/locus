@@ -151,6 +151,11 @@ pub enum EExpr {
     Continue(Vec<EExpr>),
     /// A point the program was shown never to reach.
     Trap,
+    /// `panic!("message")`: the call in progress ends in a panic with this
+    /// message. It has every type, since it yields no value.
+    Panic {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug)]

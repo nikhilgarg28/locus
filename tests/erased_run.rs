@@ -5,14 +5,14 @@ mod common;
 
 use common::*;
 use locus::erased::{
-    EBlock, EExpr, EFn, EStmt, EType, Interpreter, Module, RunError, Value, check_module,
+    EBlock, EExpr, EFn, EStmt, EType, Interpreter, Module, Outcome, RunError, Value, check_module,
 };
 use locus::kernel::{Definitions, FnId, Proof, Term, Type};
 use locus::typed::{Binder, Expr, FnItem, FnRef};
 
 const FUEL: u64 = 100_000;
 
-fn run(module: &Module, callee: FnRef, arguments: Vec<Value>) -> Result<Value, RunError> {
+fn run(module: &Module, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
     Interpreter::new(module, FUEL).call(callee, arguments)
 }
 
@@ -23,8 +23,8 @@ fn lonely_function() -> FnId {
         .unwrap()
 }
 
-fn with_evidence(byte: u8) -> Value {
-    Value::Tuple(vec![Value::U8(byte), Value::Proved])
+fn with_evidence(byte: u8) -> Outcome {
+    Outcome::Value(Value::Tuple(vec![Value::U8(byte), Value::Proved]))
 }
 
 #[test]
@@ -114,10 +114,10 @@ fn a_divergent_call_still_diverges_after_erasure() {
     let module = session.erased();
     assert_eq!(check_module(module), Ok(()));
 
-    assert_eq!(run(module, caller, vec![]), Err(RunError::OutOfFuel));
+    assert_eq!(run(module, caller, vec![]), Ok(Outcome::OutOfFuel));
     assert_eq!(
         run(module, FnRef::Exec(spin_id), vec![]),
-        Err(RunError::OutOfFuel)
+        Ok(Outcome::OutOfFuel)
     );
     // The erased caller really does contain the call.
     let body = &module.fns[1].body;
@@ -128,6 +128,90 @@ fn a_divergent_call_still_diverges_after_erasure() {
             ..
         }]
     ));
+}
+
+#[test]
+fn a_panic_ends_the_call_and_everything_around_it() {
+    // fn increment(n: u8) -> (u8, Proved) {
+    //     let out = n.wrapping_add(panic!("no sum"));
+    //     (out, Proved)
+    // }
+    // fn caller(n: u8) -> (u8, Proved) { increment(n) }
+    let (mut session, _, _) = setup();
+    let increment = session.declare_fn(&increment(false)).unwrap();
+    let mut module = session.erased().clone();
+    let [
+        EStmt::Let {
+            value: EExpr::Method { arguments, .. },
+            ..
+        },
+    ] = module.fns[0].body.stmts.as_mut_slice()
+    else {
+        panic!("increment binds a sum")
+    };
+    arguments[0] = EExpr::Panic {
+        message: "no sum".into(),
+    };
+    let mut caller = module.fns[0].clone();
+    caller.name = "caller".into();
+    caller.reference = FnRef::Math(lonely_function());
+    caller.body = EBlock {
+        stmts: vec![],
+        tail: Some(Box::new(EExpr::Call {
+            callee: increment,
+            name: "increment".into(),
+            arguments: vec![first_parameter(&caller)],
+        })),
+    };
+    let caller_ref = caller.reference;
+    module.fns.push(caller);
+    // A panic is accepted where a `u8` is expected.
+    assert_eq!(check_module(&module), Ok(()));
+
+    let panicked = Ok(Outcome::Panic("no sum".into()));
+    assert_eq!(run(&module, increment, vec![Value::U8(1)]), panicked);
+    assert_eq!(run(&module, caller_ref, vec![Value::U8(1)]), panicked);
+}
+
+/// The first parameter of a function, as an expression.
+fn first_parameter(function: &EFn) -> EExpr {
+    let (id, name, _) = &function.params[0];
+    EExpr::Var {
+        id: *id,
+        name: name.clone(),
+    }
+}
+
+#[test]
+fn out_of_fuel_is_not_a_panic() {
+    // fn spin() -> ... never returns and never panics. With any amount of
+    // fuel the answer is out of fuel, which is an outcome of its own: not an
+    // error, and not a panic with some message.
+    let (mut session, prelude, _) = setup();
+    let spin_ref = session.declare_fn(&spin(prelude)).unwrap();
+    let module = session.erased();
+    for fuel in [0, 1, 1_000] {
+        let outcome = Interpreter::new(module, fuel).call(spin_ref, vec![]);
+        assert_eq!(outcome, Ok(Outcome::OutOfFuel));
+    }
+    // A panic that is reached before the fuel runs out is a panic, and one
+    // that is not reached is out of fuel.
+    let mut module = module.clone();
+    module.fns[0].body = EBlock {
+        stmts: vec![EStmt::Expr(EExpr::Tuple(vec![]))],
+        tail: Some(Box::new(EExpr::Panic {
+            message: "reached".into(),
+        })),
+    };
+    assert_eq!(check_module(&module), Ok(()));
+    assert_eq!(
+        Interpreter::new(&module, FUEL).call(spin_ref, vec![]),
+        Ok(Outcome::Panic("reached".into()))
+    );
+    assert_eq!(
+        Interpreter::new(&module, 1).call(spin_ref, vec![]),
+        Ok(Outcome::OutOfFuel)
+    );
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use locus::diagnostic::Diagnostic;
 use locus::elab;
-use locus::erased::{Interpreter, Value, print_module};
+use locus::erased::{Interpreter, Outcome, Value, print_module};
 use locus::lexer;
 use locus::parser;
 use locus::source::SourceMap;
@@ -29,6 +29,9 @@ Usage: locus <command> <file.lc> [arguments]
 
 /// Steps the interpreter may take before it reports that it ran out.
 const FUEL: u64 = 10_000_000;
+
+/// The exit status of a Rust program that panicked.
+const PANICKED: u8 = 101;
 
 fn main() -> ExitCode {
     match run(env::args_os().skip(1).collect()) {
@@ -196,7 +199,22 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
                     });
                 }
                 match Interpreter::new(module, FUEL).call(function, values) {
-                    Ok(value) => writeln!(output, "{}", value.debug(module))?,
+                    Ok(Outcome::Value(value)) => writeln!(output, "{}", value.debug(module))?,
+                    // As a Rust program reports a panic: the message on
+                    // stderr, and exit status 101.
+                    Ok(Outcome::Panic(message)) => {
+                        output.flush()?;
+                        writeln!(io::stderr(), "`{name}` panicked:\n{message}")?;
+                        return Ok(PANICKED);
+                    }
+                    Ok(Outcome::OutOfFuel) => {
+                        output.flush()?;
+                        writeln!(
+                            io::stderr(),
+                            "error: `{name}` did not return within {FUEL} steps"
+                        )?;
+                        return Ok(1);
+                    }
                     Err(error) => {
                         output.flush()?;
                         writeln!(io::stderr(), "error: {error}")?;
