@@ -234,6 +234,12 @@ pub enum Prim {
     IntAdd,
     IntSub,
     IntMul,
+    /// The quotient truncated toward zero, as Rust's `/` on integers, and
+    /// total: `a / 0` is `0`.
+    IntDiv,
+    /// The remainder of that division, as Rust's `%`: it has the sign of
+    /// the dividend, and `a % 0` is `a`.
+    IntRem,
     /// `Int -> Int`
     IntNeg,
     /// `Int, Int -> Prop`: the order of the integers. It is a proposition,
@@ -257,6 +263,8 @@ impl Prim {
             Self::IntAdd => "int_add",
             Self::IntSub => "int_sub",
             Self::IntMul => "int_mul",
+            Self::IntDiv => "int_div",
+            Self::IntRem => "int_rem",
             Self::IntNeg => "int_neg",
             Self::IntLe => "int_le",
         }
@@ -326,6 +334,26 @@ pub enum Axiom {
     IntLeTotal(Term, Term),
     /// `a + 1 <= a => False`
     IntLtIrrefl(Term),
+    // Quotient and remainder, truncated toward zero. `/` and `%` stand for
+    // `int_div` and `int_rem`, and `x < y` for `x + 1 <= y`, as
+    // `Term::int_lt` builds it. Every one holds at every `a` and `b`, a zero
+    // divisor included, under `a / 0 == 0` and `a % 0 == a`.
+    /// `a == (a / b) * b + a % b`
+    IntDivRem(Term, Term),
+    /// `a / 0 == 0`
+    IntDivZero(Term),
+    /// `0 < b => -b < a % b`
+    IntRemLowerPos(Term, Term),
+    /// `0 < b => a % b < b`
+    IntRemUpperPos(Term, Term),
+    /// `b < 0 => b < a % b`
+    IntRemLowerNeg(Term, Term),
+    /// `b < 0 => a % b < -b`
+    IntRemUpperNeg(Term, Term),
+    /// `0 <= a => 0 <= a % b`
+    IntRemNonneg(Term, Term),
+    /// `a <= 0 => a % b <= 0`
+    IntRemNonpos(Term, Term),
 }
 
 impl Axiom {
@@ -359,6 +387,14 @@ impl Axiom {
             Self::IntLeMul(..) => "int_le_mul",
             Self::IntLeTotal(..) => "int_le_total",
             Self::IntLtIrrefl(_) => "int_lt_irrefl",
+            Self::IntDivRem(..) => "int_div_rem",
+            Self::IntDivZero(_) => "int_div_zero",
+            Self::IntRemLowerPos(..) => "int_rem_lower_pos",
+            Self::IntRemUpperPos(..) => "int_rem_upper_pos",
+            Self::IntRemLowerNeg(..) => "int_rem_lower_neg",
+            Self::IntRemUpperNeg(..) => "int_rem_upper_neg",
+            Self::IntRemNonneg(..) => "int_rem_nonneg",
+            Self::IntRemNonpos(..) => "int_rem_nonpos",
         }
     }
 
@@ -391,6 +427,14 @@ impl Axiom {
             Self::IntLeMul(a, b) => Self::IntLeMul(f(a), f(b)),
             Self::IntLeTotal(a, b) => Self::IntLeTotal(f(a), f(b)),
             Self::IntLtIrrefl(a) => Self::IntLtIrrefl(f(a)),
+            Self::IntDivRem(a, b) => Self::IntDivRem(f(a), f(b)),
+            Self::IntDivZero(a) => Self::IntDivZero(f(a)),
+            Self::IntRemLowerPos(a, b) => Self::IntRemLowerPos(f(a), f(b)),
+            Self::IntRemUpperPos(a, b) => Self::IntRemUpperPos(f(a), f(b)),
+            Self::IntRemLowerNeg(a, b) => Self::IntRemLowerNeg(f(a), f(b)),
+            Self::IntRemUpperNeg(a, b) => Self::IntRemUpperNeg(f(a), f(b)),
+            Self::IntRemNonneg(a, b) => Self::IntRemNonneg(f(a), f(b)),
+            Self::IntRemNonpos(a, b) => Self::IntRemNonpos(f(a), f(b)),
         }
     }
 
@@ -408,7 +452,8 @@ impl Axiom {
             | Self::IntAddNeg(a)
             | Self::IntMulOne(a)
             | Self::IntLeRefl(a)
-            | Self::IntLtIrrefl(a) => vec![a],
+            | Self::IntLtIrrefl(a)
+            | Self::IntDivZero(a) => vec![a],
             Self::NatAddSucc(a, b)
             | Self::NatSuccInjective(a, b)
             | Self::WrappingAddModel(a, b)
@@ -418,7 +463,14 @@ impl Axiom {
             | Self::IntMulComm(a, b)
             | Self::IntLeAntisymm(a, b)
             | Self::IntLeMul(a, b)
-            | Self::IntLeTotal(a, b) => vec![a, b],
+            | Self::IntLeTotal(a, b)
+            | Self::IntDivRem(a, b)
+            | Self::IntRemLowerPos(a, b)
+            | Self::IntRemUpperPos(a, b)
+            | Self::IntRemLowerNeg(a, b)
+            | Self::IntRemUpperNeg(a, b)
+            | Self::IntRemNonneg(a, b)
+            | Self::IntRemNonpos(a, b) => vec![a, b],
             Self::IntAddAssoc(a, b, c)
             | Self::IntMulAssoc(a, b, c)
             | Self::IntMulAdd(a, b, c)
@@ -774,6 +826,16 @@ impl Term {
 
     pub fn int_mul(left: Term, right: Term) -> Self {
         Self::Prim(Prim::IntMul, vec![left, right])
+    }
+
+    /// `left / right` over `Int`, truncated toward zero.
+    pub fn int_div(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntDiv, vec![left, right])
+    }
+
+    /// `left % right` over `Int`, the remainder of `int_div`.
+    pub fn int_rem(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntRem, vec![left, right])
     }
 
     pub fn int_neg(number: Term) -> Self {

@@ -1459,10 +1459,18 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::IntLeMul(t(), t()),
         Axiom::IntLeTotal(t(), t()),
         Axiom::IntLtIrrefl(t()),
+        Axiom::IntDivRem(t(), t()),
+        Axiom::IntDivZero(t()),
+        Axiom::IntRemLowerPos(t(), t()),
+        Axiom::IntRemUpperPos(t(), t()),
+        Axiom::IntRemLowerNeg(t(), t()),
+        Axiom::IntRemUpperNeg(t(), t()),
+        Axiom::IntRemNonneg(t(), t()),
+        Axiom::IntRemNonpos(t(), t()),
     ]
 }
 
-const AXIOMS: usize = 27;
+const AXIOMS: usize = 35;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1493,6 +1501,14 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::IntLeMul(..) => 24,
         Axiom::IntLeTotal(..) => 25,
         Axiom::IntLtIrrefl(_) => 26,
+        Axiom::IntDivRem(..) => 27,
+        Axiom::IntDivZero(_) => 28,
+        Axiom::IntRemLowerPos(..) => 29,
+        Axiom::IntRemUpperPos(..) => 30,
+        Axiom::IntRemLowerNeg(..) => 31,
+        Axiom::IntRemUpperNeg(..) => 32,
+        Axiom::IntRemNonneg(..) => 33,
+        Axiom::IntRemNonpos(..) => 34,
     }
 }
 
@@ -1595,7 +1611,7 @@ fn rule_index(proof: &Proof) -> usize {
     }
 }
 
-const PRIMS: [Prim; 14] = [
+const PRIMS: [Prim; 16] = [
     Prim::WrappingAdd,
     Prim::WrappingSub,
     Prim::U8Eq,
@@ -1610,6 +1626,8 @@ const PRIMS: [Prim; 14] = [
     Prim::IntMul,
     Prim::IntNeg,
     Prim::IntLe,
+    Prim::IntDiv,
+    Prim::IntRem,
 ];
 
 fn prim_index(prim: Prim) -> usize {
@@ -1628,6 +1646,8 @@ fn prim_index(prim: Prim) -> usize {
         Prim::IntMul => 11,
         Prim::IntNeg => 12,
         Prim::IntLe => 13,
+        Prim::IntDiv => 14,
+        Prim::IntRem => 15,
     }
 }
 

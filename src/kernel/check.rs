@@ -635,7 +635,9 @@ fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
         Prim::OfNat => (&[Type::Nat], Type::U8),
         Prim::Succ => (&[Type::Nat], Type::Nat),
         Prim::NatAdd => (&[Type::Nat, Type::Nat], Type::Nat),
-        Prim::IntAdd | Prim::IntSub | Prim::IntMul => (&[Type::Int, Type::Int], Type::Int),
+        Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntDiv | Prim::IntRem => {
+            (&[Type::Int, Type::Int], Type::Int)
+        }
         Prim::IntNeg => (&[Type::Int], Type::Int),
         Prim::IntLe => (&[Type::Int, Type::Int], Type::Prop),
     }
@@ -659,6 +661,9 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         (Prim::IntAdd, [Term::Int(a), Term::Int(b)]) => Term::Int(a.add(b)),
         (Prim::IntSub, [Term::Int(a), Term::Int(b)]) => Term::Int(a.sub(b)),
         (Prim::IntMul, [Term::Int(a), Term::Int(b)]) => Term::Int(a.mul(b)),
+        // Truncated toward zero and total: a / 0 is 0 and a % 0 is a.
+        (Prim::IntDiv, [Term::Int(a), Term::Int(b)]) => Term::Int(a.div(b)),
+        (Prim::IntRem, [Term::Int(a), Term::Int(b)]) => Term::Int(a.rem(b)),
         (Prim::IntNeg, [Term::Int(a)]) => Term::Int(a.neg()),
         _ => return None,
     })
@@ -693,7 +698,15 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::IntLeAdd(..)
         | Axiom::IntLeMul(..)
         | Axiom::IntLeTotal(..)
-        | Axiom::IntLtIrrefl(_) => Some(Type::Int),
+        | Axiom::IntLtIrrefl(_)
+        | Axiom::IntDivRem(..)
+        | Axiom::IntDivZero(_)
+        | Axiom::IntRemLowerPos(..)
+        | Axiom::IntRemUpperPos(..)
+        | Axiom::IntRemLowerNeg(..)
+        | Axiom::IntRemUpperNeg(..)
+        | Axiom::IntRemNonneg(..)
+        | Axiom::IntRemNonpos(..) => Some(Type::Int),
         Axiom::Reflect(..) => None,
     };
     if let Some(expected) = &expected {
@@ -706,6 +719,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
     let bound = Term::nat(256);
     let int_eq = |left: Term, right: Term| Term::eq(Type::Int, left, right);
     let (add, mul, le) = (Term::int_add, Term::int_mul, Term::int_le);
+    let (div, rem, lt) = (Term::int_div, Term::int_rem, Term::int_lt);
     Ok(match axiom.clone() {
         Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a),
         Axiom::NatAddSucc(a, b) => nat_eq(
@@ -785,6 +799,37 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         // order is total and that nothing lies between b and b + 1.
         Axiom::IntLeTotal(a, b) => prelude.or_prop(le(a.clone(), b.clone()), Term::int_lt(b, a)),
         Axiom::IntLtIrrefl(a) => prelude.not_prop(Term::int_lt(a.clone(), a)),
+        // Quotient and remainder, truncated toward zero. The decomposition
+        // has no condition: at b == 0 it reads a == 0 * 0 + a.
+        Axiom::IntDivRem(a, b) => int_eq(
+            a.clone(),
+            add(mul(div(a.clone(), b.clone()), b.clone()), rem(a, b)),
+        ),
+        Axiom::IntDivZero(a) => int_eq(div(a, Term::int(0)), Term::int(0)),
+        // The remainder is smaller in magnitude than the divisor. Each bound
+        // needs its condition: at b == 0 the remainder is a, and no bound
+        // holds of every a.
+        Axiom::IntRemLowerPos(a, b) => Term::implies(
+            lt(Term::int(0), b.clone()),
+            lt(Term::int_neg(b.clone()), rem(a, b)),
+        ),
+        Axiom::IntRemUpperPos(a, b) => {
+            Term::implies(lt(Term::int(0), b.clone()), lt(rem(a, b.clone()), b))
+        }
+        Axiom::IntRemLowerNeg(a, b) => {
+            Term::implies(lt(b.clone(), Term::int(0)), lt(b.clone(), rem(a, b)))
+        }
+        Axiom::IntRemUpperNeg(a, b) => Term::implies(
+            lt(b.clone(), Term::int(0)),
+            lt(rem(a, b.clone()), Term::int_neg(b)),
+        ),
+        // The remainder has the sign of the dividend, at every divisor.
+        Axiom::IntRemNonneg(a, b) => {
+            Term::implies(le(Term::int(0), a.clone()), le(Term::int(0), rem(a, b)))
+        }
+        Axiom::IntRemNonpos(a, b) => {
+            Term::implies(le(a.clone(), Term::int(0)), le(rem(a, b), Term::int(0)))
+        }
     })
 }
 

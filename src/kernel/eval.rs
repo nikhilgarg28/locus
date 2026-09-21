@@ -103,11 +103,20 @@ impl<'d> Evaluator<'d> {
         // number of any size. It is charged what the schoolbook product
         // costs, one step for each pair of 32-bit digits, which bounds the
         // size of every number and the work done on it by the step budget.
-        if let (Prim::IntMul, [Term::Int(a), Term::Int(b)]) = (*prim, values.as_slice()) {
+        //
+        // Division makes nothing larger, but long division in `Natural` is
+        // bit by bit: for each bit of the dividend it doubles and subtracts
+        // a remainder as long as the divisor. Quotient and remainder are
+        // charged that, one step for each bit of the dividend times each
+        // 32-bit digit of the divisor.
+        if let [Term::Int(a), Term::Int(b)] = values.as_slice() {
             let digits = |n: &Integer| n.magnitude().bit_length() / 32 + 1;
-            self.steps = self
-                .steps
-                .saturating_add(digits(a).saturating_mul(digits(b)));
+            let charge = match prim {
+                Prim::IntMul => digits(a).saturating_mul(digits(b)),
+                Prim::IntDiv | Prim::IntRem => a.magnitude().bit_length().saturating_mul(digits(b)),
+                _ => 0,
+            };
+            self.steps = self.steps.saturating_add(charge);
             if self.steps > STEP_LIMIT {
                 return Err(KernelError::StepLimit);
             }
