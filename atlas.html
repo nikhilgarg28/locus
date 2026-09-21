@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 36,
-  "savedAt": "2026-09-21T22:53:26.000Z",
+  "rev": 37,
+  "savedAt": "2026-09-21T22:56:33.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2374,10 +2374,18 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "4. The erased tree, `erase`, its type checker, and the reference interpreter with fuel; the differential and divergence tests.",
     "5. The Rust printer, and compiled-versus-interpreted tests.",
     "6. The frontend: realignment of the parser, name resolution, and the elaborator targeting the typed tree.",
-    ""
+    "",
+    "",
+    "## Why the parser always finishes",
+    "",
+    "The parser is total because of two guarantees, each stated and tested on its own, and the fuzz tests claim only robustness on the inputs they tried. The first is progress. The parser never moves its position backward, every iteration of every parser loop either consumes at least one token or is the last iteration of that loop, and every production entered either consumes a token or fails; the two loops that catch a failure, the statement loop of a block and the declaration loop of a program, skip one token themselves whenever a whole iteration has consumed nothing. The parser counts one step for each loop iteration and one for each production admitted by the depth guard, and returns the count with the token count in Parsed::stats. A test asserts that steps are at most four times the number of tokens, the end-of-file token included, over the examples, over long runs of every entry in the token vocabulary, over repeated error recovery, and over every fuzz case; the largest ratio observed is just under three. The only lookahead longer than two tokens, the check for a state list in a for header, reads a table of matching delimiters that is built once in a single pass over the tokens.",
+    "",
+    "The second guarantee is bounded recursion. Every recursive cycle in the grammar passes through a type, a pattern, a block, an expression, or an if, and each of these is entered through one guard that refuses with diagnostic L0108 once 64 levels are open, while a chain of postfix and binary operators at one level is a loop limited to 128 links and reports the same code. The nesting test runs each nesting form of expressions, types, and patterns 512 levels deep on a 1 MB stack in a debug build and requires the limit diagnostic rather than a stack overflow. It passes on 640 KB and not on 512 KB, so new forms must keep the frames between guards small.",
+    "",
+    "Every commit passes tools/check.sh: fmt, clippy with warnings denied, and the tests with fixed seeds. tools/check.sh --extended runs the tests in release with the fuzz counts a hundred times larger."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T22:56:33.000Z"
   },
   {
    "id": "kernel-contract",
@@ -6642,12 +6650,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t268",
    "n": 152,
    "title": "H2 · A seeded generator with no dependencies, parser fuzz tests, and tools/check.sh in a fast and an extended form",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: S1 (LOC-154), R1 (LOC-186).\n\nScope. A small xorshift generator in tests/common, since the build is offline and has one dependency. The parser is run on random sequences drawn from the token vocabulary and on the example files with random edits (delete, duplicate, swap a token). tools/check.sh runs fmt, clippy, and the tests with fixed seeds and small counts, and is what every commit must pass. tools/check.sh --extended sets LOCUS_EXTENDED, under which the fuzz counts are a hundred times larger and the random program comparison compiles thousands of programs; it runs before a milestone is declared, not on every commit.\n\nTests.\n- Fast: 50,000 token sequences and 5,000 edited files with a fixed seed: the parser returns an AST or at least one diagnostic, without a panic, on a 1 MB stack.\n- A failure prints its seed.\n- Separately from the fuzzing, the two guarantees that make the parser total are stated in Architecture and each has its own test: every loop consumes a token or stops (a test counts parser steps against the number of tokens), and recursion is bounded by MAX_DEPTH (the existing nesting test, extended to each new form).\n\nDone when. The fuzz tests show robustness on what they tried and claim no more. Totality rests on the progress and depth guarantees, which are stated and tested on their own.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. tests/common/rng.rs (xorshift64*, included with #[path]), tests/parser_fuzz.rs, Parsed::stats with a step counter, tools/check.sh and --extended. Fast: 50,000 sequences and 5,000 edited files in about 6 s; extended: 5,000,000 and 500,000 in about 45 s in release. Steps are at most 4 times the tokens; the most seen is 2.99. The fuzzing found no panic; it did find that the for header lookahead rescanned to the end of the file, quadratic on hostile input, now a delimiter table built once. The nesting test passes on a 640 KB stack and fails at 512 KB, so the margin on 1 MB is under two; the syntax lane must keep frames between depth guards small.\n\nLane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: S1 (LOC-154), R1 (LOC-186).\n\nScope. A small xorshift generator in tests/common, since the build is offline and has one dependency. The parser is run on random sequences drawn from the token vocabulary and on the example files with random edits (delete, duplicate, swap a token). tools/check.sh runs fmt, clippy, and the tests with fixed seeds and small counts, and is what every commit must pass. tools/check.sh --extended sets LOCUS_EXTENDED, under which the fuzz counts are a hundred times larger and the random program comparison compiles thousands of programs; it runs before a milestone is declared, not on every commit.\n\nTests.\n- Fast: 50,000 token sequences and 5,000 edited files with a fixed seed: the parser returns an AST or at least one diagnostic, without a panic, on a 1 MB stack.\n- A failure prints its seed.\n- Separately from the fuzzing, the two guarantees that make the parser total are stated in Architecture and each has its own test: every loop consumes a token or stops (a test counts parser steps against the number of tokens), and recursion is bounded by MAX_DEPTH (the existing nesting test, extended to each new form).\n\nDone when. The fuzz tests show robustness on what they tried and claim no more. Totality rests on the progress and depth guarantees, which are stated and tested on their own.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T22:56:33.000Z"
   },
   {
    "id": "t269",
@@ -6664,12 +6672,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t270",
    "n": 154,
    "title": "S1 · The lexer tokenizes as Rust: every keyword reserved, string literals, integer literals in full",
-   "status": "backlog",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 2.\nDepends on: H2 (LOC-152).\nUnblocks: S2 (LOC-155).\nCovers: LOC-91, LOC-94, LOC-95.\n\nScope. Reserve every strict and reserved Rust keyword. String literals with Rust escapes. Integer literals in decimal, hex, octal, and binary, with underscores and suffixes. Rust tokens Locus does not use yet (lifetimes, compound assignment, shifts, char and float literals) are recognized and reported as not in Locus yet, so that no Rust source produces a confusing token error.\n\nTests.\n- A table test over every Rust keyword: using it as a name is an error with a code.\n- A table of literals with value and suffix, including the largest of each type and one past it.\n- Each not-yet token has a test of its message.\n- The case H1 found, fn move(ref: u8), is a rejected corpus file.\n\nDone when. A Rust programmer who pastes Rust gets either a parse or a plain statement that the construct is not in Locus yet.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:53:26.000Z"
+   "updated": "2026-09-21T22:56:33.000Z"
   },
   {
    "id": "t271",
@@ -6719,23 +6727,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t275",
    "n": 159,
    "title": "K1 · Integers of any size in the kernel: subtraction, multiplication, division, comparison, sign",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 1.\nDepends on: nothing.\nUnblocks: K2 (LOC-160).\nCovers: LOC-118.\n\nScope. kernel::nat already holds naturals of any size with addition. Add subtraction, multiplication, division with remainder, and comparison, and an Int value as a sign and a magnitude. Values only; no terms or axioms yet.\n\nTests.\n- Against i128 on a boundary set and 100,000 random pairs, for every operation.\n- Beyond i128, identities: (a * b) / b == a, (a + b) - b == a, a == (a / b) * b + a % b.\n\nDone when. The arithmetic the evaluator will trust is tested on its own, before any rule depends on it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. kernel::Natural gains checked_sub, mul, div_rem, Ord, parsing; kernel::Integer is a sign and a magnitude with a canonical zero, truncating div and rem, a / 0 == 0 and a % 0 == a. Schoolbook algorithms, base 2^32 limbs. tests/kernel_integers.rs: boundary sets crossed for every operation, 100,000 random pairs per operation against i128 and u128, identities to about 768 bits.\n\nLane: Kernel. Wave 1.\nDepends on: nothing.\nUnblocks: K2 (LOC-160).\nCovers: LOC-118.\n\nScope. kernel::nat already holds naturals of any size with addition. Add subtraction, multiplication, division with remainder, and comparison, and an Int value as a sign and a magnitude. Values only; no terms or axioms yet.\n\nTests.\n- Against i128 on a boundary set and 100,000 random pairs, for every operation.\n- Beyond i128, identities: (a * b) / b == a, (a + b) - b == a, a == (a / b) * b + a % b.\n\nDone when. The arithmetic the evaluator will trust is tested on its own, before any rule depends on it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T22:56:33.000Z"
   },
   {
    "id": "t276",
    "n": 160,
    "title": "K2 · Int as a kernel type: literals, the ring and order axioms, discreteness, closed evaluation",
-   "status": "backlog",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Kernel. Wave 2.\nDepends on: K1 (LOC-159).\nUnblocks: K3 (LOC-161), K6 (LOC-164).\nCovers: LOC-118, LOC-122.\n\nScope. Int joins the kernel's types. Axioms: the commutative ring laws, the order and its compatibility with + and *, discreteness (nothing lies between n and n + 1), and induction. Evaluate computes closed Int terms. The Kernel contract is updated in the same commit, as for every kernel commit.\n\nTests.\n- For each axiom one test that uses it and one near miss that must be rejected (the axiom at the wrong type, with an argument swapped, or with \u003c for \u003c=).\n- A few derived facts proved in tests from the axioms alone, such as x \u003c y gives x + 1 \u003c= y, to show the set is usable.\n- Evaluate agrees with K1 on random closed terms.\n- A test reads the contract out of the atlas and fails if a kernel axiom is not named in it.\n\nDone when. Int exists in the logic, and the contract lists exactly what is assumed about it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:56:33.000Z"
   },
   {
    "id": "t277",
