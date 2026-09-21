@@ -27,6 +27,20 @@ enum Entry {
     Hyp { id: HypId, prop: Term },
 }
 
+/// One entry of a context, as a reader outside the kernel sees it.
+#[derive(Clone, Copy, Debug)]
+pub enum Binding<'a> {
+    Var {
+        id: VarId,
+        ty: &'a Type,
+        ghost: bool,
+    },
+    Hyp {
+        id: HypId,
+        prop: &'a Term,
+    },
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     definitions: Rc<Definitions>,
@@ -48,6 +62,20 @@ impl Context {
 
     pub(super) fn definitions(&self) -> Rc<Definitions> {
         Rc::clone(&self.definitions)
+    }
+
+    /// What the context holds, oldest first. Read-only: checking never
+    /// consults it. It is for tools that must know what is assumed, such as
+    /// a test that decides a claim's truth independently of the kernel.
+    pub fn bindings(&self) -> impl Iterator<Item = Binding<'_>> {
+        self.entries.iter().map(|entry| match entry {
+            Entry::Var { id, ty, ghost } => Binding::Var {
+                id: *id,
+                ty,
+                ghost: *ghost,
+            },
+            Entry::Hyp { id, prop } => Binding::Hyp { id: *id, prop },
+        })
     }
 
     /// Declares an executable variable. The type must be well formed here.

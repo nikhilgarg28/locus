@@ -1,0 +1,3572 @@
+//! R2: kernel soundness under mutation. No proof is accepted for a claim
+//! known to be false.
+//!
+//! The unit is a triple: a kernel context, a claim, and a proof the kernel
+//! accepts for it there. Triples come from three places. Some are written by
+//! hand below, a few for each family of rule. The lemmas of the kernel
+//! theory give one each. The rest come from the corpus: every `.lc` file
+//! under `examples/` and `tests/corpus/accept/` is elaborated, and the
+//! elaborator records every proof its search finds, with the claim and the
+//! context the kernel accepted it in (`HoleReport::found`). Walking the
+//! checked program instead would miss proofs: a pure `if` or `for` lowers to
+//! a kernel term, the proofs in it sit under the term's binders, and nothing
+//! outside the kernel can open a binder.
+//!
+//! For each triple the test makes claims that are false, checks the original
+//! proof against each of them, and then checks random one-node mutants of
+//! the proof against them. Any acceptance is a finding. So is a mutant that
+//! proves, of its own accord, anything false. A mutant accepted for the
+//! original claim is not a finding, and neither is one that proves some
+//! other true thing; both are counted, for interest.
+//!
+//! "False" is decided here, by a small evaluator that shares no code with
+//! the kernel: a claim is false when some assignment of values to the
+//! context's variables makes every hypothesis true and the claim false. Its
+//! integers are `i128` with checked arithmetic, so a claim that computes
+//! past `i128` goes undecided, as does a quantifier over `Nat` or `Int` that
+//! no sampled value settles. A claim the evaluator cannot decide is
+//! skipped, and the skips are counted. Three tests at the end check the
+//! evaluator itself.
+//!
+//! `LOCUS_EXTENDED=1` runs a hundred times as many mutants.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::time::Instant;
+
+use locus::elab::elaborate;
+use locus::kernel::derive::{Chain, fold_claim, symm_at, unfold_claim};
+use locus::kernel::theory::{self, Theory};
+use locus::kernel::{
+    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, Mode, Prelude, Prim, Proof,
+    ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof, infer_proof, infer_term,
+};
+use locus::parser::parse;
+use locus::source::SourceMap;
+use locus::typed::FnRef;
+
+const SEED: u64 = 0x5eed_10c5_2024_0002;
+
+/// Random mutants per pairing of a proof with a false claim.
+const MUTANTS: usize = 24;
+
+/// At most this many false claims per triple meet mutants. Every false claim
+/// meets the original proof.
+const FALSE_CLAIMS: usize = 10;
+
+fn mutants_per_pair() -> usize {
+    if std::env::var_os("LOCUS_EXTENDED").is_some() {
+        MUTANTS * 100
+    } else {
+        MUTANTS
+    }
+}
+
+// --- A small generator --------------------------------------------------------
+
+/// xorshift64*. Local on purpose: the test must not change when a shared
+/// generator does.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, bound: usize) -> usize {
+        (self.next() % bound as u64) as usize
+    }
+
+    fn pick<'a, T>(&mut self, items: &'a [T]) -> Option<&'a T> {
+        if items.is_empty() {
+            None
+        } else {
+            Some(&items[self.below(items.len())])
+        }
+    }
+
+    fn shuffle<T>(&mut self, items: &mut [T]) {
+        for index in (1..items.len()).rev() {
+            items.swap(index, self.below(index + 1));
+        }
+    }
+}
+
+// --- Scenes: a kernel context that can be read back -----------------------------
+
+#[derive(Clone, Debug)]
+enum Entry {
+    Var(VarId, Type),
+    Hyp(HypId, Term),
+}
+
+/// A kernel context together with what was put in it. The kernel does not
+/// say what a context holds, and the oracle needs to know.
+#[derive(Clone)]
+struct Scene {
+    definitions: Rc<Definitions>,
+    prelude: Prelude,
+    ctx: Context,
+    entries: Vec<Entry>,
+}
+
+impl Scene {
+    fn new(definitions: &Rc<Definitions>) -> Self {
+        Self {
+            definitions: Rc::clone(definitions),
+            prelude: definitions.prelude().expect("the prelude is declared"),
+            ctx: Context::with_definitions(Rc::clone(definitions)),
+            entries: Vec::new(),
+        }
+    }
+
+    /// The scene of a context recorded elsewhere. The definitions are the
+    /// file's final ones, which extend those the context was made over.
+    fn of_context(definitions: &Rc<Definitions>, ctx: &Context) -> Self {
+        let entries = ctx
+            .bindings()
+            .map(|binding| match binding {
+                Binding::Var { id, ty, .. } => Entry::Var(id, ty.clone()),
+                Binding::Hyp { id, prop } => Entry::Hyp(id, prop.clone()),
+            })
+            .collect();
+        Self {
+            definitions: Rc::clone(definitions),
+            prelude: definitions.prelude().expect("the prelude is declared"),
+            ctx: ctx.clone(),
+            entries,
+        }
+    }
+
+    fn declare(&mut self, ty: Type) -> Term {
+        let id = self
+            .ctx
+            .declare(ty.clone())
+            .expect("the scene declares a well-formed variable");
+        self.entries.push(Entry::Var(id, ty));
+        Term::Free(id)
+    }
+
+    fn assume(&mut self, prop: Term) -> HypId {
+        let id = self
+            .ctx
+            .assume(prop.clone())
+            .expect("the scene assumes a well-formed proposition");
+        self.entries.push(Entry::Hyp(id, prop));
+        id
+    }
+
+    fn hyps(&self) -> Vec<HypId> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Hyp(id, _) => Some(*id),
+                Entry::Var(..) => None,
+            })
+            .collect()
+    }
+
+    fn vars(&self) -> Vec<(VarId, Type)> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Var(id, ty) => Some((*id, ty.clone())),
+                Entry::Hyp(..) => None,
+            })
+            .collect()
+    }
+
+    fn describe(&self) -> String {
+        let mut text = String::new();
+        for entry in &self.entries {
+            match entry {
+                Entry::Var(id, ty) => text.push_str(&format!("    {id:?}: {ty}\n")),
+                Entry::Hyp(id, prop) => text.push_str(&format!("    {id:?}: @ {prop}\n")),
+            }
+        }
+        text
+    }
+}
+
+struct Triple {
+    origin: String,
+    scene: Scene,
+    claim: Term,
+    proof: Proof,
+}
+
+// --- The oracle: an evaluator that shares nothing with the kernel ---------------
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Value {
+    Bool(bool),
+    U8(u8),
+    Nat(u64),
+    /// An integer of the logic, as far as `i128` reaches. The oracle's
+    /// arithmetic is checked, and a result outside `i128` is no value: the
+    /// claim goes undecided.
+    Int(i128),
+    /// A tuple or a struct.
+    Product(Vec<Value>),
+    Variant(usize, Vec<Value>),
+    Fn(FnId),
+    /// A variable defined to be this proposition, which mentions only the
+    /// context's variables.
+    Prop(Term),
+    /// A proof, or anything else with no value the oracle tracks. Proofs are
+    /// irrelevant, so two of these are equal.
+    Opaque,
+}
+
+impl Value {
+    fn is_data(&self) -> bool {
+        match self {
+            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) => true,
+            Self::Product(values) | Self::Variant(_, values) => values
+                .iter()
+                .all(|value| *value == Self::Opaque || value.is_data()),
+            Self::Fn(_) | Self::Prop(_) | Self::Opaque => false,
+        }
+    }
+}
+
+type Assignment = HashMap<VarId, Value>;
+
+/// How much one question to the oracle may compute.
+const ORACLE_STEPS: usize = 400_000;
+
+/// The same for a claim nobody chose: whatever a mutant happens to prove.
+/// These are asked about far more often, of fewer witnesses.
+const MUTANT_CLAIM_STEPS: usize = 20_000;
+const MUTANT_CLAIM_WITNESSES: usize = 12;
+
+/// The integers a quantifier over `Int` is tried at, and the ones every
+/// variable of `Int` is tried at. A sample: it refutes a `forall` and proves
+/// an `exists`, never the reverse.
+const INT_SAMPLE: [i128; 11] = [-257, -256, -3, -2, -1, 0, 1, 2, 3, 255, 256];
+
+struct Oracle<'a> {
+    definitions: &'a Definitions,
+    prelude: Prelude,
+    free: Assignment,
+    /// Values of the enclosing binders: `Bound(0)` is the last.
+    stack: Vec<Value>,
+    steps: usize,
+    limit: usize,
+}
+
+impl<'a> Oracle<'a> {
+    fn new(scene: &'a Scene) -> Self {
+        Self {
+            definitions: &scene.definitions,
+            prelude: scene.prelude,
+            free: Assignment::new(),
+            stack: Vec::new(),
+            steps: 0,
+            limit: ORACLE_STEPS,
+        }
+    }
+
+    fn tick(&mut self) -> Option<()> {
+        self.steps += 1;
+        (self.steps <= self.limit).then_some(())
+    }
+
+    /// The truth of a proposition, when it can be decided.
+    fn prop(&mut self, term: &Term) -> Option<bool> {
+        self.tick()?;
+        match term {
+            Term::Eq(ty, left, right) => {
+                if *ty == Type::Prop {
+                    // Two propositions of different truth are not equal. Of
+                    // the same truth they may or may not be.
+                    let (left, right) = (self.prop(left)?, self.prop(right)?);
+                    return (left != right).then_some(false);
+                }
+                let (left, right) = (self.value(left)?, self.value(right)?);
+                (left.is_data() && right.is_data()).then_some(left == right)
+            }
+            Term::Implies(premise, conclusion) => {
+                match (self.prop(premise), self.prop(conclusion)) {
+                    (Some(false), _) | (_, Some(true)) => Some(true),
+                    (Some(true), Some(false)) => Some(false),
+                    _ => None,
+                }
+            }
+            Term::Forall(ty, body) => self.quantifier(ty, body, true),
+            Term::Exists(ty, body) => self.quantifier(ty, body, false),
+            // The order of the integers is a proposition, not a value.
+            Term::Prim(Prim::IntLe, arguments) => {
+                let [left, right] = arguments.as_slice() else {
+                    return None;
+                };
+                let (Value::Int(left), Value::Int(right)) = (self.value(left)?, self.value(right)?)
+                else {
+                    return None;
+                };
+                Some(left <= right)
+            }
+            Term::PropApp(id, arguments) => {
+                let prelude = self.prelude;
+                if *id == prelude.truth {
+                    Some(true)
+                } else if *id == prelude.falsehood {
+                    Some(false)
+                } else if *id == prelude.and {
+                    let [left, right] = arguments.as_slice() else {
+                        return None;
+                    };
+                    if self.contradicts(left, right) || self.contradicts(right, left) {
+                        return Some(false);
+                    }
+                    match (self.prop(left), self.prop(right)) {
+                        (Some(false), _) | (_, Some(false)) => Some(false),
+                        (Some(true), Some(true)) => Some(true),
+                        _ => None,
+                    }
+                } else if *id == prelude.or {
+                    let [left, right] = arguments.as_slice() else {
+                        return None;
+                    };
+                    match (self.prop(left), self.prop(right)) {
+                        (Some(true), _) | (_, Some(true)) => Some(true),
+                        (Some(false), Some(false)) => Some(false),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            Term::Call(callee, arguments) => {
+                let Value::Fn(id) = self.value(callee)? else {
+                    return None;
+                };
+                if let Some(answer) = self.ordering(id, arguments) {
+                    return answer;
+                }
+                let arguments = self.values(arguments)?;
+                let (arity, body) = self.definitions.function_body(id)?;
+                if arity != arguments.len() {
+                    return None;
+                }
+                let saved = std::mem::replace(&mut self.stack, arguments);
+                let result = self.prop(body);
+                self.stack = saved;
+                result
+            }
+            Term::Case {
+                scrutinee, arms, ..
+            } => {
+                let pushed = self.enter_arm(scrutinee, arms)?;
+                let result = self.prop(&arms[pushed.0].body);
+                self.stack.truncate(self.stack.len() - pushed.1);
+                result
+            }
+            Term::Free(id) => {
+                let Value::Prop(definition) = self.free.get(id)?.clone() else {
+                    return None;
+                };
+                let saved = std::mem::take(&mut self.stack);
+                let result = self.prop(&definition);
+                self.stack = saved;
+                result
+            }
+            _ => None,
+        }
+    }
+
+    /// `right` is literally `left => False`.
+    fn contradicts(&self, left: &Term, right: &Term) -> bool {
+        match right {
+            Term::Implies(premise, conclusion) => {
+                **premise == *left && **conclusion == self.prelude.falsehood_prop()
+            }
+            _ => false,
+        }
+    }
+
+    /// The prelude's orderings, by what they mean. `None` when `id` is not
+    /// one of them.
+    fn ordering(&mut self, id: FnId, arguments: &[Term]) -> Option<Option<bool>> {
+        let prelude = self.prelude;
+        let strict = if id == prelude.nat_le || id == prelude.u8_le {
+            false
+        } else if id == prelude.nat_lt || id == prelude.u8_lt {
+            true
+        } else {
+            return None;
+        };
+        let [left, right] = arguments else {
+            return Some(None);
+        };
+        let number = |value: Value| match value {
+            Value::U8(byte) => Some(u64::from(byte)),
+            Value::Nat(number) => Some(number),
+            _ => None,
+        };
+        let answer = (|| {
+            let left = number(self.value(left)?)?;
+            let right = number(self.value(right)?)?;
+            Some(if strict { left < right } else { left <= right })
+        })();
+        Some(answer)
+    }
+
+    fn quantifier(&mut self, ty: &Type, body: &Term, universal: bool) -> Option<bool> {
+        let (domain, complete): (Vec<Value>, bool) = match ty {
+            Type::Bool => (vec![Value::Bool(false), Value::Bool(true)], true),
+            Type::U8 => ((0..=255).map(Value::U8).collect(), true),
+            Type::Nat => ([0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(), false),
+            Type::Int => (INT_SAMPLE.map(Value::Int).to_vec(), false),
+            // A proof has no content: quantifying over proofs of `P` is
+            // assuming `P`.
+            Type::Proof(prop) => {
+                let premise = self.prop(prop);
+                self.stack.push(Value::Opaque);
+                let conclusion = self.prop(body);
+                self.stack.pop();
+                return match (universal, premise, conclusion) {
+                    (true, Some(false), _) | (true, _, Some(true)) => Some(true),
+                    (true, Some(true), Some(false)) => Some(false),
+                    (false, Some(false), _) | (false, _, Some(false)) => Some(false),
+                    (false, Some(true), Some(true)) => Some(true),
+                    _ => None,
+                };
+            }
+            _ => return None,
+        };
+        // The answer that one instance settles: a false instance refutes a
+        // `forall`, a true one proves an `exists`.
+        let settles = !universal;
+        let mut all_known = true;
+        for value in domain {
+            self.stack.push(value);
+            let instance = self.prop(body);
+            self.stack.pop();
+            match instance {
+                Some(found) if found == settles => return Some(settles),
+                Some(_) => {}
+                None => all_known = false,
+            }
+        }
+        (all_known && complete).then_some(!settles)
+    }
+
+    fn values(&mut self, terms: &[Term]) -> Option<Vec<Value>> {
+        terms.iter().map(|term| self.value(term)).collect()
+    }
+
+    /// Chooses the arm of a case and pushes its payload. Returns the arm and
+    /// how many values were pushed.
+    fn enter_arm(&mut self, scrutinee: &Term, arms: &[TermArm]) -> Option<(usize, usize)> {
+        let (index, payload) = match self.value(scrutinee)? {
+            Value::Bool(value) => (usize::from(value), Vec::new()),
+            Value::Variant(index, payload) => (index, payload),
+            _ => return None,
+        };
+        let arm = arms.get(index)?;
+        if arm.binders as usize != payload.len() {
+            return None;
+        }
+        let pushed = payload.len();
+        self.stack.extend(payload);
+        Some((index, pushed))
+    }
+
+    /// The value of a data term, when it has one.
+    fn value(&mut self, term: &Term) -> Option<Value> {
+        self.tick()?;
+        match term {
+            Term::Free(id) => self.free.get(id).cloned(),
+            Term::Bound(index) => {
+                let position = self.stack.len().checked_sub(*index as usize + 1)?;
+                Some(self.stack[position].clone())
+            }
+            Term::Bool(value) => Some(Value::Bool(*value)),
+            Term::U8(value) => Some(Value::U8(*value)),
+            Term::Nat(value) => value.to_u64().map(Value::Nat),
+            Term::Int(value) => value.to_i128().map(Value::Int),
+            Term::Prim(prim, arguments) => {
+                let arguments = self.values(arguments)?;
+                primitive(*prim, &arguments)
+            }
+            Term::Tuple(_, values) | Term::Struct(_, values) => {
+                Some(Value::Product(self.values(values)?))
+            }
+            Term::Proj(target, index) => match self.value(target)? {
+                Value::Product(values) => values.get(*index).cloned(),
+                _ => None,
+            },
+            Term::Proof(_) => Some(Value::Opaque),
+            Term::Fn(id) => Some(Value::Fn(*id)),
+            Term::Call(callee, arguments) => {
+                let Value::Fn(id) = self.value(callee)? else {
+                    return None;
+                };
+                let arguments = self.values(arguments)?;
+                let (arity, body) = self.definitions.function_body(id)?;
+                if arity != arguments.len() {
+                    return None;
+                }
+                let saved = std::mem::replace(&mut self.stack, arguments);
+                let result = self.value(body);
+                self.stack = saved;
+                result
+            }
+            Term::Variant(_, index, payload) => Some(Value::Variant(*index, self.values(payload)?)),
+            Term::Case {
+                scrutinee, arms, ..
+            } => {
+                let pushed = self.enter_arm(scrutinee, arms)?;
+                let result = self.value(&arms[pushed.0].body);
+                self.stack.truncate(self.stack.len() - pushed.1);
+                result
+            }
+            Term::For(looped) => {
+                let (Value::U8(lo), Value::U8(hi)) =
+                    (self.value(&looped.lo)?, self.value(&looped.hi)?)
+                else {
+                    return None;
+                };
+                if lo > hi {
+                    return None;
+                }
+                let mut state = self.value(&looped.init)?;
+                for index in lo..hi {
+                    self.stack.push(Value::U8(index));
+                    self.stack.push(state);
+                    let next = self.value(&looped.body);
+                    self.stack.truncate(self.stack.len() - 2);
+                    state = next?;
+                }
+                Some(state)
+            }
+            Term::Eq(..)
+            | Term::Implies(..)
+            | Term::Forall(..)
+            | Term::Exists(..)
+            | Term::PropApp(..)
+            | Term::Absurd(..) => None,
+        }
+    }
+}
+
+/// The primitives, written from their documentation in `Prim`.
+fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
+    Some(match (prim, arguments) {
+        (Prim::WrappingAdd, [Value::U8(a), Value::U8(b)]) => {
+            Value::U8(((u16::from(*a) + u16::from(*b)) % 256) as u8)
+        }
+        (Prim::WrappingSub, [Value::U8(a), Value::U8(b)]) => {
+            Value::U8(((256 + u16::from(*a) - u16::from(*b)) % 256) as u8)
+        }
+        (Prim::U8Eq, [Value::U8(a), Value::U8(b)]) => Value::Bool(a == b),
+        (Prim::U8Lt, [Value::U8(a), Value::U8(b)]) => Value::Bool(a < b),
+        (Prim::U8Le, [Value::U8(a), Value::U8(b)]) => Value::Bool(a <= b),
+        (Prim::ToNat, [Value::U8(a)]) => Value::Nat(u64::from(*a)),
+        (Prim::OfNat, [Value::Nat(n)]) => Value::U8((n % 256) as u8),
+        (Prim::Succ, [Value::Nat(n)]) => Value::Nat(n.checked_add(1)?),
+        (Prim::NatAdd, [Value::Nat(a), Value::Nat(b)]) => Value::Nat(a.checked_add(*b)?),
+        (Prim::IntAdd, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_add(*b)?),
+        (Prim::IntSub, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_sub(*b)?),
+        (Prim::IntMul, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_mul(*b)?),
+        (Prim::IntNeg, [Value::Int(a)]) => Value::Int(a.checked_neg()?),
+        // Truncating, as Rust's `/` and `%`, and total: `a / 0` is `0` and
+        // `a % 0` is `a`.
+        (Prim::IntDiv, [Value::Int(a), Value::Int(b)]) => {
+            Value::Int(if *b == 0 { 0 } else { a.checked_div(*b)? })
+        }
+        (Prim::IntRem, [Value::Int(a), Value::Int(b)]) => {
+            Value::Int(if *b == 0 { *a } else { a.checked_rem(*b)? })
+        }
+        _ => return None,
+    })
+}
+
+// --- Witnesses: assignments under which every hypothesis holds ------------------
+
+const SEARCH_NODES: usize = 30_000;
+const WITNESSES: usize = 300;
+const PRODUCT_CANDIDATES: usize = 48;
+
+struct Search<'a> {
+    scene: &'a Scene,
+    oracle: Oracle<'a>,
+    bytes: Vec<u8>,
+    ints: Vec<i128>,
+    nodes: usize,
+    found: Vec<Assignment>,
+}
+
+/// Every byte and integer literal in a term, as a place where a comparison
+/// changes.
+fn literals(term: &Term, bytes: &mut Vec<u8>, ints: &mut Vec<i128>) {
+    match term {
+        Term::U8(byte) => bytes.push(*byte),
+        Term::Int(value) => ints.extend(value.to_i128()),
+        _ => {}
+    }
+    for child in term_children(term) {
+        literals(child, bytes, ints);
+    }
+}
+
+impl<'a> Search<'a> {
+    fn new(scene: &'a Scene, claim: &Term, rng: &mut Rng) -> Self {
+        let (mut seen_bytes, mut seen_ints) = (Vec::new(), Vec::new());
+        literals(claim, &mut seen_bytes, &mut seen_ints);
+        for entry in &scene.entries {
+            if let Entry::Hyp(_, prop) = entry {
+                literals(prop, &mut seen_bytes, &mut seen_ints);
+            }
+        }
+        let mut bytes = vec![0, 1, 2, 3, 127, 128, 254, 255];
+        for byte in seen_bytes {
+            bytes.extend([byte.wrapping_sub(1), byte, byte.wrapping_add(1)]);
+        }
+        bytes.sort_unstable();
+        bytes.dedup();
+        rng.shuffle(&mut bytes);
+        let mut ints = INT_SAMPLE.to_vec();
+        for value in seen_ints {
+            ints.extend([value.saturating_sub(1), value, value.saturating_add(1)]);
+        }
+        ints.sort_unstable();
+        ints.dedup();
+        rng.shuffle(&mut ints);
+        Self {
+            scene,
+            oracle: Oracle::new(scene),
+            bytes,
+            ints,
+            nodes: 0,
+            found: Vec::new(),
+        }
+    }
+
+    /// Some values of a type. Fewer than all of them is fine: the search
+    /// only ever needs one witness. A value of a product with a proof field
+    /// exists only when the field's proposition holds of it.
+    fn candidates(&mut self, ty: &Type, depth: usize) -> Vec<Value> {
+        match ty {
+            Type::Bool => vec![Value::Bool(false), Value::Bool(true)],
+            Type::U8 => self.bytes.iter().copied().map(Value::U8).collect(),
+            Type::Nat => [0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(),
+            Type::Int => self.ints.iter().copied().map(Value::Int).collect(),
+            Type::Tuple(_) | Type::Struct(_) if depth < 3 => self.products(ty, depth),
+            Type::Enum(_) if depth < 3 => {
+                let Some(variants) = case_variants(&self.scene.ctx, ty) else {
+                    return Vec::new();
+                };
+                let mut values = Vec::new();
+                for (index, payload) in variants.iter().enumerate() {
+                    // A payload that depends on itself is left out: there
+                    // are other variants, or no witness.
+                    let fields: Vec<Vec<Value>> = payload
+                        .iter()
+                        .map(|field| match field {
+                            Type::Bool | Type::U8 | Type::Enum(_) | Type::Struct(_) => {
+                                self.candidates(field, depth + 1)
+                            }
+                            _ => Vec::new(),
+                        })
+                        .collect();
+                    values.extend(
+                        combinations(&fields)
+                            .into_iter()
+                            .map(|payload| Value::Variant(index, payload)),
+                    );
+                }
+                values
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn products(&mut self, ty: &Type, depth: usize) -> Vec<Value> {
+        // The kernel's typing, not its proof checking, says what the fields
+        // are: project from a variable of the type until there is no field.
+        let mut ctx = self.scene.ctx.clone();
+        let Ok(whole) = ctx.declare_ghost(ty.clone()) else {
+            return Vec::new();
+        };
+        let mut fields = Vec::new();
+        while let Ok(field) = infer_term(
+            &mut ctx,
+            &Term::proj(Term::Free(whole), fields.len()),
+            Mode::Logical,
+        ) {
+            fields.push(field);
+        }
+        let choices: Vec<Vec<Value>> = fields
+            .iter()
+            .map(|field| match field {
+                Type::Proof(_) => vec![Value::Opaque],
+                _ => self.candidates(field, depth + 1),
+            })
+            .collect();
+        let mut values = Vec::new();
+        for product in combinations(&choices) {
+            let value = Value::Product(product);
+            self.oracle.free.insert(whole, value.clone());
+            let inhabited = fields.iter().all(|field| match field {
+                Type::Proof(prop) => self.oracle.prop(prop) == Some(true),
+                _ => true,
+            });
+            self.oracle.free.remove(&whole);
+            if inhabited {
+                values.push(value);
+            }
+        }
+        values
+    }
+
+    fn run(&mut self, position: usize) {
+        self.nodes += 1;
+        if self.nodes > SEARCH_NODES || self.found.len() >= WITNESSES * 8 {
+            return;
+        }
+        self.oracle.steps = 0;
+        let scene = self.scene;
+        let Some(entry) = scene.entries.get(position) else {
+            self.found.push(self.oracle.free.clone());
+            return;
+        };
+        match entry {
+            Entry::Hyp(_, prop) => {
+                if self.oracle.prop(prop) == Some(true) {
+                    self.run(position + 1);
+                }
+            }
+            // Evidence in scope: its proposition holds.
+            Entry::Var(_, Type::Proof(prop)) => {
+                if self.oracle.prop(prop) == Some(true) {
+                    self.run(position + 1);
+                }
+            }
+            Entry::Var(id, ty) => {
+                // A defined variable has the value of its definition. When
+                // that has no value here the variable stays unassigned,
+                // which is sound: the definition is what it equals, and
+                // anything that mentions it goes undecided.
+                let definition = match scene.entries.get(position + 1) {
+                    Some(Entry::Hyp(_, Term::Eq(_, left, value))) if **left == Term::Free(*id) => {
+                        Some(value)
+                    }
+                    _ => None,
+                };
+                if let Some(value) = definition {
+                    let known = match self.oracle.value(value) {
+                        Some(value) => Some(value),
+                        None if *ty == Type::Prop => Some(Value::Prop((**value).clone())),
+                        None => None,
+                    };
+                    match known {
+                        Some(value) => {
+                            self.oracle.free.insert(*id, value);
+                            self.run(position + 2);
+                            self.oracle.free.remove(id);
+                        }
+                        None => self.run(position + 2),
+                    }
+                    return;
+                }
+                // Every proposition exists; nothing needs its value.
+                if *ty == Type::Prop {
+                    self.run(position + 1);
+                    return;
+                }
+                for value in self.candidates(ty, 0) {
+                    self.oracle.free.insert(*id, value);
+                    self.run(position + 1);
+                    self.oracle.free.remove(id);
+                }
+            }
+        }
+    }
+}
+
+/// The product of the choices, thinned to a fixed number when it is large.
+fn combinations(choices: &[Vec<Value>]) -> Vec<Vec<Value>> {
+    let total: usize = choices.iter().map(Vec::len).product();
+    if total == 0 {
+        return Vec::new();
+    }
+    let count = total.min(PRODUCT_CANDIDATES);
+    (0..count)
+        .map(|k| {
+            let mut index = k * total / count;
+            choices
+                .iter()
+                .map(|choice| {
+                    let value = choice[index % choice.len()].clone();
+                    index /= choice.len();
+                    value
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Assignments that satisfy the scene. Empty when none was found, and then
+/// nothing is known to be false there.
+fn witnesses(scene: &Scene, claim: &Term, rng: &mut Rng) -> Vec<Assignment> {
+    let mut search = Search::new(scene, claim, rng);
+    search.run(0);
+    let mut found = search.found;
+    if found.len() > WITNESSES {
+        let step = found.len() / WITNESSES;
+        found = found.into_iter().step_by(step).collect();
+    }
+    found
+}
+
+/// The first witness at which the claim is false.
+fn refute<'w>(scene: &Scene, claim: &Term, witnesses: &'w [Assignment]) -> Option<&'w Assignment> {
+    refute_within(scene, claim, witnesses, ORACLE_STEPS)
+}
+
+fn refute_within<'w>(
+    scene: &Scene,
+    claim: &Term,
+    witnesses: &'w [Assignment],
+    limit: usize,
+) -> Option<&'w Assignment> {
+    let mut oracle = Oracle::new(scene);
+    oracle.limit = limit;
+    witnesses.iter().find(|witness| {
+        oracle.free = (*witness).clone();
+        oracle.steps = 0;
+        oracle.stack.clear();
+        oracle.prop(claim) == Some(false)
+    })
+}
+
+fn describe_witness(witness: &Assignment) -> String {
+    let mut pairs: Vec<String> = witness
+        .iter()
+        .map(|(id, value)| format!("{id:?} = {value:?}"))
+        .collect();
+    pairs.sort();
+    format!("{{{}}}", pairs.join(", "))
+}
+
+// --- Walking terms ----------------------------------------------------------------
+
+fn term_children(term: &Term) -> Vec<&Term> {
+    match term {
+        Term::Free(_)
+        | Term::Bound(_)
+        | Term::Bool(_)
+        | Term::U8(_)
+        | Term::Nat(_)
+        | Term::Int(_)
+        | Term::Proof(_)
+        | Term::Fn(_)
+        | Term::Absurd(..) => Vec::new(),
+        Term::Prim(_, terms)
+        | Term::Tuple(_, terms)
+        | Term::Struct(_, terms)
+        | Term::Variant(_, _, terms)
+        | Term::PropApp(_, terms) => terms.iter().collect(),
+        Term::Eq(_, left, right) | Term::Implies(left, right) => vec![left, right],
+        Term::Forall(_, body) | Term::Exists(_, body) => vec![body],
+        Term::Proj(target, _) => vec![target],
+        Term::Call(callee, arguments) => std::iter::once(&**callee).chain(arguments).collect(),
+        Term::Case {
+            scrutinee, arms, ..
+        } => std::iter::once(&**scrutinee)
+            .chain(arms.iter().map(|arm| &arm.body))
+            .collect(),
+        Term::For(looped) => vec![&looped.lo, &looped.hi, &looped.init, &looped.body],
+    }
+}
+
+/// The term with its children replaced, in the order `term_children` gives.
+fn term_with_children(term: &Term, children: Vec<Term>) -> Term {
+    let mut next = children.into_iter();
+    let mut take = || next.next().expect("one replacement per child");
+    match term {
+        Term::Free(_)
+        | Term::Bound(_)
+        | Term::Bool(_)
+        | Term::U8(_)
+        | Term::Nat(_)
+        | Term::Int(_)
+        | Term::Proof(_)
+        | Term::Fn(_)
+        | Term::Absurd(..) => term.clone(),
+        Term::Prim(prim, terms) => Term::Prim(*prim, terms.iter().map(|_| take()).collect()),
+        Term::Tuple(fields, terms) => {
+            Term::Tuple(fields.clone(), terms.iter().map(|_| take()).collect())
+        }
+        Term::Struct(id, terms) => Term::Struct(*id, terms.iter().map(|_| take()).collect()),
+        Term::Variant(id, index, terms) => {
+            Term::Variant(*id, *index, terms.iter().map(|_| take()).collect())
+        }
+        Term::PropApp(id, terms) => Term::PropApp(*id, terms.iter().map(|_| take()).collect()),
+        Term::Eq(ty, _, _) => Term::eq(ty.clone(), take(), take()),
+        Term::Implies(_, _) => Term::implies(take(), take()),
+        Term::Forall(ty, _) => Term::Forall(ty.clone(), Box::new(take())),
+        Term::Exists(ty, _) => Term::Exists(ty.clone(), Box::new(take())),
+        Term::Proj(_, index) => Term::proj(take(), *index),
+        Term::Call(_, arguments) => {
+            let callee = take();
+            Term::call(callee, arguments.iter().map(|_| take()).collect())
+        }
+        Term::Case { result, arms, .. } => Term::Case {
+            scrutinee: Box::new(take()),
+            result: result.clone(),
+            arms: arms
+                .iter()
+                .map(|arm| TermArm {
+                    binders: arm.binders,
+                    body: take(),
+                })
+                .collect(),
+        },
+        Term::For(looped) => {
+            let mut looped = (**looped).clone();
+            looped.lo = take();
+            looped.hi = take();
+            looped.init = take();
+            looped.body = take();
+            Term::For(Box::new(looped))
+        }
+    }
+}
+
+/// Every term that differs from `term` at exactly one node, where `local`
+/// says what a node may become.
+fn rewrites(term: &Term, local: &dyn Fn(&Term) -> Vec<Term>) -> Vec<Term> {
+    let mut out = local(term);
+    let children = term_children(term);
+    for (position, child) in children.iter().enumerate() {
+        for replacement in rewrites(child, local) {
+            let mut changed: Vec<Term> = children.iter().map(|child| (*child).clone()).collect();
+            changed[position] = replacement;
+            out.push(term_with_children(term, changed));
+        }
+    }
+    out
+}
+
+/// What one node of a claim may become: a neighbouring literal, a sibling
+/// comparison or operation, swapped sides, `<=` made strict or a strict
+/// `<=` relaxed, another variable, a negation.
+fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<Term> {
+    let mut out = Vec::new();
+    match term {
+        Term::U8(byte) => {
+            out.push(Term::U8(byte.wrapping_add(1)));
+            out.push(Term::U8(byte.wrapping_sub(1)));
+        }
+        Term::Int(value) => {
+            out.push(Term::Int(value.add(&Integer::from(1i64))));
+            out.push(Term::Int(value.sub(&Integer::from(1i64))));
+        }
+        Term::Nat(number) => {
+            if let Some(number) = number.to_u64() {
+                out.push(Term::nat(number + 1));
+                if number > 0 {
+                    out.push(Term::nat(number - 1));
+                }
+            }
+        }
+        Term::Bool(value) => out.push(Term::Bool(!value)),
+        Term::Bound(index) => {
+            out.push(Term::Bound(index + 1));
+            if *index > 0 {
+                out.push(Term::Bound(index - 1));
+            }
+        }
+        Term::Free(id) => {
+            let ty = vars.iter().find(|(var, _)| var == id).map(|(_, ty)| ty);
+            for (other, other_ty) in vars {
+                if other != id && Some(other_ty) == ty && !matches!(other_ty, Type::Proof(_)) {
+                    out.push(Term::Free(*other));
+                }
+            }
+        }
+        Term::Prim(prim, arguments) => {
+            let sibling = match prim {
+                Prim::U8Le => Some(Prim::U8Lt),
+                Prim::U8Lt => Some(Prim::U8Le),
+                Prim::U8Eq => Some(Prim::U8Lt),
+                Prim::WrappingAdd => Some(Prim::WrappingSub),
+                Prim::WrappingSub => Some(Prim::WrappingAdd),
+                Prim::IntAdd => Some(Prim::IntSub),
+                Prim::IntSub => Some(Prim::IntAdd),
+                Prim::IntMul => Some(Prim::IntAdd),
+                Prim::IntDiv => Some(Prim::IntRem),
+                Prim::IntRem => Some(Prim::IntDiv),
+                // `<` is not a primitive of its own; it is handled below.
+                Prim::NatAdd | Prim::Succ | Prim::ToNat | Prim::OfNat | Prim::IntNeg => None,
+                Prim::IntLe => None,
+            };
+            if let Some(sibling) = sibling {
+                out.push(Term::Prim(sibling, arguments.clone()));
+            }
+            if let [left, right] = arguments.as_slice() {
+                out.push(Term::Prim(*prim, vec![right.clone(), left.clone()]));
+            }
+            if let (Prim::Succ | Prim::NatAdd | Prim::IntNeg, Some(first)) =
+                (prim, arguments.first())
+            {
+                out.push(first.clone());
+            }
+            // `a <= b` to `a < b`, which is `a + 1 <= b`, and back.
+            if let (Prim::IntLe, [left, right]) = (prim, arguments.as_slice()) {
+                out.push(Term::int_lt(left.clone(), right.clone()));
+                if let Term::Prim(Prim::IntAdd, sum) = left {
+                    if let [inner, Term::Int(one)] = sum.as_slice() {
+                        if *one == Integer::from(1i64) {
+                            out.push(Term::int_le(inner.clone(), right.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        Term::Call(callee, arguments) => {
+            if let Term::Fn(id) = &**callee {
+                let pairs = [
+                    (prelude.u8_le, prelude.u8_lt),
+                    (prelude.nat_le, prelude.nat_lt),
+                ];
+                for (le, lt) in pairs {
+                    if *id == le {
+                        out.push(Term::call(Term::Fn(lt), arguments.clone()));
+                    } else if *id == lt {
+                        out.push(Term::call(Term::Fn(le), arguments.clone()));
+                    }
+                }
+            }
+            if let [left, right] = arguments.as_slice() {
+                out.push(Term::call(
+                    (**callee).clone(),
+                    vec![right.clone(), left.clone()],
+                ));
+            }
+        }
+        Term::Eq(..) => out.push(prelude.not_prop(term.clone())),
+        Term::Implies(premise, conclusion) => {
+            out.push(Term::implies((**conclusion).clone(), (**premise).clone()));
+            out.push((**conclusion).clone());
+        }
+        Term::PropApp(id, arguments) if *id == prelude.or => {
+            out.push(Term::PropApp(prelude.and, arguments.clone()));
+        }
+        Term::Exists(ty, body) => out.push(Term::Forall(ty.clone(), body.clone())),
+        _ => {}
+    }
+    out
+}
+
+fn perturbations(term: &Term, scene: &Scene) -> Vec<Term> {
+    let vars = scene.vars();
+    rewrites(term, &|node| perturb_node(node, &scene.prelude, &vars))
+}
+
+/// Candidates for a false claim. The oracle decides which of them are.
+fn false_candidates(triple: &Triple) -> Vec<Term> {
+    let prelude = &triple.scene.prelude;
+    let claim = &triple.claim;
+    let negation = prelude.not_prop(claim.clone());
+    let mut out = vec![
+        prelude.falsehood_prop(),
+        negation.clone(),
+        prelude.and_prop(claim.clone(), negation),
+    ];
+    out.extend(perturbations(claim, &triple.scene));
+    out
+}
+
+// --- Walking proofs ---------------------------------------------------------------
+
+fn embedded_in(terms: &[Term]) -> Vec<(&Proof, u32, u32)> {
+    terms
+        .iter()
+        .filter_map(|term| match term {
+            Term::Proof(proof) => Some((&**proof, 0, 0)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn arm_bodies(arms: &[ProofArm]) -> Vec<(&Proof, u32, u32)> {
+    arms.iter()
+        .map(|arm| (&*arm.body, arm.vars, arm.hyps))
+        .collect()
+}
+
+/// A proof's immediate subproofs, each with the term and hypothesis binders
+/// it is under. Proofs passed as arguments of a lemma call or as the payload
+/// of a constructor count: that is where an elaborated proof keeps most of
+/// its structure.
+fn proof_children(proof: &Proof) -> Vec<(&Proof, u32, u32)> {
+    match proof {
+        Proof::Hyp(_)
+        | Proof::Refl(_)
+        | Proof::Projection(_)
+        | Proof::Literal(_)
+        | Proof::Definition(_)
+        | Proof::CaseStep(_)
+        | Proof::ExcludedMiddle(_)
+        | Proof::ForEmpty(_)
+        | Proof::Omitted
+        | Proof::Evaluate(_)
+        | Proof::EvaluateAll(_)
+        | Proof::Axiom(_) => Vec::new(),
+        Proof::OfTerm(term) => match term {
+            Term::Call(_, arguments) => embedded_in(arguments),
+            _ => Vec::new(),
+        },
+        Proof::Transport { eq, proof, .. } => vec![(eq, 0, 0), (proof, 0, 0)],
+        Proof::ImpliesIntro { body, .. } => vec![(body, 0, 1)],
+        Proof::ImpliesElim(implication, premise) => vec![(implication, 0, 0), (premise, 0, 0)],
+        Proof::ForallIntro { body, .. } => vec![(body, 1, 0)],
+        Proof::ForallElim(universal, _) => vec![(universal, 0, 0)],
+        Proof::Construct { payload, .. } => embedded_in(payload),
+        Proof::CaseProof {
+            scrutinee,
+            arms: list,
+            ..
+        } => {
+            let mut out = vec![(&**scrutinee, 0, 0)];
+            out.extend(arm_bodies(list));
+            out
+        }
+        Proof::CaseData { arms: list, .. } => arm_bodies(list),
+        Proof::ExistsIntro { proof, .. } => vec![(proof, 0, 0)],
+        Proof::ExistsElim { exists, arm, .. } => {
+            vec![(exists, 0, 0), (&*arm.body, arm.vars, arm.hyps)]
+        }
+        Proof::ForStep { lower, upper, .. } => vec![(lower, 0, 0), (upper, 0, 0)],
+        Proof::NatInduction { base, step, .. } | Proof::IntInduction { base, step, .. } => {
+            vec![(base, 0, 0), (&*step.body, step.vars, step.hyps)]
+        }
+    }
+}
+
+/// The proof with its subproofs replaced, in the order `proof_children`
+/// gives.
+fn proof_with_children(proof: &Proof, children: Vec<Proof>) -> Proof {
+    let mut next = children.into_iter();
+    let mut take = || next.next().expect("one replacement per subproof");
+    let embedded = |terms: &[Term], take: &mut dyn FnMut() -> Proof| -> Vec<Term> {
+        terms
+            .iter()
+            .map(|term| match term {
+                Term::Proof(_) => Term::proof(take()),
+                other => other.clone(),
+            })
+            .collect()
+    };
+    let rearm = |arm: &ProofArm, body: Proof| ProofArm {
+        vars: arm.vars,
+        hyps: arm.hyps,
+        body: Box::new(body),
+    };
+    match proof {
+        Proof::OfTerm(Term::Call(callee, arguments)) => Proof::OfTerm(Term::call(
+            (**callee).clone(),
+            embedded(arguments, &mut take),
+        )),
+        Proof::Transport { template, .. } => Proof::Transport {
+            eq: Box::new(take()),
+            template: template.clone(),
+            proof: Box::new(take()),
+        },
+        Proof::ImpliesIntro { hyp, .. } => Proof::ImpliesIntro {
+            hyp: hyp.clone(),
+            body: Box::new(take()),
+        },
+        Proof::ImpliesElim(..) => {
+            let implication = take();
+            Proof::implies_elim(implication, take())
+        }
+        Proof::ForallIntro { ty, .. } => Proof::ForallIntro {
+            ty: ty.clone(),
+            body: Box::new(take()),
+        },
+        Proof::ForallElim(_, argument) => Proof::forall_elim(take(), argument.clone()),
+        Proof::Construct {
+            prop,
+            variant,
+            params,
+            payload,
+        } => Proof::Construct {
+            prop: *prop,
+            variant: *variant,
+            params: params.clone(),
+            payload: embedded(payload, &mut take),
+        },
+        Proof::CaseProof { goal, arms, .. } => Proof::CaseProof {
+            scrutinee: Box::new(take()),
+            goal: goal.clone(),
+            arms: arms.iter().map(|arm| rearm(arm, take())).collect(),
+        },
+        Proof::CaseData {
+            scrutinee,
+            goal,
+            arms,
+        } => Proof::CaseData {
+            scrutinee: scrutinee.clone(),
+            goal: goal.clone(),
+            arms: arms.iter().map(|arm| rearm(arm, take())).collect(),
+        },
+        Proof::ExistsIntro { prop, witness, .. } => Proof::ExistsIntro {
+            prop: prop.clone(),
+            witness: witness.clone(),
+            proof: Box::new(take()),
+        },
+        Proof::ExistsElim { goal, arm, .. } => Proof::ExistsElim {
+            exists: Box::new(take()),
+            goal: goal.clone(),
+            arm: rearm(arm, take()),
+        },
+        Proof::ForStep { looped, .. } => Proof::ForStep {
+            looped: looped.clone(),
+            lower: Box::new(take()),
+            upper: Box::new(take()),
+        },
+        Proof::NatInduction {
+            motive,
+            step,
+            target,
+            ..
+        } => Proof::NatInduction {
+            motive: motive.clone(),
+            base: Box::new(take()),
+            step: rearm(step, take()),
+            target: target.clone(),
+        },
+        Proof::IntInduction {
+            motive,
+            step,
+            target,
+            ..
+        } => Proof::IntInduction {
+            motive: motive.clone(),
+            base: Box::new(take()),
+            step: rearm(step, take()),
+            target: target.clone(),
+        },
+        leaf => leaf.clone(),
+    }
+}
+
+/// The same axiom, instantiated at `terms` instead: the inverse of
+/// `Axiom::terms`. A flag the axiom carries is kept. Everything else here
+/// that handles axioms goes through this and `Axiom::terms`, so a new axiom
+/// needs an arm here and a line in `every_axiom_at`, and nothing more.
+fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
+    let mut next = terms.into_iter();
+    let mut take = || next.next().expect("one term per place");
+    match axiom {
+        Axiom::NatAddZero(_) => Axiom::NatAddZero(take()),
+        Axiom::NatAddSucc(..) => Axiom::NatAddSucc(take(), take()),
+        Axiom::NatSuccInjective(..) => Axiom::NatSuccInjective(take(), take()),
+        Axiom::NatSuccNotZero(_) => Axiom::NatSuccNotZero(take()),
+        Axiom::ToNatBound(_) => Axiom::ToNatBound(take()),
+        Axiom::OfToNat(_) => Axiom::OfToNat(take()),
+        Axiom::ToOfNat(_) => Axiom::ToOfNat(take()),
+        Axiom::OfNatWrap(_) => Axiom::OfNatWrap(take()),
+        Axiom::WrappingAddModel(..) => Axiom::WrappingAddModel(take(), take()),
+        Axiom::WrappingSubModel(..) => Axiom::WrappingSubModel(take(), take()),
+        Axiom::Reflect(_, flag) => Axiom::Reflect(take(), *flag),
+        Axiom::IntAddAssoc(..) => Axiom::IntAddAssoc(take(), take(), take()),
+        Axiom::IntAddComm(..) => Axiom::IntAddComm(take(), take()),
+        Axiom::IntAddZero(_) => Axiom::IntAddZero(take()),
+        Axiom::IntAddNeg(_) => Axiom::IntAddNeg(take()),
+        Axiom::IntSubDef(..) => Axiom::IntSubDef(take(), take()),
+        Axiom::IntMulAssoc(..) => Axiom::IntMulAssoc(take(), take(), take()),
+        Axiom::IntMulComm(..) => Axiom::IntMulComm(take(), take()),
+        Axiom::IntMulOne(_) => Axiom::IntMulOne(take()),
+        Axiom::IntMulAdd(..) => Axiom::IntMulAdd(take(), take(), take()),
+        Axiom::IntLeRefl(_) => Axiom::IntLeRefl(take()),
+        Axiom::IntLeTrans(..) => Axiom::IntLeTrans(take(), take(), take()),
+        Axiom::IntLeAntisymm(..) => Axiom::IntLeAntisymm(take(), take()),
+        Axiom::IntLeAdd(..) => Axiom::IntLeAdd(take(), take(), take()),
+        Axiom::IntLeMul(..) => Axiom::IntLeMul(take(), take()),
+        Axiom::IntLeTotal(..) => Axiom::IntLeTotal(take(), take()),
+        Axiom::IntLtIrrefl(_) => Axiom::IntLtIrrefl(take()),
+        Axiom::IntDivRem(..) => Axiom::IntDivRem(take(), take()),
+        Axiom::IntDivZero(_) => Axiom::IntDivZero(take()),
+        Axiom::IntRemLowerPos(..) => Axiom::IntRemLowerPos(take(), take()),
+        Axiom::IntRemUpperPos(..) => Axiom::IntRemUpperPos(take(), take()),
+        Axiom::IntRemLowerNeg(..) => Axiom::IntRemLowerNeg(take(), take()),
+        Axiom::IntRemUpperNeg(..) => Axiom::IntRemUpperNeg(take(), take()),
+        Axiom::IntRemNonneg(..) => Axiom::IntRemNonneg(take(), take()),
+        Axiom::IntRemNonpos(..) => Axiom::IntRemNonpos(take(), take()),
+    }
+}
+
+/// Every axiom, instantiated at copies of one term: the stock a sibling
+/// axiom is chosen from. One line per axiom, matching `axiom_with_terms`.
+fn every_axiom_at(t: &Term) -> Vec<Axiom> {
+    let t = || t.clone();
+    vec![
+        Axiom::NatAddZero(t()),
+        Axiom::NatAddSucc(t(), t()),
+        Axiom::NatSuccInjective(t(), t()),
+        Axiom::NatSuccNotZero(t()),
+        Axiom::ToNatBound(t()),
+        Axiom::OfToNat(t()),
+        Axiom::ToOfNat(t()),
+        Axiom::OfNatWrap(t()),
+        Axiom::WrappingAddModel(t(), t()),
+        Axiom::WrappingSubModel(t(), t()),
+        Axiom::Reflect(t(), true),
+        Axiom::Reflect(t(), false),
+        Axiom::IntAddAssoc(t(), t(), t()),
+        Axiom::IntAddComm(t(), t()),
+        Axiom::IntAddZero(t()),
+        Axiom::IntAddNeg(t()),
+        Axiom::IntSubDef(t(), t()),
+        Axiom::IntMulAssoc(t(), t(), t()),
+        Axiom::IntMulComm(t(), t()),
+        Axiom::IntMulOne(t()),
+        Axiom::IntMulAdd(t(), t(), t()),
+        Axiom::IntLeRefl(t()),
+        Axiom::IntLeTrans(t(), t(), t()),
+        Axiom::IntLeAntisymm(t(), t()),
+        Axiom::IntLeAdd(t(), t(), t()),
+        Axiom::IntLeMul(t(), t()),
+        Axiom::IntLeTotal(t(), t()),
+        Axiom::IntLtIrrefl(t()),
+        Axiom::IntDivRem(t(), t()),
+        Axiom::IntDivZero(t()),
+        Axiom::IntRemLowerPos(t(), t()),
+        Axiom::IntRemUpperPos(t(), t()),
+        Axiom::IntRemLowerNeg(t(), t()),
+        Axiom::IntRemUpperNeg(t(), t()),
+        Axiom::IntRemNonneg(t(), t()),
+        Axiom::IntRemNonpos(t(), t()),
+    ]
+}
+
+fn map_axiom(axiom: &Axiom, f: &dyn Fn(&Term) -> Term) -> Axiom {
+    axiom_with_terms(axiom, axiom.terms().into_iter().map(f).collect())
+}
+
+/// The node with `f` applied to every term it holds itself. Its subproofs
+/// are left alone, wherever they sit.
+fn map_node_terms(node: &Proof, f: &dyn Fn(&Term) -> Term) -> Proof {
+    let spare_proofs = |terms: &[Term]| -> Vec<Term> {
+        terms
+            .iter()
+            .map(|term| match term {
+                Term::Proof(_) => term.clone(),
+                other => f(other),
+            })
+            .collect()
+    };
+    match node {
+        Proof::Hyp(_) | Proof::Omitted | Proof::ImpliesElim(..) | Proof::ForallIntro { .. } => {
+            node.clone()
+        }
+        Proof::OfTerm(Term::Call(callee, arguments)) => {
+            Proof::OfTerm(Term::call((**callee).clone(), spare_proofs(arguments)))
+        }
+        Proof::OfTerm(term) => Proof::OfTerm(f(term)),
+        Proof::Refl(term) => Proof::Refl(f(term)),
+        Proof::Projection(term) => Proof::Projection(f(term)),
+        Proof::Literal(term) => Proof::Literal(f(term)),
+        Proof::Definition(term) => Proof::Definition(f(term)),
+        Proof::CaseStep(term) => Proof::CaseStep(f(term)),
+        Proof::ExcludedMiddle(term) => Proof::ExcludedMiddle(f(term)),
+        Proof::ForEmpty(term) => Proof::ForEmpty(f(term)),
+        Proof::Evaluate(term) => Proof::Evaluate(f(term)),
+        Proof::EvaluateAll(term) => Proof::EvaluateAll(f(term)),
+        Proof::Axiom(axiom) => Proof::Axiom(map_axiom(axiom, f)),
+        Proof::Transport {
+            eq,
+            template,
+            proof,
+        } => Proof::Transport {
+            eq: eq.clone(),
+            template: f(template),
+            proof: proof.clone(),
+        },
+        Proof::ImpliesIntro { hyp, body } => Proof::ImpliesIntro {
+            hyp: f(hyp),
+            body: body.clone(),
+        },
+        Proof::ForallElim(universal, argument) => Proof::ForallElim(universal.clone(), f(argument)),
+        Proof::Construct {
+            prop,
+            variant,
+            params,
+            payload,
+        } => Proof::Construct {
+            prop: *prop,
+            variant: *variant,
+            params: spare_proofs(params),
+            payload: spare_proofs(payload),
+        },
+        Proof::CaseProof {
+            scrutinee,
+            goal,
+            arms,
+        } => Proof::CaseProof {
+            scrutinee: scrutinee.clone(),
+            goal: f(goal),
+            arms: arms.clone(),
+        },
+        Proof::CaseData {
+            scrutinee,
+            goal,
+            arms,
+        } => Proof::CaseData {
+            scrutinee: f(scrutinee),
+            goal: f(goal),
+            arms: arms.clone(),
+        },
+        Proof::ExistsIntro {
+            prop,
+            witness,
+            proof,
+        } => Proof::ExistsIntro {
+            prop: f(prop),
+            witness: f(witness),
+            proof: proof.clone(),
+        },
+        Proof::ExistsElim { exists, goal, arm } => Proof::ExistsElim {
+            exists: exists.clone(),
+            goal: f(goal),
+            arm: arm.clone(),
+        },
+        Proof::ForStep {
+            looped,
+            lower,
+            upper,
+        } => Proof::ForStep {
+            looped: f(looped),
+            lower: lower.clone(),
+            upper: upper.clone(),
+        },
+        Proof::NatInduction {
+            motive,
+            base,
+            step,
+            target,
+        } => Proof::NatInduction {
+            motive: f(motive),
+            base: base.clone(),
+            step: step.clone(),
+            target: f(target),
+        },
+        Proof::IntInduction {
+            motive,
+            base,
+            step,
+            target,
+        } => Proof::IntInduction {
+            motive: f(motive),
+            base: base.clone(),
+            step: step.clone(),
+            target: f(target),
+        },
+    }
+}
+
+/// `f` applied to every term of every node of the proof.
+fn map_proof_terms(proof: &Proof, f: &dyn Fn(&Term) -> Term) -> Proof {
+    let node = map_node_terms(proof, f);
+    let children = proof_children(&node)
+        .into_iter()
+        .map(|(child, _, _)| map_proof_terms(child, f))
+        .collect();
+    proof_with_children(&node, children)
+}
+
+/// Every occurrence of `old` in the term replaced by `new`.
+fn replace_in(term: &Term, old: &Term, new: &Term) -> Term {
+    if term == old {
+        return new.clone();
+    }
+    let children = term_children(term)
+        .into_iter()
+        .map(|child| replace_in(child, old, new))
+        .collect();
+    term_with_children(term, children)
+}
+
+/// Where two claims part: the smallest subterm of the first that must be
+/// replaced to get the second.
+fn difference<'t>(from: &'t Term, to: &'t Term) -> (&'t Term, &'t Term) {
+    let (left, right) = (term_children(from), term_children(to));
+    if left.len() == right.len() {
+        let differing: Vec<usize> = (0..left.len())
+            .filter(|index| left[*index] != right[*index])
+            .collect();
+        if let [index] = differing.as_slice() {
+            let same_shape =
+                term_with_children(from, right.iter().map(|term| (*term).clone()).collect()) == *to;
+            if same_shape {
+                return difference(left[*index], right[*index]);
+            }
+        }
+    }
+    (from, to)
+}
+
+fn proof_size(proof: &Proof) -> usize {
+    1 + proof_children(proof)
+        .iter()
+        .map(|(child, _, _)| proof_size(child))
+        .sum::<usize>()
+}
+
+fn collect_subproofs(proof: &Proof, out: &mut Vec<Proof>) {
+    out.push(proof.clone());
+    for (child, _, _) in proof_children(proof) {
+        collect_subproofs(child, out);
+    }
+}
+
+/// Replaces node `target` of the proof, counting in preorder. `change`
+/// receives the node and the binders it is under.
+fn replace_node(
+    proof: &Proof,
+    target: &mut usize,
+    binders: (u32, u32),
+    change: &mut dyn FnMut(&Proof, (u32, u32)) -> Proof,
+) -> Proof {
+    if *target == 0 {
+        *target = usize::MAX;
+        return change(proof, binders);
+    }
+    *target -= 1;
+    let children = proof_children(proof)
+        .into_iter()
+        .map(|(child, vars, hyps)| {
+            replace_node(child, target, (binders.0 + vars, binders.1 + hyps), change)
+        })
+        .collect();
+    proof_with_children(proof, children)
+}
+
+// --- Mutation -----------------------------------------------------------------------
+
+/// What a mutation may draw on.
+struct Material<'a> {
+    scene: &'a Scene,
+    hyps: Vec<HypId>,
+    /// Context variables that are evidence.
+    evidence: Vec<VarId>,
+    /// Subproofs of this proof and of the other proofs of the same origin.
+    proofs: &'a [Proof],
+    /// Terms to put where a term is wanted.
+    terms: Vec<Term>,
+    /// The false claim under attack.
+    target: &'a Term,
+    /// The part of the true claim that was changed, and what it became.
+    change: (Term, Term),
+}
+
+impl<'a> Material<'a> {
+    fn new(triple: &'a Triple, proofs: &'a [Proof], target: &'a Term) -> Self {
+        let scene = &triple.scene;
+        let vars = scene.vars();
+        let mut terms = vec![
+            Term::U8(0),
+            Term::U8(1),
+            Term::U8(255),
+            Term::Bool(true),
+            Term::nat(0),
+            Term::nat(255),
+            Term::nat(256),
+            Term::int(0),
+            Term::int(1),
+            Term::int(-1),
+        ];
+        for (id, ty) in &vars {
+            if !matches!(ty, Type::Proof(_)) {
+                terms.push(Term::Free(*id));
+            }
+        }
+        for claim in [&triple.claim, target] {
+            terms.extend(term_children(claim).into_iter().cloned());
+            for child in term_children(claim) {
+                terms.extend(term_children(child).into_iter().cloned());
+            }
+        }
+        Self {
+            scene,
+            hyps: scene.hyps(),
+            evidence: vars
+                .iter()
+                .filter(|(_, ty)| matches!(ty, Type::Proof(_)))
+                .map(|(id, _)| *id)
+                .collect(),
+            proofs,
+            terms,
+            target,
+            change: {
+                let (old, new) = difference(&triple.claim, target);
+                (old.clone(), new.clone())
+            },
+        }
+    }
+
+    fn term(&self, rng: &mut Rng) -> Term {
+        rng.pick(&self.terms).cloned().unwrap_or(Term::U8(0))
+    }
+
+    /// A perturbed copy of a term that sits inside a proof node, or the
+    /// false claim itself.
+    fn bend(&self, term: &Term, rng: &mut Rng) -> Term {
+        if rng.below(4) == 0 {
+            return self.target.clone();
+        }
+        let options = perturbations(term, self.scene);
+        rng.pick(&options)
+            .cloned()
+            .unwrap_or_else(|| self.term(rng))
+    }
+
+    fn some_hyp(&self, hyp_binders: u32, rng: &mut Rng) -> Proof {
+        let bound = hyp_binders as usize;
+        let choices = self.hyps.len() + self.evidence.len() + bound;
+        if choices == 0 {
+            return Proof::Refl(self.term(rng));
+        }
+        let choice = rng.below(choices);
+        if choice < self.hyps.len() {
+            Proof::hyp(self.hyps[choice])
+        } else if choice < self.hyps.len() + self.evidence.len() {
+            Proof::OfTerm(Term::Free(self.evidence[choice - self.hyps.len()]))
+        } else {
+            Proof::Hyp(HypRef::Bound(
+                (choice - self.hyps.len() - self.evidence.len()) as u32,
+            ))
+        }
+    }
+
+    /// A computation rule aimed at the false claim.
+    fn computed(&self, rng: &mut Rng) -> Proof {
+        let side = match self.target {
+            // Evaluation decides a comparison of integers as a whole.
+            Term::Prim(Prim::IntLe, _) => return Proof::Evaluate(self.target.clone()),
+            Term::Eq(Type::Int, _, _) if rng.below(2) == 0 => {
+                return Proof::Evaluate(self.target.clone());
+            }
+            Term::Eq(_, left, right) => {
+                if rng.below(2) == 0 {
+                    (**left).clone()
+                } else {
+                    (**right).clone()
+                }
+            }
+            Term::Forall(ty, body) if *ty == Type::U8 => {
+                if let Term::Eq(_, inner, _) = &**body {
+                    return Proof::EvaluateAll((**inner).clone());
+                }
+                self.term(rng)
+            }
+            _ => self.term(rng),
+        };
+        match rng.below(5) {
+            0 => Proof::Evaluate(side),
+            1 => Proof::Refl(side),
+            2 => Proof::Literal(side),
+            3 => Proof::Definition(side),
+            _ => Proof::ExcludedMiddle(self.target.clone()),
+        }
+    }
+
+    /// The axiom about other terms, or with two of its terms exchanged, or
+    /// a sibling axiom of the same arity about the same terms. `Reflect`
+    /// also has a flag to flip. Nothing here names an axiom: the stock of
+    /// siblings is `every_axiom_at`.
+    fn change_axiom(&self, axiom: &Axiom, rng: &mut Rng) -> Axiom {
+        let mut terms: Vec<Term> = axiom.terms().into_iter().cloned().collect();
+        let arity = terms.len();
+        let choice = rng.below(if matches!(axiom, Axiom::Reflect(..)) {
+            4
+        } else {
+            3
+        });
+        match choice {
+            // One term perturbed, or replaced by any other.
+            0 => {
+                let place = rng.below(arity);
+                terms[place] = if rng.below(2) == 0 {
+                    self.bend(&terms[place], rng)
+                } else {
+                    self.term(rng)
+                };
+                axiom_with_terms(axiom, terms)
+            }
+            // Two terms exchanged; of one term, the term replaced.
+            1 => {
+                if arity > 1 {
+                    let first = rng.below(arity);
+                    let second = (first + 1 + rng.below(arity - 1)) % arity;
+                    terms.swap(first, second);
+                } else {
+                    terms[0] = self.term(rng);
+                }
+                axiom_with_terms(axiom, terms)
+            }
+            // A sibling: another axiom of the same arity at the same terms.
+            2 => {
+                let siblings: Vec<Axiom> = every_axiom_at(&Term::int(0))
+                    .into_iter()
+                    .filter(|other| other.terms().len() == arity && other.name() != axiom.name())
+                    .collect();
+                match rng.pick(&siblings) {
+                    Some(sibling) => axiom_with_terms(sibling, terms),
+                    None => axiom_with_terms(axiom, terms),
+                }
+            }
+            _ => match axiom {
+                Axiom::Reflect(comparison, flag) => Axiom::Reflect(comparison.clone(), !flag),
+                _ => unreachable!("only Reflect has a fourth choice"),
+            },
+        }
+    }
+
+    /// Changes something the node itself holds: a term, an index, a flag, or
+    /// the order of its subproofs. `None` when the node holds nothing.
+    fn change_in_place(&self, node: &Proof, rng: &mut Rng) -> Option<Proof> {
+        Some(match node {
+            Proof::Hyp(_) | Proof::Omitted => return None,
+            Proof::OfTerm(Term::Call(callee, arguments)) => {
+                let mut arguments = arguments.clone();
+                if arguments.is_empty() {
+                    return None;
+                }
+                let position = rng.below(arguments.len());
+                if matches!(arguments[position], Term::Proof(_)) {
+                    let other = rng.below(arguments.len());
+                    arguments.swap(position, other);
+                } else {
+                    arguments[position] = self.term(rng);
+                }
+                Proof::OfTerm(Term::call((**callee).clone(), arguments))
+            }
+            Proof::OfTerm(term) => Proof::OfTerm(self.bend(term, rng)),
+            Proof::Refl(term) => Proof::Refl(self.bend(term, rng)),
+            Proof::Projection(term) => Proof::Projection(self.bend(term, rng)),
+            Proof::Literal(term) => Proof::Literal(self.bend(term, rng)),
+            Proof::Definition(term) => Proof::Definition(self.bend(term, rng)),
+            Proof::CaseStep(term) => Proof::CaseStep(self.bend(term, rng)),
+            Proof::ExcludedMiddle(term) => Proof::ExcludedMiddle(self.bend(term, rng)),
+            Proof::ForEmpty(term) => Proof::ForEmpty(self.bend(term, rng)),
+            Proof::Evaluate(term) => Proof::Evaluate(self.bend(term, rng)),
+            Proof::EvaluateAll(term) => Proof::EvaluateAll(self.bend(term, rng)),
+            Proof::Axiom(axiom) => Proof::Axiom(self.change_axiom(axiom, rng)),
+            Proof::Transport {
+                eq,
+                template,
+                proof,
+            } => {
+                if rng.below(2) == 0 {
+                    Proof::Transport {
+                        eq: proof.clone(),
+                        template: template.clone(),
+                        proof: eq.clone(),
+                    }
+                } else {
+                    Proof::Transport {
+                        eq: eq.clone(),
+                        template: self.bend(template, rng),
+                        proof: proof.clone(),
+                    }
+                }
+            }
+            Proof::ImpliesIntro { hyp, body } => Proof::ImpliesIntro {
+                hyp: self.bend(hyp, rng),
+                body: body.clone(),
+            },
+            Proof::ImpliesElim(implication, premise) => {
+                Proof::ImpliesElim(premise.clone(), implication.clone())
+            }
+            Proof::ForallIntro { ty, body } => Proof::ForallIntro {
+                ty: match ty {
+                    Type::U8 => Type::Bool,
+                    Type::Nat => Type::Int,
+                    Type::Int => Type::Nat,
+                    _ => Type::Nat,
+                },
+                body: body.clone(),
+            },
+            Proof::ForallElim(universal, _) => Proof::ForallElim(universal.clone(), self.term(rng)),
+            Proof::Construct {
+                prop,
+                variant,
+                params,
+                payload,
+            } => {
+                let (mut variant, mut params, mut payload) =
+                    (*variant, params.clone(), payload.clone());
+                match rng.below(3) {
+                    // The sibling rule: `Or::Left` for `Or::Right`.
+                    0 => variant = if variant == 0 { 1 } else { variant - 1 },
+                    1 if params.len() > 1 => params.reverse(),
+                    1 if !params.is_empty() => params[0] = self.target.clone(),
+                    _ if payload.len() > 1 => payload.reverse(),
+                    _ => variant += 1,
+                }
+                Proof::Construct {
+                    prop: *prop,
+                    variant,
+                    params,
+                    payload,
+                }
+            }
+            Proof::CaseProof {
+                scrutinee,
+                goal,
+                arms,
+            } => {
+                let mut arms = arms.clone();
+                let goal = if arms.len() > 1 && rng.below(2) == 0 {
+                    arms.reverse();
+                    goal.clone()
+                } else {
+                    self.bend(goal, rng)
+                };
+                Proof::CaseProof {
+                    scrutinee: scrutinee.clone(),
+                    goal,
+                    arms,
+                }
+            }
+            Proof::CaseData {
+                scrutinee,
+                goal,
+                arms,
+            } => {
+                let mut arms = arms.clone();
+                let (scrutinee, goal) = match rng.below(3) {
+                    0 if arms.len() > 1 => {
+                        arms.reverse();
+                        (scrutinee.clone(), goal.clone())
+                    }
+                    1 => (self.bend(scrutinee, rng), goal.clone()),
+                    _ => (scrutinee.clone(), self.bend(goal, rng)),
+                };
+                Proof::CaseData {
+                    scrutinee,
+                    goal,
+                    arms,
+                }
+            }
+            Proof::ExistsIntro {
+                prop,
+                witness,
+                proof,
+            } => {
+                let (prop, witness) = if rng.below(2) == 0 {
+                    (self.bend(prop, rng), witness.clone())
+                } else {
+                    (prop.clone(), self.term(rng))
+                };
+                Proof::ExistsIntro {
+                    prop,
+                    witness,
+                    proof: proof.clone(),
+                }
+            }
+            Proof::ExistsElim { exists, goal, arm } => Proof::ExistsElim {
+                exists: exists.clone(),
+                goal: self.bend(goal, rng),
+                arm: arm.clone(),
+            },
+            Proof::ForStep {
+                looped,
+                lower,
+                upper,
+            } => Proof::ForStep {
+                looped: looped.clone(),
+                lower: upper.clone(),
+                upper: lower.clone(),
+            },
+            Proof::NatInduction {
+                motive,
+                base,
+                step,
+                target,
+            } => {
+                let (motive, target) = if rng.below(2) == 0 {
+                    (self.bend(motive, rng), target.clone())
+                } else {
+                    (motive.clone(), self.term(rng))
+                };
+                Proof::NatInduction {
+                    motive,
+                    base: base.clone(),
+                    step: step.clone(),
+                    target,
+                }
+            }
+            Proof::IntInduction {
+                motive,
+                base,
+                step,
+                target,
+            } => {
+                let (motive, target) = if rng.below(2) == 0 {
+                    (self.bend(motive, rng), target.clone())
+                } else {
+                    (motive.clone(), self.term(rng))
+                };
+                Proof::IntInduction {
+                    motive,
+                    base: base.clone(),
+                    step: step.clone(),
+                    target,
+                }
+            }
+        })
+    }
+
+    /// One node of the proof, changed. One mutant in eight is of another
+    /// kind: the proof with the claim's own change made wherever the changed
+    /// part occurs, which is the proof the false claim would have if it had
+    /// one.
+    fn mutant(&self, proof: &Proof, rng: &mut Rng) -> Proof {
+        let (old, new) = &self.change;
+        let push = |term: &Term| replace_in(term, old, new);
+        if rng.below(8) == 0 {
+            let pushed = map_proof_terms(proof, &push);
+            // Unchanged when the proof never mentions the changed part.
+            if pushed != *proof {
+                return pushed;
+            }
+        }
+        let mut target = rng.below(proof_size(proof));
+        replace_node(proof, &mut target, (0, 0), &mut |node, binders| {
+            match rng.below(9) {
+                // The claim's change, made in this node alone.
+                4 if map_node_terms(node, &push) != *node => map_node_terms(node, &push),
+                // Another hypothesis.
+                0 => self.some_hyp(binders.1, rng),
+                // A different proof from the same place.
+                1 => rng
+                    .pick(self.proofs)
+                    .cloned()
+                    .unwrap_or_else(|| self.some_hyp(binders.1, rng)),
+                // A computation rule where a proof was.
+                2 => self.computed(rng),
+                // The node applied to something, or something applied to it.
+                3 => match rng.below(3) {
+                    0 => Proof::implies_elim(node.clone(), self.some_hyp(binders.1, rng)),
+                    1 => Proof::implies_elim(self.some_hyp(binders.1, rng), node.clone()),
+                    _ => Proof::forall_elim(node.clone(), self.term(rng)),
+                },
+                // Anything the node itself holds.
+                _ => self
+                    .change_in_place(node, rng)
+                    .unwrap_or_else(|| self.some_hyp(binders.1, rng)),
+            }
+        })
+    }
+}
+
+// --- The run -------------------------------------------------------------------------
+
+#[derive(Default)]
+struct Tally {
+    triples: usize,
+    /// Triples with at least one claim known to be false.
+    attacked: usize,
+    /// Triples whose scene has no witness the oracle can find.
+    no_witness: usize,
+    /// Candidate claims the oracle found false, and those it could not
+    /// decide or found true.
+    decided_false: usize,
+    skipped: usize,
+    pairs: usize,
+    mutants: usize,
+    /// Mutants that are proofs of something, so that the claim is what
+    /// stands between them and acceptance.
+    mutants_proving_something: usize,
+    mutants_accepted_for_original: usize,
+    findings: Vec<String>,
+}
+
+impl Tally {
+    fn report(&self, label: &str, started: Instant) {
+        println!(
+            "{label}: {} triples ({} attacked, {} in a context with no witness the oracle can \
+             find); candidate claims: {} decided false, {} skipped; {} pairings of a proof with \
+             a false claim; {} mutants, of which {} prove something and {} were accepted for \
+             the original claim; {:.2}s",
+            self.triples,
+            self.attacked,
+            self.no_witness,
+            self.decided_false,
+            self.skipped,
+            self.pairs,
+            self.mutants,
+            self.mutants_proving_something,
+            self.mutants_accepted_for_original,
+            started.elapsed().as_secs_f64(),
+        );
+    }
+}
+
+fn finding(
+    triple: &Triple,
+    claim: &Term,
+    witness: &Assignment,
+    proof: &Proof,
+    what: &str,
+) -> String {
+    format!(
+        "{what}\n  origin: {}\n  seed: {SEED:#x}\n  context:\n{}  original claim: {}\n  \
+         false claim: {claim}\n  false at: {}\n  proof: {proof:?}\n",
+        triple.origin,
+        triple.scene.describe(),
+        triple.claim,
+        describe_witness(witness),
+    )
+}
+
+/// The triples whose proofs may be spliced into one another: those of one
+/// source file, or of one kind.
+fn group(origin: &str) -> &str {
+    let file = origin.split_once('#').or_else(|| origin.split_once("::"));
+    match file.or_else(|| origin.split_once('/')) {
+        Some((group, _)) => group,
+        None => origin,
+    }
+}
+
+/// Attacks every triple.
+fn attack(triples: &[Triple], tally: &mut Tally, rng: &mut Rng) {
+    let count = mutants_per_pair();
+    let mut pools: HashMap<&str, Vec<Proof>> = HashMap::new();
+    for triple in triples {
+        collect_subproofs(
+            &triple.proof,
+            pools.entry(group(&triple.origin)).or_default(),
+        );
+    }
+
+    for triple in triples {
+        tally.triples += 1;
+        let mut ctx = triple.scene.ctx.clone();
+        assert_eq!(
+            check_proof(&mut ctx, &triple.proof, &triple.claim),
+            Ok(()),
+            "{}: the kernel rejects the triple's own proof of {}",
+            triple.origin,
+            triple.claim
+        );
+
+        let found = witnesses(&triple.scene, &triple.claim, rng);
+        if found.is_empty() {
+            tally.no_witness += 1;
+            continue;
+        }
+        // The pairing the kernel has already accepted is itself under test.
+        if let Some(witness) = refute(&triple.scene, &triple.claim, &found) {
+            tally.findings.push(finding(
+                triple,
+                &triple.claim,
+                witness,
+                &triple.proof,
+                "the oracle refutes a claim the kernel accepted",
+            ));
+            continue;
+        }
+
+        let mut candidates = false_candidates(triple);
+        rng.shuffle(&mut candidates[3..]);
+        let mut falsehoods: Vec<(Term, &Assignment)> = Vec::new();
+        for candidate in candidates {
+            match refute(&triple.scene, &candidate, &found) {
+                Some(witness) => falsehoods.push((candidate, witness)),
+                None => tally.skipped += 1,
+            }
+        }
+        tally.decided_false += falsehoods.len();
+        if !falsehoods.is_empty() {
+            tally.attacked += 1;
+        }
+        // Every false claim meets the original proof; the first few also
+        // meet its mutants.
+        for (claim, witness) in falsehoods.iter().skip(FALSE_CLAIMS) {
+            tally.pairs += 1;
+            if check_proof(&mut ctx, &triple.proof, claim).is_ok() {
+                tally.findings.push(finding(
+                    triple,
+                    claim,
+                    witness,
+                    &triple.proof,
+                    "the original proof is accepted for a false claim",
+                ));
+            }
+        }
+        falsehoods.truncate(FALSE_CLAIMS);
+
+        let pool = &pools[group(&triple.origin)];
+        for (claim, witness) in &falsehoods {
+            tally.pairs += 1;
+            if check_proof(&mut ctx, &triple.proof, claim).is_ok() {
+                tally.findings.push(finding(
+                    triple,
+                    claim,
+                    witness,
+                    &triple.proof,
+                    "the original proof is accepted for a false claim",
+                ));
+            }
+            let material = Material::new(triple, pool, claim);
+            for _ in 0..count {
+                let mutant = material.mutant(&triple.proof, rng);
+                tally.mutants += 1;
+                if check_proof(&mut ctx, &mutant, claim).is_ok() {
+                    tally.findings.push(finding(
+                        triple,
+                        claim,
+                        witness,
+                        &mutant,
+                        "a mutant is accepted for a false claim",
+                    ));
+                }
+                // Whatever the mutant proves, it must not be false either.
+                if let Ok(proved) = infer_proof(&mut ctx, &mutant) {
+                    tally.mutants_proving_something += 1;
+                    let few = &found[..found.len().min(MUTANT_CLAIM_WITNESSES)];
+                    if let Some(witness) =
+                        refute_within(&triple.scene, &proved, few, MUTANT_CLAIM_STEPS)
+                    {
+                        tally.findings.push(finding(
+                            triple,
+                            &proved,
+                            witness,
+                            &mutant,
+                            "a mutant proves a claim of its own that is false",
+                        ));
+                    }
+                }
+                if check_proof(&mut ctx, &mutant, &triple.claim).is_ok() {
+                    tally.mutants_accepted_for_original += 1;
+                }
+            }
+        }
+    }
+}
+
+fn conclude(tally: &Tally) {
+    assert!(
+        tally.findings.is_empty(),
+        "{} finding(s):\n\n{}",
+        tally.findings.len(),
+        tally.findings.join("\n")
+    );
+}
+
+// --- Triples written by hand ----------------------------------------------------------
+
+struct World {
+    definitions: Rc<Definitions>,
+    prelude: Prelude,
+    theory: Theory,
+    /// `math fn double(n: u8) -> u8 { n.wrapping_add(n) }`
+    double: FnId,
+    /// `math fn within(n: u8) -> Prop { n <= 3 }`
+    within: FnId,
+    /// `math fn int_double(n: Int) -> Int { n + n }`
+    int_double: FnId,
+}
+
+fn world() -> World {
+    let (mut definitions, prelude) = Definitions::with_prelude();
+    let theory = theory::declare(&mut definitions, &prelude).expect("the theory checks");
+    let double = definitions
+        .declare_fn(
+            &Type::function(1, |params| match params {
+                [] => Type::U8,
+                _ => Type::U8,
+            }),
+            |params| Term::wrapping_add(params[0].clone(), params[0].clone()),
+        )
+        .expect("double is declared");
+    let within = definitions
+        .declare_fn(
+            &Type::function(1, |params| match params {
+                [] => Type::U8,
+                _ => Type::Prop,
+            }),
+            |params| prelude.u8_le_prop(params[0].clone(), Term::U8(3)),
+        )
+        .expect("within is declared");
+    let int_double = definitions
+        .declare_fn(&Type::function(1, |_| Type::Int), |params| {
+            Term::int_add(params[0].clone(), params[0].clone())
+        })
+        .expect("int_double is declared");
+    World {
+        definitions: Rc::new(definitions),
+        prelude,
+        theory,
+        double,
+        within,
+        int_double,
+    }
+}
+
+fn int_eq(left: Term, right: Term) -> Term {
+    Term::eq(Type::Int, left, right)
+}
+
+fn ax(axiom: Axiom) -> Proof {
+    Proof::Axiom(axiom)
+}
+
+/// `a <= a + 1`: from `0 <= 1`, which evaluation decides, by adding `a` on
+/// both sides and tidying each side. Four axioms, eleven nodes.
+fn int_le_succ(a: &Term) -> Proof {
+    let (add, le, lit) = (Term::int_add, Term::int_le, Term::int);
+    let zero_le_one = Proof::Evaluate(le(lit(0), lit(1)));
+    // 0 + a <= 1 + a
+    let shifted = Proof::implies_elim(ax(Axiom::IntLeAdd(lit(0), lit(1), a.clone())), zero_le_one);
+    let left = Chain::new(Type::Int, add(lit(0), a.clone()))
+        .step(ax(Axiom::IntAddComm(lit(0), a.clone())))
+        .step(ax(Axiom::IntAddZero(a.clone())))
+        .finish();
+    let right = ax(Axiom::IntAddComm(lit(1), a.clone()));
+    let tidy_left = Proof::transport(left, |hole| le(hole, add(lit(1), a.clone())), shifted);
+    Proof::transport(right, |hole| le(a.clone(), hole), tidy_left)
+}
+
+fn n_id(term: &Term) -> VarId {
+    match term {
+        Term::Free(id) => *id,
+        _ => panic!("a variable"),
+    }
+}
+
+fn u8_eq(left: Term, right: Term) -> Term {
+    Term::eq(Type::U8, left, right)
+}
+
+fn nat_eq(left: Term, right: Term) -> Term {
+    Term::eq(Type::Nat, left, right)
+}
+
+fn lemma(id: FnId, arguments: Vec<Term>) -> Proof {
+    Proof::OfTerm(Term::call(Term::Fn(id), arguments))
+}
+
+fn and_intro(prelude: &Prelude, p: &Term, q: &Term, left: Proof, right: Proof) -> Proof {
+    Proof::Construct {
+        prop: prelude.and,
+        variant: 0,
+        params: vec![p.clone(), q.clone()],
+        payload: vec![Term::proof(left), Term::proof(right)],
+    }
+}
+
+fn or_intro(prelude: &Prelude, p: &Term, q: &Term, side: usize, proof: Proof) -> Proof {
+    Proof::Construct {
+        prop: prelude.or,
+        variant: side,
+        params: vec![p.clone(), q.clone()],
+        payload: vec![Term::proof(proof)],
+    }
+}
+
+fn hand_built(world: &World) -> Vec<Triple> {
+    let prelude = &world.prelude;
+    let mut out = Vec::new();
+    let mut add = |name: &str, scene: Scene, claim: Term, proof: Proof| {
+        out.push(Triple {
+            origin: format!("hand/{name}"),
+            scene,
+            claim,
+            proof,
+        });
+    };
+    let le = |left: &Term, right: u8| prelude.u8_le_prop(left.clone(), Term::U8(right));
+
+    // Propositional structure.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let h = scene.assume(le(&x, 3));
+        add("hypothesis", scene, le(&x, 3), Proof::hyp(h));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let (p, q) = (le(&x, 3), u8_eq(y, Term::U8(1)));
+        let (hp, hq) = (scene.assume(p.clone()), scene.assume(q.clone()));
+        let proof = and_intro(prelude, &p, &q, Proof::hyp(hp), Proof::hyp(hq));
+        add("and_intro", scene, prelude.and_prop(p, q), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let (p, q) = (le(&x, 3), u8_eq(y, Term::U8(2)));
+        let h = scene.assume(prelude.and_prop(p.clone(), q.clone()));
+        let proof = Proof::CaseProof {
+            scrutinee: Box::new(Proof::hyp(h)),
+            goal: q.clone(),
+            arms: vec![Proof::arm(2, 0, |payload, _| {
+                Proof::OfTerm(payload[1].clone())
+            })],
+        };
+        add("and_elim", scene, q, proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let (p, q) = (le(&x, 3), u8_eq(y, Term::U8(2)));
+        let h = scene.assume(p.clone());
+        let proof = or_intro(prelude, &p, &q, 0, Proof::hyp(h));
+        add("or_left", scene, prelude.or_prop(p, q), proof);
+    }
+    {
+        // p || q gives q || p.
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let (p, q) = (le(&x, 3), u8_eq(y, Term::U8(2)));
+        let h = scene.assume(prelude.or_prop(p.clone(), q.clone()));
+        let goal = prelude.or_prop(q.clone(), p.clone());
+        let proof = Proof::CaseProof {
+            scrutinee: Box::new(Proof::hyp(h)),
+            goal: goal.clone(),
+            arms: vec![
+                Proof::arm(1, 0, |payload, _| {
+                    or_intro(prelude, &q, &p, 1, Proof::OfTerm(payload[0].clone()))
+                }),
+                Proof::arm(1, 0, |payload, _| {
+                    or_intro(prelude, &q, &p, 0, Proof::OfTerm(payload[0].clone()))
+                }),
+            ],
+        };
+        add("or_elim", scene, goal, proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let (p, q) = (u8_eq(x, Term::U8(0)), u8_eq(y, Term::U8(0)));
+        let rule = scene.assume(Term::implies(p.clone(), q.clone()));
+        let h = scene.assume(p);
+        let proof = Proof::implies_elim(Proof::hyp(rule), Proof::hyp(h));
+        add("modus_ponens", scene, q, proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let p = u8_eq(x, Term::U8(1));
+        let proof = Proof::implies_intro(p.clone(), |h| h);
+        add("implies_intro", scene, Term::implies(p.clone(), p), proof);
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let p = u8_eq(Term::U8(1), Term::U8(2));
+        let claim = prelude.or_prop(p.clone(), prelude.not_prop(p.clone()));
+        add("excluded_middle", scene, claim, Proof::ExcludedMiddle(p));
+    }
+
+    // Quantifiers.
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = Term::forall(Type::U8, |n| u8_eq(n.clone(), n));
+        let proof = Proof::forall_intro(Type::U8, Proof::Refl);
+        add("forall_intro", scene, claim, proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let h = scene.assume(Term::forall(Type::U8, |n| {
+            u8_eq(Term::wrapping_add(n.clone(), Term::U8(0)), n)
+        }));
+        let claim = u8_eq(Term::wrapping_add(x.clone(), Term::U8(0)), x.clone());
+        add(
+            "forall_elim",
+            scene,
+            claim,
+            Proof::forall_elim(Proof::hyp(h), x),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = Term::exists(Type::U8, |n| u8_eq(n, Term::U8(0)));
+        let proof = Proof::ExistsIntro {
+            prop: claim.clone(),
+            witness: Term::U8(0),
+            proof: Box::new(Proof::Refl(Term::U8(0))),
+        };
+        add("exists_intro", scene, claim, proof);
+    }
+    {
+        // exists n { n == x && n <= 3 } gives x <= 3.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let h = scene.assume(Term::exists(Type::U8, |n| {
+            prelude.and_prop(u8_eq(n.clone(), x.clone()), le(&n, 3))
+        }));
+        let goal = le(&x, 3);
+        let proof = Proof::ExistsElim {
+            exists: Box::new(Proof::hyp(h)),
+            goal: goal.clone(),
+            arm: Proof::arm(1, 1, |_, hyps| Proof::CaseProof {
+                scrutinee: Box::new(hyps[0].clone()),
+                goal: le(&x, 3),
+                arms: vec![Proof::arm(2, 0, |payload, _| {
+                    Proof::transport(
+                        Proof::OfTerm(payload[0].clone()),
+                        |hole| prelude.u8_le_prop(hole, Term::U8(3)),
+                        Proof::OfTerm(payload[1].clone()),
+                    )
+                })],
+            }),
+        };
+        add("exists_elim", scene, goal, proof);
+    }
+
+    // Equality and rewriting.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let eq = scene.assume(u8_eq(x.clone(), y.clone()));
+        let bound = scene.assume(le(&x, 3));
+        let proof = Proof::transport(
+            Proof::hyp(eq),
+            |hole| prelude.u8_le_prop(hole, Term::U8(3)),
+            Proof::hyp(bound),
+        );
+        add("transport", scene, le(&y, 3), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let eq = scene.assume(u8_eq(x.clone(), y.clone()));
+        let proof = symm_at(&Type::U8, &x, Proof::hyp(eq));
+        add("symmetry", scene, u8_eq(y, x), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let claim = u8_eq(x.clone(), x.clone());
+        add("reflexivity", scene, claim, Proof::Refl(x));
+    }
+
+    // Projections and cases.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let pair = Term::tuple(
+            &Type::Tuple(vec![Type::U8, Type::Bool]),
+            vec![x.clone(), Term::Bool(true)],
+        );
+        let projected = Term::proj(pair, 0);
+        let claim = u8_eq(projected.clone(), x);
+        add("projection", scene, claim, Proof::Projection(projected));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let case = Term::case(
+            Term::Bool(true),
+            Type::U8,
+            vec![
+                (0, Box::new(|_, _| Term::U8(1))),
+                (0, Box::new(|_, _| Term::U8(2))),
+            ],
+        );
+        let claim = u8_eq(case.clone(), Term::U8(2));
+        add("case_step", scene, claim, Proof::CaseStep(case));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let b = scene.declare(Type::Bool);
+        let is = |value: bool| Term::eq(Type::Bool, b.clone(), Term::Bool(value));
+        let goal = prelude.or_prop(is(true), is(false));
+        let proof = Proof::CaseData {
+            scrutinee: b.clone(),
+            goal: goal.clone(),
+            arms: vec![
+                Proof::arm(0, 1, |_, facts| {
+                    or_intro(prelude, &is(true), &is(false), 1, facts[0].clone())
+                }),
+                Proof::arm(0, 1, |_, facts| {
+                    or_intro(prelude, &is(true), &is(false), 0, facts[0].clone())
+                }),
+            ],
+        };
+        add("case_data", scene, goal, proof);
+    }
+
+    // The Nat axioms.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Nat);
+        let claim = nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a.clone());
+        add(
+            "nat_add_zero",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::NatAddZero(a)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Nat), scene.declare(Type::Nat));
+        let claim = nat_eq(
+            Term::nat_add(a.clone(), Term::succ(b.clone())),
+            Term::succ(Term::nat_add(a.clone(), b.clone())),
+        );
+        add(
+            "nat_add_succ",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::NatAddSucc(a, b)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Nat), scene.declare(Type::Nat));
+        let h = scene.assume(nat_eq(Term::succ(a.clone()), Term::succ(b.clone())));
+        let proof = Proof::implies_elim(
+            Proof::Axiom(Axiom::NatSuccInjective(a.clone(), b.clone())),
+            Proof::hyp(h),
+        );
+        add("nat_succ_injective", scene, nat_eq(a, b), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Nat);
+        let claim = prelude.not_prop(nat_eq(Term::succ(a.clone()), Term::nat(0)));
+        add(
+            "nat_succ_not_zero",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::NatSuccNotZero(a)),
+        );
+    }
+
+    // The u8 model.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let claim = prelude.nat_lt_prop(Term::to_nat(x.clone()), Term::nat(256));
+        add(
+            "to_nat_bound",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::ToNatBound(x)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let claim = u8_eq(Term::of_nat(Term::to_nat(x.clone())), x.clone());
+        add("of_to_nat", scene, claim, Proof::Axiom(Axiom::OfToNat(x)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let n = scene.declare(Type::Nat);
+        let h = scene.assume(prelude.nat_lt_prop(n.clone(), Term::nat(256)));
+        let claim = nat_eq(Term::to_nat(Term::of_nat(n.clone())), n.clone());
+        let proof = Proof::implies_elim(Proof::Axiom(Axiom::ToOfNat(n)), Proof::hyp(h));
+        add("to_of_nat", scene, claim, proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let n = scene.declare(Type::Nat);
+        let claim = u8_eq(
+            Term::of_nat(Term::nat_add(n.clone(), Term::nat(256))),
+            Term::of_nat(n.clone()),
+        );
+        add(
+            "of_nat_wrap",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::OfNatWrap(n)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let claim = u8_eq(
+            Term::wrapping_add(a.clone(), b.clone()),
+            Term::of_nat(Term::nat_add(
+                Term::to_nat(a.clone()),
+                Term::to_nat(b.clone()),
+            )),
+        );
+        add(
+            "wrapping_add_model",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::WrappingAddModel(a, b)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::U8), scene.declare(Type::U8));
+        let claim = u8_eq(
+            Term::wrapping_add(Term::wrapping_sub(a.clone(), b.clone()), b.clone()),
+            a.clone(),
+        );
+        add(
+            "wrapping_sub_model",
+            scene,
+            claim,
+            Proof::Axiom(Axiom::WrappingSubModel(a, b)),
+        );
+    }
+
+    // Reflection of runtime comparisons.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let comparison = Term::prim(Prim::U8Lt, vec![x.clone(), Term::U8(3)]);
+        let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(true)));
+        let proof = Proof::implies_elim(
+            Proof::Axiom(Axiom::Reflect(comparison, true)),
+            Proof::hyp(h),
+        );
+        add(
+            "reflect_true",
+            scene,
+            prelude.u8_lt_prop(x, Term::U8(3)),
+            proof,
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let comparison = Term::prim(Prim::U8Eq, vec![x.clone(), Term::U8(0)]);
+        let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(false)));
+        let proof = Proof::implies_elim(
+            Proof::Axiom(Axiom::Reflect(comparison, false)),
+            Proof::hyp(h),
+        );
+        add(
+            "reflect_false",
+            scene,
+            prelude.not_prop(u8_eq(x, Term::U8(0))),
+            proof,
+        );
+    }
+
+    // Evaluation.
+    {
+        let scene = Scene::new(&world.definitions);
+        let sum = Term::wrapping_add(Term::U8(250), Term::U8(10));
+        let claim = u8_eq(sum.clone(), Term::U8(4));
+        add("literal", scene, claim, Proof::Literal(sum));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = Term::call(
+            Term::Fn(world.double),
+            vec![Term::wrapping_add(Term::U8(100), Term::U8(50))],
+        );
+        let claim = u8_eq(term.clone(), Term::U8(44));
+        add("evaluate", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let body = |x: Term| {
+            Term::prim(
+                Prim::U8Le,
+                vec![Term::wrapping_sub(x.clone(), x), Term::U8(0)],
+            )
+        };
+        let claim = Term::forall(Type::U8, |x| {
+            Term::eq(Type::Bool, body(x), Term::Bool(true))
+        });
+        add("evaluate_all", scene, claim, Proof::evaluate_all(body));
+    }
+
+    {
+        // Perturbed to `x <= 254`, this fails at the last byte alone.
+        let scene = Scene::new(&world.definitions);
+        let body = |x: Term| Term::prim(Prim::U8Le, vec![x, Term::U8(255)]);
+        let claim = Term::forall(Type::U8, |x| {
+            Term::eq(Type::Bool, body(x), Term::Bool(true))
+        });
+        add("evaluate_all_edge", scene, claim, Proof::evaluate_all(body));
+    }
+
+    // Definitions.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let call = Term::call(Term::Fn(world.double), vec![x.clone()]);
+        let claim = u8_eq(call.clone(), Term::wrapping_add(x.clone(), x));
+        add("definition", scene, claim, Proof::Definition(call));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let call = Term::call(Term::Fn(world.within), vec![x.clone()]);
+        let h = scene.assume(call.clone());
+        let proof = unfold_claim(&call, Proof::hyp(h));
+        add("unfold", scene, le(&x, 3), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let call = Term::call(Term::Fn(world.within), vec![x.clone()]);
+        let h = scene.assume(le(&x, 3));
+        let proof = fold_claim(&call, Proof::hyp(h));
+        add("fold", scene, call, proof);
+    }
+
+    // Lemmas of the theory, used as a caller uses them.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::U8);
+        let b = scene.declare(Type::U8);
+        let c = scene.declare(Type::U8);
+        let ab = scene.assume(prelude.u8_le_prop(a.clone(), b.clone()));
+        let bc = scene.assume(prelude.u8_le_prop(b.clone(), c.clone()));
+        let proof = lemma(
+            world.theory.u8_le_trans,
+            vec![
+                a.clone(),
+                b,
+                c.clone(),
+                Term::proof(Proof::hyp(ab)),
+                Term::proof(Proof::hyp(bc)),
+            ],
+        );
+        add("lemma_call", scene, prelude.u8_le_prop(a, c), proof);
+    }
+    {
+        // A `for` over an empty range is its initial state.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let state = Type::Tuple(vec![Type::U8]);
+        let init = Term::tuple(&state, vec![Term::U8(5)]);
+        let looped = Term::for_range(
+            x.clone(),
+            x.clone(),
+            lemma(world.theory.u8_le_refl, vec![x]),
+            |_| state.clone(),
+            init.clone(),
+            |_, s, _, _| s,
+        );
+        let claim = Term::eq(state.clone(), looped.clone(), init);
+        add("for_empty", scene, claim, Proof::ForEmpty(looped));
+    }
+
+    // Int: the ring axioms.
+    let (iadd, imul, ile, ilit) = (Term::int_add, Term::int_mul, Term::int_le, Term::int);
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let claim = int_eq(iadd(a.clone(), b.clone()), iadd(b.clone(), a.clone()));
+        add("int_add_comm", scene, claim, ax(Axiom::IntAddComm(a, b)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b, c) = (
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+        );
+        let claim = int_eq(
+            imul(a.clone(), iadd(b.clone(), c.clone())),
+            iadd(imul(a.clone(), b.clone()), imul(a.clone(), c.clone())),
+        );
+        add("int_mul_add", scene, claim, ax(Axiom::IntMulAdd(a, b, c)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        let claim = int_eq(iadd(a.clone(), Term::int_neg(a.clone())), ilit(0));
+        add("int_add_neg", scene, claim, ax(Axiom::IntAddNeg(a)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let claim = int_eq(
+            Term::int_sub(a.clone(), b.clone()),
+            iadd(a.clone(), Term::int_neg(b.clone())),
+        );
+        add("int_sub_def", scene, claim, ax(Axiom::IntSubDef(a, b)));
+    }
+    {
+        // A ring equation derived in steps: (x + c) + (-c) == x.
+        let mut scene = Scene::new(&world.definitions);
+        let (x, c) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let neg_c = Term::int_neg(c.clone());
+        let proof = Chain::new(Type::Int, iadd(iadd(x.clone(), c.clone()), neg_c.clone()))
+            .step(ax(Axiom::IntAddAssoc(x.clone(), c.clone(), neg_c.clone())))
+            .rewrite(
+                |hole| iadd(x.clone(), hole),
+                ax(Axiom::IntAddNeg(c.clone())),
+            )
+            .step(ax(Axiom::IntAddZero(x.clone())))
+            .finish();
+        let claim = int_eq(iadd(iadd(x.clone(), c), neg_c), x);
+        add("int_add_then_subtract", scene, claim, proof);
+    }
+
+    // Int: the order axioms, used as implications.
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        add(
+            "int_le_refl",
+            scene,
+            ile(a.clone(), a.clone()),
+            ax(Axiom::IntLeRefl(a)),
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b, c) = (
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+        );
+        let h = scene.assume(ile(a.clone(), b.clone()));
+        let proof = Proof::implies_elim(
+            ax(Axiom::IntLeAdd(a.clone(), b.clone(), c.clone())),
+            Proof::hyp(h),
+        );
+        add(
+            "int_le_add",
+            scene,
+            ile(iadd(a, c.clone()), iadd(b, c)),
+            proof,
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b, c) = (
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+            scene.declare(Type::Int),
+        );
+        let ab = scene.assume(ile(a.clone(), b.clone()));
+        let bc = scene.assume(ile(b.clone(), c.clone()));
+        let proof = Proof::implies_elim(
+            Proof::implies_elim(
+                ax(Axiom::IntLeTrans(a.clone(), b, c.clone())),
+                Proof::hyp(ab),
+            ),
+            Proof::hyp(bc),
+        );
+        add("int_le_trans", scene, ile(a, c), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let ab = scene.assume(ile(a.clone(), b.clone()));
+        let ba = scene.assume(ile(b.clone(), a.clone()));
+        let proof = Proof::implies_elim(
+            Proof::implies_elim(
+                ax(Axiom::IntLeAntisymm(a.clone(), b.clone())),
+                Proof::hyp(ab),
+            ),
+            Proof::hyp(ba),
+        );
+        add("int_le_antisymm", scene, int_eq(a, b), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let pa = scene.assume(ile(ilit(0), a.clone()));
+        let pb = scene.assume(ile(ilit(0), b.clone()));
+        let proof = Proof::implies_elim(
+            Proof::implies_elim(ax(Axiom::IntLeMul(a.clone(), b.clone())), Proof::hyp(pa)),
+            Proof::hyp(pb),
+        );
+        add("int_le_mul", scene, ile(ilit(0), imul(a, b)), proof);
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let claim = prelude.or_prop(
+            ile(a.clone(), b.clone()),
+            Term::int_lt(b.clone(), a.clone()),
+        );
+        add("int_le_total", scene, claim, ax(Axiom::IntLeTotal(a, b)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        let claim = prelude.not_prop(Term::int_lt(a.clone(), a.clone()));
+        add("int_lt_irrefl", scene, claim, ax(Axiom::IntLtIrrefl(a)));
+    }
+    {
+        // a <= a + 1, derived: evaluation, two order axioms, and transport.
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        let claim = ile(a.clone(), iadd(a.clone(), ilit(1)));
+        add("int_le_succ", scene, claim, int_le_succ(&a));
+    }
+
+    // Int: evaluation, of closed computations and of closed comparisons.
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = Term::call(
+            Term::Fn(world.int_double),
+            vec![Term::int_sub(ilit(1), ilit(22))],
+        );
+        let claim = int_eq(term.clone(), ilit(-42));
+        add("int_evaluate", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = iadd(imul(ilit(-6), ilit(7)), Term::int_neg(ilit(-2)));
+        let claim = int_eq(term.clone(), ilit(-40));
+        add("int_evaluate_closed", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = ile(ilit(-3), ilit(2));
+        add(
+            "int_evaluate_le_true",
+            scene,
+            claim.clone(),
+            Proof::Evaluate(claim),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let comparison = ile(ilit(2), ilit(-3));
+        let claim = prelude.not_prop(comparison.clone());
+        add(
+            "int_evaluate_le_false",
+            scene,
+            claim,
+            Proof::Evaluate(comparison),
+        );
+    }
+    {
+        // `2 < 2` is `2 + 1 <= 2`, so this is decided by the same rule.
+        let scene = Scene::new(&world.definitions);
+        let comparison = Term::int_lt(ilit(2), ilit(2));
+        let claim = prelude.not_prop(comparison.clone());
+        add(
+            "int_evaluate_lt_false",
+            scene,
+            claim,
+            Proof::Evaluate(comparison),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let call = Term::call(
+            Term::Fn(world.int_double),
+            vec![Term::int_sub(ilit(1), ilit(22))],
+        );
+        let claim = int_eq(call, imul(ilit(-6), ilit(7)));
+        add(
+            "int_evaluate_eq",
+            scene,
+            claim.clone(),
+            Proof::Evaluate(claim),
+        );
+    }
+
+    // Int: division and remainder.
+    let (idiv, irem) = (Term::int_div, Term::int_rem);
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let claim = int_eq(
+            a.clone(),
+            iadd(
+                imul(idiv(a.clone(), b.clone()), b.clone()),
+                irem(a.clone(), b.clone()),
+            ),
+        );
+        add("int_div_rem", scene, claim, ax(Axiom::IntDivRem(a, b)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        let claim = int_eq(idiv(a.clone(), ilit(0)), ilit(0));
+        add("int_div_zero", scene, claim, ax(Axiom::IntDivZero(a)));
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let h = scene.assume(Term::int_lt(ilit(0), b.clone()));
+        let proof = Proof::implies_elim(
+            ax(Axiom::IntRemUpperPos(a.clone(), b.clone())),
+            Proof::hyp(h),
+        );
+        add(
+            "int_rem_upper_pos",
+            scene,
+            Term::int_lt(irem(a, b.clone()), b),
+            proof,
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let h = scene.assume(Term::int_lt(b.clone(), ilit(0)));
+        let proof = Proof::implies_elim(
+            ax(Axiom::IntRemLowerNeg(a.clone(), b.clone())),
+            Proof::hyp(h),
+        );
+        add(
+            "int_rem_lower_neg",
+            scene,
+            Term::int_lt(b.clone(), irem(a, b)),
+            proof,
+        );
+    }
+    {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let h = scene.assume(ile(ilit(0), a.clone()));
+        let proof =
+            Proof::implies_elim(ax(Axiom::IntRemNonneg(a.clone(), b.clone())), Proof::hyp(h));
+        add("int_rem_nonneg", scene, ile(ilit(0), irem(a, b)), proof);
+    }
+    {
+        // Truncation toward zero: -7 / 2 == -3 and -7 % 2 == -1, and a / 0 == 0.
+        let scene = Scene::new(&world.definitions);
+        let term = idiv(ilit(-7), ilit(2));
+        add(
+            "int_evaluate_div",
+            scene,
+            int_eq(term.clone(), ilit(-3)),
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = irem(ilit(-7), ilit(2));
+        add(
+            "int_evaluate_rem",
+            scene,
+            int_eq(term.clone(), ilit(-1)),
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = irem(ilit(7), ilit(0));
+        add(
+            "int_evaluate_rem_zero",
+            scene,
+            int_eq(term.clone(), ilit(7)),
+            Proof::Evaluate(term),
+        );
+    }
+
+    // Int: induction over the non-negative integers.
+    {
+        // 0 <= n => a <= a + n.
+        let mut scene = Scene::new(&world.definitions);
+        let (a, n) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let motive = |k: Term| ile(a.clone(), iadd(a.clone(), k));
+        let base = Proof::transport(
+            symm_at(
+                &Type::Int,
+                &iadd(a.clone(), ilit(0)),
+                ax(Axiom::IntAddZero(a.clone())),
+            ),
+            |hole| ile(a.clone(), hole),
+            ax(Axiom::IntLeRefl(a.clone())),
+        );
+        let step = |k: Term, _: Proof, ih: Proof| {
+            // a <= a + k <= (a + k) + 1 == a + (k + 1)
+            let sum = iadd(a.clone(), k.clone());
+            let longer = Proof::implies_elim(
+                Proof::implies_elim(
+                    ax(Axiom::IntLeTrans(
+                        a.clone(),
+                        sum.clone(),
+                        iadd(sum.clone(), ilit(1)),
+                    )),
+                    ih,
+                ),
+                int_le_succ(&sum),
+            );
+            Proof::transport(
+                ax(Axiom::IntAddAssoc(a.clone(), k, ilit(1))),
+                |hole| ile(a.clone(), hole),
+                longer,
+            )
+        };
+        let proof = Proof::int_induction(motive, base, step, n.clone());
+        let claim = Term::implies(ile(ilit(0), n.clone()), motive(n));
+        add("int_induction", scene, claim, proof);
+    }
+    out
+}
+
+// --- Triples from the corpus ------------------------------------------------------------
+
+/// The proofs in the body of a math function, which is where a lemma keeps
+/// its proof. The body is under one binder per parameter, and so is the
+/// signature, so a proof in it is closed by one `forall` per parameter: the
+/// kernel then opens the binders itself, and says what the closed proof
+/// proves. Returns how many proofs the kernel gave no claim for.
+fn math_triples(
+    definitions: &Rc<Definitions>,
+    id: FnId,
+    origin: &str,
+    out: &mut Vec<Triple>,
+) -> usize {
+    let Some(Type::Fn(params, _)) = definitions.signature(id) else {
+        return 0;
+    };
+    let Some((_, body)) = definitions.function_body(id) else {
+        return 0;
+    };
+    let mut found = Vec::new();
+    embedded_proofs(body, &mut found);
+    let mut unplaced = 0;
+    for proof in found {
+        let closed = params
+            .iter()
+            .rev()
+            .fold(proof.clone(), |body, ty| Proof::ForallIntro {
+                ty: ty.clone(),
+                body: Box::new(body),
+            });
+        let mut scene = Scene::new(definitions);
+        match infer_proof(&mut scene.ctx, &closed) {
+            Ok(claim) => out.push(Triple {
+                origin: origin.to_string(),
+                scene,
+                claim,
+                proof: closed,
+            }),
+            Err(_) => unplaced += 1,
+        }
+    }
+    unplaced
+}
+
+/// Proofs in a term that are under none of the term's own binders.
+fn embedded_proofs<'t>(term: &'t Term, out: &mut Vec<&'t Proof>) {
+    match term {
+        Term::Proof(proof) => out.push(proof),
+        Term::Tuple(_, terms) | Term::Struct(_, terms) | Term::Variant(_, _, terms) => {
+            for term in terms {
+                embedded_proofs(term, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The `.lc` files of a directory of the repository, in order.
+fn files_in(directory: &str) -> Vec<(String, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(root.join(directory))
+        .unwrap_or_else(|error| panic!("{directory}: {error}"))
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "lc"))
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .map(|path| {
+            let name = path.file_name().unwrap().to_string_lossy();
+            let text = std::fs::read_to_string(path).unwrap();
+            (format!("{directory}/{name}"), text)
+        })
+        .collect()
+}
+
+struct Corpus {
+    triples: Vec<Triple>,
+    /// Proofs the search found, which is every `_` and every conversion.
+    found: usize,
+    /// Proofs in the bodies of math functions, written out or found.
+    in_math_bodies: usize,
+    unplaced: usize,
+}
+
+/// Every proof of every file of the corpus. The elaborator records each
+/// proof its search finds, with the claim and the context the kernel
+/// accepted it in, wherever in the program it stands: under a branch of a
+/// pure `if`, inside a loop, in a math function. A math function whose body
+/// holds proofs gives those as well, closed over its parameters, which
+/// covers evidence that was written out and not searched for.
+fn corpus_triples() -> Corpus {
+    let mut corpus = Corpus {
+        triples: Vec::new(),
+        found: 0,
+        in_math_bodies: 0,
+        unplaced: 0,
+    };
+    for directory in ["examples", "tests/corpus/accept"] {
+        for (name, text) in files_in(directory) {
+            let mut sources = SourceMap::default();
+            let file = sources.add(name.clone(), text);
+            let source = sources.get(file);
+            let parsed = parse(source);
+            assert!(parsed.is_success(), "{name} does not parse");
+            let elaborated = elaborate(source, &parsed.program);
+            assert!(elaborated.is_success(), "{name} is not accepted");
+            let definitions = Rc::new(elaborated.session.program().definitions().clone());
+            for (index, hole) in elaborated.holes.iter().enumerate() {
+                let found = hole
+                    .found
+                    .as_ref()
+                    .expect("an accepted file has no open hole");
+                corpus.found += 1;
+                corpus.triples.push(Triple {
+                    origin: format!("{name}#{index}"),
+                    scene: Scene::of_context(&definitions, &found.context),
+                    claim: found.claim.clone(),
+                    proof: found.proof.clone(),
+                });
+            }
+            for (function, reference) in &elaborated.functions {
+                if let FnRef::Math(id) = reference {
+                    let before = corpus.triples.len();
+                    corpus.unplaced += math_triples(
+                        &definitions,
+                        *id,
+                        &format!("{name}::{function}"),
+                        &mut corpus.triples,
+                    );
+                    corpus.in_math_bodies += corpus.triples.len() - before;
+                }
+            }
+        }
+    }
+    corpus
+}
+
+/// The lemmas of the kernel theory: each is a math function whose body is a
+/// proof, found by no search and checked when the theory was declared.
+fn theory_triples(world: &World) -> Vec<Triple> {
+    let theory = &world.theory;
+    let lemmas = [
+        ("nat_add_assoc", theory.nat_add_assoc),
+        ("nat_zero_add", theory.nat_zero_add),
+        ("nat_le_refl", theory.nat_le_refl),
+        ("nat_zero_le", theory.nat_zero_le),
+        ("nat_le_trans", theory.nat_le_trans),
+        ("u8_le_refl", theory.u8_le_refl),
+        ("u8_zero_le", theory.u8_zero_le),
+        ("u8_le_trans", theory.u8_le_trans),
+        ("nat_succ_add", theory.nat_succ_add),
+        ("nat_zero_or_succ", theory.nat_zero_or_succ),
+        ("nat_le_succ_succ", theory.nat_le_succ_succ),
+        ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
+        ("u8_succ_le_of_lt", theory.u8_succ_le_of_lt),
+    ];
+    let mut triples = Vec::new();
+    for (name, id) in lemmas {
+        let origin = format!("theory/{name}");
+        let before = triples.len();
+        let unplaced = math_triples(&world.definitions, id, &origin, &mut triples);
+        assert_eq!((triples.len() - before, unplaced), (1, 0), "{origin}");
+    }
+    triples
+}
+
+// --- The tests --------------------------------------------------------------------------
+
+/// The oracle and the kernel's evaluator were written apart. On closed data
+/// they must agree, or one of them is wrong about what a term means.
+#[test]
+fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
+    let world = world();
+    let scene = Scene::new(&world.definitions);
+    let mut ctx = scene.ctx.clone();
+    let mut rng = Rng(SEED ^ 3);
+    fn byte(rng: &mut Rng, world: &World, depth: usize) -> Term {
+        let edge = [0, 1, 2, 127, 128, 254, 255];
+        if depth == 0 {
+            return Term::U8(*rng.pick(&edge).unwrap());
+        }
+        let sub = |rng: &mut Rng| byte(rng, world, depth - 1);
+        match rng.below(6) {
+            0 => Term::wrapping_add(sub(rng), sub(rng)),
+            1 => Term::wrapping_sub(sub(rng), sub(rng)),
+            2 => Term::call(Term::Fn(world.double), vec![sub(rng)]),
+            3 => Term::of_nat(Term::nat_add(
+                Term::to_nat(sub(rng)),
+                Term::succ(Term::to_nat(sub(rng))),
+            )),
+            4 => {
+                let (no, yes) = (sub(rng), sub(rng));
+                let prim = *rng.pick(&[Prim::U8Eq, Prim::U8Lt, Prim::U8Le]).unwrap();
+                Term::case(
+                    Term::prim(prim, vec![sub(rng), sub(rng)]),
+                    Type::U8,
+                    vec![
+                        (0, Box::new(move |_, _| no)),
+                        (0, Box::new(move |_, _| yes)),
+                    ],
+                )
+            }
+            _ => Term::proj(
+                Term::tuple(
+                    &Type::Tuple(vec![Type::Bool, Type::U8]),
+                    vec![Term::Bool(true), sub(rng)],
+                ),
+                1,
+            ),
+        }
+    }
+    for _ in 0..300 {
+        let term = byte(&mut rng, &world, 3);
+        let Ok(Term::Eq(_, _, value)) = infer_proof(&mut ctx, &Proof::Evaluate(term.clone()))
+        else {
+            panic!("the kernel does not evaluate {term}");
+        };
+        let mut oracle = Oracle::new(&scene);
+        let found = oracle.value(&term);
+        let Term::U8(expected) = *value else {
+            panic!("{term} evaluates to {value}");
+        };
+        assert_eq!(found, Some(Value::U8(expected)), "{term}");
+    }
+
+    // The same for the integers, whose oracle arithmetic is `i128`: where
+    // the oracle has a value it is the kernel's, and where it has none the
+    // kernel's value is outside `i128`.
+    fn integer(rng: &mut Rng, world: &World, depth: usize) -> Term {
+        let edge: [i64; 9] = [-3, -1, 0, 1, 2, 7, 255, i64::MIN, i64::MAX];
+        if depth == 0 {
+            return Term::int(*rng.pick(&edge).unwrap());
+        }
+        let sub = |rng: &mut Rng| integer(rng, world, depth - 1);
+        match rng.below(8) {
+            0 => Term::int_add(sub(rng), sub(rng)),
+            1 => Term::int_sub(sub(rng), sub(rng)),
+            2 => Term::int_mul(sub(rng), sub(rng)),
+            3 => Term::int_neg(sub(rng)),
+            4 => Term::call(Term::Fn(world.int_double), vec![sub(rng)]),
+            5 => Term::int_div(sub(rng), sub(rng)),
+            6 => Term::int_rem(sub(rng), sub(rng)),
+            _ => {
+                let (no, yes) = (sub(rng), sub(rng));
+                Term::case(
+                    Term::prim(Prim::U8Lt, vec![byte(rng, world, 1), byte(rng, world, 1)]),
+                    Type::Int,
+                    vec![
+                        (0, Box::new(move |_, _| no)),
+                        (0, Box::new(move |_, _| yes)),
+                    ],
+                )
+            }
+        }
+    }
+    let (mut valued, mut overflowed) = (0, 0);
+    for _ in 0..300 {
+        let term = integer(&mut rng, &world, 3);
+        let Ok(Term::Eq(_, _, value)) = infer_proof(&mut ctx, &Proof::Evaluate(term.clone()))
+        else {
+            panic!("the kernel does not evaluate {term}");
+        };
+        let Term::Int(expected) = *value else {
+            panic!("{term} evaluates to {value}");
+        };
+        let mut oracle = Oracle::new(&scene);
+        match oracle.value(&term) {
+            Some(found) => {
+                valued += 1;
+                let expected = expected.to_i128().expect("the oracle's value is in range");
+                assert_eq!(found, Value::Int(expected), "{term}");
+            }
+            None => overflowed += 1,
+        }
+    }
+    assert!(valued > 100, "{valued} terms had a value");
+    assert!(overflowed > 0, "{overflowed} terms overflowed i128");
+}
+
+/// The oracle reads the prelude's orderings by what they mean. The kernel
+/// defines them through `Nat` and relates them to the runtime comparisons
+/// by reflection. For every pair of bytes tried, what the oracle says is
+/// what the kernel proves, and the kernel does not prove the opposite.
+#[test]
+fn the_oracle_reads_the_orderings_as_the_kernel_does() {
+    let world = world();
+    let prelude = &world.prelude;
+    let scene = Scene::new(&world.definitions);
+    let mut ctx = scene.ctx.clone();
+    let edge = [0u8, 1, 2, 3, 127, 128, 254, 255];
+    for left in edge {
+        for right in edge {
+            let (a, b) = (Term::U8(left), Term::U8(right));
+            let orderings = [
+                (
+                    Prim::U8Le,
+                    prelude.u8_le_prop(a.clone(), b.clone()),
+                    left <= right,
+                ),
+                (
+                    Prim::U8Lt,
+                    prelude.u8_lt_prop(a.clone(), b.clone()),
+                    left < right,
+                ),
+            ];
+            for (prim, claim, holds) in orderings {
+                let mut oracle = Oracle::new(&scene);
+                assert_eq!(oracle.prop(&claim), Some(holds), "{claim}");
+                let comparison = Term::prim(prim, vec![a.clone(), b.clone()]);
+                let by_reflection = |flag: bool| {
+                    Proof::implies_elim(
+                        Proof::Axiom(Axiom::Reflect(comparison.clone(), flag)),
+                        Proof::Evaluate(comparison.clone()),
+                    )
+                };
+                let (proved, refuted) = (claim.clone(), prelude.not_prop(claim.clone()));
+                let (truth, falsehood) = if holds {
+                    (proved, refuted)
+                } else {
+                    (refuted, proved)
+                };
+                assert_eq!(check_proof(&mut ctx, &by_reflection(holds), &truth), Ok(()));
+                assert!(check_proof(&mut ctx, &by_reflection(holds), &falsehood).is_err());
+                assert!(check_proof(&mut ctx, &by_reflection(!holds), &falsehood).is_err());
+            }
+        }
+    }
+    // The order of the integers is a proposition that evaluation decides.
+    // The oracle reads it as `<=` on `i128`; what it says is what the kernel
+    // proves, for `<=`, for `<` written as `+ 1 <=`, and for `==`.
+    for left in INT_SAMPLE {
+        for right in INT_SAMPLE {
+            let (a, b) = (
+                Term::Int(Integer::from(left)),
+                Term::Int(Integer::from(right)),
+            );
+            let comparisons = [
+                (Term::int_le(a.clone(), b.clone()), left <= right),
+                (Term::int_lt(a.clone(), b.clone()), left < right),
+                (Term::eq(Type::Int, a.clone(), b.clone()), left == right),
+            ];
+            for (claim, holds) in comparisons {
+                let mut oracle = Oracle::new(&scene);
+                assert_eq!(oracle.prop(&claim), Some(holds), "{claim}");
+                let decided = Proof::Evaluate(claim.clone());
+                let (truth, falsehood) = if holds {
+                    (claim.clone(), prelude.not_prop(claim.clone()))
+                } else {
+                    (prelude.not_prop(claim.clone()), claim.clone())
+                };
+                assert_eq!(check_proof(&mut ctx, &decided, &truth), Ok(()));
+                assert!(check_proof(&mut ctx, &decided, &falsehood).is_err());
+            }
+        }
+    }
+}
+
+/// The oracle must say "false" only of what is false. These are claims
+/// whose truth is known on sight.
+#[test]
+fn the_oracle_decides_what_it_should_and_no_more() {
+    let world = world();
+    let prelude = &world.prelude;
+    let mut scene = Scene::new(&world.definitions);
+    let x = scene.declare(Type::U8);
+    scene.assume(prelude.u8_le_prop(x.clone(), Term::U8(3)));
+    let found = witnesses(&scene, &prelude.truth_prop(), &mut Rng(SEED));
+    assert!(!found.is_empty());
+    let le = |bound: u8| prelude.u8_le_prop(x.clone(), Term::U8(bound));
+    // True of every witness: never refuted.
+    for claim in [le(3), le(4), le(255), prelude.truth_prop()] {
+        assert!(refute(&scene, &claim, &found).is_none(), "{claim}");
+    }
+    // False of some witness, and the witness satisfies the hypothesis.
+    for claim in [
+        le(2),
+        le(0),
+        prelude.falsehood_prop(),
+        prelude.not_prop(le(3)),
+    ] {
+        let witness = refute(&scene, &claim, &found).unwrap_or_else(|| panic!("{claim}"));
+        let Some(Value::U8(value)) = witness.values().next() else {
+            panic!("a witness assigns x a byte");
+        };
+        assert!(*value <= 3);
+    }
+    // Undecidable here: a quantifier over all of Nat or of Int that has no
+    // small counterexample, a claim about an unknown proposition, and a
+    // computation past `i128`, which the oracle does not do.
+    let p = scene.declare(Type::Prop);
+    let found = witnesses(&scene, &p, &mut Rng(SEED));
+    let open = Term::forall(Type::Nat, |n| prelude.nat_le_prop(Term::nat(0), n));
+    let squares = Term::forall(Type::Int, |n| {
+        Term::int_le(Term::int(0), Term::int_mul(n.clone(), n))
+    });
+    let huge = Term::Int(Integer::from(i128::MAX));
+    let past = Term::eq(
+        Type::Int,
+        Term::int_add(huge.clone(), Term::int(1)),
+        huge.clone(),
+    );
+    for claim in [open, squares, past, p] {
+        assert!(refute(&scene, &claim, &found).is_none(), "{claim}");
+    }
+    // Decided from the sample: a universal over Int with a counterexample
+    // in it, an existential with a witness in it, and a strict comparison.
+    let negatives = Term::forall(Type::Int, |n| Term::int_le(Term::int(0), n));
+    let some_negative = Term::exists(Type::Int, |n| Term::int_lt(n, Term::int(0)));
+    let strict = Term::int_lt(Term::int(3), Term::int(3));
+    assert!(refute(&scene, &negatives, &found).is_some());
+    assert!(refute(&scene, &prelude.not_prop(some_negative), &found).is_some());
+    assert!(refute(&scene, &strict, &found).is_some());
+    // A variable of Int is tried at negative values too.
+    let n = scene.declare(Type::Int);
+    let found = witnesses(&scene, &n, &mut Rng(SEED));
+    let nonneg = Term::int_le(Term::int(0), n.clone());
+    let witness = refute(&scene, &nonneg, &found).expect("some witness makes n negative");
+    assert!(matches!(witness.get(&n_id(&n)), Some(Value::Int(value)) if *value < 0));
+    // An inconsistent context has no witness, so nothing is false in it.
+    scene.assume(prelude.u8_lt_prop(Term::U8(9), x));
+    assert!(witnesses(&scene, &prelude.falsehood_prop(), &mut Rng(SEED)).is_empty());
+}
+
+#[test]
+fn no_hand_built_proof_or_mutant_of_one_is_accepted_for_a_false_claim() {
+    let started = Instant::now();
+    let world = world();
+    let triples = hand_built(&world);
+    let mut tally = Tally::default();
+    attack(&triples, &mut tally, &mut Rng(SEED));
+    tally.report("hand-built", started);
+    // Every family must actually be attacked, or the test says nothing.
+    assert_eq!(tally.no_witness, 0);
+    assert_eq!(tally.attacked, tally.triples);
+    conclude(&tally);
+}
+
+#[test]
+fn no_theory_lemma_or_mutant_of_one_is_accepted_for_a_false_claim() {
+    let started = Instant::now();
+    let world = world();
+    let triples = theory_triples(&world);
+    let mut tally = Tally::default();
+    attack(&triples, &mut tally, &mut Rng(SEED ^ 1));
+    tally.report("theory", started);
+    assert!(tally.attacked > 0);
+    conclude(&tally);
+}
+
+#[test]
+fn no_corpus_proof_or_mutant_of_one_is_accepted_for_a_false_claim() {
+    let started = Instant::now();
+    let corpus = corpus_triples();
+    let mut tally = Tally::default();
+    attack(&corpus.triples, &mut tally, &mut Rng(SEED ^ 2));
+    tally.report("corpus", started);
+    println!(
+        "corpus: {} proofs found by the search, {} in the bodies of math functions, {} of \
+         those with no claim the kernel would give",
+        corpus.found, corpus.in_math_bodies, corpus.unplaced
+    );
+    assert!(corpus.found > 0);
+    assert!(tally.attacked > 0);
+    conclude(&tally);
+}

@@ -26,4 +26,4 @@ mod show;
 mod solve;
 mod types;
 
-pub use items::{Elaborated, HoleReport, ItemReport, elaborate};
+pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate};

@@ -27,7 +27,7 @@ use crate::kernel::{
 use crate::source::Span;
 
 use super::env::{Elab, Env, Fact, substitute};
-use super::items::HoleReport;
+use super::items::{FoundProof, HoleReport};
 
 const STEP_LIMIT: usize = 400;
 
@@ -89,6 +89,11 @@ impl Env<'_> {
             tier: attempt.tier,
             proof_size: checked.as_ref().map_or(0, proof_size),
             micros: started.elapsed().as_micros(),
+            found: checked.as_ref().map(|proof| FoundProof {
+                context: self.ctx.clone(),
+                claim: goal.clone(),
+                proof: proof.clone(),
+            }),
         });
         if let Some(proof) = checked {
             return Ok(proof);

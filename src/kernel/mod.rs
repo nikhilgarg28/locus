@@ -27,6 +27,7 @@ pub use check::{
     infer_proof, infer_term, same, same_type, telescope_entry, variant_term,
 };
 pub use classical::proof_is_classical;
+pub use context::Binding;
 pub use context::{Checkpoint, Context, Mode};
 pub use defs::{Definitions, Prelude, PropVariant};
 pub use depth::MAX_DEPTH;

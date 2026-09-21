@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::ast::{self, DeclarationKind, FunctionMode};
 use crate::diagnostic::Diagnostic;
 use crate::kernel::theory;
-use crate::kernel::{Context, Definitions, PropVariant, Type};
+use crate::kernel::{Context, Definitions, Proof, PropVariant, Term, Type};
 use crate::source::{SourceFile, Span};
 use crate::typed::{Binder, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
 
@@ -25,6 +25,19 @@ pub struct HoleReport {
     pub proof_size: usize,
     /// Time to find the proof and check it once, in microseconds.
     pub micros: u128,
+    /// What was found, when the kernel accepted it.
+    pub found: Option<FoundProof>,
+}
+
+/// A proof the search found, the claim it was found for, and the context
+/// the kernel accepted it in. Nothing in the compiler reads this; it is what
+/// a test of the kernel needs to check the same proof again, or a changed
+/// one, against a claim of its own.
+#[derive(Clone, Debug)]
+pub struct FoundProof {
+    pub context: Context,
+    pub claim: Term,
+    pub proof: Proof,
 }
 
 /// What one function cost to accept.
