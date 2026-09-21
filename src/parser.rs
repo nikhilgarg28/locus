@@ -44,6 +44,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
         steps: 0,
         no_struct: false,
         for_header: false,
+        formula: false,
         closers: None,
         diagnostics: lexed.diagnostics,
     }
@@ -63,6 +64,10 @@ struct Parser<'a> {
     no_struct: bool,
     /// Set in the bounds of a `for`, where `( ... ) {` is the state list.
     for_header: bool,
+    /// Set inside `prop!(...)`, `prove!(...)`, and `@(...)`, where `=>` is
+    /// implication and `forall (` and `exists (` begin quantifiers. Outside
+    /// a formula `forall` and `exists` are names, and `=>` is an error.
+    formula: bool,
     /// For each opening delimiter, the token that closes it; built by the
     /// first `for` header that asks, so that the lookahead is not a rescan.
     closers: Option<Vec<Option<usize>>>,
@@ -252,8 +257,9 @@ impl Parser<'_> {
         })
     }
 
-    /// `math` and `prop` are ordinary identifiers except where a declaration
-    /// or a function type can begin.
+    /// `math`, `prop`, and the retired `def` are ordinary identifiers except
+    /// where a declaration or a function type can begin, and `forall` and
+    /// `exists` except before `(` inside a formula.
     fn at_word(&self, word: &str) -> bool {
         self.at(K::Name) && self.source.slice(self.current().span) == Some(word)
     }
@@ -263,11 +269,23 @@ impl Parser<'_> {
     }
 
     fn declaration_start(&self) -> bool {
-        matches!(
-            self.current().kind,
-            K::Fn | K::Def | K::Const | K::Struct | K::Enum
-        ) || self.at_math_fn()
-            || (self.at_word("prop") && self.peek(1) == K::Name)
+        matches!(self.current().kind, K::Fn | K::Const | K::Struct | K::Enum)
+            || self.at_math_fn()
+            || ((self.at_word("prop") || self.at_word("def")) && self.peek(1) == K::Name)
+    }
+
+    /// `name!` before a delimiter: a form, or something reported as not one.
+    fn at_form(&self) -> bool {
+        self.peek(1) == K::Bang && matches!(self.peek(2), K::LParen | K::LBracket | K::LBrace)
+    }
+
+    /// `forall (` or `exists (`, a quantifier inside a formula. Outside one,
+    /// `forall (x: T)` can only have been meant as a quantifier, and is
+    /// reported as such, while `forall(x)` is a call.
+    fn at_quantifier(&self) -> bool {
+        (self.formula || self.peek(3) == K::Colon)
+            && self.peek(1) == K::LParen
+            && (self.at_word("forall") || self.at_word("exists"))
     }
 
     /// Inside delimiters a `{` can no longer be mistaken for a following block.
@@ -294,6 +312,18 @@ impl Parser<'_> {
         result
     }
 
+    /// A formula: the argument of `prop!` or `prove!`, or the parenthesized
+    /// proposition of a proof type.
+    fn formula_mode<T>(
+        &mut self,
+        operation: impl FnOnce(&mut Self) -> ParseResult<T>,
+    ) -> ParseResult<T> {
+        let saved = std::mem::replace(&mut self.formula, true);
+        let result = operation(self);
+        self.formula = saved;
+        result
+    }
+
     fn declaration(&mut self) -> ParseResult<Declaration> {
         // Each attribute is reported and skipped, and its item is parsed.
         while self.attribute_start() {
@@ -310,19 +340,6 @@ impl Parser<'_> {
         let start = self.bump();
         match start.kind {
             K::Fn => self.function(start, FunctionMode::Runtime),
-            K::Def => {
-                self.diagnostics.push(
-                    Diagnostic::error("L0113", "`def` was renamed to `math fn`", start.span)
-                        .note("a `math fn` is pure and total, so it can be used in propositions; it also runs when its body is executable")
-                        .suggest(Suggestion {
-                            message: "write `math fn`".into(),
-                            span: start.span,
-                            replacement: "math fn".into(),
-                            applicability: Applicability::MachineApplicable,
-                        }),
-                );
-                self.function(start, FunctionMode::Math)
-            }
             K::Struct => {
                 let name = self.name()?;
                 self.no_generics()?;
@@ -368,9 +385,22 @@ impl Parser<'_> {
                     kind: DeclarationKind::Constant { name, ty, value },
                 })
             }
-            // `declaration_start` leaves the two contextual words.
+            // `declaration_start` leaves the three contextual words.
             _ if self.at(K::Fn) => {
                 self.bump();
+                self.function(start, FunctionMode::Math)
+            }
+            _ if self.source.slice(start.span) == Some("def") => {
+                self.diagnostics.push(
+                    Diagnostic::error("L0113", "`def` was renamed to `math fn`", start.span)
+                        .note("a `math fn` is pure and total, so it can be used in propositions; it also runs when its body is executable")
+                        .suggest(Suggestion {
+                            message: "write `math fn`".into(),
+                            span: start.span,
+                            replacement: "math fn".into(),
+                            applicability: Applicability::MachineApplicable,
+                        }),
+                );
                 self.function(start, FunctionMode::Math)
             }
             _ => self.prop(start),
@@ -527,7 +557,7 @@ impl Parser<'_> {
                 })
             }
             K::Hash => self.hash_syntax(),
-            K::LBracket => self.no_arrays(start.span),
+            K::LBracket => self.no_arrays("array and slice types", start.span),
             K::LParen => {
                 self.bump();
                 if let Some(end) = self.eat(K::RParen) {
@@ -584,22 +614,76 @@ impl Parser<'_> {
         if self.current().kind.is_rust_keyword() {
             return self.keyword_as_name();
         }
-        self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@[condition]`")
+        self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@(condition)`")
     }
 
-    /// The proposition of a proof type. Calls and projections may follow a
-    /// name; other operators need the explicit proposition literal. A proof
-    /// type is often followed by a block, so `claim {` is not a struct literal.
+    /// The proposition of a proof type: a name, which calls and projections
+    /// may follow, or a formula in parentheses. A proof type is often
+    /// followed by a block, so `claim {` is not a struct literal.
     fn proof_target(&mut self, at: Token) -> ParseResult<Expr> {
-        if !matches!(self.current().kind, K::Name | K::LBracket | K::LParen) {
-            self.diagnostics.push(Diagnostic::error(
-                "L0100",
-                "a proof type needs a proposition: `@claim` or `@[condition]`",
-                at.span,
-            ));
-            return Err(());
+        match self.current().kind {
+            K::Name => self.header(false, |parser| parser.expression_bp(11)),
+            K::LParen => self.formula_mode(Self::parenthesized),
+            K::LBracket => self.bracketed_proof_target(at),
+            _ => {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0100",
+                    "a proof type needs a proposition: `@claim` or `@(condition)`",
+                    at.span,
+                ));
+                Err(())
+            }
         }
-        self.header(false, |parser| parser.expression_bp(11))
+    }
+
+    /// The retired `@[condition]`, read as `@(condition)` and reported.
+    #[inline(never)]
+    fn bracketed_proof_target(&mut self, at: Token) -> ParseResult<Expr> {
+        let (opening, formula, closing) = self.bracketed_formula()?;
+        self.retired_brackets(
+            "a proof type is written `@(condition)`; brackets are for arrays",
+            (at.span.through(opening.span), "@("),
+            closing.span,
+        );
+        Ok(Expr {
+            span: at.span.through(closing.span),
+            kind: ExprKind::Group(Box::new(formula)),
+        })
+    }
+
+    /// The formula between `[` and `]`, with both brackets. An array (`[]`,
+    /// `[a, b]`, `[x; n]`) is reported as not in Locus yet.
+    fn bracketed_formula(&mut self) -> ParseResult<(Token, Expr, Token)> {
+        let opening = self.expect(K::LBracket)?;
+        if self.at(K::RBracket) {
+            return self.no_arrays("arrays", opening.span.through(self.current().span));
+        }
+        let formula = self.formula_mode(|parser| parser.unrestricted(Self::expression))?;
+        if matches!(self.current().kind, K::Comma | K::Semicolon) {
+            return self.no_arrays("arrays", self.current().span);
+        }
+        let closing = self.close(K::RBracket, opening)?;
+        Ok((opening, formula, closing))
+    }
+
+    /// L0117, with a fix for each delimiter rather than one for the whole,
+    /// so that the fixes of nested brackets can all be applied at once.
+    #[inline(never)]
+    fn retired_brackets(&mut self, message: &str, opening: (Span, &str), closing: Span) {
+        let mut diagnostic = Diagnostic::error("L0117", message, opening.0.through(closing))
+            .note("a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`");
+        for (span, replacement) in [opening, (closing, ")")] {
+            diagnostic = diagnostic.suggest(Suggestion {
+                message: format!(
+                    "write `{replacement}` for `{}`",
+                    self.source.slice(span).unwrap_or_default()
+                ),
+                span,
+                replacement: replacement.into(),
+                applicability: Applicability::MaybeIncorrect,
+            });
+        }
+        self.diagnostics.push(diagnostic);
     }
 
     fn function_type(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Type> {
@@ -617,11 +701,13 @@ impl Parser<'_> {
         })
     }
 
-    fn no_arrays<T>(&mut self, span: Span) -> ParseResult<T> {
-        self.diagnostics.push(
-            Diagnostic::error("L0114", "arrays are not part of the core language", span)
-                .note("brackets hold exactly one proposition, as in `[x <= limit]`"),
-        );
+    /// Brackets are Rust's arrays, which Locus does not have yet.
+    fn no_arrays<T>(&mut self, what: &str, span: Span) -> ParseResult<T> {
+        self.diagnostics.push(Diagnostic::error(
+            "L0116",
+            format!("{what} are not in Locus yet"),
+            span,
+        ));
         Err(())
     }
 
@@ -935,6 +1021,16 @@ impl Parser<'_> {
         Ok(left)
     }
 
+    /// L0119: `=>` or a quantifier where no formula is being read.
+    #[inline(never)]
+    fn outside_formula(&mut self, message: &str) {
+        self.diagnostics.push(
+            Diagnostic::error("L0119", message, self.current().span).note(
+                "a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`; in a `match`, `=>` follows an arm's pattern",
+            ),
+        );
+    }
+
     #[inline(never)]
     fn chain_limit<T>(&mut self) -> ParseResult<T> {
         self.diagnostics.push(
@@ -948,11 +1044,16 @@ impl Parser<'_> {
         Err(())
     }
 
-    /// After an operand: reports an arithmetic operator, or whatever else of
-    /// Rust stands here that Locus does not use yet.
+    /// After an operand: reports an arithmetic operator, `=>` outside a
+    /// formula, or whatever else of Rust stands here that Locus does not use
+    /// yet.
     #[inline(never)]
     fn operator_not_in_locus(&mut self) -> bool {
         let operator = self.current();
+        if operator.kind == K::Implies && !self.formula {
+            self.outside_formula("`=>` is implication only inside a formula");
+            return true;
+        }
         if !matches!(
             operator.kind,
             K::Plus | K::Minus | K::Star | K::Slash | K::Percent
@@ -1056,6 +1157,8 @@ impl Parser<'_> {
 
     fn prefix(&mut self) -> ParseResult<Expr> {
         match self.current().kind {
+            K::Name if self.at_form() => self.form(),
+            K::Name if self.at_quantifier() => self.quantifier(),
             K::Name if self.peek(1) == K::LBrace && !self.no_struct => self.struct_literal(),
             K::Name | K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => {
                 self.atom()
@@ -1070,11 +1173,89 @@ impl Parser<'_> {
             K::For => self.for_expression(),
             K::Break => self.break_expression(),
             K::Continue => self.continue_expression(),
-            K::Forall | K::Exists => self.quantifier(),
             K::At => self.proof(),
             K::Hash => self.hash_syntax(),
             _ => self.fail("expected an expression"),
         }
+    }
+
+    /// `name!(...)`: a built-in form, whose name is one of a closed list.
+    #[inline(never)]
+    fn form(&mut self) -> ParseResult<Expr> {
+        let name = self.bump();
+        let bang = self.bump();
+        let spelling = self.source.slice(name.span).unwrap_or_default();
+        let Some(form) = Form::from_name(spelling) else {
+            return self.unknown_form(name.span.through(bang.span), spelling);
+        };
+        if !self.at(K::LParen) {
+            return self.fail_form(
+                name.span.through(self.current().span),
+                format!("Locus forms take parentheses: `{spelling}!(...)`"),
+            );
+        }
+        let (arguments, closing) = if form.takes_formula() {
+            self.formula_argument(form)?
+        } else {
+            self.arguments()?
+        };
+        Ok(Expr {
+            span: name.span.through(closing.span),
+            kind: ExprKind::Form {
+                form,
+                name_span: name.span,
+                arguments,
+            },
+        })
+    }
+
+    /// The one formula of `prop!(...)` or `prove!(...)`.
+    #[inline(never)]
+    fn formula_argument(&mut self, form: Form) -> ParseResult<(Vec<Expr>, Token)> {
+        let opening = self.expect(K::LParen)?;
+        if self.at(K::RParen) || self.at(K::Comma) {
+            return self.fail_form(
+                self.current().span,
+                format!("`{}!` takes one formula", form.name()),
+            );
+        }
+        let formula = self.formula_mode(|parser| parser.unrestricted(Self::expression))?;
+        if self.at(K::Comma) {
+            return self.fail_form(
+                self.current().span,
+                format!("`{}!` takes one formula, and this is a second", form.name()),
+            );
+        }
+        let closing = self.close(K::RParen, opening)?;
+        Ok((vec![formula], closing))
+    }
+
+    #[inline(never)]
+    fn fail_form<T>(&mut self, span: Span, message: String) -> ParseResult<T> {
+        self.diagnostics
+            .push(Diagnostic::error("L0118", message, span));
+        Err(())
+    }
+
+    #[inline(never)]
+    fn unknown_form<T>(&mut self, span: Span, spelling: &str) -> ParseResult<T> {
+        let list: Vec<String> = Form::ALL
+            .iter()
+            .map(|form| format!("`{}!`", form.name()))
+            .collect();
+        let (last, rest) = list.split_last().expect("the list of forms is not empty");
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0118",
+                format!("`{spelling}!` is not a form of Locus"),
+                span,
+            )
+            .note(format!(
+                "the forms are {}, and {last}; Locus has no user-defined macros",
+                rest.join(", ")
+            )),
+        );
+        Err(())
     }
 
     #[inline(never)]
@@ -1170,18 +1351,23 @@ impl Parser<'_> {
 
     #[inline(never)]
     fn quantifier(&mut self) -> ParseResult<Expr> {
+        let universal = self.at_word("forall");
+        let word = if universal { "forall" } else { "exists" };
+        if !self.formula {
+            self.outside_formula(&format!(
+                "`{word} (...)` is a quantifier only inside a formula"
+            ));
+            return Err(());
+        }
         let start = self.bump();
         let parameters = self.parameters()?;
         if parameters.is_empty() {
-            return self.fail(format!(
-                "{} needs at least one parameter",
-                start.kind.description()
-            ));
+            return self.fail(format!("`{word}` needs at least one parameter"));
         }
         let body = self.block()?;
         Ok(Expr {
             span: start.span.through(body.span),
-            kind: if start.kind == K::Forall {
+            kind: if universal {
                 ExprKind::Forall { parameters, body }
             } else {
                 ExprKind::Exists { parameters, body }
@@ -1266,26 +1452,29 @@ impl Parser<'_> {
         diagnostic = if self.at(K::LBrace) {
             diagnostic.note("proof blocks `@{ ... }` were retired; evidence is an ordinary expression, and `_` asks the elaborator to find it")
         } else {
-            diagnostic.note("`@claim` and `@[condition]` are types; request evidence with `let evidence: @claim = _;`")
+            diagnostic.note("`@claim` and `@(condition)` are types; request evidence with `let evidence: @claim = _;`, or state a claim where it stands with `prove!(condition)`")
         };
         self.diagnostics.push(diagnostic);
         Err(())
     }
 
+    /// The retired proposition literal `[condition]`, read as
+    /// `prop!(condition)` and reported.
     #[inline(never)]
     fn bracketed(&mut self) -> ParseResult<Expr> {
-        let opening = self.expect(K::LBracket)?;
-        if self.at(K::RBracket) {
-            return self.no_arrays(opening.span.through(self.current().span));
-        }
-        let formula = self.unrestricted(Self::expression)?;
-        if matches!(self.current().kind, K::Comma | K::Semicolon) {
-            return self.no_arrays(self.current().span);
-        }
-        let end = self.close(K::RBracket, opening)?;
+        let (opening, formula, closing) = self.bracketed_formula()?;
+        self.retired_brackets(
+            "a proposition is written `prop!(condition)`; brackets are for arrays",
+            (opening.span, "prop!("),
+            closing.span,
+        );
         Ok(Expr {
-            span: opening.span.through(end.span),
-            kind: ExprKind::Proposition(Box::new(formula)),
+            span: opening.span.through(closing.span),
+            kind: ExprKind::Form {
+                form: Form::Prop,
+                name_span: opening.span,
+                arguments: vec![formula],
+            },
         })
     }
 
@@ -1470,7 +1659,7 @@ impl Parser<'_> {
         }
         self.diagnostics.push(Diagnostic::error(
             "L0111", "`#` is no longer proof syntax", self.current().span,
-        ).note("use `@claim` or `@[condition]` for proof types, and `_` to ask the elaborator for evidence"));
+        ).note("use `@claim` or `@(condition)` for proof types, and `_` to ask the elaborator for evidence"));
         Err(())
     }
 
@@ -1501,7 +1690,7 @@ impl Parser<'_> {
                 "attributes are not in Locus yet",
                 start.span.through(end.span),
             )
-            .note("proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence"),
+            .note("proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence"),
         );
         if let Some(closer) = closer {
             self.position = closer + 1;

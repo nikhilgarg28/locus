@@ -4,4 +4,4 @@ error[L0226]: which `Or(...)` this proves is not known here
 3 |     let either = Or::Left(hp); //~ error: L0226 which `Or(...)` this proves is not known here
   |                  ^^^^^^^^^^^^
   |
-  = note: state the claim with an annotation, such as `let evidence: @[p || q] = ...;`
+  = note: state the claim with an annotation, such as `let evidence: @(p || q) = ...;`

@@ -1,7 +1,7 @@
 error[L0110]: `@` begins a proof type, not an expression
  --> tests/corpus/reject/proof_type_as_expression.lc:3:9
   |
-3 |     (n, @[n == n]) //~ error: L0110 begins a proof type
+3 |     (n, @(n == n)) //~ error: L0110 begins a proof type
   |         ^
   |
-  = note: `@claim` and `@[condition]` are types; request evidence with `let evidence: @claim = _;`
+  = note: `@claim` and `@(condition)` are types; request evidence with `let evidence: @claim = _;`, or state a claim where it stands with `prove!(condition)`

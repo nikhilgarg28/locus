@@ -212,12 +212,14 @@ impl Mentions<'_> {
             | ExprKind::Unit
             | ExprKind::Hole
             | ExprKind::Error => {}
-            ExprKind::Group(inner)
-            | ExprKind::Proposition(inner)
-            | ExprKind::Not(inner)
-            | ExprKind::Break(inner) => self.expr(inner),
+            ExprKind::Group(inner) | ExprKind::Not(inner) | ExprKind::Break(inner) => {
+                self.expr(inner)
+            }
             ExprKind::Tuple(items) | ExprKind::Continue(items) => {
                 items.iter().for_each(|item| self.expr(item));
+            }
+            ExprKind::Form { arguments, .. } => {
+                arguments.iter().for_each(|argument| self.expr(argument));
             }
             ExprKind::Struct { name, fields } => {
                 self.name(name);

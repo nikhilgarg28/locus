@@ -1159,7 +1159,7 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
 // The runner, tested on itself.
 
 const INCREMENT: &str = "\
-fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
+fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
     (n.wrapping_add(1), _)
 }
 ";

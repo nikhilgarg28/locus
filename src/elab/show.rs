@@ -39,7 +39,7 @@ impl Env<'_> {
                 {
                     format!("@{}", self.term_at(claim, Level::Postfix, bound))
                 }
-                claim => format!("@[{}]", self.term_at(claim, Level::Implies, bound)),
+                claim => format!("@({})", self.term_at(claim, Level::Implies, bound)),
             },
             Type::Tuple(fields) => self.telescope_at(fields, bound, true),
             Type::Struct(id) => self

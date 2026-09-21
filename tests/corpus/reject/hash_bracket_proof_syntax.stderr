@@ -4,4 +4,4 @@ error[L0105]: attributes are not in Locus yet
 2 | fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0105 attributes are not in Locus yet
   |                              ^^^^^^^^^^^
   |
-  = note: proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence
+  = note: proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence

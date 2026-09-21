@@ -1,4 +1,4 @@
-error[L0100]: a proof type needs a proposition: `@claim` or `@[condition]`
+error[L0100]: a proof type needs a proposition: `@claim` or `@(condition)`
  --> tests/corpus/reject/proof_type_without_proposition.lc:2:24
   |
 2 | fn first(n: u8, small: @) -> u8 { n } //~ error: L0100 a proof type needs a proposition

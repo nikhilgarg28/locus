@@ -1,8 +1,8 @@
 //! Evidence written out: proof constructors, `match` on evidence, the
-//! `rewrite`, `unfold` and `fold` forms, and applying evidence of a `forall`
+//! `rewrite!`, `unfold!` and `fold!` forms, and applying evidence of a `forall`
 //! or an implication. Each becomes an explicit kernel proof.
 
-use crate::ast::{self, ExprKind, PatternKind};
+use crate::ast::{self, ExprKind, Form, PatternKind};
 use crate::kernel::derive;
 use crate::kernel::{HypId, Proof, Term, Type, VarId, infer_proof};
 use crate::source::Span;
@@ -79,7 +79,7 @@ impl Env<'_> {
                             format!("which `{}(...)` this proves is not known here", info.name),
                             span,
                         )
-                        .note("state the claim with an annotation, such as `let evidence: @[p || q] = ...;`"),
+                        .note("state the claim with an annotation, such as `let evidence: @(p || q) = ...;`"),
                     );
                     return Err(());
                 }
@@ -318,17 +318,21 @@ impl Env<'_> {
         )
     }
 
-    /// `rewrite(eq, h)`, `unfold(f, h)`, `fold(f, h)`: transport, with the
-    /// occurrences to replace worked out here.
+    /// `rewrite!(eq, h)`, `unfold!(f, h)`, `fold!(f, h)`: transport, with
+    /// the occurrences to replace worked out here.
     pub fn proof_form(
         &mut self,
-        form: &str,
+        form: Form,
         arguments: &[ast::Expr],
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
         let [first, second] = arguments else {
-            return self.fail("L0208", format!("`{form}` takes two arguments"), span);
+            return self.fail(
+                "L0208",
+                format!("`{}!` takes two arguments", form.name()),
+                span,
+            );
         };
         let evidence = |env: &mut Self, expr: &ast::Expr| -> Elab<Proof> {
             let value = env.infer(expr)?;
@@ -342,14 +346,14 @@ impl Env<'_> {
             }
             env.proof_of(&value, expr.span)
         };
-        if form == "rewrite" {
+        if form == Form::Rewrite {
             let equation = evidence(self, first)?;
             let target = evidence(self, second)?;
             return match derive::rewrite(&mut self.ctx, &equation, &target) {
                 Ok(proof) => self.proved(proof, span),
                 Err(_) => self.fail(
                     "L0229",
-                    "`rewrite` takes evidence of an equation `a == b` first",
+                    "`rewrite!` takes evidence of an equation `a == b` first",
                     first.span,
                 ),
             };
@@ -369,22 +373,22 @@ impl Env<'_> {
         let Some(function) = function else {
             return self.fail(
                 "L0229",
-                format!("`{form}` takes the name of a `math fn` first"),
+                format!("`{}!` takes the name of a `math fn` first", form.name()),
                 first.span,
             );
         };
         let target = evidence(self, second)?;
-        let result = if form == "unfold" {
+        let result = if form == Form::Unfold {
             derive::unfold(&mut self.ctx, function, &target)
         } else {
             let Some(Type::Proof(goal)) = expected else {
                 self.diagnostics.push(
                     crate::diagnostic::Diagnostic::error(
                         "L0229",
-                        "`fold` needs to know the claim it should produce",
+                        "`fold!` needs to know the claim it should produce",
                         span,
                     )
-                    .note("state it with an annotation: `let folded: @name(x) = fold(name, evidence);`"),
+                    .note("state it with an annotation: `let folded: @name(x) = fold!(name, evidence);`"),
                 );
                 return Err(());
             };
@@ -396,7 +400,7 @@ impl Env<'_> {
                 let text = self.text(first.span).to_string();
                 self.fail(
                     "L0229",
-                    format!("`{form}` found no use of `{text}` to work on"),
+                    format!("`{}!` found no use of `{text}` to work on", form.name()),
                     span,
                 )
             }

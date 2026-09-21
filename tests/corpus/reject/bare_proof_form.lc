@@ -1,0 +1,17 @@
+// `rewrite`, `unfold`, and `fold` written as calls: the forms take `!` now,
+// and each is reported with the fix. A `fold` of one's own is a function.
+math fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+
+math fn use_nonzero(n: u8, h: @nonzero(n)) -> @(n != 0) {
+    unfold(nonzero, h) //~ error: L0231 `unfold` is a built-in form, written `unfold!(...)`
+}
+
+math fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
+    rewrite(same, small) //~ error: L0231 `rewrite` is a built-in form, written `rewrite!(...)`
+}
+
+fn fold(n: u8) -> u8 { n }
+
+fn folded(n: u8) -> u8 { fold(n) }
+
+fn prove(n: u8) -> u8 { n }

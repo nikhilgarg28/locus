@@ -1,5 +1,5 @@
 // Evidence is erased, so it cannot choose a value.
-fn pick(p: Prop, q: Prop, h: @[p || q]) -> u8 {
+fn pick(p: Prop, q: Prop, h: @(p || q)) -> u8 {
     match h { //~ error: L0227 evidence can be taken apart only to produce other evidence
         Or::Left(_) => 0,
         Or::Right(_) => 1,

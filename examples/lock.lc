@@ -12,7 +12,7 @@ struct Lock {
 }
 
 math fn within_limit(failures: u8) -> Prop {
-    [failures <= 3]
+    prop!(failures <= 3)
 }
 
 // One transition. The caller proves the bound once; the result carries it on.
@@ -50,7 +50,7 @@ fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) 
 }
 
 // Needs the bound: without it the subtraction could wrap.
-fn remaining(failures: u8, bounded: @within_limit(failures)) -> (left: u8, @[left <= 3]) {
+fn remaining(failures: u8, bounded: @within_limit(failures)) -> (left: u8, @(left <= 3)) {
     (3.wrapping_sub(failures), _)
 }
 

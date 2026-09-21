@@ -1,6 +1,6 @@
 //! Blocks and the statements in them. A `let` binds through `patterns`.
 
-use crate::ast::{self, StatementKind};
+use crate::ast::{self, ExprKind, Form, StatementKind};
 use crate::kernel::{Type, same_type};
 use crate::typed::{self, Stmt};
 
@@ -46,6 +46,20 @@ impl Env<'_> {
                             self.poison(pattern);
                             failed = true;
                         }
+                    }
+                }
+                // `prove!(claim);` keeps its fact in scope and is no statement.
+                StatementKind::Expression(ast::Expr {
+                    kind:
+                        ExprKind::Form {
+                            form: Form::Prove,
+                            arguments,
+                            ..
+                        },
+                    span,
+                }) => {
+                    if self.prove_statement(&arguments[0], *span).is_err() {
+                        failed = true;
                     }
                 }
                 StatementKind::Expression(expr) => match self.infer(expr) {

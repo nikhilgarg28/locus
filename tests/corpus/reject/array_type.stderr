@@ -1,7 +1,5 @@
-error[L0114]: arrays are not part of the core language
+error[L0116]: array and slice types are not in Locus yet
  --> tests/corpus/reject/array_type.lc:2:17
   |
-2 | fn first(items: [u8; 4]) -> u8 { 1 } //~ error: L0114 arrays are not part
+2 | fn first(items: [u8; 4]) -> u8 { 1 } //~ error: L0116 array and slice types are not in Locus yet
   |                 ^
-  |
-  = note: brackets hold exactly one proposition, as in `[x <= limit]`

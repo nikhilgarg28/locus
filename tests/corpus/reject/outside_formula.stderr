@@ -1,0 +1,14 @@
+error[L0119]: `=>` is implication only inside a formula
+ --> tests/corpus/reject/outside_formula.lc:4:7
+  |
+4 |     p => q //~ error: L0119 `=>` is implication only inside a formula
+  |       ^^
+  |
+  = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`; in a `match`, `=>` follows an arm's pattern
+error[L0119]: `forall (...)` is a quantifier only inside a formula
+ --> tests/corpus/reject/outside_formula.lc:7:25
+  |
+7 | const reflexive: Prop = forall (n: u8) { n == n }; //~ error: L0119 `forall (...)` is a quantifier only inside a formula
+  |                         ^^^^^^
+  |
+  = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`; in a `match`, `=>` follows an arm's pattern

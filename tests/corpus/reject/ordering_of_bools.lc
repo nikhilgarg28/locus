@@ -1,4 +1,4 @@
 // `<` in a proposition is defined on `u8`.
-fn first(a: bool, b: bool) -> @[a < b] { //~ error: L0223 ordering is defined on `u8`, and this is `bool`
+fn first(a: bool, b: bool) -> @(a < b) { //~ error: L0223 ordering is defined on `u8`, and this is `bool`
     _
 }

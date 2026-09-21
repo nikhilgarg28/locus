@@ -1,7 +1,7 @@
 // A loop whose invariant is part of its state, and a bounded `for`.
 
-fn walk(limit: u8) -> (out: u8, @[out <= limit]) {
-    loop (i: u8 = 0, bound: @[i <= limit] = _) -> (out: u8, @[out <= limit]) {
+fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
+    loop (i: u8 = 0, bound: @(i <= limit) = _) -> (out: u8, @(out <= limit)) {
         if i == limit {
             break (i, bound)
         } else {

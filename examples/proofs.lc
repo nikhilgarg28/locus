@@ -1,34 +1,34 @@
 math fn same(x: u8, y: u8) -> Prop {
-    [x == y]
+    prop!(x == y)
 }
 
-const equality_is_reflexive: Prop = [
+const equality_is_reflexive: Prop = prop!(
     forall (n: u8) { n == n }
-];
+);
 
-const equality_is_transitive: Prop = [
+const equality_is_transitive: Prop = prop!(
     forall (x: u8, y: u8, z: u8) {
         same(x, y) && same(y, z) => same(x, z)
     }
-];
+);
 
-const some_byte_is_zero: Prop = [
+const some_byte_is_zero: Prop = prop!(
     exists (n: u8) { n == 0 }
-];
+);
 
-// Evidence is an ordinary expression. `unfold` is written out here; a `_`
+// Evidence is an ordinary expression. `unfold!` is written out here; a `_`
 // performs the same step on its own.
 math fn increment_preserves_equality(
     x: u8,
     y: u8,
     equal: @same(x, y),
-) -> @[x.wrapping_add(1) == y.wrapping_add(1)] {
-    let plain: @[x == y] = unfold(same, equal);
+) -> @(x.wrapping_add(1) == y.wrapping_add(1)) {
+    let plain: @(x == y) = unfold!(same, equal);
     _
 }
 
-math fn self_equal(n: u8) -> @[n == n] {
-    let claim: Prop = [n == n];
+math fn self_equal(n: u8) -> @(n == n) {
+    let claim: Prop = prop!(n == n);
     let evidence: @claim = _;
     evidence
 }

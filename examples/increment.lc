@@ -1,4 +1,4 @@
-fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
+fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
     let out = n.wrapping_add(1);
     (out, _)
 }

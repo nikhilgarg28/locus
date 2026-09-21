@@ -1,9 +1,11 @@
 //! Handwritten tokenizer. Locus source tokenizes as Rust: every Rust keyword
-//! is reserved and every Rust token is recognized. A literal form Locus does
-//! not have yet is reported here and becomes an error token; an operator or a
-//! keyword it does not use yet is a token, and the parser reports it where it
-//! stands. Literals are decoded here; whether a value fits a type is decided
-//! during elaboration.
+//! is reserved and every Rust token is recognized, and there is no token Rust
+//! lacks. The words of Locus alone (`math`, `prop`, `forall`, `exists`, the
+//! retired `def`) are names, which the parser reads in context. A literal
+//! form Locus does not have yet is reported here and becomes an error token;
+//! an operator or a keyword it does not use yet is a token, and the parser
+//! reports it where it stands. Literals are decoded here; whether a value
+//! fits a type is decided during elaboration.
 
 use crate::ast::{IntegerLiteral, IntegerSuffix};
 use crate::diagnostic::Diagnostic;
@@ -17,13 +19,10 @@ pub enum TokenKind {
     String,
     Underscore,
     Fn,
-    Def,
     Const,
     Let,
     If,
     Else,
-    Forall,
-    Exists,
     Struct,
     Enum,
     Match,
@@ -100,13 +99,10 @@ impl TokenKind {
             Self::String => "a string",
             Self::Underscore => "`_`",
             Self::Fn => "`fn`",
-            Self::Def => "`def`",
             Self::Const => "`const`",
             Self::Let => "`let`",
             Self::If => "`if`",
             Self::Else => "`else`",
-            Self::Forall => "`forall`",
-            Self::Exists => "`exists`",
             Self::Struct => "`struct`",
             Self::Enum => "`enum`",
             Self::Match => "`match`",
@@ -176,7 +172,7 @@ impl TokenKind {
     }
 
     /// A strict or reserved keyword of Rust, which no name may be spelled as.
-    /// `def`, `forall`, and `exists` are words of Locus alone.
+    /// Every other word is a name, the words of Locus alone included.
     pub fn is_rust_keyword(self) -> bool {
         matches!(
             self,
@@ -645,13 +641,10 @@ impl<'a> Lexer<'a> {
         }
         let kind = match spelling {
             "fn" => TokenKind::Fn,
-            "def" => TokenKind::Def,
             "const" => TokenKind::Const,
             "let" => TokenKind::Let,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
-            "forall" => TokenKind::Forall,
-            "exists" => TokenKind::Exists,
             "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
             "match" => TokenKind::Match,

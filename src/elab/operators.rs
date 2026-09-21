@@ -1,8 +1,8 @@
-//! Operators outside brackets: `!`, `&&` and `||`, which are an `if`, and
+//! Operators outside a formula: `!`, `&&` and `||`, which are an `if`, and
 //! the comparisons of `u8`. Whether `p || q` is a proposition instead is
 //! decided here too.
 
-use crate::ast::{self, BinaryOp, ExprKind};
+use crate::ast::{self, BinaryOp, ExprKind, Form};
 use crate::kernel::{Type, same_type};
 use crate::typed::{CompareOp, Expr};
 
@@ -11,12 +11,16 @@ use super::env::{Elab, Env, Global};
 use super::exprs::Value;
 
 impl Env<'_> {
-    /// Whether an expression written outside brackets is a proposition, as
+    /// Whether an expression written outside a formula is a proposition, as
     /// `p || q` is when `p` is a `Prop`.
     pub(super) fn reads_as_prop(&self, expr: &ast::Expr) -> bool {
         match &expr.kind {
             ExprKind::Group(inner) | ExprKind::Not(inner) => self.reads_as_prop(inner),
-            ExprKind::Proposition(_) | ExprKind::Forall { .. } | ExprKind::Exists { .. } => true,
+            ExprKind::Form {
+                form: Form::Prop, ..
+            }
+            | ExprKind::Forall { .. }
+            | ExprKind::Exists { .. } => true,
             ExprKind::Binary {
                 operator,
                 left,
@@ -111,7 +115,7 @@ impl Env<'_> {
                             format!("values of type `{shown}` cannot be compared at runtime in the core"),
                             expr.span,
                         )
-                        .note("runtime comparison is defined on `u8`; inside `[ ... ]`, `==` states equality at any type"),
+                        .note("runtime comparison is defined on `u8`; inside a formula, `==` states equality at any type"),
                     );
             return Err(());
         }

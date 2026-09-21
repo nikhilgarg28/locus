@@ -1,7 +1,7 @@
 // A `let` inside a quantifier.
-const shifted: Prop = [
+const shifted: Prop = prop!(
     forall (n: u8) {
         let m = n; //~ error: L0290 statements inside a quantifier are not supported yet
         m == n
     }
-];
+);

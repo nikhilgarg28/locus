@@ -1,0 +1,39 @@
+error[L0117]: a proposition is written `prop!(condition)`; brackets are for arrays
+ --> tests/corpus/reject/retired_brackets.lc:4:5
+  |
+4 |     [x == y] //~ error: L0117 a proposition is written `prop!(condition)`
+  |     ^^^^^^^^
+  |
+  = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`
+  = help: write `prop!(` for `[`
+  = help: write `)` for `]`
+error[L0117]: a proof type is written `@(condition)`; brackets are for arrays
+ --> tests/corpus/reject/retired_brackets.lc:7:30
+  |
+7 | fn first(n: u8) -> (out: u8, @[out == n]) { //~ error: L0117 a proof type is written `@(condition)`
+  |                              ^^^^^^^^^^^
+  |
+  = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`
+  = help: write `@(` for `@[`
+  = help: write `)` for `]`
+error[L0117]: a proposition is written `prop!(condition)`; brackets are for arrays
+  --> tests/corpus/reject/retired_brackets.lc:8:23
+   |
+ 8 |       let claim: Prop = [ //~ error: L0117 a proposition is written `prop!(condition)`
+   |  _______________________^
+ 9 | |         forall (k: u8) { k == k => [k <= 255] } //~ error: L0117 a proposition is written `prop!(condition)`
+10 | |     ];
+   | |_____^
+   |
+   = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`
+   = help: write `prop!(` for `[`
+   = help: write `)` for `]`
+error[L0117]: a proposition is written `prop!(condition)`; brackets are for arrays
+ --> tests/corpus/reject/retired_brackets.lc:9:36
+  |
+9 |         forall (k: u8) { k == k => [k <= 255] } //~ error: L0117 a proposition is written `prop!(condition)`
+  |                                    ^^^^^^^^^^
+  |
+  = note: a formula is written inside `prop!(...)`, `prove!(...)`, or `@(...)`
+  = help: write `prop!(` for `[`
+  = help: write `)` for `]`

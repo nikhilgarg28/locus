@@ -1,4 +1,4 @@
-fn preserve(n: u8) -> (out: u8, @[out == n]) {
+fn preserve(n: u8) -> (out: u8, @(out == n)) {
     if n == 0 {
         (0, _)
     } else {

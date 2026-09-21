@@ -1,8 +1,8 @@
-//! Formulas: the contents of `[ ... ]` and of proof types, as kernel terms of
-//! type `Prop`. Inside a formula a comparison is a claim and `&&`, `||`, `!`
-//! and `=>` are connectives; nothing is executed.
+//! Formulas: the contents of `prop!(...)`, `prove!(...)`, and proof types,
+//! as kernel terms of type `Prop`. Inside a formula a comparison is a claim
+//! and `&&`, `||`, `!` and `=>` are connectives; nothing is executed.
 
-use crate::ast::{self, BinaryOp, ExprKind};
+use crate::ast::{self, BinaryOp, ExprKind, Form};
 use crate::kernel::{Term, Type, VarId, same_type};
 use crate::typed::Binder;
 
@@ -18,7 +18,13 @@ impl Env<'_> {
 
     fn formula_inner(&mut self, expr: &ast::Expr) -> Elab<Term> {
         match &expr.kind {
-            ExprKind::Group(inner) | ExprKind::Proposition(inner) => self.formula_inner(inner),
+            ExprKind::Group(inner) => self.formula_inner(inner),
+            // A `prop!` inside a formula is redundant and means the same.
+            ExprKind::Form {
+                form: Form::Prop,
+                arguments,
+                ..
+            } if arguments.len() == 1 => self.formula_inner(&arguments[0]),
             ExprKind::Bool(true) => Ok(self.prelude.truth_prop()),
             ExprKind::Bool(false) => Ok(self.prelude.falsehood_prop()),
             ExprKind::Not(inner) => {

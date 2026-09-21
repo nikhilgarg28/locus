@@ -1,11 +1,11 @@
 // These math functions construct claims; the final two transport or establish evidence.
 math fn positive(n: u8) -> Prop {
-    [n > 0]
+    prop!(n > 0)
 }
 
 math fn outside_range(n: u8) -> Prop {
-    let above_zero: Prop = [n > 0];
-    let below_ten: Prop = [n < 10];
+    let above_zero: Prop = prop!(n > 0);
+    let below_ten: Prop = prop!(n < 10);
     let inside = above_zero && below_ten;
     !inside
 }
@@ -15,7 +15,7 @@ math fn either(p: Prop, q: Prop) -> Prop {
 }
 
 math fn implies(p: Prop, q: Prop) -> Prop {
-    p => q
+    prop!(p => q)
 }
 
 math fn keep(p: Prop, evidence: @p) -> @p {
@@ -24,17 +24,17 @@ math fn keep(p: Prop, evidence: @p) -> @p {
 
 // Both the returned claim and its evidence are logical values.
 math fn reflexivity_claim(n: u8) -> (claim: Prop, @claim) {
-    let claim: Prop = [n == n];
+    let claim: Prop = prop!(n == n);
     (claim, _)
 }
 
 // A declared proposition lists the only ways it can be proved.
 prop Small(n: u8) {
     Zero: @Small(0),
-    Below(bound: @[n < 10]),
+    Below(bound: @(n < 10)),
 }
 
-math fn small_is_below_ten(n: u8, small: @Small(n)) -> @[n < 10] {
+math fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
     match small {
         Small::Zero => _,
         Small::Below(bound) => bound,

@@ -255,8 +255,14 @@ pub enum ExprKind {
     Hole,
     Group(Box<Expr>),
     Tuple(Vec<Expr>),
-    /// `[formula]`: a proposition literal.
-    Proposition(Box<Expr>),
+    /// `name!(arguments)`: a built-in form. `prop!` and `prove!` take one
+    /// formula; the others take expressions.
+    Form {
+        form: Form,
+        /// The name, without its `!`.
+        name_span: Span,
+        arguments: Vec<Expr>,
+    },
     Struct {
         name: Name,
         fields: Vec<ValueField>,
@@ -339,6 +345,81 @@ pub struct StateParameter {
     pub ty: Type,
     pub initial: Expr,
     pub span: Span,
+}
+
+/// A built-in form, spelled `name!(...)` as Rust spells a macro call. The
+/// list is closed: the parser knows it, and the elaborator gives each form
+/// its meaning. Nothing is expanded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Form {
+    /// `prop!(formula)`: a proposition.
+    Prop,
+    /// `prove!(formula)`: a claim stated where it stands, and its evidence.
+    Prove,
+    Rewrite,
+    Unfold,
+    Fold,
+    Old,
+    Snapshot,
+    Recurse,
+    Assert,
+    Unreachable,
+    Todo,
+    Panic,
+    DebugAssert,
+    Matches,
+    Vec,
+}
+
+impl Form {
+    pub const ALL: [Self; 15] = [
+        Self::Prop,
+        Self::Prove,
+        Self::Rewrite,
+        Self::Unfold,
+        Self::Fold,
+        Self::Old,
+        Self::Snapshot,
+        Self::Recurse,
+        Self::Assert,
+        Self::Unreachable,
+        Self::Todo,
+        Self::Panic,
+        Self::DebugAssert,
+        Self::Matches,
+        Self::Vec,
+    ];
+
+    /// The name before the `!`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Prop => "prop",
+            Self::Prove => "prove",
+            Self::Rewrite => "rewrite",
+            Self::Unfold => "unfold",
+            Self::Fold => "fold",
+            Self::Old => "old",
+            Self::Snapshot => "snapshot",
+            Self::Recurse => "recurse",
+            Self::Assert => "assert",
+            Self::Unreachable => "unreachable",
+            Self::Todo => "todo",
+            Self::Panic => "panic",
+            Self::DebugAssert => "debug_assert",
+            Self::Matches => "matches",
+            Self::Vec => "vec",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|form| form.name() == name)
+    }
+
+    /// Whether the form's one argument is a formula, in which `forall`,
+    /// `exists`, and `=>` are recognized.
+    pub fn takes_formula(self) -> bool {
+        matches!(self, Self::Prop | Self::Prove)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

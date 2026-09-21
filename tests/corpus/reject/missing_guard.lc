@@ -11,7 +11,7 @@ struct Lock {
 }
 
 math fn within_limit(failures: u8) -> Prop {
-    [failures <= 3]
+    prop!(failures <= 3)
 }
 
 fn step(

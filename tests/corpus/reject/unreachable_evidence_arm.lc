@@ -1,12 +1,12 @@
 // Arms on evidence that are never reached: `false` has no variants, and
 // `Or::Left` is handled twice.
-math fn anything(p: Prop, h: @[false]) -> @p {
+math fn anything(p: Prop, h: @(false)) -> @p {
     match h {
         _ => _, //~ error: L0214 this arm is never reached
     }
 }
 
-math fn swap(p: Prop, q: Prop, h: @[p || q]) -> @[q || p] {
+math fn swap(p: Prop, q: Prop, h: @(p || q)) -> @(q || p) {
     match h {
         Or::Left(hp) => Or::Right(hp),
         Or::Left(hp) => Or::Right(hp), //~ error: L0214 this arm is never reached

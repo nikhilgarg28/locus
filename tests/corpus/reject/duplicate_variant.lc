@@ -5,6 +5,6 @@ enum Light {
 }
 
 prop Small(n: u8) {
-    Below(bound: @[n < 10]),
-    Below(bound: @[n < 5]), //~ error: L0202 variant `Below` is declared twice
+    Below(bound: @(n < 10)),
+    Below(bound: @(n < 5)), //~ error: L0202 variant `Below` is declared twice
 }

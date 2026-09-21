@@ -1,7 +1,7 @@
 // Programs the elaborator lets through to the kernel, which rejects them: an
 // `if` whose branches are evidence, and a `continue` that does not end a
 // block. Each is a gap in the elaborator's own checks, reported as such.
-fn choose(flag: bool) -> @[1 == 1] { //~ error: L0299 the checker rejected this
+fn choose(flag: bool) -> @(1 == 1) { //~ error: L0299 the checker rejected this
     if flag { _ } else { _ }
 }
 

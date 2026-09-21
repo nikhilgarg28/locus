@@ -1,5 +1,5 @@
-error[L0208]: `unfold` takes two arguments
+error[L0208]: `unfold!` takes two arguments
  --> tests/corpus/reject/wrong_proof_form_argument_count.lc:5:5
   |
-5 |     unfold(nonzero) //~ error: L0208 `unfold` takes two arguments
-  |     ^^^^^^^^^^^^^^^
+5 |     unfold!(nonzero) //~ error: L0208 `unfold!` takes two arguments
+  |     ^^^^^^^^^^^^^^^^

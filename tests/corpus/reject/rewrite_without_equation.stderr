@@ -1,5 +1,5 @@
-error[L0229]: `rewrite` takes evidence of an equation `a == b` first
- --> tests/corpus/reject/rewrite_without_equation.lc:3:13
+error[L0229]: `rewrite!` takes evidence of an equation `a == b` first
+ --> tests/corpus/reject/rewrite_without_equation.lc:3:14
   |
-3 |     rewrite(below, small) //~ error: L0229 `rewrite` takes evidence of an equation `a == b` first
-  |             ^^^^^
+3 |     rewrite!(below, small) //~ error: L0229 `rewrite!` takes evidence of an equation `a == b` first
+  |              ^^^^^

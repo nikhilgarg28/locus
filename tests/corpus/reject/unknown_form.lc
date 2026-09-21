@@ -1,0 +1,20 @@
+// A form outside the closed list, one with brackets, one with braces, and
+// `prove!` with two formulas.
+fn first(n: u8) -> u8 {
+    println!("{}", n); //~ error: L0118 `println!` is not a form of Locus
+    n
+}
+
+fn second(n: u8) -> u8 {
+    let items = vec![1, 2]; //~ error: L0118 Locus forms take parentheses: `vec!(...)`
+    n
+}
+
+fn third(n: u8) -> u8 {
+    todo!{} //~ error: L0118 Locus forms take parentheses: `todo!(...)`
+}
+
+fn fourth(n: u8) -> u8 {
+    prove!(n == n, n == n); //~ error: L0118 `prove!` takes one formula, and this is a second
+    n
+}

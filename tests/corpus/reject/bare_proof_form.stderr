@@ -1,0 +1,16 @@
+error[L0231]: `unfold` is a built-in form, written `unfold!(...)`
+ --> tests/corpus/reject/bare_proof_form.lc:6:5
+  |
+6 |     unfold(nonzero, h) //~ error: L0231 `unfold` is a built-in form, written `unfold!(...)`
+  |     ^^^^^^
+  |
+  = note: the forms take `!` as a Rust macro does; a plain `rewrite`, `unfold`, or `fold` is an ordinary name, and none is defined here
+  = help: write `unfold!`
+error[L0231]: `rewrite` is a built-in form, written `rewrite!(...)`
+  --> tests/corpus/reject/bare_proof_form.lc:10:5
+   |
+10 |     rewrite(same, small) //~ error: L0231 `rewrite` is a built-in form, written `rewrite!(...)`
+   |     ^^^^^^^
+   |
+   = note: the forms take `!` as a Rust macro does; a plain `rewrite`, `unfold`, or `fold` is an ordinary name, and none is defined here
+   = help: write `rewrite!`

@@ -4,4 +4,4 @@ error[L0206]: `_` asks for evidence, and nothing here says of what
 3 |     let evidence = _; //~ error: L0206 nothing here says of what
   |                    ^
   |
-  = note: state the claim with an annotation: `let evidence: @[claim] = _;`
+  = note: state the claim with an annotation, `let evidence: @claim = _;`, or where it stands, `prove!(claim)`

@@ -1,0 +1,22 @@
+error[L0118]: `println!` is not a form of Locus
+ --> tests/corpus/reject/unknown_form.lc:4:5
+  |
+4 |     println!("{}", n); //~ error: L0118 `println!` is not a form of Locus
+  |     ^^^^^^^^
+  |
+  = note: the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros
+error[L0118]: Locus forms take parentheses: `vec!(...)`
+ --> tests/corpus/reject/unknown_form.lc:9:17
+  |
+9 |     let items = vec![1, 2]; //~ error: L0118 Locus forms take parentheses: `vec!(...)`
+  |                 ^^^^^
+error[L0118]: Locus forms take parentheses: `todo!(...)`
+  --> tests/corpus/reject/unknown_form.lc:14:5
+   |
+14 |     todo!{} //~ error: L0118 Locus forms take parentheses: `todo!(...)`
+   |     ^^^^^^
+error[L0118]: `prove!` takes one formula, and this is a second
+  --> tests/corpus/reject/unknown_form.lc:18:18
+   |
+18 |     prove!(n == n, n == n); //~ error: L0118 `prove!` takes one formula, and this is a second
+   |                  ^

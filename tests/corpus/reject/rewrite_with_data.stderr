@@ -1,5 +1,5 @@
 error[L0220]: expected evidence, found `u8`
- --> tests/corpus/reject/rewrite_with_data.lc:3:13
+ --> tests/corpus/reject/rewrite_with_data.lc:3:14
   |
-3 |     rewrite(a, small) //~ error: L0220 expected evidence, found `u8`
-  |             ^
+3 |     rewrite!(a, small) //~ error: L0220 expected evidence, found `u8`
+  |              ^

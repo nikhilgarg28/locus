@@ -4,4 +4,4 @@ error[L0105]: attributes are not in Locus yet
 2 | #[inline] //~ error: L0105 attributes are not in Locus yet
   | ^^^^^^^^^
   |
-  = note: proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence
+  = note: proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence

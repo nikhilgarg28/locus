@@ -1,14 +1,10 @@
-error[L0114]: arrays are not part of the core language
+error[L0116]: arrays are not in Locus yet
  --> tests/corpus/reject/array_literal.lc:3:7
   |
-3 |     [1, 2, 3] //~ error: L0114 arrays are not part
+3 |     [1, 2, 3] //~ error: L0116 arrays are not in Locus yet
   |       ^
-  |
-  = note: brackets hold exactly one proposition, as in `[x <= limit]`
-error[L0114]: arrays are not part of the core language
+error[L0116]: arrays are not in Locus yet
  --> tests/corpus/reject/array_literal.lc:7:5
   |
-7 |     [] //~ error: L0114 arrays are not part
+7 |     [] //~ error: L0116 arrays are not in Locus yet
   |     ^^
-  |
-  = note: brackets hold exactly one proposition, as in `[x <= limit]`

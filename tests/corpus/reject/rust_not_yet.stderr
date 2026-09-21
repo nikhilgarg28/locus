@@ -4,7 +4,7 @@ error[L0105]: attributes are not in Locus yet
 3 | #[derive(Debug)] //~ error: L0105 attributes are not in Locus yet
   | ^^^^^^^^^^^^^^^^
   |
-  = note: proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence
+  = note: proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence
 error[L0116]: visibility (`pub`) is not in Locus yet
  --> tests/corpus/reject/rust_not_yet.lc:8:1
   |

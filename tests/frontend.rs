@@ -1,6 +1,6 @@
 use locus::ast::{
-    BinaryOp, Block, DeclarationKind, Expr, ExprKind, FunctionMode, IntegerLiteral, IntegerSuffix,
-    PatternKind, StatementKind, TypeKind,
+    BinaryOp, Block, DeclarationKind, Expr, ExprKind, Form, FunctionMode, IntegerLiteral,
+    IntegerSuffix, PatternKind, StatementKind, TypeKind,
 };
 use locus::diagnostic::Applicability;
 use locus::kernel::Natural;
@@ -23,6 +23,19 @@ fn expression(text: &str) -> Expr {
         panic!()
     };
     *body.tail.take().unwrap()
+}
+
+/// The formula of `prop!(text)`, where `=>` and the quantifiers are read.
+fn formula(text: &str) -> Expr {
+    let ExprKind::Form {
+        form: Form::Prop,
+        mut arguments,
+        ..
+    } = expression(&format!("prop!({text})")).kind
+    else {
+        panic!("not a prop! form")
+    };
+    arguments.pop().unwrap()
 }
 
 fn binary(expression: &Expr, expected: BinaryOp) -> (&Expr, &Expr) {
@@ -81,7 +94,7 @@ fn lexer_preserves_large_literals_and_distinguishes_keywords() {
             K::At,
             K::Hash,
             K::Const,
-            K::Def,
+            K::Name,
             K::Name,
             K::Name,
             K::Name,
@@ -89,7 +102,7 @@ fn lexer_preserves_large_literals_and_distinguishes_keywords() {
             K::DotDot,
             K::Match,
             K::In,
-            K::Exists,
+            K::Name,
             K::Eof
         ]
     );
@@ -163,7 +176,7 @@ fn all_acceptance_examples_parse() {
 
 #[test]
 fn equality_conjunction_and_implication_have_distinct_precedence() {
-    let expr = expression("a.wrapping_add(1) == b && ready => done");
+    let expr = formula("a.wrapping_add(1) == b && ready => done");
     let (condition, _) = binary(&expr, BinaryOp::Implies);
     let (comparison, _) = binary(condition, BinaryOp::And);
     let (left, _) = binary(comparison, BinaryOp::Equal);
@@ -172,7 +185,7 @@ fn equality_conjunction_and_implication_have_distinct_precedence() {
 
 #[test]
 fn implication_is_right_associative_and_addition_is_retired() {
-    let expr = expression("a => b => c");
+    let expr = formula("a => b => c");
     let (_, right) = binary(&expr, BinaryOp::Implies);
     binary(right, BinaryOp::Implies);
     let parsed = parse_text("fn f(a: u8) -> u8 { a + 1 }");
@@ -204,7 +217,7 @@ fn grouping_unit_and_singleton_tuple_stay_distinct() {
 #[test]
 fn a_hole_is_its_own_node_and_proof_blocks_are_retired() {
     assert!(matches!(expression("_").kind, ExprKind::Hole));
-    let parsed = parse_text("fn f() -> @[true] { @{ reflexivity; } }");
+    let parsed = parse_text("fn f() -> @(true) { @{ reflexivity; } }");
     let error = parsed
         .diagnostics
         .iter()
@@ -216,7 +229,7 @@ fn a_hole_is_its_own_node_and_proof_blocks_are_retired() {
 #[test]
 fn dependent_results_and_destructuring_keep_their_binders() {
     let parsed =
-        parse_text("fn f(n: u8) -> (out: u8, @[out == n]) { let (value, _) = (n, _); (value, _) }");
+        parse_text("fn f(n: u8) -> (out: u8, @(out == n)) { let (value, _) = (n, _); (value, _) }");
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let DeclarationKind::Function { result, body, .. } = &parsed.program.declarations[0].kind
     else {
@@ -329,7 +342,7 @@ fn if_requires_else_and_else_if_is_supported() {
 
 #[test]
 fn syntax_success_does_not_claim_proof_validity() {
-    assert!(parse_text("fn impossible() -> @[false] { _ }").is_success());
+    assert!(parse_text("fn impossible() -> @(false) { _ }").is_success());
 }
 
 #[test]
@@ -367,7 +380,9 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("{", "}"),
                 ("{ let x = ", "; 1 }"),
                 ("!", ""),
-                ("p => ", ""),
+                ("prop!(p => ", ")"),
+                ("prove!(", ")"),
+                ("prop!(", ")"),
                 ("f(", ")"),
                 ("x.g(", ")"),
                 ("if c { 1 } else { ", " }"),
@@ -382,8 +397,8 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("loop (s: u8 = ", ") -> u8 { break s }"),
                 ("break ", ""),
                 ("continue(", ")"),
-                ("forall (n: u8) { ", " }"),
-                ("exists (n: u8) { ", " }"),
+                ("prop!(forall (n: u8) { ", " })"),
+                ("prop!(exists (n: u8) { ", " })"),
             ] {
                 limit_reported(
                     format!(
@@ -401,7 +416,7 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("fn(", ") -> u8"),
                 ("fn() -> ", ""),
                 ("math fn(x: ", ") -> u8"),
-                ("@[forall (h: ", ") { true }]"),
+                ("@(forall (h: ", ") { true })"),
             ] {
                 limit_reported(
                     format!(
@@ -439,8 +454,9 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
 fn malformed_inputs_terminate_and_keep_valid_diagnostic_spans() {
     let alphabet = [
         "fn ", "def ", "const ", "let ", "@", "_", "[", "]", "#", "||", "(", ")", "{", "}", ";",
-        "=>", "=", "n", "0", "💡", "é", "\n", "/*", "*/", "math ", "prop ", "struct ", "enum ",
-        "match ", "loop ", "for ", "in ", "..", "::", "break ", "continue", ",", ":", ".", "->",
+        "prove!(", "prop!(", "!", "forall ", "exists ", "=>", "=", "n", "0", "💡", "é", "\n", "/*",
+        "*/", "math ", "prop ", "struct ", "enum ", "match ", "loop ", "for ", "in ", "..", "::",
+        "break ", "continue", ",", ":", ".", "->",
     ];
     let mut seed = 17u64;
     for length in 0..256 {
@@ -465,8 +481,8 @@ fn malformed_inputs_terminate_and_keep_valid_diagnostic_spans() {
 #[test]
 fn constants_and_math_functions_state_propositions() {
     let parsed = parse_text(
-        "const reflexive: Prop = [forall (n: u8) { n == n }];
-         math fn same(x: u8, y: u8) -> Prop { [x == y] }",
+        "const reflexive: Prop = prop!(forall (n: u8) { n == n });
+         math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let DeclarationKind::Constant { name, ty, value } = &parsed.program.declarations[0].kind else {
@@ -475,7 +491,7 @@ fn constants_and_math_functions_state_propositions() {
     assert_eq!(name.text, "reflexive");
     assert!(matches!(&ty.kind, TypeKind::Named(name) if name.text == "Prop"));
     assert!(
-        matches!(&value.kind, ExprKind::Proposition(inner) if matches!(inner.kind, ExprKind::Forall { .. }))
+        matches!(&value.kind, ExprKind::Form { form: Form::Prop, arguments, .. } if matches!(arguments[0].kind, ExprKind::Forall { .. }))
     );
     let DeclarationKind::Function { result, body, .. } = &parsed.program.declarations[1].kind
     else {
@@ -484,7 +500,10 @@ fn constants_and_math_functions_state_propositions() {
     assert!(matches!(&result.kind, TypeKind::Named(name) if name.text == "Prop"));
     assert!(matches!(
         body.tail.as_ref().unwrap().kind,
-        ExprKind::Proposition(_)
+        ExprKind::Form {
+            form: Form::Prop,
+            ..
+        }
     ));
     assert!(!parse_text("prop Same(x: u8) = x == x;").is_success());
 }
@@ -500,7 +519,7 @@ fn math_and_prop_are_keywords_only_where_a_declaration_can_begin() {
 
 #[test]
 fn def_is_reported_once_with_a_fix_and_still_parses() {
-    let text = "def same(x: u8, y: u8) -> Prop { [x == y] }";
+    let text = "def same(x: u8, y: u8) -> Prop { prop!(x == y) }";
     let parsed = parse_text(text);
     assert_eq!(parsed.diagnostics.len(), 1, "{:?}", parsed.diagnostics);
     assert_eq!(parsed.diagnostics[0].code, "L0113");
@@ -509,13 +528,17 @@ fn def_is_reported_once_with_a_fix_and_still_parses() {
     let mut fixed = text.to_owned();
     fixed.replace_range(fix.span.range(), &fix.replacement);
     assert!(parse_text(&fixed).is_success(), "{fixed}");
+    // Elsewhere `def` is a name, as `forall` and `exists` are.
+    assert!(
+        parse_text("fn def(forall: u8, exists: u8) -> u8 { let def = forall; def }").is_success()
+    );
 }
 
 #[test]
 fn proof_types_accept_named_inline_and_called_propositions_with_precise_spans() {
     for (target, spelling) in [
         ("claim", "@claim"),
-        ("[n == n]", "@ [n == n]"),
+        ("(n == n)", "@ (n == n)"),
         ("same(n, n)", "@same(n, n)"),
     ] {
         let mut sources = SourceMap::default();
@@ -534,7 +557,7 @@ fn proof_types_accept_named_inline_and_called_propositions_with_precise_spans() 
         assert_eq!(source.slice(proposition.span), Some(target));
         match target {
             "claim" => assert!(matches!(proposition.kind, ExprKind::Name(_))),
-            "[n == n]" => assert!(matches!(proposition.kind, ExprKind::Proposition(_))),
+            "(n == n)" => assert!(matches!(proposition.kind, ExprKind::Group(_))),
             _ => assert!(matches!(proposition.kind, ExprKind::Call { .. })),
         }
     }
@@ -560,27 +583,120 @@ fn proof_holes_and_wildcard_patterns_are_different_nodes() {
     assert!(matches!(values[1].kind, ExprKind::Hole));
 }
 
-#[test]
-fn brackets_always_hold_one_proposition() {
-    for text in ["[n > 0]", "[forall (n: u8) { n == n }]", "[[n]]"] {
-        assert!(matches!(expression(text).kind, ExprKind::Proposition(_)));
+/// Every fix in the diagnostics applied to `text`, last first so that the
+/// earlier spans stay right.
+fn fixed(text: &str, parsed: &Parsed) -> String {
+    let mut fixed = text.to_owned();
+    let mut fixes: Vec<_> = parsed
+        .diagnostics
+        .iter()
+        .flat_map(|diagnostic| diagnostic.suggestions.iter())
+        .collect();
+    fixes.sort_by_key(|fix| std::cmp::Reverse(fix.span.start));
+    for fix in fixes {
+        fixed.replace_range(fix.span.range(), &fix.replacement);
     }
-    for text in ["[]", "[n,]", "[n, m]", "[n; 3]"] {
-        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
-        assert!(
-            parsed.diagnostics.iter().any(|d| d.code == "L0114"),
-            "{text}: {:?}",
-            parsed.diagnostics
-        );
-    }
+    fixed
 }
 
 #[test]
-fn a_bracket_is_a_proposition_with_or_without_an_annotation() {
+fn retired_brackets_are_reported_with_a_fix_that_parses() {
+    // A proposition literal, a proof type, one spanning lines, and one
+    // nested in a formula: each is L0117 once, with its own fix, and the
+    // file goes on being parsed so that every one is reported.
+    let text = "math fn same(x: u8, y: u8) -> Prop { [x == y] }
+fn f(n: u8) -> (out: u8, @[out == n]) {
+    let claim: Prop = [
+        forall (k: u8) { k == k => [k <= 255] }
+    ];
+    let h: @[n == n] = _;
+    (n, _)
+}
+prop P(n: u8) { Small: @[n < 10] }
+const c: Prop = [true];";
+    let parsed = parse_text(text);
+    assert_eq!(
+        parsed.program.declarations.len(),
+        4,
+        "{:#?}",
+        parsed.diagnostics
+    );
+    let codes: Vec<_> = parsed.diagnostics.iter().map(|d| d.code).collect();
+    assert_eq!(codes, ["L0117"; 7], "{:#?}", parsed.diagnostics);
+    // One fix per delimiter, so that nested brackets can all be fixed at
+    // once.
+    let mut fixes = Vec::new();
+    for diagnostic in &parsed.diagnostics {
+        assert!(diagnostic.message.contains("brackets are for arrays"));
+        assert_eq!(diagnostic.suggestions.len(), 2);
+        let mut pair = Vec::new();
+        for fix in &diagnostic.suggestions {
+            assert_eq!(fix.applicability, Applicability::MaybeIncorrect);
+            pair.push((&text[fix.span.range()], fix.replacement.as_str()));
+        }
+        fixes.push((pair[0], pair[1], &text[diagnostic.labels[0].span.range()]));
+    }
+    assert_eq!(
+        fixes,
+        [
+            (("[", "prop!("), ("]", ")"), "[x == y]"),
+            (("@[", "@("), ("]", ")"), "@[out == n]"),
+            (
+                ("[", "prop!("),
+                ("]", ")"),
+                "[\n        forall (k: u8) { k == k => [k <= 255] }\n    ]"
+            ),
+            (("[", "prop!("), ("]", ")"), "[k <= 255]"),
+            (("@[", "@("), ("]", ")"), "@[n == n]"),
+            (("@[", "@("), ("]", ")"), "@[n < 10]"),
+            (("[", "prop!("), ("]", ")"), "[true]"),
+        ]
+    );
+    let fixed = fixed(text, &parsed);
+    let parsed = parse_text(&fixed);
+    assert!(parsed.is_success(), "{fixed}\n{:#?}", parsed.diagnostics);
+    assert!(fixed.contains("prop!(\n        forall (k: u8) { k == k => prop!(k <= 255) }\n    )"));
+    // The old brackets read as the new forms: the same declarations, with
+    // the same number of `prop!` nodes among them.
+    let count =
+        |program: &locus::ast::Program| format!("{program:?}").matches("Form { form: Prop").count();
+    assert_eq!(parsed.program.declarations.len(), 4);
+    assert_eq!(count(&parse_text(text).program), count(&parsed.program));
+    assert_eq!(count(&parsed.program), 4);
+}
+
+#[test]
+fn brackets_are_arrays_which_are_not_in_locus_yet() {
+    for text in ["[]", "[n,]", "[n, m]", "[n; 3]"] {
+        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0116")
+            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
+        assert_eq!(error.message, "arrays are not in Locus yet");
+    }
+    for text in [
+        "fn f(xs: [bool; 1]) -> () { () }",
+        "fn f(ys: [u8]) -> () { () }",
+    ] {
+        let parsed = parse_text(text);
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0116")
+            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
+        assert_eq!(error.message, "array and slice types are not in Locus yet");
+    }
+    assert!(parse_text("fn f(h: @(true)) -> () { () }").is_success());
+}
+
+#[test]
+fn a_prop_form_is_a_proposition_with_or_without_an_annotation() {
     let parsed = parse_text(
         "fn f(n: u8) -> () {
-            let claim: Prop = [n > 0];
-            let inferred = [n > 0];
+            let claim: Prop = prop!(n > 0);
+            let inferred = prop!(n > 0);
             ()
         }",
     );
@@ -592,29 +708,19 @@ fn a_bracket_is_a_proposition_with_or_without_an_annotation() {
         let StatementKind::Let { value, .. } = &statement.kind else {
             panic!()
         };
-        assert!(matches!(value.kind, ExprKind::Proposition(_)));
+        assert!(matches!(
+            value.kind,
+            ExprKind::Form {
+                form: Form::Prop,
+                ..
+            }
+        ));
     }
-}
-
-#[test]
-fn array_types_are_outside_the_core_and_proof_types_are_not() {
-    for text in [
-        "fn f(xs: [bool; 1]) -> () { () }",
-        "fn f(ys: [u8]) -> () { () }",
-    ] {
-        assert!(
-            parse_text(text)
-                .diagnostics
-                .iter()
-                .any(|d| d.code == "L0114")
-        );
-    }
-    assert!(parse_text("fn f(h: @[true]) -> () { () }").is_success());
 }
 
 #[test]
 fn proposition_operations_have_boolean_style_precedence_and_right_associative_implication() {
-    let expr = expression("!p && q || r && s => t => u");
+    let expr = formula("!p && q || r && s => t => u");
     let (left, right) = binary(&expr, BinaryOp::Implies);
     let (first, second) = binary(left, BinaryOp::Or);
     let (negated, _) = binary(first, BinaryOp::And);
@@ -629,7 +735,7 @@ fn proposition_operations_have_boolean_style_precedence_and_right_associative_im
 #[test]
 fn at_is_not_a_bare_proof_hole_or_a_proof_type_in_expression_position() {
     for text in ["@", "@claim", "@[n == n]", "@(n == n)"] {
-        let parsed = parse_text(&format!("fn f(n: u8) -> @[n == n] {{ {text} }}"));
+        let parsed = parse_text(&format!("fn f(n: u8) -> @(n == n) {{ {text} }}"));
         assert!(
             parsed.diagnostics.iter().any(|d| d.code == "L0110"),
             "{text}: {parsed:?}"
@@ -649,9 +755,9 @@ fn at_is_not_a_bare_proof_hole_or_a_proof_type_in_expression_position() {
 fn old_hash_proof_syntax_reports_migration_help() {
     for text in [
         "fn f() -> #(true) { _ }",
-        "fn f() -> @[true] { # }",
-        "fn f() -> @[true] { #(true) }",
-        "fn f() -> @[true] { #{ reflexivity; } }",
+        "fn f() -> @(true) { # }",
+        "fn f() -> @(true) { #(true) }",
+        "fn f() -> @(true) { #{ reflexivity; } }",
     ] {
         let parsed = parse_text(text);
         let error = parsed
@@ -661,7 +767,7 @@ fn old_hash_proof_syntax_reports_migration_help() {
             .unwrap();
         assert!(error.message.contains("no longer proof syntax"));
     }
-    for text in ["fn f() -> #[true] { _ }", "fn f() -> @[true] { #[true] }"] {
+    for text in ["fn f() -> #[true] { _ }", "fn f() -> @(true) { #[true] }"] {
         assert!(
             parse_text(text)
                 .diagnostics
@@ -673,7 +779,7 @@ fn old_hash_proof_syntax_reports_migration_help() {
 
 #[test]
 fn bracket_errors_report_the_opening_and_preserve_following_declarations() {
-    let text = "fn f() -> @[n == n) { _ } const good: Prop = [true];";
+    let text = "fn f() -> @[n == n) { _ } const good: Prop = prop!(true);";
     let parsed = parse_text(text);
     let error = parsed
         .diagnostics
@@ -697,7 +803,7 @@ fn bracket_errors_report_the_opening_and_preserve_following_declarations() {
 
 #[test]
 fn missing_constant_semicolon_fix_and_recovery_work() {
-    let text = "const claim: Prop = [true]\nfn good() -> u8 { 1 }";
+    let text = "const claim: Prop = prop!(true)\nfn good() -> u8 { 1 }";
     let parsed = parse_text(text);
     assert_eq!(parsed.diagnostics.len(), 1, "{:?}", parsed.diagnostics);
     assert_eq!(parsed.program.declarations.len(), 1);
@@ -739,9 +845,9 @@ fn syntax_parser_does_not_pretend_to_enforce_prop_or_hole_types() {
 #[test]
 fn fn_and_math_fn_preserve_their_modes() {
     let parsed = parse_text(
-        "math fn same(x: u8, y: u8) -> Prop { [x == y] }
+        "math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }
          math fn keep(p: Prop, h: @p) -> @p { h }
-         fn self_equal(n: u8) -> @[same(n, n)] { _ }",
+         fn self_equal(n: u8) -> @(same(n, n)) { _ }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let modes: Vec<_> = parsed
@@ -769,8 +875,8 @@ fn fn_and_math_fn_preserve_their_modes() {
 fn recovery_keeps_math_functions_after_a_broken_function() {
     let parsed = parse_text(
         "fn broken() -> u8 { 1
-         math fn good() -> Prop { [true] }
-         const claim: Prop = [true];",
+         math fn good() -> Prop { prop!(true) }
+         const claim: Prop = prop!(true);",
     );
     assert!(!parsed.is_success());
     assert_eq!(parsed.program.declarations.len(), 2, "{parsed:?}");
@@ -859,7 +965,7 @@ fn prop_declarations_keep_parameters_payloads_and_targets() {
         "prop Even(n: u8) {
             Zero: @Even(0),
             Step(m: u8, smaller: @Even(m)): @Even(m.wrapping_add(2)),
-            Assumed(evidence: @[n == 4]),
+            Assumed(evidence: @(n == 4)),
         }
         prop Trivial { Intro }",
     );
@@ -951,12 +1057,21 @@ fn match_arms_take_every_pattern_form() {
 
 #[test]
 fn the_arm_separator_and_implication_share_a_token_without_ambiguity() {
-    let ExprKind::Match { arms, .. } = expression("match p { Side::Left => a => b, _ => c }").kind
+    let ExprKind::Match { arms, .. } =
+        expression("match p { Side::Left => prop!(a => b), _ => c }").kind
     else {
         panic!()
     };
     assert_eq!(arms.len(), 2);
-    binary(&arms[0].body, BinaryOp::Implies);
+    let implication = formula("a => b");
+    binary(&implication, BinaryOp::Implies);
+    // Outside a formula, an arm's `=>` is the one `=>` there is.
+    let parsed = parse_text("fn f(p: Side) -> u8 { match p { Side::Left => a => b, _ => c } }");
+    assert_eq!(
+        parsed.diagnostics[0].code, "L0119",
+        "{:?}",
+        parsed.diagnostics
+    );
     let parsed = parse_text("fn f(x: u8) -> u8 { match x { 0 -> 1, _ => 2 } }");
     assert!(
         parsed
@@ -1034,7 +1149,7 @@ fn loops_list_their_state_and_result() {
         result,
         body,
     } = expression(
-        "loop (i: u8 = 0, bound: @[i <= n] = _) -> (out: u8, @[out == n]) {
+        "loop (i: u8 = 0, bound: @(i <= n) = _) -> (out: u8, @(out == n)) {
             if i == n { break (i, _) } else { continue(i.wrapping_add(1), _) }
         }",
     )
@@ -1090,7 +1205,7 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
         upper,
         state,
         body,
-    } = expression("for i in 0..n (acc: u8 = 0, same: @[acc == i] = _) { continue(acc, same) }")
+    } = expression("for i in 0..n (acc: u8 = 0, same: @(acc == i) = _) { continue(acc, same) }")
         .kind
     else {
         panic!()
@@ -1129,7 +1244,7 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
 #[test]
 fn function_types_record_their_mode_and_parameter_names() {
     let parsed = parse_text(
-        "math fn apply(f: math fn(x: u8) -> @[x == x], g: fn(u8, bool) -> u8) -> () { () }",
+        "math fn apply(f: math fn(x: u8) -> @(x == x), g: fn(u8, bool) -> u8) -> () { () }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let DeclarationKind::Function { parameters, .. } = &parsed.program.declarations[0].kind else {
@@ -1154,11 +1269,9 @@ fn function_types_record_their_mode_and_parameter_names() {
 
 #[test]
 fn exists_mirrors_forall() {
-    let ExprKind::Proposition(inner) = expression("[exists (n: u8, m: u8) { n == m }]").kind else {
-        panic!()
-    };
+    let inner = formula("exists (n: u8, m: u8) { n == m }");
     assert!(matches!(inner.kind, ExprKind::Exists { parameters, .. } if parameters.len() == 2));
-    assert!(!parse_text("fn f() -> Prop { [exists () { true }] }").is_success());
+    assert!(!parse_text("fn f() -> Prop { prop!(exists () { true }) }").is_success());
 }
 
 #[test]
@@ -1215,7 +1328,7 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
         ("a constant", "const {}: u8 = 1;", &[]),
         ("a field", "struct S { {}: u8 }", &[]),
         ("a variant", "enum E { A, {}(u8) }", &[]),
-        ("a proof constructor", "prop P { {}: @[true] }", &[]),
+        ("a proof constructor", "prop P { {}: @(true) }", &[]),
         ("a payload field", "enum E { A({}: u8) }", &[]),
         (
             "a result field",
@@ -1258,7 +1371,7 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
         ),
         (
             "a bound variable",
-            "const c: Prop = [forall ({}: u8) { true }];",
+            "const c: Prop = prop!(forall ({}: u8) { true });",
             &[],
         ),
     ];
@@ -1309,7 +1422,8 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
 #[test]
 fn weak_keywords_and_the_words_of_locus_are_names() {
     let parsed = parse_text(
-        "fn union(raw: u8, safe: u8, auto: u8, default: u8) -> u8 { let macro_rules = raw; let math = safe; let prop = auto; macro_rules }",
+        "fn union(raw: u8, safe: u8, auto: u8, default: u8) -> u8 { let macro_rules = raw; let math = safe; let prop = auto; macro_rules }
+         fn forall(exists: u8, def: u8, prove: u8) -> u8 { let forall = exists; forall }",
     );
     assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
 }
@@ -2076,4 +2190,250 @@ fn an_attribute_is_reported_once_and_its_item_is_parsed() {
     }
     let parsed = parse_text("#[never closed fn f() -> u8 { 1 }");
     assert_eq!(parsed.diagnostics[0].code, "L0105");
+}
+
+// Built-in forms, and the formulas inside `prop!(...)`, `prove!(...)`, and
+// `@(...)`.
+
+#[test]
+fn forms_are_a_closed_list_spelled_with_a_bang_and_parentheses() {
+    for (text, form, arguments) in [
+        ("prop!(n > 0)", Form::Prop, 1),
+        ("prove!(out == n.wrapping_add(1))", Form::Prove, 1),
+        ("rewrite!(same, small)", Form::Rewrite, 2),
+        ("unfold!(nonzero, h)", Form::Unfold, 2),
+        ("fold!(nonzero, h)", Form::Fold, 2),
+        ("old!(x)", Form::Old, 1),
+        ("snapshot!(x)", Form::Snapshot, 1),
+        ("recurse!(h, f(n))", Form::Recurse, 2),
+        ("assert!(n < 3, \"n is {}\", n)", Form::Assert, 3),
+        ("unreachable!()", Form::Unreachable, 0),
+        ("todo!(\"later\")", Form::Todo, 1),
+        ("panic!(\"no room\")", Form::Panic, 1),
+        ("debug_assert!(n < 3)", Form::DebugAssert, 1),
+        ("matches!(n, 0)", Form::Matches, 2),
+        ("vec!(1, 2, 3)", Form::Vec, 3),
+    ] {
+        let ExprKind::Form {
+            form: parsed,
+            arguments: parsed_arguments,
+            name_span,
+            ..
+        } = expression(text).kind
+        else {
+            panic!("{text}")
+        };
+        assert_eq!(parsed, form, "{text}");
+        assert_eq!(parsed_arguments.len(), arguments, "{text}");
+        assert_eq!(name_span.range().len(), form.name().len(), "{text}");
+        assert_eq!(Form::from_name(form.name()), Some(form));
+    }
+    // A form is an expression like any other: a value, an argument, a
+    // statement.
+    let block = body(
+        "fn f(n: u8) -> (out: u8, @(out == n)) {
+            prove!(n == n);
+            let h = prove!(n == n);
+            g(prove!(n == n), prop!(n == n));
+            (n, prove!(n == n))
+        }",
+    );
+    assert_eq!(block.statements.len(), 3);
+    assert!(matches!(
+        &block.statements[0].kind,
+        StatementKind::Expression(Expr {
+            kind: ExprKind::Form {
+                form: Form::Prove,
+                ..
+            },
+            ..
+        })
+    ));
+    // `!=` is one token, and `!` before an operand is negation still.
+    let not_equal = expression("a != !b");
+    let (_, right) = binary(&not_equal, BinaryOp::NotEqual);
+    assert!(matches!(right.kind, ExprKind::Not(_)));
+    let negated = formula("!p && !(q)");
+    let (left, right) = binary(&negated, BinaryOp::And);
+    assert!(matches!(left.kind, ExprKind::Not(_)));
+    assert!(matches!(right.kind, ExprKind::Not(_)));
+}
+
+#[test]
+fn a_form_outside_the_list_or_with_other_delimiters_is_reported() {
+    let parsed = parse_text("fn f() -> u8 { foo!(1) }");
+    assert_eq!(parsed.diagnostics.len(), 1, "{:?}", parsed.diagnostics);
+    let error = &parsed.diagnostics[0];
+    assert_eq!(error.code, "L0118");
+    assert_eq!(error.message, "`foo!` is not a form of Locus");
+    assert_eq!(
+        error.notes,
+        [
+            "the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros"
+        ]
+    );
+    for form in Form::ALL {
+        assert!(error.notes[0].contains(&format!("`{}!`", form.name())));
+    }
+    for text in [
+        "vec![1, 2]",
+        "prove!{ n == n }",
+        "prop![n == n]",
+        "todo!{}",
+        "println!(\"{}\", n)",
+    ] {
+        let parsed = parse_text(&format!("fn f(n: u8) -> u8 {{ let x = {text}; n }}"));
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0118")
+            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
+        if text.starts_with("println") {
+            assert!(
+                error.message.contains("not a form"),
+                "{text}: {}",
+                error.message
+            );
+        } else {
+            assert!(
+                error.message.contains("take parentheses"),
+                "{text}: {}",
+                error.message
+            );
+        }
+        // The rest of the function is still read.
+        assert_eq!(parsed.program.declarations.len(), 1, "{text}");
+    }
+    // `prop!` and `prove!` take one formula, no more and no fewer.
+    for text in ["prop!()", "prove!(a, b)", "prop!(,)"] {
+        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0118")
+            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
+        assert!(error.message.contains("takes one formula"), "{text}");
+    }
+}
+
+#[test]
+fn quantifiers_and_implication_are_read_only_inside_a_formula() {
+    // Inside: the three places a formula is written, nested anywhere in it.
+    for text in [
+        "prop!(forall (x: u8) { x == x })",
+        "prove!(exists (x: u8, y: u8) { x == y => y == x })",
+        "prop!(same(forall (x: u8) { true }, p => q) && !(a => b))",
+        "prop!(prop!(forall (x: u8) { x <= 255 }))",
+        "prop!({ let p = forall (x: u8) { x == x }; p })",
+    ] {
+        expression(text);
+    }
+    let expr = formula("forall (n: u8) { n == n => exists (m: u8) { m == n } }");
+    let ExprKind::Forall { parameters, body } = expr.kind else {
+        panic!()
+    };
+    assert_eq!(parameters[0].name.text, "n");
+    let (_, right) = binary(body.tail.as_ref().unwrap(), BinaryOp::Implies);
+    assert!(matches!(right.kind, ExprKind::Exists { .. }));
+    let parsed = parse_text("fn f(n: u8) -> @(forall (x: u8) { x <= n => x <= 255 }) { _ }");
+    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
+    let DeclarationKind::Function { result, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    let TypeKind::Proof(target) = &result.kind else {
+        panic!()
+    };
+    let ExprKind::Group(inner) = &target.kind else {
+        panic!("{target:?}")
+    };
+    assert!(matches!(inner.kind, ExprKind::Forall { .. }));
+
+    // Outside: `forall` and `exists` are names, and `=>` is an error that
+    // says where implication is written.
+    for text in [
+        "fn f(forall: u8, exists: u8) -> u8 { forall.wrapping_add(exists) }",
+        "fn forall(n: u8) -> u8 { let exists = n; exists }",
+        "fn f() -> u8 { forall(1) }",
+        "fn f() -> u8 { let forall = 3; forall }",
+        "fn f() -> u8 { exists }",
+    ] {
+        let parsed = parse_text(text);
+        assert!(parsed.is_success(), "{text}: {:?}", parsed.diagnostics);
+    }
+    let ExprKind::Call { callee, .. } = expression("forall(x)").kind else {
+        panic!()
+    };
+    assert!(matches!(&callee.kind, ExprKind::Name(name) if name.text == "forall"));
+    for (text, what) in [
+        (
+            "fn f(p: Prop, q: Prop) -> Prop { p => q }",
+            "`=>` is implication",
+        ),
+        (
+            "fn f() -> u8 { if a => b { 1 } else { 2 } }",
+            "`=>` is implication",
+        ),
+        (
+            "fn f() -> u8 { let x = (a => b); 1 }",
+            "`=>` is implication",
+        ),
+        (
+            "fn f() -> Prop { forall (x: u8) { x == x } }",
+            "`forall (...)` is a quantifier",
+        ),
+        (
+            "fn f() -> Prop { exists (x: u8) { x == x } }",
+            "`exists (...)` is a quantifier",
+        ),
+    ] {
+        let parsed = parse_text(text);
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0119")
+            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
+        assert!(error.message.contains(what), "{text}: {}", error.message);
+        assert!(error.message.contains("only inside a formula"), "{text}");
+        assert!(error.notes[0].contains("`prop!(...)`, `prove!(...)`, or `@(...)`"));
+    }
+}
+
+#[test]
+fn the_source_has_no_token_rust_lacks() {
+    // Every token kind the lexer produces is a token of Rust. The words of
+    // Locus lex as names; `=>` is Rust's fat arrow.
+    let lexed = lex_text("math prop def forall exists prove rewrite unfold fold old snapshot");
+    assert!(
+        lexed.tokens[..lexed.tokens.len() - 1]
+            .iter()
+            .all(|token| token.kind == K::Name)
+    );
+    let lexed = lex_text("prop!(a => b) @(c) prove!(d) x![y]");
+    assert_eq!(
+        kinds(&lexed),
+        [
+            K::Name,
+            K::Bang,
+            K::LParen,
+            K::Name,
+            K::Implies,
+            K::Name,
+            K::RParen,
+            K::At,
+            K::LParen,
+            K::Name,
+            K::RParen,
+            K::Name,
+            K::Bang,
+            K::LParen,
+            K::Name,
+            K::RParen,
+            K::Name,
+            K::Bang,
+            K::LBracket,
+            K::Name,
+            K::RBracket,
+            K::Eof
+        ]
+    );
 }

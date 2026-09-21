@@ -1,10 +1,10 @@
 // The retired `#` proof syntax, in a type and in an expression.
 prop Small(n: u8) {
-    Is(witness: @[n <= 9]),
+    Is(witness: @(n <= 9)),
 }
 
 fn first(n: u8, small: #Small(n)) -> u8 { n } //~ error: L0111 no longer proof syntax
 
-fn second(n: u8) -> (out: u8, @[out == n]) {
+fn second(n: u8) -> (out: u8, @(out == n)) {
     (n, #{ _ }) //~ error: L0111 no longer proof syntax
 }

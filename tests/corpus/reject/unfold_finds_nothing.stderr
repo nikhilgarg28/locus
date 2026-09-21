@@ -1,5 +1,5 @@
-error[L0229]: `unfold` found no use of `nonzero` to work on
+error[L0229]: `unfold!` found no use of `nonzero` to work on
  --> tests/corpus/reject/unfold_finds_nothing.lc:5:5
   |
-5 |     unfold(nonzero, h) //~ error: L0229 `unfold` found no use of `nonzero` to work on
-  |     ^^^^^^^^^^^^^^^^^^
+5 |     unfold!(nonzero, h) //~ error: L0229 `unfold!` found no use of `nonzero` to work on
+  |     ^^^^^^^^^^^^^^^^^^^

@@ -36,11 +36,11 @@ const STEP_FACTOR: usize = 4;
 
 /// Every spelling the lexer gives a token kind of its own.
 const TOKENS: &[&str] = &[
-    "fn", "def", "const", "let", "if", "else", "forall", "exists", "struct", "enum", "match",
-    "loop", "for", "in", "break", "continue", "true", "false", "_", "(", ")", "{", "}", "[", "]",
-    ",", ":", ";", ".", "..", "::", "#", "@", "+", "!", "=", "==", "!=", "<", "<=", ">", ">=",
-    "&&", "||", "->", "=>", "-", "*", "/", "%", "^", "&", "|", "<<", ">>", "+=", "-=", "*=", "/=",
-    "%=", "^=", "&=", "|=", "<<=", ">>=", "...", "..=", "<-", "?", "$", "~",
+    "fn", "const", "let", "if", "else", "struct", "enum", "match", "loop", "for", "in", "break",
+    "continue", "true", "false", "_", "(", ")", "{", "}", "[", "]", ",", ":", ";", ".", "..", "::",
+    "#", "@", "+", "!", "=", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "->", "=>", "-", "*",
+    "/", "%", "^", "&", "|", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<=",
+    ">>=", "...", "..=", "<-", "?", "$", "~",
 ];
 
 /// What Locus lexes because Rust has it: the keywords it reserves without
@@ -141,11 +141,20 @@ const RUST: &[&str] = &[
     ".0.1",
 ];
 
-/// Identifiers, including the contextual words and the names the examples
-/// use, and integers in valid and invalid spellings.
+/// Identifiers, including the contextual words, the names of the forms, the
+/// names the examples use, and integers in valid and invalid spellings.
 const WORDS: &[&str] = &[
     "math",
     "prop",
+    "def",
+    "forall",
+    "exists",
+    "prove",
+    "rewrite",
+    "unfold",
+    "fold",
+    "assert",
+    "vec",
     "Prop",
     "u8",
     "bool",
@@ -176,14 +185,14 @@ const WORDS: &[&str] = &[
 const FRAGMENTS: &[&str] = &[
     "fn f() -> u8 {",
     "math fn g(n: u8) -> Prop {",
-    "fn h(x: u8, p: @[x == x]) -> (out: u8, @[out == x]) {",
+    "fn h(x: u8, p: @(x == x)) -> (out: u8, @(out == x)) {",
     "struct S { x: u8, y: bool }",
     "struct S {",
     "enum E { A, B(u8), C(x: u8, bool) }",
     "enum E {",
-    "prop P(n: u8) { Zero: @P(0), Next(m: u8, @P(m)): @[true] }",
+    "prop P(n: u8) { Zero: @P(0), Next(m: u8, @P(m)): @(true) }",
     "prop P {",
-    "const c: Prop = [",
+    "const c: Prop = prop!(",
     "const k: u8 = 1;",
     "let x =",
     "let (a, _): (u8, bool) =",
@@ -208,9 +217,30 @@ const FRAGMENTS: &[&str] = &[
     "continue()",
     "forall (n: u8) {",
     "exists (n: u8, m: u8) {",
+    "prop!(forall (n: u8) {",
+    "prove!(exists (n: u8, m: u8) {",
+    "prop!(",
+    "prove!(",
+    "prove!(n <= 3);",
+    "@(",
+    "@(x == x)",
     "@[",
     "@p",
     "[x <= 3]",
+    "prop!(x <= 3)",
+    "rewrite!(",
+    "unfold!(same,",
+    "fold!(nonzero, h)",
+    "assert!(n < 3, \"small\")",
+    "panic!(\"no room\")",
+    "unreachable!()",
+    "vec![1, 2]",
+    "vec!(",
+    "foo!(",
+    "prove![",
+    "todo!{",
+    "!(",
+    "x!",
     "S { x:",
     "E::B(",
     "f(",

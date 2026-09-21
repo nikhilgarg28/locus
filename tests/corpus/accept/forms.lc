@@ -1,0 +1,47 @@
+// The built-in forms: `prove!` states a claim where it stands, as a
+// statement that stays known or as a value; `prop!` is a proposition; and
+// `rewrite!`, `unfold!`, and `fold!` are the explicit equality steps. The
+// words `forall` and `exists` are names outside a formula.
+
+math fn nonzero(x: u8) -> Prop {
+    prop!(x != 0)
+}
+
+// The statement leaves `n <= 9` in scope; the value is the second field.
+fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+    prove!(n <= 9);
+    let out = n.wrapping_add(1);
+    (out, prove!(out <= 10))
+}
+
+fn named(n: u8) -> (out: u8, @nonzero(out)) {
+    let out = if n == 0 { 1 } else { n };
+    let plain = prove!(out != 0);
+    (out, fold!(nonzero, plain))
+}
+
+math fn back(n: u8, h: @nonzero(n)) -> @(n != 0) {
+    unfold!(nonzero, h)
+}
+
+math fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
+    rewrite!(same, small)
+}
+
+fn exists(forall: u8, prove: u8) -> u8 {
+    let def = forall;
+    def.wrapping_add(prove)
+}
+
+const general: Prop = prop!(forall (x: u8) { x <= 9 => prop!(exists (y: u8) { x < y }) });
+
+// Two `prove!` in `bump`, one in `named`; each counts as one proof.
+//~ proofs: 3
+//~ run: bump(9, Proved) => (10, Proved)
+//~ run: bump(0, Proved) => (1, Proved)
+//~ run: named(0) => (1, Proved)
+//~ run: named(7) => (7, Proved)
+//~ run: exists(2, 3) => 5
+//~ rust: pub fn bump(n: u8, small: Proved) -> (u8, Proved) {
+//~ rust: (out, Proved)
+//~ rust: pub fn exists(forall: u8, prove: u8) -> u8 {

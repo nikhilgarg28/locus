@@ -1,0 +1,7 @@
+// Implication and the quantifiers are read only inside `prop!(...)`,
+// `prove!(...)`, and `@(...)`.
+math fn implies(p: Prop, q: Prop) -> Prop {
+    p => q //~ error: L0119 `=>` is implication only inside a formula
+}
+
+const reflexive: Prop = forall (n: u8) { n == n }; //~ error: L0119 `forall (...)` is a quantifier only inside a formula

@@ -131,14 +131,18 @@ impl Env<'_> {
                             "`_` asks for evidence, and nothing here says of what",
                             expr.span,
                         )
-                        .note("state the claim with an annotation: `let evidence: @[claim] = _;`"),
+                        .note("state the claim with an annotation, `let evidence: @claim = _;`, or where it stands, `prove!(claim)`"),
                     );
                     Err(())
                 }
             },
             ExprKind::Tuple(items) => self.tuple(items, expected, expr.span),
-            ExprKind::Proposition(_)
-            | ExprKind::Forall { .. }
+            ExprKind::Form {
+                form,
+                name_span,
+                arguments,
+            } => self.form(*form, *name_span, arguments, expected, expr.span),
+            ExprKind::Forall { .. }
             | ExprKind::Exists { .. }
             | ExprKind::Binary {
                 operator: BinaryOp::Implies,

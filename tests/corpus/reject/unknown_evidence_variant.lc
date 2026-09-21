@@ -1,13 +1,13 @@
 // A constructor the proposition does not have, built and matched.
 prop Small(n: u8) {
-    Below(bound: @[n < 10]),
+    Below(bound: @(n < 10)),
 }
 
-math fn build(n: u8, bound: @[n < 10]) -> @Small(n) {
+math fn build(n: u8, bound: @(n < 10)) -> @Small(n) {
     Small::Under(bound) //~ error: L0212 `Small` has no variant `Under`
 }
 
-math fn take(n: u8, small: @Small(n)) -> @[n < 10] {
+math fn take(n: u8, small: @Small(n)) -> @(n < 10) {
     match small {
         Small::Under(bound) => bound, //~ error: L0212 `Small` has no variant `Under`
     }

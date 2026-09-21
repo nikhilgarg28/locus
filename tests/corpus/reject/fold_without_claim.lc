@@ -1,7 +1,7 @@
-// `fold` with nothing to say which claim it should produce.
-math fn nonzero(x: u8) -> Prop { [x != 0] }
+// `fold!` with nothing to say which claim it should produce.
+math fn nonzero(x: u8) -> Prop { prop!(x != 0) }
 
-math fn first(n: u8, h: @[n != 0]) -> @nonzero(n) {
-    let folded = fold(nonzero, h); //~ error: L0229 `fold` needs to know the claim it should produce
+math fn first(n: u8, h: @(n != 0)) -> @nonzero(n) {
+    let folded = fold!(nonzero, h); //~ error: L0229 `fold!` needs to know the claim it should produce
     folded
 }

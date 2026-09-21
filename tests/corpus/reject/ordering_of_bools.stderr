@@ -1,5 +1,5 @@
 error[L0223]: ordering is defined on `u8`, and this is `bool`
  --> tests/corpus/reject/ordering_of_bools.lc:2:33
   |
-2 | fn first(a: bool, b: bool) -> @[a < b] { //~ error: L0223 ordering is defined on `u8`, and this is `bool`
+2 | fn first(a: bool, b: bool) -> @(a < b) { //~ error: L0223 ordering is defined on `u8`, and this is `bool`
   |                                 ^
