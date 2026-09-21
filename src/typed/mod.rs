@@ -9,7 +9,7 @@
 mod lower;
 mod tree;
 
-pub use lower::{FnRef, LowerError, Session};
+pub use lower::{FnRef, LowerError, Session, is_pure, value_term};
 pub use tree::{
     Binder, Block, CompareOp, EnumItem, Expr, FnItem, MatchArm, Pattern, Stmt, StructItem,
     VariantItem,

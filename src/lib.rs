@@ -5,6 +5,7 @@
 
 pub mod ast;
 pub mod diagnostic;
+pub mod elab;
 pub mod erased;
 pub mod exec;
 pub mod kernel;

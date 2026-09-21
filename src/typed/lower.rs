@@ -166,7 +166,7 @@ fn telescope(binders: &[Binder]) -> Type {
 
 /// Whether evaluating the expression always returns and transfers no
 /// control, so that it can be a kernel term.
-fn is_pure(expr: &Expr) -> bool {
+pub fn is_pure(expr: &Expr) -> bool {
     match expr {
         Expr::Var { .. }
         | Expr::Bool(_)
@@ -630,6 +630,61 @@ fn anf_form(expr: &Expr, out: &mut Vec<exec::Stmt>) -> Result<Term, LowerError> 
         | Expr::Prop(_)
         | Expr::Absurd { .. } => pure(expr)?,
     })
+}
+
+/// The term lowering uses for the expression's value, without lowering it:
+/// what `anf` returns. The elaborator states goals with it, so the two must
+/// agree; a disagreement shows up as a proof the kernel rejects, never as an
+/// accepted program.
+pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
+    if is_pure(expr) {
+        return pure(expr);
+    }
+    let each = |exprs: &[Expr]| -> Result<Vec<Term>, LowerError> {
+        exprs.iter().map(value_term).collect()
+    };
+    let form = match expr {
+        Expr::Tuple { ty, fields } => Term::tuple(ty, each(fields)?),
+        Expr::Struct { id, fields, .. } => Term::Struct(
+            *id,
+            fields
+                .iter()
+                .map(|(_, field)| value_term(field))
+                .collect::<Result<_, _>>()?,
+        ),
+        Expr::Variant {
+            id, index, payload, ..
+        } => Term::Variant(*id, *index, each(payload)?),
+        Expr::Field { target, index, .. } => Term::proj(value_term(target)?, *index),
+        Expr::Method {
+            prim,
+            receiver,
+            arguments,
+        } => {
+            let mut operands = vec![value_term(receiver)?];
+            operands.extend(each(arguments)?);
+            Term::prim(*prim, operands)
+        }
+        Expr::Compare { op, left, right } => compare(*op, value_term(left)?, value_term(right)?),
+        Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
+        Expr::CallFn { result, .. }
+        | Expr::If { result, .. }
+        | Expr::Match { result, .. }
+        | Expr::Loop { result, .. }
+        | Expr::For { result, .. } => Term::var(*result),
+        Expr::Block(block) => match block.tail.as_deref() {
+            Some(tail) => return value_term(tail),
+            None => unit(),
+        },
+        Expr::Break(_) | Expr::Continue(_) => return Err(LowerError::ControlInExpression),
+        Expr::Var { .. }
+        | Expr::Bool(_)
+        | Expr::U8(_)
+        | Expr::Proof(_)
+        | Expr::Prop(_)
+        | Expr::Absurd { .. } => return pure(expr),
+    };
+    Ok(canonical(expr, form))
 }
 
 fn lower_arms(arms: &[MatchArm]) -> Result<Vec<Arm>, LowerError> {

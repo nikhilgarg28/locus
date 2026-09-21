@@ -854,7 +854,7 @@ impl Term {
 
     /// Whether the term has no dangling bound index. Types and proofs inside
     /// it are not inspected; this is used only to choose rewrite targets.
-    pub(super) fn is_closed(&self) -> bool {
+    pub fn is_closed(&self) -> bool {
         self.closed_at(0)
     }
 
@@ -900,7 +900,7 @@ impl Term {
 
     /// The first subterm, outermost and leftmost, that satisfies `wanted`.
     /// Types and proofs inside the term are not searched.
-    pub(super) fn find(&self, wanted: &impl Fn(&Term) -> bool) -> Option<&Term> {
+    pub fn find(&self, wanted: &impl Fn(&Term) -> bool) -> Option<&Term> {
         fn first<'a>(terms: &'a [Term], wanted: &impl Fn(&Term) -> bool) -> Option<&'a Term> {
             terms.iter().find_map(|term| term.find(wanted))
         }
@@ -948,7 +948,7 @@ impl Term {
     /// `is_target` recognizes. `target` must be locally closed. Occurrences
     /// inside types and proofs are left alone, which keeps the template
     /// valid: opening it with `target` gives back this term.
-    pub(super) fn abstract_over(&self, is_target: &impl Fn(&Term) -> bool) -> Term {
+    pub fn abstract_over(&self, is_target: &impl Fn(&Term) -> bool) -> Term {
         self.abstract_at(is_target, 0)
     }
 
@@ -1014,7 +1014,7 @@ impl Term {
     }
 
     /// Replaces the outermost bound variable with a locally closed term.
-    pub(super) fn open(&self, replacement: &Term) -> Term {
+    pub fn open(&self, replacement: &Term) -> Term {
         self.rebind(
             Depth::default(),
             Rebind::OpenVar {

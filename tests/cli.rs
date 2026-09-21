@@ -41,7 +41,7 @@ fn tokens_have_spans_and_unsupported_commands_fail() {
     assert!(!stdout.contains("Hash"));
     assert!(stdout.contains("Eof"));
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
-        .arg("check")
+        .arg("compile")
         .arg(example("increment.loc"))
         .output()
         .unwrap();

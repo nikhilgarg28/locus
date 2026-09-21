@@ -109,7 +109,30 @@ pub fn print_module(module: &Module) -> String {
         printer.out.push_str(&body);
         printer.out.push('\n');
     }
-    printer.out
+    indent(&printer.out)
+}
+
+/// Indents by brace depth. The printer emits one statement per line and no
+/// string literals, so counting braces is exact.
+fn indent(source: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0usize;
+    for line in source.lines() {
+        let line = line.trim();
+        let closes_first = line.starts_with('}');
+        if closes_first {
+            depth = depth.saturating_sub(1);
+        }
+        if !line.is_empty() {
+            out.push_str(&"    ".repeat(depth));
+            out.push_str(line);
+        }
+        out.push('\n');
+        let opens = line.matches('{').count();
+        let closes = line.matches('}').count() - usize::from(closes_first);
+        depth = (depth + opens).saturating_sub(closes);
+    }
+    out
 }
 
 fn tuple_of(items: &[String]) -> String {
@@ -306,11 +329,12 @@ impl Printer<'_> {
                     Prim::WrappingSub => "wrapping_sub",
                     other => other.name(),
                 };
-                format!(
-                    "{}.{method}({})",
-                    self.expr(receiver),
-                    self.all(arguments).join(", ")
-                )
+                // Rust cannot choose a type for a bare literal receiver.
+                let receiver = match &**receiver {
+                    EExpr::U8(value) => format!("{value}_u8"),
+                    other => self.expr(other),
+                };
+                format!("{}.{method}({})", receiver, self.all(arguments).join(", "))
             }
             EExpr::Compare { op, left, right } => {
                 let op = match op {
