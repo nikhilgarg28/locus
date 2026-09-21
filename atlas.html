@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 34,
-  "savedAt": "2026-09-21T22:47:55.000Z",
+  "rev": 35,
+  "savedAt": "2026-09-21T22:49:01.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6653,12 +6653,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t269",
    "n": 153,
    "title": "H3 · Split src/elab/exprs.rs by construct, with no change in behaviour",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E1 (LOC-167).\n\nScope. exprs.rs is 1,400 lines and every later lane edits it. Split it into calls, control flow, patterns, operators, and blocks so that lanes touch different files.\n\nTests.\n- Every existing test passes unchanged.\n- No file under src/elab is over about 600 lines.\n\nDone when. Two people or agents can work in the elaborator at once without colliding.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. exprs.rs is now exprs, operators, data, calls, control, loops, blocks, and patterns, the largest 284 lines; 198 tests unchanged.\n\nLane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E1 (LOC-167).\n\nScope. exprs.rs is 1,400 lines and every later lane edits it. Split it into calls, control flow, patterns, operators, and blocks so that lanes touch different files.\n\nTests.\n- Every existing test passes unchanged.\n- No file under src/elab is over about 600 lines.\n\nDone when. Two people or agents can work in the elaborator at once without colliding.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T22:49:01.000Z"
   },
   {
    "id": "t270",
