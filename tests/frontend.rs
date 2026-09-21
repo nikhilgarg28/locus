@@ -347,50 +347,84 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
     std::thread::Builder::new()
         .stack_size(1024 * 1024)
         .spawn(|| {
-            for (open, close) in [
-                ("(", ")"),
-                ("[", "]"),
-                ("{", "}"),
-                ("!", ""),
-                ("p => ", ""),
-                ("f(", ")"),
-                ("if c { 1 } else { ", " }"),
-                ("match x { _ => ", " }"),
-                ("S { x: ", " }"),
-                ("for i in 0..n (s: u8 = ", ") { continue(s) }"),
-                ("loop () -> u8 { break ", " }"),
-            ] {
-                let text = format!(
-                    "fn f() -> u8 {{ {}1{} }}",
-                    open.repeat(512),
-                    close.repeat(512)
-                );
+            let limit_reported = |text: String, form: &str| {
                 assert!(
                     parse_text(&text)
                         .diagnostics
                         .iter()
                         .any(|error| error.code == "L0108"),
-                    "{open}"
+                    "{form}"
+                );
+            };
+            for (open, close) in [
+                ("(", ")"),
+                ("(1, ", ")"),
+                ("[", "]"),
+                ("{", "}"),
+                ("{ let x = ", "; 1 }"),
+                ("!", ""),
+                ("p => ", ""),
+                ("f(", ")"),
+                ("x.g(", ")"),
+                ("if c { 1 } else { ", " }"),
+                ("if c { 1 } else ", ""),
+                ("if ", " { 1 } else { 1 }"),
+                ("match x { _ => ", " }"),
+                ("match ", " { _ => 1 }"),
+                ("S { x: ", " }"),
+                ("for i in 0..n (s: u8 = ", ") { continue(s) }"),
+                ("for i in ", "..n () { continue() }"),
+                ("loop () -> u8 { break ", " }"),
+                ("loop (s: u8 = ", ") -> u8 { break s }"),
+                ("break ", ""),
+                ("continue(", ")"),
+                ("forall (n: u8) { ", " }"),
+                ("exists (n: u8) { ", " }"),
+            ] {
+                limit_reported(
+                    format!(
+                        "fn f() -> u8 {{ {}1{} }}",
+                        open.repeat(512),
+                        close.repeat(512)
+                    ),
+                    open,
                 );
             }
-            let types = format!("fn f() -> {}u8{} {{ 1 }}", "(".repeat(512), ")".repeat(512));
-            assert!(
-                parse_text(&types)
-                    .diagnostics
-                    .iter()
-                    .any(|error| error.code == "L0108")
-            );
-            let patterns = format!(
-                "fn f() -> u8 {{ let {}x{} = 1; 1 }}",
-                "(".repeat(512),
-                ")".repeat(512)
-            );
-            assert!(
-                parse_text(&patterns)
-                    .diagnostics
-                    .iter()
-                    .any(|error| error.code == "L0108")
-            );
+            for (open, close) in [
+                ("(", ")"),
+                ("(x: ", ",)"),
+                ("(u8, ", ")"),
+                ("fn(", ") -> u8"),
+                ("fn() -> ", ""),
+                ("math fn(x: ", ") -> u8"),
+                ("@[forall (h: ", ") { true }]"),
+            ] {
+                limit_reported(
+                    format!(
+                        "fn f() -> {}u8{} {{ 1 }}",
+                        open.repeat(512),
+                        close.repeat(512)
+                    ),
+                    open,
+                );
+            }
+            for (open, close) in [
+                ("(", ")"),
+                ("(_, ", ")"),
+                ("E::V(", ")"),
+                ("S { x: ", " }"),
+                ("S { ", " }"),
+            ] {
+                let (open, close) = (open.repeat(512), close.repeat(512));
+                limit_reported(
+                    format!("fn f() -> u8 {{ let {open}x{close} = 1; 1 }}"),
+                    &open,
+                );
+                limit_reported(
+                    format!("fn f() -> u8 {{ match y {{ {open}x{close} => 1 }} }}"),
+                    &open,
+                );
+            }
         })
         .unwrap()
         .join()

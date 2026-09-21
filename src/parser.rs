@@ -13,6 +13,18 @@ type ParseResult<T> = Result<T, ()>;
 pub struct Parsed {
     pub program: Program,
     pub diagnostics: Vec<Diagnostic>,
+    pub stats: ParseStats,
+}
+
+/// The work one parse did, for the tests of the progress guarantee: `steps`
+/// stays within a constant multiple of `tokens`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParseStats {
+    /// Tokens the lexer produced, the final end-of-file token included.
+    pub tokens: usize,
+    /// One for every iteration of a parser loop and one for every production
+    /// entered through the depth guard.
+    pub steps: usize,
 }
 
 impl Parsed {
@@ -28,8 +40,10 @@ pub fn parse(source: &SourceFile) -> Parsed {
         tokens: lexed.tokens,
         position: 0,
         depth: 0,
+        steps: 0,
         no_struct: false,
         for_header: false,
+        closers: None,
         diagnostics: lexed.diagnostics,
     }
     .program()
@@ -40,11 +54,15 @@ struct Parser<'a> {
     tokens: Vec<Token>,
     position: usize,
     depth: usize,
+    steps: usize,
     /// Set in the header of an `if`, `match`, or `for`, where `Name {` begins
     /// the following block rather than a struct literal.
     no_struct: bool,
     /// Set in the bounds of a `for`, where `( ... ) {` is the state list.
     for_header: bool,
+    /// For each opening delimiter, the token that closes it; built by the
+    /// first `for` header that asks, so that the lookahead is not a rescan.
+    closers: Option<Vec<Option<usize>>>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -52,6 +70,7 @@ impl Parser<'_> {
     fn program(mut self) -> Parsed {
         let mut program = Program::default();
         while !self.at(K::Eof) {
+            self.step();
             if self.eat(K::Error).is_some() {
                 continue;
             }
@@ -69,7 +88,20 @@ impl Parser<'_> {
         Parsed {
             program,
             diagnostics: self.diagnostics,
+            stats: ParseStats {
+                tokens: self.tokens.len(),
+                steps: self.steps,
+            },
         }
+    }
+
+    /// The progress guarantee, made countable. Every loop below calls this
+    /// once per iteration, and `nested` once per production it admits. The
+    /// position never moves back, an iteration consumes a token or is the last
+    /// of its loop, and a production consumes a token or fails, so the count
+    /// stays within a constant multiple of the number of tokens.
+    fn step(&mut self) {
+        self.steps += 1;
     }
 
     fn current(&self) -> Token {
@@ -147,6 +179,7 @@ impl Parser<'_> {
             );
             return Err(());
         }
+        self.step();
         self.depth += 1;
         let result = operation(self);
         self.depth -= 1;
@@ -241,6 +274,7 @@ impl Parser<'_> {
                 let opening = self.expect(K::LBrace)?;
                 let mut variants = Vec::new();
                 while !self.at(K::RBrace) && !self.at(K::Eof) {
+                    self.step();
                     let name = self.name()?;
                     let (fields, end) = self.variant_fields(name.span)?;
                     variants.push(Variant {
@@ -307,6 +341,7 @@ impl Parser<'_> {
         let opening = self.expect(K::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
             let name = self.name()?;
             let (fields, mut end) = self.variant_fields(name.span)?;
             let target = if self.eat(K::Colon).is_some() {
@@ -351,6 +386,7 @@ impl Parser<'_> {
         let opening = self.expect(K::LParen)?;
         let mut fields = Vec::new();
         while !self.at(K::RParen) && !self.at(K::Eof) {
+            self.step();
             fields.push(self.type_field()?);
             if self.eat(K::Comma).is_none() {
                 break;
@@ -368,6 +404,7 @@ impl Parser<'_> {
         let opening = self.expect(open)?;
         let mut parameters = Vec::new();
         while !self.at(close) && !self.at(K::Eof) {
+            self.step();
             let name = self.name()?;
             self.expect(K::Colon)?;
             let ty = self.ty()?;
@@ -448,6 +485,7 @@ impl Parser<'_> {
                 }
                 let mut fields = vec![first];
                 while !self.at(K::RParen) && !self.at(K::Eof) {
+                    self.step();
                     fields.push(self.type_field()?);
                     if self.eat(K::Comma).is_none() {
                         break;
@@ -531,6 +569,7 @@ impl Parser<'_> {
                     let opening = self.bump();
                     let mut arguments = Vec::new();
                     while !self.at(K::RParen) && !self.at(K::Eof) {
+                        self.step();
                         arguments.push(self.pattern()?);
                         if self.eat(K::Comma).is_none() {
                             break;
@@ -554,6 +593,7 @@ impl Parser<'_> {
                 let opening = self.bump();
                 let mut fields = Vec::new();
                 while !self.at(K::RBrace) && !self.at(K::Eof) {
+                    self.step();
                     let start = self.current().span;
                     let name = if self.peek(1) == K::Colon {
                         let name = self.name()?;
@@ -624,6 +664,7 @@ impl Parser<'_> {
                 }
                 let mut patterns = vec![first];
                 while !self.at(K::RParen) && !self.at(K::Eof) {
+                    self.step();
                     patterns.push(self.pattern()?);
                     if self.eat(K::Comma).is_none() {
                         break;
@@ -660,6 +701,7 @@ impl Parser<'_> {
         let mut statements = Vec::new();
         let mut tail = None;
         while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
             // A declaration here usually means the preceding function lost its `}`.
             if self.declaration_start() {
                 self.close(K::RBrace, opening)?;
@@ -761,6 +803,7 @@ impl Parser<'_> {
         let mut left = self.prefix()?;
         let mut chain = 0;
         loop {
+            self.step();
             if chain >= MAX_EXPRESSION_CHAIN {
                 return self.chain_limit();
             }
@@ -1020,6 +1063,7 @@ impl Parser<'_> {
         }
         let mut elements = vec![first];
         while !self.at(K::RParen) && !self.at(K::Eof) {
+            self.step();
             elements.push(self.expression()?);
             if self.eat(K::Comma).is_none() {
                 break;
@@ -1102,6 +1146,7 @@ impl Parser<'_> {
             let opening = parser.expect(K::LParen)?;
             let mut arguments = Vec::new();
             while !parser.at(K::RParen) && !parser.at(K::Eof) {
+                parser.step();
                 arguments.push(parser.expression()?);
                 if parser.eat(K::Comma).is_none() {
                     break;
@@ -1114,22 +1159,11 @@ impl Parser<'_> {
 
     /// In the bounds of a `for`, the parenthesized group directly before the
     /// body is the state list, not a call on the upper bound.
-    fn state_list_follows(&self) -> bool {
-        let mut depth = 0usize;
-        for (offset, token) in self.tokens[self.position..].iter().enumerate() {
-            match token.kind {
-                K::LParen | K::LBrace | K::LBracket => depth += 1,
-                K::RParen | K::RBrace | K::RBracket => {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        return self.peek(offset + 1) == K::LBrace;
-                    }
-                }
-                K::Eof => return false,
-                _ => {}
-            }
-        }
-        false
+    fn state_list_follows(&mut self) -> bool {
+        let closers = self
+            .closers
+            .get_or_insert_with(|| matching_delimiters(&self.tokens));
+        closers[self.position].is_some_and(|closer| self.tokens[closer + 1].kind == K::LBrace)
     }
 
     #[inline(never)]
@@ -1139,6 +1173,7 @@ impl Parser<'_> {
         let fields = self.unrestricted(|parser| {
             let mut fields = Vec::new();
             while !parser.at(K::RBrace) && !parser.at(K::Eof) {
+                parser.step();
                 let start = parser.current().span;
                 let name = if parser.peek(1) == K::Colon {
                     let name = parser.name()?;
@@ -1174,6 +1209,7 @@ impl Parser<'_> {
         let arms = self.unrestricted(|parser| {
             let mut arms = Vec::new();
             while !parser.at(K::RBrace) && !parser.at(K::Eof) {
+                parser.step();
                 let pattern = parser.pattern()?;
                 if !parser.at(K::Implies) {
                     return parser.fail("expected `=>` between a match arm's pattern and its body");
@@ -1258,6 +1294,7 @@ impl Parser<'_> {
             let opening = parser.expect(K::LParen)?;
             let mut state = Vec::new();
             while !parser.at(K::RParen) && !parser.at(K::Eof) {
+                parser.step();
                 let name = parser.name()?;
                 parser.expect(K::Colon)?;
                 let ty = parser.ty()?;
@@ -1303,6 +1340,7 @@ impl Parser<'_> {
     fn recover_declaration(&mut self) {
         let mut depth = 0usize;
         while !self.at(K::Eof) {
+            self.step();
             let kind = self.current().kind;
             if depth == 0 && self.declaration_start() {
                 return;
@@ -1319,6 +1357,7 @@ impl Parser<'_> {
     fn recover_statement(&mut self) {
         let mut depth = 0usize;
         while !self.at(K::Eof) {
+            self.step();
             let kind = self.current().kind;
             if depth == 0 {
                 if kind == K::RBrace || kind == K::Let || self.declaration_start() {
@@ -1337,6 +1376,26 @@ impl Parser<'_> {
             self.bump();
         }
     }
+}
+
+/// Pairs delimiters by depth alone, as the recovery loops do: `(`, `{`, and
+/// `[` open, and any closer closes the nearest open one. One pass over the
+/// tokens.
+fn matching_delimiters(tokens: &[Token]) -> Vec<Option<usize>> {
+    let mut closers = vec![None; tokens.len()];
+    let mut open = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match token.kind {
+            K::LParen | K::LBrace | K::LBracket => open.push(index),
+            K::RParen | K::RBrace | K::RBracket => {
+                if let Some(opener) = open.pop() {
+                    closers[opener] = Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    closers
 }
 
 fn binary(kind: K) -> Option<(BinaryOp, u8, u8)> {
