@@ -89,13 +89,15 @@ def plan(data):
     for task in data["tasks"]:
         if task["project"] == project["id"] and " · " in task["title"]:
             tasks[task["title"].split(" · ")[0]] = task
-    lane, deps = {}, {}
+    lane, deps, lane_line = {}, {}, {}
     for key, task in tasks.items():
         lines = task["notes"].split("\n")
-        found = re.match(r"Lane: (\w+)\.", lines[0])
+        at = next((i for i, l in enumerate(lines) if l.startswith("Lane: ")), None)
+        found = re.match(r"Lane: (\w+)\.", lines[at]) if at is not None else None
         after = next((l for l in lines if l.startswith("Depends on:")), None)
         if not found or found.group(1) not in PLAN_LANES or after is None:
-            sys.exit("%s: the notes must start with 'Lane: X.' and have a 'Depends on:' line" % key)
+            sys.exit("%s: the notes must have a 'Lane: X.' line and a 'Depends on:' line" % key)
+        lane_line[key] = at
         lane[key] = found.group(1)
         deps[key] = re.findall(r"\b([A-Z]\d+)\b", after.split(":", 1)[1])
         for dep in deps[key]:
@@ -118,7 +120,7 @@ def plan(data):
     order = sorted(tasks, key=lambda k: tasks[k]["n"])
     for key in order:
         lines = [l for l in tasks[key]["notes"].split("\n") if not l.startswith("Unblocks:")]
-        lines[0] = "Lane: %s. Wave %d." % (lane[key], wave[key])
+        lines[lane_line[key]] = "Lane: %s. Wave %d." % (lane[key], wave[key])
         at = next(i for i, l in enumerate(lines) if l.startswith("Depends on:"))
         lines[at] = "Depends on: %s." % (", ".join(ref(d) for d in deps[key]) or "nothing")
         unblocks = [k for k in order if key in deps[k]]

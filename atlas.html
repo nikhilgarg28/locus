@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 37,
-  "savedAt": "2026-09-21T22:56:33.000Z",
+  "rev": 39,
+  "savedAt": "2026-09-21T23:13:41.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2382,10 +2382,16 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "The second guarantee is bounded recursion. Every recursive cycle in the grammar passes through a type, a pattern, a block, an expression, or an if, and each of these is entered through one guard that refuses with diagnostic L0108 once 64 levels are open, while a chain of postfix and binary operators at one level is a loop limited to 128 links and reports the same code. The nesting test runs each nesting form of expressions, types, and patterns 512 levels deep on a 1 MB stack in a debug build and requires the limit diagnostic rather than a stack overflow. It passes on 640 KB and not on 512 KB, so new forms must keep the frames between guards small.",
     "",
-    "Every commit passes tools/check.sh: fmt, clippy with warnings denied, and the tests with fixed seeds. tools/check.sh --extended runs the tests in release with the fuzz counts a hundred times larger."
+    "Every commit passes tools/check.sh: fmt, clippy with warnings denied, and the tests with fixed seeds. tools/check.sh --extended runs the tests in release with the fuzz counts a hundred times larger.",
+    "",
+    "## What erasure preserves",
+    "",
+    "Erasure preserves the outcome of a call. If the check-IR program returns a value, the erased program returns the same value, with every ghost position filled by its marker. If the check-IR program panics, the erased program panics with the same message, and nothing that would have run after the panic runs in either. If the check-IR program does not return, the erased program does not return either. Fuel is not part of this statement. It belongs to the interpreters, which are test oracles, and it exists so that a test of a program that does not return ends. Running out of fuel means only that a run saw neither a value nor a panic within its budget. The two interpreters spend fuel at different rates, so a comparison in which either side ran out of fuel is inconclusive. The same holds for a compiled program that was killed at its timeout. Neither is agreement, and neither is evidence that the program diverges.",
+    "",
+    "Both interpreters return one type, Outcome: a value, a panic with its message, or out of fuel. Nothing in the check IR can panic yet; the erased tree has a panic expression that only hand-built trees reach. The corpus runner calls every run line under catch_unwind in two builds of the generated Rust, with overflow checks on and off, and restarts the program after a run line that goes silent for the length of the timeout."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T22:56:33.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "kernel-contract",
@@ -3096,23 +3102,30 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## How mutation is checked",
     "",
-    "The typed tree stays shaped like the source, so that the generated Rust assigns where the programmer assigned. The check IR has no assignment. Trusted lowering gives each assignment a new version of the variable, and the check IR stays what it is today: lets, facts, calls, matches, and loops that pass their state. This section is the design, written before the code (LOC-129). It says what is added to the check IR, what lowering does, what is trusted, and works eight cases by hand; each case becomes a test of the same name.",
+    "The typed tree stays shaped like the source, so that the generated Rust assigns where the programmer assigned. The check IR has no assignment. Trusted lowering gives each assignment a new version of the variable, and the check IR stays what it is today: lets, facts, calls, matches, and loops that pass their state. This section is the design, written before the code (LOC-129). It says what is added to the check IR, what lowering does, what is trusted, and works eleven cases by hand; each case becomes a test of the same name. It was reviewed and revised on 21 September.",
     "",
     "### What is trusted, and what watches it",
     "",
     "- Trusted: the checker of the check IR; lowering, which here means versions, which variables a branch or loop assigns, the writing back of &mut arguments, and the disjointness of those arguments; and erase.",
     "- Not trusted: the flow analysis in the elaborator, which decides whether tracked evidence is valid, whether a value has been moved, which evidence a loop carries, and which version a diagnostic names. Its mistakes cannot make a false claim pass. A use of stale evidence lowers to a proof about an old version where a claim about the current one is wanted, and the kernel rejects it. A use of a moved value is harmless in the logic, where values are values, and rustc rejects the generated Rust.",
-    "- Lowering computes the set of variables a loop or branch assigns itself, syntactically and generously: every variable assigned or passed as &mut anywhere inside, nested blocks included. It does not take the set from the flow analysis. Leaving one out would keep facts about a variable the program has changed, which is the one way this translation can be unsound.",
+    "- Lowering computes the set of variables a loop or branch assigns itself, and does not take it from the flow analysis. Leaving one out would keep facts about a variable the program has changed, which is the one way this translation can be unsound. The set is computed over binding identities, not names:",
+    "  - a binding made outside the construct and assigned anywhere inside it, nested blocks included, is in the set; so is one passed as &mut, or whose field path is;",
+    "  - a write to a field counts as a write to the root binding of the path;",
+    "  - a binding made inside the construct is local to it and is never in the set, since it has no value at entry; a loop with let mut scratch in its body does not carry scratch;",
+    "  - a binding that shadows an outer one is a different binding, so assigning to the inner leaves the outer out of the set, and assigning to the outer before it is shadowed puts it in;",
+    "  - the condition of a while is part of the loop, so an assignment or a &mut call in the condition counts.",
+    "  Each of these five has a small test of its own in M2 and M3, on the check IR that lowering produces and through the two interpreters.",
+    "- Lowering follows Rust's order of evaluation exactly, one subexpression at a time, and each subexpression sees the versions current when it runs: arguments left to right; in an assignment, the right side first, with everything it writes back, and the place last. A translation that is well typed and out of order is one the checker cannot catch, so the order is part of what is trusted, and the interpreters watch it (case 9).",
     "- The two interpreters are compared on every program. The interpreter of the check IR runs the versions, the interpreter of the erased tree runs the assignments, and a variable missed by lowering shows as a disagreement on any input that reaches it. The random programs of R1 assign in branches and loops for this reason.",
     "",
     "### Added to the check IR",
     "",
     "Four additions and one simplification.",
     "",
-    "- A function carries its promises. The checker enforces what erasure and the boundary with Rust rely on: a function that promises no_panic calls only functions that promise it, has evidence at every operation that may panic, and has evidence of false at every panic ending; a function that promises terminates contains no loop and calls only functions that promise it. Recursion is already impossible, since a function is checked against those declared before it. The elaborator checks the same promises first, to give good errors; the checker's word is the one that counts.",
+    "- A function carries its promises, all four. The checker enforces what erasure and the boundary with Rust rely on. A function that promises no_panic calls only functions that promise it, has evidence at every operation that may panic, and has evidence of false at every panic ending. A function that promises terminates contains no loop and calls only functions that promise it. A function that promises no_io, or no_alloc, calls only functions that promise the same, and uses no primitive that performs I/O, or allocates; the core has no such primitive yet, and the rule is there so that the first one cannot slip past. Erasure removes a call only on the strength of terminates, no_panic, and no_io, so none of the three can rest on the elaborator alone. Recursion is already impossible, since a function is checked against those declared before it. The elaborator checks the same promises first, to give good errors; the checker's word is the one that counts.",
     "- Return, as a way for a block to end. The value is checked against the function's result type in the context of that point, exactly as the value of the body is. It may stand anywhere, inside loops included, and like break it means the block produces no value.",
     "- Panic, as a way for a block to end, with its message. It demands nothing, and under no_panic it demands a proof of false. Nothing follows it.",
-    "- A primitive operation that may panic, as a statement: let v = a + b for a machine type, from the table of K5. Its equation is the meaning that holds in every build: for + - * the wrapped result, for / and % the truncating result of the views. It may carry a proof that the panic condition is false; under no_panic it must. With the proof, the exact result is also known (the view of v is the sum of the views). Without it nothing more is known, except that for / and % the code that follows learns that the panic condition was false, since these panic in every build. The interpreter of the check IR panics when the condition holds, or wraps when run in wrapping mode.",
+    "- A primitive operation that may panic, as a statement: let v = a + b for a machine type, from the table of K5. Its equation is the meaning that holds in every build: for + - * the wrapped result, for / and % the truncating result of the views. It may carry a proof that the panic condition is false; under no_panic it must. With the proof, the exact result is also known (the view of v is the sum of the views). Without it nothing more is known, except that for / and % the code that follows learns that the panic condition was false, since these panic in every build. The interpreters have two modes, as Rust has two builds. In the default mode every panic condition of the table panics. In wrapping mode the overflow of + - * and of unary minus wraps, and nothing else changes: division and remainder by zero still panic, and so do MIN / -1 and MIN % -1, as they do in every Rust build. Unary minus exists on signed types only; its panic condition is that the operand is MIN, and its wrapped result is MIN.",
     "- The bounded for is simplified. Its state no longer depends on the index, because evidence declared outside a for cannot speak of the hidden index, so the state is a plain tuple as for loop, the proof that the bounds are ordered is dropped (an empty range runs no passes), and break is allowed with the loop's state. It is stated for every integer type. The body still gets lo \u003c= i and i \u003c hi afresh on each pass.",
     "",
     "Nothing else changes. In particular a match in statement position already allows an arm to transfer control and produce no value.",
@@ -3122,12 +3135,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Assignment. x = e becomes let x' = e, and later mentions of x mean x'. Assignment to a field path, lock.failures = e, becomes let lock' = Lock { failures: e, open: lock.open }. The new value is an ordinary struct value and must be well typed, so a field that an evidence field of the same struct depends on cannot be assigned alone: the rebuilt value would carry evidence about the old field, and the kernel rejects it. The whole value is replaced. This is the rule already stated under Mutation and references, and here it falls out of the translation.",
     "- Tracked evidence. let mut ok: @P = proof becomes the fact ok : P at the current versions. ok = proof becomes a new fact ok' : P read at the versions current at that line. A use of ok is the latest of these. An assignment to x does nothing to ok in the check IR; ok is still a true fact, about the old x. Whether ok may be used is the flow analysis's question, and the kernel's answer if the analysis is wrong.",
     "- What mentions means. Tracked evidence is invalidated by an assignment to a variable its type mentions as written. A name bound by let is a value and a snapshot, so let p = prop!(x \u003c= 3); let mut ok: @p = ...; mentions p and not x, and an assignment to x leaves it valid, correctly, since p is still the proposition about the old x.",
-    "- A branch that assigns. When the whole conditional is pure, each variable it assigns becomes a let whose value is a conditional term, so its new value is known exactly. Otherwise the conditional lowers to a match whose result is a tuple: the new versions of the variables assigned in any arm, then the tracked evidence that is valid at the end of every arm that reaches the end, typed over those new versions, then the value of the conditional. An arm that returns, breaks, continues, or panics contributes nothing, which is how a path that leaves does not count at the join.",
+    "- A branch that assigns has one representation. A conditional or match in which no arm assigns an outer binding is lowered as it is today: as a term when it is pure, which keeps its defining equation, and as a match statement otherwise. Pure means that every part is a term of the logic: literals, names, fields, constructors, comparisons, the wrapping methods, conditionals and matches of the same kind, and calls to functions that may appear in propositions (terminates, no_panic, no_io, no &mut); and no operation that may panic, no loop, no assignment, and no return, break, continue, or panic. As soon as any arm assigns an outer binding, the conditional lowers to a match whose result is a tuple: the new versions of the variables assigned in any arm, then the tracked evidence that is valid at the end of every arm that reaches the end, typed over those new versions, then the value of the conditional. An arm that returns, breaks, continues, or panics contributes nothing, which is how a path that leaves does not count at the join. The condition or scrutinee is evaluated before any arm, at the versions current on entry. Nothing is known of a joined variable beyond what the evidence in the tuple says, even when both arms are simple; an exact equation for the join, where every arm is pure, could be added later and is left out now so that there is one translation to audit (case 10).",
     "- A loop. The state is a tuple: the variables assigned in the body, then the tracked evidence declared outside and carried by the loop, typed over them. Every continue, and the end of the body, supplies that state at the current versions; so does the entry. The loop's result is a tuple of the same shape, plus the value of a break, plus the fact of the exit test when the loop is a while with a pure condition and no break. while c { body } is a loop whose body matches on c and breaks in the false arm. Which evidence is carried is chosen by the flow analysis (what is valid on entry and used afterwards or on a later pass); choosing too little loses facts and choosing too much leaves an obligation unproved at a continue, and neither is unsound.",
     "- A call with &mut arguments. In the logic the callee takes the old values and returns a tuple of the new values of its &mut parameters followed by its declared result, whose type may mention them, with old!(x) for the entry value. At the call, lowering binds the result, then writes each new value back along its path as an assignment does. Lowering rejects two &mut arguments whose paths overlap, and a &mut argument that overlaps a path another argument reads. This check is small and is trusted, because two values written back to one place would let the logic keep the wrong one.",
+    "- What may be lent. A field that evidence in the same struct depends on cannot be assigned alone, and for the same reason it cannot be lent: &mut percent.value is rejected by lowering, as is any path through such a field. The callee would write to it at runtime before the caller could rebuild and recheck anything, and a panic in between would leave a broken value where a Rust caller can find it. &mut percent is accepted, since whoever holds a whole Percent can only replace it with a valid one. This rule, with the rule on assignment, gives an invariant that does not depend on which path a function leaves by: at every moment of execution, every value of a struct type satisfies the evidence in its fields. It is the argument for safety under unwinding, and it is about writes, not about returns.",
+    "- When a call panics. Writes made through &mut before a panic are real, and a Rust caller that catches the panic sees them. The logic needs nothing for this: partial correctness speaks only of normal return, and the invariant above is what protects values on the other path. The interpreters and the comparison with compiled Rust do need it, or a wrong write-back on the way out would go unseen. So a panic as an outcome carries the values of the function's &mut parameters at the moment of the panic. In the check IR, every point that may panic, a panic ending, an operation that may panic, or a call, is annotated by lowering with the current versions of the function's &mut parameters, and at a call these are written in terms of the values the callee reports for its own. The checker ignores the annotations; only the interpreter reads them, so a mistake in them is a false alarm in the comparison and never a false proof. The compiled harness reads the arguments after catch_unwind and compares. This arrives with references, in O3; until then a panic carries its message alone, and the outcome type is a struct so that the state can be added without touching its users.",
     "- Moves and reinitialising produce nothing in the check IR. x = e after a move is an assignment like any other.",
     "",
-    "### The eight cases",
+    "### The cases",
     "",
     "**1. A branch that refreshes against one that returns early.**",
     "",
@@ -3199,7 +3214,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "let done = settle(&mut pair.lo, &mut pair.hi, le);",
     "~~~",
     "",
-    "In the logic settle takes (a, b, le) and returns (a', b', @(a' == b')). The call binds r, then let pair1 = Pair { lo: r.0, hi: r.1 }, and done is r.2, whose type after the opening of the pattern is pair1.lo == pair1.hi. settle(&mut pair.lo, &mut pair.lo, ...) and settle(&mut pair, &mut pair.hi, ...) are rejected by lowering as overlapping, and by rustc. If Pair carried evidence about lo and hi, the rebuilt pair1 would need that evidence, and the programmer would pass &mut pair to a function that returns a whole valid Pair.",
+    "In the logic settle takes (a, b, le) and returns (a', b', @(a' == b')). The call binds r, then let pair1 = Pair { lo: r.0, hi: r.1 }, and done is r.2, whose type after the opening of the pattern is pair1.lo == pair1.hi. settle(&mut pair.lo, &mut pair.lo, ...) and settle(&mut pair, &mut pair.hi, ...) are rejected by lowering as overlapping, and by rustc. If Pair carried evidence about lo and hi, neither field could be lent at all, and the programmer would pass &mut pair to a function that replaces it with a whole valid Pair.",
     "",
     "**7. An operation that may panic.**",
     "",
@@ -3224,11 +3239,49 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "}",
     "~~~",
     "",
-    "self.value = v alone is rejected, by the rule on assignment above: the rebuilt value is ill typed. The whole value is written by one assignment, whose operands Rust evaluates before it writes, so a panic comes either before the write, leaving the old valid value, or not at all. No broken Percent exists at any moment for a Rust caller to find after catch_unwind, and the no_panic rule of LOC-191 has nothing to forbid in the core. It stays recorded for the day field-by-field update with a refresh is allowed, when there would be a window between the write and the refresh. The test from the Rust side, which catches a panic from set and reads the survivor, stays in O4.",
+    "self.value = v alone is rejected, by the rule on assignment above: the rebuilt value is ill typed. The whole value is written by one assignment, whose operands Rust evaluates before it writes, so a panic comes either before the write, leaving the old valid value, or not at all. Nor can the field be lent: helper(&mut self.value) is rejected, because helper would write before anyone rechecks. No broken Percent exists at any moment for a Rust caller to find after catch_unwind, which is the invariant stated under What lowering does, and the no_panic rule of LOC-191 has nothing to forbid in the core. It stays recorded for the day field-by-field update with a refresh is allowed, when there would be a window between the write and the refresh. The test from the Rust side, which catches a panic from set and reads the survivor, stays in O4.",
+    "",
+    "**9. The right side changes what the left side names.**",
+    "",
+    "~~~",
+    "fn touch(p: &mut Pair) -> u32 { p.hi = 7; 3 }",
+    "",
+    "pair.lo = touch(&mut pair);         // Rust leaves lo == 3 and hi == 7",
+    "~~~",
+    "",
+    "The right side runs first, with its write-back: the call binds r, and let pair1 = r.0 is the Pair with hi == 7. Only then is the place updated, from the version current at that point: let pair2 = Pair { lo: r.1, hi: pair1.hi }. Rebuilding from pair0 would give hi its old value, would be perfectly well typed, and would be wrong; the checker could not tell. The test asserts lo == 3 and hi == 7 in both interpreters and in compiled Rust. The same order governs arguments: in f(pair.lo, touch(&mut pair)) the first argument is read before the call changes pair, and in f(touch(&mut pair), pair.hi) after.",
+    "",
+    "**10. Both arms assign and refresh, and the condition reads what an arm assigns.**",
+    "",
+    "~~~",
+    "if x \u003c 2 {                          // the condition reads x on entry",
+    "    x = 1;",
+    "    ok = prove!(x \u003c= 2);",
+    "} else {",
+    "    x = 2;",
+    "    ok = prove!(x \u003c= 2);",
+    "}",
+    "use_it(x, ok);",
+    "~~~",
+    "",
+    "A match on x0 \u003c 2. The true arm knows (x0 \u003c 2) == true, has let x1 = 1 and the fact ok1 : x1 \u003c= 2, and ends in the value (x1, ok1). The false arm likewise with x2 = 2 and ok2. The result of the match is r of type (x: u8, @(x \u003c= 2)), a tuple whose second part is typed over its first; each arm's value is checked against it, which asks for x1 \u003c= 2 of ok1 and x2 \u003c= 2 of ok2. After the match the current x is r.0 and the current ok is r.1, a proof of r.0 \u003c= 2, which is what use_it wants. Nothing else is known of r.0; that it is 1 or 2 is not recorded, by the choice made above, and a program that needs it carries it as evidence in the same way. If one arm left out its refresh, the analysis would report ok as invalid after the join, and a broken analysis would put ok0, a proof about x0, in that arm's tuple, which the kernel rejects against x \u003c= 2 at x1.",
+    "",
+    "**11. A replacement that completes, and then a panic.**",
+    "",
+    "~~~",
+    "impl Percent {",
+    "    fn set_then_fail(&mut self, v: u32, fits: @(v \u003c= 100)) {",
+    "        *self = Percent { value: v, in_range: fits };",
+    "        panic!(\"after the write\");",
+    "    }",
+    "}",
+    "~~~",
+    "",
+    "A Rust caller, through a wrapper that needs no evidence, catches the panic and reads the Percent it lent. It finds the new value, valid. The logic has nothing to say, since the function does not return. The interpreters report the panic together with the value of self at that moment, which is the new one, and the compiled harness agrees. This is the test that a write before a panic is neither lost nor half done; with case 8, where the panic comes before the write, it covers both sides of the one assignment.",
     "",
     "### Left open by this design",
     "",
-    "Diagnostics that name versions need the line of each assignment kept on the version, which is cheap. Tracked evidence is in local variables and parameters only, invalidated by whole variable and not by path. Whether a while with a break should still export a fact about its exit is left until an example wants it.",
+    "Diagnostics that name versions need the line of each assignment kept on the version, which is cheap. Tracked evidence is in local variables and parameters only, invalidated by whole variable and not by path. Whether a while with a break should still export a fact about its exit, and whether a join of pure arms should keep an exact equation, are left until an example wants them.",
     "",
     "Plan: LOC-142, LOC-129, and M0 to M5 of the Build plan.",
     "",
@@ -3286,7 +3339,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T22:47:55.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "target-examples",
@@ -3712,7 +3765,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Recursion and decreases, shared references with lifetimes, generics and traits, Seq, Map, and Set, usize and slices, bit operators and shifts, match parity, floats, modules across files and packages, the header and implementation split, and the polish list. Each has its project in the Plan."
    ],
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:41:03.000Z"
+   "updated": "2026-09-21T23:13:41.000Z"
   },
   {
    "id": "working-notes",
@@ -6397,12 +6450,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t244",
    "n": 129,
    "title": "Design the checked IR for mutation, early exit, and panics before coding it",
-   "status": "doing",
+   "status": "done",
    "priority": 4,
    "project": "p89",
-   "notes": "This is commit M0 (LOC-176) of the Build plan.\n\nA gate: mutation is not implemented until this is written (21 September, after review). The design must state, for each case below, the versions, the facts available at each point, and the types of results, and not only whether the program is accepted:\n1. One branch refreshes tracked evidence; the other returns early.\n2. A loop with several continue and break paths.\n3. Snapshot evidence survives an assignment, while tracked evidence needs a refresh.\n4. A proposition value captures an old value, and then becomes the type of tracked evidence.\n5. A value is moved and initialized again, with evidence about its earlier state in scope.\n6. A call changes two disjoint fields and returns evidence about both.\n\nDirection decided 21 September (Target language: How mutation is checked): versions, in lowering, watched by comparing the two interpreters. The design itself is still to be written.\n\nRaised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
+   "notes": "Done 21 September as M0 of the Build plan, after one review. Target language: How mutation is checked.\n\nThis is commit M0 (LOC-176) of the Build plan.\n\nA gate: mutation is not implemented until this is written (21 September, after review). The design must state, for each case below, the versions, the facts available at each point, and the types of results, and not only whether the program is accepted:\n1. One branch refreshes tracked evidence; the other returns early.\n2. A loop with several continue and break paths.\n3. Snapshot evidence survives an assignment, while tracked evidence needs a refresh.\n4. A proposition value captures an old value, and then becomes the type of tracked evidence.\n5. A value is moved and initialized again, with evidence about its earlier state in scope.\n6. A call changes two disjoint fields and returns evidence about both.\n\nDirection decided 21 September (Target language: How mutation is checked): versions, in lowering, watched by comparing the two interpreters. The design itself is still to be written.\n\nRaised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t245",
@@ -6774,9 +6827,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 5.\nDepends on: K4 (LOC-162).\nUnblocks: E6 (LOC-172).\nCovers: LOC-121, LOC-12.\n\nScope. One trusted table with a row for each type and each of + - * / %, and for the wrapping methods. The panic condition and the meaning are terms over the model of K4.\n\nTests.\n- At 8 bits, every pair of operands for every row: the panic condition holds exactly when Rust's checked operation returns None, and otherwise the meaning equals Rust's result.\n- At wider types the boundary set crossed with itself, and random pairs.\n- MIN / -1 and MIN % -1 as named tests for each signed type.\n\nDone when. The table is small enough to read and is tested against Rust row by row.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Kernel. Wave 5.\nDepends on: K4 (LOC-162).\nUnblocks: E6 (LOC-172).\nCovers: LOC-121, LOC-12.\n\nScope. One trusted table with a row for each type and each of + - * / %, and for the wrapping methods. The panic condition and the meaning are terms over the model of K4.\n\nTests.\n- At 8 bits, every pair of operands for every row: the panic condition holds exactly when Rust's checked operation returns None, and otherwise the meaning equals Rust's result.\n- At wider types the boundary set crossed with itself, and random pairs.\n- MIN / -1 and MIN % -1 as named tests for each signed type.\n- Unary minus on the signed types: panics when the operand is MIN, wraps to MIN. In wrapping mode only the overflow of + - * and unary minus wraps; / and % by zero, MIN / -1, and MIN % -1 panic in every build, and the table says so row by row.\n\nDone when. The table is small enough to read and is tested against Rust row by row.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t280",
@@ -6848,12 +6901,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t286",
    "n": 170,
    "title": "E4 · A panic is a third outcome: the interpreters, the erased tree, and the harness",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-138.\n\nScope. Preparation only, with no surface syntax and no checked semantics. Both interpreters return a value, a panic with its message, or out of fuel. The erased tree and the printer gain a panic expression, reached for now only from trees built by hand. The compiled harness calls each function under catch_unwind, can build with overflow checks on or off, and runs the program under a process timeout; a timeout is reported as inconclusive and never as a disagreement or as divergence. The statement of erasure in Architecture is restated for three outcomes.\n\nTests.\n- Erased trees built by hand that panic agree with their compiled Rust, message included.\n- Out of fuel stays distinct from a panic and is never compared as one.\n- The harness is tested on a program that loops forever: inconclusive, and the rest of the batch is still compared.\n\nDone when. Tests can say f(255) => panic. What a panic means to the checker comes with M1 for block endings and with E6 for operators.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. One Outcome type for both interpreters (Value, Panic(message), OutOfFuel); EExpr::Panic; the corpus runner understands => panic and => panic: message, builds twice (overflow checks on and off), and treats out of fuel and a timeout as inconclusive. Notes for later commits: the erased check now lets any never-yielding subexpression through and stops checking what follows it in a block, which M1 should tighten so that dead arms are still checked; an untyped panic in a let can defeat Rust's inference (E0282), so M1 needs a type on the let or on the panic. When O3 adds the state of &mut parameters to a panic, Panic becomes a struct.\n\nLane: Elaborator. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-138.\n\nScope. Preparation only, with no surface syntax and no checked semantics. Both interpreters return a value, a panic with its message, or out of fuel. The erased tree and the printer gain a panic expression, reached for now only from trees built by hand. The compiled harness calls each function under catch_unwind, can build with overflow checks on or off, and runs the program under a process timeout; a timeout is reported as inconclusive and never as a disagreement or as divergence. The statement of erasure in Architecture is restated for three outcomes.\n\nTests.\n- Erased trees built by hand that panic agree with their compiled Rust, message included.\n- Out of fuel stays distinct from a panic and is never compared as one.\n- The harness is tested on a program that loops forever: inconclusive, and the rest of the batch is still compared.\n\nDone when. Tests can say f(255) => panic. What a panic means to the checker comes with M1 for block endings and with E6 for operators.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:53:26.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t287",
@@ -6914,12 +6967,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t292",
    "n": 176,
    "title": "M0 · Write the design of the checked IR for mutation, early exit, panics, and operations that may panic",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 1.\nDepends on: nothing.\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-129.\n\nScope. A section of Target language, not code. For each of the six cases of LOC-129 it shows the source, the check IR after lowering to versions, and what the checker demands at each point: a branch that refreshes against one that returns early; several continue and break paths; snapshot against tracked evidence; a captured proposition used as a tracked type; move and reinitialise; a call that changes two disjoint fields. A seventh case covers a primitive operation that may panic, under no_panic and outside it, since E6 needs it before the rest. An eighth covers a protected value behind &mut when a panic unwinds, once that rule is decided.\n\nTests.\n- Each case is written so that it can be copied into a test in M2 to M4 and O3.\n- Reviewed by Nikhil before M1 starts.\n\nDone when. The gate. No mutation code is written before this is agreed.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Written 21 September, reviewed, and revised the same day: evaluation order as part of the trusted translation, binding identities for the assigned set, one representation for a join that assigns, what may be lent, what a panic carries, all four promises in the checker, wrapping mode by operation, and cases 9 to 11. Target language: How mutation is checked.\n\nLane: Mutation. Wave 1.\nDepends on: nothing.\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-129.\n\nScope. A section of Target language, not code. For each of the six cases of LOC-129 it shows the source, the check IR after lowering to versions, and what the checker demands at each point: a branch that refreshes against one that returns early; several continue and break paths; snapshot against tracked evidence; a captured proposition used as a tracked type; move and reinitialise; a call that changes two disjoint fields. A seventh case covers a primitive operation that may panic, under no_panic and outside it, since E6 needs it before the rest. An eighth covers a protected value behind &mut when a panic unwinds, once that rule is decided.\n\nTests.\n- Each case is written so that it can be copied into a test in M2 to M4 and O3.\n- Reviewed by Nikhil before M1 starts.\n\nDone when. The gate. No mutation code is written before this is agreed.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t293",
@@ -6928,9 +6981,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 3.\nDepends on: M0 (LOC-176), E4 (LOC-170).\nUnblocks: M2 (LOC-178), E10 (LOC-190).\nCovers: LOC-142, LOC-93.\n\nScope. src/exec only: the IR, its checker, and its interpreter. At a return the checker demands the function's result type; at a panic it demands nothing, or under no_panic evidence that the point is unreachable.\n\nTests.\n- Programs built by hand in the IR, as exec_check does today: a return inside a branch, a panic inside a branch, both.\n- A return with the wrong evidence is rejected at the return.\n- Architecture's account of the trusted base is updated.\n\nDone when. The checker is ready before any surface syntax reaches it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Mutation. Wave 3.\nDepends on: M0 (LOC-176), E4 (LOC-170).\nUnblocks: M2 (LOC-178), E10 (LOC-190).\nCovers: LOC-142, LOC-93.\n\nScope. src/exec only: the IR, its checker, and its interpreter. At a return the checker demands the function's result type; at a panic it demands nothing, or under no_panic evidence that the point is unreachable.\n\nTests.\n- Programs built by hand in the IR, as exec_check does today: a return inside a branch, a panic inside a branch, both.\n- A return with the wrong evidence is rejected at the return.\n- Architecture's account of the trusted base is updated.\n- All four promises are enforced by the checker, no_io and no_alloc included, each with a hand-built function that breaks it.\n- The erased check still checks the arms and statements that follow a never-yielding expression, which E4 stopped doing.\n- A let bound to a panic gets a type in the generated Rust, so that inference cannot fail (E0282).\n\nDone when. The checker is ready before any surface syntax reaches it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t294",
@@ -6939,9 +6992,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n- Case 9: the right side changes what the left side names; lo == 3 and hi == 7 three ways. The same for the two argument orders.\n- Case 10: both arms assign and refresh, and the condition reads the entry version.\n- The assigned set, on the check IR lowering produces and through both interpreters: an outer binding assigned in a nested block; a field write counting for its root; a local let mut inside a branch staying local; a shadowing binding assigned while the outer one is not, and the reverse.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t295",
@@ -6950,9 +7003,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n- The assigned set for loops: a let mut inside the body is not loop state; an assignment in a while condition is; a &mut call in the condition is, once O3 lands.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t296",
@@ -7005,9 +7058,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n- A field that evidence in its struct depends on cannot be lent: &mut percent.value is rejected by lowering, and &mut percent is accepted.\n- A panic carries the values of the &mut parameters at that moment, in both interpreters and in the compiled harness, which reads the arguments after catch_unwind. A callee that writes and then panics, called directly and through a caller that lent a field of its own &mut parameter.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t301",
@@ -7016,9 +7069,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Ownership. Wave 11.\nDepends on: O2 (LOC-183), O3 (LOC-184).\nUnblocks: R4 (LOC-189).\n\nScope. Methods and associated functions in impl blocks, with self, &self, and &mut self. The Percent example checks and builds, with an enum of its own in place of Option, which waits for generics.\n\nTests.\n- Percent moves from parse-only to run.\n- The Rust caller crate of O2 uses Percent: checked works, new is not visible, the fields are not visible.\n- The Rust caller calls a method that updates a Percent through &mut self under catch_unwind, with an input chosen to make it panic if anything can, and then reads the value that survives: it satisfies the invariant. If the rule decided forbids the method instead, the rejected file is the test.\n\nDone when. The fourth milestone: every program in Target examples works.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Ownership. Wave 11.\nDepends on: O2 (LOC-183), O3 (LOC-184).\nUnblocks: R4 (LOC-189).\n\nScope. Methods and associated functions in impl blocks, with self, &self, and &mut self. The Percent example checks and builds, with an enum of its own in place of Option, which waits for generics.\n\nTests.\n- Percent moves from parse-only to run.\n- The Rust caller crate of O2 uses Percent: checked works, new is not visible, the fields are not visible.\n- The Rust caller calls a method that updates a Percent through &mut self under catch_unwind, with an input chosen to make it panic if anything can, and then reads the value that survives: it satisfies the invariant. If the rule decided forbids the method instead, the rejected file is the test.\n- Case 11: a method that completes one valid replacement and then panics; the Rust caller finds the new valid value.\n\nDone when. The fourth milestone: every program in Target examples works.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:31.000Z"
   },
   {
    "id": "t302",
