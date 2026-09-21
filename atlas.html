@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 13,
-  "savedAt": "2026-09-21T20:49:51.000Z",
-  "nextTask": 125,
-  "nextId": 239,
+  "rev": 14,
+  "savedAt": "2026-09-21T20:54:27.000Z",
+  "nextTask": 127,
+  "nextId": 242,
   "taskPrefix": "LOC"
  },
  "docs": [
@@ -434,7 +434,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "   - as between integer types wraps, never panics, and is valid everywhere. as Int is exact. A literal that does not fit its type is an error.",
     "   - Floats follow from the same test. Their arithmetic never panics, so it may be written in a proposition, where it is an operation the logic knows nothing about: out == a + b can be stated and used, and no algebra follows from it. Equality in a proposition is the logic's, which holds of any value and itself; Rust's == on floats is a different function, which NaN fails, and the two must not be confused. How that is spelled is to be settled with floats.",
     "   - The reference interpreter panics on overflow, the stricter of Rust's two behaviors, and generated Rust is compared with it in a build with overflow checks.",
-    "   - Still open: whether a comparison in a proposition may mix integer types, as in out == x as Int + 1 with out a u32. A comparison of two integers has one mathematical meaning whatever their types, which argues for allowing it; Rust does not allow it, which argues for writing out as Int.",
+    "   - A comparison is between two values of one type, in code and in propositions alike, and Int is a type like any other here: out as Int == x as Int + 1, not out == x as Int + 1. This is Rust's rule, and it keeps every conversion into the logic visible.",
+    "   - How the language knows that + on a u8 or an i32 may panic. The operations of the built-in types are a table in the compiler: for each operator and type, the result type, the condition under which it panics, stated over the Int values of the operands, and what the result is to the logic. + - * of every integer type panic when the exact result is out of range in a build that checks; / and % panic on a zero divisor, and on the smallest value over -1 for a signed type; negating the smallest value of a signed type overflows; comparisons, as, the wrapping_ methods, and the operators of bool never panic. The table is part of what is trusted, beside the table from constructs to effects of item 4, and the kernel's models of the machine types are what it is stated in. Once traits exist the table is presented as the implementations of the operator traits for the built-in types in the standard library, so that a built-in operator and one a programmer defines are found and judged the same way.",
+    "   - Operators a programmer defines, as Rust allows through the operator traits (Add, Sub, Mul, Div, Rem, Neg, Not, the comparison traits, Index), arrive with traits. One question they raise is open. A built-in + is usable in code that promises no_panic because it has a condition under which it does not panic, and that condition becomes an obligation where it is used. A function a programmer writes has no way to state such a condition except by taking evidence as a parameter, and a + b has no place to pass evidence. So an Add for Meters whose body adds two u32 could not be used under no_panic. The candidates are a promise that carries its condition, or evidence parameters on an operator's implementation that every use fills with a hole, which does not fit the signature Rust's trait fixes.",
     "   - What this asks of the kernel: Int as an ordered ring, where there is only Nat with addition today; for each machine type a view to Int and a wrap from Int, generalizing the present model of u8; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
     "",
     "## 15.2 Open questions",
@@ -522,7 +524,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T20:49:51.000Z"
+   "updated": "2026-09-21T20:54:27.000Z"
   },
   {
    "id": "language",
@@ -4149,6 +4151,17 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "anchor": "",
    "project": "p181",
    "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "f241",
+   "area": "Functions, effects, and references",
+   "name": "Operators a programmer defines, through the operator traits",
+   "status": "planned",
+   "note": "Item 14. Arrives with traits; how such an operator states when it does not panic is open.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p24",
+   "updated": "2026-09-21T20:54:27.000Z"
   }
  ],
  "projects": [
@@ -5594,12 +5607,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t228",
    "n": 117,
    "title": "Decide whether a comparison in a proposition may mix integer types",
-   "status": "todo",
+   "status": "done",
    "priority": 1,
    "project": "p89",
-   "notes": "Notes, item 14. out == x as Int + 1 with out a u32, or out as Int == x as Int + 1.",
+   "notes": "Decided 21 September: no. A comparison is always within one type, Int included: out as Int == x as Int + 1. Notes, item 14.\n\nNotes, item 14. out == x as Int + 1 with out a u32, or out as Int == x as Int + 1.",
    "created": "2026-09-21T20:49:51.000Z",
-   "updated": "2026-09-21T20:49:51.000Z"
+   "updated": "2026-09-21T20:54:27.000Z"
   },
   {
    "id": "t230",
@@ -5641,9 +5654,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 0,
    "project": "p229",
-   "notes": "Overflow for + - *; zero divisor and the smallest value over -1 for / and %.",
+   "notes": "Overflow for + - *; zero divisor and the smallest value over -1 for / and %.\n\nThis is the table of notes item 14: for each operator and type, the result type, the panic condition over the Int values of the operands, and the result to the logic. It is trusted.",
    "created": "2026-09-21T20:49:51.000Z",
-   "updated": "2026-09-21T20:49:51.000Z"
+   "updated": "2026-09-21T20:54:27.000Z"
   },
   {
    "id": "t234",
@@ -5677,6 +5690,28 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Until Int is in the language these are built in the kernel's own terms, as theory.rs is today.",
    "created": "2026-09-21T20:49:51.000Z",
    "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t239",
+   "n": 125,
+   "title": "Operators a programmer defines, through the operator traits as in Rust",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p24",
+   "notes": "Notes, item 14. Add, Sub, Mul, Div, Rem, Neg, Not, the comparison traits, Index. Valid in a proposition exactly when the implementation promises terminates, no_panic, and no_io. The table of built-in operations becomes the standard library's implementations of these traits for the built-in types.",
+   "created": "2026-09-21T20:54:27.000Z",
+   "updated": "2026-09-21T20:54:27.000Z"
+  },
+  {
+   "id": "t240",
+   "n": 126,
+   "title": "Decide how an operator a programmer defines states the condition under which it does not panic",
+   "status": "todo",
+   "priority": 1,
+   "project": "p89",
+   "notes": "Notes, item 14. a + b has no place to pass evidence, so Add for Meters, whose body adds two u32, could not be used under no_panic. Candidates: a promise that carries its condition; or evidence parameters on the implementation that every use fills with a hole, which does not fit the signature Rust's trait fixes. Not needed before traits.",
+   "created": "2026-09-21T20:54:27.000Z",
+   "updated": "2026-09-21T20:54:27.000Z"
   }
  ]
 }
