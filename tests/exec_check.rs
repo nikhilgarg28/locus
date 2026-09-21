@@ -1,4 +1,4 @@
-//! The exec checker on hand-built check IR (docs/architecture.md): the
+//! The exec checker on hand-built check IR (Architecture in atlas.html): the
 //! programs of the specification, written out the way `lower` will produce
 //! them, and the ways they must be rejected.
 

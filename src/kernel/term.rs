@@ -241,7 +241,7 @@ impl Prim {
 }
 
 /// The axioms of the internal `Nat` and of the `u8` model. Each takes terms
-/// and yields a fixed proposition about them; see `docs/kernel-contract.md`.
+/// and yields a fixed proposition about them; see the kernel contract in `atlas.html`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Axiom {
     /// `a + 0 == a`

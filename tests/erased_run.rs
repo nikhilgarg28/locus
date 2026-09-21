@@ -1,5 +1,5 @@
 //! Erasure, the erased tree's type checker, and the reference interpreter
-//! (docs/architecture.md): the specification's programs, erased and run.
+//! (Architecture in atlas.html): the specification's programs, erased and run.
 
 mod common;
 

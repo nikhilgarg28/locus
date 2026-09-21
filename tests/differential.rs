@@ -1,4 +1,4 @@
-//! The two branches from the typed tree must agree (docs/architecture.md).
+//! The two branches from the typed tree must agree (Architecture in atlas.html).
 //! The checker sees the lowering of a typed tree; the machine runs its
 //! erasure. Here a ghost-skipping interpreter for the check IR and the
 //! reference interpreter for the erased tree run every program on the same

@@ -1,5 +1,5 @@
 //! The kernel bounds how deeply its input may nest, so that checking
-//! untrusted input cannot exhaust the stack (docs/kernel-contract.md).
+//! untrusted input cannot exhaust the stack (the kernel contract in atlas.html).
 
 use locus::kernel::derive::Chain;
 use locus::kernel::{

@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K5 (docs/kernel-contract.md): the internal
+//! Acceptance tests for kernel gate K5 (the kernel contract in atlas.html): the internal
 //! `Nat` with induction, the `u8` model, reflection of runtime comparisons,
 //! and agreement between native evaluation and the model.
 //! Every term here is written by hand; nothing comes from the parser.

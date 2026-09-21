@@ -1,5 +1,5 @@
 //! The checking judgments. Each arm of `infer_proof` is one rule of
-//! `docs/kernel-contract.md`.
+//! the kernel contract in `atlas.html`.
 
 use super::context::{Context, Mode};
 use super::defs::Prelude;

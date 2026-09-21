@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K6 (docs/kernel-contract.md): the range
+//! Acceptance tests for kernel gate K6 (the kernel contract in atlas.html): the range
 //! iteration rule, with state whose type depends on the index.
 //! Every term here is written by hand; nothing comes from the parser.
 

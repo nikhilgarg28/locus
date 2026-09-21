@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K1 (docs/kernel-contract.md): terms, the
+//! Acceptance tests for kernel gate K1 (the kernel contract in atlas.html): terms, the
 //! three-kinded context with upgrade, comparison up to renaming, equality
 //! with reflexivity and transport, and internal `Forall` and `Implies`.
 //! Gate K2 is tested in `tests/kernel_products.rs`.

@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 0,
-  "savedAt": "",
+  "rev": 1,
+  "savedAt": "2026-09-21T19:31:46.000Z",
   "nextTask": 77,
   "nextId": 166,
   "taskPrefix": "LOC"
@@ -135,9 +135,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "readme",
    "title": "Overview",
    "group": "Overview",
-   "path": "README.md",
    "body": [
-    "# Locus",
+    "# Locus: overview",
     "",
     "*Review the guarantees, check the implementation, and use the result from ordinary Rust.*",
     "",
@@ -176,17 +175,18 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "`check`, `run`, and `rust` stop at the first stage that reports an error. Errors in the source exit with status 1, errors in the command line with status 2. Diagnostic color is enabled for terminals unless `NO_COLOR` is set. `run` takes `u8` and `bool` arguments.",
     "",
-    "## Documents",
+    "## Where things are",
     "",
-    "`atlas.html` is the one tool for following the project: open it in a browser to read and edit every document below, the table of what in the language is built and what is left, and the projects and tasks. It saves into itself. `python3 tools/atlas.py export` writes the markdown files from it, `import` reads them back, and `status` says which differ.",
+    "Everything about the project is in this one file, `atlas.html`, and nowhere else.",
     "",
     "| | |",
     "|---|---|",
-    "| [docs/notes.md](docs/notes.md) | The only document about the future: positioning, agreed directions, open questions, deferred features |",
-    "| [docs/roadmap.md](docs/roadmap.md) | Batches of work, written from the projects and tasks in the atlas |",
-    "| [docs/language.md](docs/language.md) | The language as specified now, with its grammar and its relationship to Rust's features |",
-    "| [docs/architecture.md](docs/architecture.md) | How the compiler is built: the representations, the trusted base, the elaborator and its proof search |",
-    "| [docs/kernel-contract.md](docs/kernel-contract.md) | Every kernel rule, with exact premises and conclusion; it changes together with the kernel |",
+    "| [Notes](notes.md) | The only document about the future: positioning, agreed directions, open questions, deferred features. Its Working notes section is for free-form notes |",
+    "| [Projects](roadmap.md) and tasks | Batches of work, not in sequence, and the tasks in them |",
+    "| Language status | Every feature of the language and the compiler: built, designed, planned, deferred, or unsure |",
+    "| [Language](language.md) | The language as specified now, with its grammar and its relationship to Rust's features |",
+    "| [Architecture](architecture.md) | How the compiler is built: the representations, the trusted base, the elaborator and its proof search |",
+    "| [Kernel contract](kernel-contract.md) | Every kernel rule, with exact premises and conclusion; it changes together with the kernel |",
     "",
     "A fact about the future lives only in the notes. When something is built, its text moves from there into the document that describes what exists.",
     ""
@@ -198,11 +198,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "notes",
    "title": "Notes",
    "group": "Design",
-   "path": "docs/notes.md",
    "body": [
     "# Notes",
     "",
-    "This is the one place that speaks about the future of Locus: what it is for, what has been agreed and not yet built, what is undecided, and what is deferred. The other documents describe only what exists: [language.md](language.md) is the language as specified now, [architecture.md](architecture.md) is how the compiler is built, and [kernel-contract.md](kernel-contract.md) states the kernel's rules. The batches of work are the projects in `atlas.html`, from which [roadmap.md](roadmap.md) is written. When something here is built, its text moves into one of those documents and leaves this one.",
+    "This is the one place that speaks about the future of Locus: what it is for, what has been agreed and not yet built, what is undecided, and what is deferred. The other documents describe only what exists: [Language](language.md) is the language as specified now, [Architecture](architecture.md) is how the compiler is built, and the [Kernel contract](kernel-contract.md) states the kernel's rules. The batches of work are the [projects](roadmap.md). When something here is built, its text moves into one of those documents and leaves this one.",
     "",
     "Section numbers such as \"section 10\" refer to language.md. \"Item 8\" refers to the numbered items under Accepted directions.",
     "",
@@ -494,7 +493,6 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "language",
    "title": "Language",
    "group": "Reference",
-   "path": "docs/language.md",
    "body": [
     "# The Locus language",
     "",
@@ -2390,7 +2388,6 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "architecture",
    "title": "Architecture",
    "group": "Reference",
-   "path": "docs/architecture.md",
    "body": [
     "# Architecture",
     "",
@@ -2677,7 +2674,6 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "kernel-contract",
    "title": "Kernel contract",
    "group": "Reference",
-   "path": "docs/kernel-contract.md",
    "body": [
     "# Kernel contract",
     "",
@@ -4901,7 +4897,7 @@ function serialize(db) {
   return JSON.stringify(out, null, 1).replace(/</g, '\\u003c');
 }
 let DB = parseData($('#atlas-data').textContent);
-let dirty = false, fileHandle = null, specFilter = 'all', boardProject = 'all', boardText = '', showCanceled = false;
+let dirty = false, fileHandle = null, baseRev = DB.meta.rev, specFilter = 'all', boardProject = 'all', boardText = '', showCanceled = false;
 const newId = p => p + (DB.meta.nextId++);
 const docById = id => DB.docs.find(d => d.id === id);
 const projectById = id => DB.projects.find(p => p.id === id);
@@ -4912,7 +4908,7 @@ function touch() {
   renderSaveState();
   clearTimeout(touch.timer);
   touch.timer = setTimeout(() => {
-    try { localStorage.setItem('locus-atlas-draft', JSON.stringify({rev: DB.meta.rev, at: now(), data: serialize(DB)})); } catch (e) { /* storage may be unavailable */ }
+    try { localStorage.setItem('locus-atlas-draft', JSON.stringify({rev: baseRev, at: now(), data: serialize(DB)})); } catch (e) { /* storage may be unavailable */ }
   }, 600);
 }
 
@@ -4935,9 +4931,14 @@ function idb(mode, fn) {
     };
   });
 }
+// The revision of the data in a copy of this file, or null when it cannot be read.
+function revisionOf(text) {
+  const start = text.indexOf(FILE_2), end = text.indexOf(FILE_3, start);
+  if (start < 0 || end < 0) return null;
+  try { return JSON.parse(text.slice(start + FILE_2.length, end)).meta.rev; } catch (e) { return null; }
+}
 async function save() {
-  DB.meta.rev += 1; DB.meta.savedAt = now();
-  const text = buildFile();
+  const previous = {rev: DB.meta.rev, savedAt: DB.meta.savedAt};
   try {
     if (window.showSaveFilePicker) {
       if (!fileHandle) { try { fileHandle = await idb('readonly', s => s.get('handle')); } catch (e) { fileHandle = null; } }
@@ -4946,18 +4947,24 @@ async function save() {
         fileHandle = await window.showSaveFilePicker({suggestedName: 'atlas.html', types: [{description: 'HTML', accept: {'text/html': ['.html']}}]});
         try { await idb('readwrite', s => s.put(fileHandle, 'handle')); } catch (e) { /* remembered for this session only */ }
       }
-      const w = await fileHandle.createWritable(); await w.write(text); await w.close();
+      // Something else may have written the file since this page read it.
+      const onDisk = revisionOf(await (await fileHandle.getFile()).text());
+      if (onDisk != null && onDisk !== baseRev && !confirm('The file on disk has changed since this page loaded it: it is at revision ' + onDisk + ', and this page started from revision ' + baseRev + '. Saving now replaces what is on disk. Reload the page instead to see those changes.\n\nSave anyway?')) return;
+      DB.meta.rev = Math.max(DB.meta.rev, onDisk || 0) + 1; DB.meta.savedAt = now();
+      const w = await fileHandle.createWritable(); await w.write(buildFile()); await w.close();
       toast('Saved to ' + fileHandle.name);
     } else {
+      DB.meta.rev += 1; DB.meta.savedAt = now();
+      const text = buildFile();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([text], {type: 'text/html'})); a.download = 'atlas.html';
       document.body.appendChild(a); a.click(); a.remove();
       toast('Downloaded atlas.html. Replace the old file with it.');
     }
-    dirty = false;
+    dirty = false; baseRev = DB.meta.rev;
     try { localStorage.removeItem('locus-atlas-draft'); } catch (e) { /* ignore */ }
   } catch (e) {
-    DB.meta.rev -= 1;
+    DB.meta.rev = previous.rev; DB.meta.savedAt = previous.savedAt;
     if (e && e.name !== 'AbortError') toast('Could not save: ' + e.message);
   }
   renderSaveState();
@@ -4965,7 +4972,7 @@ async function save() {
 function draft() {
   try {
     const d = JSON.parse(localStorage.getItem('locus-atlas-draft') || 'null');
-    return d && d.rev === DB.meta.rev ? d : null;
+    return d && d.rev === baseRev ? d : null;
   } catch (e) { return null; }
 }
 
@@ -5124,7 +5131,16 @@ function stackedBar(table, counts) {
 }
 const countBy = (list, key) => list.reduce((acc, x) => { acc[x[key]] = (acc[x[key]] || 0) + 1; return acc; }, {});
 
-function route() { return (location.hash.replace(/^#\/?/, '') || '').split('/'); }
+// The page keeps its own idea of where it is, and only mirrors it into the address. Some
+// places a page can be shown in never deliver hashchange, and some forbid changing the address.
+let current = location.hash || '#/';
+function route() { return (current.replace(/^#\/?/, '') || '').split('/'); }
+function go(hash) {
+  current = hash || '#/';
+  try { if (location.hash !== current) history.pushState(null, '', current); } catch (e) { /* the address stays as it was */ }
+  render();
+}
+function syncFromAddress() { if ((location.hash || '#/') !== current) { current = location.hash || '#/'; render(); } }
 function renderShell() {
   const groups = [];
   DB.docs.forEach(d => { if (groups.indexOf(d.group || 'Docs') < 0) groups.push(d.group || 'Docs'); });
@@ -5189,7 +5205,7 @@ function viewDoc(id) {
   if (!d) return '<div class="page"><h1>No such document</h1></div>';
   const r = renderMarkdown(d.body, {editable: true, docId: d.id});
   const toc = r.headings.filter(h => h.level === 2 || h.level === 3).map(h => '<a class="l' + h.level + '" href="#/doc/' + d.id + '/' + h.id + '">' + esc(h.text.replace(/[`*]/g, '')) + '</a>').join('');
-  return '<div class="page wide"><div class="head"><div><p class="tiny">' + esc(d.group || 'Docs') + (d.path ? ', mirrors <span class="mono">' + esc(d.path) + '</span>' : '') + ', edited ' + ago(d.updated) + '</p></div>' +
+  return '<div class="page wide"><div class="head"><div><p class="tiny">' + esc(d.group || 'Docs') + ', edited ' + ago(d.updated) + '</p></div>' +
     '<div class="row"><a class="btn" href="#/edit/' + d.id + '">Edit</a><button class="btn ghost" data-act="doc-settings" data-id="' + d.id + '">Settings</button></div></div>' +
     '<div class="doc"><article class="md">' + r.html + '</article><nav class="toc">' + toc + '</nav></div></div>';
 }
@@ -5223,14 +5239,13 @@ function applyEdit() {
     d.body = lines.join('\n');
   } else d.body = text + '\n';
   d.updated = now(); touch();
-  location.hash = '#/doc/' + d.id;
+  go('#/doc/' + d.id);
 }
 function docSettings(id) {
   const d = id ? docById(id) : null;
   modal('<h2>' + (d ? 'Document settings' : 'New document') + '</h2>' +
     '<label class="f">Title</label><input class="text" id="ds-title" value="' + esc(d ? d.title : '') + '">' +
     '<label class="f">Group in the sidebar</label><input class="text" id="ds-group" value="' + esc(d ? d.group : (docSettings.group || 'Design')) + '">' +
-    '<label class="f">Markdown file it mirrors (optional)</label><input class="text mono" id="ds-path" value="' + esc(d ? d.path || '' : '') + '" placeholder="docs/name.md">' +
     '<div class="row" style="margin-top:16px;justify-content:space-between"><span>' + (d ? '<button class="btn danger ghost" data-act="doc-delete" data-id="' + d.id + '">Delete</button>' : '') + '</span>' +
     '<span class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="doc-save" data-id="' + (d ? d.id : '') + '">' + (d ? 'Save' : 'Create') + '</button></span></div>');
 }
@@ -5376,7 +5391,7 @@ function viewSearch(q) {
 const val = id => { const e = document.getElementById(id); return e ? e.value : ''; };
 const HELP = '<h2>How this file works</h2><div class="md"><p>Everything is inside this one HTML file: the documents, the language status table, the projects and tasks, and the program that shows them. Nothing is sent anywhere.</p>' +
   '<p><strong>Saving.</strong> Press Save file, or Cmd/Ctrl+S. In Chrome, Edge and Arc the first save asks where the file is; choose this file, and later saves write to it directly. In other browsers a new copy is downloaded, to put in place of the old one. Unsaved edits are also kept in the browser, and offered back if the page is closed before saving.</p>' +
-  '<p><strong>Markdown mirrors.</strong> A document can name the markdown file it mirrors. <code>python3 tools/atlas.py export</code> writes those files from this one, <code>import</code> reads them back, and <code>status</code> says which differ.</p>' +
+  '<p><strong>One copy.</strong> The documents live only here. <code>python3 tools/atlas.py</code> reads and writes them from the command line: <code>list</code>, <code>show NAME</code>, <code>put NAME FILE</code>, and <code>dump DIR</code> to write them all out as markdown for reading elsewhere. If the file changes on disk while this page is open, saving says so before replacing it.</p>' +
   '<p><strong>Keys.</strong> <code>/</code> search, Cmd/Ctrl+S save, Esc close.</p></div><div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Close</button></div>';
 const ACTIONS = {
   save, close: closeModal,
@@ -5385,7 +5400,7 @@ const ACTIONS = {
   help: () => modal(HELP),
   'draft-restore': () => { const d = draft(); if (d) { DB = parseData(d.data); dirty = true; render(); toast('Restored. Save the file to keep it.'); } },
   'draft-discard': () => { try { localStorage.removeItem('locus-atlas-draft'); } catch (e) { /* ignore */ } render(); },
-  'edit-section': el => { location.hash = '#/edit/' + route()[1] + '/' + el.dataset.h; },
+  'edit-section': el => go('#/edit/' + route()[1] + '/' + el.dataset.h),
   'edit-apply': applyEdit,
   'new-doc': el => { docSettings.group = el.dataset.group; docSettings(''); },
   'doc-settings': el => docSettings(el.dataset.id),
@@ -5393,10 +5408,10 @@ const ACTIONS = {
     const title = val('ds-title').trim(); if (!title) return toast('A document needs a title.');
     let d = docById(el.dataset.id);
     if (!d) { let id = slug(title), n = 1; while (docById(id)) id = slug(title) + '-' + (++n); d = {id, body: '# ' + title + '\n', created: now()}; DB.docs.push(d); }
-    d.title = title; d.group = val('ds-group').trim() || 'Docs'; d.path = val('ds-path').trim(); d.updated = now();
-    touch(); closeModal(); if (location.hash === '#/doc/' + d.id) render(); else location.hash = '#/doc/' + d.id;
+    d.title = title; d.group = val('ds-group').trim() || 'Docs'; d.updated = now();
+    touch(); closeModal(); go('#/doc/' + d.id);
   },
-  'doc-delete': el => { const d = docById(el.dataset.id); if (d && confirm('Delete the document ' + d.title + '? This cannot be undone once the file is saved.')) { DB.docs = DB.docs.filter(x => x !== d); touch(); closeModal(); location.hash = '#/'; } },
+  'doc-delete': el => { const d = docById(el.dataset.id); if (d && confirm('Delete the document ' + d.title + '? This cannot be undone once the file is saved.')) { DB.docs = DB.docs.filter(x => x !== d); touch(); closeModal(); go('#/'); } },
   'spec-filter': el => { specFilter = el.dataset.v; render(); },
   'feature-edit': el => featureModal(el.dataset.id),
   'feature-save': el => {
@@ -5413,9 +5428,9 @@ const ACTIONS = {
     let p = projectById(el.dataset.id);
     if (!p) { p = {id: newId('p'), created: now()}; DB.projects.push(p); }
     Object.assign(p, {name, status: val('pf-status'), description: val('pf-desc'), updated: now()});
-    touch(); closeModal(); if (location.hash === '#/project/' + p.id) render(); else location.hash = '#/project/' + p.id;
+    touch(); closeModal(); go('#/project/' + p.id);
   },
-  'project-delete': el => { const p = projectById(el.dataset.id); if (p && confirm('Delete the project ' + p.name + '? Its tasks are kept, without a project.')) { DB.tasks.forEach(t => { if (t.project === p.id) t.project = ''; }); DB.projects = DB.projects.filter(x => x !== p); touch(); closeModal(); location.hash = '#/projects'; } },
+  'project-delete': el => { const p = projectById(el.dataset.id); if (p && confirm('Delete the project ' + p.name + '? Its tasks are kept, without a project.')) { DB.tasks.forEach(t => { if (t.project === p.id) t.project = ''; }); DB.projects = DB.projects.filter(x => x !== p); touch(); closeModal(); go('#/projects'); } },
   'task-new': () => taskModal(''),
   'task-open': el => taskModal(el.dataset.id),
   'task-save': el => {
@@ -5430,6 +5445,11 @@ const ACTIONS = {
 document.addEventListener('click', e => {
   if (e.target.id === 'modal') return closeModal();
   const el = e.target.closest('[data-act]');
+  const link = e.target.closest('a[href^="#/"]');
+  if (link && !(el && link.contains(el) && el !== link) && !link.dataset.act && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+    e.preventDefault(); const s = $('#side'); if (s) s.classList.remove('open');
+    return go(link.getAttribute('href'));
+  }
   if (!el) { if (!e.target.closest('#side')) { const s = $('#side'); if (s) s.classList.remove('open'); } return; }
   const act = ACTIONS[el.dataset.act]; if (!act) return;
   if (el.tagName === 'A') e.preventDefault();
@@ -5455,7 +5475,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (route()[0] === 'edit') applyEdit(); save(); return; }
   if (e.key === 'Escape') return closeModal();
-  if (e.key === 'Enter' && e.target.id === 'q') { location.hash = '#/search/' + encodeURIComponent(e.target.value); return; }
+  if (e.key === 'Enter' && e.target.id === 'q') return go('#/search/' + encodeURIComponent(e.target.value));
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) { e.preventDefault(); const q = $('#q'); if (q) q.focus(); }
 });
 document.addEventListener('dragstart', e => { const c = e.target.closest && e.target.closest('[data-drag]'); if (c) e.dataTransfer.setData('text/plain', c.dataset.drag); });
@@ -5468,7 +5488,8 @@ document.addEventListener('drop', e => {
   if (t && t.status !== c.dataset.drop) { t.status = c.dataset.drop; t.updated = now(); touch(); }
   render();
 });
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', syncFromAddress);
+window.addEventListener('popstate', syncFromAddress);
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 try { const th = localStorage.getItem('locus-atlas-theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) { /* ignore */ }
 document.title = DB.meta.title;

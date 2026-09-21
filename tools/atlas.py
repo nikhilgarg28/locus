@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Keeps atlas.html and the markdown files in step.
+"""Reads and writes the documents inside atlas.html from the command line.
 
-atlas.html holds everything: documents, the language status table, projects
-and tasks. A document may name the markdown file it mirrors.
+atlas.html is the only copy of the documents, the language status table, and
+the projects and tasks. This tool is for working on it outside a browser.
 
-    python3 tools/atlas.py status   which mirrors differ from the atlas
-    python3 tools/atlas.py export   write the markdown files from the atlas,
-                                    and docs/roadmap.md from the projects
-    python3 tools/atlas.py import   read the markdown files into the atlas
+    python3 tools/atlas.py list               the documents, with their names
+    python3 tools/atlas.py show NAME          print a document as markdown
+    python3 tools/atlas.py put NAME FILE      replace a document's text ("-" reads standard input)
+    python3 tools/atlas.py dump DIR           write every document, and the roadmap, as markdown files
+    python3 tools/atlas.py tasks              the projects and their tasks
 
-Only the data block of atlas.html is rewritten; the program around it is
-left byte for byte as it was, in the format the page itself saves.
+Only the data block of atlas.html is rewritten, in the layout the page itself
+saves, and its revision is raised so that an open page notices the change.
 """
 import datetime
 import json
@@ -21,7 +22,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ATLAS = ROOT / "atlas.html"
 BLOCK = re.compile(r'(<script type="application/json" id="atlas-data">\n)(.*?)(\n</script>)', re.S)
-ROADMAP = "docs/roadmap.md"
 STATUS_MARK = {"done": "x", "canceled": "-"}
 
 
@@ -33,23 +33,27 @@ def load():
     return text, match, json.loads(match.group(2))
 
 
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
 def store(text, match, data):
+    data["meta"]["rev"] = data["meta"].get("rev", 0) + 1
+    data["meta"]["savedAt"] = now()
     # The same layout as JSON.stringify(data, null, 1) in the page.
     dumped = json.dumps(data, indent=1, ensure_ascii=False).replace("<", "\\u003c")
     ATLAS.write_text(text[: match.start(2)] + dumped + text[match.end(2):], encoding="utf-8")
 
 
-def now():
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+def find(data, name):
+    for doc in data["docs"]:
+        if doc["id"] == name or doc["title"].lower() == name.lower():
+            return doc
+    sys.exit("no document named %r; try: %s" % (name, ", ".join(d["id"] for d in data["docs"])))
 
 
 def roadmap(data):
-    lines = [
-        "# Roadmap",
-        "",
-        "Generated from atlas.html by `python3 tools/atlas.py export`. The projects and tasks are edited there.",
-        "",
-    ]
+    lines = ["# Roadmap", ""]
     for project in data["projects"]:
         lines += ["## " + project["name"], "", "Status: " + project.get("status", "planned") + ".", ""]
         if project.get("description"):
@@ -63,43 +67,31 @@ def roadmap(data):
     return "\n".join(lines).rstrip() + "\n"
 
 
-def mirrors(data):
-    for doc in data["docs"]:
-        if doc.get("path"):
-            yield doc, ROOT / doc["path"], "\n".join(doc["body"])
-    yield None, ROOT / ROADMAP, roadmap(data)
-
-
 def main():
-    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    args = sys.argv[1:]
+    command = args[0] if args else "list"
     text, match, data = load()
-    if command == "status":
-        clean = True
-        for doc, path, body in mirrors(data):
-            on_disk = path.read_text(encoding="utf-8") if path.exists() else None
-            if on_disk != body:
-                clean = False
-                print(("missing  " if on_disk is None else "differs  ") + str(path.relative_to(ROOT)))
-        print("everything is in step" if clean else "run export to write the files, or import to read them")
-    elif command == "export":
-        for doc, path, body in mirrors(data):
-            if not path.exists() or path.read_text(encoding="utf-8") != body:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(body, encoding="utf-8")
-                print("wrote    " + str(path.relative_to(ROOT)))
-    elif command == "import":
-        changed = False
-        for doc, path, body in mirrors(data):
-            if doc is None or not path.exists():
-                continue
-            on_disk = path.read_text(encoding="utf-8")
-            if on_disk != body:
-                doc["body"] = on_disk.split("\n")
-                doc["updated"] = now()
-                changed = True
-                print("read     " + str(path.relative_to(ROOT)))
-        if changed:
-            store(text, match, data)
+    if command == "list":
+        for doc in data["docs"]:
+            print("%-18s %-12s %5d lines  %s" % (doc["id"], doc.get("group", ""), len(doc["body"]), doc["title"]))
+    elif command == "show" and len(args) == 2:
+        sys.stdout.write("\n".join(find(data, args[1])["body"]))
+    elif command == "put" and len(args) == 3:
+        doc = find(data, args[1])
+        body = sys.stdin.read() if args[2] == "-" else pathlib.Path(args[2]).read_text(encoding="utf-8")
+        doc["body"] = body.split("\n")
+        doc["updated"] = now()
+        store(text, match, data)
+        print("replaced %s; atlas.html is at revision %d" % (doc["id"], data["meta"]["rev"]))
+    elif command == "dump" and len(args) == 2:
+        out = pathlib.Path(args[1])
+        out.mkdir(parents=True, exist_ok=True)
+        for doc in data["docs"]:
+            (out / (doc["id"] + ".md")).write_text("\n".join(doc["body"]), encoding="utf-8")
+        (out / "roadmap.md").write_text(roadmap(data), encoding="utf-8")
+        print("wrote %d files to %s" % (len(data["docs"]) + 1, out))
+    elif command == "tasks":
+        sys.stdout.write(roadmap(data))
     else:
         sys.exit(__doc__)
 

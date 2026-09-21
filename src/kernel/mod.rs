@@ -4,9 +4,9 @@
 //! kernel terms and nothing else. It performs no search, no inference beyond
 //! reading a proof's conclusion off its structure, and no normalization.
 //! Every rule implemented here is stated, with exact premises and conclusion,
-//! in `docs/kernel-contract.md`; the two must change together.
+//! in the kernel contract in `atlas.html`; the two must change together.
 //!
-//! Implemented so far: gates K1 to K6 of `docs/kernel-contract.md`.
+//! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`.
 
 mod check;
 mod classical;

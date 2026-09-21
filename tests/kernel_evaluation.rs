@@ -1,5 +1,5 @@
 //! Tests for the closed-term evaluator, proof by evaluation, and the range
-//! successor axiom (docs/kernel-contract.md).
+//! successor axiom (the kernel contract in atlas.html).
 //! Every term here is written by hand; nothing comes from the parser.
 
 use std::rc::Rc;
