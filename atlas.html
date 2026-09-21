@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 30,
-  "savedAt": "2026-09-21T22:30:25.000Z",
-  "nextTask": 192,
-  "nextId": 308,
+  "rev": 32,
+  "savedAt": "2026-09-21T22:41:03.000Z",
+  "nextTask": 193,
+  "nextId": 309,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -3106,6 +3106,15 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Plan: LOC-137, LOC-135, LOC-19.",
     "",
+    "## Found proofs are stored",
+    "",
+    "- Everything that fills a _ or a prove! is untrusted and produces a proof the kernel checks. That holds for the exact and computed steps, for the arithmetic procedure, and for any automation added later. Automation never widens what is trusted; only a new kernel rule does, and a rule is added only where ordinary proofs would be too large to be practical, as with linear arithmetic. The Kernel contract lists every rule.",
+    "- The proofs found are written to a file beside the source, one per source file, in text, one obligation to an entry so that diffs and merges are readable. It is checked in, as Cargo.lock is.",
+    "- An entry is found by a hash of the obligation, which is the claim and the facts it may use as kernel terms, and not by a hash of the source text. Reformatting, comments, and edits elsewhere in the file leave entries valid. Definitions are referred to by name, not by number.",
+    "- The file is untrusted input. A stored proof is checked by the kernel against the current obligation every time, so a stale, edited, or wrong entry can cost a search and can never make a false claim pass. The hash is for finding an entry and carries no authority.",
+    "- locus check uses a stored proof where one is found, searches where none is, and writes what it finds. locus check --locked never searches: a missing or failing entry is an error. That is the mode for CI and for a reviewer, who then depend on the kernel alone, and it is what makes builds fast.",
+    "- A proof found by one version of Locus still checks under a later one, however the search has changed, as long as the kernel accepts the same rules. The format of proofs and certificates is versioned, and a change to it or to the kernel's rules is the one event that can invalidate stored proofs; it is announced, and proofs are found again.",
+    "",
     "## Logic-only types and erasure",
     "",
     "Logic-only types and erasure by type. This supersedes the ghost keyword on binders that section 2.4 of the language as built defers.",
@@ -3137,7 +3146,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T22:30:25.000Z"
+   "updated": "2026-09-21T22:41:03.000Z"
   },
   {
    "id": "target-examples",
@@ -3374,7 +3383,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "body": [
     "# Build plan",
     "",
-    "How the code gets from what is built (Language, as built) to the core language of Target language: 40 commits in seven lanes, each with its tests and the condition under which it is done. Each commit is a task in the Core build project, where its status is tracked; this document holds the order, the reasons, and the exit criteria for the whole. It is a plan and changes as commits land and teach us things.",
+    "How the code gets from what is built (Language, as built) to the core language of Target language: 41 commits in seven lanes, each with its tests and the condition under which it is done. Each commit is a task in the Core build project, where its status is tracked; this document holds the order, the reasons, and the exit criteria for the whole. It is a plan and changes as commits land and teach us things.",
     "",
     "## What done means",
     "",
@@ -3384,6 +3393,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- **The proofs are the ones predicted.** check --stats classifies the obligations of those files as exact, computed, or arithmetic, and the counts match Target examples (three, four, seven) or the difference is recorded there as a finding.",
     "- **A Rust caller is held at the boundary.** A hand-written Rust crate compiled against the generated module can call what is plain pub and nothing that takes evidence, cannot name a marker constructor, cannot build a protected struct, and the marker replay attack fails to compile. rustc gives the verdict in each case. A protected value that a Rust caller still holds after catching a panic satisfies its invariant (LOC-191).",
     "- **An author is told why.** Removing a hypothesis from each target example gives a diagnostic with the obligation, the claim after computing, the facts considered, and a counterexample where the arithmetic procedure finds one. Every error code has a rejected file and a golden rendering.",
+    "- **A crate can be checked by the kernel alone.** With its stored proofs, locus check --locked runs no search, and proofs written by a weaker search still check.",
     "- **Checking is deterministic.** Checking a file twice, on any machine, gives byte-identical proofs, diagnostics, and Rust. No hole is filled by search that bridges claims, and every limit in the checker is a count of work and never a clock.",
     "- **Locus is never more permissive than rustc.** Every accepted corpus program compiles without warnings. Every program rejected for a move or an aliasing error in a runtime use is also rejected by rustc when printed without that check.",
     "- **What is checked is what runs.** Under the extended suite the random program generator agrees three ways (check-IR interpreter, erased interpreter, compiled Rust) on at least 10,000 programs covering arithmetic in both overflow configurations, panics, mutation, bounded loops, and &mut calls, with no more than a handful inconclusive.",
@@ -3416,7 +3426,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "| 6 |  | S5 |  | E2, E9 |  |  |",
     "| 7 |  |  |  | E3, E6, E8, E10 | M2 | O2 |",
     "| 8 |  |  |  | E7 | M3 | O1 |",
-    "| 9 |  |  |  |  | M4, M5 |  |",
+    "| 9 |  |  |  | E11 | M4, M5 |  |",
     "| 10 |  |  |  |  |  | O3 |",
     "| 11 |  |  |  |  |  | O4 |",
     "| 12 | R4 |  |  |  |  |  |",
@@ -3521,6 +3531,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- **E8** LOC-174. Logic-only types and the one erasure rule: Ghost\u003cT>, snapshot!, erased positions. After: E5, E2.",
     "- **E9** LOC-175. Variants with named fields, const as a Rust const, separate type and value namespaces. After: S4.",
     "- **E10** LOC-190. The forms that panic: panic!, assert!, unreachable!, todo!, debug_assert!. After: M1, E2, S2.",
+    "- **E11** LOC-192. Found proofs are stored beside the source, and locus check --locked never searches. After: E7.",
     "",
     "### Mutation",
     "",
@@ -3543,7 +3554,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- **R1** LOC-186. A generator of random well-typed programs, compared three ways. After: H1, H2.",
     "- **R2** LOC-187. Kernel soundness under mutation: no proof is accepted for a claim known to be false. After: H1.",
     "- **R3** LOC-188. Golden diagnostics, and a test that every error code is exercised. After: H1.",
-    "- **R4** LOC-189. Acceptance: the target examples run, the legacy is gone, and Now is rewritten. After: E3, E7, E8, E9, E10, M5, O4, K8, R1, R2, R3.",
+    "- **R4** LOC-189. Acceptance: the target examples run, the legacy is gone, and Now is rewritten. After: E11, E3, E7, E8, E9, E10, M5, O4, K8, R1, R2, R3.",
     "",
     "## Decisions",
     "",
@@ -3561,7 +3572,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Recursion and decreases, shared references with lifetimes, generics and traits, Seq, Map, and Set, usize and slices, bit operators and shifts, match parity, floats, modules across files and packages, the header and implementation split, and the polish list. Each has its project in the Plan."
    ],
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:30:25.000Z"
+   "updated": "2026-09-21T22:41:03.000Z"
   },
   {
    "id": "working-notes",
@@ -4914,13 +4925,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t10",
    "n": 8,
-   "title": "Some sort of lock file that contains generated proofs in addition generated rust",
+   "title": "A file of found proofs beside each source file, keyed by obligation, with a locked mode",
    "status": "backlog",
    "priority": 0,
    "project": "p2",
-   "notes": "",
+   "notes": "Decided 21 September. Target language: Found proofs are stored. Built by E11 (LOC-192).",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T22:41:03.000Z"
   },
   {
    "id": "t11",
@@ -6634,7 +6645,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 3.\nDepends on: K2 (LOC-160).\nUnblocks: K7 (LOC-165).\nCovers: LOC-123.\n\nScope. A certificate is a goal, a list of pairs of a kernel proof and a non-negative literal coefficient, and nothing else. Every constraint enters as the conclusion of a proof the kernel checks in the ordinary way: a hypothesis from the context, a range fact as an instance of the axiom of K4, a quotient and remainder constraint as instances of the axioms of K3, the bridge from a comparison of machine values to a comparison of their views as an instance of K4 or K8. The rule itself does three things, all trusted: it reads each conclusion and the negated goal as a linear expression over Int, treating any term that is not +, -, a literal, or multiplication by a literal as an opaque atom compared by same; it tightens strict inequalities by discreteness; and it checks that the combination sums to a false statement about literals. The procedure states no constraint on its own authority. Before any code, one complete certificate is written into the Kernel contract for the last obligation of midpoint, showing the goal and hypotheses, their linear forms, the proof behind each range fact and each division constraint, and the final sum.\n\nTests.\n- The written certificate, and certificates by hand for the other six arithmetic obligations of Target examples, are accepted.\n- A test-side recomputation of the combination in i128 decides whether a certificate is valid; over all changes of one coefficient, sign, or hypothesis, the kernel accepts exactly the valid ones. Some changes leave a certificate valid, and those must be accepted.\n- Fabricated constraints: a range fact with no proof, a range fact for the wrong type, a quotient constraint whose proof is for another divisor, a remainder bound taken without b != 0. Each is rejected, and rejected as a bad proof and not as bad arithmetic.\n- Goals that are false on a small bounded domain are never accepted under any of 100,000 random certificates.\n- Two atoms that differ are never merged; two that are same are.\n- Size limits as counts, with a test at the limit.\n\nDone when. The kernel can check arithmetic it did not find, and everything the check relies on is either a kernel proof or one of three trusted steps named in the contract.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Kernel. Wave 3.\nDepends on: K2 (LOC-160).\nUnblocks: K7 (LOC-165).\nCovers: LOC-123.\n\nScope. A certificate is a goal, a list of pairs of a kernel proof and a non-negative literal coefficient, and nothing else. Every constraint enters as the conclusion of a proof the kernel checks in the ordinary way: a hypothesis from the context, a range fact as an instance of the axiom of K4, a quotient and remainder constraint as instances of the axioms of K3, the bridge from a comparison of machine values to a comparison of their views as an instance of K4 or K8. The rule itself does three things, all trusted: it reads each conclusion and the negated goal as a linear expression over Int, treating any term that is not +, -, a literal, or multiplication by a literal as an opaque atom compared by same; it tightens strict inequalities by discreteness; and it checks that the combination sums to a false statement about literals. The procedure states no constraint on its own authority. Before any code, one complete certificate is written into the Kernel contract for the last obligation of midpoint, showing the goal and hypotheses, their linear forms, the proof behind each range fact and each division constraint, and the final sum. The certificate is given a text form with a version in this commit, since E11 stores it.\n\nTests.\n- The written certificate, and certificates by hand for the other six arithmetic obligations of Target examples, are accepted.\n- A test-side recomputation of the combination in i128 decides whether a certificate is valid; over all changes of one coefficient, sign, or hypothesis, the kernel accepts exactly the valid ones. Some changes leave a certificate valid, and those must be accepted.\n- Fabricated constraints: a range fact with no proof, a range fact for the wrong type, a quotient constraint whose proof is for another divisor, a remainder bound taken without b != 0. Each is rejected, and rejected as a bad proof and not as bad arithmetic.\n- Goals that are false on a small bounded domain are never accepted under any of 100,000 random certificates.\n- Two atoms that differ are never merged; two that are same are.\n- Size limits as counts, with a test at the limit.\n\nDone when. The kernel can check arithmetic it did not find, and everything the check relies on is either a kernel proof or one of three trusted steps named in the contract.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
    "updated": "2026-09-21T22:27:28.000Z"
   },
@@ -6733,7 +6744,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 8.\nDepends on: K7 (LOC-165), E1 (LOC-167), E6 (LOC-172).\nUnblocks: R4 (LOC-189).\nCovers: LOC-72, LOC-15.\n\nScope. A hole is tried as exact, then computed, then arithmetic. When the procedure fails and finds values that satisfy the facts and break the goal, the diagnostic shows them.\n\nTests.\n- midpoint, and step and remaining from the 32-bit lock, check, run, and compile; their corpus files move from parse-only to run.\n- check --stats classifies the obligations as Target examples predicted: three exact, four computed, seven arithmetic. A difference is a finding to record, not a number to adjust.\n- midpoint without its ordered hypothesis is rejected with a counterexample.\n\nDone when. The second milestone: real 32-bit programs with overflow shown impossible.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Elaborator. Wave 8.\nDepends on: K7 (LOC-165), E1 (LOC-167), E6 (LOC-172).\nUnblocks: R4 (LOC-189), E11 (LOC-192).\nCovers: LOC-72, LOC-15.\n\nScope. A hole is tried as exact, then computed, then arithmetic. When the procedure fails and finds values that satisfy the facts and break the goal, the diagnostic shows them.\n\nTests.\n- midpoint, and step and remaining from the 32-bit lock, check, run, and compile; their corpus files move from parse-only to run.\n- check --stats classifies the obligations as Target examples predicted: three exact, four computed, seven arithmetic. A difference is a finding to record, not a number to adjust.\n- midpoint without its ordered hypothesis is rejected with a counterexample.\n\nDone when. The second milestone: real 32-bit programs with overflow shown impossible.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
    "updated": "2026-09-21T22:27:28.000Z"
   },
@@ -6909,7 +6920,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Robustness. Wave 12.\nDepends on: E3 (LOC-169), E7 (LOC-173), E8 (LOC-174), E9 (LOC-175), E10 (LOC-190), M5 (LOC-181), O4 (LOC-185), K8 (LOC-166), R1 (LOC-186), R2 (LOC-187), R3 (LOC-188).\n\nScope. The closing commit. Language, as built is rewritten from the implementation, Overview and README show the 32-bit lock, and the Language status table moves every core row to built.\n\nTests.\n- The overall exit criteria of the Build plan, each as a test or a command, under tools/check.sh --extended.\n\nDone when. The core language of the Vision is the language of the code.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Robustness. Wave 12.\nDepends on: E11 (LOC-192), E3 (LOC-169), E7 (LOC-173), E8 (LOC-174), E9 (LOC-175), E10 (LOC-190), M5 (LOC-181), O4 (LOC-185), K8 (LOC-166), R1 (LOC-186), R2 (LOC-187), R3 (LOC-188).\n\nScope. The closing commit. Language, as built is rewritten from the implementation, Overview and README show the 32-bit lock, and the Language status table moves every core row to built.\n\nTests.\n- The overall exit criteria of the Build plan, each as a test or a command, under tools/check.sh --extended.\n\nDone when. The core language of the Vision is the language of the code.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
    "updated": "2026-09-21T22:27:28.000Z"
   },
@@ -6934,6 +6945,17 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "created": "2026-09-21T22:27:28.000Z",
    "updated": "2026-09-21T22:30:25.000Z",
    "notes": "Decided 21 September: the conservative rule below. Target language: Effects are promises.\n\nRaised by review of the Build plan, 21 September; Target language mentions the question under Effects and leaves it to protected exports. A method takes &mut self on a type whose fields carry evidence, assigns a field, which invalidates the evidence, and panics before refreshing it. The checker looks only at the return path, so it is satisfied. A Rust caller that wrapped the call in catch_unwind now holds a value whose invariant is false, in safe Rust. A value owned by the function that panics is not a problem: it is dropped unseen, since Locus types have no Drop.\n\nRecommended, conservative: between an assignment that invalidates evidence stored in a place reached through a &mut parameter and the refresh of that evidence, nothing may panic; to begin with this is enforced by requiring #[no_panic] on any function that makes such an assignment. Replacing the whole value at once, *self = Percent { ... }, invalidates nothing and needs no promise. A finer rule, which looks only at the window between the assignment and the refresh, can replace it later without breaking any program.\n\nNeeded before O3 (LOC-184). The Rust caller test is in O4 (LOC-185), and the design case is the eighth of M0."
+  },
+  {
+   "id": "t308",
+   "n": 192,
+   "title": "E11 · Found proofs are stored beside the source, and locus check --locked never searches",
+   "status": "backlog",
+   "priority": 2,
+   "project": "p266",
+   "notes": "Lane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "created": "2026-09-21T22:41:03.000Z",
+   "updated": "2026-09-21T22:41:03.000Z"
   }
  ]
 }
