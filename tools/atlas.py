@@ -9,6 +9,8 @@ the projects and tasks. This tool is for working on it outside a browser.
     python3 tools/atlas.py put NAME FILE      replace a document's text ("-" reads standard input)
     python3 tools/atlas.py dump DIR           write every document, and the roadmap, as markdown files
     python3 tools/atlas.py tasks              the projects and their tasks
+    python3 tools/atlas.py plan               check the order of the Core build tasks, and rewrite from them
+                                              the waves and the list of commits in the Build plan
     python3 tools/atlas.py serve [PORT]       open the atlas from a local address, where it can save
                                               itself as changes are made, in any browser
 
@@ -72,6 +74,91 @@ def roadmap(data):
             lines.append("- [%s] %s-%d %s%s" % (mark, data["meta"].get("taskPrefix", "LOC"), task["n"], task["title"], suffix))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+PLAN_LANES = ["Harness", "Syntax", "Kernel", "Elaborator", "Mutation", "Ownership", "Robustness"]
+
+
+def plan(data):
+    """The Core build tasks are the only record of what depends on what. A task's
+    title starts with its key, and its notes have the lines "Lane: X." and
+    "Depends on: K1 (LOC-n), ...". Everything else about the order is derived here."""
+    project = next(p for p in data["projects"] if p["name"] == "Core build")
+    prefix = data["meta"].get("taskPrefix", "LOC")
+    tasks = {}
+    for task in data["tasks"]:
+        if task["project"] == project["id"] and " · " in task["title"]:
+            tasks[task["title"].split(" · ")[0]] = task
+    lane, deps = {}, {}
+    for key, task in tasks.items():
+        lines = task["notes"].split("\n")
+        found = re.match(r"Lane: (\w+)\.", lines[0])
+        after = next((l for l in lines if l.startswith("Depends on:")), None)
+        if not found or found.group(1) not in PLAN_LANES or after is None:
+            sys.exit("%s: the notes must start with 'Lane: X.' and have a 'Depends on:' line" % key)
+        lane[key] = found.group(1)
+        deps[key] = re.findall(r"\b([A-Z]\d+)\b", after.split(":", 1)[1])
+        for dep in deps[key]:
+            if dep not in tasks:
+                sys.exit("%s depends on %s, which is not a task" % (key, dep))
+    wave, visiting = {}, set()
+
+    def level(key):
+        if key in visiting:
+            sys.exit("the dependencies make a cycle through " + key)
+        if key not in wave:
+            visiting.add(key)
+            wave[key] = 1 + max([level(d) for d in deps[key]], default=0)
+            visiting.discard(key)
+        return wave[key]
+
+    for key in tasks:
+        level(key)
+    ref = lambda k: "%s (%s-%d)" % (k, prefix, tasks[k]["n"])
+    order = sorted(tasks, key=lambda k: tasks[k]["n"])
+    for key in order:
+        lines = [l for l in tasks[key]["notes"].split("\n") if not l.startswith("Unblocks:")]
+        lines[0] = "Lane: %s. Wave %d." % (lane[key], wave[key])
+        at = next(i for i, l in enumerate(lines) if l.startswith("Depends on:"))
+        lines[at] = "Depends on: %s." % (", ".join(ref(d) for d in deps[key]) or "nothing")
+        unblocks = [k for k in order if key in deps[k]]
+        if unblocks:
+            lines.insert(at + 1, "Unblocks: %s." % ", ".join(ref(k) for k in unblocks))
+        tasks[key]["notes"] = "\n".join(lines)
+
+    columns = PLAN_LANES[:-1]
+    table = ["| Wave | Harness and robustness | " + " | ".join(columns[1:]) + " |", "|---" * (len(columns) + 1) + "|"]
+    for n in range(1, max(wave.values()) + 1):
+        cells = []
+        for column in columns:
+            mine = [k for k in order if wave[k] == n and (lane[k] == column or (column == "Harness" and lane[k] == "Robustness"))]
+            cells.append(", ".join(mine))
+        table.append("| %d | %s |" % (n, " | ".join(cells)))
+    listing = ["## The commits", "", "One task each, in the Core build project, where the scope, the tests, and the condition for done are written. This list and the table of waves are written by python3 tools/atlas.py plan from the tasks, which are the only record of the order.", ""]
+    for name in PLAN_LANES:
+        listing += ["### " + name, ""]
+        for key in order:
+            if lane[key] == name:
+                title = tasks[key]["title"].split(" · ", 1)[1]
+                listing.append("- **%s** %s-%d. %s. After: %s." % (key, prefix, tasks[key]["n"], title, ", ".join(deps[key]) or "nothing"))
+        listing.append("")
+    doc = find(data, "build-plan")
+    body = doc["body"]
+    start = next(i for i, l in enumerate(body) if l.startswith("| Wave |"))
+    end = start
+    while end < len(body) and body[end].startswith("|"):
+        end += 1
+    body[start:end] = table
+    start = body.index("## The commits")
+    end = next(i for i in range(start + 1, len(body)) if body[i].startswith("## "))
+    body[start:end] = listing
+    doc["updated"] = now()
+
+    def chain(key):
+        return (chain(max(deps[key], key=lambda d: wave[d])) if deps[key] else []) + [key]
+
+    last = max(order, key=lambda k: wave[k])
+    return "%d commits in %d waves; the longest chain is %s" % (len(order), wave[last], ", ".join(chain(last)))
 
 
 def revision_of(text):
@@ -173,6 +260,10 @@ def main():
             (out / (doc["id"] + ".md")).write_text("\n".join(doc["body"]), encoding="utf-8")
         (out / "roadmap.md").write_text(roadmap(data), encoding="utf-8")
         print("wrote %d files to %s" % (len(data["docs"]) + 1, out))
+    elif command == "plan":
+        summary = plan(data)
+        store(text, match, data)
+        print(summary)
     elif command == "tasks":
         sys.stdout.write(roadmap(data))
     else:
