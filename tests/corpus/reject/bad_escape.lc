@@ -1,0 +1,4 @@
+// An escape Rust does not have.
+fn greeting() -> u8 {
+    "a\qb" //~ error: L0007 unknown escape
+}

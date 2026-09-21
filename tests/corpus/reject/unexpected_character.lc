@@ -1,10 +1,10 @@
 // A character that begins no token.
 fn first(n: u8) -> u8 {
-    $ //~ error: L0001 unexpected character
+    ` //~ error: L0001 unexpected character
 }
 
 // After an expression, the parser adds an error of its own.
 fn second(n: u8) -> u8 {
-    n $ //~ error: L0001 unexpected character
+    n ` //~ error: L0001 unexpected character
     //~^ error: L0102
 }

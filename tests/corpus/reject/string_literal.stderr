@@ -1,5 +1,5 @@
-error[L0006]: string literals are not supported in the initial core
+error[L0290]: string literals are not in Locus yet
  --> tests/corpus/reject/string_literal.lc:3:5
   |
-3 |     "hello" //~ error: L0006 string literals
+3 |     "hello" //~ error: L0290 string literals are not in Locus yet
   |     ^^^^^^^

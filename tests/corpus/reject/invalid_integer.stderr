@@ -1,7 +1,7 @@
-error[L0003]: invalid decimal integer literal
- --> tests/corpus/reject/invalid_integer.lc:3:5
+error[L0003]: invalid suffix `u9` for an integer literal
+ --> tests/corpus/reject/invalid_integer.lc:3:6
   |
-3 |     0xff //~ error: L0003 invalid decimal integer literal
-  |     ^^^^
+3 |     1u9 //~ error: L0003 invalid suffix
+  |      ^^
   |
-  = note: use decimal digits with optional single underscores between digits; bases and type suffixes are not supported yet
+  = note: the suffixes are `u8`, `u16`, `u32`, `u64`, `u128`, `usize`, `i8`, `i16`, `i32`, `i64`, `i128`, and `isize`

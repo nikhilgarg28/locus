@@ -1,4 +1,4 @@
-error[L0005]: raw identifiers and raw strings are not supported in the initial core
+error[L0005]: raw identifiers are not in Locus yet
  --> tests/corpus/reject/raw_identifier.lc:2:10
   |
 2 | fn first(r#match: u8) -> u8 { 1 } //~ error: L0005 raw identifiers

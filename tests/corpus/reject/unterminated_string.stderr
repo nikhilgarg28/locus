@@ -1,0 +1,15 @@
+error[L0006]: unterminated string literal
+ --> tests/corpus/reject/unterminated_string.lc:3:5
+  |
+3 |     "hello //~ error: L0006 unterminated string
+  |     ^
+  |
+  = note: the literal runs to the end of the file; close it with a matching quote
+error[L0101]: expected `}` to close this delimiter
+ --> tests/corpus/reject/unterminated_string.lc:4:19
+  |
+2 | fn greeting() -> u8 {
+  |                     - delimiter opened here
+3 |     "hello //~ error: L0006 unterminated string
+4 | } //~ error: L0101
+  |                   ^

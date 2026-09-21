@@ -1,4 +1,4 @@
-// An integer literal in a base other than ten.
+// An integer literal with a suffix that names no integer type.
 fn mask() -> u8 {
-    0xff //~ error: L0003 invalid decimal integer literal
+    1u9 //~ error: L0003 invalid suffix
 }

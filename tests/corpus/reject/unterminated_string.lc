@@ -1,0 +1,4 @@
+// A string literal that never closes takes the rest of the file with it.
+fn greeting() -> u8 {
+    "hello //~ error: L0006 unterminated string
+} //~ error: L0101

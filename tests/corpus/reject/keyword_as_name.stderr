@@ -1,0 +1,32 @@
+error[L0115]: `move` is a Rust keyword and cannot be used as a name
+ --> tests/corpus/reject/keyword_as_name.lc:3:4
+  |
+3 | fn move(ref: u8) -> u8 { ref } //~ error: L0115 `move` is a Rust keyword
+  |    ^^^^
+  |
+  = note: Locus reserves every keyword of Rust, whether or not it uses it yet
+  = help: rename it, for example to `move_`
+error[L0115]: `type` is a Rust keyword and cannot be used as a name
+ --> tests/corpus/reject/keyword_as_name.lc:5:9
+  |
+5 | fn fine(type: u8) -> u8 { //~ error: L0115 `type` is a Rust keyword
+  |         ^^^^
+  |
+  = note: Locus reserves every keyword of Rust, whether or not it uses it yet
+  = help: rename it, for example to `type_`
+error[L0115]: `yield` is a Rust keyword and cannot be used as a name
+  --> tests/corpus/reject/keyword_as_name.lc:11:5
+   |
+11 |     yield: u8, //~ error: L0115 `yield` is a Rust keyword
+   |     ^^^^^
+   |
+   = note: Locus reserves every keyword of Rust, whether or not it uses it yet
+   = help: rename it, for example to `yield_`
+error[L0115]: `match` is a Rust keyword and cannot be used as a name
+  --> tests/corpus/reject/keyword_as_name.lc:15:9
+   |
+15 |     let match = 1; //~ error: L0115 `match` is a Rust keyword
+   |         ^^^^^
+   |
+   = note: Locus reserves every keyword of Rust, whether or not it uses it yet
+   = help: rename it, for example to `match_`

@@ -1,4 +1,4 @@
-// A string literal.
+// A string literal where a value is needed: the elaborator has no use for it yet.
 fn greeting() -> u8 {
-    "hello" //~ error: L0006 string literals
+    "hello" //~ error: L0290 string literals are not in Locus yet
 }

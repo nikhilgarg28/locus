@@ -1,0 +1,7 @@
+error[L0007]: unknown escape `\q`
+ --> tests/corpus/reject/bad_escape.lc:3:7
+  |
+3 |     "a\qb" //~ error: L0007 unknown escape
+  |       ^^
+  |
+  = note: the escapes are `\n`, `\r`, `\t`, `\\`, `\0`, `\'`, `\"`, `\x7F`, `\u{10FFFF}`, and a backslash at the end of a line
