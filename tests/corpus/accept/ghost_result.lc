@@ -1,0 +1,16 @@
+// A `math fn` whose body is executable is emitted too. A `Prop` it returns
+// has no runtime form and is `Ghost`.
+
+math fn claim_of(n: u8) -> (claim: Prop, @claim) {
+    let claim: Prop = [n == n];
+    (claim, _)
+}
+
+math fn twice(n: u8) -> u8 {
+    n.wrapping_add(n)
+}
+
+//~ proofs: 1
+//~ run: claim_of(3) => (Ghost, Proved)
+//~ run: twice(200) => 144
+//~ rust: pub fn claim_of(n: u8) -> (Ghost, Proved) {

@@ -5,3 +5,7 @@ fn preserve(n: u8) -> (out: u8, @[out == n]) {
         (n, _)
     }
 }
+
+//~ proofs: 2
+//~ run: preserve(0) => (0, Proved)
+//~ run: preserve(200) => (200, Proved)

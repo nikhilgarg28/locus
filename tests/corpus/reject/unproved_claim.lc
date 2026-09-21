@@ -1,0 +1,4 @@
+// Nothing bounds `n`, so the claim is false at 255 and no proof exists.
+fn small(n: u8) -> (out: u8, @[out <= 9]) {
+    (n, _) //~ error: L0230 cannot show
+}

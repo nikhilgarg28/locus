@@ -1,0 +1,3 @@
+fn first(n: u8) -> u8 {
+    missing //~ error: L0204 unknown name `missing`
+}

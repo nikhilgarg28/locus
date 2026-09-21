@@ -1,0 +1,53 @@
+// Every kind of value a run line can write: bytes, booleans, unit, tuples,
+// structs, and enum variants with and without a payload.
+
+enum Shape {
+    Dot,
+    Line(u8),
+    Box(u8, bool),
+}
+
+struct Pixel {
+    shape: Shape,
+    lit: bool,
+}
+
+fn nothing() -> () {
+    ()
+}
+
+fn swap(pair: (u8, bool)) -> (bool, u8) {
+    (pair.1, pair.0)
+}
+
+fn only(n: u8) -> (u8,) {
+    (n,)
+}
+
+fn toggle(pixel: Pixel) -> Pixel {
+    if pixel.lit {
+        Pixel { shape: pixel.shape, lit: false }
+    } else {
+        Pixel { shape: pixel.shape, lit: true }
+    }
+}
+
+fn width(shape: Shape) -> u8 {
+    match shape {
+        Shape::Dot => 1,
+        Shape::Line(length) => length,
+        Shape::Box(side, _) => side,
+    }
+}
+
+//~ proofs: 0
+//~ run: nothing() => ()
+//~ run: swap((7, true)) => (true, 7)
+//~ run: only(7) => (7,)
+//~ run: toggle(Pixel { shape: Dot, lit: false }) => Pixel { shape: Dot, lit: true }
+//~ run: toggle(Pixel { shape: Shape::Box(2, true), lit: true }) => Pixel { shape: Box(2, true), lit: false }
+//~ run: width(Dot) => 1
+//~ run: width(Line(9)) => 9
+//~ run: width(Shape::Box(4, false)) => 4
+//~ rust: pub fn swap(pair: (u8, bool)) -> (bool, u8) {
+//~ rust: Box(u8, bool),

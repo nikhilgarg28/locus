@@ -1,0 +1,24 @@
+// Evidence is an argument like any other. At runtime it is `Proved`, and a
+// run line passes it as such.
+
+fn headroom(n: u8, small: @[n <= 250]) -> (out: u8, @[out >= 5]) {
+    (255.wrapping_sub(n), _)
+}
+
+fn clamp(n: u8) -> (out: u8, @[out <= 250]) {
+    if n <= 250 { (n, _) } else { (250, _) }
+}
+
+fn room_after_clamp(n: u8) -> u8 {
+    let (small, bound) = clamp(n);
+    let (room, _) = headroom(small, bound);
+    room
+}
+
+// Three `_`, and one conversion of `bound` to what `headroom` asks for.
+//~ proofs: 4
+//~ run: headroom(250, Proved) => (5, Proved)
+//~ run: clamp(255) => (250, Proved)
+//~ run: room_after_clamp(0) => 255
+//~ run: room_after_clamp(255) => 5
+//~ rust: pub fn headroom(n: u8, small: Proved) -> (u8, Proved) {

@@ -1,0 +1,4 @@
+fn flag(n: u8) -> u8 {
+    true
+    //~^ error: L0220 expected `u8`, found `bool`
+}

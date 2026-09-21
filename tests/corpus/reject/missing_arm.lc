@@ -1,0 +1,10 @@
+enum Light {
+    Red,
+    Green,
+}
+
+fn go(light: Light) -> bool {
+    match light { //~ error: L0213 no arm handles `Light::Green`
+        Light::Red => false,
+    }
+}

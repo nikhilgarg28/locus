@@ -40,3 +40,7 @@ math fn small_is_below_ten(n: u8, small: @Small(n)) -> @[n < 10] {
         Small::Below(bound) => bound,
     }
 }
+
+//~ proofs: 2
+//~ run: reflexivity_claim(5) => (Ghost, Proved)
+//~ rust: pub fn reflexivity_claim(n: u8) -> (Ghost, Proved) {

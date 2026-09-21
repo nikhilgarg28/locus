@@ -1,0 +1,8 @@
+// Every error in a file is listed, each on its line; one item's failure does
+// not hide another's.
+fn big() -> u8 {
+    256 //~ error: L0205
+}
+
+fn small() -> u8 { 1 }
+fn small() -> u8 { 2 } //~ error: L0202 declared twice

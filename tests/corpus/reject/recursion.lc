@@ -1,0 +1,4 @@
+// Recursion is not part of the core language.
+fn forever(n: u8) -> u8 { //~ error: L0203
+    forever(n)
+}

@@ -38,3 +38,7 @@ fn increment(n: u8) -> (out: u8, @same(out, n.wrapping_add(1))) {
     let out = n.wrapping_add(1);
     (out, _)
 }
+
+// Only `increment` exists at runtime; the rest of the file is logic.
+//~ proofs: 4
+//~ run: increment(9) => (10, Proved)
