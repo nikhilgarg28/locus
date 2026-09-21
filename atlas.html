@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 1,
-  "savedAt": "2026-09-21T19:31:46.000Z",
-  "nextTask": 77,
-  "nextId": 166,
+  "rev": 3,
+  "savedAt": "2026-09-21T19:37:49.000Z",
+  "nextTask": 80,
+  "nextId": 172,
   "taskPrefix": "LOC"
  },
  "docs": [
@@ -350,15 +350,15 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "#[terminates(decreases = n)]",
     "#[no_panic]",
     "fn sum_to(n: u8) -> u8 {",
-    "    if n == 0 { 0 } else { n.wrapping_add(recurse(_, sum_to(n.wrapping_sub(1)))) }",
+    "    if n == 0 { 0 } else { n.wrapping_add(recurse!(_, sum_to(n.wrapping_sub(1)))) }",
     "}",
     "~~~",
     "",
     "   - A function that does not call itself writes #[terminates] alone. A function that calls itself and promises to terminate must state the measure; it is not guessed. A header carries the bare promise, and the definition adds the measure, which is the argument for the promise and no part of the contract.",
     "   - The measure is an ordinary expression over the parameters, read as a logical term and never executed. Its type must have an order with no infinite descent, fixed by the language: unsigned integers and later Nat under \u003c, bool, tuples lexicographically, later recursive data by the part-of order, and later signed integers with the added obligation that the measure is not negative. Wrapping cannot cheat the order: n.wrapping_sub(1) \u003c n is false when n is 0.",
-    "   - recurse(evidence, call) is the slot for the evidence at a recursive call. It has the value of the call and erases to it. The first argument is expected to be evidence that the measure at the arguments is smaller than the measure at the parameters, so _ works there and a wrong proof is an ordinary mismatch reported at the call. A bare recursive call means recurse(_, call). The form is written like a call with a reserved name, as rewrite, unfold, and fold are. It is the rendering of the idea that a function already on the call stack receives, as an extra argument, evidence that it has gone down; outside callers never see that argument, and the old value is the current frame's own measure.",
-    "   - A recursive call is a call to any function in the caller's own cycle of the call graph, which the ordering of declarations already computes; the programmer does not mark it, and recurse around any other call is an error. The evidence is per call, not per function: each call from f to g shows that the measure of g at the arguments is below the measure of f at its parameters, in one order shared by the cycle. That is checkable within one body, against the signatures and measures of the others, and it implies what is wanted, since following the calls round any cycle back to f composes into a strict descent of f's own measure. The members of a cycle therefore live in one implementation unit, where their measures are visible, and their signatures are elaborated before any of their bodies. A function in a cycle that does not promise to terminate cannot be called by one that does.",
-    "   - Mutual recursion: every function in a cycle states a measure, and at a call from f to g the slot of recurse expects the measure of g at the arguments to be smaller than the measure of f at its parameters. The functions may have quite different parameters; it is their measures that must be comparable, because a cycle terminates exactly when every function in it can be mapped into one order without infinite descent. Two ways of being comparable are intended. Measures of one type from the list above, typically numbers or tuples of numbers, reached through conversions such as a size function once Nat exists; a final tuple component that ranks the functions lets an edge keep the first component equal, as with (n, 1) and (n, 0). And measures that are recursive data of any types, compared by the part-of order, which relates values of different types: a statement inside an expression is a part of it. That covers functions that follow mutually recursive data, with the evidence coming from the match that exposed the part. An order supplied by the programmer, with a proof that it has no infinite descent, is not planned; a cycle that needs one does not promise to terminate. Whether the first implementation includes mutual recursion is open.",
+    "   - recurse!(evidence, call) is the slot for the evidence at a recursive call. It has the value of the call and erases to it. The first argument is expected to be evidence that the measure at the arguments is smaller than the measure at the parameters, so _ works there and a wrong proof is an ordinary mismatch reported at the call. A bare recursive call means recurse!(_, call). The form is spelled with !, as rewrite!, unfold!, and fold! are (item 12). It is the rendering of the idea that a function already on the call stack receives, as an extra argument, evidence that it has gone down; outside callers never see that argument, and the old value is the current frame's own measure.",
+    "   - A recursive call is a call to any function in the caller's own cycle of the call graph, which the ordering of declarations already computes; the programmer does not mark it, and recurse! around any other call is an error. The evidence is per call, not per function: each call from f to g shows that the measure of g at the arguments is below the measure of f at its parameters, in one order shared by the cycle. That is checkable within one body, against the signatures and measures of the others, and it implies what is wanted, since following the calls round any cycle back to f composes into a strict descent of f's own measure. The members of a cycle therefore live in one implementation unit, where their measures are visible, and their signatures are elaborated before any of their bodies. A function in a cycle that does not promise to terminate cannot be called by one that does.",
+    "   - Mutual recursion: every function in a cycle states a measure, and at a call from f to g the slot of recurse! expects the measure of g at the arguments to be smaller than the measure of f at its parameters. The functions may have quite different parameters; it is their measures that must be comparable, because a cycle terminates exactly when every function in it can be mapped into one order without infinite descent. Two ways of being comparable are intended. Measures of one type from the list above, typically numbers or tuples of numbers, reached through conversions such as a size function once Nat exists; a final tuple component that ranks the functions lets an edge keep the first component equal, as with (n, 1) and (n, 0). And measures that are recursive data of any types, compared by the part-of order, which relates values of different types: a statement inside an expression is a part of it. That covers functions that follow mutually recursive data, with the evidence coming from the match that exposed the part. An order supplied by the programmer, with a proof that it has no infinite descent, is not planned; a cycle that needs one does not promise to terminate. Whether the first implementation includes mutual recursion is open.",
     "   - Computation meant to run forever is a function without the terminates promise that loops around a function with it; each pass finishes and carries its evidence.",
     "   - What the logic knows of a recursive function. The kernel has no recursion, so a terminating recursive function is not a kernel term and has no defining equation there, even where its body is visible. It enters the logic as a function symbol with the function's signature, known by its contract alone (item 6), and the checker's termination rule is what justifies treating it as total. This refines item 6: the defining equation is available where the body is visible and is expressible as a kernel term. Recursion in the kernel, beginning with structural recursion over recursive data, would make the equation available and is the natural companion of recursive data types.",
     "   - Consequences to keep in view. A function that promises to terminate uses stack in proportion to its recursion depth, since Rust does not guarantee tail calls, so recursion suits structural recursion and divide and conquer better than iteration over long input. Loops that keep the promise, by a finite range or a measure, are left for later; the kernel's rule for a bounded for (section 10.6) remains and is what they would lower to. The one trusted addition is the checker's rule that a strictly decreasing sequence in these orders is finite.",
@@ -400,7 +400,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "   - prove!(P) states a claim where it stands. P is a formula, written as inside brackets and without them. The claim must be provable at that point, by the search a _ would run, and a failure is reported there. It differs from let _: @[P] = _; in two ways: the fact stays in scope for every later search, which is what makes it a stepping stone and what localizes a broken proof to the step that no longer follows; and it is an expression of type @[P], so let h = prove!(i \u003c= limit); names the evidence and (out, prove!(out == n.wrapping_add(1))) is a hole that says what it proves. It erases to nothing as a statement and to the marker as a value. It takes no hints yet. The name assert! is not used for it, because in Rust that is a check at runtime.",
     "   - old!(x) and snapshot!(e) are spelled this way (items 10 and 11): neither evaluates its argument as a function would.",
     "   - Forms that mean what they mean in Rust: assert!(c), a check at runtime after which c is a known fact, and which needs evidence in a function that promises no_panic; unreachable!(), of any type, which needs evidence of false under no_panic; todo!(), of any type, which panics, so that a half-written file can be checked; panic!, debug_assert!, matches!, and vec! once Vec exists; and the attribute derive with a closed list of traits.",
-    "   - Undecided: whether recurse (item 9) and the rewrite, unfold, and fold forms (section 8.4) take the same spelling. The case for it is that recurse wraps a call and the type expected of its evidence depends on that call, that unfold and fold take the name of a function and not a value, and that the result type of all four is computed from their arguments in a way no function signature states; it would also stop those four names being reserved.",
+    "   - recurse!(evidence, call), rewrite!(eq, h), unfold!(f, h), and fold!(f, h) take the same spelling. recurse! wraps what must be, syntactically, a recursive call, and the type expected of its evidence is computed from that call. unfold! and fold! take the name of a function and not a value. The result type of rewrite! is computed by substitution. None of the four names is reserved any longer.",
+    "   - The rule that separates a form from a library function: a step is a function when its type can be written, and a form when the compiler has to look at syntax to know the type. A lemma such as u8_le_trans, and symmetry, transitivity, and congruence of equality, are functions that take evidence and return evidence, and live in the library. rewrite! cannot be one today: its signature would take the predicate P as a parameter, which needs generics and a lambda to pass, and since the kernel computes nothing by itself, P(a) would still have to be connected to the claim actually held; the form reads the claim of h, finds the occurrences, and works P out. unfold! cannot be one at all in that shape, since no signature can speak of the body of whichever function it is given; it is a rewrite along that function's defining equation, and fold! is the same rewrite backwards. Either way nothing is trusted that was not before: a form emits an ordinary kernel step, transport, and a library lemma is a checked function.",
+    "   - To revisit when generics and logic-only lambdas become possible: whether some of these forms should become library functions. The candidates are transport itself, as a function taking the predicate explicitly, and each function's defining equation as evidence that can be named. rewrite!, unfold!, and fold! would then remain as conveniences that infer the predicate. The library would be grouped beside the logic types, as logic::eq, logic::u8, and so on.",
     "",
     "## 15.2 Open questions",
     "",
@@ -487,7 +489,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:22:18.000Z"
+   "updated": "2026-09-21T19:36:36.000Z"
   },
   {
    "id": "language",
@@ -3194,13 +3196,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f104",
    "area": "Types and data",
-   "name": "Ghost\u003cT> and snapshot(e)",
+   "name": "Ghost\u003cT> and snapshot!(e)",
    "status": "agreed",
    "note": "Item 11. Replaces the ghost binder keyword.",
    "doc": "notes",
    "anchor": "15-3-accepted-directions-not-yet-specified",
    "project": "",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:37:49.000Z"
   },
   {
    "id": "f105",
@@ -3471,11 +3473,11 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "area": "Propositions and proofs",
    "name": "rewrite, unfold, fold",
    "status": "built",
-   "note": "",
+   "note": "Built as rewrite(eq, h), unfold(f, h), fold(f, h). Agreed: respell as rewrite!, unfold!, fold! (notes, item 12).",
    "doc": "",
    "anchor": "",
    "project": "",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:37:49.000Z"
   },
   {
    "id": "f130",
@@ -3601,13 +3603,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f141",
    "area": "Functions, effects, and references",
-   "name": "Recursion with `#[terminates(decreases = e)]` and `recurse(evidence, call)`",
+   "name": "Recursion with `#[terminates(decreases = e)]` and `recurse!(evidence, call)`",
    "status": "agreed",
    "note": "Item 9. Known to the logic by its contract until the kernel has recursion.",
    "doc": "notes",
    "anchor": "15-3-accepted-directions-not-yet-specified",
    "project": "p64",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:37:49.000Z"
   },
   {
    "id": "f142",
@@ -3623,13 +3625,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f143",
    "area": "Functions, effects, and references",
-   "name": "& and &mut as parameters; old(x); impl blocks and self",
+   "name": "& and &mut as parameters; old!(x); impl blocks and self",
    "status": "agreed",
    "note": "Item 10, tier 0, second step.",
    "doc": "notes",
    "anchor": "15-3-accepted-directions-not-yet-specified",
    "project": "p45",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:37:49.000Z"
   },
   {
    "id": "f144",
@@ -3872,6 +3874,39 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "anchor": "",
    "project": "p67",
    "updated": "2026-09-21T19:19:39.000Z"
+  },
+  {
+   "id": "f167",
+   "area": "Propositions and proofs",
+   "name": "prove!(P): state a claim where it stands; the fact stays in scope and the value is evidence",
+   "status": "agreed",
+   "note": "No hints yet. _ stays the request for evidence. Notes, item 12.",
+   "doc": "notes",
+   "anchor": "",
+   "project": "",
+   "updated": "2026-09-21T19:37:49.000Z"
+  },
+  {
+   "id": "f168",
+   "area": "Propositions and proofs",
+   "name": "Built-in forms spelled with !, and no user-defined macros",
+   "status": "agreed",
+   "note": "assert!, unreachable!, todo!, panic!, debug_assert!, matches!, later vec!; derive with a closed list. Notes, item 12.",
+   "doc": "notes",
+   "anchor": "",
+   "project": "",
+   "updated": "2026-09-21T19:37:49.000Z"
+  },
+  {
+   "id": "f169",
+   "area": "Propositions and proofs",
+   "name": "transport and defining equations as library functions",
+   "status": "planned",
+   "note": "To revisit when generics and logic-only lambdas exist; rewrite!, unfold!, fold! would remain as conveniences. Notes, item 12.",
+   "doc": "notes",
+   "anchor": "",
+   "project": "",
+   "updated": "2026-09-21T19:37:49.000Z"
   }
  ],
  "projects": [
@@ -4848,6 +4883,39 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "The notes record tiers. & and &mut as parameters, with impl blocks and self, come early and need no lifetimes; shared references with lifetimes are the next tier.",
    "created": "2026-09-21T19:19:39.000Z",
    "updated": "2026-09-21T19:19:39.000Z"
+  },
+  {
+   "id": "t170",
+   "n": 77,
+   "title": "prove!(P) and the built-in forms (assert!, unreachable!, todo!, ...)",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 12. Parser: accept name!(...) for the closed list only. prove! records its fact for later holes and has type @[P].",
+   "created": "2026-09-21T19:37:49.000Z",
+   "updated": "2026-09-21T19:37:49.000Z"
+  },
+  {
+   "id": "t171",
+   "n": 78,
+   "title": "Respell rewrite, unfold, fold as rewrite!, unfold!, fold!",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 12. Update the parser, the elaborator's reserved names, examples/proofs.loc, and section 8.4 of the language reference together, with a migration diagnostic for the old spelling.",
+   "created": "2026-09-21T19:37:49.000Z",
+   "updated": "2026-09-21T19:37:49.000Z"
+  },
+  {
+   "id": "t172",
+   "n": 79,
+   "title": "Explore which forms become library functions once generics exist",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p24",
+   "notes": "transport taking the predicate explicitly; each function's defining equation as nameable evidence; library grouped as logic::eq, logic::u8. Needs logic-only lambdas too. Notes, item 12.",
+   "created": "2026-09-21T19:37:49.000Z",
+   "updated": "2026-09-21T19:37:49.000Z"
   }
  ]
 }
