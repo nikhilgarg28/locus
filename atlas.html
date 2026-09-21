@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 12,
-  "savedAt": "2026-09-21T20:34:38.000Z",
-  "nextTask": 117,
-  "nextId": 228,
+  "rev": 13,
+  "savedAt": "2026-09-21T20:49:51.000Z",
+  "nextTask": 125,
+  "nextId": 239,
   "taskPrefix": "LOC"
  },
  "docs": [
@@ -421,7 +421,21 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "   - A const item is emitted as a Rust const, and its initializer is limited to what Rust can evaluate at compile time. At present it is a function of no arguments.",
     "   - match is to have the power it has in Rust: on integers, bool, and tuples, with literal, range, and or-patterns, bindings with @, guards, and exhaustiveness over integer ranges. This is in the batch on control flow, not in the core.",
     "   - Polish, after the core: omitting -> (), mut on parameters, field init shorthand and ..base in struct expressions, loop labels, MAX and MIN and a closed list of integer methods, range expressions including ..=, and passing doc comments and chosen attributes through to the generated Rust. usize and isize arrive with slices; their width depends on the platform, which the logic and determinism both have to account for.",
-    "   - Still open from the audit: what the integer operators mean to the logic, given that overflow panics in one build and wraps in another, that / and % truncate toward zero and panic on a zero divisor, and that a shift overflows at the bit width; The operators of the core are + - * / %; multiplication is in, although it makes arithmetic non-linear, and the bit operators and shifts come later, since they need a bit-level model. The kernel today has only Nat with addition, so the core needs Int in the kernel.",
+    "   - The meaning of the integer operators is item 14. The operators of the core are + - * / %; the bit operators and shifts come later, since they need a bit-level model.",
+    "",
+    "14. Integers, in code and in propositions. One rule decides what may be written in a proposition, and it is item 5, applied to operators as to any other function: an operator is a function of its operand types, with effects of its own, and only what always returns, never panics, and does no io may appear in a proposition.",
+    "",
+    "   - In code an operator means what it means in Rust and is printed as written. + - * on a machine integer panic on overflow in a build with overflow checks and wrap in one without; / and % panic on a zero divisor, and on the smallest value divided by -1, in every build.",
+    "   - So x + 1 on a machine integer may panic, and is not valid in a proposition. x as Int + 1 is valid, because + on Int is total, and so is x.wrapping_add(1), which never panics. The same test, not a rule about arithmetic, is what rejects the one and admits the others, and the error says which two things can be written instead. Comparisons of machine integers never panic and are valid as they stand. A specification therefore cannot contain arithmetic that silently wraps, and no operator means one thing in code and another in a proposition: + always means the operation of its operand type.",
+    "   - The same test settles what is to come. Indexing a Vec and unwrap may panic and are not written in propositions; their total counterparts on Seq and Option are. A function that takes evidence in place of panicking is total, and is written in a proposition wherever that evidence can be given. An operator a programmer defines is valid in a proposition exactly when its implementation makes the three promises.",
+    "   - Code that promises no_panic may still use +: the operation has a condition under which it does not panic, and the promise turns that condition into an obligation at the place it is used. A proposition is never executed, so it has no such place, which is why the condition cannot be discharged there.",
+    "   - What the logic knows of let s = a + b. Under no_panic, where the sum was shown to be in range, s as Int == a as Int + b as Int. Otherwise only s == a.wrapping_add(b), the one fact true in every build; evidence that the sum is in range recovers the exact sum. An operation that panics in every build teaches its condition to what follows: after a / b the divisor is known not to be zero, as c is known after assert!(c). An overflow check that only some builds make teaches nothing.",
+    "   - / and % on Int truncate toward zero, as in Rust, so that code and specification agree. Int division by zero has the value 0, since a function of the logic must be total; code that promises no_panic never reaches it.",
+    "   - as between integer types wraps, never panics, and is valid everywhere. as Int is exact. A literal that does not fit its type is an error.",
+    "   - Floats follow from the same test. Their arithmetic never panics, so it may be written in a proposition, where it is an operation the logic knows nothing about: out == a + b can be stated and used, and no algebra follows from it. Equality in a proposition is the logic's, which holds of any value and itself; Rust's == on floats is a different function, which NaN fails, and the two must not be confused. How that is spelled is to be settled with floats.",
+    "   - The reference interpreter panics on overflow, the stricter of Rust's two behaviors, and generated Rust is compared with it in a build with overflow checks.",
+    "   - Still open: whether a comparison in a proposition may mix integer types, as in out == x as Int + 1 with out a u32. A comparison of two integers has one mathematical meaning whatever their types, which argues for allowing it; Rust does not allow it, which argues for writing out as Int.",
+    "   - What this asks of the kernel: Int as an ordered ring, where there is only Nat with addition today; for each machine type a view to Int and a wrap from Int, generalizing the present model of u8; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
     "",
     "## 15.2 Open questions",
     "",
@@ -508,7 +522,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T20:34:38.000Z"
+   "updated": "2026-09-21T20:49:51.000Z"
   },
   {
    "id": "language",
@@ -3369,13 +3383,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f118",
    "area": "Expressions and control",
-   "name": "Arithmetic operators, with overflow an obligation only under no_panic; `as` casts",
-   "status": "planned",
-   "note": "",
-   "doc": "",
-   "anchor": "",
+   "name": "Arithmetic operators + - * / % with Rust's behavior; in a proposition only total operations, such as those of Int and wrapping_add",
+   "status": "agreed",
+   "note": "Item 14.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
    "project": "p2",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:49:51.000Z"
   },
   {
    "id": "f119",
@@ -4113,6 +4127,28 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "anchor": "15-3-accepted-directions-not-yet-specified",
    "project": "p181",
    "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f237",
+   "area": "Compiler and kernel",
+   "name": "Int and the machine integer models in the kernel; an arithmetic procedure that produces evidence",
+   "status": "planned",
+   "note": "Item 14. The kernel has Nat with addition and a model of u8 today.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p229",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "f238",
+   "area": "Expressions and control",
+   "name": "Bit operators and shifts",
+   "status": "planned",
+   "note": "After the core; they need a bit-level model.",
+   "doc": "",
+   "anchor": "",
+   "project": "p181",
+   "updated": "2026-09-21T20:49:51.000Z"
   }
  ],
  "projects": [
@@ -4131,6 +4167,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "description": "Logic-only types, grouped under logic. These are Prop, proof types, Int and Seq\u003cT>, with Map and Set later. They have no runtime form, now or ever.\n\nGhost\u003cT>, built by snapshot(e). It gives up the runtime form of any other type. Inside a proposition it reads as the T.\n\nOne rule. A binding or field is erased exactly when its type has no runtime form. There is no binder keyword.\n\nConversions into the logic. as Int, and a view from Vec to Seq.\n\nRuntime big numbers and similar types are library types with a logic-only model.\n\nModel functions and model fields need no feature of their own.",
    "created": "2026-09-21T19:19:39.000Z",
    "updated": "2026-09-21T19:19:39.000Z"
+  },
+  {
+   "id": "p229",
+   "name": "Kernel arithmetic",
+   "status": "planned",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z",
+   "description": "What item 14 of the notes asks of the kernel. The core batch cannot have i32, u32, or the arithmetic operators without it: the kernel today has Nat with addition and a model of u8 only."
   },
   {
    "id": "p173",
@@ -5506,12 +5550,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t207",
    "n": 113,
    "title": "Decide what the integer operators mean to the logic",
-   "status": "todo",
+   "status": "done",
    "priority": 3,
    "project": "p89",
-   "notes": "Notes, item 13. Overflow panics in one build and wraps in another, so without no_panic the only fact true in every build is that the result, if there is one, is the wrapped value. / and % truncate toward zero and panic on a zero divisor; a shift overflows at the bit width; as truncates.\n\nProposal (21 September), not yet accepted:\n\n1. In code an operator means what it means in Rust, and is printed as written.\n2. To the logic, the result of a + b is the sum of the two values as Int, wrapped into the type. Under no_panic there is also an obligation that the sum is in range, after which the wrap is the identity and the result is the exact sum. Without no_panic there is no obligation and only the wrapped value is known, since that is the one fact true in every build.\n3. Inside a proposition, arithmetic is over Int: a machine integer is read as its Int value, so a specification cannot overflow. Code and specification agree exactly when nothing overflows, which is what no_panic establishes. To speak of wrapping in a proposition, write wrapping_add.\n4. An operation that panics in every build teaches its condition to what follows: after a / b, the divisor is known not to be zero, as after assert!(c), c is known. An operation that panics only in some builds teaches nothing.\n5. / and % on Int truncate toward zero, as in Rust, so that code and specification agree. Int division by zero is given the value 0 in the logic, where it must be total; code under no_panic can never reach it.\n6. as between integer types is the same wrap and is never an obligation. as Int is exact.\n7. The reference interpreter panics on overflow, which is the stricter of Rust's two behaviors.\n8. Kernel work this implies: Int as an ordered ring; for each machine type a view to Int and a wrap from Int, generalizing the present u8 model; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
+   "notes": "Decided 21 September: notes, item 14. The test is item 5 applied to operators: x + 1 on a machine integer may panic, so it is not valid in a proposition; x as Int + 1 and x.wrapping_add(1) are.\n\nNotes, item 13. Overflow panics in one build and wraps in another, so without no_panic the only fact true in every build is that the result, if there is one, is the wrapped value. / and % truncate toward zero and panic on a zero divisor; a shift overflows at the bit width; as truncates.\n\nProposal (21 September), not yet accepted:\n\n1. In code an operator means what it means in Rust, and is printed as written.\n2. To the logic, the result of a + b is the sum of the two values as Int, wrapped into the type. Under no_panic there is also an obligation that the sum is in range, after which the wrap is the identity and the result is the exact sum. Without no_panic there is no obligation and only the wrapped value is known, since that is the one fact true in every build.\n3. Inside a proposition, arithmetic is over Int: a machine integer is read as its Int value, so a specification cannot overflow. Code and specification agree exactly when nothing overflows, which is what no_panic establishes. To speak of wrapping in a proposition, write wrapping_add.\n4. An operation that panics in every build teaches its condition to what follows: after a / b, the divisor is known not to be zero, as after assert!(c), c is known. An operation that panics only in some builds teaches nothing.\n5. / and % on Int truncate toward zero, as in Rust, so that code and specification agree. Int division by zero is given the value 0 in the logic, where it must be total; code under no_panic can never reach it.\n6. as between integer types is the same wrap and is never an obligation. as Int is exact.\n7. The reference interpreter panics on overflow, which is the stricter of Rust's two behaviors.\n8. Kernel work this implies: Int as an ordered ring; for each machine type a view to Int and a wrap from Int, generalizing the present u8 model; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
    "created": "2026-09-21T20:29:22.000Z",
-   "updated": "2026-09-21T20:34:38.000Z"
+   "updated": "2026-09-21T20:49:51.000Z"
   },
   {
    "id": "t208",
@@ -5545,6 +5589,94 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Notes, item 13. Left out of the core: they need a bit-level model in the logic. A shift overflows when the amount reaches the bit width.",
    "created": "2026-09-21T20:34:38.000Z",
    "updated": "2026-09-21T20:34:38.000Z"
+  },
+  {
+   "id": "t228",
+   "n": 117,
+   "title": "Decide whether a comparison in a proposition may mix integer types",
+   "status": "todo",
+   "priority": 1,
+   "project": "p89",
+   "notes": "Notes, item 14. out == x as Int + 1 with out a u32, or out as Int == x as Int + 1.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t230",
+   "n": 118,
+   "title": "Int in the kernel, as an ordered ring: + - *, order, and the axioms or the construction behind them",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Nat stays for induction; Int is what machine integers are modelled by.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t231",
+   "n": 119,
+   "title": "Int division and remainder that truncate toward zero, total, with division by zero equal to 0",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t232",
+   "n": 120,
+   "title": "A model for each machine integer type: a view to Int, a wrap from Int, range and round-trip facts",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Generalizes the six axioms of the u8 model. as between integer types is the wrap.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t233",
+   "n": 121,
+   "title": "The operators of each machine type stated through the model, with their panic conditions",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Overflow for + - *; zero divisor and the smallest value over -1 for / and %.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t234",
+   "n": 122,
+   "title": "The closed-term evaluator over Int and the machine types",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Proof by all 256 cases remains for bytes only.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t235",
+   "n": 123,
+   "title": "An arithmetic procedure that produces evidence the kernel checks",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Linear; multiplication by a literal counts as linear; other products are left to lemmas. This is what makes holes fill beyond a byte, and the content of the batch on more powerful hole filling.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
+  },
+  {
+   "id": "t236",
+   "n": 124,
+   "title": "Lemmas about Int and the machine types, callable by name",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p229",
+   "notes": "Until Int is in the language these are built in the kernel's own terms, as theory.rs is today.",
+   "created": "2026-09-21T20:49:51.000Z",
+   "updated": "2026-09-21T20:49:51.000Z"
   }
  ]
 }
