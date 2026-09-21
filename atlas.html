@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 39,
-  "savedAt": "2026-09-21T23:13:41.000Z",
+  "rev": 40,
+  "savedAt": "2026-09-21T23:13:57.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6978,12 +6978,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t293",
    "n": 177,
    "title": "M1 · The check IR gains return and panic as ways a block ends",
-   "status": "backlog",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 3.\nDepends on: M0 (LOC-176), E4 (LOC-170).\nUnblocks: M2 (LOC-178), E10 (LOC-190).\nCovers: LOC-142, LOC-93.\n\nScope. src/exec only: the IR, its checker, and its interpreter. At a return the checker demands the function's result type; at a panic it demands nothing, or under no_panic evidence that the point is unreachable.\n\nTests.\n- Programs built by hand in the IR, as exec_check does today: a return inside a branch, a panic inside a branch, both.\n- A return with the wrong evidence is rejected at the return.\n- Architecture's account of the trusted base is updated.\n- All four promises are enforced by the checker, no_io and no_alloc included, each with a hand-built function that breaks it.\n- The erased check still checks the arms and statements that follow a never-yielding expression, which E4 stopped doing.\n- A let bound to a panic gets a type in the generated Rust, so that inference cannot fail (E0282).\n\nDone when. The checker is ready before any surface syntax reaches it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-21T23:13:57.000Z"
   },
   {
    "id": "t294",
@@ -7077,12 +7077,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t302",
    "n": 186,
    "title": "R1 · A generator of random well-typed programs, compared three ways",
-   "status": "backlog",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151), H2 (LOC-152).\nUnblocks: R4 (LOC-189).\n\nScope. Programs over the runtime fragment with trivial evidence, run in the check-IR interpreter, the erased interpreter, and as compiled Rust, two hundred to a rustc call. Loops are generated bounded by construction (a counter with a literal limit, never assigned in the body), because interpreter fuel does not bound the compiled program; the process timeout of E4 is a safeguard and its firing is inconclusive. The fast suite runs a few hundred programs with a fixed seed; the extended suite runs thousands with fresh seeds. E6, M2, M3, and O3 each extend the generator as part of their own exit.\n\nTests.\n- Three-way agreement on every generated program, panics included once E4 lands, and in both overflow configurations once E6 lands.\n- A failing program is printed with its seed and shrunk by deleting statements.\n- An inconclusive run is counted and printed, and the extended suite fails if more than a handful are.\n\nDone when. Differences between what is checked and what runs are found by machine, not by luck.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:57.000Z"
   },
   {
    "id": "t303",
@@ -7099,12 +7099,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t304",
    "n": 188,
    "title": "R3 · Golden diagnostics, and a test that every error code is exercised",
-   "status": "backlog",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. The rendered diagnostic of every rejected corpus file is stored and compared. A meta test lists the error codes in the source and fails if one has no rejected file.\n\nTests.\n- LOCUS_BLESS=1 rewrites the goldens; the diff is reviewed like code.\n\nDone when. Diagnostics are the product for an author, human or AI, and change only on purpose.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T23:13:57.000Z"
   },
   {
    "id": "t305",
