@@ -24,6 +24,8 @@ Diagnostics are part of each batch: preserve requirement origins, report Locus-l
 
 ## What this milestone is for, and how it will be judged
 
+[positioning.md](positioning.md) records what Locus is for and what it gives up. Two points from it bear on the plan. The accepted cost: only code written in Locus is verified. The assumption everything rests on: ownership and mutation, a logic over immutable values, and explicit proofs, together, at a tolerable proof burden. The core has no mutation, so that assumption is untested, and the experiment that tests it, `let mut` and `&mut` read as old and new values, is the most informative work after this milestone.
+
 The central promise is that someone can write familiar code, state meaningful facts about it, and get understandable help establishing them. The kernel is a foundation for that; the experience from source to executable is what decides whether the language succeeds. Until that has been tested, the core feature set holds steady.
 
 **The test.** One polished end-to-end example: source code for a small bounded state machine; a result that carries evidence; a caller that reuses that evidence; useful diagnostics for an intentional mistake; and matching interpreted and generated behavior. Everything between here and there serves that example.
