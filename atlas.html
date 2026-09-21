@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 16,
-  "savedAt": "2026-09-21T21:04:38.000Z",
-  "nextTask": 129,
-  "nextId": 244,
+  "rev": 17,
+  "savedAt": "2026-09-21T21:08:15.000Z",
+  "nextTask": 137,
+  "nextId": 252,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -3164,6 +3164,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "7. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.",
     "8. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; Appendix A of language.md tracks them.",
     "",
+    "## To settle before the core is built",
+    "",
+    "Raised in the last review before implementation, and tracked as tasks under Open decisions: LOC-129, LOC-130, LOC-131, LOC-132, LOC-133, LOC-134, LOC-135, LOC-136. In short: the checked IR for mutation, early exit, and panics, with the flow rules the target language defers; how moves meet the logic; acceptance examples in the target syntax, and the automation they show to be needed; whether evidence of one claim is accepted for another; how Int enters the kernel and how the machine models are tested; what a panic is to the interpreter and to erasure; what locus build emits; and the order of implementation.",
+    "",
     "## Deferred",
     "",
     "The README milestones give the intended order. Each item below is outside this fragment.",
@@ -3182,7 +3186,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:03:06.000Z"
+   "updated": "2026-09-21T21:08:15.000Z"
   },
   {
    "id": "working-notes",
@@ -5235,9 +5239,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "todo",
    "priority": 2,
    "project": "p89",
-   "notes": "The core batch has i32 and u32 with overflow as an obligation, and only the basic hole (the exact fact in scope). The strongest tier of the present search tries all 256 values of a byte and does not carry over to 32 bits. Until stronger hole filling exists, every overflow obligation is written out by hand, which needs at least the Int lemmas to be callable; the lemma library is in a later batch.",
+   "notes": "The core batch has i32 and u32 with overflow as an obligation, and only the basic hole (the exact fact in scope). The strongest tier of the present search tries all 256 values of a byte and does not carry over to 32 bits. Until stronger hole filling exists, every overflow obligation is written out by hand, which needs at least the Int lemmas to be callable; the lemma library is in a later batch.\n\nNow part of LOC-131.",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T21:08:15.000Z"
   },
   {
    "id": "t91",
@@ -5854,6 +5858,94 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Target language: Mutation and references. Needs no lifetimes. impl blocks and self are LOC-38.",
    "created": "2026-09-21T21:03:06.000Z",
    "updated": "2026-09-21T21:03:06.000Z"
+  },
+  {
+   "id": "t244",
+   "n": 129,
+   "title": "Design the checked IR for mutation, early exit, and panics before coding it",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "notes": "Raised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t245",
+   "n": 130,
+   "title": "Decide how moves meet the logic",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "notes": "Evidence, Ghost\u003cT>, Int, and every type with no runtime form should be Copy, whatever they speak of. A proposition should be able to mention a value that has been moved, since a result type speaks of parameters the body consumed. An expression that is erased should have to keep the three promises and should never move anything, which would replace the present rule that keeps the effects of an erased expression. Matching through a & parameter binds references in Rust, which tier 0 has no place for: only Copy fields could be bound.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t246",
+   "n": 131,
+   "title": "Write the acceptance examples of the new core in the target syntax, and count what their proofs need",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "notes": "Before building: the lock example with u32, and two or three more, written by hand with prop!, @(...), as Int, promises on every function, tracked evidence, and explicit refreshes. This tests the spelling cheaply, and shows which holes must fill for the core to be usable. With only the basic hole, every overflow obligation over 32 bits is a chain of lemma calls; the expected conclusion is that the linear arithmetic procedure belongs inside the core milestone. Subsumes LOC-72.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t247",
+   "n": 132,
+   "title": "Decide whether evidence of one claim is still accepted for another",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "Open question 3. The elaborator does it today, and it is what makes destructuring a result need no proof repair. It is implicit, which sits badly with preferring explicit steps, and prove!(P) now offers an explicit way to restate a fact. Decide before the elaborator is reworked.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t248",
+   "n": 133,
+   "title": "Decide how Int enters the kernel, and how the machine models are tested",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "Axioms for an ordered ring, or a construction from Nat. The u8 model was tested against native arithmetic on every pair of bytes; that is impossible at 32 bits, so the models and the evaluator need boundary and randomized testing against Rust. A wrong axiom here makes everything provable.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t249",
+   "n": 134,
+   "title": "Decide what a panic is to the interpreter, the differential tests, and erasure",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "Today a program returns or does not. A panic is a third outcome: the reference interpreter, the comparison with compiled Rust, and the statement that erasure preserves behavior all have to speak of it. Later, with &mut and protected types: a panic in the middle of an update leaves the caller's value half changed, and a Rust caller that catches the panic can see it.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t250",
+   "n": 135,
+   "title": "Decide what locus build emits",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "One module per file, to be declared with mod? Where Proved and Ghost live when there are several files, since each file defining its own makes them different Rust types; and whether Proved can be made unconstructible outside generated code from the start, which shapes every signature that is generated.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
+  },
+  {
+   "id": "t251",
+   "n": 136,
+   "title": "Decide the order of implementation, and what leaves the core",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "The present pipeline works end to end with about 200 tests. A suggested order that keeps it working: the changes of syntax (prop!, @P, keywords, precedence, literals, paths, pub); promises in place of math fn; Int and the machine integers in the kernel, with arithmetic; let mut, tracked evidence, and the loop forms; moves and derive; return, the never type, and the panicking forms. The lock file of found proofs depends on a stable form for proofs and could leave the core.",
+   "created": "2026-09-21T21:08:15.000Z",
+   "updated": "2026-09-21T21:08:15.000Z"
   }
  ]
 }
