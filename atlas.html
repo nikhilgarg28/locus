@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 20,
-  "savedAt": "2026-09-21T21:40:52.000Z",
+  "rev": 21,
+  "savedAt": "2026-09-21T21:45:09.000Z",
   "nextTask": 149,
   "nextId": 264,
   "taskPrefix": "LOC",
@@ -2890,7 +2890,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "What Locus adds to Rust, in full, so that the list can be kept short:",
     "",
     "- Tokens: none. Every token Locus uses is a token of Rust, which is what keeps a locus! { ... } macro possible. One case needs care there: Rust reads pair.0.1 as a name, a dot, and the number 0.1, and splits it while parsing.",
-    "- Words: prop, a keyword only where a declaration can begin, and whether even that is needed is open (LOC-148). math goes when promises replace math fn. Every keyword of Rust is reserved. Int, Prop, Seq, and Ghost are names of types, forall and exists are names of functions of the logic, and prove!, old!, recurse!, and the rest are names of forms; none of these are keywords.",
+    "- Words: one, the keyword that declares a proposition, prop, a keyword only where a declaration can begin. Writing the declaration as an attribute on an enum was considered and declined (LOC-148): a keyword is acceptable, and says more plainly what is being declared. math goes when promises replace math fn. Every keyword of Rust is reserved. Int, Prop, Seq, and Ghost are names of types, forall and exists are names of functions of the logic, and prove!, old!, recurse!, and the rest are names of forms; none of these are keywords.",
     "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @(out == n)), with each name in scope in the fields after it; => as implication inside a formula; declarations of propositions, including a variant that states which proposition it proves; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
     "- Attributes: the promises and derive. An attribute's contents are free-form in Rust.",
     "",
@@ -3125,7 +3125,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:40:52.000Z"
+   "updated": "2026-09-21T21:45:09.000Z"
   },
   {
    "id": "target-examples",
@@ -6239,12 +6239,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t263",
    "n": 148,
    "title": "Decide whether a declared proposition is written as an attribute on an enum, so that prop is not a keyword",
-   "status": "todo",
+   "status": "canceled",
    "priority": 1,
    "project": "p89",
-   "notes": "Proposal, 21 September. A proposition is an enum whose values are its proofs, which is how it was first explained, so write it as one:\n\n    #[prop(n: u32)]\n    enum Small {\n        #[proves(Small(0))]\n        Zero,\n        Below { bound: @(n \u003c 10) },\n    }\n\nThe parameters go in the attribute; a variant that proves the proposition at particular arguments says so with #[proves(...)], and one without it proves it at the parameters; fields with names use Rust's struct-like variants. Everything but the @ types is Rust syntax. Use is unchanged: @Small(n), Small::Zero, match on evidence. It is erased whole. Observation: until recursion arrives, a declared proposition adds names and not power, since without recursion it can be written with ||, &&, and exists; what it is really for is inductive predicates.",
+   "notes": "Decided 21 September: no. A declared proposition keeps a keyword of its own; keywords are acceptable. The proposal below is kept for the record.\n\nProposal, 21 September. A proposition is an enum whose values are its proofs, which is how it was first explained, so write it as one:\n\n    #[prop(n: u32)]\n    enum Small {\n        #[proves(Small(0))]\n        Zero,\n        Below { bound: @(n \u003c 10) },\n    }\n\nThe parameters go in the attribute; a variant that proves the proposition at particular arguments says so with #[proves(...)], and one without it proves it at the parameters; fields with names use Rust's struct-like variants. Everything but the @ types is Rust syntax. Use is unchanged: @Small(n), Small::Zero, match on evidence. It is erased whole. Observation: until recursion arrives, a declared proposition adds names and not power, since without recursion it can be written with ||, &&, and exists; what it is really for is inductive predicates.",
    "created": "2026-09-21T21:40:52.000Z",
-   "updated": "2026-09-21T21:40:52.000Z"
+   "updated": "2026-09-21T21:45:09.000Z"
   }
  ]
 }
