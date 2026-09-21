@@ -1,4 +1,4 @@
-//! The typed tree and `lower` (docs/ir-architecture.md): the specification's
+//! The typed tree and `lower` (docs/architecture.md): the specification's
 //! programs written in source shape, lowered, and checked.
 
 mod common;

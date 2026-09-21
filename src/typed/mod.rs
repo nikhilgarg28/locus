@@ -1,4 +1,4 @@
-//! The typed tree and its lowering (docs/ir-architecture.md).
+//! The typed tree and its lowering (docs/architecture.md).
 //!
 //! The typed tree is the source program made fully explicit, in the shape of
 //! the source. `lower` turns it into what is checked: kernel declarations for

@@ -1,6 +1,6 @@
-# Locus immutable core: scope, types, propositions, and proofs
+# The Locus language
 
-Status: proposed language specification, revised 20 September 2026. This describes a coherent target fragment, not the implemented frontend. The current parser grammar remains in grammar.md, which lists where the frontend still differs. Rust features that this fragment does not support are tracked in rust-features.md.
+Status: the language as specified now, revised 21 September 2026. The parser and the elaborator implement this fragment; what the elaborator does not yet handle is listed in [architecture.md](architecture.md). Everything about the future of the language, including what has been agreed and not yet specified, is in [notes.md](notes.md). Section 13 is the grammar as implemented, and Appendix A relates the fragment to Rust's features.
 
 This document specifies binding, formation, checking, and execution rules together. A context-free parser grammar alone would not specify the dependencies we need. Code examples use proposed surface syntax; kernel constructs and context annotations need not be exposed to programmers.
 
@@ -1471,119 +1471,169 @@ Two tooling consequences are intended:
 
 The prelude, including its kernel-level part, is not trusted: its lemmas are checked like any other. The hole solver and all other automation are not trusted.
 
-## 13. Surface grammar sketch
+## 13. Surface grammar
 
-This is a complete construct inventory for the selected fragment, with conventional token details abbreviated. It intentionally leaves automation implementation and diagnostic wording outside the grammar.
+This is the grammar implemented by the syntax frontend. Names, types, propositions, modes, and proofs still require the semantic checking that comes after parsing. bool, u8, and Prop are parsed as type names, not lexer keywords.
+
+Appendix A lists the Rust features that the fragment does not support.
+
+### Relationship to Rust tokens
+
+Locus source is meant to tokenize as Rust, so that the same frontend can later run inside a locus! { ... } procedural macro as well as on .loc files. Every token here is a Rust token. Two places need care in that setting and none in the file-based frontend: Rust reads pair.0.1 as a name, a dot, and the float 0.1, which a macro driver has to split; and => and .. arrive as single punctuation tokens in both.
+
+The words struct, enum, match, loop, for, in, break, and continue are reserved, as they are in Rust. forall and exists are reserved by Locus. math and prop are ordinary identifiers except where a declaration or a function type can begin: math directly before fn, and prop directly before a name at the start of a declaration.
+
+### Retired syntax
+
+The parser recognizes four retired forms in order to say what replaced them.
+
+| Written | Diagnostic | Replacement |
+|---|---|---|
+| def name(...) | L0113, with an applicable fix; parsing continues as a math fn | math fn name(...) |
+| @{ command; ... } | L0110 | Evidence is an ordinary expression: a stated intermediate fact, a lemma call, a match, or _ |
+| a + b | L0112 | a.wrapping_add(b); arithmetic operators return with Int and Nat in a later milestone |
+| [], [a, b], [a; n], [T], [T; n] | L0114 | None in the core; brackets hold exactly one proposition |
+
+Nat is an ordinary name to the parser. Name resolution reports it.
+
+### Notation
+
+In this EBNF, brackets denote optional syntax and braces denote repetition. Quoted brackets and braces are source tokens. Comma-separated lists allow a trailing comma.
 
 ~~~
-Program       ::= Declaration*
+file        = { declaration } ;
+declaration = [ "math" ] "fn" name "(" parameters ")" "->" type block
+            | "struct" name "{" parameters "}"
+            | "enum" name "{" [ variant { "," variant } [ "," ] ] "}"
+            | "prop" name [ "(" parameters ")" ] "{" [ prop_variant { "," prop_variant } [ "," ] ] "}"
+            | "const" name ":" type "=" expression ";" ;
+parameters  = [ parameter { "," parameter } [ "," ] ] ;
+parameter   = name ":" type ;
+variant     = name [ "(" fields ")" ] ;
+prop_variant = name [ "(" fields ")" ] [ ":" "@" proof_target ] ;
+fields      = [ field { "," field } [ "," ] ] ;
+field       = [ name ":" ] type ;
 
-Declaration   ::= [math] fn Name "(" Parameters ")" "->" Type Block
-                | struct Name "{" Fields "}"
-                | enum Name "{" Variants "}"
-                | prop Name ["(" Parameters ")"] "{" PropVariants "}"
-                | const Name ":" Type "=" LogicalExpr ";"
+type        = name | "(" ")" | "(" type ")" | tuple_type
+            | "@" proof_target
+            | [ "math" ] "fn" "(" fields ")" "->" type ;
+proof_target = (name | proposition | "(" expression ")") { postfix } ;
+postfix     = "(" arguments ")" | "." name | "." integer ;
+tuple_type  = "(" field "," ")"
+            | "(" field "," field { "," field } [ "," ] ")" ;
 
-Parameters    ::= [Parameter ("," Parameter)* [","]]
-Parameter     ::= Name ":" Type
+block       = "{" { statement } [ expression ] "}" ;
+statement   = "let" pattern [ ":" type ] "=" expression ";"
+            | expression ";" ;
+pattern     = name | "_" | "true" | "false" | integer
+            | "(" ")" | "(" pattern ")"
+            | "(" pattern "," [ pattern { "," pattern } [ "," ] ] ")"
+            | name "{" [ pattern_field { "," pattern_field } [ "," ] ] "}"
+            | path [ "(" [ pattern { "," pattern } [ "," ] ] ")" ] ;
+pattern_field = [ name ":" ] pattern ;
+path        = name "::" name ;
 
-Fields        ::= [Field ("," Field)* [","]]
-Field         ::= [Name ":"] Type
-
-Variants      ::= [Variant ("," Variant)* [","]]
-Variant       ::= Name ["(" Fields ")"]
-
-PropVariants  ::= [PropVariant ("," PropVariant)* [","]]
-PropVariant   ::= Name ["(" Fields ")"] [":" "@" ProofTarget]
-
-Type          ::= bool | u8 | Prop | Name
-                | "@" ProofTarget
-                | "(" ")"
-                | "(" Type ")"
-                | TupleType
-                | [math] fn "(" TypeParameters ")" "->" Type
-
-TypeParameters ::= [Field ("," Field)* [","]]
-TupleType      ::= "(" Field "," [Field ("," Field)* [","]] ")"
-
-ProofTarget   ::= Name Postfix*
-                | PropositionLiteral Postfix*
-                | "(" PropExpr ")" Postfix*
-
-Block         ::= "{" Statement* [Expr] "}"
-Statement     ::= let Pattern [":" Type] "=" Expr ";"
-                | Expr ";"
-
-Pattern       ::= Name | "_"
-                | true | false | Integer
-                | "(" ")"
-                | "(" Pattern "," [Pattern ("," Pattern)* [","]] ")"
-                | Name "{" PatternFields "}"
-                | Path ["(" [Pattern ("," Pattern)* [","]] ")"]
-
-PatternFields ::= [PatternField ("," PatternField)* [","]]
-PatternField  ::= [Name ":"] Pattern
-
-Path          ::= Name "::" Name
-
-Expr          ::= Primary
-                | "!" Expr
-                | Expr BinaryOperator Expr
-                | Expr Postfix
-                | if Expr Block else (Block | IfExpr)
-                | match Expr "{" [Arm ("," Arm)* [","]] "}"
-                | loop "(" StateParameters ")" "->" Type Block
-                | for Name in Expr ".." Expr "(" StateParameters ")" Block
-                | break Expr
-                | continue "(" Arguments ")"
-
-Arm           ::= Pattern "=>" Expr
-
-Primary       ::= Name | Path | Integer | true | false | "_"
-                | "(" ")"
-                | "(" Expr ")"
-                | TupleExpr
-                | Name "{" ValueFields "}"
-                | Block
-                | PropositionLiteral
-
-TupleExpr     ::= "(" Expr "," [Expr ("," Expr)* [","]] ")"
-ValueFields   ::= [ValueField ("," ValueField)* [","]]
-ValueField    ::= [Name ":"] Expr
-
-Postfix       ::= "(" Arguments ")" | "." Name | "." Integer
-Arguments     ::= [Expr ("," Expr)* [","]]
-
-StateParameters ::= [StateParameter ("," StateParameter)* [","]]
-StateParameter  ::= Name ":" Type "=" Expr
-
-PropositionLiteral ::= "[" Formula "]"
+expression  = atom | "!" expression | expression binary_operator expression
+            | expression postfix ;
+arguments   = [ expression { "," expression } [ "," ] ] ;
+atom        = name | path | integer | "true" | "false" | "_" | block
+            | "(" ")" | "(" expression ")" | tuple_expression
+            | name "{" [ value_field { "," value_field } [ "," ] ] "}"
+            | proposition
+            | "if" expression block "else" (block | if_expression)
+            | "match" expression "{" { arm } "}"
+            | "loop" "(" state ")" "->" type block
+            | "for" name "in" expression ".." expression "(" state ")" block
+            | "break" expression
+            | "continue" "(" arguments ")"
+            | ("forall" | "exists") "(" nonempty_parameters ")" block ;
+tuple_expression = "(" expression "," [ expression { "," expression } [ "," ] ] ")" ;
+value_field = [ name ":" ] expression ;
+arm         = pattern "=>" expression [ "," ] ;
+state       = [ state_parameter { "," state_parameter } [ "," ] ] ;
+state_parameter = name ":" type "=" expression ;
+proposition = "[" expression "]" ;
 ~~~
+
+if_expression has the if form above. nonempty_parameters follows parameters but requires at least one parameter. The comma after a match arm may be omitted only when the arm's body is a block, and after the last arm. Binary precedence, highest first: comparisons == != < <= > >=; &&; ||; implication =>. Conjunction and disjunction associate left; implication associates right. Unparenthesized comparison chains are errors. Calls and projections bind tighter than prefix !.
+
+The parser is more permissive than the language in three places, and the elaborator narrows them: a let pattern must be irrefutable; struct fields and patterns are checked against the declaration; and the body of a quantifier is a block whose only meaningful content is its final formula.
+
+### Headers and blocks
+
+Three conventions keep a { unambiguous. They are parsing conventions and do not change typing.
+
+- In the condition of an if, the scrutinee of a match, and the bounds of a for, name { begins the following block and is not a struct literal. This is Rust's rule. Parentheses, brackets, call arguments, and nested blocks lift the restriction: match (Unit {}) { ... }.
+- The proposition of a proof type follows the same rule, because a proof type is usually followed by a body: in -> @claim { given } the braces are the function body.
+- In the bounds of a for, the parenthesized group directly before the body is the state list, not a call on the upper bound. for i in 0..limit(a) (acc: u8 = 0) { ... } calls limit and then lists the state. A for with no state writes ().
+
+=> separates a match arm's pattern from its body and is also implication. A pattern never contains an expression and there are no guards, so the first => after a pattern is the separator and any later one belongs to the body.
+
+### Executable and math functions
+
+fn and math fn share parameter, result, and body grammar; the AST records FunctionMode::Runtime or FunctionMode::Math. The semantic rules, from the specification, are:
+
+- fn accepts/returns executable data and erased proofs, including data/proof tuples. It may diverge, and is checked for partial correctness. Proposition and proof values in its signature are ghost: they are erased and cannot determine executable data or control flow. A proof type such as @[same(x, y)] can mention propositions without passing a proposition object at runtime.
+- math fn is a pure, total function. It can accept/return propositions, proofs, and data. It is callable from logic, and also from executable code; it is compiled when its signature contains executable data and erased entirely when its signature is wholly ghost.
+- Local Prop bindings and logical calls are allowed in fn bodies as ghost bindings. A ghost value cannot determine executable data, runtime branching, or runtime layout. Proofs can discharge statically checked obligations.
+- Unknown runtime inputs can be used symbolically in logic. Compile-time resolution means checking the expression and its dependencies, not knowing every input value or deciding every proposition.
+- A runtime fn cannot be used in a proposition. A function used in logic must be a math fn, whose totality is guaranteed syntactically: no general loops and, in the core, no recursion.
+
+The syntax parser does not enforce these semantic restrictions. Both declaration kinds currently require explicit parameter/result types, and nested declarations are outside the initial grammar.
+
+### Propositions and bracket expressions
+
+Propositions are erased logical values of type Prop, not executable Booleans. Logical expressions may refer symbolically to unknown runtime inputs. Their meaning and well-formedness are checked at compile time; neither those inputs nor the truth of every claim must be known at compile time. Merely defining a proposition does not establish it.
+
+A proposition literal uses brackets, even when its annotation already says Prop:
+
+~~~
+math fn positive(n: u8) -> Prop {
+    [n > 0]
+}
+
+const equality_is_reflexive: Prop = [
+    forall (n: u8) {
+        n == n
+    }
+];
+~~~
+
+The intended elaboration rules are:
+
+- The core has no arrays, so [e] always denotes a proposition literal, with or without an expected type: let claim = [n != 0]; binds a Prop. How brackets are shared with arrays once arrays exist is an open question in the specification.
+- [], [e,], [a, b], and [e; count] are rejected. A multiline proposition is one formula, not a comma-separated list of claims.
+- let claim: Prop = n > 0; is a type error: there is no implicit Boolean-to-proposition conversion. Write let claim: Prop = [n > 0];.
+- Existing proposition values do not need wrapping: let another: Prop = claim; and a call returning Prop are valid.
+- For p: Prop and q: Prop, !p, p && q, p || q, and p => q construct new propositions directly, without extra brackets. They do not prove, decide, or branch on those claims. Boolean !, &&, and || retain their executable meanings; Boolean conjunction/disjunction retain short-circuit behavior. Implication is a logical operation. Mixed Boolean/proposition operands require an explicit logical formula.
+- Logical literals interpret comparisons and connectives logically and permit quantification. They do not execute arbitrary code or make effectful/nonterminating calls valid in logic.
+- A local proposition refers to logical snapshots at its definition; later mutation will not change what that proposition means.
+
+The parser records a bracket expression as ExprKind::Proposition. Enforcing the rules above is the elaborator's work.
+
+### Proof types and construction
+
+@claim denotes evidence for a named proposition. @[condition] applies the same type constructor to a proposition literal. Calls to proposition-returning math fn declarations can be used directly, such as @same(x, y), or within literals, such as @[same(x, y)]. Calls and projections belong to the proof target; ungrouped binary operators do not. The target must have type Prop after elaboration.
+
+An expression _ requests checked evidence for its expected proposition. It cannot assume a claim, stand for unspecified runtime data, or select an arbitrary proposition when no goal is known. Unsolved goals are compilation errors. _ in a binding/destructuring pattern continues to mean ignoring a value; this is a different AST form.
+
+A proof type (@claim, @[condition]) is not also a proof-producing expression, and @ never begins an expression. Use an annotation to state an explicit goal, such as let evidence: @[n == n] = _;.
+
+Evidence is built with ordinary expressions. A declared proposition is proved by applying one of its constructors, Small::Below(bound), and used by match. rewrite, unfold, and fold use call syntax with reserved names and need no grammar of their own. Hash-based proof forms are no longer accepted. #[...] and #![...] remain reserved for future attributes and currently receive an unsupported-feature diagnostic.
+
+### Scope, lexical rules, and recovery
+
+The final expression supplies a block's result. Every preceding expression statement requires ;, including an if or block expression. Early return is outside this initial grammar. (x) is grouping, (x,) is a tuple, and (out: u8,) is a named one-field tuple type. Named result fields in either kind of function will bind only in subsequent fields; parameter names and local bindings have lexical scope. Constants require an explicit type and are currently top-level declarations; local names use let.
+
+Identifiers currently use ASCII letters/digits and underscores and cannot begin with a digit. Proposition names follow a lowercase snake_case convention, not a capitalization rule. Integers are decimal digit sequences with optional single underscores between digits; their text is retained without a machine-integer conversion. Numeric suffixes, strings, and raw identifiers are not supported yet. Whitespace, // comments, and nested /* ... */ comments are accepted. Spans use UTF-8 byte offsets, including on invalid Unicode input.
+
+Parsing has bounded nesting (64 levels) and expression-chain length (128). Recovery can retain a partial AST for diagnostics; a file with any lexical or syntax error is never reported as successfully parsed. Conversely, syntax success does not establish semantic validity: the parser still accepts false proof goals, unbracketed Booleans in Prop contexts, misplaced proof holes, refutable let patterns, and a break outside a loop, for subsequent checking to reject.
+
+### Notes on the productions
 
 Formula and PropExpr follow section 7. LogicalExpr is Expr checked in logical mode; it is not a separate token language. IfExpr is the if production above. A variant with a payload is constructed by applying its Path with the call Postfix. A let Pattern is restricted to the irrefutable forms (section 6), which include the constructor pattern of a single-variant, all-proof proposition. The rewrite, unfold, and fold forms of section 8.4 use call syntax with reserved names and need no grammar of their own; the first argument of unfold and fold is a function name.
 
 Named function signatures, loop signatures, and for state lists are always explicit.
-
-The longest tokens are recognized first. Operators bind, highest to lowest:
-
-~~~
-calls and projections
-prefix !
-comparisons == != < <= > >=
-&&
-||
-=>  (right associative; proposition implication only)
-~~~
-
-Other binary operators are not in this fragment. Comparison chaining is rejected.
-
-The token => now has two roles: it separates a match arm's pattern from its body, and it is proposition implication. This is unambiguous here because a pattern never contains an expression and there are no guards: the first => after a pattern is the arm separator, and any later one belongs to the body. It is nevertheless easy to misread, and it stops being unambiguous once guards exist. Section 15 records the open choice of a different implication token.
-
-In runtime Boolean expressions, && and || short-circuit and can be understood through if/else. For Prop operands they construct logical connectives.
-
-Named product construction is syntactically distinguished from a following control-flow block by the parser's condition/header context. This applies to the condition of an if, the scrutinee of a match, and the bounds of a for. Parentheses may disambiguate a constructor used directly in those positions. This is a parsing convention, not a change in typing.
-
-Identifiers, whitespace, decimal literals, and comments can retain the current frontend's lexical rules. Locus source tokenizes as Rust, and its identifiers reappear in generated Rust, so Rust's keywords are reserved: among them struct, enum, match, loop, for, in, break, and continue. Locus adds forall and exists. The words math and prop are reserved only where the grammar expects them: math directly before fn, and prop directly before a name where a declaration can begin. Arrays are outside this selected fragment, so a bracketed expression is always a proposition literal containing exactly one formula, whether or not an expected type is present: let claim = [n != 0]; binds a Prop. There is no array reading to default to. How brackets are shared with arrays later is open (section 15.2).
 
 ## 14. Minimum checks an implementation must enforce
 
@@ -1622,124 +1672,7 @@ A conforming implementation must reject:
 
 ## 15. Deferred features and open questions
 
-### 15.1 Deferred
-
-The README milestones give the intended order. Each item below is outside this fragment.
-
-- Logical lambdas: logic-only, capturing only immutable and ghost values, and erased. They remove the hand lifting of section 8.3.
-- Mathematical Int and Nat, arithmetic operators whose overflow is a proof obligation over the mathematical value, further machine widths, and a linear-arithmetic procedure.
-- Generics over types and propositions. Exists, Option-like types, and a library Ghost wrapper become declarable.
-- Recursion, as one feature: recursive enums, recursive prop declarations, and structural recursion, where a recursive call is permitted only on a part bound by a match on the argument. Induction is then a recursive math function returning a proof. In the logic, Box is transparent: a recursive Rust enum using Box is seen as the plain inductive type, and the same holds for Rc, Arc, and shared references in the absence of interior mutability, because ownership guarantees such values are finite trees. Types that permit cycles through interior mutability are not inductive and need separate treatment.
-- The ghost keyword on binders (section 2.4), and with it model fields. The semantics is already fixed by Prop fields (section 4.2): ghost data is part of the logical value, so s.model is a function of s, and two structs differing only in a ghost field are different values with one runtime representation. A consequence to carry forward: once runtime equality exists on structs, it compares representations, and therefore does not reflect logical equality for a type with ghost data fields.
-- Dependent conjunction and implication, where the right operand is well formed only under the left, as in [i < len && a.get(i) > 0] once indexing demands a proof. This arrives with the first operation that takes a proof precondition, and is a reason to make && and => kernel formers at that point, not instances of the prelude And.
-- Requires/ensures/invariant/assert as sugar over proof parameters, dependent results, and loop proof state.
-- Mutation, references, ownership, and surface loops that elaborate to the state-passing loops of section 10.
-- Termination measures, for total correctness of executable loops and for non-structural math recursion. Until then the workaround for the latter is an explicit fuel parameter.
-- Trusted and external declarations, with the rest of Rust interoperability. Every such declaration is to be syntactically marked.
-- Runtime closures.
-
-### 15.2 Open questions
-
-These are not decided. Each lists the current behavior of this document first. None needs to be settled before the kernel spike.
-
-1. Proposition literals use brackets, [n != 0], and in this fragment a bracketed expression is always a proposition literal (section 13). Brackets are array syntax in Rust, and [n > 0] is a valid Rust array expression. The alternative is to drop the literal form: where a Prop is expected, an expression is elaborated as a formula, and the proof type is written @(n != 0).
-2. Implication is spelled =>, which is also the match arm separator (section 13). The alternative is ==>.
-3. Supplying evidence of Q where evidence of P is expected is an error unless the two are identical (section 3.1). The alternative is to treat the mismatch as an implicit hole, asking the solver of section 12.3 for P with the supplied evidence in scope. The implementation does the alternative, because a name bound by destructuring a result would otherwise never fit where evidence about that name is wanted; whether the specification should follow is still to be decided.
-4. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.
-5. A hole does not search the prelude (section 12.3). A mechanism for marking lemmas that a hole may apply, with its own step budget, would shorten proofs at some cost in predictability.
-6. The spelling of the chain form (section 8.4). One candidate is the bracketed form trans[a =(p) b =(q) c] used by the explicit refinement calculus.
-7. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.
-8. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; rust-features.md tracks them.
-
-### 15.3 Accepted directions, not yet specified
-
-These were agreed in design discussion and are not yet worked into the sections above, which still describe fn and math fn. The details, in particular spelling, remain open. [positioning.md](positioning.md) gives the use case that motivates them: a header that a person reviews, and an implementation that is checked against it.
-
-1. Effects are a small closed list fixed by the language: not returning, panicking, allocating, and io, which is any interaction with the world, including time and randomness. There are no user-defined effects and no effect handlers, which would need runtime machinery that plain Rust does not have. Mutation is visible in types and is not an effect. Being ghost is a separate axis: an effect says what happens at runtime, and ghost says what exists at runtime. Classical reasoning is reported by an audit, not tracked as an effect.
-2. As in Rust, a function may have any effect unless it promises otherwise. A promise is a built-in attribute, one per effect, named as Rust names its own promises of absence (no_std, no_mangle):
-
-~~~
-#[terminates]      always returns
-#[no_panic]        never aborts
-#[no_alloc]        never allocates
-#[no_io]           never interacts with the world
-~~~
-
-   What is guaranteed is what is written, which suits review of a specification: a reader looks for promises that are present, not for weakenings that are absent. An inner attribute at the top of a file, such as #![no_panic], makes a promise for every function in it. Promises are always explicit and never inferred, as const fn and async fn are in Rust, so they spread to every function a promising function calls. There is no attribute that bundles several promises. An obligation arises only where a promise is made: an operation that may panic in Rust, such as checked arithmetic or indexing when they arrive, needs no evidence in an ordinary function and needs evidence in one that promises no_panic.
-3. Attributes are a closed, built-in set interpreted by the compiler. Locus has no macros and no user-defined attributes. Attribute syntax is chosen because it is Rust syntax.
-4. A promise is checked against the body: every construct and every callee must keep it. A foreign declaration states its promises and is trusted. Only termination bears on the soundness of the logic, and the logic is protected by construction, since only total kernel terms appear in propositions. The other promises are claims about runtime behavior, enforced by a table from constructs to effects and a check at each call, in the check IR so that the check is on the trusted path.
-5. A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io. Such a function always returns and is deterministic, so f(x) denotes one value; allocation is invisible to the logic. The rule reads the signature and never the body. A function with no runtime form, such as one returning Prop, must keep these promises and states them like any other. A function that may not return cannot appear in a proposition, because its result type may promise anything; the result of calling it is a fresh variable that exists only after the call returns, as now.
-6. What the logic knows about f(x) is, always, what the result type says, so that f(x).1 is evidence about f(x).0; and, where the body of f is visible, its defining equation as well. Visibility of the equation follows visibility of the body. A recursive function is the exception recorded in item 9. Within one file every body is visible. Once headers exist, a function whose body is in the header is known by its definition, which is right for the vocabulary of a specification, and a function given there only by its signature is known by its contract. No separate control of unfolding is planned; it can be revisited.
-7. With the above, math fn carries no information of its own: it is the three promises of item 5. That a function may use Prop, quantifiers, and later Int, and need not be executable, follows from its types, which the kernel already classifies. The type math fn(x: A) -> B becomes a function type with those promises; function types carry promises too. The keyword stays until the promises are implemented and is then removed.
-8. Loop invariants need no construct of their own once the language has mutable locals. The direction is agreed; the full rules are to be written as part of introducing mut, together with the replacement of the loop forms of section 10, which exist only because there is no mutation.
-
-   - Evidence bound with let is a snapshot. It speaks of the values its proposition mentions as they were at that line, is never invalidated, and stays usable after those variables change, as let y = x keeps the old x. Evidence bound with let mut is tracked: its proposition is read against current values, and it may be reassigned. The same type text therefore reads differently under let and let mut, exactly as for data. Both are needed: evidence about the next value is built as a snapshot before an assignment and used to re-establish tracked evidence after it.
-   - Assigning a variable, or passing it as &mut, invalidates every tracked evidence variable whose type mentions it, until that evidence is reassigned. Validity then follows Rust's initialization analysis: valid after a join only if valid on every path into it, a loop's back edge is such a path, and a path that breaks or returns does not count. Evidence that is not used again carries no obligation.
-   - A fact that can be derived afresh on each pass is an ordinary let inside the body. A fact that depends on earlier passes is tracked evidence declared before the loop and reassigned in the body. A claim about what the loop leaves behind is that evidence, used after the loop with the fact of the exit test. Refreshing is explicit, ok = _; or ok = proof;, so that each obligation is visible where it arises.
-
-~~~
-let mut lock = Lock { failures: 0, open: false };
-let mut ok: @within_limit(lock.failures) = _;
-for attempt in 0..attempts {
-    let (next, still) = step(lock, ok, event_at(attempt, correct));
-    lock = next;        // ok is now invalid
-    ok = still;         // re-established
-}
-(lock, ok)
-~~~
-
-   - The checker still performs the induction: the tracked evidence live across the back edge becomes part of the loop's state, as in section 10. The programmer states no invariant. The flow analysis is not trusted. Lowering gives each assignment a new version of the variable and of the evidence, and stale evidence used by mistake is a proof about an old version, which the kernel rejects. What becomes trusted is the translation of mutable locals into versions, which mutable data needs in any case.
-   - A for hides its iterator, so evidence declared before the loop cannot speak of the index, nor in general of what an iterator has produced so far. Facts the loop can supply afresh on each pass, such as the bounds of a range index, are unaffected. A carried fact about progress is written with the iterator or index as a named mutable variable, in a while or while let. A clause on for that names the hidden state was considered and is deliberately not planned.
-   - To be settled with mut: tracked evidence in local variables only at first; no assignment to a struct field that a proof field of the same struct depends on; invalidation by whole variable rather than by path; and how the signature of a function taking &mut states a fact about the new value.
-9. Termination. Every loop, including for, counts as possibly not returning, and needs no annotation. A function that promises to terminate contains no loop and, when it calls itself, states what gets smaller, in the same attribute as the promise:
-
-~~~
-#[terminates(decreases = n)]
-#[no_panic]
-fn sum_to(n: u8) -> u8 {
-    if n == 0 { 0 } else { n.wrapping_add(recurse(_, sum_to(n.wrapping_sub(1)))) }
-}
-~~~
-
-   - A function that does not call itself writes #[terminates] alone. A function that calls itself and promises to terminate must state the measure; it is not guessed. A header carries the bare promise, and the definition adds the measure, which is the argument for the promise and no part of the contract.
-   - The measure is an ordinary expression over the parameters, read as a logical term and never executed. Its type must have an order with no infinite descent, fixed by the language: unsigned integers and later Nat under <, bool, tuples lexicographically, later recursive data by the part-of order, and later signed integers with the added obligation that the measure is not negative. Wrapping cannot cheat the order: n.wrapping_sub(1) < n is false when n is 0.
-   - recurse(evidence, call) is the slot for the evidence at a recursive call. It has the value of the call and erases to it. The first argument is expected to be evidence that the measure at the arguments is smaller than the measure at the parameters, so _ works there and a wrong proof is an ordinary mismatch reported at the call. A bare recursive call means recurse(_, call). The form is written like a call with a reserved name, as rewrite, unfold, and fold are. It is the rendering of the idea that a function already on the call stack receives, as an extra argument, evidence that it has gone down; outside callers never see that argument, and the old value is the current frame's own measure.
-   - A recursive call is a call to any function in the caller's own cycle of the call graph, which the ordering of declarations already computes; the programmer does not mark it, and recurse around any other call is an error. The evidence is per call, not per function: each call from f to g shows that the measure of g at the arguments is below the measure of f at its parameters, in one order shared by the cycle. That is checkable within one body, against the signatures and measures of the others, and it implies what is wanted, since following the calls round any cycle back to f composes into a strict descent of f's own measure. The members of a cycle therefore live in one implementation unit, where their measures are visible, and their signatures are elaborated before any of their bodies. A function in a cycle that does not promise to terminate cannot be called by one that does.
-   - Mutual recursion: every function in a cycle states a measure, and at a call from f to g the slot of recurse expects the measure of g at the arguments to be smaller than the measure of f at its parameters. The functions may have quite different parameters; it is their measures that must be comparable, because a cycle terminates exactly when every function in it can be mapped into one order without infinite descent. Two ways of being comparable are intended. Measures of one type from the list above, typically numbers or tuples of numbers, reached through conversions such as a size function once Nat exists; a final tuple component that ranks the functions lets an edge keep the first component equal, as with (n, 1) and (n, 0). And measures that are recursive data of any types, compared by the part-of order, which relates values of different types: a statement inside an expression is a part of it. That covers functions that follow mutually recursive data, with the evidence coming from the match that exposed the part. An order supplied by the programmer, with a proof that it has no infinite descent, is not planned; a cycle that needs one does not promise to terminate. Whether the first implementation includes mutual recursion is open.
-   - Computation meant to run forever is a function without the terminates promise that loops around a function with it; each pass finishes and carries its evidence.
-   - What the logic knows of a recursive function. The kernel has no recursion, so a terminating recursive function is not a kernel term and has no defining equation there, even where its body is visible. It enters the logic as a function symbol with the function's signature, known by its contract alone (item 6), and the checker's termination rule is what justifies treating it as total. This refines item 6: the defining equation is available where the body is visible and is expressible as a kernel term. Recursion in the kernel, beginning with structural recursion over recursive data, would make the equation available and is the natural companion of recursive data types.
-   - Consequences to keep in view. A function that promises to terminate uses stack in proportion to its recursion depth, since Rust does not guarantee tail calls, so recursion suits structural recursion and divide and conquer better than iteration over long input. Loops that keep the promise, by a finite range or a measure, are left for later; the kernel's rule for a bounded for (section 10.6) remains and is what they would lower to. The one trusted addition is the checker's rule that a strictly decreasing sequence in these orders is finite.
-10. Mutation and references, in tiers. Tier 0 is agreed; the full rules are to be written when it is specified in detail, together with item 8, which depends on it.
-
-   Tier 0 consists of two steps, in order. First, let mut locals and assignment to a variable or to a field path of one (x = e, lock.failures = e), which need no references at all. Second, &mut T and &T as parameter types, including self, with arguments written as paths (&mut lock, &mut pair.0, &lock), a reference parameter passed on to another call, and inherent impl blocks with method calls, without traits, since &mut self presupposes them. Not in tier 0: a reference held in a local, in a struct field, or returned; explicit lifetimes; a reference to a reference; a closure that captures one. A reference therefore lasts for one call, and no lifetime is ever written or checked. Every type is still Copy; moves and types that are not Copy arrive with Box and Vec.
-
-   - What the logic sees. A mutable variable is a sequence of versions, a new one at each assignment. At a join, a variable assigned on some path gets a new version, equal to a conditional term when the branches are pure. In a loop, nothing is known of a variable the loop assigns beyond what tracked evidence carries (item 8). Lowering turns versions into the state-passing forms the check IR already has. What becomes trusted is that translation.
-   - How a signature speaks of old and new. In parameter types a &mut parameter means its value at entry. In the result type it means its value at return. old(x) names the entry value where the result needs both. In the logic the function takes the old value and returns the new value beside its declared result, so that a call gives its argument a new version and the evidence it returns is about that version:
-
-~~~
-fn bump(lock: &mut Lock, ok: @within_limit(lock.failures)) -> @within_limit(lock.failures)
-
-ok = bump(&mut lock, ok);      // lock has a new version; the result re-establishes ok
-~~~
-
-   - Aliasing. The &mut arguments of one call are disjoint paths, and disjoint from every other argument that reads the same variable: f(&mut a, &mut a) and f(&mut a, a.x) are rejected, f(&mut a.x, &a.y) is accepted. Locus is never more permissive than rustc, since the generated Rust must compile, and soundness rests on Locus's own check: lowering cannot write two new values back to one variable.
-   - Evidence. A parameter is bound as let is, so an evidence parameter is a snapshot of the entry state; mut ok: @P makes it tracked, which is Rust's own syntax for a mutable parameter. A field that a proof field of the same struct depends on is not assigned through a reference; the whole value is replaced.
-   - &T adds nothing to the logic while every type is Copy and nothing has interior mutability: a shared reference is the value. It is there for idiom, and for efficiency later.
-   - Left for the detailed specification: the flow rules for tracked evidence, early return, what the caller's variable holds when the callee does not return normally (harmless under partial correctness), and diagnostics that name versions, such as i as it was before line 12.
-
-   Tier 1, planned next: shared references in fields, returns, and locals, with lifetimes. The logic is unchanged, because a shared reference is still the value, provided types with interior mutability are excluded. Nothing in the logic depends on when a shared loan ends, only on the value not changing while it lasts, which rustc enforces on the generated code; whether rustc may be the final judge of lifetimes here is to be examined. This recovers parsers that hold their input, lookups that return a reference, and iteration over a collection.
-
-   Tiers beyond that are not planned, and what each would cost is known from the tools that have done it. A mutable reference in a local needs a loan analysis of Locus's own, because a borrow ends at its last use and the logic must know where the lent variable gets its value back; rustc's checker has no specification to match. A returned mutable reference breaks the reading of a function as old values to new ones, because the final state of self depends on what the caller later writes; the known answers are a second, backward function per function, or prophecy variables that name a reference's final value, and either makes specifications harder to read, which matters when the specification is what people review. A mutable reference in a struct makes the struct's logical value carry current and final values. Interior mutability, unsafe code, and concurrency need separation logic and are a different project. In each case the translation from borrows to values would sit in the trusted lowering. Every tier 0 program remains valid under the later tiers, and the old(x) convention coexists with a notation for a reference's final value.
-
-11. Logic-only types and erasure by type. This supersedes the ghost keyword on binders that section 2.4 defers.
-
-   - Two ideas are kept apart. Every value has a logical value, which is what propositions speak of: a u8 is a number below 256, a Vec is a sequence, a Tree is a tree. Separately, a type either has a runtime form or has none.
-   - Some types have no runtime form by nature: Prop, proof types, Int, the unbounded integers, and Seq<T>, the finite sequences, with Map and Set to follow. They are grouped under the name logic, and are built-in names until modules exist. Int and Seq never acquire a runtime form. A runtime Int would be a big number with a heap and an allocation at every operation, and giving an erased type a runtime form later would silently turn reasoning into computation. A program that needs big numbers at runtime uses a library type whose logical value is an Int, as the logical value of a Vec<T> is a Seq<T>.
-   - Any other type gives up its runtime form on request, as Ghost<T>, which keeps the logical value of a T and nothing else. snapshot(e) builds one: it takes the value of e as it is now, never executes e, and neither moves nor copies anything. Inside a proposition a Ghost<T> reads as the T. At first snapshot applies only to a variable that is still live. Ghost<T> erases to the zero-sized marker of the same name, so the generated Rust reads as the source does.
-   - One rule: a binding, field, parameter, or result is erased exactly when its type has no runtime form. There is no keyword and no attribute. The rules that already govern Prop apply unchanged: erased values flow only into erased positions, a function returning such a type has no runtime form, a runtime branch cannot be chosen by one, and a struct may have such fields. Runtime containers of logic-only types, such as Vec<Int>, are not allowed at first.
-   - Conversions into the logic are exact and total: x as Int from any machine integer, and a view from a Vec, array, or slice to its Seq. They serve a different purpose from snapshot. A snapshot remembers this exact value, at its own type. A conversion gives the mathematical value, to reason with: arithmetic that cannot overflow, a length that is an Int, concatenation.
-   - Why Int is needed in the language and not only in the kernel. A specification written in machine arithmetic suffers the overflow it is trying to describe, so that every bound has to be rearranged. And acceptance rests on evidence a person or an AI writes: an obligation stated in terms nobody can write admits no intermediate fact, produces a diagnostic nobody can type back in, and leaves every lemma to be built by hand in the kernel's own language.
-   - Model functions and model fields need no feature of their own. A model function maps a representation to the value it stands for, is used only in propositions, and so never runs; given only by its signature in a header, it is known to callers through the contracts of the operations, which is the abstraction boundary. A model field is a field of a logic-only type, kept beside the real fields with evidence that the two agree.
+What is deferred, what is undecided, and what has been agreed but not yet specified all concern the future of the language, and are kept in [notes.md](notes.md) so that this document describes one thing: the language as it is specified now. References in this document to section 15.1, 15.2, or 15.3 are to the sections of that name in the notes.
 
 ## 16. Semantic completion status
 
@@ -1776,7 +1709,7 @@ A small implementation can expose missing rules. Passing tests is useful evidenc
 
 ## 17. Relationship to Rust and a possible interoperability path
 
-At this stage Locus is a small immutable, typed language with a proof system. Machine types, let bindings, shadowing, functions, tuples, named structs, enums, and match are familiar to Rust programmers. It does not yet contain Rust's ownership, borrowing, mutable references, resource destruction, traits, generics, or broad collection APIs. The explicit list of unsupported Rust features, of Locus constructs that are not Rust, and of places where the two currently conflict is maintained in rust-features.md.
+At this stage Locus is a small immutable, typed language with a proof system. Machine types, let bindings, shadowing, functions, tuples, named structs, enums, and match are familiar to Rust programmers. It does not yet contain Rust's ownership, borrowing, mutable references, resource destruction, traits, generics, or broad collection APIs. The explicit list of unsupported Rust features, of Locus constructs that are not Rust, and of places where the two currently conflict is maintained in Appendix A.
 
 The logical layer is closer to a restricted dependent type theory: propositions, evidence, and dependent proof fields are checked by a kernel. It is much smaller than Lean's exposed type system and libraries: there are no types indexed by values, no first-class types or universes, no type-level computation, and no quotients. What it keeps is roughly classical higher-order logic with declared data and declared propositions, plus proof-carrying data. The closest formal relative is the explicit refinement calculus of Ghalayini and Krishnaswami: refinements with explicit, erased proofs and ghost variables over a simply typed base, with no judgmental equality. Locus adds potentially divergent functions, declared propositions, propositions as values, and bounded automation. The runtime/math distinction is a Locus design choice; it should not be mistaken for a complete model of Lean's runtime facilities.
 
@@ -1807,3 +1740,146 @@ References:
 - [Lean inductive types and structures](https://lean-lang.org/doc/reference/latest/The-Type-System/Inductive-Types/)
 - [Lean propositional equality](https://lean-lang.org/doc/reference/latest/Basic-Propositions/Propositional-Equality/)
 - [Lean quantifiers](https://lean-lang.org/doc/reference/latest/Basic-Propositions/Quantifiers/)
+
+## Appendix A. Rust features and Locus
+
+This appendix is the explicit record of how the Locus core relates to Rust: what is supported, what is supported differently, what is not supported, what Locus adds, and where the two currently conflict. It tracks the fragment specified above, and is updated with it.
+
+Keep this file current. Any change to the specification that adds, removes, or alters a Rust-visible construct must update the matching row here.
+
+Status values:
+
+| Status | Meaning |
+|---|---|
+| Supported | Same surface form and the same meaning as Rust, within the fragment. |
+| Differs | Present, but with a different form or a restricted meaning. The note says how. |
+| Deferred | Not in the core. Intended later; the note gives the README milestone when one exists. |
+| Unplanned | Not in the core and with no current plan. |
+
+### 1. Supported, or supported with differences
+
+| Rust feature | Status | Notes |
+|---|---|---|
+| `bool`, `true`, `false` | Supported | |
+| `u8`, decimal literals | Differs | No literal suffixes, hex, octal, or binary forms. Underscore separators are accepted. |
+| Unit `()` and tuples | Differs | A tuple type may name its fields, `(value: u8, @[value != 0])`. The names are binders for later field types only; access, construction, and patterns stay positional. |
+| `.0`, `.1` tuple projection | Supported | Erased fields still occupy a source position. |
+| Named-field `struct` | Differs | Fields are ordered, may be unnamed, and may be accessed positionally as well as by name. A later field's type may mention an earlier field inside a proposition. No field-init shorthand, no reordering, no `..base` update. |
+| `enum` | Differs | Unit and tuple-style variants only. Non-recursive. Variants are always written `Enum::Variant`. No struct-style variants, explicit discriminants, or `as` casts. |
+| `match` | Differs | Exhaustive, ordered arms; name, wildcard, literal, tuple, struct, and variant patterns, nested. No guards, `\|` alternatives, ranges, `@` bindings, or `ref`. Each arm also receives checked evidence about the scrutinee. |
+| `if` / `else` | Differs | `else` is required. Defined as `match` on `bool`; each branch receives evidence of the condition's value. |
+| `let` and shadowing | Supported | Bindings are immutable. Irrefutable patterns only. |
+| Block expressions, trailing expression | Supported | |
+| `fn` items | Differs | Parameter and result types are always explicit. Result types may name their fields and depend on parameters. Top level only. No recursion. |
+| Function pointer types `fn(A) -> B` | Differs | Inhabited by the names of declared functions. A `math fn(A) -> B` type also exists. |
+| `const` items | Differs | The initializer is a total logical expression. |
+| Method-call syntax `x.wrapping_add(1)` | Differs | Only for primitive operations: `wrapping_add`, `wrapping_sub`. No user methods. |
+| Comparison operators `== != < <= > >=` | Differs | Defined on `u8` and `bool` only. No chaining. No equality on products, enums, or functions at runtime. |
+| `!`, `&&`, `\|\|` | Supported | Short-circuit on `bool`. The same tokens build propositions when the operands are `Prop`. |
+| `loop` | Differs | Carries explicit state: `loop (s: T = init) -> R { ... }`. There is no bare `loop { }`. |
+| `break value` | Supported | Targets the nearest `loop`. No labels. |
+| `continue` | Differs | Takes the next state: `continue(next_1, next_2)`. No labels. |
+| `for` | Differs | Only `for i in lo..hi (state) { ... }` over a `u8` range, with explicit state and no `break` (proposed form). Requires evidence that `lo <= hi`; a reversed range is rejected, where Rust treats it as empty. No iterators. |
+| Line and nested block comments | Supported | Doc comments have no special meaning. |
+| Attributes `#[...]`, `#![...]` | Deferred | Reserved; currently rejected with a diagnostic. |
+
+### 2. Not supported
+
+#### 2.1 Types
+
+| Rust feature | Status | Notes |
+|---|---|---|
+| Other integer types: `u16` to `u128`, `i8` to `i128`, `usize`, `isize` | Deferred | Milestone 2. Added by the same rules as `u8`. |
+| Arithmetic and bit operators: `+ - * / %`, `& \| ^ << >>`, unary `-`, compound assignment | Deferred | Milestone 2. Needs the overflow policy: an obligation over the mathematical value. |
+| `as` casts and numeric conversions | Deferred | Milestone 2. |
+| `f32`, `f64` | Unplanned | |
+| `char`, `str`, `String`, string, char, and byte literals | Deferred | With collections, milestone 10. |
+| Arrays `[T; N]`, slices `[T]`, indexing `a[i]`, array literals | Deferred | Milestones 9 and 10. The bracket syntax conflicts with proposition literals; see section 4. |
+| References `&T`, `&mut T`, lifetimes | Deferred | Milestone 9. |
+| Raw pointers | Unplanned | Listed in the README as following the foundation. |
+| `Box`, `Rc`, `Arc` | Deferred | With recursion and ownership. In the logic they are transparent wrappers around `T`. |
+| `Vec`, maps, sets, the standard library | Deferred | Milestone 10. |
+| Recursive types | Deferred | Milestone 4, with structural recursion. |
+| Tuple structs `struct P(u8, u8);` and unit structs | Deferred | Named-field struct syntax covers unnamed fields meanwhile. |
+| Struct-style enum variants, explicit discriminants | Deferred | |
+| `union` | Unplanned | |
+| Never type `!` | Deferred | A match with no arms on a proof of `false` plays this role inside verified code. |
+| Type aliases `type` | Deferred | |
+| Generics and const generics | Deferred | Milestone 3. |
+| Traits, `impl` blocks, user methods, associated items, trait objects `dyn`, `impl Trait` | Deferred | Milestone 12. |
+| Closures and the `Fn`, `FnMut`, `FnOnce` traits | Deferred | Logic-only lambdas come first; runtime closures follow the foundation. |
+
+#### 2.2 Bindings, ownership, and state
+
+| Rust feature | Status | Notes |
+|---|---|---|
+| `let mut`, assignment | Deferred | Milestone 7. |
+| Moves, borrows, the borrow checker, `Copy` and `Clone` | Deferred | Milestone 9. Every core value is immutable and freely reusable. |
+| `Drop` and destructors | Deferred | After the foundation. |
+| Interior mutability: `Cell`, `RefCell`, `Mutex` | Deferred | After the foundation. Types that allow cycles are not inductive in the logic. |
+| `static` items | Unplanned | |
+| Threads, `Send`, `Sync`, atomics | Deferred | After the foundation. |
+| `async` / `await` | Deferred | After the foundation. |
+| `unsafe` blocks and functions | Unplanned | |
+
+#### 2.3 Control flow and expressions
+
+| Rust feature | Status | Notes |
+|---|---|---|
+| Recursive and mutually recursive functions | Deferred | Milestone 4. Declarations are acyclic in the core. |
+| `if` without `else` | Deferred | |
+| `if let`, `let ... else`, `while let` | Deferred | |
+| `while` | Deferred | Milestone 8, elaborating to state-passing loops. |
+| `for` over iterators, ranges as values | Deferred | With traits. |
+| Bare `loop { }`, loop labels, labelled `break` and `continue` | Deferred | Milestone 8. |
+| `return` | Deferred | |
+| `?` operator | Deferred | With generics. |
+| Match guards, `\|` patterns, range patterns, `@` bindings, `ref` patterns, slice patterns | Deferred | Guards interact with the `=>` conflict in section 4. |
+| Refutable patterns in `let` | Deferred | |
+| Struct update `..base`, field-init shorthand | Deferred | |
+| Panics, `panic!`, unwinding, `catch_unwind` | Deferred | Milestone 11. The core's only non-returning behavior is divergence. |
+| Macros: `macro_rules!`, procedural macros, `println!` and other std macros | Unplanned | |
+| Input and output, `fn main`, process entry | Deferred | Milestone 1 defines how generated Rust is invoked. |
+
+#### 2.4 Items and program structure
+
+| Rust feature | Status | Notes |
+|---|---|---|
+| Modules `mod`, `use`, paths other than `Enum::Variant`, visibility `pub` | Deferred | Milestone 5. |
+| Crates, Cargo dependencies, `extern crate` | Deferred | Milestone 11. |
+| `extern` blocks, FFI, calling Rust from Locus | Deferred | Milestone 11. Requires marked trusted declarations. |
+| Exporting Locus functions to Rust callers | Deferred | Milestone 11. Proof parameters need checked wrappers or validated types. |
+| Items nested inside function bodies | Deferred | |
+| `const fn`, const evaluation | Unplanned | `math fn` is the closest analogue: a restricted subset usable in a second context. |
+| Type inference for function signatures | Unplanned | Signatures stay explicit. |
+
+### 3. Locus constructs that are not Rust
+
+| Construct | Purpose |
+|---|---|
+| `math fn` | A pure, total function, callable from both code and logic. Lemmas and predicates are math functions. |
+| `Prop` | The type of logical claims. |
+| `@P`, `@[formula]` | The type of proofs of a proposition. |
+| `[formula]` | A proposition literal, with logical `==`, comparisons, connectives, `forall`, and `exists`. |
+| `=>` between propositions | Implication. |
+| `forall (x: A) { ... }`, `exists (x: A) { ... }` | Quantifiers inside a formula. |
+| `prop Name(params) { variants }` | A user-declared proposition, given by its proof constructors. |
+| `_` in expression position | A request for a checked proof of the expected proposition. |
+| `rewrite(eq, h)`, `unfold(f, h)`, `fold(f, h)` | Built-in proof forms: transport along an equality or a function's defining equation. |
+| Applying a proof, `all(n)`, `imp(hp)` | Instantiating a quantified or implicational proof. |
+| Named tuple fields and dependent field types | Letting a proof field describe a data field. |
+| `loop (state) -> R`, `continue(next)`, `for i in lo..hi (state)` | State-passing iteration for an immutable language. |
+| Ghost bindings | Bindings that exist only for the checker. Implicit in the core; a `ghost` keyword is deferred. |
+
+### 4. Known conflicts with Rust syntax
+
+A Rust superset stays reachable only if Locus never gives valid Rust syntax a different meaning. Whether to adopt that as a rule is an open question in the specification (section 15.2). These are the current violations and near-misses.
+
+| Locus form | Conflict | Proposed resolution |
+|---|---|---|
+| `[n > 0]` as a proposition literal | Valid Rust: a one-element `[bool; 1]` array. In the core a bracketed expression is always a proposition literal. Also collides with array types, slices, and indexing once those exist. | Drop the literal form. Elaborate an expression as a formula wherever a `Prop` is expected, and write the proof type as `@(n > 0)`. |
+| `=>` as implication | Rust uses `=>` for match arms. Unambiguous only while guards are absent. | Spell implication `==>`. |
+| `prop`, `math`, `in` as words | Valid Rust identifiers, except `in`. | Treat as contextual keywords, reserved only where the grammar expects them. |
+| Erased fields in tuples and structs | Not a syntax conflict. A proof field, parameter, or result appears in generated Rust as the zero-sized marker `Proved`, and a proposition as `Ghost`, so positions, arity, and patterns match the source. Signatures show the markers. | Settled; see specification section 11. |
+
+Forms that occupy positions where Rust has no valid syntax, and are therefore safe extensions: `math fn`, `@` in type position, `loop (...)`, `continue(...)`, `for ... (state) { }`, named tuple fields, and an enum or struct that refers to itself without `Box` (rejected by Rust as infinitely sized; not yet accepted by Locus either).

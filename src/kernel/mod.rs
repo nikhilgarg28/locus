@@ -6,7 +6,7 @@
 //! Every rule implemented here is stated, with exact premises and conclusion,
 //! in `docs/kernel-contract.md`; the two must change together.
 //!
-//! Implemented so far: gates K1 to K6 of `docs/core-plan.md`.
+//! Implemented so far: gates K1 to K6 of `docs/kernel-contract.md`.
 
 mod check;
 mod classical;

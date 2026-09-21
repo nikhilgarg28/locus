@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K3 (docs/core-plan.md): math functions
+//! Acceptance tests for kernel gate K3 (docs/kernel-contract.md): math functions
 //! and their defining equations, function types and values, `Prop` as a
 //! value, and the derived `rewrite`, `unfold`, and `fold` forms.
 //! Every term here is written by hand; nothing comes from the parser.

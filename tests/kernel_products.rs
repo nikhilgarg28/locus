@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K2 (docs/core-plan.md): tuples, structs,
+//! Acceptance tests for kernel gate K2 (docs/kernel-contract.md): tuples, structs,
 //! dependent proof fields, the let, projection, and literal computation
 //! axioms, and proof irrelevance in comparison.
 //! Every term here is written by hand; nothing comes from the parser.

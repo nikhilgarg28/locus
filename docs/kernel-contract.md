@@ -2,7 +2,7 @@
 
 This document states every rule the proof kernel implements, with exact premises and conclusions. The kernel lives in `src/kernel/` and is independent of the parser. The code and this document change together: a rule is not in the kernel unless it is written here, and nothing here is in force until a kernel test exercises it.
 
-It covers all six kernel gates, **K1** to **K6**, of [the core plan](core-plan.md). Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), `tests/kernel_numbers.rs` (K5), `tests/kernel_loops.rs` (K6), `tests/kernel_evaluation.rs` (evaluation and the range successor axiom), and `tests/kernel_depth.rs` (the depth bound). The intended full rule inventory is section 12.2 of [the specification](core-language-spec.md); rules are added here as each gate is built.
+It covers all six kernel gates, **K1** to **K6**, which are listed at the end of this document. Tests are in `tests/kernel.rs` (K1), `tests/kernel_products.rs` (K2), `tests/kernel_functions.rs` (K3), `tests/kernel_cases.rs` (K4), `tests/kernel_numbers.rs` (K5), `tests/kernel_loops.rs` (K6), `tests/kernel_evaluation.rs` (evaluation and the range successor axiom), and `tests/kernel_depth.rs` (the depth bound). The intended full rule inventory is section 12.2 of [the specification](language.md); rules are added here as each gate is built.
 
 ## Representation
 
@@ -395,3 +395,16 @@ One K2 acceptance condition is stated in the plan in terms of `NonZero`. When K2
 Agreement is tested exhaustively. For every pair of bytes, `tests/kernel_numbers.rs` has the kernel check that the native `wrapping_add` result equals `of_nat(to_nat(a) + to_nat(b))` evaluated step by step, that adding the subtrahend back to the native `wrapping_sub` result restores the minuend, and that whatever the native `<` answers, the matching fact about the models is provable. `of_nat` and `to_nat` are checked against their axioms on literals. The builder functions on `Term` and `Proof` that take closures are conveniences for constructing well-scoped terms; a term built any other way is checked just the same.
 
 Known limit: checking is recursive and has no depth bound yet. Hand-written terms cannot exhaust the stack; this must be addressed before the kernel accepts terms produced from untrusted source text.
+
+## The gates
+
+The kernel was built in six acceptance gates, from hand-written terms and independently of the parser. Each was small, and none was started before the ones ahead of it passed. The tests are named after them.
+
+| Gate | Scope | Passes when |
+|---|---|---|
+| K1 (done) | Terms, contexts with the three kinds of entry and upgrade, comparison up to renaming and proof irrelevance, `Eq` with reflexivity and transport, internal `Forall` and `Implies`. | A true equality checks; a false one is rejected; a fact in scope discharges an identical goal; a ghost variable is rejected in an executable term. |
+| K2 (done) | Tuples, structs, dependent proof fields, and the `let`, projection, and literal computation axioms. | A dependent data/proof result checks; returned data instantiates a later proof field; two `NonZero` values with equal bytes are equal without a proof step. |
+| K3 (done) | Math functions, defining equations, `unfold`/`fold`/`rewrite`, function values, `Prop` as a value. | An explicit unfolding step checks; `select() == successor` is provable at a function type while pointwise agreement does not prove function equality; `Claim { proposition: [true] }` and `Claim { proposition: [false] }` are distinguishable and their projections compute. |
+| K4 (done) | Enums and the case rule with arm evidence; declared props, the index-equation case rule, `Exists`, excluded middle with dependency recording. | An indexed proposition match supplies its index equation; a match on a proof with a non-proof result or a non-total arm is rejected; a variant concluding another proposition is rejected; constructor disjointness is derived. |
+| K5 (done) | Internal `Nat` with induction; the `u8` model, reflection lemmas, and native evaluation. | A `u8` ordering lemma over three variables is proved from the model, not by enumeration; native evaluation agrees with the model exhaustively for one-byte operations. |
+| K6 (done) | The range-iteration rule. | The bounded-count example checks with index-dependent state; empty range, rejected reversed bounds, `hi == 255`, and nested iteration are covered. |

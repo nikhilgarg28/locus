@@ -1,4 +1,4 @@
-//! The erased tree (docs/ir-architecture.md): the typed tree with the logic
+//! The erased tree (docs/architecture.md): the typed tree with the logic
 //! taken out. It has the same shape, and contains only what exists at
 //! runtime. A ghost position is filled by a zero-sized marker, `Proved` or
 //! `Ghost`, so nothing is renumbered or moved.

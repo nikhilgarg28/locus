@@ -1,4 +1,4 @@
-//! Acceptance tests for kernel gate K4 (docs/core-plan.md): enums and case
+//! Acceptance tests for kernel gate K4 (docs/kernel-contract.md): enums and case
 //! analysis with arm evidence, declared propositions with index equations,
 //! `Exists`, and excluded middle with dependency recording.
 //! Every term here is written by hand; nothing comes from the parser.

@@ -1,22 +1,8 @@
 # Locus
 
-*Working design brief — agreed direction, with proposed syntax and milestones.*
-
 *Review the guarantees, check the implementation, and use the result from ordinary Rust.*
 
 Locus is a Rust-like language for the parts of a crate whose correctness matters most. Propositions and proofs compose with ordinary functions and data, and explicit proof evidence is checked, deterministically, by a small, auditable kernel. Locus is designed to verify systems implementations with precise arithmetic, ownership, and mutation semantics, then emit readable Rust without runtime proof machinery. Generated interfaces protect proven invariants at the boundary with safe Rust callers. A programmer or an AI supplies the implementation and evidence against a human-reviewed specification; proof construction can be automated, while acceptance rests on independent checking. That is the destination; the core implemented so far covers `bool`, `u8`, structs, enums, and loops without mutation.
-
-[docs/positioning.md](docs/positioning.md) gives the reasoning behind that paragraph, what Locus gives up, and the assumption it rests on. We start with a small, cohesive language and grow through working examples. Predictable checking and fast compilation are design goals; full Lean or Rust compatibility is not.
-
-**The programming model.** Propositions are native logical claims, potentially non-executable, rather than runtime booleans. They compose through equality, logical connectives, quantification, and named predicates. A proof establishes a particular proposition about particular values. A theorem is a function producing such proofs for arbitrary permitted inputs. `fn` declares executable functions accepting and returning runtime data and erased proofs, including combinations; it may diverge. `math fn` declares a function in the mathematical sense: pure and total, with one well-defined result for every input. A `math fn` is written once and used in both worlds: it is callable from logic because it is total, and it is compiled and callable at runtime whenever its signature contains executable data. Lemmas are math functions returning proofs; predicates are math functions returning `Prop`. Users can also declare their own propositions: a `prop` declaration lists every way a claim can be proved, as an `enum` lists every way a value can be built, and `match` on such a proof is case analysis. Propositions, proofs, and existential witnesses are *ghost* bindings: they exist for the checker, may appear anywhere in logic, and may never determine executable data or control flow. Under that rule proposition values may appear in `fn` signatures and struct fields; they are simply erased. Runtime structs and enums can combine data and proof fields, and a later field may mention an earlier one only inside a proposition, so runtime layout never depends on a value. Mathematical `Nat` and `Int` remain distinct from machine integers. Richer mathematical objects belong in libraries.
-
-**Erasure and control flow.** Proofs are checked at compile time, including proofs about unknown runtime inputs. Proposition values, proof values, and logical computation are erased; surrounding data computation still executes. Proofs can establish further facts and discharge preconditions, but cannot be printed, inspected, or used as runtime branch discriminants. Runtime decisions and enum tags can carry erased evidence; `if` is a `match` on `bool`, and every `match` arm receives checked evidence about the value it matched. `Unknown` or an absent proof establishes neither a claim nor its negation. Checked comparisons supply facts within their respective branches. Ordinary operations retain checked fallbacks when proofs are unavailable.
-
-**State and functions.** Proofs refer to immutable logical snapshots, tracked through SSA-style state versions, not borrows that freeze data or runtime copies. Mutation leaves old proofs true about old states; it does not retarget them. `before(x)` and `after(x)` describe invocation entry and normal return. Heap aliases must participate in state tracking. Loop invariants are ordinary proof components of explicit loop state, supplied on entry and on every back edge. Termination of executable loops is not tracked: an `fn` is checked for partial correctness, and a proof it returns is available only in the code reached after it returns. Totality of math code is guaranteed syntactically instead of by measures: math code has no general loops and, in the core, no recursion; bounded iteration is allowed, and structural recursion arrives with recursive data. There is no `decreases` clause. Functions used directly in propositions must be math functions; effectful calls are described through results and state transitions. Purely logical computation is erased and cannot supply runtime data or branch discriminants; the ghost flow check enforces that boundary. Runtime inputs may occur symbolically in logical definitions. Contracts remain optional surface conveniences.
-
-**Proposition and proof syntax.** `Prop` is the type of logical claims. A proposition literal must use brackets: `let claim: Prop = [n > 0];`. An annotation alone does not convert a Boolean into a proposition. Existing propositions compose directly using `!p`, `p && q`, `p || q`, and `p => q`; these operations construct claims, not evidence. In the core, which has no arrays, a bracketed expression is always a proposition literal, with or without an expected type. The implemented parser still keeps `[e]` neutral and preserves array forms; how brackets are shared with arrays later is an open question. Two spellings remain under review because they collide with Rust syntax, the bracket literal and `=>`; the specification records them as open questions.
-
-`@claim` or `@[condition]` denotes a proof type. Proofs are ordinary expressions: names, proof constructors such as `Or::Left(h)`, `match`, lemma calls, and applications of quantified proofs such as `all(n)`. The intended style is declarative: a sequence of `let` bindings that state intermediate facts, each justified by a lemma call or a hole. There is no tactic language; the earlier `@{ ... }` proof block is retired. `_` in an expression requests a checked proof of the expected proposition, found by a fixed, bounded search. An unsolved goal or missing expected proposition is an error. `_` in a pattern still ignores a value. The proof marker is not used alone, and `#[...]` remains reserved for attributes. Named result fields let proofs describe returned data:
 
 ```rust
 fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
@@ -25,24 +11,40 @@ fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
 }
 ```
 
-**Implementation direction.** Use a handwritten Rust lexer and recursive-descent/Pratt parser, with a reusable diagnostic renderer. Locus has its own proof kernel, written in Rust and kept small. The elaborator, the hole solver, decision procedures, and any external tool or model that proposes proofs are untrusted: each must produce an explicit term, and only the kernel's acceptance counts. An SMT solver is not the foundation. The logic is classical higher-order logic with declared data and declared propositions; since proofs are erased and can only produce other proofs, classical reasoning cannot affect execution. The planned soundness argument is a denotational model in the style of explicit refinement types (Ghalayini and Krishnaswami, ICFP 2023): every type erases to a simple type, and a proposition denotes a truth value. Locus keeps a logical value and its runtime representation apart: ghost data such as a `Prop` field is part of the logical value though absent at runtime, while proof contents are irrelevant to both. For a type with no ghost data, such as a nonzero byte, this reduces to a subset of the erased type. The model stays tractable because values appear in types only inside propositions. Equality is available at every data type, including function types, with reflexivity, transport, and computation; function and proposition extensionality are withheld. Excluded middle is one named lemma whose uses are recorded. Exporting accepted terms to an independent checker tests the implementation without replacing that argument. The kernel compares terms only up to renaming and proof irrelevance and contains no normalizer: computation steps are explicit equality axioms, inserted silently by the elaborator for lets, projections, matches on known constructors, and literal arithmetic, and only on request for function definitions. Checking is therefore syntax-directed and predictable. Machine integers are native to the kernel and modelled as bounded natural numbers, so their ordering lemmas are proved, not assumed; the kernel can also establish closed facts by evaluation. A kernel-internal `Nat` with a recursor underlies that model and bounded iteration, and later becomes the source-level `Nat`. Begin with limited, predictable automation: a hole searches facts in scope, propositional structure, equalities with congruence, definition unfolding, and closed evaluation, and nothing else; arithmetic steps are explicit lemma calls, and every search limit counts steps, never time. Found proofs are recorded so that rechecking never repeats a search. Initially, only proof types depend on runtime values, keeping data layouts straightforward. Erasure is a compositional function on types and terms. Emit Rust after erasure and build through Cargo. Lowering and imported behavioral specifications are explicit trust boundaries. Rust exports must preserve proof preconditions through checked wrappers or protected validated types.
+`@[...]` is the type of evidence for a claim, and `_` asks the compiler to find that evidence. What it finds is an explicit proof, which a small kernel checks. Proofs are erased, and the rest is emitted as plain Rust.
 
-**Proposed milestones, in dependency order:**
+## Status
 
-0. **Core:** `u8` with explicit wrapping operations, `bool`, unit, tuples, named structs, nonrecursive enums and `match`, immutable bindings, blocks, nonrecursive `fn`/`math fn` declarations, `if`, state-passing loops in `fn`, bounded iteration, proposition values, `prop` declarations, dependent proof results; the proof kernel, checker, and interpreter.
-1. **Native execution:** Rust generation and proof erasure; compare compiled and interpreted behavior.
-2. **Mathematical integers and machine arithmetic:** `Int` and `Nat`, further machine widths, arithmetic operators whose overflow is a proof obligation, conversions, and a linear-arithmetic procedure; verify byte packing.
-3. **Generics:** type and proposition parameters; `Option`, `Result`, and positive, negative, or unknown evidence; logic-only lambdas.
-4. **Recursion:** recursive enums and `prop` declarations, structural recursion, and induction as recursive lemmas, with `Box` transparent to the logic; prove list append's length property.
-5. **Proof tooling:** modules, cached checking, recorded proofs, hole expansion, opaque theorem interfaces, goal diagnostics, and rewrite and chain forms.
-6. **Specification conveniences:** the `ghost` binder keyword and model fields; `requires`/`ensures`/`invariant`/`assert` as sugar over proof parameters and results.
-7. **Local mutation:** assignment, snapshots, and branch joins; verify swap and reject stale-state evidence.
-8. **Loops over mutable state:** `while` and `for` elaborating to state-passing loops, labels, and optional termination measures; verify an iterative algorithm.
-9. **Ownership:** moves, shared/exclusive borrows, fixed arrays, and proof-assisted access; track referenced storage.
-10. **Collections:** modeled slices, `Box`, and `Vec`; prove in-place sorting preserves elements and produces order.
-11. **Rust boundaries:** marked trusted declarations, concrete adapters, effects, panics, safe exports; ship a verified codec crate.
-12. **Broader integration:** traits, associated types, ordering laws, and cross-package proof metadata; verify a generic algorithm.
+A `.loc` file goes from text to a checked program, an interpreted result, and generated Rust. The kernel, the checker for executable code, erasure, a reference interpreter, the Rust printer, the parser, and the elaborator with its bounded proof search and diagnostics all exist. `examples/lock.loc` is the end-to-end example. There is no mutation, no arithmetic beyond a byte, and no protected export to Rust yet.
 
-Runtime closures, custom destructors, interior mutability, raw pointers, concurrency, and async follow once this foundation works. Each milestone should deliver a useful example and measure checking cost, proof burden, and generated-code behavior.
+## Running it
 
-The implementation so far is a syntax frontend; the back half of the compiler, first built for hand-built typed trees (lowering and checking, erasure, a reference interpreter, and printed Rust that is compiled and compared with the interpreter; see the [IR architecture](docs/ir-architecture.md)); and beneath that, the proof kernel's six gates (equality, implication, quantifiers, dependent products with proof fields, total functions with defining equations, enums and case analysis, declared propositions with index equations, excluded middle, an internal `Nat` with induction, the `u8` model with checked ordering lemmas, range iteration with index-dependent invariants, and explicit computation steps, over hand-written terms; see the [kernel contract](docs/kernel-contract.md)). See [development instructions](docs/development.md), the [core implementation plan](docs/core-plan.md), the [IR architecture](docs/ir-architecture.md), the [core language specification](docs/core-language-spec.md), the [implemented surface grammar](docs/grammar.md), and the [list of Rust features that Locus does and does not support](docs/rust-features.md). The parser follows the specification's grammar, and the [elaborator](docs/elaborator.md) connects it to the rest: it resolves names, works out types, fills each `_` with an explicit proof that the kernel checks, and reports an unsolved one with the claim, the relevant facts, and a failing case when there is one. `locus check`, `locus run`, and `locus rust` take a `.loc` file to a checked program, an interpreted result, and generated Rust; `examples/lock.loc` is the end-to-end example.
+Requires Rust 1.85 or newer. The only dependency is the diagnostic renderer.
+
+```sh
+cargo run -- check examples/lock.loc            # types and proofs
+cargo run -- check examples/lock.loc --holes    # every `_`, how it was filled, and what it cost
+cargo run -- check examples/lock.loc --stats    # per function: time to elaborate and to check
+cargo run -- run examples/lock.loc attempts_left 5 9
+cargo run -- rust examples/lock.loc             # the generated Rust
+cargo run -- tokens examples/increment.loc
+cargo run -- parse examples/increment.loc
+cargo run -- ast examples/preserve.loc
+cargo test
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+```
+
+`check`, `run`, and `rust` stop at the first stage that reports an error. Errors in the source exit with status 1, errors in the command line with status 2. Diagnostic color is enabled for terminals unless `NO_COLOR` is set. `run` takes `u8` and `bool` arguments.
+
+## Documents
+
+| | |
+|---|---|
+| [docs/notes.md](docs/notes.md) | The only document about the future: positioning, agreed directions, open questions, deferred features |
+| [docs/roadmap.md](docs/roadmap.md) | Batches of work |
+| [docs/language.md](docs/language.md) | The language as specified now, with its grammar and its relationship to Rust's features |
+| [docs/architecture.md](docs/architecture.md) | How the compiler is built: the representations, the trusted base, the elaborator and its proof search |
+| [docs/kernel-contract.md](docs/kernel-contract.md) | Every kernel rule, with exact premises and conclusion; it changes together with the kernel |
+
+A fact about the future lives only in the notes. When something is built, its text moves from there into the document that describes what exists.

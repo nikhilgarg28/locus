@@ -1,4 +1,4 @@
-//! The check IR and the exec checker (docs/ir-architecture.md).
+//! The check IR and the exec checker (docs/architecture.md).
 //!
 //! The check IR is executable code in let-normal form over kernel types, terms, and
 //! proofs. It exists to be checked: `lower` will produce it from the typed
