@@ -1,0 +1,4 @@
+// An integer literal in a base other than ten.
+fn mask() -> u8 {
+    0xff //~ error: L0003 invalid decimal integer literal
+}

@@ -1,0 +1,7 @@
+error[L0221]: this is a `bool`, and a proposition is needed
+ --> tests/corpus/reject/bool_as_proposition.lc:2:27
+  |
+2 | fn first(flag: bool) -> @[flag] { //~ error: L0221 this is a `bool`, and a proposition is needed
+  |                           ^^^^
+  |
+  = note: a runtime boolean is not a claim; state one with a comparison, such as `... == true`

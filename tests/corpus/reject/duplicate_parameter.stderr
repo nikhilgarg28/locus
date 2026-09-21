@@ -1,0 +1,5 @@
+error[L0202]: parameter `n` is declared twice
+ --> tests/corpus/reject/duplicate_parameter.lc:2:17
+  |
+2 | fn first(n: u8, n: u8) -> u8 { n } //~ error: L0202 parameter `n` is declared twice
+  |                 ^

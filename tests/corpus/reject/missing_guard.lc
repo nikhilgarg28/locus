@@ -1,0 +1,33 @@
+// `step` without its guard: the claim, the claim after computing, a case in
+// which it fails, and the facts known at the hole.
+enum Event {
+    Wrong,
+    Right,
+}
+
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+math fn within_limit(failures: u8) -> Prop {
+    [failures <= 3]
+}
+
+fn step(
+    lock: Lock,
+    bounded: @within_limit(lock.failures),
+    event: Event,
+) -> (next: Lock, @within_limit(next.failures)) {
+    match event {
+        Event::Right => (Lock { failures: 0, open: true }, _),
+        Event::Wrong => (Lock { failures: lock.failures.wrapping_add(1), open: false }, _),
+        //~^ error: L0230 cannot show `within_limit(lock.failures.wrapping_add(1))`
+    }
+}
+
+// What depends on `step` is not reported again.
+fn twice(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) {
+    let (once, still_bounded) = step(lock, bounded, Event::Wrong);
+    step(once, still_bounded, Event::Wrong)
+}

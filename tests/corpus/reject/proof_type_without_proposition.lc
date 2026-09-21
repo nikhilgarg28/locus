@@ -1,0 +1,2 @@
+// `@` with no proposition after it.
+fn first(n: u8, small: @) -> u8 { n } //~ error: L0100 a proof type needs a proposition

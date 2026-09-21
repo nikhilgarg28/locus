@@ -1,0 +1,8 @@
+error[L0230]: this is evidence of `failures <= 9`, and `failures <= 3` is needed
+ --> tests/corpus/reject/evidence_of_another_claim.lc:7:25
+  |
+7 |     remaining(failures, small) //~ error: L0230 this is evidence of `failures <= 9`, and `failures <= 3` is needed
+  |                         ^^^^^
+  |
+  = note: it fails when `failures` is 4, which the facts known here allow
+  = note: known here: `failures <= 9`

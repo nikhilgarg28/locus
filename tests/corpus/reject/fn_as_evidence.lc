@@ -1,0 +1,6 @@
+// An ordinary `fn` named where evidence is needed.
+fn self_equal(x: u8) -> @[x == x] { _ }
+
+math fn all_self_equal() -> @[forall (x: u8) { x == x }] {
+    self_equal //~ error: L0209 only a `math fn` is evidence
+}

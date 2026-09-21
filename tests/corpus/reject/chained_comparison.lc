@@ -1,0 +1,4 @@
+// Comparisons chained without parentheses.
+fn between(a: u8, b: u8, c: u8) -> bool {
+    a < b < c //~ error: L0103 comparisons cannot be chained
+}

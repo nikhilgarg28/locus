@@ -1,0 +1,5 @@
+error[L0208]: `And::Intro` carries 2 value(s), and the pattern names 3
+ --> tests/corpus/reject/wrong_evidence_pattern_count.lc:4:9
+  |
+4 |         And::Intro(hp, hq, more) => hp, //~ error: L0208 carries 2 value(s), and the pattern names 3
+  |         ^^^^^^^^^^

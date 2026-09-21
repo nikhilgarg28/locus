@@ -1,0 +1,8 @@
+// A field the struct does not have.
+struct Lock {
+    failures: u8,
+}
+
+fn first(lock: Lock) -> u8 {
+    lock.attempts //~ error: L0210 has no field `attempts`
+}

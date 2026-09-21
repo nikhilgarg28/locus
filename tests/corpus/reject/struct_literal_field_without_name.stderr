@@ -1,0 +1,5 @@
+error[L0224]: a field needs a name: `name: value`
+ --> tests/corpus/reject/struct_literal_field_without_name.lc:8:12
+  |
+8 |     Lock { n.wrapping_add(1), open: false } //~ error: L0224 a field needs a name
+  |            ^^^^^^^^^^^^^^^^^

@@ -1,0 +1,8 @@
+error[L0230]: cannot show `n <= 6`
+  --> tests/corpus/reject/false_in_one_case.lc:10:30
+   |
+10 |         SmallPrime::Seven => _, //~ error: L0230 cannot show `n <= 6`
+   |                              ^
+   |
+   = note: after computing, the claim is `7 <= 6`
+   = note: nothing known here speaks of the values in this claim

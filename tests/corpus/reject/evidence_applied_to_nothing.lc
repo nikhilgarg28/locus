@@ -1,0 +1,4 @@
+// Evidence of an equation takes no argument.
+math fn first(h: @[1 == 1], n: u8) -> @[1 == 1] {
+    h(n) //~ error: L0228 which takes no argument
+}

@@ -1,0 +1,7 @@
+error[L0229]: `fold` needs to know the claim it should produce
+ --> tests/corpus/reject/fold_without_claim.lc:5:18
+  |
+5 |     let folded = fold(nonzero, h); //~ error: L0229 `fold` needs to know the claim it should produce
+  |                  ^^^^^^^^^^^^^^^^
+  |
+  = note: state it with an annotation: `let folded: @name(x) = fold(name, evidence);`

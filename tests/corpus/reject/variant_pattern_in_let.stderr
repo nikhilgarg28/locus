@@ -1,0 +1,5 @@
+error[L0290]: a `let` pattern is a name, `_`, or a tuple of those for now
+ --> tests/corpus/reject/variant_pattern_in_let.lc:7:9
+  |
+7 |     let Light::Amber(seconds) = light; //~ error: L0290 a `let` pattern is a name, `_`, or a tuple of those for now
+  |         ^^^^^^^^^^^^^^^^^^^^^

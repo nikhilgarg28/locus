@@ -1,0 +1,7 @@
+error[L0003]: invalid decimal integer literal
+ --> tests/corpus/reject/invalid_integer.lc:3:5
+  |
+3 |     0xff //~ error: L0003 invalid decimal integer literal
+  |     ^^^^
+  |
+  = note: use decimal digits with optional single underscores between digits; bases and type suffixes are not supported yet

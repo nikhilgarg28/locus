@@ -1,0 +1,5 @@
+// A tuple pattern with more parts than the value has.
+fn first(pair: (u8, u8)) -> u8 {
+    let (a, b, c) = pair; //~ error: L0220 this pattern has 3 parts
+    a
+}

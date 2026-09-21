@@ -1,0 +1,4 @@
+// The retired `#[condition]` proof type reads as an attribute.
+fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0105 attributes are reserved
+    (n, _)
+}

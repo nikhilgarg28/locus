@@ -1,0 +1,5 @@
+error[L0290]: statements inside a quantifier are not supported yet
+ --> tests/corpus/reject/statement_in_quantifier.lc:4:9
+  |
+4 |         let m = n; //~ error: L0290 statements inside a quantifier are not supported yet
+  |         ^^^^^^^^^^

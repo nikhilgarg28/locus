@@ -1,0 +1,7 @@
+error[L0210]: `(u8, u8)` has no field `left`
+ --> tests/corpus/reject/field_of_a_tuple_by_name.lc:3:10
+  |
+3 |     pair.left //~ error: L0210 has no field `left`
+  |          ^^^^
+  |
+  = note: a tuple is projected by position, as in `pair.0`, or taken apart with `let`

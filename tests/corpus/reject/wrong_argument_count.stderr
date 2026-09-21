@@ -1,0 +1,5 @@
+error[L0208]: `first` takes 1 value, and 2 were given
+ --> tests/corpus/reject/wrong_argument_count.lc:5:5
+  |
+5 |     first(1, 2) //~ error: L0208 takes 1 value, and 2 were given
+  |     ^^^^^^^^^^^

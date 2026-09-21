@@ -1,0 +1,7 @@
+error[L0206]: `_` asks for evidence, and nothing here says of what
+ --> tests/corpus/reject/hole_without_claim.lc:3:20
+  |
+3 |     let evidence = _; //~ error: L0206 nothing here says of what
+  |                    ^
+  |
+  = note: state the claim with an annotation: `let evidence: @[claim] = _;`

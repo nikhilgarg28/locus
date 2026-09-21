@@ -1,0 +1,9 @@
+// A `let` pattern that is not a name, `_`, or a tuple of those.
+enum Light {
+    Amber(u8),
+}
+
+fn wait(light: Light) -> u8 {
+    let Light::Amber(seconds) = light; //~ error: L0290 a `let` pattern is a name, `_`, or a tuple of those for now
+    seconds
+}

@@ -1,0 +1,9 @@
+// A variant built with more values than it carries.
+enum Light {
+    Red,
+    Amber(u8),
+}
+
+fn first(n: u8) -> Light {
+    Light::Amber(n, n) //~ error: L0208 `Light::Amber` takes 1 value, and 2 were given
+}

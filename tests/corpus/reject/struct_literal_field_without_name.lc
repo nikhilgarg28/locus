@@ -1,0 +1,9 @@
+// A struct literal with a value that has no field name.
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+fn first(n: u8) -> Lock {
+    Lock { n.wrapping_add(1), open: false } //~ error: L0224 a field needs a name
+}

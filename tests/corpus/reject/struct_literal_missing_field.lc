@@ -1,0 +1,9 @@
+// A struct literal that leaves a field out.
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+fn first() -> Lock {
+    Lock { failures: 0 } //~ error: L0224 missing field `open` of `Lock`
+}

@@ -1,0 +1,10 @@
+error[L0202]: variant `Red` is declared twice
+ --> tests/corpus/reject/duplicate_variant.lc:4:5
+  |
+4 |     Red, //~ error: L0202 variant `Red` is declared twice
+  |     ^^^
+error[L0202]: variant `Below` is declared twice
+ --> tests/corpus/reject/duplicate_variant.lc:9:5
+  |
+9 |     Below(bound: @[n < 5]), //~ error: L0202 variant `Below` is declared twice
+  |     ^^^^^

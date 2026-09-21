@@ -1,0 +1,7 @@
+error[L0105]: attributes are reserved but not supported in the initial core
+ --> tests/corpus/reject/hash_bracket_proof_syntax.lc:2:30
+  |
+2 | fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0105 attributes are reserved
+  |                              ^
+  |
+  = note: proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence

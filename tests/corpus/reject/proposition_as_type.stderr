@@ -1,0 +1,5 @@
+error[L0200]: `Small` is a proposition, not a type; its proofs have type `@Small(...)`
+ --> tests/corpus/reject/proposition_as_type.lc:6:24
+  |
+6 | fn first(n: u8, small: Small) -> u8 { n } //~ error: L0200 is a proposition, not a type
+  |                        ^^^^^

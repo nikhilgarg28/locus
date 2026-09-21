@@ -1,0 +1,6 @@
+// A call with more arguments than the function has parameters.
+fn first(n: u8) -> u8 { n }
+
+fn second() -> u8 {
+    first(1, 2) //~ error: L0208 takes 1 value, and 2 were given
+}

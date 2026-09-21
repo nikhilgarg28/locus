@@ -1,0 +1,7 @@
+// A function named where a value is needed.
+fn double(n: u8) -> u8 { n.wrapping_add(n) }
+
+fn first(n: u8) -> u8 {
+    let f = double; //~ error: L0290 a function used as a value is not supported yet
+    n
+}

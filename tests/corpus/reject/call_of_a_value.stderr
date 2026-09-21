@@ -1,0 +1,5 @@
+error[L0207]: a `u8` cannot be applied
+ --> tests/corpus/reject/call_of_a_value.lc:3:5
+  |
+3 |     n(1) //~ error: L0207 cannot be applied
+  |     ^^^^

@@ -1,0 +1,5 @@
+error[L0204]: `Lock` is not a value
+ --> tests/corpus/reject/type_as_value.lc:7:5
+  |
+7 |     Lock //~ error: L0204 `Lock` is not a value
+  |     ^^^^

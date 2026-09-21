@@ -1,0 +1,12 @@
+// A claim that fails in one arm: the arm's equation turns it into `7 <= 6`.
+prop SmallPrime(n: u8) {
+    Two: @SmallPrime(2),
+    Seven: @SmallPrime(7),
+}
+
+math fn too_small(n: u8, h: @SmallPrime(n)) -> @[n <= 6] {
+    match h {
+        SmallPrime::Two => _,
+        SmallPrime::Seven => _, //~ error: L0230 cannot show `n <= 6`
+    }
+}

@@ -1,0 +1,7 @@
+error[L0101]: expected `)` to close this delimiter
+ --> tests/corpus/reject/unclosed_parenthesis.lc:4:1
+  |
+3 |     (n
+  |     - delimiter opened here
+4 | } //~ error: L0101 to close this delimiter
+  | ^

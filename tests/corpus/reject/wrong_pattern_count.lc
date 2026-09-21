@@ -1,0 +1,12 @@
+// An arm that names more values than its variant carries.
+enum Light {
+    Red,
+    Amber(u8),
+}
+
+fn wait(light: Light) -> u8 {
+    match light {
+        Light::Red => 0,
+        Light::Amber(seconds, more) => seconds, //~ error: L0208 carries 1 value(s), and the pattern names 2
+    }
+}

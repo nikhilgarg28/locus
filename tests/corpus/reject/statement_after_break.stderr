@@ -1,0 +1,9 @@
+error[L0216]: statements follow a transfer of control
+ --> tests/corpus/reject/statement_after_break.lc:3:19
+  |
+3 |       loop () -> u8 { //~ error: L0216 statements follow a transfer of control
+  |  ___________________^
+4 | |         break n;
+5 | |         let m = n;
+6 | |     }
+  | |_____^

@@ -1,0 +1,9 @@
+// A variant the enum does not have.
+enum Light {
+    Red,
+    Green,
+}
+
+fn first() -> Light {
+    Light::Blue //~ error: L0212 `Light` has no variant `Blue`
+}

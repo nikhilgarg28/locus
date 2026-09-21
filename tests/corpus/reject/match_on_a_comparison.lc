@@ -1,0 +1,6 @@
+// `match` on evidence of a claim that has no variants.
+math fn first(n: u8, small: @[n <= 9]) -> @[n <= 9] {
+    match small { //~ error: L0212 which has no variants to match
+        _ => small,
+    }
+}

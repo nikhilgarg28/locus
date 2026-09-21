@@ -1,0 +1,5 @@
+// A constructor with nothing to say which claim it proves.
+math fn first(p: Prop, q: Prop, hp: @p) -> () {
+    let either = Or::Left(hp); //~ error: L0226 which `Or(...)` this proves is not known here
+    ()
+}

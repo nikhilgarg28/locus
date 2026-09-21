@@ -1,0 +1,5 @@
+// A literal of a struct that is not declared.
+fn first(n: u8) -> u8 {
+    let lock = Lock { failures: n }; //~ error: L0204 unknown struct `Lock`
+    n
+}

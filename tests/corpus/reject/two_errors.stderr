@@ -1,0 +1,12 @@
+error[L0205]: `256` does not fit in `u8`, whose largest value is 255
+ --> tests/corpus/reject/two_errors.lc:4:5
+  |
+4 |     256 //~ error: L0205
+  |     ^^^
+error[L0202]: `small` is declared twice
+ --> tests/corpus/reject/two_errors.lc:8:4
+  |
+7 | fn small() -> u8 { 1 }
+  |    ----- first declared here
+8 | fn small() -> u8 { 2 } //~ error: L0202 declared twice
+  |    ^^^^^

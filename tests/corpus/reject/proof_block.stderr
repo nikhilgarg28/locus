@@ -1,0 +1,7 @@
+error[L0110]: `@` begins a proof type, not an expression
+ --> tests/corpus/reject/proof_block.lc:3:9
+  |
+3 |     (n, @{ _ }) //~ error: L0110 begins a proof type
+  |         ^
+  |
+  = note: proof blocks `@{ ... }` were retired; evidence is an ordinary expression, and `_` asks the elaborator to find it

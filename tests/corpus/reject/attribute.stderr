@@ -1,0 +1,7 @@
+error[L0105]: attributes are reserved but not supported in the initial core
+ --> tests/corpus/reject/attribute.lc:2:1
+  |
+2 | #[inline] //~ error: L0105 attributes are reserved
+  | ^
+  |
+  = note: proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence

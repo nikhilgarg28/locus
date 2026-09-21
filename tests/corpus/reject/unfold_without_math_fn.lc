@@ -1,0 +1,6 @@
+// `unfold` whose first argument is not the name of a `math fn`.
+math fn nonzero(x: u8) -> Prop { [x != 0] }
+
+math fn first(n: u8, h: @nonzero(n)) -> @[n != 0] {
+    unfold(n, h) //~ error: L0229 `unfold` takes the name of a `math fn` first
+}

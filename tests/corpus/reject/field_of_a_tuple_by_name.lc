@@ -1,0 +1,4 @@
+// A tuple is projected by position.
+fn first(pair: (u8, u8)) -> u8 {
+    pair.left //~ error: L0210 has no field `left`
+}

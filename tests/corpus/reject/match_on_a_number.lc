@@ -1,0 +1,6 @@
+// `match` on a `u8`.
+fn first(n: u8) -> u8 {
+    match n { //~ error: L0212 `match` takes apart an enum or evidence, and this is `u8`
+        _ => 0,
+    }
+}

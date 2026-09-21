@@ -1,0 +1,7 @@
+error[L0209]: `first` is an ordinary `fn` and cannot be called here
+ --> tests/corpus/reject/fn_called_from_math_fn.lc:5:5
+  |
+5 |     first(n) //~ error: L0209 is an ordinary `fn` and cannot be called here
+  |     ^^^^^^^^
+  |
+  = note: an ordinary `fn` may fail to return, so a `math fn` and a proposition can only call a `math fn`

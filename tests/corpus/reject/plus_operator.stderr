@@ -1,0 +1,7 @@
+error[L0112]: `+` is not part of the core language
+ --> tests/corpus/reject/plus_operator.lc:3:7
+  |
+3 |     a + b //~ error: L0112
+  |       ^
+  |
+  = note: u8 arithmetic says what happens on overflow: write `a.wrapping_add(b)`

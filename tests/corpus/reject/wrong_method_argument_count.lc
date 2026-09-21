@@ -1,0 +1,4 @@
+// A method of `u8` takes one argument.
+fn first(n: u8) -> u8 {
+    n.wrapping_add(1, 2) //~ error: L0208 `wrapping_add` takes one argument
+}

@@ -1,0 +1,11 @@
+// An arm whose pattern is not a variant or `_`.
+enum Light {
+    Red,
+    Green,
+}
+
+fn go(light: Light) -> bool {
+    match light {
+        (a, b) => false, //~ error: L0290 other patterns are not supported yet
+    }
+}

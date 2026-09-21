@@ -1,0 +1,5 @@
+error[L0206]: `_` asks for evidence, and a `u8` is needed here
+ --> tests/corpus/reject/hole_for_data.lc:3:5
+  |
+3 |     _ //~ error: L0206 a `u8` is needed here
+  |     ^

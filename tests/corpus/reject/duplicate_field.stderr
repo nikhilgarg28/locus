@@ -1,0 +1,10 @@
+error[L0202]: `failures` is declared twice
+ --> tests/corpus/reject/duplicate_field.lc:4:5
+  |
+4 |     failures: u8, //~ error: L0202 `failures` is declared twice
+  |     ^^^^^^^^
+error[L0202]: `out` is declared twice
+ --> tests/corpus/reject/duplicate_field.lc:7:29
+  |
+7 | fn pair(n: u8) -> (out: u8, out: u8) { //~ error: L0202 `out` is declared twice
+  |                             ^^^

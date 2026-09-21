@@ -1,0 +1,4 @@
+// A parenthesis that is never closed.
+fn first(n: u8) -> u8 {
+    (n
+} //~ error: L0101 to close this delimiter

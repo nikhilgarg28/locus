@@ -1,0 +1,4 @@
+// A quantifier with nothing to state.
+const nothing: Prop = [
+    forall (n: u8) { } //~ error: L0222 a quantifier needs a formula to state
+];

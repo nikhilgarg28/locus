@@ -1,0 +1,5 @@
+error[L0208]: `wrapping_add` takes one argument
+ --> tests/corpus/reject/wrong_method_argument_count.lc:3:5
+  |
+3 |     n.wrapping_add(1, 2) //~ error: L0208 `wrapping_add` takes one argument
+  |     ^^^^^^^^^^^^^^^^^^^^

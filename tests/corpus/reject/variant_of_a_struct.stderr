@@ -1,0 +1,5 @@
+error[L0212]: `Lock` is not an enum or a proposition
+ --> tests/corpus/reject/variant_of_a_struct.lc:7:5
+  |
+7 |     Lock::Open //~ error: L0212 `Lock` is not an enum or a proposition
+  |     ^^^^

@@ -1,0 +1,4 @@
+// `rewrite` given a `u8` where evidence is needed.
+math fn moved(a: u8, b: u8, same: @[a == b], small: @[a <= 9]) -> @[b <= 9] {
+    rewrite(a, small) //~ error: L0220 expected evidence, found `u8`
+}

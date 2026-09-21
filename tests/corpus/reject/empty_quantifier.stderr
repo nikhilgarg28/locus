@@ -1,0 +1,5 @@
+error[L0222]: a quantifier needs a formula to state
+ --> tests/corpus/reject/empty_quantifier.lc:3:20
+  |
+3 |     forall (n: u8) { } //~ error: L0222 a quantifier needs a formula to state
+  |                    ^^^

@@ -1,0 +1,5 @@
+error[L0225]: a variant of `Small` proves `Small(...)`
+ --> tests/corpus/reject/variant_proves_another_proposition.lc:7:12
+  |
+7 |     Zero: @Tiny(0), //~ error: L0225 a variant of `Small` proves `Small(...)`
+  |            ^^^^^^^

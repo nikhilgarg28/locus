@@ -1,0 +1,5 @@
+error[L0212]: `Light` has no variant `Blue`
+ --> tests/corpus/reject/unknown_variant.lc:8:12
+  |
+8 |     Light::Blue //~ error: L0212 `Light` has no variant `Blue`
+  |            ^^^^

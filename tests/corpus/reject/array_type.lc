@@ -1,0 +1,2 @@
+// An array type.
+fn first(items: [u8; 4]) -> u8 { 1 } //~ error: L0114 arrays are not part

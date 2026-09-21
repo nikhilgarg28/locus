@@ -1,0 +1,3 @@
+// Something other than a declaration at the top of a file.
+fn first(n: u8) -> u8 { n }
+7 //~ error: L0100 expected a declaration

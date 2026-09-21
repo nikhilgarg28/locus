@@ -1,0 +1,9 @@
+// Two fields with one name, in a struct and in a tuple type.
+struct Lock {
+    failures: u8,
+    failures: u8, //~ error: L0202 `failures` is declared twice
+}
+
+fn pair(n: u8) -> (out: u8, out: u8) { //~ error: L0202 `out` is declared twice
+    (n, n)
+}

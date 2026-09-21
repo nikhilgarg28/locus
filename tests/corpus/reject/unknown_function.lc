@@ -1,0 +1,4 @@
+// A call of a function that is not declared.
+fn first(n: u8) -> u8 {
+    double(n) //~ error: L0204 unknown function `double`
+}

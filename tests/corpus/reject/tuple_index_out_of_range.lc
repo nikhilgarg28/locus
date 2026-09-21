@@ -1,0 +1,4 @@
+// A position the tuple does not have.
+fn third(pair: (u8, u8)) -> u8 {
+    pair.2 //~ error: L0210 has no field `2`
+}

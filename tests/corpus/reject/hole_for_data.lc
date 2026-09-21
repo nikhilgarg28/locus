@@ -1,0 +1,4 @@
+// `_` where a `u8` is needed: a hole is filled with evidence, never data.
+fn first(n: u8) -> u8 {
+    _ //~ error: L0206 a `u8` is needed here
+}

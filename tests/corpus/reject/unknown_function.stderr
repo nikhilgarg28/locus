@@ -1,0 +1,5 @@
+error[L0204]: unknown function `double`
+ --> tests/corpus/reject/unknown_function.lc:3:5
+  |
+3 |     double(n) //~ error: L0204 unknown function `double`
+  |     ^^^^^^

@@ -1,0 +1,10 @@
+error[L0214]: this arm is never reached
+  --> tests/corpus/reject/unreachable_arm.lc:10:9
+   |
+10 |         Light::Red => true, //~ error: L0214 this arm is never reached
+   |         ^^^^^^^^^^
+error[L0214]: this arm is never reached
+  --> tests/corpus/reject/unreachable_arm.lc:19:9
+   |
+19 |         _ => true, //~ error: L0214 this arm is never reached
+   |         ^

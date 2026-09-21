@@ -1,0 +1,10 @@
+error[L0227]: evidence can be taken apart only to produce other evidence
+ --> tests/corpus/reject/evidence_chooses_a_value.lc:3:5
+  |
+3 | /     match h { //~ error: L0227 evidence can be taken apart only to produce other evidence
+4 | |         Or::Left(_) => 0,
+5 | |         Or::Right(_) => 1,
+6 | |     }
+  | |_____^
+  |
+  = note: proofs are erased, so which one was supplied cannot choose a value; state the claim this `match` proves with an annotation

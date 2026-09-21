@@ -1,0 +1,5 @@
+error[L0220]: `double` does not return evidence
+ --> tests/corpus/reject/math_fn_without_evidence_as_evidence.lc:5:5
+  |
+5 |     double //~ error: L0220 `double` does not return evidence
+  |     ^^^^^^

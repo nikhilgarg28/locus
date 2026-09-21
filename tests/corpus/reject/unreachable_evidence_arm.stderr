@@ -1,0 +1,10 @@
+error[L0214]: this arm is never reached
+ --> tests/corpus/reject/unreachable_evidence_arm.lc:5:9
+  |
+5 |         _ => _, //~ error: L0214 this arm is never reached
+  |         ^^^^^^
+error[L0214]: this arm is never reached
+  --> tests/corpus/reject/unreachable_evidence_arm.lc:12:9
+   |
+12 |         Or::Left(hp) => Or::Right(hp), //~ error: L0214 this arm is never reached
+   |         ^^^^^^^^^^^^

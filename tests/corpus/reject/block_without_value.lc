@@ -1,0 +1,4 @@
+// A block that ends in a statement where a value is needed.
+fn first(n: u8) -> u8 { //~ error: L0220 this block ends without a value, and `u8` is expected
+    let m = n;
+}

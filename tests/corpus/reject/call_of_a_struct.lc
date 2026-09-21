@@ -1,0 +1,8 @@
+// A call of something that is not a function.
+struct Lock {
+    failures: u8,
+}
+
+fn first(n: u8) -> Lock {
+    Lock(n) //~ error: L0207 `Lock` cannot be called
+}

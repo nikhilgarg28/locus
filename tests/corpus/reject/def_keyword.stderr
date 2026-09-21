@@ -1,0 +1,8 @@
+error[L0113]: `def` was renamed to `math fn`
+ --> tests/corpus/reject/def_keyword.lc:2:1
+  |
+2 | def double(n: u8) -> u8 { n.wrapping_add(n) } //~ error: L0113 renamed to `math fn`
+  | ^^^
+  |
+  = note: a `math fn` is pure and total, so it can be used in propositions; it also runs when its body is executable
+  = help: write `math fn`

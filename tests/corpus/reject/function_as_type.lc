@@ -1,0 +1,4 @@
+// A function's name where a type is needed.
+fn double(n: u8) -> u8 { n.wrapping_add(n) }
+
+fn first(n: double) -> u8 { 1 } //~ error: L0200 is a function, not a type

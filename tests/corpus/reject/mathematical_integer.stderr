@@ -1,0 +1,7 @@
+error[L0201]: `Nat` is not part of the core language
+ --> tests/corpus/reject/mathematical_integer.lc:2:13
+  |
+2 | fn first(n: Nat) -> u8 { 1 } //~ error: L0201 `Nat` is not part of the core language
+  |             ^^^
+  |
+  = note: the core has `bool` and `u8`; mathematical integers arrive in a later milestone

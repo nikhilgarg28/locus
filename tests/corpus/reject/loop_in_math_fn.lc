@@ -1,0 +1,6 @@
+// A `loop` in a `math fn`, which must return.
+math fn first(n: u8) -> u8 {
+    loop () -> u8 { //~ error: L0215 `loop` cannot appear here
+        break n
+    }
+}

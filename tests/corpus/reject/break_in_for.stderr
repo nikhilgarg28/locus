@@ -1,0 +1,7 @@
+error[L0218]: a bounded `for` runs to the end of its range and has no `break`
+ --> tests/corpus/reject/break_in_for.lc:4:9
+  |
+4 |         break total //~ error: L0218 has no `break`
+  |         ^^^^^^^^^^^
+  |
+  = note: carry a `bool` in the state to stop doing work early

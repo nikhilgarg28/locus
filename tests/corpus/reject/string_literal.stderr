@@ -1,0 +1,5 @@
+error[L0006]: string literals are not supported in the initial core
+ --> tests/corpus/reject/string_literal.lc:3:5
+  |
+3 |     "hello" //~ error: L0006 string literals
+  |     ^^^^^^^

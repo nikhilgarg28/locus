@@ -1,0 +1,2 @@
+// Two parameters with one name.
+fn first(n: u8, n: u8) -> u8 { n } //~ error: L0202 parameter `n` is declared twice

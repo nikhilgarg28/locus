@@ -1,0 +1,9 @@
+error[L0102]: expected `;` after this binding
+ --> tests/corpus/reject/missing_semicolon.lc:3:14
+  |
+3 |     let m = n //~ error: L0102 expected `;`
+  |             -^
+  |             |
+  |             this binding ends here
+  |
+  = help: insert `;` here

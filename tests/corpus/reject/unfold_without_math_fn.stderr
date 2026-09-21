@@ -1,0 +1,5 @@
+error[L0229]: `unfold` takes the name of a `math fn` first
+ --> tests/corpus/reject/unfold_without_math_fn.lc:5:12
+  |
+5 |     unfold(n, h) //~ error: L0229 `unfold` takes the name of a `math fn` first
+  |            ^

@@ -1,0 +1,7 @@
+error[L0226]: which `Or(...)` this proves is not known here
+ --> tests/corpus/reject/constructor_without_claim.lc:3:18
+  |
+3 |     let either = Or::Left(hp); //~ error: L0226 which `Or(...)` this proves is not known here
+  |                  ^^^^^^^^^^^^
+  |
+  = note: state the claim with an annotation, such as `let evidence: @[p || q] = ...;`

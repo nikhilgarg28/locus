@@ -1,0 +1,4 @@
+// A string literal.
+fn greeting() -> u8 {
+    "hello" //~ error: L0006 string literals
+}

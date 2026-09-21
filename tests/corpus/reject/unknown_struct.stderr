@@ -1,0 +1,5 @@
+error[L0204]: unknown struct `Lock`
+ --> tests/corpus/reject/unknown_struct.lc:3:16
+  |
+3 |     let lock = Lock { failures: n }; //~ error: L0204 unknown struct `Lock`
+  |                ^^^^

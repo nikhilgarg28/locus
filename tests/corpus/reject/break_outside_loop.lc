@@ -1,0 +1,8 @@
+// `break` and `continue` with no loop around them.
+fn first(n: u8) -> u8 {
+    break n //~ error: L0217 `break` outside a loop
+}
+
+fn second(n: u8) -> u8 {
+    continue(n) //~ error: L0217 `continue` outside a loop
+}

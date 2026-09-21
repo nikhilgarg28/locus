@@ -1,0 +1,5 @@
+// `_` with nothing to say what it should prove.
+fn first(n: u8) -> u8 {
+    let evidence = _; //~ error: L0206 nothing here says of what
+    n
+}

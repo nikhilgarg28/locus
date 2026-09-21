@@ -1,0 +1,7 @@
+error[L0004]: non-ASCII identifiers are not supported in the initial core
+ --> tests/corpus/reject/non_ascii_identifier.lc:2:4
+  |
+2 | fn café() -> u8 { 1 } //~ error: L0004 non-ASCII identifiers
+  |    ^^^^
+  |
+  = note: use ASCII letters, digits, and underscores for identifiers

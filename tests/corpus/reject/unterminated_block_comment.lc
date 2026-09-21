@@ -1,0 +1,3 @@
+// A block comment that is never closed.
+fn first(n: u8) -> u8 { n }
+/* the rest of the file //~ error: L0002 unterminated block comment

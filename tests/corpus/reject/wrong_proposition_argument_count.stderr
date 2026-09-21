@@ -1,0 +1,5 @@
+error[L0208]: `Small` takes 1 argument(s), and 2 were given
+ --> tests/corpus/reject/wrong_proposition_argument_count.lc:3:12
+  |
+3 |     Zero: @Small(0, 0), //~ error: L0208 `Small` takes 1 argument(s), and 2 were given
+  |            ^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error[L0207]: `Lock` cannot be called
+ --> tests/corpus/reject/call_of_a_struct.lc:7:5
+  |
+7 |     Lock(n) //~ error: L0207 `Lock` cannot be called
+  |     ^^^^

@@ -1,0 +1,5 @@
+error[L0204]: unknown name `Light`
+ --> tests/corpus/reject/unknown_enum.lc:3:17
+  |
+3 |     let light = Light::Red; //~ error: L0204 unknown name `Light`
+  |                 ^^^^^

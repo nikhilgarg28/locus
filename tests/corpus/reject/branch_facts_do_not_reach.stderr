@@ -1,0 +1,8 @@
+error[L0230]: cannot show `n <= 9`
+ --> tests/corpus/reject/branch_facts_do_not_reach.lc:4:9
+  |
+4 |     (n, _) //~ error: L0230 cannot show `n <= 9`
+  |         ^
+  |
+  = note: it fails when `n` is 10, which the facts known here allow
+  = note: nothing known here speaks of the values in this claim

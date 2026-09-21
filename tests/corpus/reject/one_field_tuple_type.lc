@@ -1,0 +1,4 @@
+// A one-field tuple type without its trailing comma.
+fn first(n: u8) -> (out: u8) { //~ error: L0106 trailing comma
+    (n,)
+}

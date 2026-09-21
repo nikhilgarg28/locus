@@ -1,0 +1,5 @@
+error[L0224]: missing field `open` of `Lock`
+ --> tests/corpus/reject/struct_literal_missing_field.lc:8:5
+  |
+8 |     Lock { failures: 0 } //~ error: L0224 missing field `open` of `Lock`
+  |     ^^^^^^^^^^^^^^^^^^^^

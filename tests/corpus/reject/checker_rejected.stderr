@@ -1,0 +1,14 @@
+error[L0299]: the checker rejected this: a term-level case cannot have the proof type @(1 == 1) as its result
+ --> tests/corpus/reject/checker_rejected.lc:4:4
+  |
+4 | fn choose(flag: bool) -> @[1 == 1] { //~ error: L0299 the checker rejected this
+  |    ^^^^^^
+  |
+  = note: this is a gap in the elaborator's own checks; the program was not accepted
+error[L0299]: the checker rejected this: break and continue may only end a block
+  --> tests/corpus/reject/checker_rejected.lc:10:9
+   |
+10 |         let next = continue(total); //~ error: L0299 break and continue may only end a block
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this is a gap in the elaborator's own checks; the program was not accepted

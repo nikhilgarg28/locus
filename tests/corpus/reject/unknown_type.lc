@@ -1,0 +1,2 @@
+// A type that is not declared.
+fn first(n: Byte) -> u8 { 1 } //~ error: L0200 unknown type `Byte`

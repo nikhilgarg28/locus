@@ -1,0 +1,8 @@
+// A struct's name where a value is needed.
+struct Lock {
+    failures: u8,
+}
+
+fn first(n: u8) -> u8 {
+    Lock //~ error: L0204 `Lock` is not a value
+}

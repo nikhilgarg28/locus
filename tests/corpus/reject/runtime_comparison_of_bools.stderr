@@ -1,0 +1,7 @@
+error[L0211]: values of type `bool` cannot be compared at runtime in the core
+ --> tests/corpus/reject/runtime_comparison_of_bools.lc:3:5
+  |
+3 |     a == b //~ error: L0211 cannot be compared at runtime
+  |     ^^^^^^
+  |
+  = note: runtime comparison is defined on `u8`; inside `[ ... ]`, `==` states equality at any type

@@ -1,0 +1,5 @@
+error[L0290]: a function used as a value is not supported yet; call it
+ --> tests/corpus/reject/function_as_value.lc:5:13
+  |
+5 |     let f = double; //~ error: L0290 a function used as a value is not supported yet
+  |             ^^^^^^

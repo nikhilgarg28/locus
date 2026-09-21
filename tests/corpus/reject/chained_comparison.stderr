@@ -1,0 +1,9 @@
+error[L0103]: comparisons cannot be chained without parentheses
+ --> tests/corpus/reject/chained_comparison.lc:3:11
+  |
+3 |     a < b < c //~ error: L0103 comparisons cannot be chained
+  |     ----- ^
+  |     |
+  |     the first comparison is here
+  |
+  = note: write each comparison separately and combine them with `&&`

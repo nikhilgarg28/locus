@@ -1,0 +1,8 @@
+error[L0230]: cannot show `n <= 9`
+ --> tests/corpus/reject/unproved_claim.lc:3:9
+  |
+3 |     (n, _) //~ error: L0230 cannot show
+  |         ^
+  |
+  = note: it fails when `n` is 10, which the facts known here allow
+  = note: nothing known here speaks of the values in this claim

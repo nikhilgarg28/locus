@@ -1,0 +1,7 @@
+error[L0212]: this is evidence of `n <= 9`, which has no variants to match
+ --> tests/corpus/reject/match_on_a_comparison.lc:3:11
+  |
+3 |     match small { //~ error: L0212 which has no variants to match
+  |           ^^^^^
+  |
+  = note: `match` takes apart evidence of a declared proposition, of `p && q`, or of `p || q`

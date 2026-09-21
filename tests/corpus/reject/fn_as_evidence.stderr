@@ -1,0 +1,5 @@
+error[L0209]: `self_equal` is an ordinary `fn`; only a `math fn` is evidence
+ --> tests/corpus/reject/fn_as_evidence.lc:5:5
+  |
+5 |     self_equal //~ error: L0209 only a `math fn` is evidence
+  |     ^^^^^^^^^^

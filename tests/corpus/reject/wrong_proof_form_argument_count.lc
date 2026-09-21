@@ -1,0 +1,6 @@
+// `unfold` takes a `math fn` and evidence.
+math fn nonzero(x: u8) -> Prop { [x != 0] }
+
+math fn first(n: u8, h: @nonzero(n)) -> @[n != 0] {
+    unfold(nonzero) //~ error: L0208 `unfold` takes two arguments
+}

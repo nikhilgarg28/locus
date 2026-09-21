@@ -1,0 +1,21 @@
+// Arms that are never reached: a variant twice, and `_` after every variant.
+enum Light {
+    Red,
+    Green,
+}
+
+fn twice(light: Light) -> bool {
+    match light {
+        Light::Red => false,
+        Light::Red => true, //~ error: L0214 this arm is never reached
+        Light::Green => true,
+    }
+}
+
+fn after_all(light: Light) -> bool {
+    match light {
+        Light::Red => false,
+        Light::Green => true,
+        _ => true, //~ error: L0214 this arm is never reached
+    }
+}

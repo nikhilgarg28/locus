@@ -1,0 +1,5 @@
+// A variant of an enum that is not declared.
+fn first(n: u8) -> u8 {
+    let light = Light::Red; //~ error: L0204 unknown name `Light`
+    n
+}

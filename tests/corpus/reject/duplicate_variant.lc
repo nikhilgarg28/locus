@@ -1,0 +1,10 @@
+// Two variants with one name, in an enum and in a proposition.
+enum Light {
+    Red,
+    Red, //~ error: L0202 variant `Red` is declared twice
+}
+
+prop Small(n: u8) {
+    Below(bound: @[n < 10]),
+    Below(bound: @[n < 5]), //~ error: L0202 variant `Below` is declared twice
+}

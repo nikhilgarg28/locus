@@ -1,0 +1,5 @@
+error[L0220]: this pattern has 3 parts, and the value is `(u8, u8)`
+ --> tests/corpus/reject/tuple_pattern_of_wrong_size.lc:3:9
+  |
+3 |     let (a, b, c) = pair; //~ error: L0220 this pattern has 3 parts
+  |         ^^^^^^^^^

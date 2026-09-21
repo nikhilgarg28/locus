@@ -1,0 +1,7 @@
+error[L0108]: syntax nesting exceeds the parser limit
+ --> tests/corpus/reject/nesting_limit.lc:3:68
+  |
+3 |     ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
+  |                                                                    ^
+  |
+  = note: split deeply nested expressions or types into smaller definitions

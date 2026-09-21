@@ -1,0 +1,5 @@
+error[L0224]: field `failures` is given twice
+ --> tests/corpus/reject/struct_literal_field_twice.lc:8:25
+  |
+8 |     Lock { failures: 0, failures: 1, open: false } //~ error: L0224 field `failures` is given twice
+  |                         ^^^^^^^^^^^

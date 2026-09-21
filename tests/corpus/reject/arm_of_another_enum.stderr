@@ -1,0 +1,5 @@
+error[L0212]: this arm is for `Event`, and the value matched is a `Light`
+  --> tests/corpus/reject/arm_of_another_enum.lc:15:9
+   |
+15 |         Event::Right => true, //~ error: L0212 this arm is for `Event`, and the value matched is a `Light`
+   |         ^^^^^^^^^^^^

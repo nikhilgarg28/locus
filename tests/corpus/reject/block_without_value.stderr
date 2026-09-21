@@ -1,0 +1,8 @@
+error[L0220]: this block ends without a value, and `u8` is expected
+ --> tests/corpus/reject/block_without_value.lc:2:23
+  |
+2 |   fn first(n: u8) -> u8 { //~ error: L0220 this block ends without a value, and `u8` is expected
+  |  _______________________^
+3 | |     let m = n;
+4 | | }
+  | |_^

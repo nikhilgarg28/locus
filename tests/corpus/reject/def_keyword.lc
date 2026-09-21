@@ -1,0 +1,2 @@
+// The retired `def` keyword.
+def double(n: u8) -> u8 { n.wrapping_add(n) } //~ error: L0113 renamed to `math fn`

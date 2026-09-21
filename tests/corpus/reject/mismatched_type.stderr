@@ -1,0 +1,5 @@
+error[L0220]: expected `u8`, found `bool`
+ --> tests/corpus/reject/mismatched_type.lc:2:5
+  |
+2 |     true
+  |     ^^^^

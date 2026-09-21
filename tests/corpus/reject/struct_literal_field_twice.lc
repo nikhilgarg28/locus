@@ -1,0 +1,9 @@
+// A struct literal that gives a field twice.
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+fn first() -> Lock {
+    Lock { failures: 0, failures: 1, open: false } //~ error: L0224 field `failures` is given twice
+}

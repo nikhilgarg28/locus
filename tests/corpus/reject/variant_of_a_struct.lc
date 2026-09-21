@@ -1,0 +1,8 @@
+// A path into something that is not an enum or a proposition.
+struct Lock {
+    failures: u8,
+}
+
+fn first() -> Lock {
+    Lock::Open //~ error: L0212 `Lock` is not an enum or a proposition
+}

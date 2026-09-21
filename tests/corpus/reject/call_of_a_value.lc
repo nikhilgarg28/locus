@@ -1,0 +1,4 @@
+// A call of a `u8`.
+fn first(n: u8) -> u8 {
+    n(1) //~ error: L0207 cannot be applied
+}

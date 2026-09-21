@@ -1,0 +1,8 @@
+// An array literal, and an empty one.
+fn items() -> u8 {
+    [1, 2, 3] //~ error: L0114 arrays are not part
+}
+
+fn none() -> u8 {
+    [] //~ error: L0114 arrays are not part
+}

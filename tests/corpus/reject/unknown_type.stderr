@@ -1,0 +1,5 @@
+error[L0200]: unknown type `Byte`
+ --> tests/corpus/reject/unknown_type.lc:2:13
+  |
+2 | fn first(n: Byte) -> u8 { 1 } //~ error: L0200 unknown type `Byte`
+  |             ^^^^

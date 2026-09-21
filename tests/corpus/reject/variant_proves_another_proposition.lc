@@ -1,0 +1,8 @@
+// A variant whose stated conclusion is a different proposition.
+prop Tiny(n: u8) {
+    Zero: @Tiny(0),
+}
+
+prop Small(n: u8) {
+    Zero: @Tiny(0), //~ error: L0225 a variant of `Small` proves `Small(...)`
+}

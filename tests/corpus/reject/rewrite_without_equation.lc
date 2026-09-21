@@ -1,0 +1,4 @@
+// `rewrite` whose first argument is not evidence of an equation.
+math fn moved(a: u8, b: u8, below: @[a <= b], small: @[a <= 9]) -> @[b <= 9] {
+    rewrite(below, small) //~ error: L0229 `rewrite` takes evidence of an equation `a == b` first
+}

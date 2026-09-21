@@ -1,0 +1,7 @@
+error[L0213]: no arm handles `Light::Green`
+ --> tests/corpus/reject/missing_arm.lc:7:5
+  |
+7 | /     match light { //~ error: L0213 no arm handles `Light::Green`
+8 | |         Light::Red => false,
+9 | |     }
+  | |_____^

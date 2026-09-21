@@ -1,0 +1,10 @@
+error[L0290]: patterns inside a variant are names or `_` for now
+  --> tests/corpus/reject/nested_pattern.lc:10:22
+   |
+10 |         Light::Amber((seconds, tenths)) => seconds, //~ error: L0290 patterns inside a variant are names or `_` for now
+   |                      ^^^^^^^^^^^^^^^^^
+error[L0290]: patterns inside a variant are names or `_` for now
+  --> tests/corpus/reject/nested_pattern.lc:16:24
+   |
+16 |         And::Intro(hp, And::Intro(hq, hr)) => hp, //~ error: L0290 patterns inside a variant are names or `_` for now
+   |                        ^^^^^^^^^^^^^^^^^^

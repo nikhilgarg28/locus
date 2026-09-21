@@ -1,0 +1,6 @@
+// Loop state whose evidence holds at the start and not after a step.
+fn count(n: u8) -> (total: u8, @[total <= 3]) {
+    for i in 0..n (total: u8 = 0, small: @[total <= 3] = _) {
+        continue(total.wrapping_add(1), _) //~ error: L0230 cannot show `total.wrapping_add(1) <= 3`
+    }
+}

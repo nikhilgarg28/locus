@@ -1,0 +1,6 @@
+// A range whose start may lie past its end.
+fn first(n: u8) -> () {
+    for i in 5..n () { //~ error: L0230 cannot show `5 <= n`
+        continue()
+    }
+}

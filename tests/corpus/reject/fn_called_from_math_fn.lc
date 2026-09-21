@@ -1,0 +1,6 @@
+// A `math fn` that calls an ordinary `fn`.
+fn first(n: u8) -> u8 { n }
+
+math fn second(n: u8) -> u8 {
+    first(n) //~ error: L0209 is an ordinary `fn` and cannot be called here
+}

@@ -1,0 +1,5 @@
+error[L0224]: `Lock` has no field `attempts`
+ --> tests/corpus/reject/struct_literal_unknown_field.lc:8:38
+  |
+8 |     Lock { failures: 0, open: false, attempts: 0 } //~ error: L0224 `Lock` has no field `attempts`
+  |                                      ^^^^^^^^^^^

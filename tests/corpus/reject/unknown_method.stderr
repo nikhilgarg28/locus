@@ -1,0 +1,5 @@
+error[L0207]: unknown method `pow`
+ --> tests/corpus/reject/unknown_method.lc:3:7
+  |
+3 |     n.pow(2) //~ error: L0207 unknown method `pow`
+  |       ^^^

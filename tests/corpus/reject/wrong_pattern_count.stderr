@@ -1,0 +1,5 @@
+error[L0208]: `Light::Amber` carries 1 value(s), and the pattern names 2
+  --> tests/corpus/reject/wrong_pattern_count.lc:10:9
+   |
+10 |         Light::Amber(seconds, more) => seconds, //~ error: L0208 carries 1 value(s), and the pattern names 2
+   |         ^^^^^^^^^^^^

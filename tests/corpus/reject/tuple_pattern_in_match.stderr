@@ -1,0 +1,5 @@
+error[L0290]: an arm's pattern is `Enum::Variant(names...)` or `_`; other patterns are not supported yet
+ --> tests/corpus/reject/tuple_pattern_in_match.lc:9:9
+  |
+9 |         (a, b) => false, //~ error: L0290 other patterns are not supported yet
+  |         ^^^^^^

@@ -1,0 +1,4 @@
+// A retired proof block.
+fn first(n: u8) -> (out: u8, @[out == n]) {
+    (n, @{ _ }) //~ error: L0110 begins a proof type
+}

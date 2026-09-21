@@ -1,0 +1,17 @@
+// An arm for an enum other than the one matched.
+enum Light {
+    Red,
+    Green,
+}
+
+enum Event {
+    Wrong,
+    Right,
+}
+
+fn go(light: Light) -> bool {
+    match light {
+        Light::Red => false,
+        Event::Right => true, //~ error: L0212 this arm is for `Event`, and the value matched is a `Light`
+    }
+}

@@ -1,0 +1,7 @@
+error[L0106]: a one-field tuple type needs a trailing comma
+ --> tests/corpus/reject/one_field_tuple_type.lc:2:28
+  |
+2 | fn first(n: u8) -> (out: u8) { //~ error: L0106 trailing comma
+  |                            ^
+  |
+  = help: insert `,` after this field

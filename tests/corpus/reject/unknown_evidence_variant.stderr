@@ -1,0 +1,10 @@
+error[L0212]: `Small` has no variant `Under`
+ --> tests/corpus/reject/unknown_evidence_variant.lc:7:12
+  |
+7 |     Small::Under(bound) //~ error: L0212 `Small` has no variant `Under`
+  |            ^^^^^
+error[L0212]: `Small` has no variant `Under`
+  --> tests/corpus/reject/unknown_evidence_variant.lc:12:16
+   |
+12 |         Small::Under(bound) => bound, //~ error: L0212 `Small` has no variant `Under`
+   |                ^^^^^

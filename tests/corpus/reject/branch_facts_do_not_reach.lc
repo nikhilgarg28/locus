@@ -1,0 +1,5 @@
+// The test of an `if` is known inside its branches and not after it.
+fn clamp(n: u8) -> (out: u8, @[out <= 9]) {
+    let small = if n <= 9 { true } else { false };
+    (n, _) //~ error: L0230 cannot show `n <= 9`
+}

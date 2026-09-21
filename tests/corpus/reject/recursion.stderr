@@ -1,0 +1,7 @@
+error[L0203]: `forever` is defined in terms of itself
+ --> tests/corpus/reject/recursion.lc:2:4
+  |
+2 | fn forever(n: u8) -> u8 { //~ error: L0203
+  |    ^^^^^^^
+  |
+  = note: recursion is not part of the core language; a bounded `for` repeats a step a known number of times

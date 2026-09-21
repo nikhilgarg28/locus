@@ -1,0 +1,5 @@
+error[L0210]: `(u8, u8)` has no field `2`
+ --> tests/corpus/reject/tuple_index_out_of_range.lc:3:10
+  |
+3 |     pair.2 //~ error: L0210 has no field `2`
+  |          ^

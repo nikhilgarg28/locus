@@ -1,0 +1,5 @@
+error[L0212]: `match` takes apart an enum or evidence, and this is `u8`
+ --> tests/corpus/reject/match_on_a_number.lc:3:11
+  |
+3 |     match n { //~ error: L0212 `match` takes apart an enum or evidence, and this is `u8`
+  |           ^

@@ -1,0 +1,6 @@
+// A bounded `for` has no `break`.
+fn first(n: u8) -> u8 {
+    for i in 0..n (total: u8 = 0) {
+        break total //~ error: L0218 has no `break`
+    }
+}

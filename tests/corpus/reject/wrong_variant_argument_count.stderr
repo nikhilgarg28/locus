@@ -1,0 +1,5 @@
+error[L0208]: `Light::Amber` takes 1 value, and 2 were given
+ --> tests/corpus/reject/wrong_variant_argument_count.lc:8:5
+  |
+8 |     Light::Amber(n, n) //~ error: L0208 `Light::Amber` takes 1 value, and 2 were given
+  |     ^^^^^^^^^^^^^^^^^^

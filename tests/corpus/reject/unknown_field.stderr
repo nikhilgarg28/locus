@@ -1,0 +1,5 @@
+error[L0210]: `Lock` has no field `attempts`
+ --> tests/corpus/reject/unknown_field.lc:7:10
+  |
+7 |     lock.attempts //~ error: L0210 has no field `attempts`
+  |          ^^^^^^^^

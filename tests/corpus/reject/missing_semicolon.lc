@@ -1,0 +1,5 @@
+// A `let` without its `;`.
+fn first(n: u8) -> u8 {
+    let m = n //~ error: L0102 expected `;`
+    m
+}

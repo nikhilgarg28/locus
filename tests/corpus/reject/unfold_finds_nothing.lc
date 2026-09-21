@@ -1,0 +1,6 @@
+// `unfold` of a `math fn` that the evidence does not mention.
+math fn nonzero(x: u8) -> Prop { [x != 0] }
+
+math fn first(n: u8, h: @[n != 0]) -> @[n != 0] {
+    unfold(nonzero, h) //~ error: L0229 `unfold` found no use of `nonzero` to work on
+}
