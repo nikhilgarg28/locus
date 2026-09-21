@@ -12,7 +12,7 @@ use crate::kernel::{
 use crate::source::{SourceFile, Span};
 use crate::typed::{Binder, FnRef, Session};
 
-use super::items::HoleReport;
+use super::items::{HoleReport, ItemReport};
 
 pub(super) type Elab<T> = Result<T, ()>;
 
@@ -114,6 +114,7 @@ pub(super) struct Env<'a> {
     pub failed: HashSet<String>,
     pub diagnostics: Vec<Diagnostic>,
     pub holes: Vec<HoleReport>,
+    pub items: Vec<ItemReport>,
 
     // The function being elaborated.
     pub ctx: Context,

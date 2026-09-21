@@ -49,6 +49,8 @@ Typed tree         the source program made fully explicit
 | Check IR | let-normal executable code over kernel terms and proofs | accepted by the exec checker and the kernel |
 | Erased tree | data and control only, in the shape of the typed tree | a proof or a ghost cannot be represented |
 
+The resolved tree is a stage of the design and not a data structure in the implementation: the elaborator resolves each name against its scope as it builds the typed tree, after ordering the declarations by what they mention ([elaborator.md](elaborator.md)).
+
 ## The typed tree
 
 The typed tree is the source program with nothing left implicit. It has two kinds of content.
@@ -179,8 +181,7 @@ Compared with checking a lowered core directly, `lower` has moved into the trust
 
 ## Build order
 
-Steps 1 to 5 are done for hand-built typed trees; step 6 is next.
-
+All six steps are done. Steps 1 to 5 were built against hand-built typed trees; step 6 produces typed trees from source, and is described in [elaborator.md](elaborator.md).
 
 1. Kernel: give the arms of a term-level `case` the hypothesis `scrutinee == variant(payload)`, so that a math function's branches know what an executable `match` arm knows.
 2. The check IR and the exec checker, driven by hand-built programs: `increment`, `preserve`, `classify`, `bounded_walk`, and `spin` with its caller.

@@ -21,10 +21,20 @@ pub struct HoleReport {
     pub span: Span,
     pub solved: bool,
     pub tier: &'static str,
-    /// The size of the proof found, as the length of its debug text.
+    /// The size of the proof found: roughly its number of nodes.
     pub proof_size: usize,
     /// Time to find the proof and check it once, in microseconds.
     pub micros: u128,
+}
+
+/// What one function cost to accept.
+#[derive(Clone, Debug)]
+pub struct ItemReport {
+    pub name: String,
+    /// Elaboration, including the search for every proof in it.
+    pub elaborate_micros: u128,
+    /// Lowering, checking by the kernel, and erasure.
+    pub check_micros: u128,
 }
 
 pub struct Elaborated {
@@ -34,6 +44,7 @@ pub struct Elaborated {
     pub functions: Vec<(String, FnRef)>,
     pub diagnostics: Vec<Diagnostic>,
     pub holes: Vec<HoleReport>,
+    pub items: Vec<ItemReport>,
 }
 
 impl Elaborated {
@@ -61,6 +72,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         failed: HashSet::new(),
         diagnostics: Vec::new(),
         holes: Vec::new(),
+        items: Vec::new(),
         ctx: Context::new(),
         names: Vec::new(),
         facts: Vec::new(),
@@ -135,6 +147,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
             .collect(),
         diagnostics: env.diagnostics,
         holes: env.holes,
+        items: env.items,
     }
 }
 
@@ -241,6 +254,7 @@ impl Env<'_> {
         body: Body<'_>,
         constant: bool,
     ) -> Elab<Global> {
+        let started = std::time::Instant::now();
         self.start_item(math);
         let mut params: Vec<Binder> = Vec::new();
         for parameter in parameters {
@@ -274,10 +288,17 @@ impl Env<'_> {
             result: result_ty.clone(),
             body: block,
         };
+        let elaborate_micros = started.elapsed().as_micros();
+        let started = std::time::Instant::now();
         let reference = match self.session.declare_fn(&item) {
             Ok(reference) => reference,
             Err(error) => return self.internal(error, name.span),
         };
+        self.items.push(ItemReport {
+            name: name.text.clone(),
+            elaborate_micros,
+            check_micros: started.elapsed().as_micros(),
+        });
         Ok(Global::Fn(Rc::new(FnInfo {
             reference,
             name: name.text.clone(),

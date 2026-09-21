@@ -7,6 +7,10 @@ cargo run -- tokens examples/increment.loc
 cargo run -- parse examples/increment.loc
 cargo run -- ast examples/preserve.loc
 cargo run -- parse examples/propositions.loc
+cargo run -- check examples/lock.loc --holes
+cargo run -- check examples/lock.loc --stats
+cargo run -- run examples/lock.loc attempts_left 5 9
+cargo run -- rust examples/lock.loc
 cargo test
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
@@ -24,4 +28,4 @@ The current proof spelling is `@claim` / `@[condition]` in types and `_` for an 
 
 Bracket expressions remain neutral in the AST until typing supplies context. The parser also preserves explicit array forms and array/slice type syntax, but no array execution is implemented. The `!`, `&&`, `||`, and `=>` nodes likewise need semantic checking to distinguish operations on proposition values from executable Boolean operations.
 
-`fn` declares executable functions with optional proof parameters and results; `math fn` declares pure, total functions usable in propositions. The AST preserves the distinction; checking purity, totality, and ghost-to-runtime data flow belongs to the elaborator, which is not yet implemented. The files in `examples/` follow the specification's grammar. `examples/lock.loc` is the end-to-end example the milestone is judged by. See [the grammar](grammar.md) for the implemented syntax, [the specification](core-language-spec.md) for its meaning, and [rust-features.md](rust-features.md) for the Rust features outside the core.
+`fn` declares executable functions with optional proof parameters and results; `math fn` declares pure, total functions usable in propositions. The AST preserves the distinction; purity and totality are checked by the [elaborator](elaborator.md), and ghost-to-runtime data flow by the kernel's executable mode. The files in `examples/` follow the specification's grammar. `examples/lock.loc` is the end-to-end example the milestone is judged by. See [the grammar](grammar.md) for the implemented syntax, [the specification](core-language-spec.md) for its meaning, and [rust-features.md](rust-features.md) for the Rust features outside the core.

@@ -15,7 +15,8 @@ const HELP: &str = "Locus
 
 Usage: locus <command> <file.loc> [arguments]
 
-  check   Check types and proofs; --holes lists every `_` and how it was filled
+  check   Check types and proofs; --holes lists every `_` and how it was filled,
+          --stats what each function cost to elaborate and to check
   run     Check, then interpret a function: locus run <file.loc> <function> [u8|true|false]...
   rust    Check, then print the generated Rust
   tokens  Print tokens and their original source spans
@@ -55,7 +56,11 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
     let command = arguments[0].to_str().unwrap_or("");
     let well_formed = match command {
         "tokens" | "parse" | "ast" | "rust" => arguments.len() == 2,
-        "check" => arguments.len() == 2 || (arguments.len() == 3 && arguments[2] == "--holes"),
+        "check" => {
+            arguments.len() == 2
+                || (arguments.len() == 3
+                    && (arguments[2] == "--holes" || arguments[2] == "--stats"))
+        }
         "run" => arguments.len() >= 3,
         _ => false,
     };
@@ -104,12 +109,44 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
     }
     if matches!(command, "check" | "run" | "rust") {
         let elaborated = elab::elaborate(source, &parsed.program);
-        if command == "check" && arguments.len() == 3 {
+        if command == "check" && arguments.len() == 3 && arguments[2] == "--stats" {
+            writeln!(
+                output,
+                "{:<28} {:>14} {:>12}",
+                "function", "elaborate (us)", "check (us)"
+            )?;
+            for item in &elaborated.items {
+                writeln!(
+                    output,
+                    "{:<28} {:>14} {:>12}",
+                    item.name, item.elaborate_micros, item.check_micros
+                )?;
+            }
+            let search: u128 = elaborated.holes.iter().map(|hole| hole.micros).sum();
+            let nodes: usize = elaborated.holes.iter().map(|hole| hole.proof_size).sum();
+            writeln!(
+                output,
+                "total: {} us elaborating ({} us of it searching for {} proofs, {} proof nodes), {} us checking",
+                elaborated
+                    .items
+                    .iter()
+                    .map(|item| item.elaborate_micros)
+                    .sum::<u128>(),
+                search,
+                elaborated.holes.len(),
+                nodes,
+                elaborated
+                    .items
+                    .iter()
+                    .map(|item| item.check_micros)
+                    .sum::<u128>(),
+            )?;
+        } else if command == "check" && arguments.len() == 3 {
             for hole in &elaborated.holes {
                 let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
                 writeln!(
                     output,
-                    "{}:{line}:{column}: {} ({}, {} bytes of proof, {} us)",
+                    "{}:{line}:{column}: {} ({}, {} proof nodes, {} us)",
                     source.name,
                     if hole.solved { "filled" } else { "unsolved" },
                     hole.tier,

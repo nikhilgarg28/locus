@@ -87,9 +87,7 @@ impl Env<'_> {
             span,
             solved: checked.is_some(),
             tier: attempt.tier,
-            proof_size: checked
-                .as_ref()
-                .map_or(0, |proof| format!("{proof:?}").len()),
+            proof_size: checked.as_ref().map_or(0, proof_size),
             micros: started.elapsed().as_micros(),
         });
         if let Some(proof) = checked {
@@ -814,4 +812,20 @@ fn free_variables(term: &Term, out: &mut Vec<crate::kernel::VarId>) {
         false
     });
     out.extend(seen.into_inner());
+}
+
+/// Roughly the number of nodes in a proof: one per constructor in its debug
+/// form. The kernel has no size measure of its own, and this one is only
+/// reported, never relied on.
+fn proof_size(proof: &Proof) -> usize {
+    let text = format!("{proof:?}");
+    let mut nodes = 0;
+    let mut previous = ' ';
+    for character in text.chars() {
+        if character.is_ascii_uppercase() && !previous.is_ascii_alphanumeric() {
+            nodes += 1;
+        }
+        previous = character;
+    }
+    nodes
 }

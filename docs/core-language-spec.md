@@ -1445,15 +1445,18 @@ A hole's behavior must be predictable, so its search is fixed and bounded:
 2. propositional reasoning over &&, ||, =>, true, and false using facts in scope;
 3. rewriting with equalities in scope and congruence (a proof-producing congruence closure);
 4. unfolding of math function definitions;
-5. evaluation of closed terms by the kernel.
+5. evaluation of closed terms by the kernel;
+6. for a comparison that speaks of exactly one unknown byte, evaluation of all 256 cases under the facts in scope that speak of that byte alone (the rule of section 12.2).
 
-A hole does not search the prelude. In particular it does not do machine-order or arithmetic reasoning: it will not derive i < limit from i <= limit and i != limit. Such steps are written as lemma calls, as in sections 8.1 and 10.4. Every example in this document uses a hole only for a goal within these five tiers. A mechanism that lets a hole apply selected lemmas is a possible later addition (section 15.2); it is deliberately absent here so that what a hole can do is easy to state.
+The implementation builds tiers 1, 2, 4, 5, and 6, and in place of tier 3 an oriented rewriting: a name bound by let, or a field of a result, is replaced by what an equation in scope says it equals. A proof-producing congruence closure is not built yet.
+
+A hole does not search the prelude. In particular it does not reason about order or arithmetic between two unknowns: it will not derive i < limit from i <= limit and i != limit. With limit a literal, tier 6 decides it. Such steps are written as lemma calls, as in sections 8.1 and 10.4. Every example in this document uses a hole only for a goal within these five tiers. A mechanism that lets a hole apply selected lemmas is a possible later addition (section 15.2); it is deliberately absent here so that what a hole can do is easy to state.
 
 Anything beyond the tiers is an explicit step: a lemma call, a match, a rewrite, unfold, or fold form (section 8.4), or a named decision procedure. Expected named procedures are linear arithmetic once mathematical integers exist, and bit-level reasoning for wider machine integers. Each emits kernel terms or a certificate for a small checker; if a certificate checker is added to the trusted base, that is recorded explicitly.
 
 Resource policy. Every limit is a count of deterministic steps, never elapsed time, so that whether a program is accepted does not depend on the machine that checks it. A hole has fixed budgets for: the depth of definition unfolding; the size of any intermediate term; the number of congruence-closure merges; the number of propositional case splits; and the number of cases evaluated, at most 65,536, which covers two byte variables and rules out three. Acyclic unfolding always terminates but can grow a term rapidly; the size budget, not termination, is what bounds it. Exceeding any budget is reported as "not found", naming the budget. The budgets are constants of a language version, and raising one is a compatible change.
 
-When a hole fails, the diagnostic reports the Locus-level goal and the facts that were in scope, and distinguishes "not found" from "refuted by evaluation".
+When a hole fails, the diagnostic reports the Locus-level goal, the goal after computing when that differs, and the facts in scope that speak of the values in the goal, and distinguishes "not found" from "refuted by evaluation": a refutation names the failing byte.
 
 Two tooling consequences are intended:
 

@@ -19,4 +19,4 @@ mod show;
 mod solve;
 mod types;
 
-pub use items::{Elaborated, HoleReport, elaborate};
+pub use items::{Elaborated, HoleReport, ItemReport, elaborate};
