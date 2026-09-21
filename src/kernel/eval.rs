@@ -19,7 +19,8 @@
 use super::check::evaluate_primitive;
 use super::defs::Definitions;
 use super::error::KernelError;
-use super::term::{ForLoop, Proof, Term, Type};
+use super::int::Integer;
+use super::term::{ForLoop, Prim, Proof, Term, Type};
 
 /// Counts evaluation steps, never time, so acceptance does not depend on
 /// the machine.
@@ -64,7 +65,9 @@ impl<'d> Evaluator<'d> {
 
     fn eval_form(&mut self, term: &Term) -> Result<Term, KernelError> {
         match term {
-            Term::Bool(_) | Term::U8(_) | Term::Nat(_) | Term::Fn(_) => Ok(term.clone()),
+            Term::Bool(_) | Term::U8(_) | Term::Nat(_) | Term::Int(_) | Term::Fn(_) => {
+                Ok(term.clone())
+            }
             // A proof is never inspected, so its contents are dropped. Keeping
             // them would let a loop's state grow with every iteration, since
             // each state's proofs mention the state before it.
@@ -75,7 +78,8 @@ impl<'d> Evaluator<'d> {
             | Term::Implies(..)
             | Term::Forall(..)
             | Term::Exists(..)
-            | Term::PropApp(..) => Ok(term.clone()),
+            | Term::PropApp(..)
+            | Term::Prim(Prim::IntLe, _) => Ok(term.clone()),
             Term::Free(_) => Err(KernelError::NotClosed(term.clone())),
             Term::Bound(_) => Err(KernelError::DanglingBound),
             Term::Absurd(..) => Err(stuck(term)),
@@ -94,6 +98,20 @@ impl<'d> Evaluator<'d> {
             unreachable!("dispatched on this form")
         };
         let values = self.eval_all(arguments)?;
+        // Multiplication is the one primitive whose result can be twice the
+        // size of its operands, so a short term can square its way to a
+        // number of any size. It is charged what the schoolbook product
+        // costs, one step for each pair of 32-bit digits, which bounds the
+        // size of every number and the work done on it by the step budget.
+        if let (Prim::IntMul, [Term::Int(a), Term::Int(b)]) = (*prim, values.as_slice()) {
+            let digits = |n: &Integer| n.magnitude().bit_length() / 32 + 1;
+            self.steps = self
+                .steps
+                .saturating_add(digits(a).saturating_mul(digits(b)));
+            if self.steps > STEP_LIMIT {
+                return Err(KernelError::StepLimit);
+            }
+        }
         evaluate_primitive(*prim, &values).ok_or_else(|| stuck(term))
     }
 
@@ -187,7 +205,7 @@ fn stuck(term: &Term) -> KernelError {
 pub(super) fn is_plain_data(definitions: &Definitions, ty: &Type) -> bool {
     let all = |fields: &[Type]| fields.iter().all(|field| is_plain_data(definitions, field));
     match ty {
-        Type::Bool | Type::U8 | Type::Nat => true,
+        Type::Bool | Type::U8 | Type::Nat | Type::Int => true,
         Type::Prop | Type::Proof(_) | Type::Fn(..) => false,
         Type::Tuple(fields) => all(fields),
         Type::Struct(id) => definitions.struct_fields(*id).is_some_and(all),

@@ -63,7 +63,13 @@ pub(super) fn check_depth<'a>(
 fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
     match node {
         Node::Type(ty) => match ty {
-            Type::Bool | Type::U8 | Type::Nat | Type::Prop | Type::Struct(_) | Type::Enum(_) => {}
+            Type::Bool
+            | Type::U8
+            | Type::Nat
+            | Type::Int
+            | Type::Prop
+            | Type::Struct(_)
+            | Type::Enum(_) => {}
             Type::Proof(prop) => out.push(Node::Term(prop)),
             Type::Tuple(fields) => out.extend(fields.iter().map(Node::Type)),
             Type::Fn(params, result) => {
@@ -77,6 +83,7 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             | Term::Bool(_)
             | Term::U8(_)
             | Term::Nat(_)
+            | Term::Int(_)
             | Term::Fn(_) => {}
             Term::Prim(_, terms) | Term::Struct(_, terms) | Term::Variant(_, _, terms) => {
                 out.extend(terms.iter().map(Node::Term));
@@ -216,6 +223,12 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
                 }
                 Proof::Axiom(axiom) => push_axiom(axiom, out),
                 Proof::NatInduction {
+                    motive,
+                    base,
+                    step,
+                    target,
+                }
+                | Proof::IntInduction {
                     motive,
                     base,
                     step,

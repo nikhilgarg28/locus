@@ -24,6 +24,8 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Bool(l), Term::Bool(r)) => l == r,
         (Term::U8(l), Term::U8(r)) => l == r,
         (Term::Nat(l), Term::Nat(r)) => l == r,
+        // A number has one representation, so this is equality of numbers.
+        (Term::Int(l), Term::Int(r)) => l == r,
         (Term::Prim(lp, la), Term::Prim(rp, ra)) => lp == rp && all(la, ra),
         (Term::Eq(lt, ll, lr), Term::Eq(rt, rl, rr)) => {
             same_type(lt, rt) && same(ll, rl) && same(lr, rr)
@@ -79,6 +81,7 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
         (Type::Bool, Type::Bool)
         | (Type::U8, Type::U8)
         | (Type::Nat, Type::Nat)
+        | (Type::Int, Type::Int)
         | (Type::Prop, Type::Prop) => true,
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
@@ -96,7 +99,7 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 /// Checks that a type is well formed in the context.
 pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
-        Type::Bool | Type::U8 | Type::Nat | Type::Prop => Ok(()),
+        Type::Bool | Type::U8 | Type::Nat | Type::Int | Type::Prop => Ok(()),
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
         Type::Tuple(fields) => check_telescope(ctx, fields),
         Type::Struct(id) => ctx
@@ -142,6 +145,7 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
         Term::Bool(_) => Ok(Type::Bool),
         Term::U8(_) => Ok(Type::U8),
         Term::Nat(_) => ghost_former(mode, &Type::Nat).map(|()| Type::Nat),
+        Term::Int(_) => ghost_former(mode, &Type::Int).map(|()| Type::Int),
         Term::Prim(..) => type_of_prim(ctx, term, mode),
         Term::Eq(..) => type_of_eq(ctx, term, mode),
         Term::Implies(..) => type_of_implies(ctx, term, mode),
@@ -631,11 +635,16 @@ fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
         Prim::OfNat => (&[Type::Nat], Type::U8),
         Prim::Succ => (&[Type::Nat], Type::Nat),
         Prim::NatAdd => (&[Type::Nat, Type::Nat], Type::Nat),
+        Prim::IntAdd | Prim::IntSub | Prim::IntMul => (&[Type::Int, Type::Int], Type::Int),
+        Prim::IntNeg => (&[Type::Int], Type::Int),
+        Prim::IntLe => (&[Type::Int, Type::Int], Type::Prop),
     }
 }
 
 /// Native evaluation of a primitive applied to literals. This is the
-/// implementation that must agree with the `u8` model.
+/// implementation that must agree with the `u8` model, and with the integers
+/// as a model of the `Int` axioms. `int_le` is a proposition and has no
+/// value; `evaluate` decides it.
 pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
     Some(match (prim, arguments) {
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
@@ -647,6 +656,10 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         (Prim::OfNat, [Term::Nat(n)]) => Term::U8(n.low_byte()),
         (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.succ()),
         (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.add(b)),
+        (Prim::IntAdd, [Term::Int(a), Term::Int(b)]) => Term::Int(a.add(b)),
+        (Prim::IntSub, [Term::Int(a), Term::Int(b)]) => Term::Int(a.sub(b)),
+        (Prim::IntMul, [Term::Int(a), Term::Int(b)]) => Term::Int(a.mul(b)),
+        (Prim::IntNeg, [Term::Int(a)]) => Term::Int(a.neg()),
         _ => return None,
     })
 }
@@ -665,6 +678,22 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::OfToNat(_)
         | Axiom::WrappingAddModel(..)
         | Axiom::WrappingSubModel(..) => Some(Type::U8),
+        Axiom::IntAddAssoc(..)
+        | Axiom::IntAddComm(..)
+        | Axiom::IntAddZero(_)
+        | Axiom::IntAddNeg(_)
+        | Axiom::IntSubDef(..)
+        | Axiom::IntMulAssoc(..)
+        | Axiom::IntMulComm(..)
+        | Axiom::IntMulOne(_)
+        | Axiom::IntMulAdd(..)
+        | Axiom::IntLeRefl(_)
+        | Axiom::IntLeTrans(..)
+        | Axiom::IntLeAntisymm(..)
+        | Axiom::IntLeAdd(..)
+        | Axiom::IntLeMul(..)
+        | Axiom::IntLeTotal(..)
+        | Axiom::IntLtIrrefl(_) => Some(Type::Int),
         Axiom::Reflect(..) => None,
     };
     if let Some(expected) = &expected {
@@ -675,6 +704,8 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
     let nat_eq = |left: Term, right: Term| Term::eq(Type::Nat, left, right);
     let u8_eq = |left: Term, right: Term| Term::eq(Type::U8, left, right);
     let bound = Term::nat(256);
+    let int_eq = |left: Term, right: Term| Term::eq(Type::Int, left, right);
+    let (add, mul, le) = (Term::int_add, Term::int_mul, Term::int_le);
     Ok(match axiom.clone() {
         Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a),
         Axiom::NatAddSucc(a, b) => nat_eq(
@@ -715,6 +746,45 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
                 Term::implies(observed, prelude.not_prop(claim))
             }
         }
+        Axiom::IntAddAssoc(a, b, c) => {
+            int_eq(add(add(a.clone(), b.clone()), c.clone()), add(a, add(b, c)))
+        }
+        Axiom::IntAddComm(a, b) => int_eq(add(a.clone(), b.clone()), add(b, a)),
+        Axiom::IntAddZero(a) => int_eq(add(a.clone(), Term::int(0)), a),
+        Axiom::IntAddNeg(a) => int_eq(add(a.clone(), Term::int_neg(a)), Term::int(0)),
+        Axiom::IntSubDef(a, b) => int_eq(
+            Term::int_sub(a.clone(), b.clone()),
+            add(a, Term::int_neg(b)),
+        ),
+        Axiom::IntMulAssoc(a, b, c) => {
+            int_eq(mul(mul(a.clone(), b.clone()), c.clone()), mul(a, mul(b, c)))
+        }
+        Axiom::IntMulComm(a, b) => int_eq(mul(a.clone(), b.clone()), mul(b, a)),
+        Axiom::IntMulOne(a) => int_eq(mul(a.clone(), Term::int(1)), a),
+        Axiom::IntMulAdd(a, b, c) => int_eq(
+            mul(a.clone(), add(b.clone(), c.clone())),
+            add(mul(a.clone(), b), mul(a, c)),
+        ),
+        Axiom::IntLeRefl(a) => le(a.clone(), a),
+        Axiom::IntLeTrans(a, b, c) => Term::implies(
+            le(a.clone(), b.clone()),
+            Term::implies(le(b, c.clone()), le(a, c)),
+        ),
+        Axiom::IntLeAntisymm(a, b) => Term::implies(
+            le(a.clone(), b.clone()),
+            Term::implies(le(b.clone(), a.clone()), int_eq(a, b)),
+        ),
+        Axiom::IntLeAdd(a, b, c) => {
+            Term::implies(le(a.clone(), b.clone()), le(add(a, c.clone()), add(b, c)))
+        }
+        Axiom::IntLeMul(a, b) => Term::implies(
+            le(Term::int(0), a.clone()),
+            Term::implies(le(Term::int(0), b.clone()), le(Term::int(0), mul(a, b))),
+        ),
+        // The second case is b < a written out, so this one axiom says the
+        // order is total and that nothing lies between b and b + 1.
+        Axiom::IntLeTotal(a, b) => prelude.or_prop(le(a.clone(), b.clone()), Term::int_lt(b, a)),
+        Axiom::IntLtIrrefl(a) => prelude.not_prop(Term::int_lt(a.clone(), a)),
     })
 }
 
@@ -828,6 +898,7 @@ pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         Proof::EvaluateAll(..) => claim_of_evaluate_all(ctx, proof),
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
         Proof::NatInduction { .. } => claim_of_nat_induction(ctx, proof),
+        Proof::IntInduction { .. } => claim_of_int_induction(ctx, proof),
     }
 }
 
@@ -1272,6 +1343,35 @@ fn claim_of_evaluate(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelErr
     };
     let ty = term_type(ctx, term, Mode::Logical)?;
     let definitions = ctx.definitions();
+    // A comparison of integers is a proposition, so it has no value to be
+    // equal to. It is decided instead: evaluation proves the comparison
+    // when it holds of the two values, and its negation when it does not.
+    let sides = match term {
+        Term::Prim(Prim::IntLe, sides) => match sides.as_slice() {
+            [left, right] => Some((left, right)),
+            _ => None,
+        },
+        Term::Eq(Type::Int, left, right) => Some((&**left, &**right)),
+        _ => None,
+    };
+    if let Some((left, right)) = sides {
+        // One evaluator: the budget covers both sides.
+        let mut evaluator = Evaluator::new(&definitions);
+        let (Term::Int(l), Term::Int(r)) = (evaluator.eval(left)?, evaluator.eval(right)?) else {
+            return Err(KernelError::NoComputationStep(term.clone()));
+        };
+        let holds = if matches!(term, Term::Eq(..)) {
+            l == r
+        } else {
+            l <= r
+        };
+        return if holds {
+            Ok(term.clone())
+        } else {
+            let prelude = definitions.prelude().ok_or(KernelError::NoPrelude)?;
+            Ok(prelude.not_prop(term.clone()))
+        };
+    }
     if !is_plain_data(&definitions, &ty) {
         return Err(KernelError::NotPlainData(ty));
     }
@@ -1340,6 +1440,45 @@ fn claim_of_nat_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         |vars| motive.open(&Term::succ(Term::Free(vars[0]))),
     )?;
     Ok(motive.open(target))
+}
+
+#[inline(never)]
+fn claim_of_int_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::IntInduction {
+        motive,
+        base,
+        step,
+        target,
+    } = proof
+    else {
+        unreachable!("dispatched on this variant")
+    };
+    let scope = ctx.len();
+    let hole = ctx.push_bound(Type::Int);
+    let well_formed = expect_type(
+        ctx,
+        &motive.open(&Term::Free(hole)),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    well_formed?;
+    expect_type(ctx, target, &Type::Int, Mode::Logical)?;
+    proof_of(ctx, base, &motive.open(&Term::int(0)))?;
+    let nonneg = |n: &Term| Term::int_le(Term::int(0), n.clone());
+    check_arm_with(
+        ctx,
+        step,
+        1,
+        |_, _| Type::Int,
+        |vars| {
+            let n = Term::Free(vars[0]);
+            vec![nonneg(&n), motive.open(&n)]
+        },
+        |vars| motive.open(&Term::int_add(Term::Free(vars[0]), Term::int(1))),
+    )?;
+    // Only the non-negative integers are reached from 0 by successors.
+    Ok(Term::implies(nonneg(target), motive.open(target)))
 }
 
 /// Accepts `proof` as a proof of `expected`, which must be a proposition.

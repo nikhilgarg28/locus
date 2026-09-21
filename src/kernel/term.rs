@@ -15,6 +15,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::int::Integer;
 use super::nat::Natural;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -68,6 +69,9 @@ pub enum Type {
     /// Natural numbers. Internal to the kernel: the model of `u8` and the
     /// domain of induction. It has no runtime representation, so it is ghost.
     Nat,
+    /// The integers of the logic. Like `Nat`, the type has no runtime
+    /// representation, so it is ghost.
+    Int,
     /// The type of propositions. Every value of this type is ghost.
     Prop,
     /// `@P`: the type of proofs of the proposition `P`. Ghost.
@@ -90,7 +94,7 @@ impl Type {
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
         match self {
-            Self::Prop | Self::Proof(_) | Self::Nat => true,
+            Self::Prop | Self::Proof(_) | Self::Nat | Self::Int => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
             Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) | Self::Enum(_) => false,
@@ -184,9 +188,13 @@ impl Type {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Type {
         match self {
-            Self::Bool | Self::U8 | Self::Nat | Self::Prop | Self::Struct(_) | Self::Enum(_) => {
-                self.clone()
-            }
+            Self::Bool
+            | Self::U8
+            | Self::Nat
+            | Self::Int
+            | Self::Prop
+            | Self::Struct(_)
+            | Self::Enum(_) => self.clone(),
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
             Self::Tuple(fields) => Self::Tuple(rebind_telescope(fields, depth, op)),
             Self::Fn(params, result) => Self::Fn(
@@ -222,6 +230,16 @@ pub enum Prim {
     Succ,
     /// `Nat, Nat -> Nat`
     NatAdd,
+    /// `Int, Int -> Int`
+    IntAdd,
+    IntSub,
+    IntMul,
+    /// `Int -> Int`
+    IntNeg,
+    /// `Int, Int -> Prop`: the order of the integers. It is a proposition,
+    /// not a runtime comparison, and the only primitive order on `Int`:
+    /// `a < b` is written `a + 1 <= b`.
+    IntLe,
 }
 
 impl Prim {
@@ -236,12 +254,18 @@ impl Prim {
             Self::OfNat => "of_nat",
             Self::Succ => "succ",
             Self::NatAdd => "nat_add",
+            Self::IntAdd => "int_add",
+            Self::IntSub => "int_sub",
+            Self::IntMul => "int_mul",
+            Self::IntNeg => "int_neg",
+            Self::IntLe => "int_le",
         }
     }
 }
 
-/// The axioms of the internal `Nat` and of the `u8` model. Each takes terms
-/// and yields a fixed proposition about them; see the kernel contract in `atlas.html`.
+/// The axioms of the internal `Nat`, of the `u8` model, and of `Int`. Each
+/// takes terms and yields a fixed proposition about them; see the kernel
+/// contract in `atlas.html`, which names each axiom as `name` does.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Axiom {
     /// `a + 0 == a`
@@ -267,9 +291,77 @@ pub enum Axiom {
     /// For a comparison `c` and its proposition `P`: `c == true => P` when
     /// the flag is true, `c == false => (P => False)` when it is false.
     Reflect(Term, bool),
+    // The integers are a commutative ring. Below, `+`, `-`, `*`, and `<=`
+    // stand for `int_add`, `int_sub` or `int_neg`, `int_mul`, and `int_le`.
+    /// `(a + b) + c == a + (b + c)`
+    IntAddAssoc(Term, Term, Term),
+    /// `a + b == b + a`
+    IntAddComm(Term, Term),
+    /// `a + 0 == a`
+    IntAddZero(Term),
+    /// `a + (-a) == 0`
+    IntAddNeg(Term),
+    /// `a - b == a + (-b)`
+    IntSubDef(Term, Term),
+    /// `(a * b) * c == a * (b * c)`
+    IntMulAssoc(Term, Term, Term),
+    /// `a * b == b * a`
+    IntMulComm(Term, Term),
+    /// `a * 1 == a`
+    IntMulOne(Term),
+    /// `a * (b + c) == a * b + a * c`
+    IntMulAdd(Term, Term, Term),
+    /// `a <= a`
+    IntLeRefl(Term),
+    /// `a <= b => b <= c => a <= c`
+    IntLeTrans(Term, Term, Term),
+    /// `a <= b => b <= a => a == b`
+    IntLeAntisymm(Term, Term),
+    /// `a <= b => a + c <= b + c`
+    IntLeAdd(Term, Term, Term),
+    /// `0 <= a => 0 <= b => 0 <= a * b`
+    IntLeMul(Term, Term),
+    /// `a <= b || b + 1 <= a`: the order is total, and it is discrete,
+    /// because the second case is `b < a` written out.
+    IntLeTotal(Term, Term),
+    /// `a + 1 <= a => False`
+    IntLtIrrefl(Term),
 }
 
 impl Axiom {
+    /// The name the kernel contract gives the axiom.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::NatAddZero(_) => "nat_add_zero",
+            Self::NatAddSucc(..) => "nat_add_succ",
+            Self::NatSuccInjective(..) => "nat_succ_injective",
+            Self::NatSuccNotZero(_) => "nat_succ_not_zero",
+            Self::ToNatBound(_) => "to_nat_bound",
+            Self::OfToNat(_) => "of_to_nat",
+            Self::ToOfNat(_) => "to_of_nat",
+            Self::OfNatWrap(_) => "of_nat_wrap",
+            Self::WrappingAddModel(..) => "wrapping_add_model",
+            Self::WrappingSubModel(..) => "wrapping_sub_model",
+            Self::Reflect(..) => "reflect",
+            Self::IntAddAssoc(..) => "int_add_assoc",
+            Self::IntAddComm(..) => "int_add_comm",
+            Self::IntAddZero(_) => "int_add_zero",
+            Self::IntAddNeg(_) => "int_add_neg",
+            Self::IntSubDef(..) => "int_sub_def",
+            Self::IntMulAssoc(..) => "int_mul_assoc",
+            Self::IntMulComm(..) => "int_mul_comm",
+            Self::IntMulOne(_) => "int_mul_one",
+            Self::IntMulAdd(..) => "int_mul_add",
+            Self::IntLeRefl(_) => "int_le_refl",
+            Self::IntLeTrans(..) => "int_le_trans",
+            Self::IntLeAntisymm(..) => "int_le_antisymm",
+            Self::IntLeAdd(..) => "int_le_add",
+            Self::IntLeMul(..) => "int_le_mul",
+            Self::IntLeTotal(..) => "int_le_total",
+            Self::IntLtIrrefl(_) => "int_lt_irrefl",
+        }
+    }
+
     fn map(&self, f: impl Fn(&Term) -> Term) -> Axiom {
         match self {
             Self::NatAddZero(a) => Self::NatAddZero(f(a)),
@@ -283,10 +375,27 @@ impl Axiom {
             Self::WrappingAddModel(a, b) => Self::WrappingAddModel(f(a), f(b)),
             Self::WrappingSubModel(a, b) => Self::WrappingSubModel(f(a), f(b)),
             Self::Reflect(c, flag) => Self::Reflect(f(c), *flag),
+            Self::IntAddAssoc(a, b, c) => Self::IntAddAssoc(f(a), f(b), f(c)),
+            Self::IntAddComm(a, b) => Self::IntAddComm(f(a), f(b)),
+            Self::IntAddZero(a) => Self::IntAddZero(f(a)),
+            Self::IntAddNeg(a) => Self::IntAddNeg(f(a)),
+            Self::IntSubDef(a, b) => Self::IntSubDef(f(a), f(b)),
+            Self::IntMulAssoc(a, b, c) => Self::IntMulAssoc(f(a), f(b), f(c)),
+            Self::IntMulComm(a, b) => Self::IntMulComm(f(a), f(b)),
+            Self::IntMulOne(a) => Self::IntMulOne(f(a)),
+            Self::IntMulAdd(a, b, c) => Self::IntMulAdd(f(a), f(b), f(c)),
+            Self::IntLeRefl(a) => Self::IntLeRefl(f(a)),
+            Self::IntLeTrans(a, b, c) => Self::IntLeTrans(f(a), f(b), f(c)),
+            Self::IntLeAntisymm(a, b) => Self::IntLeAntisymm(f(a), f(b)),
+            Self::IntLeAdd(a, b, c) => Self::IntLeAdd(f(a), f(b), f(c)),
+            Self::IntLeMul(a, b) => Self::IntLeMul(f(a), f(b)),
+            Self::IntLeTotal(a, b) => Self::IntLeTotal(f(a), f(b)),
+            Self::IntLtIrrefl(a) => Self::IntLtIrrefl(f(a)),
         }
     }
 
-    pub(super) fn terms(&self) -> Vec<&Term> {
+    /// The terms the axiom is instantiated at, in order.
+    pub fn terms(&self) -> Vec<&Term> {
         match self {
             Self::NatAddZero(a)
             | Self::NatSuccNotZero(a)
@@ -294,11 +403,27 @@ impl Axiom {
             | Self::OfToNat(a)
             | Self::ToOfNat(a)
             | Self::OfNatWrap(a)
-            | Self::Reflect(a, _) => vec![a],
+            | Self::Reflect(a, _)
+            | Self::IntAddZero(a)
+            | Self::IntAddNeg(a)
+            | Self::IntMulOne(a)
+            | Self::IntLeRefl(a)
+            | Self::IntLtIrrefl(a) => vec![a],
             Self::NatAddSucc(a, b)
             | Self::NatSuccInjective(a, b)
             | Self::WrappingAddModel(a, b)
-            | Self::WrappingSubModel(a, b) => vec![a, b],
+            | Self::WrappingSubModel(a, b)
+            | Self::IntAddComm(a, b)
+            | Self::IntSubDef(a, b)
+            | Self::IntMulComm(a, b)
+            | Self::IntLeAntisymm(a, b)
+            | Self::IntLeMul(a, b)
+            | Self::IntLeTotal(a, b) => vec![a, b],
+            Self::IntAddAssoc(a, b, c)
+            | Self::IntMulAssoc(a, b, c)
+            | Self::IntMulAdd(a, b, c)
+            | Self::IntLeTrans(a, b, c)
+            | Self::IntLeAdd(a, b, c) => vec![a, b, c],
         }
     }
 }
@@ -312,6 +437,8 @@ pub enum Term {
     U8(u8),
     /// A `Nat` literal, of arbitrary size.
     Nat(Natural),
+    /// An `Int` literal, of arbitrary size and either sign.
+    Int(Integer),
     Prim(Prim, Vec<Term>),
     /// `a == b` at the given type.
     Eq(Type, Box<Term>, Box<Term>),
@@ -494,12 +621,22 @@ pub enum Proof {
     /// `forall (x: u8) { body == true }`, by evaluating all 256 cases. The
     /// body binds `Bound(0)`.
     EvaluateAll(Term),
-    /// An axiom of `Nat` or of the `u8` model.
+    /// An axiom of `Nat`, of the `u8` model, or of `Int`.
     Axiom(Axiom),
     /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
     /// `motive[0]`; `step` binds `n` and the hypothesis `motive[n]` and
     /// proves `motive[succ(n)]`. Concludes `motive[target]`.
     NatInduction {
+        motive: Term,
+        base: Box<Proof>,
+        step: ProofArm,
+        target: Term,
+    },
+    /// Induction over the non-negative integers. The motive binds
+    /// `Bound(0)`; `base` proves `motive[0]`; `step` binds `n` and the
+    /// hypotheses `0 <= n` and `motive[n]`, in that order, and proves
+    /// `motive[n + 1]`. Concludes `0 <= target => motive[target]`.
+    IntInduction {
         motive: Term,
         base: Box<Proof>,
         step: ProofArm,
@@ -620,6 +757,38 @@ impl Term {
 
     pub fn nat_add(left: Term, right: Term) -> Self {
         Self::Prim(Prim::NatAdd, vec![left, right])
+    }
+
+    /// An `Int` literal.
+    pub fn int(value: i64) -> Self {
+        Self::Int(Integer::from(value))
+    }
+
+    pub fn int_add(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntAdd, vec![left, right])
+    }
+
+    pub fn int_sub(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntSub, vec![left, right])
+    }
+
+    pub fn int_mul(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntMul, vec![left, right])
+    }
+
+    pub fn int_neg(number: Term) -> Self {
+        Self::Prim(Prim::IntNeg, vec![number])
+    }
+
+    /// The proposition `left <= right` over `Int`.
+    pub fn int_le(left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntLe, vec![left, right])
+    }
+
+    /// `left < right` over `Int` is not a form of its own: it abbreviates
+    /// `left + 1 <= right`, which is what makes the order discrete.
+    pub fn int_lt(left: Term, right: Term) -> Self {
+        Self::int_le(Self::int_add(left, Self::int(1)), right)
     }
 
     /// A tuple value of the given tuple type.
@@ -866,6 +1035,7 @@ impl Term {
             | Self::Bool(_)
             | Self::U8(_)
             | Self::Nat(_)
+            | Self::Int(_)
             | Self::Proof(_)
             | Self::Fn(_) => true,
             Self::Prim(_, arguments) => all(arguments),
@@ -913,6 +1083,7 @@ impl Term {
             | Self::Bool(_)
             | Self::U8(_)
             | Self::Nat(_)
+            | Self::Int(_)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => None,
@@ -969,6 +1140,7 @@ impl Term {
             | Self::Bool(_)
             | Self::U8(_)
             | Self::Nat(_)
+            | Self::Int(_)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => self.clone(),
@@ -1033,7 +1205,7 @@ impl Term {
         match self {
             Self::Free(..) => self.rebind_free(depth, op),
             Self::Bound(..) => self.rebind_bound(depth, op),
-            Self::Bool(_) | Self::U8(_) | Self::Nat(_) => self.clone(),
+            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) => self.clone(),
             Self::Prim(..) => self.rebind_prim(depth, op),
             Self::Eq(..) => self.rebind_eq(depth, op),
             Self::Implies(..) => self.rebind_implies(depth, op),
@@ -1265,6 +1437,38 @@ pub(super) fn field_type(fields: &[Type], index: usize, earlier: impl Fn(usize) 
 }
 
 impl Proof {
+    /// The name the kernel contract gives the rule.
+    pub fn rule_name(&self) -> &'static str {
+        match self {
+            Self::Hyp(_) => "hyp",
+            Self::OfTerm(_) => "of_term",
+            Self::Refl(_) => "refl",
+            Self::Transport { .. } => "transport",
+            Self::ImpliesIntro { .. } => "implies_intro",
+            Self::ImpliesElim(..) => "implies_elim",
+            Self::ForallIntro { .. } => "forall_intro",
+            Self::ForallElim(..) => "forall_elim",
+            Self::Projection(_) => "projection",
+            Self::Literal(_) => "literal",
+            Self::Definition(_) => "definition",
+            Self::CaseStep(_) => "case_step",
+            Self::Construct { .. } => "construct",
+            Self::CaseProof { .. } => "case_proof",
+            Self::CaseData { .. } => "case_data",
+            Self::ExistsIntro { .. } => "exists_intro",
+            Self::ExistsElim { .. } => "exists_elim",
+            Self::ExcludedMiddle(_) => "excluded_middle",
+            Self::ForEmpty(_) => "for_empty",
+            Self::ForStep { .. } => "for_step",
+            Self::Omitted => "omitted",
+            Self::Evaluate(_) => "evaluate",
+            Self::EvaluateAll(_) => "evaluate_all",
+            Self::Axiom(_) => "axiom",
+            Self::NatInduction { .. } => "nat_induction",
+            Self::IntInduction { .. } => "int_induction",
+        }
+    }
+
     pub fn hyp(id: HypId) -> Self {
         Self::Hyp(HypRef::Free(id))
     }
@@ -1316,6 +1520,26 @@ impl Proof {
             motive: motive(Term::Free(hole)).close(hole),
             base: Box::new(base),
             step: Self::arm(1, 1, |vars, hyps| step(vars[0].clone(), hyps[0].clone())),
+            target,
+        }
+    }
+
+    /// Builds an induction over the non-negative integers. `motive(n)` is
+    /// the claim about `n`; `step(n, nonneg, ih)` proves the claim about
+    /// `n + 1` from `nonneg`, that `0 <= n`, and `ih`, the claim about `n`.
+    pub fn int_induction(
+        motive: impl FnOnce(Term) -> Term,
+        base: Proof,
+        step: impl FnOnce(Term, Proof, Proof) -> Proof,
+        target: Term,
+    ) -> Self {
+        let hole = VarId::fresh();
+        Self::IntInduction {
+            motive: motive(Term::Free(hole)).close(hole),
+            base: Box::new(base),
+            step: Self::arm(1, 2, |vars, hyps| {
+                step(vars[0].clone(), hyps[0].clone(), hyps[1].clone())
+            }),
             target,
         }
     }
@@ -1434,6 +1658,7 @@ impl Proof {
             Self::EvaluateAll(..) => self.rebind_evaluate_all(depth, op),
             Self::Axiom(..) => self.rebind_axiom(depth, op),
             Self::NatInduction { .. } => self.rebind_nat_induction(depth, op),
+            Self::IntInduction { .. } => self.rebind_int_induction(depth, op),
         }
     }
 
@@ -1730,6 +1955,25 @@ impl Proof {
             target: target.rebind(depth, op),
         }
     }
+
+    #[inline(never)]
+    fn rebind_int_induction(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::IntInduction {
+            motive,
+            base,
+            step,
+            target,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::IntInduction {
+            motive: motive.rebind(depth.under_vars(1), op),
+            base: Box::new(base.rebind(depth, op)),
+            step: step.rebind(depth, op),
+            target: target.rebind(depth, op),
+        }
+    }
 }
 
 impl ProofArm {
@@ -1751,6 +1995,7 @@ impl fmt::Display for Type {
             Self::Bool => f.write_str("bool"),
             Self::U8 => f.write_str("u8"),
             Self::Nat => f.write_str("Nat"),
+            Self::Int => f.write_str("Int"),
             Self::Prop => f.write_str("Prop"),
             Self::Proof(prop) => write!(f, "@{prop}"),
             Self::Tuple(fields) => {
@@ -1791,6 +2036,7 @@ impl fmt::Display for Term {
             Self::Bool(value) => write!(f, "{value}"),
             Self::U8(value) => write!(f, "{value}"),
             Self::Nat(value) => write!(f, "{value}n"),
+            Self::Int(value) => write!(f, "{value}i"),
             Self::Prim(prim, arguments) => {
                 write!(f, "{}(", prim.name())?;
                 write_list(f, arguments)?;

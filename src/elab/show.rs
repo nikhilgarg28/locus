@@ -31,6 +31,7 @@ impl Env<'_> {
             Type::Bool => "bool".into(),
             Type::U8 => "u8".into(),
             Type::Nat => "Nat".into(),
+            Type::Int => "Int".into(),
             Type::Prop => "Prop".into(),
             Type::Proof(claim) => match &**claim {
                 Term::PropApp(..) | Term::Call(..) | Term::Free(_) | Term::Bound(_)
@@ -151,6 +152,7 @@ impl Env<'_> {
             Term::Bool(value) => value.to_string(),
             Term::U8(value) => value.to_string(),
             Term::Nat(value) => format!("{value}"),
+            Term::Int(value) => format!("{value}"),
             Term::Prim(prim, operands) => match (prim, operands.as_slice()) {
                 (Prim::U8Eq, [a, b]) => self.binary("==", Level::Compare, at, a, b, bound),
                 (Prim::U8Lt, [a, b]) => self.binary("<", Level::Compare, at, a, b, bound),

@@ -6,7 +6,8 @@
 //! Every rule implemented here is stated, with exact premises and conclusion,
 //! in the kernel contract in `atlas.html`; the two must change together.
 //!
-//! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`.
+//! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`,
+//! and `Int`, the integers of the logic, by axioms and native evaluation.
 
 mod check;
 mod classical;

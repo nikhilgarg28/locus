@@ -51,6 +51,9 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
         Proof::Axiom(axiom) => axiom.terms().into_iter().any(term),
         Proof::NatInduction {
             base, step, target, ..
+        }
+        | Proof::IntInduction {
+            base, step, target, ..
         } => sub(base) || sub(&step.body) || term(target),
     }
 }
@@ -65,7 +68,12 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
     match term {
         Term::Fn(id) => definitions.is_classical(*id),
         Term::Proof(proof) | Term::Absurd(proof, _) => proof_is_classical(definitions, proof),
-        Term::Free(_) | Term::Bound(_) | Term::Bool(_) | Term::U8(_) | Term::Nat(_) => false,
+        Term::Free(_)
+        | Term::Bound(_)
+        | Term::Bool(_)
+        | Term::U8(_)
+        | Term::Nat(_)
+        | Term::Int(_) => false,
         Term::Prim(_, terms)
         | Term::Tuple(_, terms)
         | Term::Struct(_, terms)
