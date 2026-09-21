@@ -2,7 +2,9 @@
 
 *Working design brief — agreed direction, with proposed syntax and milestones.*
 
-Locus is a Rust-like language in which propositions and explicit, kernel-checked proofs are ordinary parts of a program. Because the source language knows about ownership, mutability, and layout, the proofs are about the real systems code, and that code is emitted as plain, readable Rust with no runtime. Because the target is Rust, guarantees survive into the caller's code: safe Rust cannot construct a value that breaks a proven invariant. Proofs are explicit rather than found by a solver, so checking is deterministic and the trusted base is small. It is for the part of a crate that must be right, written by a Rust programmer, or by an AI against a header that a person reviews.
+*Review the guarantees, check the implementation, and use the result from ordinary Rust.*
+
+Locus is a Rust-like language for the parts of a crate whose correctness matters most. Propositions and proofs compose with ordinary functions and data, and explicit proof evidence is checked, deterministically, by a small, auditable kernel. Locus is designed to verify systems implementations with precise arithmetic, ownership, and mutation semantics, then emit readable Rust without runtime proof machinery. Generated interfaces protect proven invariants at the boundary with safe Rust callers. A programmer or an AI supplies the implementation and evidence against a human-reviewed specification; proof construction can be automated, while acceptance rests on independent checking. That is the destination; the core implemented so far covers `bool`, `u8`, structs, enums, and loops without mutation.
 
 [docs/positioning.md](docs/positioning.md) gives the reasoning behind that paragraph, what Locus gives up, and the assumption it rests on. We start with a small, cohesive language and grow through working examples. Predictable checking and fast compilation are design goals; full Lean or Rust compatibility is not.
 
