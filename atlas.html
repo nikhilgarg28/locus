@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 4,
-  "savedAt": "2026-09-21T19:40:29.000Z",
-  "nextTask": 80,
-  "nextId": 172,
+  "rev": 5,
+  "savedAt": "2026-09-21T19:41:53.000Z",
+  "nextTask": 86,
+  "nextId": 179,
   "taskPrefix": "LOC"
  },
  "docs": [
@@ -3476,8 +3476,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "note": "Built as rewrite(eq, h), unfold(f, h), fold(f, h). Agreed: respell as rewrite!, unfold!, fold! (notes, item 12).",
    "doc": "",
    "anchor": "",
-   "project": "",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "project": "p173",
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "f130",
@@ -3883,8 +3883,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "note": "No hints yet. _ stays the request for evidence. Notes, item 12.",
    "doc": "notes",
    "anchor": "",
-   "project": "",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "project": "p173",
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "f168",
@@ -3894,8 +3894,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "note": "assert!, unreachable!, todo!, panic!, debug_assert!, matches!, later vec!; derive with a closed list. Notes, item 12.",
    "doc": "notes",
    "anchor": "",
-   "project": "",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "project": "p173",
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "f169",
@@ -3905,8 +3905,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "note": "To revisit when generics and logic-only lambdas exist; rewrite!, unfold!, fold! would remain as conveniences. Notes, item 12.",
    "doc": "notes",
    "anchor": "",
-   "project": "",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "project": "p173",
+   "updated": "2026-09-21T19:41:53.000Z"
   }
  ],
  "projects": [
@@ -3925,6 +3925,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "description": "Logic-only types, grouped under logic. These are Prop, proof types, Int and Seq\u003cT>, with Map and Set later. They have no runtime form, now or ever.\n\nGhost\u003cT>, built by snapshot(e). It gives up the runtime form of any other type. Inside a proposition it reads as the T.\n\nOne rule. A binding or field is erased exactly when its type has no runtime form. There is no binder keyword.\n\nConversions into the logic. as Int, and a view from Vec to Seq.\n\nRuntime big numbers and similar types are library types with a logic-only model.\n\nModel functions and model fields need no feature of their own.",
    "created": "2026-09-21T19:19:39.000Z",
    "updated": "2026-09-21T19:19:39.000Z"
+  },
+  {
+   "id": "p173",
+   "name": "Macros and built-in forms",
+   "status": "planned",
+   "description": "Locus has no user-defined macros, and a closed set of forms the compiler handles itself, spelled with ! as Rust spells a macro call (notes, item 12). Nothing is expanded; the mark says that this is not an ordinary call.\n\nThe rule: a step is a library function when its type can be written, and a form when the compiler has to look at syntax to know the type.\n\nThree groups of work: the machinery (parsing name!(...) for the closed list, diagnostics for anything else); the proof forms (prove!, and the respelling of rewrite, unfold, fold, recurse, old, snapshot); and the forms that mean what they mean in Rust (assert!, unreachable!, todo!, panic!, debug_assert!, matches!, vec!, derive). _ stays the request for evidence and is not part of this.\n\nLater questions: hints for prove!, user-defined macros (not planned), and which forms become library functions once generics and logic-only lambdas exist.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "p20",
@@ -4315,13 +4323,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t30",
    "n": 25,
-   "title": "Derive",
+   "title": "#[derive(...)] with a closed list of traits",
    "status": "backlog",
    "priority": 0,
-   "project": "p24",
-   "notes": "",
+   "project": "p173",
+   "notes": "Clone, Copy, PartialEq, Eq, Debug to start; generated structs already derive these. Depends on traits only for anything beyond the closed list.",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "t31",
@@ -4821,13 +4829,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t88",
    "n": 71,
-   "title": "panic!, assert! and unreachable! as built-in forms, since Locus has no macros",
+   "title": "panic!, assert!, unreachable!, todo!, debug_assert!, matches! with their Rust meaning",
    "status": "backlog",
    "priority": 0,
-   "project": "p84",
-   "notes": "",
+   "project": "p173",
+   "notes": "assert!(c): a runtime check after which c is a known fact; needs evidence under #[no_panic]. unreachable!(): any type; needs evidence of false under #[no_panic]. todo!(): any type, panics, so a half-written file can be checked. These depend on the panic effect and the no_panic promise.",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "t90",
@@ -4887,13 +4895,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t170",
    "n": 77,
-   "title": "prove!(P) and the built-in forms (assert!, unreachable!, todo!, ...)",
+   "title": "prove!(P): a claim stated where it stands",
    "status": "backlog",
    "priority": 0,
-   "project": "p2",
-   "notes": "Notes, item 12. Parser: accept name!(...) for the closed list only. prove! records its fact for later holes and has type @[P].",
+   "project": "p173",
+   "notes": "Formula without brackets. Provable by the search a _ runs; failure reported there. The fact stays in scope for later holes; as an expression it has type @[P]; erases to nothing as a statement and to Proved as a value. No hints yet.",
    "created": "2026-09-21T19:37:49.000Z",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "t171",
@@ -4901,10 +4909,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "title": "Respell rewrite, unfold, fold as rewrite!, unfold!, fold!",
    "status": "backlog",
    "priority": 0,
-   "project": "p2",
+   "project": "p173",
    "notes": "Notes, item 12. Update the parser, the elaborator's reserved names, examples/proofs.lc, and section 8.4 of the language reference together, with a migration diagnostic for the old spelling.",
    "created": "2026-09-21T19:37:49.000Z",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "updated": "2026-09-21T19:41:53.000Z"
   },
   {
    "id": "t172",
@@ -4912,10 +4920,76 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "title": "Explore which forms become library functions once generics exist",
    "status": "backlog",
    "priority": 0,
-   "project": "p24",
+   "project": "p173",
    "notes": "transport taking the predicate explicitly; each function's defining equation as nameable evidence; library grouped as logic::eq, logic::u8. Needs logic-only lambdas too. Notes, item 12.",
    "created": "2026-09-21T19:37:49.000Z",
-   "updated": "2026-09-21T19:37:49.000Z"
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t174",
+   "n": 80,
+   "title": "Parse name!(...) for the closed list of built-in forms",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "Lexer already has `!`. A form is a name directly followed by `!` and a delimited group. Anything not on the list gets a diagnostic saying Locus has no user-defined macros and listing what exists. Attributes are the same idea: the closed set is #[terminates], #[no_panic], #[no_alloc], #[no_io], #[derive], and the parser reserves #[...] today.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t175",
+   "n": 81,
+   "title": "old!(x) and snapshot!(e)",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "Arrive with &mut parameters (item 10) and Ghost\u003cT> (item 11). Neither evaluates its argument as a function would.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t176",
+   "n": 82,
+   "title": "recurse!(evidence, call)",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "Arrives with recursion and #[terminates(decreases = e)] (item 9). A bare recursive call means recurse!(_, call); recurse! around a call that is not recursive is an error.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t177",
+   "n": 83,
+   "title": "vec! once Vec exists",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "Same meaning as in Rust.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t178",
+   "n": 84,
+   "title": "Decide: hints for prove!",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "Deferred on purpose. The earlier idea was prove!(P, using lemma, fact). Ties to the open question about marking lemmas a hole may apply.",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t179",
+   "n": 85,
+   "title": "Decide: generated Rust for the Rust-meaning forms",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p173",
+   "notes": "assert! and friends print as themselves. Under #[no_panic] an assert! is proven never to fail: keep the runtime check, or drop it?",
+   "created": "2026-09-21T19:41:53.000Z",
+   "updated": "2026-09-21T19:41:53.000Z"
   }
  ]
 }
