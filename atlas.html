@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 18,
-  "savedAt": "2026-09-21T21:22:55.000Z",
-  "nextTask": 146,
-  "nextId": 261,
+  "rev": 19,
+  "savedAt": "2026-09-21T21:35:37.000Z",
+  "nextTask": 147,
+  "nextId": 262,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -2887,6 +2887,16 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Where Locus and Rust both have a thing, it means in Locus what it means in Rust, and generated Rust must be what a Rust programmer would have written. Locus never gives valid Rust syntax a different meaning; what it adds is syntax Rust does not have.",
     "",
+    "What Locus adds to Rust, in full, so that the list can be kept short:",
+    "",
+    "- Tokens: none. Every token Locus uses is a token of Rust, which is what keeps a locus! { ... } macro possible. One case needs care there: Rust reads pair.0.1 as a name, a dot, and the number 0.1, and splits it while parsing.",
+    "- Words: forall and exists are reserved by Locus, and prop is a keyword only where a declaration can begin. math goes when promises replace math fn. Every keyword of Rust is reserved as well. Int, Prop, Seq, and Ghost are names of types, and prove!, old!, recurse!, and the rest are names of forms, none of them keywords. Whether forall and exists need to be keywords is open (LOC-146).",
+    "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @(out == n)), with each name in scope in the fields after it; => as implication inside a formula; the quantifiers; declarations of propositions, including a variant that states which proposition it proves; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
+    "- Attributes: the promises and derive. An attribute's contents are free-form in Rust.",
+    "",
+    "The loop with a state list, continue with arguments, and the for with a state list were additions of the same kind, and go when let mut arrives.",
+    "",
+    "",
     "## Propositions and evidence",
     "",
     "- Propositions are written prop!(P), where P is a formula, and the type of evidence is @P, where P is the name of a proposition, a proposition applied to arguments, or a formula in parentheses: @within_limit(n), @(out == n.wrapping_add(1)). Brackets are no longer proposition literals, because [n > 0] is a Rust array and arrays, slices, and indexing are coming. This settles open question 1. A lighter way to write a proposition value may be found later. The implication arrow stays =>; it appears only inside prop!(...), prove!(...), and @(...), which Locus owns.",
@@ -3113,7 +3123,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:35:37.000Z"
   },
   {
    "id": "target-examples",
@@ -6200,6 +6210,17 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "All pairs cannot be tried beyond a byte. A wrong axiom makes everything provable.",
    "created": "2026-09-21T21:22:55.000Z",
    "updated": "2026-09-21T21:22:55.000Z"
+  },
+  {
+   "id": "t261",
+   "n": 146,
+   "title": "Decide whether forall and exists stay keywords, or become names that take a closure",
+   "status": "todo",
+   "priority": 1,
+   "project": "p89",
+   "notes": "Target language: The rule about Rust. forall(|x: u8| x \u003c= 255) is plain Rust syntax, a call that takes a closure, where forall (x: u8) { x \u003c= 255 } is not. It would leave prop as the only word Locus adds, and it fits the logic-only lambdas expected later. The closure is never run.",
+   "created": "2026-09-21T21:35:37.000Z",
+   "updated": "2026-09-21T21:35:37.000Z"
   }
  ]
 }
