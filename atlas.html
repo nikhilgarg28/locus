@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 7,
-  "savedAt": "2026-09-21T19:50:25.000Z",
-  "nextTask": 86,
-  "nextId": 179,
+  "rev": 11,
+  "savedAt": "2026-09-21T20:29:22.000Z",
+  "nextTask": 116,
+  "nextId": 227,
   "taskPrefix": "LOC"
  },
  "docs": [
@@ -404,11 +404,30 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "   - The rule that separates a form from a library function: a step is a function when its type can be written, and a form when the compiler has to look at syntax to know the type. A lemma such as u8_le_trans, and symmetry, transitivity, and congruence of equality, are functions that take evidence and return evidence, and live in the library. rewrite! cannot be one today: its signature would take the predicate P as a parameter, which needs generics and a lambda to pass, and since the kernel computes nothing by itself, P(a) would still have to be connected to the claim actually held; the form reads the claim of h, finds the occurrences, and works P out. unfold! cannot be one at all in that shape, since no signature can speak of the body of whichever function it is given; it is a rewrite along that function's defining equation, and fold! is the same rewrite backwards. Either way nothing is trusted that was not before: a form emits an ordinary kernel step, transport, and a library lemma is a checked function.",
     "   - To revisit when generics and logic-only lambdas become possible: whether some of these forms should become library functions. The candidates are transport itself, as a function taking the predicate explicitly, and each function's defining equation as evidence that can be named. rewrite!, unfold!, and fold! would then remain as conveniences that infer the predicate. The library would be grouped beside the logic types, as logic::eq, logic::u8, and so on.",
     "",
+    "13. Decisions from the audit against the Rust Reference. The rule behind all of them: where Locus and Rust both have a thing, it means in Locus what it means in Rust, and generated Rust must be what a Rust programmer would have written. The audit walked the Reference chapter by chapter; what it found missing from the batches is filed as tasks.",
+    "",
+    "   - Propositions are written prop!(P), where P is a formula, and the type of evidence is @P, where P is the name of a proposition, a proposition applied to arguments, or a formula in parentheses: @within_limit(n), @(out == n.wrapping_add(1)). Brackets are no longer proposition literals, because [n > 0] is a Rust array and arrays, slices, and indexing are coming. This settles open question 1. A lighter way to write a proposition value may be found later. The implication arrow stays =>; it appears only inside prop!(...), prove!(...), and @(...), which Locus owns.",
+    "   - Values move, as in Rust. A type is used more than once only if it is Copy, and Copy and Clone are asked for with derive, from the closed list of item 12. Use of a moved value is an error from the start. The present behavior, where every type is silently Copy, accepts programs that are not Rust.",
+    "   - Items and fields are private unless marked pub, and pub is part of the core. The generated Rust at present makes everything public; shipping that and adding privacy later would change what programs mean. pub(crate) and the rest wait for modules.",
+    "   - Every Rust keyword is reserved: the strict ones and the ones Rust reserves for later (abstract, become, box, do, final, gen, macro, override, priv, try, typeof, unsized, virtual, yield). Identifiers reach the generated Rust, so a variable named type or move would break it. Rust's weak keywords stay identifiers, as they do in Rust. Locus reserves forall and exists besides.",
+    "   - The never type ! exists, with its coercion to any type. It is the type of panic!, unreachable!, todo!, of return, break, and continue, and the result type of a function that never returns.",
+    "   - Early exit is part of the core: return. The check IR and lowering are designed with it from the start. The ? operator waits for the traits it is defined by.",
+    "   - An integer literal takes the type expected of it, and i32 when nothing expects one, as in Rust. Suffixes (255u8), and hexadecimal, octal, and binary literals are part of the core. String literals exist for the messages of the built-in forms.",
+    "   - Paths and namespaces follow Rust. A path has any number of segments, which u32::MAX, an associated function such as Lock::new, and modules all need. Types and values are looked up separately, so that a type and a function may share a name, as a struct and its constructor function do in Rust.",
+    "   - Type arguments are written only on the types the language provides, such as Ghost\u003cT> and Seq\u003cT>, and later Option\u003cT> and Vec\u003cT>. Type parameters on a programmer's own types and functions arrive with generics, which need type variables in the logic. The alternative considered was a small subset of generics in the core.",
+    "   - Operator precedence is Rust's table, exactly, including as and the unary operators. The implication arrow binds loosest.",
+    "   - == and != are what they are in Rust: defined on bool and every integer type, and on a programmer's type only when it derives PartialEq. What equality of a type with erased fields means to the logic is already noted in language.md and is unchanged.",
+    "   - Enum variants with named fields are part of the core. Explicit discriminants, tuple structs, unit structs, and the newtype idiom are polish.",
+    "   - A const item is emitted as a Rust const, and its initializer is limited to what Rust can evaluate at compile time. At present it is a function of no arguments.",
+    "   - match is to have the power it has in Rust: on integers, bool, and tuples, with literal, range, and or-patterns, bindings with @, guards, and exhaustiveness over integer ranges. This is in the batch on control flow, not in the core.",
+    "   - Polish, after the core: omitting -> (), mut on parameters, field init shorthand and ..base in struct expressions, loop labels, MAX and MIN and a closed list of integer methods, range expressions including ..=, and passing doc comments and chosen attributes through to the generated Rust. usize and isize arrive with slices; their width depends on the platform, which the logic and determinism both have to account for.",
+    "   - Still open from the audit: what the integer operators mean to the logic, given that overflow panics in one build and wraps in another, that / and % truncate toward zero and panic on a zero divisor, and that a shift overflows at the bit width; and which operators are in the first cut at all, since multiplication makes arithmetic non-linear and the bit operators need a bit-level model, while the kernel today has only Nat with addition.",
+    "",
     "## 15.2 Open questions",
     "",
     "These are not decided. Each lists the current behavior of this document first. None needs to be settled before the kernel spike.",
     "",
-    "1. Proposition literals use brackets, [n != 0], and in this fragment a bracketed expression is always a proposition literal (section 13). Brackets are array syntax in Rust, and [n > 0] is a valid Rust array expression. The alternative is to drop the literal form: where a Prop is expected, an expression is elaborated as a formula, and the proof type is written @(n != 0).",
+    "1. Settled by item 13: propositions are written prop!(P) and evidence types @P, and brackets are left to arrays. What remains open is a lighter way to write a proposition value.",
     "2. Implication is spelled =>, which is also the match arm separator (section 13). The alternative is ==>.",
     "3. Supplying evidence of Q where evidence of P is expected is an error unless the two are identical (section 3.1). The alternative is to treat the mismatch as an implicit hole, asking the solver of section 12.3 for P with the supplied evidence in scope. The implementation does the alternative, because a name bound by destructuring a result would otherwise never fit where evidence about that name is wanted; whether the specification should follow is still to be decided.",
     "4. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.",
@@ -489,7 +508,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:36:36.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "language",
@@ -3372,13 +3391,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f120",
    "area": "Expressions and control",
-   "name": "return, ?, let else, Option and Result",
+   "name": "?, let else, Option and Result",
    "status": "planned",
-   "note": "",
+   "note": "? waits for the traits that define it.",
    "doc": "",
    "anchor": "",
    "project": "p84",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "f121",
@@ -3407,11 +3426,11 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "area": "Propositions and proofs",
    "name": "Prop, proof types `@P`, proposition literals `[...]`, connectives, forall and exists as formulas",
    "status": "built",
-   "note": "",
+   "note": "Bracketed literals and @[P] are what is built; they are to be replaced by prop!(P) and @P (notes, item 13).",
    "doc": "language",
    "anchor": "7-propositions",
    "project": "",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "f124",
@@ -3801,13 +3820,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "f159",
    "area": "Organization, interop, and tooling",
-   "name": "pub, and generated interfaces that protect what was proven",
+   "name": "Generated interfaces that protect what was proven; pub(crate)",
    "status": "planned",
    "note": "Proved must not be constructible outside generated code; exported functions take no evidence from Rust.",
    "doc": "notes",
    "anchor": "positioning",
    "project": "p20",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "f160",
@@ -3907,6 +3926,193 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "anchor": "",
    "project": "p173",
    "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "f210",
+   "area": "Propositions and proofs",
+   "name": "prop!(P) for a proposition and @P for evidence; brackets left to arrays",
+   "status": "agreed",
+   "note": "Item 13.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f211",
+   "area": "Types and data",
+   "name": "Values move; Copy and Clone only by derive; use after move is an error",
+   "status": "agreed",
+   "note": "Item 13. At present every type is silently Copy.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f212",
+   "area": "Types and data",
+   "name": "The never type !",
+   "status": "agreed",
+   "note": "Item 13.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f213",
+   "area": "Types and data",
+   "name": "Enum variants with named fields",
+   "status": "agreed",
+   "note": "Item 13.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f214",
+   "area": "Types and data",
+   "name": "Type arguments on the types the language provides",
+   "status": "agreed",
+   "note": "Item 13. User type parameters arrive with generics.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f215",
+   "area": "Types and data",
+   "name": "Integer literals typed as in Rust: the expected type, else i32; suffixes and other bases",
+   "status": "agreed",
+   "note": "Item 13. At present a literal is a u8.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f216",
+   "area": "Types and data",
+   "name": "usize and isize",
+   "status": "planned",
+   "note": "Platform-dependent width.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p37",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f217",
+   "area": "Types and data",
+   "name": "Tuple structs, unit structs, newtypes; explicit discriminants",
+   "status": "planned",
+   "note": "",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p181",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f218",
+   "area": "Expressions and control",
+   "name": "return",
+   "status": "agreed",
+   "note": "Item 13. The check IR has no early exit yet.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f219",
+   "area": "Expressions and control",
+   "name": "Rust's operator precedence, exactly",
+   "status": "agreed",
+   "note": "Item 13.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f220",
+   "area": "Expressions and control",
+   "name": "== and != on bool and every integer type",
+   "status": "agreed",
+   "note": "Item 13. At present only on u8.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f221",
+   "area": "Expressions and control",
+   "name": "match with the power it has in Rust",
+   "status": "planned",
+   "note": "Integers, bool, tuples; literal, range, and or-patterns; @ bindings; guards.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p33",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f222",
+   "area": "Expressions and control",
+   "name": "const emitted as a Rust const",
+   "status": "agreed",
+   "note": "Item 13. At present a function of no arguments.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f223",
+   "area": "Organization, interop, and tooling",
+   "name": "Private by default, and pub",
+   "status": "agreed",
+   "note": "Item 13. At present everything generated is pub.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f224",
+   "area": "Organization, interop, and tooling",
+   "name": "Every Rust keyword reserved",
+   "status": "agreed",
+   "note": "Item 13.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f225",
+   "area": "Organization, interop, and tooling",
+   "name": "Paths of any length; separate type and value namespaces",
+   "status": "agreed",
+   "note": "Item 13. At present a path has exactly two segments and there is one namespace.",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p2",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "f226",
+   "area": "Organization, interop, and tooling",
+   "name": "Doc comments and chosen attributes passed through to generated Rust",
+   "status": "planned",
+   "note": "",
+   "doc": "notes",
+   "anchor": "15-3-accepted-directions-not-yet-specified",
+   "project": "p181",
+   "updated": "2026-09-21T20:29:22.000Z"
   }
  ],
  "projects": [
@@ -4053,6 +4259,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "description": "",
    "created": "2026-09-21T19:19:39.000Z",
    "updated": "2026-09-21T19:19:39.000Z"
+  },
+  {
+   "id": "p181",
+   "created": "2026-09-21T19:58:25.403Z",
+   "name": "Polish",
+   "status": "planned",
+   "description": "Long laundry list of things to add/support",
+   "updated": "2026-09-21T19:58:25.403Z"
   }
  ],
  "tasks": [
@@ -4250,9 +4464,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 0,
    "project": "p20",
-   "notes": "",
+   "notes": "Private by default and pub are now part of the core (notes, item 13); what stays here is pub(crate) and the protected export.",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "t22",
@@ -4807,13 +5021,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t86",
    "n": 69,
-   "title": "?, return and let … else",
+   "title": "? once the traits that define it exist, and let … else",
    "status": "backlog",
    "priority": 0,
    "project": "p84",
-   "notes": "",
+   "notes": "return moved to the core (notes, item 13).",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:19:39.000Z"
+   "updated": "2026-09-21T20:29:22.000Z"
   },
   {
    "id": "t87",
@@ -4990,6 +5204,336 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "assert! and friends print as themselves. Under #[no_panic] an assert! is proven never to fail: keep the runtime check, or drop it?",
    "created": "2026-09-21T19:41:53.000Z",
    "updated": "2026-09-21T19:41:53.000Z"
+  },
+  {
+   "id": "t179",
+   "n": 86,
+   "title": "match guards",
+   "status": "todo",
+   "priority": 0,
+   "project": "p33",
+   "notes": "",
+   "created": "2026-09-21T19:54:30.730Z",
+   "updated": "2026-09-21T19:54:30.730Z"
+  },
+  {
+   "id": "t180",
+   "n": 87,
+   "title": "type specific literals (e.g. u128)",
+   "status": "todo",
+   "priority": 0,
+   "project": "p24",
+   "notes": "",
+   "created": "2026-09-21T19:55:01.438Z",
+   "updated": "2026-09-21T19:55:01.438Z"
+  },
+  {
+   "id": "t182",
+   "n": 88,
+   "title": "prop!(P) and @P replace bracketed proposition literals",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. @P takes a name, an application, or a formula in parentheses. Migration diagnostic for [P] and @[P]. Update every example.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t183",
+   "n": 89,
+   "title": "Values move by default; Copy and Clone only by derive; use after move is an error",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. Depends on derive (LOC-25) for Clone and Copy at least.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t184",
+   "n": 90,
+   "title": "Private by default; pub on items and fields",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. Generated Rust stops making everything pub.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t185",
+   "n": 91,
+   "title": "Reserve every Rust keyword",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. Strict and reserved keywords; weak keywords stay identifiers. forall and exists are reserved by Locus.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t186",
+   "n": 92,
+   "title": "The never type !, and its coercion to any type",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t187",
+   "n": 93,
+   "title": "return, with the check IR and lowering designed for early exit",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t188",
+   "n": 94,
+   "title": "Integer literals: the expected type, else i32; suffixes; hex, octal, and binary",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t189",
+   "n": 95,
+   "title": "String literals, for the messages of the built-in forms",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t190",
+   "n": 96,
+   "title": "Paths of any length; separate type and value namespaces; associated items such as u32::MAX",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t191",
+   "n": 97,
+   "title": "Type arguments on the types the language provides: Ghost\u003cT>, Seq\u003cT>",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. User type parameters arrive with generics.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t192",
+   "n": 98,
+   "title": "Rust's operator precedence table, exactly",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t193",
+   "n": 99,
+   "title": "== and != on bool and every integer type",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13. On a user type only with derive(PartialEq).",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t194",
+   "n": 100,
+   "title": "Enum variants with named fields",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t195",
+   "n": 101,
+   "title": "const items emitted as Rust const, with initializers Rust can evaluate at compile time",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t196",
+   "n": 102,
+   "title": "match with the power it has in Rust: integers, bool, tuples; literal, range, and or-patterns; @ bindings; exhaustiveness over integer ranges",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p33",
+   "notes": "Notes, item 13. Guards are LOC-86.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t197",
+   "n": 103,
+   "title": "usize and isize",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p37",
+   "notes": "Notes, item 13. The width depends on the platform; the logic and determinism both have to account for it. Arrives with slices.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t198",
+   "n": 104,
+   "title": "Omit -> () on a function that returns unit",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t199",
+   "n": 105,
+   "title": "mut on parameters",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t200",
+   "n": 106,
+   "title": "Field init shorthand and ..base in struct expressions",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t201",
+   "n": 107,
+   "title": "Loop labels, and break and continue to a label",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t202",
+   "n": 108,
+   "title": "MAX, MIN, and a closed list of integer methods",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t203",
+   "n": 109,
+   "title": "Range expressions, including ..=",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t204",
+   "n": 110,
+   "title": "Doc comments and chosen attributes passed through to the generated Rust",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t205",
+   "n": 111,
+   "title": "Explicit enum discriminants",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t206",
+   "n": 112,
+   "title": "Tuple structs, unit structs, and the newtype idiom",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p181",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t207",
+   "n": 113,
+   "title": "Decide what the integer operators mean to the logic",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "notes": "Notes, item 13. Overflow panics in one build and wraps in another, so without no_panic the only fact true in every build is that the result, if there is one, is the wrapped value. / and % truncate toward zero and panic on a zero divisor; a shift overflows at the bit width; as truncates.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t208",
+   "n": 114,
+   "title": "Decide which operators are in the first cut",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "notes": "Notes, item 13. Multiplication makes arithmetic non-linear; the bit operators and shifts need a bit-level model; the kernel today has only Nat with addition.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
+  },
+  {
+   "id": "t209",
+   "n": 115,
+   "title": "Decide a lighter way to write a proposition value than prop!(P)",
+   "status": "todo",
+   "priority": 1,
+   "project": "p89",
+   "notes": "Notes, item 13.",
+   "created": "2026-09-21T20:29:22.000Z",
+   "updated": "2026-09-21T20:29:22.000Z"
   }
  ]
 }
