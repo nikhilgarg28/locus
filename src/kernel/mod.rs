@@ -16,6 +16,7 @@ mod depth;
 pub mod derive;
 mod error;
 mod eval;
+mod int;
 mod nat;
 mod term;
 pub mod theory;
@@ -30,7 +31,8 @@ pub use defs::{Definitions, Prelude, PropVariant};
 pub use depth::MAX_DEPTH;
 pub use error::KernelError;
 pub use eval::MAX_EVAL_DEPTH;
-pub use nat::Natural;
+pub use int::Integer;
+pub use nat::{Natural, ParseNumberError};
 pub use term::{
     ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,
     StructId, Term, TermArm, Type, VarId,
