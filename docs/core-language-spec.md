@@ -1668,7 +1668,27 @@ fn run(attempts: u8) -> u8 { ... }
 5. A function may appear in a proposition exactly when its declared effects are empty or only alloc. Such a function always returns and is deterministic, so f(x) denotes one value. The rule reads the signature and never the body. A function that may diverge cannot appear in a proposition, because its result type may promise anything; the result of calling it is a fresh variable that exists only after the call returns, as now.
 6. What the logic knows about f(x) is, always, what the result type says, so that f(x).1 is evidence about f(x).0; and, where the body of f is visible, its defining equation as well. Visibility of the equation follows visibility of the body. Within one file every body is visible. Once headers exist, a function whose body is in the header is known by its definition, which is right for the vocabulary of a specification, and a function given there only by its signature is known by its contract. No separate control of unfolding is planned; it can be revisited.
 7. With the above, math fn carries no information of its own. That a function may use Prop, quantifiers, and later Int, and need not be executable, follows from its types, which the kernel already classifies. The type math fn(x: A) -> B becomes a function type with no effects; function types carry effects too. The keyword stays until effects are implemented, then becomes shorthand for a function without effects, and is then removed.
-8. Promising termination for a function that uses loop or recursion needs a termination measure. Its form is under discussion.
+8. Loop invariants need no construct of their own once the language has mutable locals. The direction is agreed; the full rules are to be written as part of introducing mut, together with the replacement of the loop forms of section 10, which exist only because there is no mutation.
+
+   - Evidence bound with let is a snapshot. It speaks of the values its proposition mentions as they were at that line, is never invalidated, and stays usable after those variables change, as let y = x keeps the old x. Evidence bound with let mut is tracked: its proposition is read against current values, and it may be reassigned. The same type text therefore reads differently under let and let mut, exactly as for data. Both are needed: evidence about the next value is built as a snapshot before an assignment and used to re-establish tracked evidence after it.
+   - Assigning a variable, or passing it as &mut, invalidates every tracked evidence variable whose type mentions it, until that evidence is reassigned. Validity then follows Rust's initialization analysis: valid after a join only if valid on every path into it, a loop's back edge is such a path, and a path that breaks or returns does not count. Evidence that is not used again carries no obligation.
+   - A fact that can be derived afresh on each pass is an ordinary let inside the body. A fact that depends on earlier passes is tracked evidence declared before the loop and reassigned in the body. A claim about what the loop leaves behind is that evidence, used after the loop with the fact of the exit test. Refreshing is explicit, ok = _; or ok = proof;, so that each obligation is visible where it arises.
+
+~~~
+let mut lock = Lock { failures: 0, open: false };
+let mut ok: @within_limit(lock.failures) = _;
+for attempt in 0..attempts {
+    let (next, still) = step(lock, ok, event_at(attempt, correct));
+    lock = next;        // ok is now invalid
+    ok = still;         // re-established
+}
+(lock, ok)
+~~~
+
+   - The checker still performs the induction: the tracked evidence live across the back edge becomes part of the loop's state, as in section 10. The programmer states no invariant. The flow analysis is not trusted. Lowering gives each assignment a new version of the variable and of the evidence, and stale evidence used by mistake is a proof about an old version, which the kernel rejects. What becomes trusted is the translation of mutable locals into versions, which mutable data needs in any case.
+   - A for hides its iterator, so evidence declared before the loop cannot speak of the index, nor in general of what an iterator has produced so far. Facts the loop can supply afresh on each pass, such as the bounds of a range index, are unaffected. A carried fact about progress is written with the iterator or index as a named mutable variable, in a while or while let. A clause on for that names the hidden state was considered and is deliberately not planned.
+   - To be settled with mut: tracked evidence in local variables only at first; no assignment to a struct field that a proof field of the same struct depends on; invalidation by whole variable rather than by path; and how the signature of a function taking &mut states a fact about the new value.
+9. Promising termination for a function that uses loop or recursion needs a termination measure. Its form is under discussion.
 
 ## 16. Semantic completion status
 
