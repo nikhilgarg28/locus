@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 23,
-  "savedAt": "2026-09-21T21:51:51.000Z",
+  "rev": 24,
+  "savedAt": "2026-09-21T21:57:33.000Z",
   "nextTask": 151,
   "nextId": 266,
   "taskPrefix": "LOC",
@@ -6273,9 +6273,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "todo",
    "priority": 2,
    "project": "p89",
-   "notes": "Target language: What is generated. Rust's pub(crate) would let hand-written Rust in the same crate call it, so it does not serve. Either the signature decides (a pub function that takes evidence is emitted visible to generated modules only), or there is an explicit spelling.",
+   "notes": "Target language: What is generated. Rust's pub(crate) would let hand-written Rust in the same crate call it, so it does not serve. Either the signature decides (a pub function that takes evidence is emitted visible to generated modules only), or there is an explicit spelling.\n\nProposal (21 September): no new syntax. Rust already has restricted visibility: pub(super), pub(in path), pub(crate). One checked rule does the work: a function that takes evidence may be visible no further than the root of the generated modules. Plain pub on such a function is an error that says so and offers the two ways out, a narrower visibility or a validated type. In a crate that mixes Locus and hand-written Rust the programmer writes pub(in crate::verified), or pub(super) when the modules are siblings under a generated root; in a crate that is all Locus, pub(crate) is already right. Every spelling means what it means in Rust. Not covered: one Locus crate calling evidence-taking functions of another. Rust has no visibility meaning \"generated code in other crates\", so that would rest on a hidden name and a convention, as serde's __private does, and on locus audit. Alternatives considered: inferring it from the signature (implicit, and a small change to a signature would silently change what is exported); an #[export] attribute with pub meaning less than it does in Rust; and pub(locus), which is not Rust syntax.",
    "created": "2026-09-21T21:51:51.000Z",
-   "updated": "2026-09-21T21:51:51.000Z"
+   "updated": "2026-09-21T21:57:33.000Z"
   }
  ]
 }
