@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 47,
-  "savedAt": "2026-09-21T23:37:20.000Z",
+  "rev": 48,
+  "savedAt": "2026-09-21T23:37:26.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6995,12 +6995,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t278",
    "n": 162,
    "title": "K4 · A model for each machine integer type, from one table",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Kernel. Wave 4.\nDepends on: K3 (LOC-161).\nUnblocks: K5 (LOC-163), K7 (LOC-165), K8 (LOC-166), E5 (LOC-171).\nCovers: LOC-120, LOC-145.\n\nScope. For u8 to u64 and i8 to i64: a view to Int, a wrap from Int, the range of the view, and the round trips. as between machine types is the wrap of the view. The u8 model over Nat is restated over Int and its separate axioms are removed, so the contract holds one schema and not a list per type.\n\nTests.\n- The 8-bit types exhaustively against Rust: every value for the view and round trip, every pair of types for as.\n- The wider types at a boundary set (0, 1, MAX, MAX - 1, MIN, MIN + 1, -1, powers of two and their neighbours) and at random.\n- Every existing kernel_numbers test passes on the new model.\n\nDone when. What the logic says about a machine value is what Rust computes, tested where it can be tested exhaustively and at the edges where it cannot.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:37:20.000Z"
+   "updated": "2026-09-21T23:37:26.000Z"
   },
   {
    "id": "t279",
