@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 32,
-  "savedAt": "2026-09-21T22:41:03.000Z",
+  "rev": 33,
+  "savedAt": "2026-09-21T22:43:22.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6257,12 +6257,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t244",
    "n": 129,
    "title": "Design the checked IR for mutation, early exit, and panics before coding it",
-   "status": "todo",
+   "status": "doing",
    "priority": 4,
    "project": "p89",
    "notes": "This is commit M0 (LOC-176) of the Build plan.\n\nA gate: mutation is not implemented until this is written (21 September, after review). The design must state, for each case below, the versions, the facts available at each point, and the types of results, and not only whether the program is accepted:\n1. One branch refreshes tracked evidence; the other returns early.\n2. A loop with several continue and break paths.\n3. Snapshot evidence survives an assignment, while tracked evidence needs a refresh.\n4. A proposition value captures an old value, and then becomes the type of tracked evidence.\n5. A value is moved and initialized again, with evidence about its earlier state in scope.\n6. A call changes two disjoint fields and returns evidence about both.\n\nDirection decided 21 September (Target language: How mutation is checked): versions, in lowering, watched by comparing the two interpreters. The design itself is still to be written.\n\nRaised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T22:14:21.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t245",
@@ -6499,34 +6499,34 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t267",
    "n": 151,
    "title": "H1 · A corpus runner: every .lc file is checked, run in both interpreters, compiled, and compared",
-   "status": "todo",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E4 (LOC-170), R1 (LOC-186), R2 (LOC-187), R3 (LOC-188).\nCovers: LOC-7.\n\nScope. tests/corpus/accept and tests/corpus/reject hold .lc files whose expectations are written in comments: the number of proofs, run lines such as f(1, 2) => 3 or f(255) => panic, substrings the generated Rust must contain, and for rejected files the code of the error on the line where it is expected. One runner does for each accepted file what cli.rs and rust_output.rs do by hand today: check, run every run line in the check-IR interpreter and the erased interpreter, print Rust, compile all files in one rustc call with -D warnings, run, compare. The five examples move under it.\n\nTests.\n- The five examples pass through the runner.\n- The runner is tested on itself: a wrong expected value, a missing error, and an error on the wrong line each make it report a failure.\n- All failures in a run are reported, not the first.\n\nDone when. From here on a feature is tested by adding files. The whole suite stays under a minute because rustc runs once.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t268",
    "n": 152,
    "title": "H2 · A seeded generator with no dependencies, parser fuzz tests, and tools/check.sh in a fast and an extended form",
-   "status": "todo",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: S1 (LOC-154), R1 (LOC-186).\n\nScope. A small xorshift generator in tests/common, since the build is offline and has one dependency. The parser is run on random sequences drawn from the token vocabulary and on the example files with random edits (delete, duplicate, swap a token). tools/check.sh runs fmt, clippy, and the tests with fixed seeds and small counts, and is what every commit must pass. tools/check.sh --extended sets LOCUS_EXTENDED, under which the fuzz counts are a hundred times larger and the random program comparison compiles thousands of programs; it runs before a milestone is declared, not on every commit.\n\nTests.\n- Fast: 50,000 token sequences and 5,000 edited files with a fixed seed: the parser returns an AST or at least one diagnostic, without a panic, on a 1 MB stack.\n- A failure prints its seed.\n- Separately from the fuzzing, the two guarantees that make the parser total are stated in Architecture and each has its own test: every loop consumes a token or stops (a test counts parser steps against the number of tokens), and recursion is bounded by MAX_DEPTH (the existing nesting test, extended to each new form).\n\nDone when. The fuzz tests show robustness on what they tried and claim no more. Totality rests on the progress and depth guarantees, which are stated and tested on their own.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t269",
    "n": 153,
    "title": "H3 · Split src/elab/exprs.rs by construct, with no change in behaviour",
-   "status": "todo",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E1 (LOC-167).\n\nScope. exprs.rs is 1,400 lines and every later lane edits it. Split it into calls, control flow, patterns, operators, and blocks so that lanes touch different files.\n\nTests.\n- Every existing test passes unchanged.\n- No file under src/elab is over about 600 lines.\n\nDone when. Two people or agents can work in the elaborator at once without colliding.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t270",
@@ -6587,12 +6587,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t275",
    "n": 159,
    "title": "K1 · Integers of any size in the kernel: subtraction, multiplication, division, comparison, sign",
-   "status": "todo",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Kernel. Wave 1.\nDepends on: nothing.\nUnblocks: K2 (LOC-160).\nCovers: LOC-118.\n\nScope. kernel::nat already holds naturals of any size with addition. Add subtraction, multiplication, division with remainder, and comparison, and an Int value as a sign and a magnitude. Values only; no terms or axioms yet.\n\nTests.\n- Against i128 on a boundary set and 100,000 random pairs, for every operation.\n- Beyond i128, identities: (a * b) / b == a, (a + b) - b == a, a == (a / b) * b + a % b.\n\nDone when. The arithmetic the evaluator will trust is tested on its own, before any rule depends on it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t276",
@@ -6774,12 +6774,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t292",
    "n": 176,
    "title": "M0 · Write the design of the checked IR for mutation, early exit, panics, and operations that may panic",
-   "status": "todo",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 1.\nDepends on: nothing.\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-129.\n\nScope. A section of Target language, not code. For each of the six cases of LOC-129 it shows the source, the check IR after lowering to versions, and what the checker demands at each point: a branch that refreshes against one that returns early; several continue and break paths; snapshot against tracked evidence; a captured proposition used as a tracked type; move and reinitialise; a call that changes two disjoint fields. A seventh case covers a primitive operation that may panic, under no_panic and outside it, since E6 needs it before the rest. An eighth covers a protected value behind &mut when a panic unwinds, once that rule is decided.\n\nTests.\n- Each case is written so that it can be copied into a test in M2 to M4 and O3.\n- Reviewed by Nikhil before M1 starts.\n\nDone when. The gate. No mutation code is written before this is agreed.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:43:22.000Z"
   },
   {
    "id": "t293",
