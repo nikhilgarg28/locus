@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 44,
-  "savedAt": "2026-09-21T23:27:10.000Z",
+  "rev": 45,
+  "savedAt": "2026-09-21T23:27:30.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6887,12 +6887,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t271",
    "n": 155,
    "title": "S2 · Built-in forms and the formula grammar: prop!, prove!, @P, forall and exists, rewrite!, unfold!, fold!",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 3.\nDepends on: S1 (LOC-154).\nUnblocks: S3 (LOC-156), E1 (LOC-167), E10 (LOC-190).\nCovers: LOC-80, LOC-88, LOC-149, LOC-77, LOC-78.\n\nScope. Parse name!(...) for the closed list of forms. Formulas, with forall (x: T) { ... }, exists, and =>, are parsed only inside prop!(...), prove!(...), and @(...). @P takes a name, an application, or a parenthesized formula. [P], @[P], and the bare rewrite, unfold, and fold go, each with a migration diagnostic that carries a fix. prove!(P) elaborates as a claim filled where it stands. Examples and tests are respelled.\n\nTests.\n- Every elaborator test passes after respelling, with the same proofs found.\n- Each old spelling gives its migration diagnostic; applying the fix gives a file that parses, tested by applying it.\n- forall and exists are ordinary names outside a formula; => outside a formula or a match arm is rejected; an unknown form names the closed list.\n\nDone when. Brackets are free for arrays, and the source has no token Rust lacks.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:27:10.000Z"
+   "updated": "2026-09-21T23:27:30.000Z"
   },
   {
    "id": "t272",
