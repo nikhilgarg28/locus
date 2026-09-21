@@ -1,0 +1,45 @@
+// Pasted Rust either parses or is told, construct by construct, that it is
+// not in Locus yet. One attribute is one error, and its item is still read.
+#[derive(Debug)] //~ error: L0105 attributes are not in Locus yet
+struct Counter {
+    count: u8,
+}
+
+pub fn visible() -> u8 { 1 } //~ error: L0116 visibility
+
+use std::fmt; //~ error: L0116 `use` declarations
+
+impl Counter { //~ error: L0116 `impl` blocks
+    fn get(&self) -> u8 { self.count }
+}
+
+fn assigned(n: u8) -> u8 {
+    let mut total = n; //~ error: L0116 `mut` is not in Locus yet
+    total += 1; //~ error: L0116 compound assignment (`+=`)
+    total
+}
+
+fn shifted(n: u8) -> u8 {
+    n << 1 //~ error: L0116 the shift operator `<<`
+}
+
+fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
+
+fn looped(n: u8) -> u8 {
+    while n < 3 { }; //~ error: L0116 `while` loops
+    return n; //~ error: L0116 `return`
+}
+
+fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
+//~^ error: L0005 lifetimes and loop labels
+
+fn literals() -> u8 {
+    let letter = 'x'; //~ error: L0005 character literals
+    let half = 0.5; //~ error: L0005 float literals
+    let bytes = b"raw"; //~ error: L0005 byte strings
+    1
+}
+
+fn minus(n: u8) -> u8 {
+    n - 1 //~ error: L0112 `-` is not part of the core language
+}

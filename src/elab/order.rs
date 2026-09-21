@@ -207,6 +207,7 @@ impl Mentions<'_> {
             ExprKind::Name(name) => self.name(name),
             ExprKind::Path(path) => self.name(&path.prefix),
             ExprKind::Integer(_)
+            | ExprKind::String(_)
             | ExprKind::Bool(_)
             | ExprKind::Unit
             | ExprKind::Hole

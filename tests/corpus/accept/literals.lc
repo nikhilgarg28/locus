@@ -1,0 +1,48 @@
+// Integer literals are written as in Rust: four bases, underscores, and a
+// suffix. `u8` is the one integer type so far, so `u8` is the one suffix the
+// elaborator takes.
+//~ rust: 255
+
+fn hexadecimal() -> u8 {
+    0xFF
+}
+
+fn octal() -> u8 {
+    0o17_u8
+}
+
+fn binary() -> u8 {
+    0b1010_1010
+}
+
+fn underscores() -> u8 {
+    1__0_u8
+}
+
+fn suffixed(n: u8) -> u8 {
+    n.wrapping_add(250u8)
+}
+
+fn compared(n: u8) -> bool {
+    n < 0x80
+}
+
+// A literal followed by a dot is still a receiver, and a position in a
+// tuple of tuples is still two projections.
+fn receiver() -> u8 {
+    1.wrapping_add(0x02)
+}
+
+fn inner(pair: (u8, (u8, u8))) -> u8 {
+    pair.1.0
+}
+
+//~ run: hexadecimal() => 255
+//~ run: octal() => 15
+//~ run: binary() => 170
+//~ run: underscores() => 10
+//~ run: suffixed(10) => 4
+//~ run: compared(127) => true
+//~ run: compared(128) => false
+//~ run: receiver() => 3
+//~ run: inner((1, (2, 3))) => 2

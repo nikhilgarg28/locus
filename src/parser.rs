@@ -2,7 +2,7 @@
 
 use crate::ast::*;
 use crate::diagnostic::{Applicability, Diagnostic, Suggestion};
-use crate::lexer::{Token, TokenKind as K, lex};
+use crate::lexer::{Literal, Token, TokenKind as K, lex};
 use crate::source::{SourceFile, Span};
 
 const MAX_DEPTH: usize = 64;
@@ -38,6 +38,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
     Parser {
         source,
         tokens: lexed.tokens,
+        literals: lexed.literals,
         position: 0,
         depth: 0,
         steps: 0,
@@ -52,6 +53,8 @@ pub fn parse(source: &SourceFile) -> Parsed {
 struct Parser<'a> {
     source: &'a SourceFile,
     tokens: Vec<Token>,
+    /// The values of the integer and string tokens, by `Token::literal`.
+    literals: Vec<Literal>,
     position: usize,
     depth: usize,
     steps: usize,
@@ -130,8 +133,10 @@ impl Parser<'_> {
         self.at(kind).then(|| self.bump())
     }
 
+    /// An error token was reported by the lexer, and a token of Rust that
+    /// Locus does not use yet is reported as that, whatever was expected.
     fn fail<T>(&mut self, message: impl Into<String>) -> ParseResult<T> {
-        if !self.at(K::Error) {
+        if !self.at(K::Error) && !self.rust_only() {
             self.diagnostics
                 .push(Diagnostic::error("L0100", message, self.current().span));
         }
@@ -186,7 +191,60 @@ impl Parser<'_> {
         result
     }
 
+    /// Reports the current token if it belongs to Rust and not yet to Locus:
+    /// a keyword Locus does not use, an attribute, or an operator.
+    #[inline(never)]
+    fn rust_only(&mut self) -> bool {
+        let token = self.current();
+        if self.attribute_start() {
+            self.attribute();
+            return true;
+        }
+        let spelling = self.source.slice(token.span).unwrap_or_default();
+        let diagnostic = if token.kind == K::Keyword {
+            match keyword_construct(spelling) {
+                Some((message, note)) => {
+                    let diagnostic = Diagnostic::error("L0116", message, token.span);
+                    match note {
+                        Some(note) => diagnostic.note(note),
+                        None => diagnostic,
+                    }
+                }
+                None => keyword_is_no_name(spelling, token.span),
+            }
+        } else {
+            let Some(message) = rust_only_token(token.kind, spelling) else {
+                return false;
+            };
+            Diagnostic::error("L0116", message, token.span)
+        };
+        self.diagnostics.push(diagnostic);
+        true
+    }
+
+    /// A keyword where a name belongs. Before a name, `mut` or `pub` is Rust
+    /// that Locus does not have yet, and so are the keywords that stand for
+    /// names in Rust; anywhere else the keyword was meant as the name.
+    #[inline(never)]
+    fn keyword_as_name<T>(&mut self) -> ParseResult<T> {
+        let token = self.current();
+        let spelling = self.source.slice(token.span).unwrap_or_default();
+        let rust = token.kind == K::Keyword
+            && (self.peek(1) == K::Name || matches!(spelling, "self" | "Self" | "crate" | "super"));
+        if !(rust && self.rust_only()) {
+            self.diagnostics
+                .push(keyword_is_no_name(spelling, token.span));
+            // Taken as the name it was meant as, so that recovery does not
+            // read a `const` or an `fn` here as the start of a declaration.
+            self.bump();
+        }
+        Err(())
+    }
+
     fn name(&mut self) -> ParseResult<Name> {
+        if self.current().kind.is_rust_keyword() {
+            return self.keyword_as_name();
+        }
         let token = self.expect(K::Name)?;
         Ok(Name {
             text: self.source.slice(token.span).unwrap().to_owned(),
@@ -237,8 +295,12 @@ impl Parser<'_> {
     }
 
     fn declaration(&mut self) -> ParseResult<Declaration> {
-        if self.attribute_start() {
-            return self.unsupported_attribute();
+        // Each attribute is reported and skipped, and its item is parsed.
+        while self.attribute_start() {
+            self.step();
+            if !self.attribute() || self.at(K::Eof) {
+                return Err(());
+            }
         }
         if !self.declaration_start() {
             return self.fail(
@@ -263,6 +325,7 @@ impl Parser<'_> {
             }
             K::Struct => {
                 let name = self.name()?;
+                self.no_generics()?;
                 let (fields, end) = self.parameter_list(K::LBrace, K::RBrace)?;
                 Ok(Declaration {
                     span: start.span.through(end.span),
@@ -271,6 +334,7 @@ impl Parser<'_> {
             }
             K::Enum => {
                 let name = self.name()?;
+                self.no_generics()?;
                 let opening = self.expect(K::LBrace)?;
                 let mut variants = Vec::new();
                 while !self.at(K::RBrace) && !self.at(K::Eof) {
@@ -315,6 +379,7 @@ impl Parser<'_> {
 
     fn function(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Declaration> {
         let name = self.name()?;
+        self.no_generics()?;
         let parameters = self.parameters()?;
         self.expect(K::Arrow)?;
         let result = self.ty()?;
@@ -329,6 +394,19 @@ impl Parser<'_> {
                 body,
             },
         })
+    }
+
+    /// `<` after the name an item declares.
+    fn no_generics(&mut self) -> ParseResult<()> {
+        if self.at(K::Less) {
+            self.diagnostics.push(Diagnostic::error(
+                "L0116",
+                "generic parameters are not in Locus yet",
+                self.current().span,
+            ));
+            return Err(());
+        }
+        Ok(())
     }
 
     fn prop(&mut self, start: Token) -> ParseResult<Declaration> {
@@ -497,8 +575,16 @@ impl Parser<'_> {
                     kind: TypeKind::Tuple(fields),
                 })
             }
-            _ => self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@[condition]`"),
+            _ => self.no_type(),
         }
+    }
+
+    #[inline(never)]
+    fn no_type<T>(&mut self) -> ParseResult<T> {
+        if self.current().kind.is_rust_keyword() {
+            return self.keyword_as_name();
+        }
+        self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@[condition]`")
     }
 
     /// The proposition of a proof type. Calls and projections may follow a
@@ -539,9 +625,14 @@ impl Parser<'_> {
         Err(())
     }
 
+    /// A keyword before `:` was meant as a name, and `name` says so.
+    fn at_name_or_keyword(&self) -> bool {
+        self.at(K::Name) || self.current().kind.is_rust_keyword()
+    }
+
     fn type_field(&mut self) -> ParseResult<TypeField> {
         let start = self.current().span;
-        let name = if self.at(K::Name) && self.peek(1) == K::Colon {
+        let name = if self.peek(1) == K::Colon && self.at_name_or_keyword() {
             let name = self.name()?;
             self.bump();
             Some(name)
@@ -632,13 +723,7 @@ impl Parser<'_> {
                     kind: PatternKind::Bool(start.kind == K::True),
                 })
             }
-            K::Integer => {
-                self.bump();
-                Ok(Pattern {
-                    span: start.span,
-                    kind: PatternKind::Integer(self.source.slice(start.span).unwrap().into()),
-                })
-            }
+            K::Integer => Ok(self.integer_pattern()),
             K::Underscore => {
                 self.bump();
                 Ok(Pattern {
@@ -676,7 +761,24 @@ impl Parser<'_> {
                     kind: PatternKind::Tuple(patterns),
                 })
             }
-            _ => self.fail("expected a pattern: a name, `_`, a literal, a tuple, or a constructor"),
+            _ => self.no_pattern(),
+        }
+    }
+
+    #[inline(never)]
+    fn no_pattern<T>(&mut self) -> ParseResult<T> {
+        if self.current().kind.is_rust_keyword() {
+            return self.keyword_as_name();
+        }
+        self.fail("expected a pattern: a name, `_`, a literal, a tuple, or a constructor")
+    }
+
+    #[inline(never)]
+    fn integer_pattern(&mut self) -> Pattern {
+        let token = self.bump();
+        Pattern {
+            span: token.span,
+            kind: PatternKind::Integer(self.integer(token)),
         }
     }
 
@@ -819,8 +921,8 @@ impl Parser<'_> {
                 left = self.member(left)?;
                 continue;
             }
-            if self.at(K::Plus) {
-                return self.plus_retired();
+            if self.operator_not_in_locus() {
+                return Err(());
             }
             let Some((operator, left_bp, right_bp)) = binary(self.current().kind) else {
                 break;
@@ -846,17 +948,37 @@ impl Parser<'_> {
         Err(())
     }
 
+    /// After an operand: reports an arithmetic operator, or whatever else of
+    /// Rust stands here that Locus does not use yet.
     #[inline(never)]
-    fn plus_retired<T>(&mut self) -> ParseResult<T> {
-        self.diagnostics.push(
-            Diagnostic::error(
-                "L0112",
-                "`+` is not part of the core language",
-                self.current().span,
-            )
-            .note("u8 arithmetic says what happens on overflow: write `a.wrapping_add(b)`"),
+    fn operator_not_in_locus(&mut self) -> bool {
+        let operator = self.current();
+        if !matches!(
+            operator.kind,
+            K::Plus | K::Minus | K::Star | K::Slash | K::Percent
+        ) {
+            return self.rust_only();
+        }
+        let mut diagnostic = Diagnostic::error(
+            "L0112",
+            format!(
+                "{} is not part of the core language",
+                operator.kind.description()
+            ),
+            operator.span,
         );
-        Err(())
+        let method = match operator.kind {
+            K::Plus => Some("wrapping_add"),
+            K::Minus => Some("wrapping_sub"),
+            _ => None,
+        };
+        if let Some(method) = method {
+            diagnostic = diagnostic.note(format!(
+                "u8 arithmetic says what happens on overflow: write `a.{method}(b)`"
+            ));
+        }
+        self.diagnostics.push(diagnostic);
+        true
     }
 
     #[inline(never)]
@@ -875,11 +997,20 @@ impl Parser<'_> {
     fn member(&mut self, value: Expr) -> ParseResult<Expr> {
         self.expect(K::Dot)?;
         if let Some(index) = self.eat(K::Integer) {
+            let spelling = self.source.slice(index.span).unwrap();
+            if !spelling.bytes().all(|byte| byte.is_ascii_digit()) {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0100",
+                    "a tuple position is written in decimal digits alone, as in `pair.0`",
+                    index.span,
+                ));
+                return Err(());
+            }
             return Ok(Expr {
                 span: value.span.through(index.span),
                 kind: ExprKind::Index {
                     value: Box::new(value),
-                    index: self.source.slice(index.span).unwrap().into(),
+                    index: spelling.into(),
                     index_span: index.span,
                 },
             });
@@ -926,7 +1057,9 @@ impl Parser<'_> {
     fn prefix(&mut self) -> ParseResult<Expr> {
         match self.current().kind {
             K::Name if self.peek(1) == K::LBrace && !self.no_struct => self.struct_literal(),
-            K::Name | K::Integer | K::True | K::False | K::Underscore | K::Error => self.atom(),
+            K::Name | K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => {
+                self.atom()
+            }
             K::Bang => self.not(),
             K::LParen => self.parenthesized(),
             K::LBracket => self.bracketed(),
@@ -964,12 +1097,28 @@ impl Parser<'_> {
         Ok(Expr {
             span: token.span,
             kind: match token.kind {
-                K::Integer => ExprKind::Integer(self.source.slice(token.span).unwrap().into()),
+                K::Integer => ExprKind::Integer(self.integer(token)),
+                K::String => ExprKind::String(self.string(token)),
                 K::True | K::False => ExprKind::Bool(token.kind == K::True),
                 K::Underscore => ExprKind::Hole,
                 _ => ExprKind::Error,
             },
         })
+    }
+
+    /// The value the lexer decoded for an integer token.
+    fn integer(&self, token: Token) -> IntegerLiteral {
+        match self.literals.get(token.literal as usize) {
+            Some(Literal::Integer(literal)) => literal.clone(),
+            _ => unreachable!("the lexer gives every integer token its value"),
+        }
+    }
+
+    fn string(&self, token: Token) -> String {
+        match self.literals.get(token.literal as usize) {
+            Some(Literal::String(value)) => value.clone(),
+            _ => unreachable!("the lexer gives every string token its value"),
+        }
     }
 
     #[inline(never)]
@@ -1332,17 +1481,69 @@ impl Parser<'_> {
     }
 
     fn unsupported_attribute<T>(&mut self) -> ParseResult<T> {
-        self.diagnostics.push(Diagnostic::error("L0105", "attributes are reserved but not supported in the initial core", self.current().span)
-            .note("proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence"));
+        self.attribute();
         Err(())
     }
 
+    /// Reports one attribute and skips it, brackets and all, so that it is
+    /// reported once. False when its bracket is never closed.
+    fn attribute(&mut self) -> bool {
+        let start = self.bump();
+        self.eat(K::Bang);
+        let closers = self
+            .closers
+            .get_or_insert_with(|| matching_delimiters(&self.tokens));
+        let closer = closers[self.position];
+        let end = closer.map_or(self.current(), |closer| self.tokens[closer]);
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0105",
+                "attributes are not in Locus yet",
+                start.span.through(end.span),
+            )
+            .note("proof types use `@claim` or `@[condition]`, and `_` asks the elaborator for evidence"),
+        );
+        if let Some(closer) = closer {
+            self.position = closer + 1;
+        }
+        closer.is_some()
+    }
+
+    /// An attribute, or a keyword that begins an item in Rust and not yet in
+    /// Locus.
+    fn rust_item_start(&self) -> bool {
+        if self.attribute_start() {
+            return true;
+        }
+        self.at(K::Keyword)
+            && matches!(
+                self.source.slice(self.current().span),
+                Some(
+                    "async"
+                        | "extern"
+                        | "impl"
+                        | "mod"
+                        | "pub"
+                        | "static"
+                        | "trait"
+                        | "type"
+                        | "unsafe"
+                        | "use"
+                )
+            )
+    }
+
+    /// Skips to where the next declaration begins. An item of Rust is a place
+    /// to stop as well, past the one that failed, so that each is reported.
     fn recover_declaration(&mut self) {
+        let start = self.position;
         let mut depth = 0usize;
         while !self.at(K::Eof) {
             self.step();
             let kind = self.current().kind;
-            if depth == 0 && self.declaration_start() {
+            if depth == 0
+                && (self.declaration_start() || (self.position > start && self.rust_item_start()))
+            {
                 return;
             }
             match kind {
@@ -1396,6 +1597,97 @@ fn matching_delimiters(tokens: &[Token]) -> Vec<Option<usize>> {
         }
     }
     closers
+}
+
+/// L0115. Locus reserves every strict and reserved keyword of Rust, the ones
+/// it has no use for included, so that no Locus source reads differently as
+/// Rust.
+fn keyword_is_no_name(keyword: &str, span: Span) -> Diagnostic {
+    Diagnostic::error(
+        "L0115",
+        format!("`{keyword}` is a Rust keyword and cannot be used as a name"),
+        span,
+    )
+    .note("Locus reserves every keyword of Rust, whether or not it uses it yet")
+    .suggest(Suggestion {
+        message: format!("rename it, for example to `{keyword}_`"),
+        span,
+        replacement: format!("{keyword}_"),
+        applicability: Applicability::MaybeIncorrect,
+    })
+}
+
+/// What a keyword that Locus does not use yet begins or marks in Rust, and a
+/// note where Locus has another way. `None` for the keywords Rust reserves
+/// without a use of its own.
+fn keyword_construct(keyword: &str) -> Option<(&'static str, Option<&'static str>)> {
+    let message = match keyword {
+        "as" => "`as` casts are not in Locus yet",
+        "async" => "`async` is not in Locus yet",
+        "await" => "`await` is not in Locus yet",
+        "crate" => "`crate` paths are not in Locus yet",
+        "dyn" => "`dyn` trait objects are not in Locus yet",
+        "extern" => "`extern` is not in Locus yet",
+        "impl" => "`impl` blocks and `impl Trait` are not in Locus yet",
+        "mod" => "modules (`mod`) are not in Locus yet",
+        "move" => "closures (`move`) are not in Locus yet",
+        "mut" => "`mut` is not in Locus yet",
+        "pub" => "visibility (`pub`) is not in Locus yet",
+        "ref" => "`ref` bindings are not in Locus yet",
+        "return" => "`return` is not in Locus yet",
+        "self" => "`self` and methods are not in Locus yet",
+        "Self" => "`Self` is not in Locus yet",
+        "static" => "`static` items are not in Locus yet",
+        "super" => "`super` paths are not in Locus yet",
+        "trait" => "traits are not in Locus yet",
+        "type" => "type aliases (`type`) are not in Locus yet",
+        "unsafe" => "`unsafe` is not in Locus yet",
+        "use" => "`use` declarations are not in Locus yet",
+        "where" => "`where` clauses are not in Locus yet",
+        "while" => "`while` loops are not in Locus yet",
+        _ => return None,
+    };
+    let note = match keyword {
+        "mut" => Some("a binding never changes; `loop` and `for` carry their state explicitly"),
+        "return" => Some("the value of a function is the tail expression of its body"),
+        "while" => Some("write a `loop`, or a `for` over a range, with its state listed"),
+        _ => None,
+    };
+    Some((message, note))
+}
+
+/// L0116 for a token that is an operator or punctuation of Rust alone.
+fn rust_only_token(kind: K, spelling: &str) -> Option<String> {
+    Some(match kind {
+        K::PlusEqual
+        | K::MinusEqual
+        | K::StarEqual
+        | K::SlashEqual
+        | K::PercentEqual
+        | K::CaretEqual
+        | K::AndEqual
+        | K::OrEqual
+        | K::ShiftLeftEqual
+        | K::ShiftRightEqual => {
+            format!("compound assignment (`{spelling}`) is not in Locus yet")
+        }
+        K::ShiftLeft | K::ShiftRight => {
+            format!("the shift operator `{spelling}` is not in Locus yet")
+        }
+        K::And => "references and the `&` operator are not in Locus yet".into(),
+        K::Or => "closures, or-patterns, and the `|` operator are not in Locus yet".into(),
+        K::Caret => "the `^` operator is not in Locus yet".into(),
+        K::Minus => "negation (`-`) is not in Locus yet".into(),
+        K::Star => "dereferences and raw pointers (`*`) are not in Locus yet".into(),
+        K::Question => "the `?` operator is not in Locus yet".into(),
+        K::Dollar => "`$` belongs to macros, which are not in Locus yet".into(),
+        K::DotDotEqual => "inclusive ranges (`..=`) are not in Locus yet".into(),
+        K::DotDotDot => "`...` is not in Locus yet".into(),
+        K::Tilde | K::LeftArrow => {
+            format!("`{spelling}` is a token of Rust with no meaning in Locus")
+        }
+        _ => return None,
+    })
 }
 
 fn binary(kind: K) -> Option<(BinaryOp, u8, u8)> {

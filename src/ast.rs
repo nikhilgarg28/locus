@@ -1,6 +1,70 @@
 //! Surface syntax, including grouping and spans. This is not kernel syntax.
 
+use crate::kernel::Natural;
 use crate::source::Span;
+
+/// The type an integer literal names after its digits, as in `7u8`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IntegerSuffix {
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    Usize,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    Isize,
+}
+
+impl IntegerSuffix {
+    pub const ALL: [Self; 12] = [
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::U64,
+        Self::U128,
+        Self::Usize,
+        Self::I8,
+        Self::I16,
+        Self::I32,
+        Self::I64,
+        Self::I128,
+        Self::Isize,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::Usize => "usize",
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::Isize => "isize",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|suffix| suffix.name() == name)
+    }
+}
+
+/// An integer literal: its value, whatever its size and base, and its suffix.
+/// Whether the value fits a type is the elaborator's question.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IntegerLiteral {
+    pub value: Natural,
+    pub suffix: Option<IntegerSuffix>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Name {
@@ -126,7 +190,7 @@ pub enum PatternKind {
     Wildcard,
     Unit,
     Bool(bool),
-    Integer(String),
+    Integer(IntegerLiteral),
     Group(Box<Pattern>),
     Tuple(Vec<Pattern>),
     Struct {
@@ -182,7 +246,9 @@ pub struct Expr {
 pub enum ExprKind {
     Name(Name),
     Path(Box<Path>),
-    Integer(String),
+    Integer(IntegerLiteral),
+    /// A string literal, with its escapes decoded.
+    String(String),
     Bool(bool),
     Unit,
     /// `_`: evidence the elaborator is asked to find.

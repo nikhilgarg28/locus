@@ -1,0 +1,17 @@
+// Every keyword of Rust is reserved, the ones Locus has no use for included:
+// generated Rust could not spell these names. Found by the corpus runner.
+fn move(ref: u8) -> u8 { ref } //~ error: L0115 `move` is a Rust keyword
+
+fn fine(type: u8) -> u8 { //~ error: L0115 `type` is a Rust keyword
+    type
+}
+
+struct Point {
+    x: u8,
+    yield: u8, //~ error: L0115 `yield` is a Rust keyword
+}
+
+fn binding() -> u8 {
+    let match = 1; //~ error: L0115 `match` is a Rust keyword
+    2
+}

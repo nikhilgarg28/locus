@@ -85,14 +85,31 @@ impl Env<'_> {
             ExprKind::Group(inner) => self.expr(inner, expected),
             ExprKind::Unit => Ok(Value::new(Expr::unit(), unit_type())),
             ExprKind::Bool(value) => Ok(Value::new(Expr::Bool(*value), Type::Bool)),
-            ExprKind::Integer(text) => match text.replace('_', "").parse::<u8>() {
-                Ok(value) => Ok(Value::new(Expr::U8(value), Type::U8)),
-                Err(_) => self.fail(
-                    "L0205",
-                    format!("`{text}` does not fit in `u8`, whose largest value is 255"),
+            // Until literals are typed, `u8` is the one integer type.
+            ExprKind::Integer(literal) => match literal.suffix {
+                None | Some(ast::IntegerSuffix::U8) => {
+                    let value = literal.value.to_u64().map(u8::try_from);
+                    match value {
+                        Some(Ok(value)) => Ok(Value::new(Expr::U8(value), Type::U8)),
+                        _ => self.fail(
+                            "L0205",
+                            format!(
+                                "`{}` does not fit in `u8`, whose largest value is 255",
+                                literal.value
+                            ),
+                            expr.span,
+                        ),
+                    }
+                }
+                Some(suffix) => self.fail(
+                    "L0290",
+                    format!("the type `{}` is not in Locus yet", suffix.name()),
                     expr.span,
                 ),
             },
+            ExprKind::String(_) => {
+                self.fail("L0290", "string literals are not in Locus yet", expr.span)
+            }
             ExprKind::Name(name) => self.name(name, expected),
             ExprKind::Hole => match expected {
                 Some(Type::Proof(claim)) => {

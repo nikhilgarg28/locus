@@ -1,9 +1,10 @@
 use locus::ast::{
-    BinaryOp, Block, DeclarationKind, Expr, ExprKind, FunctionMode, PatternKind, StatementKind,
-    TypeKind,
+    BinaryOp, Block, DeclarationKind, Expr, ExprKind, FunctionMode, IntegerLiteral, IntegerSuffix,
+    PatternKind, StatementKind, TypeKind,
 };
 use locus::diagnostic::Applicability;
-use locus::lexer::{TokenKind as K, lex};
+use locus::kernel::Natural;
+use locus::lexer::{Lexed, Literal, TokenKind as K, lex};
 use locus::parser::{Parsed, parse};
 use locus::source::{FileId, SourceMap, Span};
 
@@ -119,12 +120,15 @@ fn nested_comments_and_line_comments_are_skipped() {
 fn lexical_errors_are_reported_once_with_valid_spans() {
     for (text, code) in [
         ("/* missing", "L0002"),
-        ("1__2", "L0003"),
-        ("12u8", "L0003"),
+        ("12u9", "L0003"),
+        ("0b102", "L0003"),
         ("café", "L0004"),
         ("r#type", "L0005"),
-        ("\"a string\"", "L0006"),
+        ("\"a string", "L0006"),
+        ("\"a \\q string\"", "L0007"),
         ("💡", "L0001"),
+        ("\\", "L0001"),
+        ("`", "L0001"),
     ] {
         let mut sources = SourceMap::default();
         let file = sources.add("test.lc", text);
@@ -939,7 +943,9 @@ fn match_arms_take_every_pattern_form() {
     let PatternKind::Tuple(literals) = &arms[4].pattern.kind else {
         panic!()
     };
-    assert!(matches!(&literals[0].kind, PatternKind::Integer(text) if text == "0"));
+    assert!(
+        matches!(&literals[0].kind, PatternKind::Integer(literal) if literal.value == Natural::zero())
+    );
     assert!(matches!(arms[5].pattern.kind, PatternKind::Wildcard));
 }
 
@@ -1090,7 +1096,7 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
         panic!()
     };
     assert_eq!(index.text, "i");
-    assert!(matches!(&lower.kind, ExprKind::Integer(text) if text == "0"));
+    assert!(matches!(&lower.kind, ExprKind::Integer(literal) if literal.value == Natural::zero()));
     assert!(matches!(&upper.kind, ExprKind::Name(name) if name.text == "n"));
     assert_eq!(state.len(), 2);
     assert!(matches!(body.tail.unwrap().kind, ExprKind::Continue(_)));
@@ -1172,4 +1178,902 @@ fn let_accepts_constructor_and_struct_patterns() {
         panic!()
     };
     assert!(matches!(pattern.kind, PatternKind::Struct { .. }));
+}
+
+// Locus tokenizes as Rust: keywords, literals, and the tokens Locus does not
+// use yet.
+
+fn lex_text(text: &str) -> Lexed {
+    let mut sources = SourceMap::default();
+    let file = sources.add("test.lc", text);
+    lex(sources.get(file))
+}
+
+fn kinds(lexed: &Lexed) -> Vec<K> {
+    lexed.tokens.iter().map(|token| token.kind).collect()
+}
+
+/// The strict keywords of Rust 2024 and then the reserved ones, written out
+/// here so that the test does not lean on the lexer's own list.
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
+    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+    "unsafe", "use", "where", "while", "abstract", "become", "box", "do", "final", "gen", "macro",
+    "override", "priv", "try", "typeof", "unsized", "virtual", "yield",
+];
+
+#[test]
+fn every_rust_keyword_is_reserved_in_every_name_position() {
+    assert_eq!(RUST_KEYWORDS.len(), 38 + 14);
+    // `true` and `false` are patterns, and `fn` begins a type.
+    let positions: &[(&str, &str, &[&str])] = &[
+        ("a function", "fn {}() -> u8 { 1 }", &[]),
+        ("a parameter", "fn f({}: u8) -> u8 { 1 }", &[]),
+        ("a struct", "struct {} { x: u8 }", &[]),
+        ("an enum", "enum {} { A }", &[]),
+        ("a constant", "const {}: u8 = 1;", &[]),
+        ("a field", "struct S { {}: u8 }", &[]),
+        ("a variant", "enum E { A, {}(u8) }", &[]),
+        ("a proof constructor", "prop P { {}: @[true] }", &[]),
+        ("a payload field", "enum E { A({}: u8) }", &[]),
+        (
+            "a result field",
+            "fn f() -> ({}: u8, bool) { (1, true) }",
+            &[],
+        ),
+        ("a type", "fn f(x: {}) -> u8 { 1 }", &["fn"]),
+        (
+            "a binding",
+            "fn f() -> u8 { let {} = 1; 1 }",
+            &["true", "false"],
+        ),
+        (
+            "a binding in a tuple",
+            "fn f() -> u8 { let (_, {}) = p; 1 }",
+            &["true", "false"],
+        ),
+        (
+            "a binding in an arm",
+            "fn f() -> u8 { match e { E::A({}) => 1 } }",
+            &["true", "false"],
+        ),
+        (
+            "a field pattern",
+            "fn f() -> u8 { let S { {}: _ } = s; 1 }",
+            &[],
+        ),
+        ("a field of a literal", "fn f() -> S { S { {}: 1 } }", &[]),
+        ("a member", "fn f() -> u8 { s.{} }", &[]),
+        ("a variant of a path", "fn f() -> E { E::{} }", &[]),
+        (
+            "loop state",
+            "fn f() -> u8 { loop ({}: u8 = 0) -> u8 { break 1 } }",
+            &[],
+        ),
+        (
+            "a loop index",
+            "fn f() -> u8 { for {} in 0..1 () { continue() } }",
+            &[],
+        ),
+        (
+            "a bound variable",
+            "const c: Prop = [forall ({}: u8) { true }];",
+            &[],
+        ),
+    ];
+    for keyword in RUST_KEYWORDS {
+        for (position, template, exempt) in positions {
+            if exempt.contains(keyword) {
+                continue;
+            }
+            let text = template.replace("{}", keyword);
+            let mut sources = SourceMap::default();
+            let file = sources.add("test.lc", text.as_str());
+            let source = sources.get(file);
+            let parsed = parse(source);
+            let first = parsed
+                .diagnostics
+                .first()
+                .unwrap_or_else(|| panic!("`{keyword}` was accepted as {position}: {text}"));
+            // The four that stand where names do in Rust are reported as the
+            // Rust they are; every other keyword as no name.
+            let code = if matches!(*keyword, "self" | "Self" | "crate" | "super") {
+                "L0116"
+            } else {
+                "L0115"
+            };
+            assert_eq!(first.code, code, "{text}: {}", first.message);
+            assert_eq!(source.slice(first.labels[0].span), Some(*keyword), "{text}");
+            assert!(
+                first.message.contains(&format!("`{keyword}`")),
+                "{text}: {}",
+                first.message
+            );
+            // The keyword is reported once, whatever recovery says after it.
+            let reports = parsed
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| matches!(diagnostic.code, "L0115" | "L0116"))
+                .count();
+            assert_eq!(reports, 1, "{text}: {:#?}", parsed.diagnostics);
+        }
+    }
+    let message = &parse_text("fn move(ref: u8) -> u8 { ref }").diagnostics[0].message;
+    assert_eq!(
+        message,
+        "`move` is a Rust keyword and cannot be used as a name"
+    );
+}
+
+#[test]
+fn weak_keywords_and_the_words_of_locus_are_names() {
+    let parsed = parse_text(
+        "fn union(raw: u8, safe: u8, auto: u8, default: u8) -> u8 { let macro_rules = raw; let math = safe; let prop = auto; macro_rules }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+}
+
+#[test]
+fn integer_literals_carry_their_value_and_suffix() {
+    use IntegerSuffix as S;
+    let mut cases: Vec<(String, Natural, Option<S>)> = Vec::new();
+    // The largest value of each fixed-width type, and one past it: the lexer
+    // reads the value and leaves the range to the elaborator.
+    for (suffix, max) in [
+        (S::U8, u128::from(u8::MAX)),
+        (S::U16, u128::from(u16::MAX)),
+        (S::U32, u128::from(u32::MAX)),
+        (S::U64, u128::from(u64::MAX)),
+        (S::U128, u128::MAX),
+        (S::I8, i8::MAX as u128),
+        (S::I16, i16::MAX as u128),
+        (S::I32, i32::MAX as u128),
+        (S::I64, i64::MAX as u128),
+        (S::I128, i128::MAX as u128),
+    ] {
+        let name = suffix.name();
+        let past = Natural::from_u128(max).succ();
+        cases.push((
+            format!("{max}{name}"),
+            Natural::from_u128(max),
+            Some(suffix),
+        ));
+        cases.push((
+            format!("{max:#x}_{name}"),
+            Natural::from_u128(max),
+            Some(suffix),
+        ));
+        cases.push((format!("{past}{name}"), past.clone(), Some(suffix)));
+        cases.push((format!("{past}"), past, None));
+    }
+    let two_to_128 = Natural::from_u128(u128::MAX).succ();
+    for (text, value, suffix) in [
+        ("0", Natural::zero(), None),
+        ("007", Natural::from(7), None),
+        ("255", Natural::from(255), None),
+        ("256u8", Natural::from(256), Some(S::U8)),
+        ("0xff", Natural::from(255), None),
+        ("0xFF_u8", Natural::from(255), Some(S::U8)),
+        ("0o377", Natural::from(255), None),
+        ("0b1111_1111", Natural::from(255), None),
+        ("0b1111_1111i8", Natural::from(255), Some(S::I8)),
+        ("1_000", Natural::from(1000), None),
+        ("1__0", Natural::from(10), None),
+        ("1_", Natural::from(1), None),
+        ("0_u8", Natural::zero(), Some(S::U8)),
+        ("0x_1_", Natural::from(1), None),
+        ("0xdead_beef", Natural::from(0xdead_beef), None),
+        ("0x1f32", Natural::from(0x1f32), None),
+        ("0xbu8", Natural::from(11), Some(S::U8)),
+        ("12usize", Natural::from(12), Some(S::Usize)),
+        ("12isize", Natural::from(12), Some(S::Isize)),
+        (
+            "340282366920938463463374607431768211456u128",
+            two_to_128.clone(),
+            Some(S::U128),
+        ),
+        (
+            "0x1_0000_0000_0000_0000_0000_0000_0000_0000",
+            two_to_128.clone(),
+            None,
+        ),
+        (
+            "0o4000000000000000000000000000000000000000000",
+            two_to_128.clone(),
+            None,
+        ),
+        (
+            "9999999999999999999999999999999999999999",
+            "9999999999999999999999999999999999999999".parse().unwrap(),
+            None,
+        ),
+    ] {
+        cases.push((text.to_owned(), value, suffix));
+    }
+    cases.push((format!("0b1{}", "0".repeat(128)), two_to_128, None));
+
+    for (text, value, suffix) in cases {
+        let lexed = lex_text(&text);
+        assert!(
+            lexed.diagnostics.is_empty(),
+            "{text}: {:?}",
+            lexed.diagnostics
+        );
+        assert_eq!(kinds(&lexed), [K::Integer, K::Eof], "{text}");
+        assert_eq!(
+            lexed.literal(lexed.tokens[0]),
+            Some(&Literal::Integer(IntegerLiteral { value, suffix })),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn invalid_integer_literals_point_at_what_is_wrong() {
+    for (text, offending, message) in [
+        ("1abc", "abc", "invalid suffix `abc` for an integer literal"),
+        ("0x1G", "G", "invalid suffix `G` for an integer literal"),
+        ("1u9", "u9", "invalid suffix `u9` for an integer literal"),
+        (
+            "1u8u8",
+            "u8u8",
+            "invalid suffix `u8u8` for an integer literal",
+        ),
+        ("0X1F", "X1F", "invalid suffix `X1F` for an integer literal"),
+        ("1é", "é", "invalid suffix `é` for an integer literal"),
+        (
+            "1else",
+            "else",
+            "invalid suffix `else` for an integer literal",
+        ),
+        ("0b12", "2", "`2` is not a digit of a base 2 literal"),
+        ("0o1_8", "8", "`8` is not a digit of a base 8 literal"),
+        ("0x", "0x", "no digits after `0x`"),
+        ("0b_", "0b_", "no digits after `0b`"),
+        ("0ou8", "0ou8", "no digits after `0o`"),
+        ("1.0abc", "abc", "invalid suffix `abc` for a float literal"),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let lexed = lex(source);
+        assert_eq!(kinds(&lexed), [K::Error, K::Eof], "{text}");
+        assert_eq!(lexed.diagnostics.len(), 1, "{text}");
+        let diagnostic = &lexed.diagnostics[0];
+        assert_eq!(diagnostic.code, "L0003", "{text}");
+        assert_eq!(diagnostic.message, message, "{text}");
+        assert_eq!(
+            source.slice(diagnostic.labels[0].span),
+            Some(offending),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_dot_after_digits_is_a_float_only_where_rust_reads_one() {
+    for (text, expected) in [
+        ("pair.0", vec![K::Name, K::Dot, K::Integer]),
+        (
+            "pair.0.1",
+            vec![K::Name, K::Dot, K::Integer, K::Dot, K::Integer],
+        ),
+        ("0..n", vec![K::Integer, K::DotDot, K::Name]),
+        ("0..=9", vec![K::Integer, K::DotDotEqual, K::Integer]),
+        (
+            "1.max(2)",
+            vec![
+                K::Integer,
+                K::Dot,
+                K::Name,
+                K::LParen,
+                K::Integer,
+                K::RParen,
+            ],
+        ),
+        ("0x1.e5", vec![K::Integer, K::Dot, K::Name]),
+    ] {
+        let lexed = lex_text(text);
+        assert!(
+            lexed.diagnostics.is_empty(),
+            "{text}: {:?}",
+            lexed.diagnostics
+        );
+        let mut found = kinds(&lexed);
+        assert_eq!(found.pop(), Some(K::Eof));
+        assert_eq!(found, expected, "{text}");
+    }
+    let nested = expression("pair.0.1");
+    let ExprKind::Index { value, index, .. } = &nested.kind else {
+        panic!("{nested:?}")
+    };
+    assert_eq!(index, "1");
+    assert!(matches!(&value.kind, ExprKind::Index { index, .. } if index == "0"));
+    for text in ["pair.0x1", "pair.0u8", "pair.0_0"] {
+        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
+        assert_eq!(parsed.diagnostics.len(), 1, "{text}");
+        assert!(parsed.diagnostics[0].message.contains("tuple position"));
+    }
+}
+
+#[test]
+fn string_literals_decode_rusts_escapes() {
+    for (text, value) in [
+        (r#""""#, ""),
+        (r#""plain text""#, "plain text"),
+        (r#""\n\r\t\\\0\'\"""#, "\n\r\t\\\0'\""),
+        (r#""\x41\x7f\x00""#, "A\x7f\0"),
+        (r#""\u{41}\u{1F4A1}\u{10FFFF}\u{00_41}""#, "A💡\u{10FFFF}A"),
+        ("\"two\nlines\"", "two\nlines"),
+        ("\"two\r\nlines\"", "two\nlines"),
+        ("\"one \\\n      line\"", "one line"),
+        ("\"one \\\r\n\t line\"", "one line"),
+        (
+            "\"// not a comment /* nor this\"",
+            "// not a comment /* nor this",
+        ),
+        ("\"💡 é\"", "💡 é"),
+    ] {
+        let lexed = lex_text(text);
+        assert!(
+            lexed.diagnostics.is_empty(),
+            "{text}: {:?}",
+            lexed.diagnostics
+        );
+        assert_eq!(kinds(&lexed), [K::String, K::Eof], "{text}");
+        assert_eq!(
+            lexed.literal(lexed.tokens[0]),
+            Some(&Literal::String(value.to_owned())),
+            "{text}"
+        );
+    }
+    let parsed = expression(r#""a \"quoted\" word""#);
+    assert_eq!(parsed.kind, ExprKind::String("a \"quoted\" word".into()));
+}
+
+#[test]
+fn string_errors_point_at_the_offending_part() {
+    for (text, code, offending, message) in [
+        (r#""a\qb""#, "L0007", r"\q", "unknown escape `\\q`"),
+        (r#""\x80""#, "L0007", r"\x80", "goes up to `\\x7F`"),
+        (r#""\xff""#, "L0007", r"\xff", "goes up to `\\x7F`"),
+        (
+            r#""\x4""#,
+            "L0007",
+            r"\x4",
+            "exactly two hexadecimal digits",
+        ),
+        (
+            r#""\xZZ""#,
+            "L0007",
+            r"\x",
+            "exactly two hexadecimal digits",
+        ),
+        (r#""\u41""#, "L0007", r"\u", "with braces"),
+        (
+            r#""\u{}""#,
+            "L0007",
+            r"\u{}",
+            "at least one hexadecimal digit",
+        ),
+        (r#""\u{41""#, "L0007", r"\u{41", "closing brace"),
+        (r#""\u{1234567}""#, "L0007", r"\u{1234567}", "at most six"),
+        (r#""\u{D800}""#, "L0007", r"\u{D800}", "not a surrogate"),
+        (
+            r#""\u{110000}""#,
+            "L0007",
+            r"\u{110000}",
+            "at most `10FFFF`",
+        ),
+        (
+            r#""never closed"#,
+            "L0006",
+            "\"",
+            "unterminated string literal",
+        ),
+        (
+            "\"ends in a backslash\\",
+            "L0006",
+            "\"",
+            "unterminated string literal",
+        ),
+        ("'", "L0006", "'", "unterminated character literal"),
+        ("'\\n", "L0006", "'", "unterminated character literal"),
+        (
+            "b\"bytes",
+            "L0006",
+            "\"",
+            "unterminated byte string literal",
+        ),
+        ("b'x", "L0006", "'", "unterminated byte literal"),
+        (
+            "r##\"raw\"#",
+            "L0006",
+            "\"",
+            "unterminated raw string literal",
+        ),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let lexed = lex(source);
+        assert_eq!(kinds(&lexed), [K::Error, K::Eof], "{text}");
+        assert_eq!(
+            lexed.diagnostics.len(),
+            1,
+            "{text}: {:?}",
+            lexed.diagnostics
+        );
+        let diagnostic = &lexed.diagnostics[0];
+        assert_eq!(diagnostic.code, code, "{text}");
+        assert!(
+            diagnostic.message.contains(message),
+            "{text}: {}",
+            diagnostic.message
+        );
+        assert_eq!(
+            source.slice(diagnostic.labels[0].span),
+            Some(offending),
+            "{text}"
+        );
+    }
+    // Every bad escape of a string is reported, and the string is one token.
+    let lexed = lex_text(r#""\q and \w" next"#);
+    assert_eq!(lexed.diagnostics.len(), 2);
+    assert_eq!(kinds(&lexed), [K::Error, K::Name, K::Eof]);
+}
+
+#[test]
+fn literal_forms_of_rust_are_lexed_whole_and_reported_as_not_in_locus_yet() {
+    for (text, what) in [
+        ("'a", "lifetimes and loop labels"),
+        ("'static", "lifetimes and loop labels"),
+        ("'_", "lifetimes and loop labels"),
+        ("'x'", "character literals"),
+        ("'1'", "character literals"),
+        ("'_'", "character literals"),
+        ("' '", "character literals"),
+        ("'\"'", "character literals"),
+        ("'\\n'", "character literals"),
+        ("'\\''", "character literals"),
+        ("'\\\\'", "character literals"),
+        ("'\\u{1F4A1}'", "character literals"),
+        ("'💡'", "character literals"),
+        ("'ab'", "character literals"),
+        ("b'x'", "byte literals"),
+        ("b'\\''", "byte literals"),
+        ("b\"bytes \\\" and more\"", "byte strings"),
+        ("c\"text\"", "C strings"),
+        ("r\"raw \\\"", "raw strings"),
+        ("r#\"a \" inside\"#", "raw strings"),
+        ("r##\"a \"# inside\"##", "raw strings"),
+        ("br\"raw\"", "raw byte strings"),
+        ("cr#\"raw\"#", "raw C strings"),
+        ("r#type", "raw identifiers"),
+        ("1.0", "float literals"),
+        ("1.", "float literals"),
+        ("1e5", "float literals"),
+        ("1E-5", "float literals"),
+        ("1_0.0_1e+1_0", "float literals"),
+        ("1.5f32", "float literals"),
+        ("2f64", "float literals"),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let lexed = lex(source);
+        assert_eq!(kinds(&lexed), [K::Error, K::Eof], "{text}");
+        assert_eq!(source.slice(lexed.tokens[0].span), Some(text));
+        assert_eq!(
+            lexed.diagnostics.len(),
+            1,
+            "{text}: {:?}",
+            lexed.diagnostics
+        );
+        assert_eq!(lexed.diagnostics[0].code, "L0005", "{text}");
+        assert_eq!(
+            lexed.diagnostics[0].message,
+            format!("{what} are not in Locus yet"),
+            "{text}"
+        );
+        // The parser adds nothing to what the lexer said.
+        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+    }
+    // A lifetime and a character literal are told apart as rustc tells them.
+    let lexed = lex_text("fn f<'a>(x: &'a u8, y: ('a', 'b'))");
+    let messages: Vec<_> = lexed
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.split(" are").next().unwrap())
+        .collect();
+    assert_eq!(
+        messages,
+        [
+            "lifetimes and loop labels",
+            "lifetimes and loop labels",
+            "character literals",
+            "character literals"
+        ]
+    );
+}
+
+#[test]
+fn every_punctuation_token_of_rust_is_a_token() {
+    let text = "+ - * / % ^ ! & | && || << >> += -= *= /= %= ^= &= |= <<= >>= = == != > < >= <= @ _ . .. ... ..= , ; : :: -> => <- # $ ? ~ ( ) [ ] { }";
+    let lexed = lex_text(text);
+    assert!(lexed.diagnostics.is_empty(), "{:?}", lexed.diagnostics);
+    assert_eq!(
+        kinds(&lexed),
+        [
+            K::Plus,
+            K::Minus,
+            K::Star,
+            K::Slash,
+            K::Percent,
+            K::Caret,
+            K::Bang,
+            K::And,
+            K::Or,
+            K::AndAnd,
+            K::OrOr,
+            K::ShiftLeft,
+            K::ShiftRight,
+            K::PlusEqual,
+            K::MinusEqual,
+            K::StarEqual,
+            K::SlashEqual,
+            K::PercentEqual,
+            K::CaretEqual,
+            K::AndEqual,
+            K::OrEqual,
+            K::ShiftLeftEqual,
+            K::ShiftRightEqual,
+            K::Equal,
+            K::EqualEqual,
+            K::BangEqual,
+            K::Greater,
+            K::Less,
+            K::GreaterEqual,
+            K::LessEqual,
+            K::At,
+            K::Underscore,
+            K::Dot,
+            K::DotDot,
+            K::DotDotDot,
+            K::DotDotEqual,
+            K::Comma,
+            K::Semicolon,
+            K::Colon,
+            K::PathSep,
+            K::Arrow,
+            K::Implies,
+            K::LeftArrow,
+            K::Hash,
+            K::Dollar,
+            K::Question,
+            K::Tilde,
+            K::LParen,
+            K::RParen,
+            K::LBracket,
+            K::RBracket,
+            K::LBrace,
+            K::RBrace,
+            K::Eof
+        ]
+    );
+    // Without spaces the longest spelling wins, as in Rust.
+    assert_eq!(
+        kinds(&lex_text("a<<=b>>=c<-d..=e...f")),
+        [
+            K::Name,
+            K::ShiftLeftEqual,
+            K::Name,
+            K::ShiftRightEqual,
+            K::Name,
+            K::LeftArrow,
+            K::Name,
+            K::DotDotEqual,
+            K::Name,
+            K::DotDotDot,
+            K::Name,
+            K::Eof
+        ]
+    );
+}
+
+#[test]
+fn operators_of_rust_are_reported_as_not_in_locus_yet() {
+    let mut cases: Vec<(String, &str, String)> = Vec::new();
+    for operator in ["+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<=", ">>="] {
+        cases.push((
+            format!("x {operator} 1"),
+            "L0116",
+            format!("compound assignment (`{operator}`) is not in Locus yet"),
+        ));
+    }
+    for (text, code, message) in [
+        (
+            "x << 1",
+            "L0116",
+            "the shift operator `<<` is not in Locus yet",
+        ),
+        (
+            "x >> 1",
+            "L0116",
+            "the shift operator `>>` is not in Locus yet",
+        ),
+        (
+            "x & 1",
+            "L0116",
+            "references and the `&` operator are not in Locus yet",
+        ),
+        (
+            "&x",
+            "L0116",
+            "references and the `&` operator are not in Locus yet",
+        ),
+        (
+            "x | 1",
+            "L0116",
+            "closures, or-patterns, and the `|` operator are not in Locus yet",
+        ),
+        (
+            "|y| y",
+            "L0116",
+            "closures, or-patterns, and the `|` operator are not in Locus yet",
+        ),
+        ("x ^ 1", "L0116", "the `^` operator is not in Locus yet"),
+        ("f(x)?", "L0116", "the `?` operator is not in Locus yet"),
+        ("-x", "L0116", "negation (`-`) is not in Locus yet"),
+        (
+            "*x",
+            "L0116",
+            "dereferences and raw pointers (`*`) are not in Locus yet",
+        ),
+        (
+            "$x",
+            "L0116",
+            "`$` belongs to macros, which are not in Locus yet",
+        ),
+        (
+            "~x",
+            "L0116",
+            "`~` is a token of Rust with no meaning in Locus",
+        ),
+        (
+            "x <- 1",
+            "L0116",
+            "`<-` is a token of Rust with no meaning in Locus",
+        ),
+        ("f(...)", "L0116", "`...` is not in Locus yet"),
+        (
+            "for i in 0..=9 () { continue() }",
+            "L0116",
+            "inclusive ranges (`..=`) are not in Locus yet",
+        ),
+        ("x + 1", "L0112", "`+` is not part of the core language"),
+        ("x - 1", "L0112", "`-` is not part of the core language"),
+        ("x * 2", "L0112", "`*` is not part of the core language"),
+        ("x / 2", "L0112", "`/` is not part of the core language"),
+        ("x % 2", "L0112", "`%` is not part of the core language"),
+    ] {
+        cases.push((text.to_owned(), code, message.to_owned()));
+    }
+    for (text, code, message) in cases {
+        let parsed = parse_text(&format!("fn f(x: u8) -> u8 {{ {text}; x }}"));
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.diagnostics[0].code, code, "{text}");
+        assert_eq!(parsed.diagnostics[0].message, message, "{text}");
+    }
+    let parsed = parse_text("fn f(x: &u8, y: *mut u8) -> u8 { 1 }");
+    assert_eq!(parsed.diagnostics.len(), 1);
+    assert!(parsed.diagnostics[0].message.starts_with("references"));
+}
+
+#[test]
+fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
+    for (text, message, declarations) in [
+        (
+            "impl S { fn get() -> u8 { 1 } }",
+            "`impl` blocks and `impl Trait` are not in Locus yet",
+            0,
+        ),
+        (
+            "use std::fmt;",
+            "`use` declarations are not in Locus yet",
+            0,
+        ),
+        (
+            "mod inner { fn f() -> u8 { 1 } }",
+            "modules (`mod`) are not in Locus yet",
+            0,
+        ),
+        (
+            "trait T { fn f() -> u8; }",
+            "traits are not in Locus yet",
+            0,
+        ),
+        (
+            "type Byte = u8;",
+            "type aliases (`type`) are not in Locus yet",
+            0,
+        ),
+        (
+            "static LIMIT: u8 = 3;",
+            "`static` items are not in Locus yet",
+            0,
+        ),
+        ("extern crate core;", "`extern` is not in Locus yet", 0),
+        (
+            "pub fn f() -> u8 { 1 }",
+            "visibility (`pub`) is not in Locus yet",
+            1,
+        ),
+        (
+            "unsafe fn f() -> u8 { 1 }",
+            "`unsafe` is not in Locus yet",
+            1,
+        ),
+        ("async fn f() -> u8 { 1 }", "`async` is not in Locus yet", 1),
+        (
+            "struct S { pub x: u8 }",
+            "visibility (`pub`) is not in Locus yet",
+            0,
+        ),
+        (
+            "fn f(mut x: u8) -> u8 { x }",
+            "`mut` is not in Locus yet",
+            0,
+        ),
+        (
+            "fn f(self) -> u8 { 1 }",
+            "`self` and methods are not in Locus yet",
+            0,
+        ),
+        ("fn f(x: Self) -> u8 { 1 }", "`Self` is not in Locus yet", 0),
+        (
+            "fn f(x: dyn T) -> u8 { 1 }",
+            "`dyn` trait objects are not in Locus yet",
+            0,
+        ),
+        (
+            "fn f(x: impl T) -> u8 { 1 }",
+            "`impl` blocks and `impl Trait` are not in Locus yet",
+            0,
+        ),
+        (
+            "fn f<T>(x: T) -> T { x }",
+            "generic parameters are not in Locus yet",
+            0,
+        ),
+        (
+            "struct S<T> { x: T }",
+            "generic parameters are not in Locus yet",
+            0,
+        ),
+        (
+            "enum E<T> { A(T) }",
+            "generic parameters are not in Locus yet",
+            0,
+        ),
+        (
+            "fn f(x: u8) -> u8 { while x < 3 { }; x }",
+            "`while` loops are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { return x; }",
+            "`return` is not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { unsafe { x } }",
+            "`unsafe` is not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { let mut y = x; y }",
+            "`mut` is not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { let ref y = x; x }",
+            "`ref` bindings are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { x as u8 }",
+            "`as` casts are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { move || x; x }",
+            "closures (`move`) are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { crate::g(x) }",
+            "`crate` paths are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { super::g(x) }",
+            "`super` paths are not in Locus yet",
+            1,
+        ),
+        (
+            "fn f(x: u8) -> u8 { async { x }; x }",
+            "`async` is not in Locus yet",
+            1,
+        ),
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.diagnostics[0].code, "L0116", "{text}");
+        assert_eq!(parsed.diagnostics[0].message, message, "{text}");
+        assert_eq!(parsed.program.declarations.len(), declarations, "{text}");
+    }
+    // A keyword Rust reserves without a use is no name, wherever it stands.
+    for text in ["fn f() -> u8 { yield }", "abstract fn f() -> u8 { 1 }"] {
+        let parsed = parse_text(text);
+        assert_eq!(parsed.diagnostics.len(), 1, "{text}");
+        assert_eq!(parsed.diagnostics[0].code, "L0115", "{text}");
+    }
+    // The fix for a keyword used as a name is offered, not applied.
+    let parsed = parse_text("fn f(type: u8) -> u8 { 1 }");
+    let suggestion = &parsed.diagnostics[0].suggestions[0];
+    assert_eq!(suggestion.replacement, "type_");
+    assert_eq!(suggestion.applicability, Applicability::MaybeIncorrect);
+}
+
+#[test]
+fn an_attribute_is_reported_once_and_its_item_is_parsed() {
+    for (text, diagnostics, declarations) in [
+        ("#[derive(Debug, Clone)] struct S { x: u8 }", 1, 1),
+        ("#![allow(unused)] fn f() -> u8 { 1 }", 1, 1),
+        ("#[test] #[cfg(any(a, b))] fn f() -> u8 { 1 }", 2, 1),
+        ("fn f() -> u8 { 1 } #[trailing]", 1, 1),
+        ("fn f() -> u8 { #[inline] let x = 1; x }", 1, 1),
+        ("struct S { #[serde(rename = \"y\")] x: u8 }", 1, 0),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let parsed = parse(source);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            diagnostics,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.program.declarations.len(), declarations, "{text}");
+        for diagnostic in &parsed.diagnostics {
+            assert_eq!(diagnostic.code, "L0105");
+            assert_eq!(diagnostic.message, "attributes are not in Locus yet");
+            let covered = source.slice(diagnostic.labels[0].span).unwrap();
+            assert!(
+                covered.starts_with('#') && covered.ends_with(']'),
+                "{covered}"
+            );
+        }
+    }
+    let parsed = parse_text("#[never closed fn f() -> u8 { 1 }");
+    assert_eq!(parsed.diagnostics[0].code, "L0105");
 }

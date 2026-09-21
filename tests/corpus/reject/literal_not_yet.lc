@@ -1,0 +1,25 @@
+// These literals lex and parse. `u8` is the one integer type so far, and a
+// string is only the message of a built-in form, which does not exist yet.
+fn wide() -> u8 {
+    1u16 //~ error: L0290 the type `u16` is not in Locus yet
+}
+
+fn signed() -> u8 {
+    0x7F_i8 //~ error: L0290 the type `i8` is not in Locus yet
+}
+
+fn past() -> u8 {
+    0x100 //~ error: L0205 `256` does not fit in `u8`
+}
+
+fn past_with_suffix() -> u8 {
+    256u8 //~ error: L0205 `256` does not fit in `u8`
+}
+
+fn huge() -> u8 {
+    340282366920938463463374607431768211456 //~ error: L0205 does not fit in `u8`
+}
+
+fn text() -> u8 {
+    "a\tmessage" //~ error: L0290 string literals are not in Locus yet
+}
