@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 48,
-  "savedAt": "2026-09-21T23:37:26.000Z",
+  "rev": 49,
+  "savedAt": "2026-09-21T23:42:04.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2396,10 +2396,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Diagnostics are golden",
     "",
-    "Every rejected file under tests/corpus/reject has a NAME.stderr beside it holding exactly what locus check prints for it, and a test compares them; LOCUS_BLESS=1 rewrites the goldens, and the diff is reviewed like code. A second test fails if any error code in the source has no rejected file."
+    "Every rejected file under tests/corpus/reject has a NAME.stderr beside it holding exactly what locus check prints for it, and a test compares them; LOCUS_BLESS=1 rewrites the goldens, and the diff is reviewed like code. A second test fails if any error code in the source has no rejected file.",
+    "",
+    "## The kernel is attacked",
+    "",
+    "tests/kernel_soundness.rs pairs every proof it can find, hand-built, from the theory, and from the corpus, with claims known to be false by an evaluator of its own, and with thousands of one-node mutations of the proof, and requires the kernel to reject every pairing. A mutant that proves some other claim is checked against the oracle too. Sabotaging the kernel in a dozen ways was confirmed to produce findings before the test was kept."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T23:37:20.000Z"
+   "updated": "2026-09-21T23:42:04.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7270,12 +7274,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t303",
    "n": 187,
    "title": "R2 · Kernel soundness under mutation: no proof is accepted for a claim known to be false",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. Accepting a changed proof of a true claim is harmless, and a changed proof may validly prove some other proposition, so neither is a finding. What would be a finding is a proof accepted for a false claim. For every proof the corpus produces, the test makes claims known to be false (the negation of the original where that is closed or bounded, and perturbed claims refuted by evaluation over a small domain) and checks them against the original proof and against random changes of one node of it: another hypothesis, another axiom argument, a swapped subproof.\n\nTests.\n- The kernel rejects every pairing of a proof with a claim known to be false.\n- A changed proof checked against the original claim may be accepted; the count is printed, for interest only.\n- Runs over every proof in the corpus, so it grows with the language.\n- Covers the Int forms of K2 (rebased after K2 landed).\n\nDone when. A standing check on the one component everything trusts.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September as tests/kernel_soundness.rs. Triples come from 67 hand-built proofs covering every rule and axiom family (Int and division included), the 13 theory lemmas, and every proof the elaborator finds for the corpus (recorded through a new HoleReport::found). The oracle is an evaluator of its own, three-valued, exhaustive over bool and u8 and sampling over Nat and Int; a claim is false only when a witness satisfies every hypothesis. Mutations are generic over axioms through Axiom::terms(). Fast: about 17,000 mutants in 3 s; extended: 1.7 million in 78 s, no finding. Sabotage: Evaluate deciding \u003c= as \u003c gives 67 findings; an axiom stated wrongly is caught at setup by its own positive triple. K4 and later kernel commits must extend the exhaustive matches here, which the compiler enforces.\n\nLane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. Accepting a changed proof of a true claim is harmless, and a changed proof may validly prove some other proposition, so neither is a finding. What would be a finding is a proof accepted for a false claim. For every proof the corpus produces, the test makes claims known to be false (the negation of the original where that is closed or bounded, and perturbed claims refuted by evaluation over a small domain) and checks them against the original proof and against random changes of one node of it: another hypothesis, another axiom argument, a swapped subproof.\n\nTests.\n- The kernel rejects every pairing of a proof with a claim known to be false.\n- A changed proof checked against the original claim may be accepted; the count is printed, for interest only.\n- Runs over every proof in the corpus, so it grows with the language.\n- Covers the Int forms of K2 (rebased after K2 landed).\n\nDone when. A standing check on the one component everything trusts.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:53:26.000Z"
+   "updated": "2026-09-21T23:42:04.000Z"
   },
   {
    "id": "t304",
