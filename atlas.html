@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 29,
-  "savedAt": "2026-09-21T22:27:41.000Z",
+  "rev": 30,
+  "savedAt": "2026-09-21T22:30:25.000Z",
   "nextTask": 192,
   "nextId": 308,
   "taskPrefix": "LOC",
@@ -2917,7 +2917,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "- An integer literal takes the type expected of it, and i32 when nothing expects one, as in Rust. Suffixes (255u8), and hexadecimal, octal, and binary literals are part of the core. String literals exist for the messages of the built-in forms.",
     "",
-    "- Type arguments are written only on the types the language provides, such as Ghost\u003cT> and Seq\u003cT>, and later Option\u003cT> and Vec\u003cT>. Type parameters on a programmer's own types and functions arrive with generics, which need type variables in the logic. The alternative considered was a small subset of generics in the core.",
+    "- Type arguments are written only on the types the language provides, Ghost\u003cT> in the core, and later Seq\u003cT>, Option\u003cT>, and Vec\u003cT>. Type parameters on a programmer's own types and functions arrive with generics, which need type variables in the logic. The alternative considered was a small subset of generics in the core.",
     "",
     "- Enum variants with named fields are part of the core. Explicit discriminants, tuple structs, unit structs, and the newtype idiom are polish.",
     "",
@@ -2972,6 +2972,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- What this asks of the kernel: Int, by the axioms listed below, where there is only Nat with addition today; for each machine type a view to Int and a wrap from Int, generalizing the present model of u8; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
     "",
     "- Int enters the kernel by axioms, with literals of any size and native evaluation, and not by a construction from Nat, which would need the ring laws proved by hand in the kernel's own terms while native evaluation of literals is trusted either way. Nat remains, for induction. An ordered ring is not enough to be the integers, since the order of an ordered ring need not be discrete. The contract states: the ring laws and the order; discreteness, that nothing lies strictly between n and n + 1; for each machine type the view to Int, its range, the wrap from Int, and that they round-trip; and quotient and remainder that truncate toward zero, characterized by a == (a / b) * b + a % b, by the remainder being smaller than the divisor in size and having the sign of a, and by the value 0 for a zero divisor. The arithmetic procedure is scoped by the acceptance examples: linear constraints over Int, the facts about machine ranges, and division by a literal reduced to linear constraints through the characterization above, each reduction a checked step and not an assumption. Random tests check the evaluator and the models against Rust; they say nothing about whether the axioms are consistent, which rests on the integers being a model of them and on keeping the list short and standard.",
+    "- Linear arithmetic is checked by one kernel rule and found outside the kernel. A certificate is a goal and a list of pairs, each a kernel proof and a non-negative literal coefficient. Every constraint is the conclusion of a proof checked in the ordinary way, so the procedure that finds certificates asserts nothing on its own authority: a range fact is an instance of a machine model axiom, a quotient and remainder constraint an instance of the division axioms. The rule reads each conclusion and the negated goal as a linear expression over Int, with anything that is not +, -, a literal, or multiplication by a literal treated as an opaque atom; tightens strict inequalities by discreteness; and checks that the combination sums to a false statement about literals. The alternative, spelling the same reasoning out in ring and order axioms, keeps the kernel smaller by a couple of hundred lines and makes each line of arithmetic a proof of hundreds of steps, in a kernel that has no normalizer to shorten them.",
     "",
     "Plan: LOC-11, LOC-12, LOC-3, LOC-9, LOC-118, LOC-119, LOC-120, LOC-121, LOC-122, LOC-123, LOC-124, LOC-145.",
     "",
@@ -2994,7 +2995,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "A promise is checked against the body: every construct and every callee must keep it. A foreign declaration states its promises and is trusted. Only termination bears on the soundness of the logic, and the logic is protected by construction, since only total kernel terms appear in propositions. The other promises are claims about runtime behavior, enforced by a table from constructs to effects and a check at each call, in the check IR so that the check is on the trusted path.",
     "",
-    "- A panic is a third way for a function to end, beside returning and never returning. The interpreters report it, generated Rust is compared with the interpreter on it, and the statement that erasure preserves behavior speaks of it. Partial correctness is unchanged: a result type says what holds if the function returns. With &mut and protected types a further question arises, since a panic in the middle of an update leaves the caller's value half changed and a Rust caller that catches the panic can see it; that belongs with protected exports.",
+    "- A panic is a third way for a function to end, beside returning and never returning. The interpreters report it, generated Rust is compared with the interpreter on it, and the statement that erasure preserves behavior speaks of it. Partial correctness is unchanged: a result type says what holds if the function returns. With &mut and protected types a further question arises, since a panic in the middle of an update leaves the caller's value half changed and a Rust caller that catches the panic can see it; the rule is the next point.",
+    "- A value whose fields carry evidence must not be left broken where a panic could expose it. A function that assigns through a &mut parameter in a way that invalidates evidence stored behind that parameter must promise no_panic. Replacing the whole value at once, *self = Percent { ... }, invalidates nothing and needs no promise. A value the function owns needs no rule: if the function panics the value is dropped unseen, since no Locus type has a destructor. A finer rule, which forbids a panic only between the assignment and the refresh, can replace this one later without rejecting any program it accepts.",
     "",
     "Plan: LOC-13, LOC-59, LOC-138.",
     "",
@@ -3109,7 +3111,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Logic-only types and erasure by type. This supersedes the ghost keyword on binders that section 2.4 of the language as built defers.",
     "",
     "- Two ideas are kept apart. Every value has a logical value, which is what propositions speak of: a u8 is a number below 256, a Vec is a sequence, a Tree is a tree. Separately, a type either has a runtime form or has none.",
-    "- Some types have no runtime form by nature: Prop, proof types, Int, the unbounded integers, and Seq\u003cT>, the finite sequences, with Map and Set to follow. They are grouped under the name logic, and are built-in names until modules exist. Int and Seq never acquire a runtime form. A runtime Int would be a big number with a heap and an allocation at every operation, and giving an erased type a runtime form later would silently turn reasoning into computation. A program that needs big numbers at runtime uses a library type whose logical value is an Int, as the logical value of a Vec\u003cT> is a Seq\u003cT>.",
+    "- Some types have no runtime form by nature: Prop, proof types, Int, the unbounded integers, and Seq\u003cT>, the finite sequences, with Map and Set to follow. Seq arrives after the core, with its own theory in the kernel; Int and Ghost\u003cT> are in the core. They are grouped under the name logic, and are built-in names until modules exist. Int and Seq never acquire a runtime form. A runtime Int would be a big number with a heap and an allocation at every operation, and giving an erased type a runtime form later would silently turn reasoning into computation. A program that needs big numbers at runtime uses a library type whose logical value is an Int, as the logical value of a Vec\u003cT> is a Seq\u003cT>.",
     "- Any other type gives up its runtime form on request, as Ghost\u003cT>, which keeps the logical value of a T and nothing else. snapshot!(e) builds one: it takes the value of e as it is now, never executes e, and neither moves nor copies anything. Inside a proposition a Ghost\u003cT> reads as the T. At first snapshot! applies only to a variable that is still live. Ghost\u003cT> erases to the zero-sized marker of the same name, so the generated Rust reads as the source does.",
     "- One rule: a binding, field, parameter, or result is erased exactly when its type has no runtime form. There is no keyword and no attribute. The rules that already govern Prop apply unchanged: erased values flow only into erased positions, a runtime branch cannot be chosen by one, and a struct may have such fields. Runtime containers of logic-only types, such as Vec\u003cInt>, are not allowed at first.",
     "- An erased result is not an erasable computation. fn clear(x: &mut u32) -> @(x == 0) returns only evidence, keeps all three promises, and writes through x; removing the call would remove the write. A call is removed only when nothing it does can be observed: its result has no runtime form, it keeps the three promises, and it takes no &mut to anything with a runtime form. Otherwise the call is kept and its result is the marker. A function has no runtime form only when every call of it could be removed.",
@@ -3135,7 +3137,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:30:25.000Z"
   },
   {
    "id": "target-examples",
@@ -3543,16 +3545,15 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- **R3** LOC-188. Golden diagnostics, and a test that every error code is exercised. After: H1.",
     "- **R4** LOC-189. Acceptance: the target examples run, the legacy is gone, and Now is rewritten. After: E3, E7, E8, E9, E10, M5, O4, K8, R1, R2, R3.",
     "",
-    "## Decisions this plan needs",
+    "## Decisions",
     "",
-    "- **The order itself** (LOC-136). This document is the proposal.",
-    "- **A kernel rule for linear certificates** (K6). Proposed: yes, one trusted rule of a couple of hundred lines, against proofs of hundreds of steps for a line of arithmetic. It is the largest single addition to the kernel in the plan.",
-    "- **Seq\u003cT> leaves the core.** Proposed: yes. No acceptance example needs it, and it brings a theory of sequences into the kernel. Ghost\u003cT> and Int stay.",
-    "- **Percent without Option.** Proposed: an enum of its own in the core; Option\u003cT> arrives with generics or as a provided type, later.",
-    "- **What locus build emits** (LOC-135), needed before O2.",
-    "- **The design of M0** (LOC-129), needed before M1 and, for its seventh case, before E6. Until it is agreed, the mutation lane does not start.",
-    "- **A protected value behind &mut when a panic unwinds** (LOC-191), needed before O3. Proposed: the conservative rule written there.",
-    "- **The contract of the arithmetic certificate**, written into the Kernel contract with one complete certificate before K6 is coded.",
+    "Decided on 21 September, and recorded in Target language: the order of this plan (LOC-136); one kernel rule that checks linear certificates (K6); Seq\u003cT> leaves the core; Percent uses an enum of its own until Option exists; a function that invalidates evidence behind a &mut parameter must promise no_panic (LOC-191).",
+    "",
+    "Still needed:",
+    "",
+    "- **What locus build emits** (LOC-135), before O2.",
+    "- **The design of M0** (LOC-129), before M1 and, for its seventh case, before E6. Until it is agreed, the mutation lane does not start.",
+    "- **The contract of the arithmetic certificate**, written into the Kernel contract with one complete certificate, before K6 is coded.",
     "- Not blocking: a finite loop that may promise to terminate (LOC-144), a lighter spelling for promises (LOC-143) and for a proposition value (LOC-115). Each is a small change after the core if decided later.",
     "",
     "## Left out of the core on purpose",
@@ -3560,7 +3561,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Recursion and decreases, shared references with lifetimes, generics and traits, Seq, Map, and Set, usize and slices, bit operators and shifts, match parity, floats, modules across files and packages, the header and implementation split, and the polish list. Each has its project in the Plan."
    ],
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:41.000Z"
+   "updated": "2026-09-21T22:30:25.000Z"
   },
   {
    "id": "working-notes",
@@ -5892,13 +5893,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
   {
    "id": "t191",
    "n": 97,
-   "title": "Type arguments on the types the language provides: Ghost\u003cT>, Seq\u003cT>",
+   "title": "Type arguments on the types the language provides: Ghost\u003cT> in the core",
    "status": "backlog",
    "priority": 0,
    "project": "p2",
-   "notes": "Target language. User type parameters arrive with generics.",
+   "notes": "Seq\u003cT> left the core on 21 September; it arrives with its theory in the kernel, under Logic growth.\n\nTarget language. User type parameters arrive with generics.",
    "created": "2026-09-21T20:29:22.000Z",
-   "updated": "2026-09-21T20:29:22.000Z"
+   "updated": "2026-09-21T22:30:25.000Z"
   },
   {
    "id": "t192",
@@ -6322,12 +6323,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t251",
    "n": 136,
    "title": "Decide the order of implementation, and what leaves the core",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p89",
-   "notes": "Proposed 21 September in the Build plan document and the Core build project; waiting for confirmation.\n\nA second review (21 September) proposed nearly the same order: 1. the syntax changes, explicit visibility, and exact evidence; 2. promises, Int, machine arithmetic, and the certificates the examples need; 3. mutable locals and tracked evidence, after LOC-129; 4. moves, references as parameters, and protected exports. The lock file, a lighter spelling for promises, richer patterns, and collections can wait.\n\nThe present pipeline works end to end with about 200 tests. A suggested order that keeps it working: the changes of syntax (prop!, @P, keywords, precedence, literals, paths, pub); promises in place of math fn; Int and the machine integers in the kernel, with arithmetic; let mut, tracked evidence, and the loop forms; moves and derive; return, the never type, and the panicking forms. The lock file of found proofs depends on a stable form for proofs and could leave the core.",
+   "notes": "Decided 21 September: the order of the Build plan is accepted.\n\nProposed 21 September in the Build plan document and the Core build project; waiting for confirmation.\n\nA second review (21 September) proposed nearly the same order: 1. the syntax changes, explicit visibility, and exact evidence; 2. promises, Int, machine arithmetic, and the certificates the examples need; 3. mutable locals and tracked evidence, after LOC-129; 4. moves, references as parameters, and protected exports. The lock file, a lighter spelling for promises, richer patterns, and collections can wait.\n\nThe present pipeline works end to end with about 200 tests. A suggested order that keeps it working: the changes of syntax (prop!, @P, keywords, precedence, literals, paths, pub); promises in place of math fn; Int and the machine integers in the kernel, with arithmetic; let mut, tracked evidence, and the loop forms; moves and derive; return, the never type, and the panicking forms. The lock file of found proofs depends on a stable form for proofs and could leave the core.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T22:14:21.000Z"
+   "updated": "2026-09-21T22:30:25.000Z"
   },
   {
    "id": "t252",
@@ -6927,12 +6928,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t307",
    "n": 191,
    "title": "Decide the rule for a protected value behind &mut when a panic unwinds past a broken invariant",
-   "status": "todo",
+   "status": "done",
    "priority": 3,
    "project": "p89",
    "created": "2026-09-21T22:27:28.000Z",
-   "updated": "2026-09-21T22:27:28.000Z",
-   "notes": "Raised by review of the Build plan, 21 September; Target language mentions the question under Effects and leaves it to protected exports. A method takes &mut self on a type whose fields carry evidence, assigns a field, which invalidates the evidence, and panics before refreshing it. The checker looks only at the return path, so it is satisfied. A Rust caller that wrapped the call in catch_unwind now holds a value whose invariant is false, in safe Rust. A value owned by the function that panics is not a problem: it is dropped unseen, since Locus types have no Drop.\n\nRecommended, conservative: between an assignment that invalidates evidence stored in a place reached through a &mut parameter and the refresh of that evidence, nothing may panic; to begin with this is enforced by requiring #[no_panic] on any function that makes such an assignment. Replacing the whole value at once, *self = Percent { ... }, invalidates nothing and needs no promise. A finer rule, which looks only at the window between the assignment and the refresh, can replace it later without breaking any program.\n\nNeeded before O3 (LOC-184). The Rust caller test is in O4 (LOC-185), and the design case is the eighth of M0."
+   "updated": "2026-09-21T22:30:25.000Z",
+   "notes": "Decided 21 September: the conservative rule below. Target language: Effects are promises.\n\nRaised by review of the Build plan, 21 September; Target language mentions the question under Effects and leaves it to protected exports. A method takes &mut self on a type whose fields carry evidence, assigns a field, which invalidates the evidence, and panics before refreshing it. The checker looks only at the return path, so it is satisfied. A Rust caller that wrapped the call in catch_unwind now holds a value whose invariant is false, in safe Rust. A value owned by the function that panics is not a problem: it is dropped unseen, since Locus types have no Drop.\n\nRecommended, conservative: between an assignment that invalidates evidence stored in a place reached through a &mut parameter and the refresh of that evidence, nothing may panic; to begin with this is enforced by requiring #[no_panic] on any function that makes such an assignment. Replacing the whole value at once, *self = Percent { ... }, invalidates nothing and needs no promise. A finer rule, which looks only at the window between the assignment and the refresh, can replace it later without breaking any program.\n\nNeeded before O3 (LOC-184). The Rust caller test is in O4 (LOC-185), and the design case is the eighth of M0."
   }
  ]
 }
