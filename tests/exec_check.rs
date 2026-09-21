@@ -4,7 +4,9 @@
 
 use std::rc::Rc;
 
-use locus::exec::{Arm, Block, ExecError, ExecFn, ExecFnId, ForStmt, Program, Stmt, Tail};
+use locus::exec::{
+    Arm, Block, ExecError, ExecFn, ExecFnId, ForStmt, Program, Promises, Stmt, Tail,
+};
 use locus::kernel::derive::symm_at;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
@@ -83,6 +85,7 @@ fn increment() -> ExecFn {
     let (out_id, out) = var();
     let out_is = HypId::fresh();
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::U8,
             [n] => increment_result(n),
@@ -145,6 +148,7 @@ fn a_dependent_result_and_a_caller_that_reuses_its_evidence() {
             Proof::Refl(Term::proj(second.clone(), 0))
         };
         ExecFn {
+            promises: Promises::default(),
             signature: Type::function(1, |params| match params {
                 [] => Type::U8,
                 [n] => result(n),
@@ -209,6 +213,7 @@ fn preserve(use_the_fact: bool) -> ExecFn {
         Proof::Refl(Term::U8(0))
     };
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::U8,
             [n] => result(n),
@@ -283,6 +288,7 @@ fn an_enum_carries_the_decision_and_its_evidence() {
         )
     };
     let classify = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::U8,
             _ => Type::Enum(world.classified),
@@ -333,6 +339,7 @@ fn an_enum_carries_the_decision_and_its_evidence() {
         }
     };
     let caller = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |_| Type::U8),
         params: vec![m_id],
         body: block(
@@ -444,6 +451,7 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
         )),
     );
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::U8,
             [limit] => result(limit),
@@ -504,6 +512,7 @@ fn spin(prelude: &Prelude) -> ExecFn {
     let (never_id, never) = var();
     let falsehood = Type::proof(prelude.falsehood_prop());
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(0, |_| falsehood.clone()),
         params: vec![],
         body: block(
@@ -532,6 +541,7 @@ fn a_divergent_function_may_advertise_a_proof_of_false() {
 
     let (impossible_id, impossible) = var();
     let caller = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(0, |_| Type::U8),
         params: vec![],
         body: block(
@@ -551,6 +561,7 @@ fn a_divergent_function_may_advertise_a_proof_of_false() {
 
 fn returns_u8(params: Vec<VarId>, arity: usize, body: Block) -> ExecFn {
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(arity, |_| Type::U8),
         params,
         body,
@@ -615,6 +626,7 @@ fn control_flow_is_checked() {
     // One arm too few.
     let (b_id, b) = var();
     let short_match = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::Bool,
             _ => Type::U8,
@@ -716,6 +728,7 @@ fn calls_and_bindings_are_checked() {
     let (n_id, n) = var();
     let h_id = VarId::fresh();
     let needs_three = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(2, |params| match params {
             [] => Type::U8,
             [n] => Type::proof(u8_eq(n.clone(), Term::U8(3))),
@@ -820,6 +833,7 @@ fn calls_and_bindings_are_checked() {
         ),
     };
     let escapes = ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::Bool,
             _ => Type::U8,
@@ -914,6 +928,7 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
         lemma(world.theory.u8_zero_le, vec![n.clone()])
     };
     ExecFn {
+        promises: Promises::default(),
         signature: Type::function(1, |params| match params {
             [] => Type::U8,
             [n] => counted_result(n),

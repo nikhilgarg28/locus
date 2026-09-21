@@ -276,6 +276,7 @@ fn pattern_of(pattern: &Pattern) -> EPattern {
         Pattern::Bind { binder, .. } => EPattern::Bind {
             id: binder.id,
             name: binder.name.clone(),
+            ty: erase_type(&binder.ty),
         },
         Pattern::Wildcard => EPattern::Wildcard,
         Pattern::Tuple(patterns) => EPattern::Tuple(patterns.iter().map(pattern_of).collect()),

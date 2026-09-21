@@ -74,7 +74,14 @@ pub enum EStmt {
 
 #[derive(Clone, Debug)]
 pub enum EPattern {
-    Bind { id: VarId, name: String },
+    /// A name with its type. The type is what the name has when the value
+    /// bound never yields, where there is no value to take a type from, and
+    /// it is what the printer writes there so that Rust need not infer it.
+    Bind {
+        id: VarId,
+        name: String,
+        ty: EType,
+    },
     Wildcard,
     Tuple(Vec<EPattern>),
 }
@@ -149,6 +156,9 @@ pub enum EExpr {
     },
     Break(Box<EExpr>),
     Continue(Vec<EExpr>),
+    /// `return value`: the call in progress ends with this value, from any
+    /// depth of loops and matches. Like `break` it yields no value.
+    Return(Box<EExpr>),
     /// A point the program was shown never to reach.
     Trap,
     /// `panic!("message")`: the call in progress ends in a panic with this

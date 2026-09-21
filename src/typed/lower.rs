@@ -159,6 +159,8 @@ impl Session {
             Ok(FnRef::Math(id))
         } else {
             let function = ExecFn {
+                // The surface has no syntax for promises yet.
+                promises: exec::Promises::default(),
                 signature,
                 params: item.params.iter().map(|param| param.id).collect(),
                 body: lower_block(&item.body)?,

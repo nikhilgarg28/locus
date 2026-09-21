@@ -5,10 +5,11 @@ mod common;
 
 use common::*;
 use locus::erased::{
-    EBlock, EExpr, EFn, EStmt, EType, Interpreter, Module, Outcome, RunError, Value, check_module,
+    EArm, EBlock, EExpr, EFn, EPattern, EStmt, EType, Interpreter, Module, Outcome, RunError,
+    TypeError, Value, check_module,
 };
-use locus::kernel::{Definitions, FnId, Proof, Term, Type};
-use locus::typed::{Binder, Expr, FnItem, FnRef};
+use locus::kernel::{Definitions, FnId, Prim, Proof, Term, Type, VarId};
+use locus::typed::{Binder, CompareOp, Expr, FnItem, FnRef};
 
 const FUEL: u64 = 100_000;
 
@@ -316,4 +317,185 @@ fn the_type_checker_guards_erasure() {
     };
     module.fns = vec![caller];
     assert!(check_module(&module).is_err());
+}
+
+// --- Return, and what a never-yielding value excuses ------------------------------
+
+/// `fn f(n: u8) -> u8 { body }`, with `n` the parameter of `increment`.
+fn u8_to_u8(session: &locus::typed::Session, body: EBlock) -> Module {
+    let mut module = session.erased().clone();
+    module.fns.truncate(1);
+    module.fns[0].result = EType::U8;
+    module.fns[0].body = body;
+    module
+}
+
+fn wrapping_add(receiver: EExpr, argument: EExpr) -> EExpr {
+    EExpr::Method {
+        prim: Prim::WrappingAdd,
+        receiver: Box::new(receiver),
+        arguments: vec![argument],
+    }
+}
+
+/// A name with its type, as a pattern and as the variable it binds.
+fn bind(name: &str, ty: EType) -> (EPattern, EExpr) {
+    let id = VarId::fresh();
+    let pattern = EPattern::Bind {
+        id,
+        name: name.into(),
+        ty,
+    };
+    let var = EExpr::Var {
+        id,
+        name: name.into(),
+    };
+    (pattern, var)
+}
+
+fn tail(expr: EExpr) -> EBlock {
+    EBlock {
+        stmts: vec![],
+        tail: Some(Box::new(expr)),
+    }
+}
+
+#[test]
+fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
+    // fn f(n: u8) -> u8 {
+    //     loop (i: u8 = 0) -> u8 {
+    //         if i == n { return <returned> } else { continue(i.wrapping_add(1)) }
+    //     }
+    // }
+    let (mut session, _, _) = setup();
+    let reference = session.declare_fn(&increment(false)).unwrap();
+    let n = first_parameter(&session.erased().fns[0]);
+    let i_id = VarId::fresh();
+    let i = || EExpr::Var {
+        id: i_id,
+        name: "i".into(),
+    };
+    let looping = |returned: EExpr| {
+        u8_to_u8(
+            &session,
+            tail(EExpr::Loop {
+                state: vec![(i_id, "i".into(), EType::U8, EExpr::U8(0))],
+                result: EType::U8,
+                body: tail(EExpr::If {
+                    condition: Box::new(EExpr::Compare {
+                        op: CompareOp::Eq,
+                        left: Box::new(i()),
+                        right: Box::new(n.clone()),
+                    }),
+                    then_block: tail(EExpr::Return(Box::new(returned))),
+                    else_block: tail(EExpr::Continue(vec![wrapping_add(i(), EExpr::U8(1))])),
+                }),
+            }),
+        )
+    };
+    let module = looping(wrapping_add(i(), EExpr::U8(100)));
+    assert_eq!(check_module(&module), Ok(()));
+    assert_eq!(
+        run(&module, reference, vec![Value::U8(0)]),
+        Ok(Outcome::Value(Value::U8(100)))
+    );
+    // Three iterations, then the return.
+    assert_eq!(
+        run(&module, reference, vec![Value::U8(3)]),
+        Ok(Outcome::Value(Value::U8(103)))
+    );
+
+    // A return must supply the function's result type.
+    let wrong = looping(EExpr::Bool(true));
+    assert_eq!(
+        check_module(&wrong),
+        Err(TypeError(
+            "a returned value has type Bool, expected U8".into()
+        ))
+    );
+}
+
+#[test]
+fn what_follows_a_value_that_never_yields_is_still_checked() {
+    let (mut session, prelude, _) = setup();
+    session.declare_enum(&classified_enum(prelude)).unwrap();
+    session.declare_fn(&increment(false)).unwrap();
+    let panics = || EExpr::Panic {
+        message: "never".into(),
+    };
+
+    // let m: u8 = panic!("never"); <rest>; m.wrapping_add(1)
+    let sequel = |first: EExpr, rest: EExpr| {
+        let (m, m_var) = bind("m", EType::U8);
+        u8_to_u8(
+            &session,
+            EBlock {
+                stmts: vec![
+                    EStmt::Let {
+                        pattern: m,
+                        value: first,
+                    },
+                    EStmt::Expr(rest),
+                ],
+                tail: Some(Box::new(wrapping_add(m_var, EExpr::U8(1)))),
+            },
+        )
+    };
+    assert_eq!(check_module(&sequel(panics(), EExpr::U8(0))), Ok(()));
+    // The statement after the panic is checked.
+    let ill = sequel(panics(), wrapping_add(EExpr::Bool(true), EExpr::U8(1)));
+    assert!(check_module(&ill).is_err());
+    // So is the tail, through the type the name carries.
+    let (b, b_var) = bind("b", EType::Bool);
+    let tail_ill = u8_to_u8(
+        &session,
+        EBlock {
+            stmts: vec![EStmt::Let {
+                pattern: b,
+                value: panics(),
+            }],
+            tail: Some(Box::new(wrapping_add(b_var, EExpr::U8(1)))),
+        },
+    );
+    assert!(check_module(&tail_ill).is_err());
+    // The type a name carries must be the type of its value, when there is one.
+    let (b, _) = bind("b", EType::Bool);
+    let disagrees = u8_to_u8(
+        &session,
+        EBlock {
+            stmts: vec![EStmt::Let {
+                pattern: b,
+                value: EExpr::U8(1),
+            }],
+            tail: Some(Box::new(EExpr::U8(2))),
+        },
+    );
+    assert!(check_module(&disagrees).is_err());
+
+    // A match on a scrutinee that never yields still has its arms checked,
+    // against the enum the match names.
+    let matching = |arm_value: EExpr| {
+        let arm = |name: &str, value: EExpr| EArm {
+            variant_name: name.into(),
+            payload: vec![(VarId::fresh(), "v".into()), (VarId::fresh(), "h".into())],
+            body: tail(value),
+        };
+        u8_to_u8(
+            &session,
+            tail(EExpr::Match {
+                scrutinee: Box::new(panics()),
+                enum_name: "Classified".into(),
+                arms: vec![arm("Zero", EExpr::U8(0)), arm("NonZero", arm_value)],
+            }),
+        )
+    };
+    assert_eq!(check_module(&matching(EExpr::U8(1))), Ok(()));
+    assert!(check_module(&matching(EExpr::Bool(true))).is_err());
+    // No arm is ever reached.
+    let module = matching(EExpr::U8(1));
+    let reference = module.fns[0].reference;
+    assert_eq!(
+        run(&module, reference, vec![Value::U8(0)]),
+        Ok(Outcome::Panic("never".into()))
+    );
 }

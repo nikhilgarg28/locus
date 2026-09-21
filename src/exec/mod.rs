@@ -12,4 +12,4 @@ mod ir;
 
 pub use check::{ExecError, Program};
 pub use interp::CheckInterpreter;
-pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Stmt, Tail};
+pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Promise, Promises, Stmt, Tail};

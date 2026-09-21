@@ -9,10 +9,10 @@
 //! `Ghost`, without being looked into, which is what skipping means here.
 //!
 //! A call ends in the same `Outcome` as in the other interpreter: a value, a
-//! panic with its message, or out of fuel. The check IR has no construct that
-//! panics yet, so nothing here produces `Outcome::Panic`; the case is part of
-//! the type so that the two interpreters are compared as outcomes from now
-//! on, and the construct arrives with the checked semantics of panics.
+//! panic with its message, or out of fuel. A panic ending is a panic of the
+//! call, and of every call around it. A `return` travels the same way, as a
+//! `Stop`, out through whatever loops and matches it stands in, and stops at
+//! the call of its own function, whose value it is.
 
 use crate::erased::{Outcome, RunError, Stop, Value, outcome};
 use crate::kernel::{ForLoop, Prim, Term, VarId, evaluate_primitive};
@@ -102,9 +102,10 @@ impl<'p> CheckInterpreter<'p> {
         let result = self.block(&function.body);
         self.free = saved_free;
         self.bound = saved_bound;
-        match result? {
-            Flow::Value(value) => Ok(value),
-            _ => stuck("a function body ended in break or continue"),
+        match result {
+            Ok(Flow::Value(value)) | Err(Stop::Return(value)) => Ok(value),
+            Ok(_) => stuck("a function body ended in break or continue"),
+            Err(stop) => Err(stop),
         }
     }
 
@@ -136,6 +137,9 @@ impl<'p> CheckInterpreter<'p> {
             Tail::Break(value) => Ok(Flow::Break(self.term(value)?)),
             Tail::Continue(next) => Ok(Flow::Continue(self.terms(next)?)),
             Tail::Match { scrutinee, arms } => self.arms(scrutinee, arms),
+            Tail::Return(value) => Err(Stop::Return(self.term(value)?)),
+            // The proof that the point is unreachable is a ghost: skipped.
+            Tail::Panic { message, .. } => Err(Stop::Panic(message.clone())),
         }
     }
 

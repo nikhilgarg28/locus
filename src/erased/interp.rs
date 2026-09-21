@@ -80,9 +80,12 @@ impl std::error::Error for RunError {}
 
 /// Why evaluation stopped short of a value. It travels as the error of every
 /// step of an interpreter, so `?` passes a panic out through whatever was
-/// being evaluated, in evaluation order, just as it passes out of fuel.
+/// being evaluated, in evaluation order, just as it passes out of fuel. A
+/// `return` travels the same way and stops at the call of its function.
 #[derive(Debug)]
 pub(crate) enum Stop {
+    /// A `return` with its value, on its way to the call it ends.
+    Return(Value),
     Panic(String),
     OutOfFuel,
     Error(RunError),
@@ -102,6 +105,8 @@ pub(crate) fn outcome(result: Result<Value, Stop>) -> Result<Outcome, RunError> 
         Err(Stop::Panic(message)) => Ok(Outcome::Panic(message)),
         Err(Stop::OutOfFuel) => Ok(Outcome::OutOfFuel),
         Err(Stop::Error(error)) => Err(error),
+        // Every call catches the returns of its own body.
+        Err(Stop::Return(_)) => Err(RunError::Stuck("a return outside a function".into())),
     }
 }
 
@@ -177,9 +182,10 @@ impl<'m> Interpreter<'m> {
         let result = self.block(&function.body);
         self.depth -= 1;
         self.env = saved;
-        match result? {
-            Flow::Value(value) => Ok(value),
-            _ => stuck(format!("{} ended in break or continue", function.name)),
+        match result {
+            Ok(Flow::Value(value)) | Err(Stop::Return(value)) => Ok(value),
+            Ok(_) => stuck(format!("{} ended in break or continue", function.name)),
+            Err(stop) => Err(stop),
         }
     }
 
@@ -395,6 +401,7 @@ impl<'m> Interpreter<'m> {
                     Err(flow) => flow,
                 });
             }
+            EExpr::Return(value) => return Err(Stop::Return(value!(self.expr(value)))),
         }))
     }
 

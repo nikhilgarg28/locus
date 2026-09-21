@@ -33,6 +33,12 @@
 //! arguments of a call, the call itself. Rust warns that such code is
 //! unreachable, and the header allows exactly that on purpose, since the
 //! printer keeps the shape of the source and does not prune it.
+//!
+//! A `let` whose value contains a panic, a trap, or a transfer of control
+//! is printed with the type of its pattern, `let x: u8 = panic!(...)`,
+//! because Rust may have nothing else to infer the type of `x` from, and
+//! what follows may need it (E0282). Any other `let` is printed as the
+//! source wrote it.
 
 use std::fmt::Write;
 
@@ -212,11 +218,17 @@ impl Printer<'_> {
         for stmt in &block.stmts {
             match stmt {
                 EStmt::Let { pattern, value } => {
+                    let annotation =
+                        if contains_divergence(value) && !matches!(pattern, EPattern::Wildcard) {
+                            format!(": {}", self.pattern_type(pattern, diverges(value)))
+                        } else {
+                            String::new()
+                        };
                     let value = self.expr(value);
-                    let _ = writeln!(out, "let {} = {value};", pattern_of(pattern));
+                    let _ = writeln!(out, "let {}{annotation} = {value};", pattern_of(pattern));
                 }
                 EStmt::Expr(expr) => {
-                    let expr = self.expr(expr);
+                    let expr = self.standing_alone(expr);
                     let _ = writeln!(out, "{expr};");
                 }
             }
@@ -237,11 +249,39 @@ impl Printer<'_> {
             }
             Some(EExpr::Continue(next)) => out.push_str(&self.continuing(next)),
             Some(tail) => {
-                out.push_str(&self.expr(tail));
+                out.push_str(&self.standing_alone(tail));
                 out.push('\n');
             }
         }
         out
+    }
+
+    /// An expression that is a whole statement or a whole tail, where a
+    /// `return` needs no parentheses.
+    fn standing_alone(&mut self, expr: &EExpr) -> String {
+        match expr {
+            EExpr::Return(value) => format!("return {}", self.expr(value)),
+            other => self.expr(other),
+        }
+    }
+
+    /// The type of a pattern, for an annotation. A wildcard has no type of
+    /// its own. Its part is left to Rust to infer, unless the value has the
+    /// type `!` (`diverges`), when there is nothing to infer it from and any
+    /// type will do, since no value ever reaches the pattern: it is `()`.
+    fn pattern_type(&self, pattern: &EPattern, diverges: bool) -> String {
+        match pattern {
+            EPattern::Bind { ty, .. } => self.ty(ty),
+            EPattern::Wildcard if diverges => "()".into(),
+            EPattern::Wildcard => "_".into(),
+            EPattern::Tuple(patterns) => {
+                let types: Vec<String> = patterns
+                    .iter()
+                    .map(|pattern| self.pattern_type(pattern, diverges))
+                    .collect();
+                tuple_of(&types)
+            }
+        }
     }
 
     /// A loop or a `for` as statements: the state's declarations, the loop,
@@ -423,8 +463,96 @@ impl Printer<'_> {
                 format!("{{\n{}}}", self.looping(state, body, Some(header)))
             }
             EExpr::Break(value) => format!("break {}", self.expr(value)),
+            // Inside a larger expression: `return` would take whatever
+            // follows it as part of its value.
+            EExpr::Return(value) => format!("(return {})", self.expr(value)),
             EExpr::Continue(next) => format!("{{\n{}}}", self.continuing(next)),
         }
+    }
+}
+
+/// Whether the printed expression has Rust's type `!`: it is a transfer of
+/// control, a trap, or a panic, or a conditional or block that ends in one
+/// on every path. Where it does, a wildcard in the pattern of a `let` must
+/// be given some type, and `()` serves.
+fn diverges(expr: &EExpr) -> bool {
+    let block = |block: &EBlock| block.tail.as_deref().is_some_and(diverges);
+    match expr {
+        EExpr::Trap
+        | EExpr::Panic { .. }
+        | EExpr::Break(_)
+        | EExpr::Continue(_)
+        | EExpr::Return(_) => true,
+        EExpr::If {
+            then_block,
+            else_block,
+            ..
+        } => block(then_block) && block(else_block),
+        EExpr::Match { arms, .. } => arms.iter().all(|arm| block(&arm.body)),
+        EExpr::Block(inner) => block(inner),
+        _ => false,
+    }
+}
+
+/// Whether an expression contains a point that never yields a value, a
+/// transfer of control, a trap, or a panic, anywhere inside it. Rust types
+/// such a point as `!`, and where it stands in a tuple or an arm the type of
+/// the whole may stay undetermined, so a `let` bound to such an expression
+/// is given its type. That is the only use of this: annotating too little
+/// costs an error from rustc, and annotating too much costs nothing, since
+/// every name's type is its own.
+fn contains_divergence(expr: &EExpr) -> bool {
+    let any = |exprs: &[EExpr]| exprs.iter().any(contains_divergence);
+    let block = |block: &EBlock| {
+        block.stmts.iter().any(|stmt| match stmt {
+            EStmt::Let { value, .. } => contains_divergence(value),
+            EStmt::Expr(expr) => contains_divergence(expr),
+        }) || block.tail.as_deref().is_some_and(contains_divergence)
+    };
+    let state = |state: &[(VarId, String, EType, EExpr)]| {
+        state
+            .iter()
+            .any(|(_, _, _, init)| contains_divergence(init))
+    };
+    match expr {
+        EExpr::Trap
+        | EExpr::Panic { .. }
+        | EExpr::Break(_)
+        | EExpr::Continue(_)
+        | EExpr::Return(_) => true,
+        EExpr::Var { .. } | EExpr::Bool(_) | EExpr::U8(_) | EExpr::Proved | EExpr::Ghost => false,
+        EExpr::Tuple(exprs)
+        | EExpr::Variant { payload: exprs, .. }
+        | EExpr::Call {
+            arguments: exprs, ..
+        } => any(exprs),
+        EExpr::Struct { fields, .. } => fields.iter().any(|(_, value)| contains_divergence(value)),
+        EExpr::Field { target, .. } => contains_divergence(target),
+        EExpr::Method {
+            receiver,
+            arguments,
+            ..
+        } => contains_divergence(receiver) || any(arguments),
+        EExpr::Compare { left, right, .. } => {
+            contains_divergence(left) || contains_divergence(right)
+        }
+        EExpr::If {
+            condition,
+            then_block,
+            else_block,
+        } => contains_divergence(condition) || block(then_block) || block(else_block),
+        EExpr::Match {
+            scrutinee, arms, ..
+        } => contains_divergence(scrutinee) || arms.iter().any(|arm| block(&arm.body)),
+        EExpr::Block(inner) => block(inner),
+        EExpr::Loop { state: s, body, .. } => state(s) || block(body),
+        EExpr::For {
+            lo,
+            hi,
+            state: s,
+            body,
+            ..
+        } => contains_divergence(lo) || contains_divergence(hi) || state(s) || block(body),
     }
 }
 

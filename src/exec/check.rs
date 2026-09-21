@@ -1,7 +1,8 @@
 //! The exec checker. It walks a function body in order, extending a kernel
 //! context as the specification's section 6.3 describes, and asks the kernel
 //! to check every pure term and every proof in the context that holds at
-//! that point. It checks nothing about termination.
+//! that point. A function is checked for partial correctness, and for each
+//! promise it makes: `terminates`, `no_panic`, `no_alloc`, `no_io`.
 
 use std::fmt;
 use std::rc::Rc;
@@ -11,7 +12,7 @@ use crate::kernel::{
     check_type, check_values, infer_term, same_type, telescope_entry, variant_term,
 };
 
-use super::ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Stmt, Tail};
+use super::ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Promise, Promises, Stmt, Tail};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
@@ -21,7 +22,8 @@ pub enum ExecError {
     /// A function's signature is not a function type, or its parameter
     /// identities do not match it.
     BadSignature,
-    /// A loop body reached its end: every path must break or continue.
+    /// A loop body reached its end: every path must break, continue,
+    /// return, or panic.
     FallsThrough,
     /// `break` or `continue` with no enclosing loop.
     NoEnclosingLoop,
@@ -33,8 +35,19 @@ pub enum ExecError {
     BadLoopState,
     /// `break` where the nearest enclosing iteration is a `for`.
     BreakInFor,
-    /// A `for` is stated with the prelude's orderings.
+    /// A `for` is stated with the prelude's orderings, and a panic is shown
+    /// unreachable by a proof of the prelude's `False`.
     NoPrelude,
+    /// The function makes this promise and calls a function that does not.
+    CalleeBreaksPromise {
+        promise: Promise,
+        callee: ExecFnId,
+    },
+    /// The function promises `terminates` and contains a loop or a `for`.
+    LoopUnderTerminates,
+    /// The function promises `no_panic` and has a panic ending with no proof
+    /// that it is unreachable.
+    PanicUnderNoPanic,
 }
 
 impl From<KernelError> for ExecError {
@@ -49,12 +62,28 @@ impl fmt::Display for ExecError {
             Self::Kernel(error) => write!(f, "{error}"),
             Self::UnknownFunction => f.write_str("function is not declared"),
             Self::BadSignature => f.write_str("the signature and parameters do not match"),
-            Self::FallsThrough => f.write_str("a loop body must end in break or continue"),
+            Self::FallsThrough => {
+                f.write_str("a loop body must end in break, continue, return, or a panic")
+            }
             Self::NoEnclosingLoop => f.write_str("break or continue outside a loop"),
             Self::BadMatch => f.write_str("the arms do not match the scrutinee's variants"),
             Self::BadLoopState => f.write_str("the loop state does not match its telescope"),
             Self::BreakInFor => f.write_str("a bounded for has no break"),
-            Self::NoPrelude => f.write_str("a bounded for needs the prelude declarations"),
+            Self::NoPrelude => f.write_str(
+                "a bounded for and an unreachable panic need the prelude declarations",
+            ),
+            Self::CalleeBreaksPromise { promise, callee } => write!(
+                f,
+                "a function that promises {} calls function {}, which does not",
+                promise.name(),
+                callee.0
+            ),
+            Self::LoopUnderTerminates => {
+                f.write_str("a function that promises terminates contains a loop")
+            }
+            Self::PanicUnderNoPanic => f.write_str(
+                "a function that promises no_panic has a panic with no proof that it is unreachable",
+            ),
         }
     }
 }
@@ -64,10 +93,32 @@ impl std::error::Error for ExecError {}
 /// Checked ordinary functions over a set of kernel declarations. A function
 /// is checked against the functions declared before it, so it cannot call
 /// itself, directly or indirectly.
+///
+/// A function is also checked for each promise it makes, so that a promise
+/// of a declared function can be relied on:
+///
+/// - `no_panic`: every callee promises it, and every panic ending carries a
+///   proof of `False` in the context of its point.
+/// - `terminates`: every callee promises it, and the body contains no loop
+///   and no `for`, however deeply nested. With no recursion, that leaves
+///   nothing that can run forever.
+/// - `no_alloc` and `no_io`: every callee promises the same. The check IR has
+///   no primitive that allocates or performs I/O.
 #[derive(Clone, Debug)]
 pub struct Program {
     definitions: Definitions,
     fns: Vec<ExecFn>,
+}
+
+/// What the function being checked declares, as every point of its body
+/// sees it: the result type, which a `return` must supply, and the promises.
+/// The result type is formed in the context of the parameters, and a context
+/// only grows and never rebinds an identity, so it means the same at every
+/// point of the body.
+#[derive(Clone, Copy)]
+struct Declared<'a> {
+    result: &'a Type,
+    promises: Promises,
 }
 
 /// The iteration that `break` and `continue` refer to. `state` is what a
@@ -101,6 +152,12 @@ impl Program {
         self.fns.get(id.0)
     }
 
+    /// The promises of a declared function, each of which was enforced when
+    /// it was declared.
+    pub fn promises(&self, id: ExecFnId) -> Option<Promises> {
+        self.fns.get(id.0).map(|function| function.promises)
+    }
+
     /// The signature of a declared function.
     pub fn signature(&self, id: ExecFnId) -> Option<&Type> {
         self.fns.get(id.0).map(|function| &function.signature)
@@ -131,7 +188,11 @@ impl Program {
         }
         let result = telescope_entry(&function.signature, params.len(), &bound)
             .ok_or(ExecError::BadSignature)?;
-        self.check_block(&mut ctx, &function.body, Some(&result), &[])
+        let declared = Declared {
+            result: &result,
+            promises: function.promises,
+        };
+        self.check_block(&mut ctx, &function.body, Some(&result), declared, &[])
     }
 
     /// Checks a block. `expected` is the type its value must have; `None`
@@ -142,10 +203,11 @@ impl Program {
         ctx: &mut Context,
         block: &Block,
         expected: Option<&Type>,
+        declared: Declared<'_>,
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
         let scope = ctx.checkpoint();
-        let result = self.check_block_in_scope(ctx, block, expected, loops);
+        let result = self.check_block_in_scope(ctx, block, expected, declared, loops);
         ctx.rollback(scope);
         result
     }
@@ -155,10 +217,11 @@ impl Program {
         ctx: &mut Context,
         block: &Block,
         expected: Option<&Type>,
+        declared: Declared<'_>,
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
         for stmt in &block.stmts {
-            self.check_stmt(ctx, stmt, loops)?;
+            self.check_stmt(ctx, stmt, declared, loops)?;
         }
         match &block.tail {
             Tail::Value(value) => {
@@ -174,8 +237,19 @@ impl Program {
                 Ok(check_values(ctx, target.state, next, Mode::Executable)?)
             }
             Tail::Match { scrutinee, arms } => {
-                self.check_arms(ctx, scrutinee, arms, expected, loops)
+                self.check_arms(ctx, scrutinee, arms, expected, declared, loops)
             }
+            // Whatever the block was expected to produce, it produces
+            // nothing: control leaves the function.
+            Tail::Return(value) => expect(ctx, value, declared.result),
+            Tail::Panic { unreachable, .. } => match unreachable {
+                Some(proof) => {
+                    let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
+                    Ok(check_proof(ctx, proof, &prelude.falsehood_prop())?)
+                }
+                None if declared.promises.no_panic => Err(ExecError::PanicUnderNoPanic),
+                None => Ok(()),
+            },
         }
     }
 
@@ -183,6 +257,7 @@ impl Program {
         &self,
         ctx: &mut Context,
         stmt: &Stmt,
+        declared: Declared<'_>,
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
         match stmt {
@@ -212,7 +287,18 @@ impl Program {
                 callee,
                 arguments,
             } => {
-                let callee = self.fns.get(callee.0).ok_or(ExecError::UnknownFunction)?;
+                let id = *callee;
+                let callee = self.fns.get(id.0).ok_or(ExecError::UnknownFunction)?;
+                // A primitive that allocates or performs I/O would be
+                // refused here, under `no_alloc` or `no_io`; there is none.
+                for promise in Promise::ALL {
+                    if declared.promises.makes(promise) && !callee.promises.makes(promise) {
+                        return Err(ExecError::CalleeBreaksPromise {
+                            promise,
+                            callee: id,
+                        });
+                    }
+                }
                 let result = check_call(ctx, &callee.signature, arguments, Mode::Executable)?;
                 // No defining equation: the result of a call that may not
                 // return is not equal to the call in the logic.
@@ -227,7 +313,7 @@ impl Program {
                 // The result type is formed outside the arms, so it cannot
                 // mention anything an arm binds.
                 check_type(ctx, ty)?;
-                self.check_arms(ctx, scrutinee, arms, Some(ty), loops)?;
+                self.check_arms(ctx, scrutinee, arms, Some(ty), declared, loops)?;
                 Ok(ctx.declare_with(*var, ty.clone(), false)?)
             }
             Stmt::Loop {
@@ -238,12 +324,23 @@ impl Program {
                 result,
                 body,
             } => {
+                if declared.promises.terminates {
+                    return Err(ExecError::LoopUnderTerminates);
+                }
                 // Formed in the outer context: the state is not in scope in
                 // the result type.
                 check_type(ctx, result)?;
                 check_values(ctx, state, init, Mode::Executable)?;
                 let scope = ctx.checkpoint();
-                let checked = self.check_loop_body(ctx, state, vars, result, body, loops);
+                let checked = (|| {
+                    self.declare_state(ctx, state, vars)?;
+                    let mut inner = loops.to_vec();
+                    inner.push(Target {
+                        state,
+                        result: Some(result),
+                    });
+                    self.check_block(ctx, body, None, declared, &inner)
+                })();
                 ctx.rollback(scope);
                 checked?;
                 Ok(ctx.declare_with(*var, result.clone(), false)?)
@@ -262,6 +359,11 @@ impl Program {
                     init,
                     body,
                 } = &**looped;
+                // A `for` is bounded, but the rule is the design's: under
+                // `terminates` there is no iteration of either kind.
+                if declared.promises.terminates {
+                    return Err(ExecError::LoopUnderTerminates);
+                }
                 let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
                 for bound in [lo, hi] {
                     expect(ctx, bound, &Type::U8)?;
@@ -294,7 +396,7 @@ impl Program {
                         state: &next,
                         result: None,
                     });
-                    self.check_block(ctx, body, None, &inner)
+                    self.check_block(ctx, body, None, declared, &inner)
                 })();
                 ctx.rollback(scope);
                 checked?;
@@ -326,30 +428,13 @@ impl Program {
         Ok(())
     }
 
-    fn check_loop_body(
-        &self,
-        ctx: &mut Context,
-        state: &Type,
-        vars: &[crate::kernel::VarId],
-        result: &Type,
-        body: &Block,
-        loops: &[Target<'_>],
-    ) -> Result<(), ExecError> {
-        self.declare_state(ctx, state, vars)?;
-        let mut inner = loops.to_vec();
-        inner.push(Target {
-            state,
-            result: Some(result),
-        });
-        self.check_block(ctx, body, None, &inner)
-    }
-
     fn check_arms(
         &self,
         ctx: &mut Context,
         scrutinee: &Term,
         arms: &[Arm],
         expected: Option<&Type>,
+        declared: Declared<'_>,
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
         // Executable mode: a ghost cannot choose a branch.
@@ -378,7 +463,7 @@ impl Program {
                     variant_term(&scrutinee_type, index, &arm.payload, payload),
                 );
                 ctx.assume_with(arm.fact, fact)?;
-                self.check_block(ctx, &arm.body, expected, loops)
+                self.check_block(ctx, &arm.body, expected, declared, loops)
             })();
             ctx.rollback(scope);
             checked?;

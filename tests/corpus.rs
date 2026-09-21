@@ -1357,8 +1357,10 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     assert!(harness(&[]).ends_with("fn main() {}\n"));
 }
 
-// Panics. No source panics yet, so the erased tree of a source is given its
-// panics by hand: every call of `panics(k)` becomes a panic with message `k`.
+// Panics and returns. No source panics or returns yet, so the erased tree of
+// a source is given them by hand: every call of `panics(k)` becomes a panic
+// with message `k`, every call of `returns(e)` a `return e`, and every call
+// of `returns_pair(k)` a `return (k, k)`.
 
 const PANICS: &str = "\
 enum Event { Wrong, Right(u8) }
@@ -1434,8 +1436,13 @@ const PANICS_RUNS: &str = r#"
 
 /// The erased tree of `PANICS`, with its panics.
 fn panicking_module() -> Module {
+    planted_module(PANICS)
+}
+
+/// The erased tree of a source, with its panics and returns planted.
+fn planted_module(text: &str) -> Module {
     let mut sources = SourceMap::default();
-    let file = sources.add("panics.lc", PANICS);
+    let file = sources.add("planted.lc", text);
     let source = sources.get(file);
     let elaborated = elaborate(source, &parse(source).program);
     assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
@@ -1463,12 +1470,29 @@ fn plant(expr: &mut EExpr) {
     match expr {
         EExpr::Call {
             name, arguments, ..
-        } if name == "panics" => {
-            let [EExpr::U8(which)] = arguments.as_slice() else {
-                panic!("`panics` takes a literal")
+        } if name == "returns" => {
+            let [value] = arguments.as_mut_slice() else {
+                panic!("`returns` takes one argument")
             };
-            *expr = EExpr::Panic {
-                message: MESSAGES[usize::from(*which)].into(),
+            plant(value);
+            *expr = EExpr::Return(Box::new(value.clone()));
+        }
+        EExpr::Call {
+            name, arguments, ..
+        } if name == "panics" || name == "returns_pair" => {
+            let [EExpr::U8(which)] = arguments.as_slice() else {
+                panic!("`{name}` takes a literal")
+            };
+            let which = *which;
+            *expr = if name == "panics" {
+                EExpr::Panic {
+                    message: MESSAGES[usize::from(which)].into(),
+                }
+            } else {
+                EExpr::Return(Box::new(EExpr::Tuple(vec![
+                    EExpr::U8(which),
+                    EExpr::U8(which),
+                ])))
             };
         }
         EExpr::Var { .. }
@@ -1485,7 +1509,9 @@ fn plant(expr: &mut EExpr) {
         }
         | EExpr::Continue(exprs) => exprs.iter_mut().for_each(plant),
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
-        EExpr::Field { target: inner, .. } | EExpr::Break(inner) => plant(inner),
+        EExpr::Field { target: inner, .. } | EExpr::Break(inner) | EExpr::Return(inner) => {
+            plant(inner);
+        }
         EExpr::Method {
             receiver,
             arguments,
@@ -1536,6 +1562,102 @@ fn plant(expr: &mut EExpr) {
 
 fn listed(remarks: &[Failure]) -> Vec<String> {
     remarks.iter().map(Failure::to_string).collect()
+}
+
+const RETURNS: &str = "\
+enum Event { Wrong, Right(u8) }
+
+fn returns(which: u8) -> u8 { which }
+
+fn returns_pair(which: u8) -> (u8, u8) { (which, which) }
+
+fn panics(which: u8) -> u8 { which }
+
+fn after_a_let(n: u8) -> u8 {
+    let m = panics(0);
+    m.wrapping_add(1)
+}
+
+fn early(n: u8) -> u8 {
+    let m = if n == 0 { returns(7) } else { n };
+    m.wrapping_add(1)
+}
+
+fn from_a_loop(n: u8) -> u8 {
+    loop (i: u8 = 0) -> u8 {
+        if i == n {
+            break returns(i.wrapping_add(100))
+        } else {
+            continue(i.wrapping_add(1))
+        }
+    }
+}
+
+fn from_a_for(n: u8) -> u8 {
+    let (last,) = for i in 0..n (last: u8 = 0) {
+        let _ = if i == 2 { returns(50) } else { i };
+        continue(i)
+    };
+    last
+}
+
+fn from_an_arm(event: Event) -> u8 {
+    let (value, _) = match event {
+        Event::Wrong => (returns(4), 0),
+        Event::Right(n) => (n, n),
+    };
+    value
+}
+
+fn with_a_wildcard(n: u8) -> (u8, u8) {
+    let (a, _) = if n == 0 { returns_pair(6) } else { returns_pair(8) };
+    (a, 0)
+}
+
+fn through_a_call(n: u8) -> u8 { early(n).wrapping_add(10) }
+";
+
+const RETURNS_RUNS: &str = "\
+//~ run: after_a_let(1) => panic: in a let
+//~ run: early(0) => 7
+//~ run: early(5) => 6
+//~ run: from_a_loop(0) => 100
+//~ run: from_a_loop(3) => 103
+//~ run: from_a_for(2) => 1
+//~ run: from_a_for(5) => 50
+//~ run: from_an_arm(Wrong) => 4
+//~ run: from_an_arm(Right(9)) => 9
+//~ run: with_a_wildcard(0) => (6, 6)
+//~ run: with_a_wildcard(1) => (8, 8)
+//~ run: through_a_call(0) => 17
+//~ run: through_a_call(5) => 16
+//~ rust: let m: u8 = panic!(\"{}\", \"in a let\");
+//~ rust: let m: u8 = if n == 0 {
+//~ rust: return 7
+//~ rust: break (return i.wrapping_add(100))
+//~ rust: let _ = if i == 2 {
+//~ rust: return 50
+//~ rust: let (value, _): (u8, _) = match event {
+//~ rust: Event::Wrong => {
+//~ rust: ((return 4), 0)
+//~ rust: let (a, _): (u8, ()) = if n == 0 {
+//~ rust: return (6, 6)
+";
+
+#[test]
+fn trees_that_return_agree_with_their_compiled_rust_and_a_let_bound_to_a_panic_has_a_type() {
+    let module = planted_module(RETURNS);
+    let text = format!("{RETURNS}{RETURNS_RUNS}");
+    let examined = examine_tree("returns.lc", &text, &module, FUEL);
+    assert_eq!(listed(&examined.failures), Vec::<String>::new());
+    assert_eq!(listed(&examined.inconclusive), Vec::<String>::new());
+    let report = compile_and_compare(
+        &[examined.compiled.unwrap()],
+        "locus_corpus_returns",
+        TIMEOUT,
+    );
+    assert_eq!(listed(&report.failures), Vec::<String>::new());
+    assert_eq!(listed(&report.inconclusive), Vec::<String>::new());
 }
 
 #[test]

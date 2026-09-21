@@ -37,6 +37,8 @@ struct Target {
 struct Checker<'m> {
     module: &'m Module,
     signatures: HashMap<FnRef, (Vec<EType>, EType)>,
+    /// The result type of the function being checked, for `return`.
+    result: EType,
     env: Vec<(VarId, EType)>,
     targets: Vec<Target>,
 }
@@ -45,7 +47,9 @@ struct Checker<'m> {
 /// because it transfers control, traps, or panics. An expression that never
 /// yields is accepted wherever a value of any type is expected, and an
 /// expression that needs the value of one that never yields never yields
-/// either: `f(panic!("..."))` does not call `f`.
+/// either: `f(panic!("..."))` does not call `f`. That is all it excuses.
+/// Whatever stands around or after it is checked as it would be anyway: the
+/// other arguments, the rest of the block, every arm.
 type Yield = Option<EType>;
 
 /// The type of a subexpression whose value is needed; when there is none,
@@ -75,6 +79,7 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
     let mut checker = Checker {
         module,
         signatures,
+        result: EType::unit(),
         env: Vec::new(),
         targets: Vec::new(),
     };
@@ -85,6 +90,7 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
             .map(|(id, _, ty)| (*id, ty.clone()))
             .collect();
         checker.targets.clear();
+        checker.result = function.result.clone();
         let found = checker.block(&function.body)?;
         expect(
             &found,
@@ -120,40 +126,52 @@ impl Checker<'_> {
         result
     }
 
+    /// Every statement and the tail are checked, whatever came before them.
+    /// A block that contains a statement that never yields never yields
+    /// either, since its end is not reached.
     fn block_in_scope(&mut self, block: &EBlock) -> Result<Yield, TypeError> {
+        let mut reaches_its_end = true;
         for stmt in &block.stmts {
-            match stmt {
+            let found = match stmt {
                 EStmt::Let { pattern, value } => {
-                    // Nothing after a `let` whose value never yields is
-                    // reached, and its names have no types to be checked
-                    // with, so the block ends here and never yields.
-                    let ty = needed!(self.expr(value)?);
-                    self.bind(pattern, &ty)?;
+                    let found = self.expr(value)?;
+                    self.bind(pattern, found.as_ref())?;
+                    found
                 }
-                EStmt::Expr(expr) => {
-                    self.expr(expr)?;
-                }
-            }
+                EStmt::Expr(expr) => self.expr(expr)?,
+            };
+            reaches_its_end &= found.is_some();
         }
-        match &block.tail {
-            Some(tail) => self.expr(tail),
-            None => Ok(Some(EType::unit())),
-        }
+        let tail = match &block.tail {
+            Some(tail) => self.expr(tail)?,
+            None => Some(EType::unit()),
+        };
+        Ok(tail.filter(|_| reaches_its_end))
     }
 
-    fn bind(&mut self, pattern: &EPattern, ty: &EType) -> Result<(), TypeError> {
+    /// Binds the names of a pattern at the types they carry. `found` is the
+    /// type of the value, which those types must agree with; it is `None`
+    /// when the value never yields, and the names are still bound, so that
+    /// what follows is checked.
+    fn bind(&mut self, pattern: &EPattern, found: Option<&EType>) -> Result<(), TypeError> {
         match pattern {
             EPattern::Wildcard => Ok(()),
-            EPattern::Bind { id, .. } => {
+            EPattern::Bind { id, name, ty } => {
+                if found.is_some_and(|found| found != ty) {
+                    return fail(format!("{name} is bound as {ty:?} to {found:?}"));
+                }
                 self.env.push((*id, ty.clone()));
                 Ok(())
             }
-            EPattern::Tuple(patterns) => match ty {
-                EType::Tuple(fields) if fields.len() == patterns.len() => patterns
+            EPattern::Tuple(patterns) => match found {
+                None => patterns
+                    .iter()
+                    .try_for_each(|pattern| self.bind(pattern, None)),
+                Some(EType::Tuple(fields)) if fields.len() == patterns.len() => patterns
                     .iter()
                     .zip(fields)
-                    .try_for_each(|(pattern, field)| self.bind(pattern, field)),
-                other => fail(format!("a tuple pattern against {other:?}")),
+                    .try_for_each(|(pattern, field)| self.bind(pattern, Some(field))),
+                Some(other) => fail(format!("a tuple pattern against {other:?}")),
             },
         }
     }
@@ -322,14 +340,21 @@ impl Checker<'_> {
                 return Ok(condition.and(joined));
             }
             EExpr::Match {
-                scrutinee, arms, ..
+                scrutinee,
+                enum_name,
+                arms,
             } => {
-                // With a scrutinee that never yields there is no enum to check
-                // the arms against, and no arm runs.
-                let EType::Enum(id) = needed!(self.expr(scrutinee)?) else {
-                    return fail("a match on something that is not an enum");
+                // A scrutinee that never yields has no type to find the enum
+                // by, and no arm runs. The arms are checked all the same,
+                // against the enum the match names.
+                let scrutinee = self.expr(scrutinee)?;
+                let enums = &self.module.enums;
+                let decl = match &scrutinee {
+                    Some(EType::Enum(id)) => enums.iter().find(|decl| decl.id == *id),
+                    Some(_) => return fail("a match on something that is not an enum"),
+                    None => enums.iter().find(|decl| decl.name == *enum_name),
                 };
-                let Some(decl) = self.module.enums.iter().find(|decl| decl.id == id) else {
+                let Some(decl) = decl else {
                     return fail("a match on an enum that was not emitted");
                 };
                 if decl.variants.len() != arms.len() {
@@ -349,7 +374,7 @@ impl Checker<'_> {
                     self.env.truncate(scope);
                     result = join(result, arm_type?, "the arms of a match")?;
                 }
-                return Ok(result);
+                return Ok(scrutinee.and(result));
             }
             EExpr::Block(block) => return self.block(block),
             EExpr::Loop {
@@ -399,6 +424,12 @@ impl Checker<'_> {
                     return fail("continue outside a loop");
                 };
                 self.arguments(next, &target.state, "the next loop state")?;
+                return Ok(None);
+            }
+            EExpr::Return(value) => {
+                let found = self.expr(value)?;
+                let result = self.result.clone();
+                expect(&found, &result, "a returned value")?;
                 return Ok(None);
             }
         }))
