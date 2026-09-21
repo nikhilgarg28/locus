@@ -1,6 +1,6 @@
 # Notes
 
-This is the one place that speaks about the future of Locus: what it is for, what has been agreed and not yet built, what is undecided, and what is deferred. The other documents describe only what exists: [language.md](language.md) is the language as specified now, [architecture.md](architecture.md) is how the compiler is built, and [kernel-contract.md](kernel-contract.md) states the kernel's rules. The batches of work are in [roadmap.md](roadmap.md). When something here is built, its text moves into one of those documents and leaves this one.
+This is the one place that speaks about the future of Locus: what it is for, what has been agreed and not yet built, what is undecided, and what is deferred. The other documents describe only what exists: [language.md](language.md) is the language as specified now, [architecture.md](architecture.md) is how the compiler is built, and [kernel-contract.md](kernel-contract.md) states the kernel's rules. The batches of work are the projects in `atlas.html`, from which [roadmap.md](roadmap.md) is written. When something here is built, its text moves into one of those documents and leaves this one.
 
 Section numbers such as "section 10" refer to language.md. "Item 8" refers to the numbered items under Accepted directions.
 

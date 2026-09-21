@@ -39,10 +39,12 @@ cargo clippy --all-targets -- -D warnings
 
 ## Documents
 
+`atlas.html` is the one tool for following the project: open it in a browser to read and edit every document below, the table of what in the language is built and what is left, and the projects and tasks. It saves into itself. `python3 tools/atlas.py export` writes the markdown files from it, `import` reads them back, and `status` says which differ.
+
 | | |
 |---|---|
 | [docs/notes.md](docs/notes.md) | The only document about the future: positioning, agreed directions, open questions, deferred features |
-| [docs/roadmap.md](docs/roadmap.md) | Batches of work |
+| [docs/roadmap.md](docs/roadmap.md) | Batches of work, written from the projects and tasks in the atlas |
 | [docs/language.md](docs/language.md) | The language as specified now, with its grammar and its relationship to Rust's features |
 | [docs/architecture.md](docs/architecture.md) | How the compiler is built: the representations, the trusted base, the elaborator and its proof search |
 | [docs/kernel-contract.md](docs/kernel-contract.md) | Every kernel rule, with exact premises and conclusion; it changes together with the kernel |
