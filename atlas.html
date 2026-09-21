@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 35,
-  "savedAt": "2026-09-21T22:49:01.000Z",
+  "rev": 36,
+  "savedAt": "2026-09-21T22:53:26.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6631,12 +6631,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t267",
    "n": 151,
    "title": "H1 · A corpus runner: every .lc file is checked, run in both interpreters, compiled, and compared",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E4 (LOC-170), R1 (LOC-186), R2 (LOC-187), R3 (LOC-188).\nCovers: LOC-7.\n\nScope. tests/corpus/accept and tests/corpus/reject hold .lc files whose expectations are written in comments: the number of proofs, run lines such as f(1, 2) => 3 or f(255) => panic, substrings the generated Rust must contain, and for rejected files the code of the error on the line where it is expected. One runner does for each accepted file what cli.rs and rust_output.rs do by hand today: check, run every run line in the check-IR interpreter and the erased interpreter, print Rust, compile all files in one rustc call with -D warnings, run, compare. The five examples move under it.\n\nTests.\n- The five examples pass through the runner.\n- The runner is tested on itself: a wrong expected value, a missing error, and an error on the wrong line each make it report a failure.\n- All failures in a run are reported, not the first.\n\nDone when. From here on a feature is tested by adding files. The whole suite stays under a minute because rustc runs once.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September as tests/corpus.rs. Directives: //~ proofs: N, //~ run: f(args) => value (or => panic, refused until E4), //~ rust: text, //~ error: L0204 [message] with ^ for the line above. The corpus is examples/, tests/corpus/accept, and tests/corpus/reject; one rustc call; all failures listed. Found on the way: a name that is a Rust keyword and not a Locus one, such as move, is accepted and printed unescaped, and rustc rejects the output; S1 closes this by reserving every Rust keyword.\n\nLane: Harness. Wave 1.\nDepends on: nothing.\nUnblocks: E4 (LOC-170), R1 (LOC-186), R2 (LOC-187), R3 (LOC-188).\nCovers: LOC-7.\n\nScope. tests/corpus/accept and tests/corpus/reject hold .lc files whose expectations are written in comments: the number of proofs, run lines such as f(1, 2) => 3 or f(255) => panic, substrings the generated Rust must contain, and for rejected files the code of the error on the line where it is expected. One runner does for each accepted file what cli.rs and rust_output.rs do by hand today: check, run every run line in the check-IR interpreter and the erased interpreter, print Rust, compile all files in one rustc call with -D warnings, run, compare. The five examples move under it.\n\nTests.\n- The five examples pass through the runner.\n- The runner is tested on itself: a wrong expected value, a missing error, and an error on the wrong line each make it report a failure.\n- All failures in a run are reported, not the first.\n\nDone when. From here on a feature is tested by adding files. The whole suite stays under a minute because rustc runs once.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:43:22.000Z"
+   "updated": "2026-09-21T22:53:26.000Z"
   },
   {
    "id": "t268",
@@ -6667,9 +6667,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Syntax. Wave 2.\nDepends on: H2 (LOC-152).\nUnblocks: S2 (LOC-155).\nCovers: LOC-91, LOC-94, LOC-95.\n\nScope. Reserve every strict and reserved Rust keyword. String literals with Rust escapes. Integer literals in decimal, hex, octal, and binary, with underscores and suffixes. Rust tokens Locus does not use yet (lifetimes, compound assignment, shifts, char and float literals) are recognized and reported as not in Locus yet, so that no Rust source produces a confusing token error.\n\nTests.\n- A table test over every Rust keyword: using it as a name is an error with a code.\n- A table of literals with value and suffix, including the largest of each type and one past it.\n- Each not-yet token has a test of its message.\n\nDone when. A Rust programmer who pastes Rust gets either a parse or a plain statement that the construct is not in Locus yet.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Syntax. Wave 2.\nDepends on: H2 (LOC-152).\nUnblocks: S2 (LOC-155).\nCovers: LOC-91, LOC-94, LOC-95.\n\nScope. Reserve every strict and reserved Rust keyword. String literals with Rust escapes. Integer literals in decimal, hex, octal, and binary, with underscores and suffixes. Rust tokens Locus does not use yet (lifetimes, compound assignment, shifts, char and float literals) are recognized and reported as not in Locus yet, so that no Rust source produces a confusing token error.\n\nTests.\n- A table test over every Rust keyword: using it as a name is an error with a code.\n- A table of literals with value and suffix, including the largest of each type and one past it.\n- Each not-yet token has a test of its message.\n- The case H1 found, fn move(ref: u8), is a rejected corpus file.\n\nDone when. A Rust programmer who pastes Rust gets either a parse or a plain statement that the construct is not in Locus yet.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:53:26.000Z"
   },
   {
    "id": "t271",
@@ -6840,12 +6840,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t286",
    "n": 170,
    "title": "E4 · A panic is a third outcome: the interpreters, the erased tree, and the harness",
-   "status": "backlog",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: E6 (LOC-172), M1 (LOC-177).\nCovers: LOC-138.\n\nScope. Preparation only, with no surface syntax and no checked semantics. Both interpreters return a value, a panic with its message, or out of fuel. The erased tree and the printer gain a panic expression, reached for now only from trees built by hand. The compiled harness calls each function under catch_unwind, can build with overflow checks on or off, and runs the program under a process timeout; a timeout is reported as inconclusive and never as a disagreement or as divergence. The statement of erasure in Architecture is restated for three outcomes.\n\nTests.\n- Erased trees built by hand that panic agree with their compiled Rust, message included.\n- Out of fuel stays distinct from a panic and is never compared as one.\n- The harness is tested on a program that loops forever: inconclusive, and the rest of the batch is still compared.\n\nDone when. Tests can say f(255) => panic. What a panic means to the checker comes with M1 for block endings and with E6 for operators.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:53:26.000Z"
   },
   {
    "id": "t287",
@@ -7027,12 +7027,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t303",
    "n": 187,
    "title": "R2 · Kernel soundness under mutation: no proof is accepted for a claim known to be false",
-   "status": "backlog",
+   "status": "doing",
    "priority": 3,
    "project": "p266",
    "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151).\nUnblocks: R4 (LOC-189).\n\nScope. Accepting a changed proof of a true claim is harmless, and a changed proof may validly prove some other proposition, so neither is a finding. What would be a finding is a proof accepted for a false claim. For every proof the corpus produces, the test makes claims known to be false (the negation of the original where that is closed or bounded, and perturbed claims refuted by evaluation over a small domain) and checks them against the original proof and against random changes of one node of it: another hypothesis, another axiom argument, a swapped subproof.\n\nTests.\n- The kernel rejects every pairing of a proof with a claim known to be false.\n- A changed proof checked against the original claim may be accepted; the count is printed, for interest only.\n- Runs over every proof in the corpus, so it grows with the language.\n\nDone when. A standing check on the one component everything trusts.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-21T22:53:26.000Z"
   },
   {
    "id": "t304",
