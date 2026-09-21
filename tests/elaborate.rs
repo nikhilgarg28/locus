@@ -1,5 +1,5 @@
 //! Source to checked program: parsing, elaboration with holes, kernel
-//! acceptance, interpretation, and generated Rust, from `.loc` text.
+//! acceptance, interpretation, and generated Rust, from `.lc` text.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -10,11 +10,11 @@ use locus::parser::parse;
 use locus::source::SourceMap;
 
 const FUEL: u64 = 1_000_000;
-const LOCK: &str = include_str!("../examples/lock.loc");
+const LOCK: &str = include_str!("../examples/lock.lc");
 
 fn elaborated(text: &str) -> Elaborated {
     let mut sources = SourceMap::default();
-    let file = sources.add("test.loc", text);
+    let file = sources.add("test.lc", text);
     let source = sources.get(file);
     let parsed = parse(source);
     assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
@@ -55,17 +55,17 @@ fn call(result: &Elaborated, name: &str, arguments: &[u8]) -> String {
 #[test]
 fn the_acceptance_examples_check() {
     for example in [
-        include_str!("../examples/increment.loc"),
-        include_str!("../examples/preserve.loc"),
-        include_str!("../examples/proofs.loc"),
-        include_str!("../examples/propositions.loc"),
+        include_str!("../examples/increment.lc"),
+        include_str!("../examples/preserve.lc"),
+        include_str!("../examples/proofs.lc"),
+        include_str!("../examples/propositions.lc"),
         LOCK,
     ] {
         accepted(example);
     }
 }
 
-/// What `examples/lock.loc` computes, written directly.
+/// What `examples/lock.lc` computes, written directly.
 fn attempts_left(attempts: u8, correct: u8) -> u8 {
     let mut failures = 0u8;
     for attempt in 0..attempts {

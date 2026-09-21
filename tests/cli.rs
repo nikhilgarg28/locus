@@ -11,7 +11,7 @@ fn example(name: &str) -> PathBuf {
 fn parse_reports_syntax_only_and_ast_is_available() {
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
         .arg("parse")
-        .arg(example("increment.loc"))
+        .arg(example("increment.lc"))
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -20,7 +20,7 @@ fn parse_reports_syntax_only_and_ast_is_available() {
     assert!(stdout.contains("types and proofs have not been checked"));
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
         .arg("ast")
-        .arg(example("preserve.loc"))
+        .arg(example("preserve.lc"))
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -31,7 +31,7 @@ fn parse_reports_syntax_only_and_ast_is_available() {
 fn tokens_have_spans_and_unsupported_commands_fail() {
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
         .arg("tokens")
-        .arg(example("increment.loc"))
+        .arg(example("increment.lc"))
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -42,7 +42,7 @@ fn tokens_have_spans_and_unsupported_commands_fail() {
     assert!(stdout.contains("Eof"));
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
         .arg("compile")
-        .arg(example("increment.loc"))
+        .arg(example("increment.lc"))
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
@@ -51,7 +51,7 @@ fn tokens_have_spans_and_unsupported_commands_fail() {
 #[test]
 fn missing_files_are_reported_without_panicking() {
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
-        .args(["parse", "does-not-exist.loc"])
+        .args(["parse", "does-not-exist.lc"])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
@@ -67,7 +67,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     let locus = || Command::new(env!("CARGO_BIN_EXE_locus"));
     let output = locus()
         .arg("check")
-        .arg(example("lock.loc"))
+        .arg(example("lock.lc"))
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -78,7 +78,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     );
     let output = locus()
         .arg("check")
-        .arg(example("lock.loc"))
+        .arg(example("lock.lc"))
         .arg("--holes")
         .output()
         .unwrap();
@@ -86,14 +86,14 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     assert!(stdout.contains("filled (all 256 cases,"), "{stdout}");
     let output = locus()
         .arg("run")
-        .arg(example("lock.loc"))
+        .arg(example("lock.lc"))
         .args(["attempts_left", "2", "9"])
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n");
     let output = locus()
         .arg("rust")
-        .arg(example("lock.loc"))
+        .arg(example("lock.lc"))
         .output()
         .unwrap();
     assert!(
@@ -103,7 +103,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     );
     let output = locus()
         .arg("run")
-        .arg(example("lock.loc"))
+        .arg(example("lock.lc"))
         .args(["no_such_function"])
         .output()
         .unwrap();

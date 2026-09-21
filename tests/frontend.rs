@@ -9,7 +9,7 @@ use locus::source::{FileId, SourceMap, Span};
 
 fn parse_text(text: &str) -> Parsed {
     let mut sources = SourceMap::default();
-    let file = sources.add("test.loc", text);
+    let file = sources.add("test.lc", text);
     parse(sources.get(file))
 }
 
@@ -41,7 +41,7 @@ fn binary(expression: &Expr, expected: BinaryOp) -> (&Expr, &Expr) {
 #[test]
 fn source_locations_use_bytes_without_splitting_unicode() {
     let mut sources = SourceMap::default();
-    let file = sources.add("unicode.loc", "aé\r\nb\n");
+    let file = sources.add("unicode.lc", "aé\r\nb\n");
     let source = sources.get(file);
     assert_eq!(source.line_column(3), Some((1, 3)));
     assert_eq!(source.line_column(5), Some((2, 1)));
@@ -55,7 +55,7 @@ fn source_locations_use_bytes_without_splitting_unicode() {
 fn lexer_preserves_large_literals_and_distinguishes_keywords() {
     let text = "fn fn_name forall_ _ 1_000 9999999999999999999999999999999999999999 == => -> != <= >= && || @ # const def Prop prop math :: .. match in exists";
     let mut sources = SourceMap::default();
-    let file = sources.add("test.loc", text);
+    let file = sources.add("test.lc", text);
     let source = sources.get(file);
     let lexed = lex(source);
     assert!(lexed.diagnostics.is_empty());
@@ -102,7 +102,7 @@ fn lexer_preserves_large_literals_and_distinguishes_keywords() {
 #[test]
 fn nested_comments_and_line_comments_are_skipped() {
     let mut sources = SourceMap::default();
-    let file = sources.add("test.loc", "/* outer /* inner */ end */ fn // tail\n x");
+    let file = sources.add("test.lc", "/* outer /* inner */ end */ fn // tail\n x");
     let lexed = lex(sources.get(file));
     assert!(lexed.diagnostics.is_empty());
     assert_eq!(
@@ -127,7 +127,7 @@ fn lexical_errors_are_reported_once_with_valid_spans() {
         ("💡", "L0001"),
     ] {
         let mut sources = SourceMap::default();
-        let file = sources.add("test.loc", text);
+        let file = sources.add("test.lc", text);
         let source = sources.get(file);
         let lexed = lex(source);
         assert_eq!(
@@ -146,11 +146,11 @@ fn lexical_errors_are_reported_once_with_valid_spans() {
 #[test]
 fn all_acceptance_examples_parse() {
     for example in [
-        include_str!("../examples/increment.loc"),
-        include_str!("../examples/preserve.loc"),
-        include_str!("../examples/proofs.loc"),
-        include_str!("../examples/propositions.loc"),
-        include_str!("../examples/lock.loc"),
+        include_str!("../examples/increment.lc"),
+        include_str!("../examples/preserve.lc"),
+        include_str!("../examples/proofs.lc"),
+        include_str!("../examples/propositions.lc"),
+        include_str!("../examples/lock.lc"),
     ] {
         let parsed = parse_text(example);
         assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
@@ -331,11 +331,11 @@ fn syntax_success_does_not_claim_proof_validity() {
 #[test]
 fn diagnostic_rendering_contains_source_location_and_help() {
     let mut sources = SourceMap::default();
-    let file = sources.add("example.loc", "fn f() -> u8 {\n    let n = 1\n    n\n}\n");
+    let file = sources.add("example.lc", "fn f() -> u8 {\n    let n = 1\n    n\n}\n");
     let parsed = parse(sources.get(file));
     let rendered = parsed.diagnostics[0].render(&sources, false);
     assert!(rendered.contains("error[L0102]"), "{rendered}");
-    assert!(rendered.contains("example.loc:2:"), "{rendered}");
+    assert!(rendered.contains("example.lc:2:"), "{rendered}");
     assert!(rendered.contains("let n = 1"), "{rendered}");
     assert!(rendered.contains("insert `;` here"), "{rendered}");
     assert!(!rendered.contains('\u{1b}'));
@@ -412,7 +412,7 @@ fn malformed_inputs_terminate_and_keep_valid_diagnostic_spans() {
             text.push_str(alphabet[(seed >> 32) as usize % alphabet.len()]);
         }
         let mut sources = SourceMap::default();
-        let file = sources.add("fuzz.loc", &text);
+        let file = sources.add("fuzz.lc", &text);
         let source = sources.get(file);
         let parsed = parse(source);
         for error in parsed.diagnostics {
@@ -482,7 +482,7 @@ fn proof_types_accept_named_inline_and_called_propositions_with_precise_spans() 
     ] {
         let mut sources = SourceMap::default();
         let text = format!("fn f(n: u8) -> {spelling} {{ _ }}");
-        let file = sources.add("proof-type.loc", text);
+        let file = sources.add("proof-type.lc", text);
         let source = sources.get(file);
         let parsed = parse(source);
         assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
@@ -751,7 +751,7 @@ fn recovery_keeps_math_functions_after_a_broken_function() {
 
 #[test]
 fn direct_proposition_call_parses_in_a_dependent_result_tuple() {
-    let parsed = parse_text(include_str!("../examples/proofs.loc"));
+    let parsed = parse_text(include_str!("../examples/proofs.lc"));
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let declaration = parsed.program.declarations.iter().find(|declaration| {
         matches!(&declaration.kind, DeclarationKind::Function { name, .. } if name.text == "increment")
@@ -817,7 +817,7 @@ fn struct_and_enum_declarations_keep_fields_and_payloads() {
 fn prop_declarations_keep_parameters_payloads_and_targets() {
     let mut sources = SourceMap::default();
     let file = sources.add(
-        "prop.loc",
+        "prop.lc",
         "prop Even(n: u8) {
             Zero: @Even(0),
             Step(m: u8, smaller: @Even(m)): @Even(m.wrapping_add(2)),

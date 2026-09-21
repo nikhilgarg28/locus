@@ -13,11 +13,11 @@ use locus::source::SourceMap;
 
 const HELP: &str = "Locus
 
-Usage: locus <command> <file.loc> [arguments]
+Usage: locus <command> <file.lc> [arguments]
 
   check   Check types and proofs; --holes lists every `_` and how it was filled,
           --stats what each function cost to elaborate and to check
-  run     Check, then interpret a function: locus run <file.loc> <function> [u8|true|false]...
+  run     Check, then interpret a function: locus run <file.lc> <function> [u8|true|false]...
   rust    Check, then print the generated Rust
   tokens  Print tokens and their original source spans
   parse   Validate syntax only
@@ -67,7 +67,7 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
     if !well_formed {
         writeln!(
             io::stderr(),
-            "error: expected `locus <check|run|rust|tokens|parse|ast> <file.loc>`\nUse `locus --help` for available commands."
+            "error: expected `locus <check|run|rust|tokens|parse|ast> <file.lc>`\nUse `locus --help` for available commands."
         )?;
         return Ok(2);
     }
