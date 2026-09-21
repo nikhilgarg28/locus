@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 22,
-  "savedAt": "2026-09-21T21:48:29.000Z",
-  "nextTask": 149,
-  "nextId": 264,
+  "rev": 23,
+  "savedAt": "2026-09-21T21:51:51.000Z",
+  "nextTask": 151,
+  "nextId": 266,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -2890,7 +2890,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "What Locus adds to Rust, in full, so that the list can be kept short:",
     "",
     "- Tokens: none. Every token Locus uses is a token of Rust, which is what keeps a locus! { ... } macro possible. One case needs care there: Rust reads pair.0.1 as a name, a dot, and the number 0.1, and splits it while parsing.",
-    "- Words: three. prop, which declares a proposition, is a keyword only where a declaration can begin. Writing the declaration as an attribute on an enum was considered and declined (LOC-148): a keyword is acceptable, and says more plainly what is being declared. math goes when promises replace math fn. Every keyword of Rust is reserved. forall and exists are keywords as well. Int, Prop, Seq, and Ghost are names of types, and prove!, old!, recurse!, and the rest are names of forms, not keywords.",
+    "- Words: three. prop, which declares a proposition, is a keyword only where a declaration can begin. Writing the declaration as an attribute on an enum was considered and declined (LOC-148): a keyword is acceptable, and says more plainly what is being declared. math goes when promises replace math fn. Every keyword of Rust is reserved. forall and exists are keywords inside a formula, and ordinary names outside one. Int, Prop, Seq, and Ghost are names of types, and prove!, old!, recurse!, and the rest are names of forms, not keywords.",
     "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @(out == n)), with each name in scope in the fields after it; => as implication inside a formula; the quantifiers; declarations of propositions, including a variant that states which proposition it proves; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
     "- Attributes: the promises and derive. An attribute's contents are free-form in Rust.",
     "",
@@ -2904,7 +2904,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Evidence is accepted where a claim is wanted only when it is evidence of exactly that claim, after computing. Computing means what the kernel decision has always meant by it: a name bound by let is replaced by what it stands for, a projection of a written tuple or struct and a match on a written constructor are carried out, and arithmetic on literals is done. It is a fixed procedure and not a search. Nothing else happens by itself: no fact is used to reach another, and no function is unfolded unless unfold! or fold! asks. The programmer states a step with prove!, and the forms rewrite!, unfold!, and fold! do the rest. This settles open question 3 against the bridging the elaborator does today.",
     "- Opening a dependent pattern types each part over the names the pattern binds. In let (next, still) = step(...), still has the type @within_limit(next.failures), not a type about step(...).0. This too is a fixed step, and without it evidence that comes out of a call could never be used.",
     "",
-    "- The quantifiers are keywords: forall (x: u8) { x \u003c= 255 } and exists (x: u8) { x == 0 }, with several parameters for several variables. Writing them as names that take a closure was agreed and then withdrawn: a quantifier is part of how every formula is built, and a function name with a meaning fixed by the language is an odd thing to build it from. Writing the whole grammar of propositions as an enum was also considered and does not work: a quantifier would still need a function inside a variant, which is the closure again; equality and the comparisons exist at every type, which an enum cannot list; and an enum can be matched on, which would let code tell p && q from q && p although they say the same thing. What is like an enum is the evidence of a declared proposition, and that is already written with variants. Open: whether forall and exists are reserved everywhere, or only inside a formula, where the language already has a grammar of its own (=> is part of it) and which is always inside prop!(...), prove!(...), or @(...).",
+    "- The quantifiers are keywords: forall (x: u8) { x \u003c= 255 } and exists (x: u8) { x == 0 }, with several parameters for several variables. Writing them as names that take a closure was agreed and then withdrawn: a quantifier is part of how every formula is built, and a function name with a meaning fixed by the language is an odd thing to build it from. Writing the whole grammar of propositions as an enum was also considered and does not work: a quantifier would still need a function inside a variant, which is the closure again; equality and the comparisons exist at every type, which an enum cannot list; and an enum can be matched on, which would let code tell p && q from q && p although they say the same thing. What is like an enum is the evidence of a declared proposition, and that is already written with variants. They are keywords inside a formula only. A formula is always written inside prop!(...), prove!(...), or @(...), where the language already has a grammar of its own, of which => is part; outside a formula forall and exists are ordinary names, so the language at large reserves nothing beyond Rust's keywords and prop.",
     "",
     "Plan: LOC-88, LOC-77, LOC-115, LOC-140, LOC-139, LOC-147.",
     "",
@@ -2924,7 +2924,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "- A type with no runtime form is Copy, whatever it speaks of: evidence, Ghost\u003cT>, Int, Prop. A type with a runtime form moves unless it derives Copy.",
     "- In a body, a proposition cannot mention a local that has been moved, as code cannot; to speak of a value after it moves, take snapshot!(v) before. A signature is outside the body's flow: a result type may mention any parameter, and means its value on entry.",
-    "- An expression that is erased keeps the three promises, terminates, no_panic, and no_io, which are the three that let a function appear in a proposition, and for the same reason: it is never run, so erasing it must change nothing. It also never moves anything: a use of a variable inside it is a reading of its value, which requires the variable to be live and leaves it live. The flow analysis that tracks initialization and moves enforces both, and the generated Rust agrees because the expression is not in it. This replaces the present rule that keeps the effects of an erased expression.",
+    "- An expression that is erased keeps the three promises, terminates, no_panic, and no_io, which are the three that let a function appear in a proposition, and for the same reason: it is never run, so erasing it must change nothing. It takes no &mut to anything with a runtime form, since a write is as observable as a panic. It also never moves anything: a use of a variable inside it is a reading of its value, which requires the variable to be live and leaves it live. The flow analysis that tracks initialization and moves enforces both, and the generated Rust agrees because the expression is not in it. This replaces the present rule that keeps the effects of an erased expression.",
     "",
     "Plan: LOC-2, LOC-89, LOC-92, LOC-94, LOC-95, LOC-97, LOC-100, LOC-101, LOC-25, LOC-103, LOC-112, LOC-111, LOC-141.",
     "",
@@ -2944,7 +2944,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "- Operator precedence is Rust's table, exactly, including as and the unary operators. The implication arrow binds loosest.",
     "",
-    "- == and != are what they are in Rust: defined on bool and every integer type, and on a programmer's type only when it derives PartialEq. What equality of a type with erased fields means to the logic is already noted in language.md and is unchanged.",
+    "- == and != are what they are in Rust: defined on bool and every integer type, and on a programmer's type only when it derives PartialEq. Deriving PartialEq is allowed only for a type with no logic-only data in it: no field of type Prop, Int, Seq, or Ghost\u003cT>, at any depth. Two values that differ only in such a field have one runtime representation and are different values to the logic, so a == b coming out true could not teach that a and b are equal. Evidence fields are no obstacle, since what a proof contains is irrelevant. For a type that qualifies, the true branch of a == b knows the two are equal, and the false branch that they are not.",
     "",
     "- match is to have the power it has in Rust: on integers, bool, and tuples, with literal, range, and or-patterns, bindings with @, guards, and exhaustiveness over integer ranges. This is in the batch on control flow, not in the core.",
     "",
@@ -2968,9 +2968,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- A comparison is between two values of one type, in code and in propositions alike, and Int is a type like any other here: out as Int == x as Int + 1, not out == x as Int + 1. This is Rust's rule, and it keeps every conversion into the logic visible.",
     "- How the language knows that + on a u8 or an i32 may panic. The operations of the built-in types are a table in the compiler: for each operator and type, the result type, the condition under which it panics, stated over the Int values of the operands, and what the result is to the logic. + - * of every integer type panic when the exact result is out of range in a build that checks; / and % panic on a zero divisor, and on the smallest value over -1 for a signed type; negating the smallest value of a signed type overflows; comparisons, as, the wrapping_ methods, and the operators of bool never panic. The table is part of what is trusted, beside the table from constructs to effects (Effects are promises), and the kernel's models of the machine types are what it is stated in. Once traits exist the table is presented as the implementations of the operator traits for the built-in types in the standard library, so that a built-in operator and one a programmer defines are found and judged the same way.",
     "- Operators a programmer defines, as Rust allows through the operator traits (Add, Sub, Mul, Div, Rem, Neg, Not, the comparison traits, Index), arrive with traits. One question they raise is open. A built-in + is usable in code that promises no_panic because it has a condition under which it does not panic, and that condition becomes an obligation where it is used. A function a programmer writes has no way to state such a condition except by taking evidence as a parameter, and a + b has no place to pass evidence. So an Add for Meters whose body adds two u32 could not be used under no_panic. The candidates are a promise that carries its condition, or evidence parameters on an operator's implementation that every use fills with a hole, which does not fit the signature Rust's trait fixes.",
-    "- What this asks of the kernel: Int as an ordered ring, where there is only Nat with addition today; for each machine type a view to Int and a wrap from Int, generalizing the present model of u8; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
+    "- What this asks of the kernel: Int, by the axioms listed below, where there is only Nat with addition today; for each machine type a view to Int and a wrap from Int, generalizing the present model of u8; the evaluator; and an arithmetic procedure that is linear, treats multiplication by a literal as linear, and leaves other products to lemmas.",
     "",
-    "- Int enters the kernel by axioms, as an ordered ring with literals of any size and native evaluation, and not by a construction from Nat. A construction would need the ring laws proved by hand in the kernel's own terms, and native evaluation of literals is trusted either way. Nat remains, for induction. Each axiom is stated in the kernel contract and tested by evaluating random instances; the machine models and the evaluator are tested against Rust at boundaries and at random, since all pairs cannot be tried beyond a byte.",
+    "- Int enters the kernel by axioms, with literals of any size and native evaluation, and not by a construction from Nat, which would need the ring laws proved by hand in the kernel's own terms while native evaluation of literals is trusted either way. Nat remains, for induction. An ordered ring is not enough to be the integers, since the order of an ordered ring need not be discrete. The contract states: the ring laws and the order; discreteness, that nothing lies strictly between n and n + 1; for each machine type the view to Int, its range, the wrap from Int, and that they round-trip; and quotient and remainder that truncate toward zero, characterized by a == (a / b) * b + a % b, by the remainder being smaller than the divisor in size and having the sign of a, and by the value 0 for a zero divisor. The arithmetic procedure is scoped by the acceptance examples: linear constraints over Int, the facts about machine ranges, and division by a literal reduced to linear constraints through the characterization above, each reduction a checked step and not an assumption. Random tests check the evaluator and the models against Rust; they say nothing about whether the axioms are consistent, which rests on the integers being a model of them and on keeping the list short and standard.",
     "",
     "Plan: LOC-11, LOC-12, LOC-3, LOC-9, LOC-118, LOC-119, LOC-120, LOC-121, LOC-122, LOC-123, LOC-124, LOC-145.",
     "",
@@ -2999,7 +2999,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Functions in propositions",
     "",
-    "A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io. Such a function always returns and is deterministic, so f(x) denotes one value; allocation is invisible to the logic. The rule reads the signature and never the body. A function with no runtime form, such as one returning Prop, must keep these promises and states them like any other. A function that may not return cannot appear in a proposition, because its result type may promise anything; the result of calling it is a fresh variable that exists only after the call returns, as now.",
+    "A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io, and its signature takes no &mut: a proposition is never run, so nothing written in one can change anything. A function may assign its own locals freely; what matters is storage the caller can see, and the signature shows that. Such a function always returns and is deterministic, so f(x) denotes one value; allocation is invisible to the logic. The rule reads the signature and never the body. A function with no runtime form, such as one returning Prop, must keep these promises and states them like any other. A function that may not return cannot appear in a proposition, because its result type may promise anything; the result of calling it is a fresh variable that exists only after the call returns, as now.",
     "",
     "What the logic knows about f(x) is, always, what the result type says, so that f(x).1 is evidence about f(x).0; and, where the body of f is visible, its defining equation as well. Visibility of the equation follows visibility of the body. A recursive function is the exception recorded under Termination. Within one file every body is visible. Once headers exist, a function whose body is in the header is known by its definition, which is right for the vocabulary of a specification, and a function given there only by its signature is known by its contract. No separate control of unfolding is planned; it can be revisited.",
     "",
@@ -3011,7 +3011,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Mutation and references, in tiers. Tier 0 is agreed; the full rules are to be written when it is specified in detail, together with Evidence about mutable state, which depends on it.",
     "",
-    "Tier 0 consists of two steps, in order. First, let mut locals and assignment to a variable or to a field path of one (x = e, lock.failures = e), which need no references at all. Second, &mut T and &T as parameter types, including self, with arguments written as paths (&mut lock, &mut pair.0, &lock), a reference parameter passed on to another call, and inherent impl blocks with method calls, without traits, since &mut self presupposes them. Not in tier 0: a reference held in a local, in a struct field, or returned; explicit lifetimes; a reference to a reference; a closure that captures one. A reference therefore lasts for one call, and no lifetime is ever written or checked. Every type is still Copy; moves and types that are not Copy arrive with Box and Vec.",
+    "Tier 0 consists of two steps, in order. First, let mut locals and assignment to a variable or to a field path of one (x = e, lock.failures = e), which need no references at all. Second, &mut T and &T as parameter types, including self, with arguments written as paths (&mut lock, &mut pair.0, &lock), a reference parameter passed on to another call, and inherent impl blocks with method calls, without traits, since &mut self presupposes them. Not in tier 0: a reference held in a local, in a struct field, or returned; explicit lifetimes; a reference to a reference; a closure that captures one. A reference therefore lasts for one call, and no lifetime is ever written or checked. Values move from the start, as decided under Values and types, so a struct that does not derive Copy is moved when it is passed by value and lent when it is passed by reference; Box and Vec add heap storage, not moving.",
     "",
     "- What the logic sees. A mutable variable is a sequence of versions, a new one at each assignment. At a join, a variable assigned on some path gets a new version, equal to a conditional term when the branches are pure. In a loop, nothing is known of a variable the loop assigns beyond what tracked evidence carries (Evidence about mutable state). Lowering turns versions into the state-passing forms the check IR already has. What becomes trusted is that translation.",
     "- How a signature speaks of old and new. In parameter types a &mut parameter means its value at entry. In the result type it means its value at return. old!(x) names the entry value where the result needs both. In the logic the function takes the old value and returns the new value beside its declared result, so that a call gives its argument a new version and the evidence it returns is about that version:",
@@ -3091,7 +3091,15 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## What is generated",
     "",
-    "One Rust module for each file. Proved and Ghost cannot be constructed outside generated code: they have a private field, and the only way to make one is visible to generated modules alone. Hand-written Rust therefore cannot call a function that takes evidence, which is the point; it comes in through a function that checks at runtime and returns an Option or a Result. Evidence does pass between files, as a value returned by one and taken by another, so the markers are defined once, in a module that all generated modules sit under, and not once in each file. For a single file the two are the same.",
+    "One Rust module for each file, all of them under one module that holds the markers, so that evidence returned by one file can be taken by another.",
+    "",
+    "A marker that cannot be forged does not protect an export. Every proof erases to the same Rust type, so hand-written Rust can obtain a Proved honestly, from any function that returns one, and pass it to a function that wants evidence of something else: with increment and Percent::new both exported, safe Rust builds a Percent of 101. A marker for each proposition would not help either, since it still would not tie the evidence to the particular argument. So the boundary is drawn by what is exported, not by what can be constructed:",
+    "",
+    "- A function that takes evidence, directly or inside a parameter whose type Rust could build, is visible to other Locus modules and never to Rust. It is emitted so that only modules under the generated root can see it.",
+    "- What Rust sees takes no evidence. It takes plain data and checks it at runtime, returning an Option or a Result, or it takes a validated type, one whose fields are private and whose every constructor Rust can reach validates. Returning evidence to Rust is harmless once nothing Rust can call accepts any.",
+    "- Proved and Ghost still have no public constructor. That stops casual misuse and is no part of the guarantee.",
+    "",
+    "How a function is marked visible to Locus and not to Rust is open (LOC-150).",
     "",
     "Plan: LOC-137, LOC-135, LOC-19.",
     "",
@@ -3102,7 +3110,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Two ideas are kept apart. Every value has a logical value, which is what propositions speak of: a u8 is a number below 256, a Vec is a sequence, a Tree is a tree. Separately, a type either has a runtime form or has none.",
     "- Some types have no runtime form by nature: Prop, proof types, Int, the unbounded integers, and Seq\u003cT>, the finite sequences, with Map and Set to follow. They are grouped under the name logic, and are built-in names until modules exist. Int and Seq never acquire a runtime form. A runtime Int would be a big number with a heap and an allocation at every operation, and giving an erased type a runtime form later would silently turn reasoning into computation. A program that needs big numbers at runtime uses a library type whose logical value is an Int, as the logical value of a Vec\u003cT> is a Seq\u003cT>.",
     "- Any other type gives up its runtime form on request, as Ghost\u003cT>, which keeps the logical value of a T and nothing else. snapshot!(e) builds one: it takes the value of e as it is now, never executes e, and neither moves nor copies anything. Inside a proposition a Ghost\u003cT> reads as the T. At first snapshot! applies only to a variable that is still live. Ghost\u003cT> erases to the zero-sized marker of the same name, so the generated Rust reads as the source does.",
-    "- One rule: a binding, field, parameter, or result is erased exactly when its type has no runtime form. There is no keyword and no attribute. The rules that already govern Prop apply unchanged: erased values flow only into erased positions, a function returning such a type has no runtime form, a runtime branch cannot be chosen by one, and a struct may have such fields. Runtime containers of logic-only types, such as Vec\u003cInt>, are not allowed at first.",
+    "- One rule: a binding, field, parameter, or result is erased exactly when its type has no runtime form. There is no keyword and no attribute. The rules that already govern Prop apply unchanged: erased values flow only into erased positions, a runtime branch cannot be chosen by one, and a struct may have such fields. Runtime containers of logic-only types, such as Vec\u003cInt>, are not allowed at first.",
+    "- An erased result is not an erasable computation. fn clear(x: &mut u32) -> @(x == 0) returns only evidence, keeps all three promises, and writes through x; removing the call would remove the write. A call is removed only when nothing it does can be observed: its result has no runtime form, it keeps the three promises, and it takes no &mut to anything with a runtime form. Otherwise the call is kept and its result is the marker. A function has no runtime form only when every call of it could be removed.",
     "- Conversions into the logic are exact and total: x as Int from any machine integer, and a view from a Vec, array, or slice to its Seq. They serve a different purpose from snapshot. A snapshot remembers this exact value, at its own type. A conversion gives the mathematical value, to reason with: arithmetic that cannot overflow, a length that is an Int, concatenation.",
     "- Why Int is needed in the language and not only in the kernel. A specification written in machine arithmetic suffers the overflow it is trying to describe, so that every bound has to be rearranged. And acceptance rests on evidence a person or an AI writes: an obligation stated in terms nobody can write admits no intermediate fact, produces a diagnostic nobody can type back in, and leaves every lemma to be built by hand in the kernel's own language.",
     "- Model functions and model fields need no feature of their own. A model function maps a representation to the value it stands for, is used only in propositions, and so never runs; given only by its signature in a header, it is known to callers through the contracts of the operations, which is the abstraction boundary. A model field is a field of a logic-only type, kept beside the real fields with evidence that the two agree.",
@@ -3125,7 +3134,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-21T21:48:29.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "target-examples",
@@ -3242,7 +3251,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "}",
     "~~~",
     "",
-    "Rust code cannot call new, because it cannot construct the evidence, and cannot build a Percent directly, because the fields are private. It calls checked. This example needs impl blocks and Option, which are later stages.",
+    "new is visible to other Locus modules and is not exported to Rust. Being unable to construct evidence would not stop Rust from calling it: every proof erases to the same marker, and one obtained honestly from another function could be passed here. Rust cannot build a Percent directly either, because the fields are private. It calls checked. This example needs impl blocks and Option, which are later stages.",
     "",
     "## Findings",
     "",
@@ -3255,7 +3264,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     ""
    ],
    "created": "2026-09-21T21:22:55.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "principles",
@@ -4889,9 +4898,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 0,
    "project": "p173",
-   "notes": "Clone, Copy, PartialEq, Eq, Debug to start; generated structs already derive these. Depends on traits only for anything beyond the closed list.",
+   "notes": "Clone, Copy, PartialEq, Eq, Debug to start; generated structs already derive these. Depends on traits only for anything beyond the closed list.\n\nPartialEq may be derived only for a type with no logic-only data at any depth (Prop, Int, Seq, Ghost\u003cT>); evidence fields are fine. Target language: Expressions and control.",
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T19:41:53.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t31",
@@ -5912,9 +5921,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 0,
    "project": "p229",
-   "notes": "Decided 21 September (Target language: Integers). By axioms and not by construction from Nat: a construction needs the ring laws proved by hand in the kernel's own terms, for little gain, since native evaluation of literals is trusted either way. Each axiom is stated in the kernel contract and tested by evaluating random instances.",
+   "notes": "An ordered ring is not enough: add discreteness. State quotient and remainder fully, for negative operands and a zero divisor. Random tests check the implementation against the model, not the consistency of the axioms. Target language: Integers.\n\nDecided 21 September (Target language: Integers). By axioms and not by construction from Nat: a construction needs the ring laws proved by hand in the kernel's own terms, for little gain, since native evaluation of literals is trusted either way. Each axiom is stated in the kernel contract and tested by evaluating random instances.",
    "created": "2026-09-21T20:49:51.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t231",
@@ -5967,9 +5976,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 3,
    "project": "p229",
-   "notes": "Linear; multiplication by a literal counts as linear; other products are left to lemmas. This is what makes holes fill beyond a byte, and the content of the batch on more powerful hole filling.\n\nTarget examples, finding 3: seven of fourteen obligations in the examples are arithmetic, all linear. This belongs early in the sequence.",
+   "notes": "Scope (21 September, after review): exactly the certificate rules the acceptance examples need. Linear constraints over Int; machine ranges; division by a literal, reduced to linear constraints by a checked step. The midpoint example needs the last.\n\nLinear; multiplication by a literal counts as linear; other products are left to lemmas. This is what makes holes fill beyond a byte, and the content of the batch on more powerful hole filling.\n\nTarget examples, finding 3: seven of fourteen obligations in the examples are arithmetic, all linear. This belongs early in the sequence.",
    "created": "2026-09-21T20:49:51.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t236",
@@ -6031,11 +6040,11 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "n": 129,
    "title": "Design the checked IR for mutation, early exit, and panics before coding it",
    "status": "todo",
-   "priority": 3,
+   "priority": 4,
    "project": "p89",
-   "notes": "Direction decided 21 September (Target language: How mutation is checked): versions, in lowering, watched by comparing the two interpreters. The design itself is still to be written.\n\nRaised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
+   "notes": "A gate: mutation is not implemented until this is written (21 September, after review). The design must state, for each case below, the versions, the facts available at each point, and the types of results, and not only whether the program is accepted:\n1. One branch refreshes tracked evidence; the other returns early.\n2. A loop with several continue and break paths.\n3. Snapshot evidence survives an assignment, while tracked evidence needs a refresh.\n4. A proposition value captures an old value, and then becomes the type of tracked evidence.\n5. A value is moved and initialized again, with evidence about its earlier state in scope.\n6. A call changes two disjoint fields and returns evidence about both.\n\nDirection decided 21 September (Target language: How mutation is checked): versions, in lowering, watched by comparing the two interpreters. The design itself is still to be written.\n\nRaised in the last review before the core. Today lowering is small because the language is pure. With let mut, assignment, loops over mutable state, return, moves, and panics, either lowering does a large translation into versions and state passing, all of it trusted, or the check IR gains mutable variables and the checker grows instead. The rules the target language leaves \"to be written with mut\" belong to the same design and are one flow analysis: validity of tracked evidence, what is known after a join, what a loop forgets, initialization and moves, and early return. Write this as a design before implementing any part of it.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t245",
@@ -6110,20 +6119,20 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "todo",
    "priority": 2,
    "project": "p89",
-   "notes": "The present pipeline works end to end with about 200 tests. A suggested order that keeps it working: the changes of syntax (prop!, @P, keywords, precedence, literals, paths, pub); promises in place of math fn; Int and the machine integers in the kernel, with arithmetic; let mut, tracked evidence, and the loop forms; moves and derive; return, the never type, and the panicking forms. The lock file of found proofs depends on a stable form for proofs and could leave the core.",
+   "notes": "A second review (21 September) proposed nearly the same order: 1. the syntax changes, explicit visibility, and exact evidence; 2. promises, Int, machine arithmetic, and the certificates the examples need; 3. mutable locals and tracked evidence, after LOC-129; 4. moves, references as parameters, and protected exports. The lock file, a lighter spelling for promises, richer patterns, and collections can wait.\n\nThe present pipeline works end to end with about 200 tests. A suggested order that keeps it working: the changes of syntax (prop!, @P, keywords, precedence, literals, paths, pub); promises in place of math fn; Int and the machine integers in the kernel, with arithmetic; let mut, tracked evidence, and the loop forms; moves and derive; return, the never type, and the panicking forms. The lock file of found proofs depends on a stable form for proofs and could leave the core.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T21:08:15.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t252",
    "n": 137,
-   "title": "Proved and Ghost that cannot be constructed outside generated code",
+   "title": "The export boundary: nothing Rust can call takes evidence; markers without public constructors",
    "status": "backlog",
    "priority": 0,
    "project": "p2",
-   "notes": "Target language: What is generated.",
+   "notes": "Redesigned 21 September after review: every proof erases to one Rust type, so a marker obtained honestly from one function can be replayed into another (the reviewer compiled an example that builds Percent(101) in safe Rust). Protection comes from what is exported. Target language: What is generated.",
    "created": "2026-09-21T21:22:55.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t253",
@@ -6198,9 +6207,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "todo",
    "priority": 2,
    "project": "p89",
-   "notes": "Target examples, finding 4. Loops never promise it and recursion comes later, so nothing that repeats can be used in a proposition or called from anything that promises to terminate. A loop over a finite range that keeps the promise is more urgent than its place under Unsure (LOC-49) suggests.",
+   "notes": "Target examples, finding 4. Loops never promise it and recursion comes later, so nothing that repeats can be used in a proposition or called from anything that promises to terminate. A loop over a finite range that keeps the promise is more urgent than its place under Unsure (LOC-49) suggests.\n\nA second review agrees: keep a loop over a finite range that terminates available early. Removing the bounded for that exists today, while recursion is deferred, would make simple logical computations harder.",
    "created": "2026-09-21T21:22:55.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t260",
@@ -6228,12 +6237,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t262",
    "n": 147,
    "title": "Decide whether forall and exists are reserved everywhere or only inside a formula",
-   "status": "todo",
+   "status": "done",
    "priority": 1,
    "project": "p89",
-   "notes": "Target language: Propositions and evidence. The closure spelling was withdrawn on 21 September; the quantifiers stay keywords, written as they are today. A formula is always inside prop!(...), prove!(...), or @(...), where => already has a meaning it has nowhere else, so the two words could be keywords there alone and ordinary names elsewhere.",
+   "notes": "Decided 21 September: only inside a formula.\n\nTarget language: Propositions and evidence. The closure spelling was withdrawn on 21 September; the quantifiers stay keywords, written as they are today. A formula is always inside prop!(...), prove!(...), or @(...), where => already has a meaning it has nowhere else, so the two words could be keywords there alone and ordinary names elsewhere.",
    "created": "2026-09-21T21:40:52.000Z",
-   "updated": "2026-09-21T21:48:29.000Z"
+   "updated": "2026-09-21T21:51:51.000Z"
   },
   {
    "id": "t263",
@@ -6245,6 +6254,28 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Decided 21 September: no. A declared proposition keeps a keyword of its own; keywords are acceptable. The proposal below is kept for the record.\n\nProposal, 21 September. A proposition is an enum whose values are its proofs, which is how it was first explained, so write it as one:\n\n    #[prop(n: u32)]\n    enum Small {\n        #[proves(Small(0))]\n        Zero,\n        Below { bound: @(n \u003c 10) },\n    }\n\nThe parameters go in the attribute; a variant that proves the proposition at particular arguments says so with #[proves(...)], and one without it proves it at the parameters; fields with names use Rust's struct-like variants. Everything but the @ types is Rust syntax. Use is unchanged: @Small(n), Small::Zero, match on evidence. It is erased whole. Observation: until recursion arrives, a declared proposition adds names and not power, since without recursion it can be written with ||, &&, and exists; what it is really for is inductive predicates.",
    "created": "2026-09-21T21:40:52.000Z",
    "updated": "2026-09-21T21:45:09.000Z"
+  },
+  {
+   "id": "t264",
+   "n": 149,
+   "title": "A formula grammar: forall, exists, and => only inside prop!(...), prove!(...), and @(...)",
+   "status": "backlog",
+   "priority": 0,
+   "project": "p2",
+   "notes": "Target language: Propositions and evidence. Outside a formula forall and exists are ordinary names.",
+   "created": "2026-09-21T21:51:51.000Z",
+   "updated": "2026-09-21T21:51:51.000Z"
+  },
+  {
+   "id": "t265",
+   "n": 150,
+   "title": "Decide how a function is marked visible to other Locus modules but not exported to Rust",
+   "status": "todo",
+   "priority": 2,
+   "project": "p89",
+   "notes": "Target language: What is generated. Rust's pub(crate) would let hand-written Rust in the same crate call it, so it does not serve. Either the signature decides (a pub function that takes evidence is emitted visible to generated modules only), or there is an explicit spelling.",
+   "created": "2026-09-21T21:51:51.000Z",
+   "updated": "2026-09-21T21:51:51.000Z"
   }
  ]
 }
