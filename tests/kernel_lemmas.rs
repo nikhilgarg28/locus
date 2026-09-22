@@ -238,7 +238,7 @@ fn the_lemma_names_are_stable() {
     }
 
     // The names the examples call are the family at `u8`: E5 rebound them
-    // from the lemmas over the model of `u8` in `Nat` to the table.
+    // from the lemmas over the earlier model of `u8` to the table.
     let rebound = [
         ("u8_le_refl", theory.machine(MachineInt::U8).le_refl),
         ("u8_le_trans", theory.machine(MachineInt::U8).le_trans),

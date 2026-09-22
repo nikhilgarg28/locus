@@ -441,9 +441,9 @@ impl Env<'_> {
     }
 
     /// `rewrite(...)`, `unfold(...)`, or `fold(...)` written as a call: the
-    /// forms are spelled with `!` now, and the bare names are free.
+    /// forms are spelled with `!`, and the bare names are free.
     #[inline(never)]
-    pub(super) fn retired_bare_form<T>(&mut self, name: &ast::Name) -> Elab<T> {
+    pub(super) fn bare_form<T>(&mut self, name: &ast::Name) -> Elab<T> {
         let span = name.span.at_end();
         self.diagnostics.push(
             Diagnostic::error(

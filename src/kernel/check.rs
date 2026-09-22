@@ -26,7 +26,6 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Bound(l), Term::Bound(r)) => l == r,
         (Term::Bool(l), Term::Bool(r)) => l == r,
         (Term::U8(l), Term::U8(r)) => l == r,
-        (Term::Nat(l), Term::Nat(r)) => l == r,
         // A number has one representation, so this is equality of numbers.
         (Term::Int(l), Term::Int(r)) => l == r,
         (Term::Machine(lt, lv), Term::Machine(rt, rv)) => lt == rt && lv == rv,
@@ -84,7 +83,6 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
     match (left, right) {
         (Type::Bool, Type::Bool)
         | (Type::U8, Type::U8)
-        | (Type::Nat, Type::Nat)
         | (Type::Int, Type::Int)
         | (Type::Prop, Type::Prop) => true,
         (Type::Machine(l), Type::Machine(r)) => l == r,
@@ -104,7 +102,7 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 /// Checks that a type is well formed in the context.
 pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
-        Type::Bool | Type::U8 | Type::Nat | Type::Int | Type::Prop => Ok(()),
+        Type::Bool | Type::U8 | Type::Int | Type::Prop => Ok(()),
         // `u8` is `Type::U8` and nothing else, so that a type has one form.
         Type::Machine(MachineInt::U8) => Err(KernelError::MachineFormOfU8),
         Type::Machine(_) => Ok(()),
@@ -152,7 +150,6 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
         Term::Bound(_) => Err(KernelError::DanglingBound),
         Term::Bool(_) => Ok(Type::Bool),
         Term::U8(_) => Ok(Type::U8),
-        Term::Nat(_) => ghost_former(mode, &Type::Nat).map(|()| Type::Nat),
         Term::Int(_) => ghost_former(mode, &Type::Int).map(|()| Type::Int),
         Term::Machine(..) => type_of_machine(term),
         Term::Prim(..) => type_of_prim(ctx, term, mode),
@@ -671,8 +668,6 @@ fn expect_arm_count(arms: &[ProofArm], variants: usize) -> Result<(), KernelErro
 /// The parameter types and the result type of a primitive.
 fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
     match prim {
-        Prim::Succ => (vec![Type::Nat], Type::Nat),
-        Prim::NatAdd => (vec![Type::Nat, Type::Nat], Type::Nat),
         Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntDiv | Prim::IntRem => {
             (vec![Type::Int, Type::Int], Type::Int)
         }
@@ -720,8 +715,6 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         // A comparison of two values of a type is the comparison of their
         // numbers, which is what `cmp_reflect` states of the views.
         (Prim::Cmp(op, ty), [a, b]) => Term::Bool(op.holds(&machine(ty, a)?, &machine(ty, b)?)),
-        (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.succ()),
-        (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.add(b)),
         (Prim::IntAdd, [Term::Int(a), Term::Int(b)]) => Term::Int(a.add(b)),
         (Prim::IntSub, [Term::Int(a), Term::Int(b)]) => Term::Int(a.sub(b)),
         (Prim::IntMul, [Term::Int(a), Term::Int(b)]) => Term::Int(a.mul(b)),
@@ -737,10 +730,6 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
 fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError> {
     let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
     let expected = match axiom {
-        Axiom::NatAddZero(_)
-        | Axiom::NatAddSucc(..)
-        | Axiom::NatSuccInjective(..)
-        | Axiom::NatSuccNotZero(_) => Some(Type::Nat),
         Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -780,21 +769,10 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
             expect_type(ctx, term, expected, Mode::Logical)?;
         }
     }
-    let nat_eq = |left: Term, right: Term| Term::eq(Type::Nat, left, right);
     let int_eq = |left: Term, right: Term| Term::eq(Type::Int, left, right);
     let (add, mul, le) = (Term::int_add, Term::int_mul, Term::int_le);
     let (div, rem, lt) = (Term::int_div, Term::int_rem, Term::int_lt);
     Ok(match axiom.clone() {
-        Axiom::NatAddZero(a) => nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a),
-        Axiom::NatAddSucc(a, b) => nat_eq(
-            Term::nat_add(a.clone(), Term::succ(b.clone())),
-            Term::succ(Term::nat_add(a, b)),
-        ),
-        Axiom::NatSuccInjective(a, b) => Term::implies(
-            nat_eq(Term::succ(a.clone()), Term::succ(b.clone())),
-            nat_eq(a, b),
-        ),
-        Axiom::NatSuccNotZero(a) => prelude.not_prop(nat_eq(Term::succ(a), Term::nat(0))),
         Axiom::IntAddAssoc(a, b, c) => {
             int_eq(add(add(a.clone(), b.clone()), c.clone()), add(a, add(b, c)))
         }
@@ -1034,9 +1012,7 @@ pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         Proof::ForStep { .. } => claim_of_for_step(ctx, proof),
         Proof::Omitted => Err(KernelError::OmittedProof),
         Proof::Evaluate(..) => claim_of_evaluate(ctx, proof),
-        Proof::EvaluateAll(..) => claim_of_evaluate_all(ctx, proof),
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
-        Proof::NatInduction { .. } => claim_of_nat_induction(ctx, proof),
         Proof::IntInduction { .. } => claim_of_int_induction(ctx, proof),
         Proof::Linear { .. } => claim_of_linear(ctx, proof),
     }
@@ -1522,69 +1498,6 @@ fn claim_of_evaluate(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelErr
     }
     let value = Evaluator::new(&definitions).eval(term)?;
     Ok(Term::eq(ty, term.clone(), value))
-}
-
-#[inline(never)]
-fn claim_of_evaluate_all(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
-    let Proof::EvaluateAll(body) = proof else {
-        unreachable!("dispatched on this variant")
-    };
-    let scope = ctx.len();
-    let var = ctx.push_bound(Type::U8);
-    let typed = expect_type(
-        ctx,
-        &body.open(&Term::Free(var)),
-        &Type::Bool,
-        Mode::Logical,
-    );
-    ctx.truncate(scope);
-    typed?;
-    let definitions = ctx.definitions();
-    // One evaluator for all cases: the step budget covers the whole
-    // claim, not each byte.
-    let mut evaluator = Evaluator::new(&definitions);
-    for byte in 0..=255u8 {
-        let case = body.open(&Term::U8(byte));
-        if evaluator.eval(&case)? != Term::Bool(true) {
-            return Err(KernelError::Refuted(Term::U8(byte)));
-        }
-    }
-    let claim = Term::eq(Type::Bool, body.clone(), Term::Bool(true));
-    Ok(Term::Forall(Type::U8, Box::new(claim)))
-}
-
-#[inline(never)]
-fn claim_of_nat_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
-    let Proof::NatInduction {
-        motive,
-        base,
-        step,
-        target,
-    } = proof
-    else {
-        unreachable!("dispatched on this variant")
-    };
-    let scope = ctx.len();
-    let hole = ctx.push_bound(Type::Nat);
-    let well_formed = expect_type(
-        ctx,
-        &motive.open(&Term::Free(hole)),
-        &Type::Prop,
-        Mode::Logical,
-    );
-    ctx.truncate(scope);
-    well_formed?;
-    expect_type(ctx, target, &Type::Nat, Mode::Logical)?;
-    proof_of(ctx, base, &motive.open(&Term::nat(0)))?;
-    check_arm_with(
-        ctx,
-        step,
-        1,
-        |_, _| Type::Nat,
-        |vars| vec![motive.open(&Term::Free(vars[0]))],
-        |vars| motive.open(&Term::succ(Term::Free(vars[0]))),
-    )?;
-    Ok(motive.open(target))
 }
 
 #[inline(never)]

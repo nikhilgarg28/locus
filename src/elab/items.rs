@@ -493,7 +493,7 @@ impl Env<'_> {
                 })
             }),
             Type::Fn(_, result) => self.carries_evidence(result),
-            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Nat | Type::Int => false,
+            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Int => false,
         }
     }
 
@@ -519,7 +519,6 @@ impl Env<'_> {
             | Type::U8
             | Type::Machine(_)
             | Type::Prop
-            | Type::Nat
             | Type::Int => false,
         }
     }
@@ -613,7 +612,7 @@ impl Env<'_> {
                     forgery.reason
                 ),
             }),
-            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Nat | Type::Int => None,
+            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Int => None,
         }
     }
 }

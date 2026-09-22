@@ -43,7 +43,6 @@ impl Env<'_> {
         match ty {
             Type::Bool => "bool".into(),
             Type::U8 => "u8".into(),
-            Type::Nat => "Nat".into(),
             Type::Int => "Int".into(),
             Type::Machine(ty) => ty.name().into(),
             Type::Prop => "Prop".into(),
@@ -104,9 +103,6 @@ impl Env<'_> {
 
     fn is_operator(&self, term: &Term) -> bool {
         match term {
-            Term::Call(callee, _) => {
-                matches!(&**callee, Term::Fn(id) if *id == self.prelude.nat_le || *id == self.prelude.nat_lt)
-            }
             Term::PropApp(id, _) => [
                 self.prelude.and,
                 self.prelude.or,
@@ -171,7 +167,6 @@ impl Env<'_> {
                 .unwrap_or_else(|| "_".into()),
             Term::Bool(value) => value.to_string(),
             Term::U8(value) => value.to_string(),
-            Term::Nat(value) => format!("{value}"),
             Term::Int(value) => format!("{value}"),
             // A literal of a type other than `u8` shows its type, so that
             // `0i32 <= 3i32` is not mistaken for a claim about bytes.
@@ -310,29 +305,14 @@ impl Env<'_> {
                 )
             }
             Term::Proof(_) => "_".into(),
-            Term::Fn(id) => {
-                let named = [(prelude.nat_le, "nat_le"), (prelude.nat_lt, "nat_lt")];
-                match self.fn_by_id(*id) {
-                    Some(info) => info.name.clone(),
-                    None => named
-                        .iter()
-                        .find(|(known, _)| known == id)
-                        .map_or_else(|| "lemma".to_string(), |(_, name)| name.to_string()),
-                }
-            }
-            Term::Call(callee, arguments) => match (&**callee, arguments.as_slice()) {
-                (Term::Fn(id), [a, b]) if *id == prelude.nat_le => {
-                    self.binary("<=", Level::Compare, at, a, b, bound)
-                }
-                (Term::Fn(id), [a, b]) if *id == prelude.nat_lt => {
-                    self.binary("<", Level::Compare, at, a, b, bound)
-                }
-                _ => format!(
-                    "{}({})",
-                    self.term_at(callee, Level::Postfix, bound),
-                    self.list(arguments, bound)
-                ),
-            },
+            Term::Fn(id) => self
+                .fn_by_id(*id)
+                .map_or_else(|| "lemma".to_string(), |info| info.name.clone()),
+            Term::Call(callee, arguments) => format!(
+                "{}({})",
+                self.term_at(callee, Level::Postfix, bound),
+                self.list(arguments, bound)
+            ),
             Term::Variant(id, index, payload) => {
                 let Some(info) = self.enum_by_id(*id) else {
                     return format!("enum::{index}({})", self.list(payload, bound));

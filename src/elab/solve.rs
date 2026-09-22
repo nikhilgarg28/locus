@@ -666,9 +666,7 @@ pub fn certificate_pairs(proof: &Proof) -> usize {
             exists, arm: one, ..
         } => certificate_pairs(exists) + arm(one),
         Proof::ForStep { lower, upper, .. } => certificate_pairs(lower) + certificate_pairs(upper),
-        Proof::NatInduction { base, step, .. } | Proof::IntInduction { base, step, .. } => {
-            certificate_pairs(base) + arm(step)
-        }
+        Proof::IntInduction { base, step, .. } => certificate_pairs(base) + arm(step),
         Proof::Hyp(_)
         | Proof::OfTerm(_)
         | Proof::Refl(_)
@@ -681,7 +679,6 @@ pub fn certificate_pairs(proof: &Proof) -> usize {
         | Proof::ForEmpty(_)
         | Proof::Omitted
         | Proof::Evaluate(_)
-        | Proof::EvaluateAll(_)
         | Proof::Axiom(_) => 0,
     }
 }

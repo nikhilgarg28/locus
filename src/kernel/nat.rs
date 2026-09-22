@@ -1,5 +1,5 @@
-//! Arbitrary-precision natural numbers: the values of `Nat` literals and the
-//! magnitudes of `Integer`. Addition, checked subtraction, multiplication,
+//! Arbitrary-precision natural numbers: the magnitudes of `Integer` and the
+//! values of the lexer's literals. Addition, checked subtraction, multiplication,
 //! division with remainder, comparison, decimal parsing and printing.
 //! Part of the trusted base, because evaluation computes with it. Every
 //! algorithm is the schoolbook one: clarity is worth more here than speed.

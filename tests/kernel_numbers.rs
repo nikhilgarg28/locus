@@ -1,5 +1,5 @@
-//! Acceptance tests for kernel gate K5 (the kernel contract in atlas.html): the internal
-//! `Nat` with induction, the model of `u8` over `Int`, reflection of runtime
+//! Acceptance tests for the numbers of the kernel (the kernel contract in
+//! atlas.html): the model of `u8` over `Int`, reflection of runtime
 //! comparisons, and agreement between native evaluation and the model.
 //! Every term here is written by hand; nothing comes from the parser.
 
@@ -18,10 +18,6 @@ fn setup() -> (Rc<Definitions>, Prelude, Theory) {
     (Rc::new(definitions), prelude, theory)
 }
 
-fn nat_eq(left: Term, right: Term) -> Term {
-    Term::eq(Type::Nat, left, right)
-}
-
 fn u8_eq(left: Term, right: Term) -> Term {
     Term::eq(Type::U8, left, right)
 }
@@ -35,7 +31,7 @@ fn lemma(id: locus::kernel::FnId, arguments: Vec<Term>) -> Proof {
 #[test]
 fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
     // Declaring the theory is the proof: every lemma in it was checked by
-    // the kernel, by reasoning and induction over Nat.
+    // the kernel, by reasoning from the axioms of `Int` and of the model.
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::clone(&definitions));
 
@@ -93,8 +89,8 @@ fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
     ));
     // None of this is classical, and the lemma bounded_walk needs exists.
     for id in [
-        theory.nat_add_assoc,
-        theory.nat_le_trans,
+        theory.int_le_of_lt,
+        theory.int_le_add_left,
         theory.machine(MachineInt::U8).le_trans,
         theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
     ] {
@@ -267,116 +263,10 @@ fn native_conversions_agree_with_the_model_axioms() {
 
 // --- Induction and the Peano axioms --------------------------------------------
 
-#[test]
-fn induction_checks_its_base_and_its_step() {
-    let (definitions, _, theory) = setup();
-    let mut ctx = Context::with_definitions(definitions);
-    let n = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
-    let zero = Term::nat(0);
-    let claim = |k: Term| nat_eq(Term::nat_add(Term::nat(0), k.clone()), k);
-
-    // The lemma, and the same induction written inline.
-    assert_eq!(
-        check_proof(
-            &mut ctx,
-            &lemma(theory.nat_zero_add, vec![n.clone()]),
-            &claim(n.clone())
-        ),
-        Ok(())
-    );
-    let step = |k: Term, ih: Proof| {
-        Chain::new(
-            Type::Nat,
-            Term::nat_add(Term::nat(0), Term::succ(k.clone())),
-        )
-        .step(Proof::Axiom(Axiom::NatAddSucc(Term::nat(0), k)))
-        .rewrite(Term::succ, ih)
-        .finish()
-    };
-    let inline = Proof::nat_induction(
-        claim,
-        Proof::Axiom(Axiom::NatAddZero(zero.clone())),
-        step,
-        n.clone(),
-    );
-    assert_eq!(check_proof(&mut ctx, &inline, &claim(n.clone())), Ok(()));
-
-    // A wrong base case.
-    let bad_base = Proof::nat_induction(claim, Proof::Refl(zero.clone()), step, n.clone());
-    assert!(matches!(
-        infer_proof(&mut ctx, &bad_base),
-        Err(KernelError::ProofMismatch { .. })
-    ));
-    // A step that only restates its hypothesis proves the claim about k, not
-    // about succ(k).
-    let lazy_step = Proof::nat_induction(
-        claim,
-        Proof::Axiom(Axiom::NatAddZero(zero.clone())),
-        |_, ih| ih,
-        n.clone(),
-    );
-    assert!(matches!(
-        infer_proof(&mut ctx, &lazy_step),
-        Err(KernelError::ProofMismatch { .. })
-    ));
-    // The motive must be a proposition and the target a Nat.
-    let data_motive = Proof::nat_induction(|k| k, Proof::Refl(zero.clone()), |_, ih| ih, n);
-    assert!(matches!(
-        infer_proof(&mut ctx, &data_motive),
-        Err(KernelError::TypeMismatch { .. })
-    ));
-    let byte_target = Proof::nat_induction(
-        claim,
-        Proof::Axiom(Axiom::NatAddZero(zero)),
-        step,
-        Term::U8(3),
-    );
-    assert!(matches!(
-        infer_proof(&mut ctx, &byte_target),
-        Err(KernelError::TypeMismatch { .. })
-    ));
-}
-
-#[test]
-fn successor_is_injective_and_never_zero() {
-    let (definitions, prelude, _) = setup();
-    let mut ctx = Context::with_definitions(definitions);
-
-    // 1 == 0 => False: 1 is succ(0), and no successor is zero.
-    let one_is_zero = nat_eq(Term::nat(1), Term::nat(0));
-    let refuted = Proof::implies_intro(one_is_zero.clone(), |h| {
-        let one = Proof::Literal(Term::succ(Term::nat(0)));
-        let succ_is_zero = Proof::transport(
-            symm_at(&Type::Nat, &Term::succ(Term::nat(0)), one),
-            |hole| nat_eq(hole, Term::nat(0)),
-            h,
-        );
-        Proof::implies_elim(
-            Proof::Axiom(Axiom::NatSuccNotZero(Term::nat(0))),
-            succ_is_zero,
-        )
-    });
-    assert_eq!(
-        check_proof(&mut ctx, &refuted, &prelude.not_prop(one_is_zero)),
-        Ok(())
-    );
-
-    let a = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
-    let b = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
-    let h = ctx
-        .assume(nat_eq(Term::succ(a.clone()), Term::succ(b.clone())))
-        .unwrap();
-    let injective = Proof::implies_elim(
-        Proof::Axiom(Axiom::NatSuccInjective(a.clone(), b.clone())),
-        Proof::hyp(h),
-    );
-    assert_eq!(check_proof(&mut ctx, &injective, &nat_eq(a, b)), Ok(()));
-}
-
 // --- The model in use ------------------------------------------------------------
 
 #[test]
-fn nat_is_ghost_and_axioms_are_typed() {
+fn the_model_of_u8_is_ghost_and_axioms_are_typed() {
     let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
     let x = Term::var(ctx.declare(Type::U8).unwrap());
@@ -404,42 +294,28 @@ fn nat_is_ghost_and_axioms_are_typed() {
         infer_term(&mut ctx, &comparison, Mode::Executable),
         Ok(Type::Bool)
     );
-    // An axiom about bytes does not accept a Nat, and conversely.
+    // An axiom about bytes does not accept an integer, and conversely.
     assert!(matches!(
         infer_proof(
             &mut ctx,
-            &Proof::Axiom(Axiom::ViewLower(MachineInt::U8, Term::nat(3)))
+            &Proof::Axiom(Axiom::ViewLower(MachineInt::U8, Term::int(3)))
         ),
         Err(KernelError::TypeMismatch { .. })
     ));
     assert!(matches!(
-        infer_proof(&mut ctx, &Proof::Axiom(Axiom::NatAddZero(x.clone()))),
+        infer_proof(&mut ctx, &Proof::Axiom(Axiom::IntAddZero(x.clone()))),
         Err(KernelError::TypeMismatch { .. })
     ));
     assert!(matches!(
         infer_proof(&mut ctx, &Proof::Axiom(Axiom::CmpReflect(x, true))),
         Err(KernelError::TypeMismatch { .. })
     ));
-    // The axioms are stated with the prelude's orderings.
+    // The axioms are stated with the prelude's propositions.
     let mut bare = Context::new();
     assert_eq!(
-        infer_proof(&mut bare, &Proof::Axiom(Axiom::NatAddZero(Term::nat(1)))),
+        infer_proof(&mut bare, &Proof::Axiom(Axiom::IntAddZero(Term::int(1)))),
         Err(KernelError::NoPrelude)
     );
-    // Nat literals are not machine integers: arithmetic continues past u64,
-    // and a Nat is not an Int, so wrap has no step on one.
-    let past = Term::succ(Term::nat(u64::MAX));
-    let Ok(Term::Eq(_, _, value)) = infer_proof(&mut ctx, &Proof::Literal(past)) else {
-        panic!("succ has a literal step at any size")
-    };
-    assert_eq!(value.to_string(), "18446744073709551616n");
-    assert!(matches!(
-        infer_proof(
-            &mut ctx,
-            &Proof::Literal(Term::wrap(MachineInt::U8, *value))
-        ),
-        Err(KernelError::TypeMismatch { .. } | KernelError::NoComputationStep(_))
-    ));
 }
 
 #[test]
@@ -620,9 +496,9 @@ fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
         .is_ok()
     );
     for id in [
-        theory.nat_succ_add,
-        theory.nat_zero_or_succ,
-        theory.nat_le_succ_succ,
+        theory.int_lt_of_le_of_ne,
+        theory.int_le_add_right,
+        theory.int_le_sub,
         theory.machine(MachineInt::U8).lt_of_le_of_ne,
         theory.machine(MachineInt::U8).succ_le_of_lt,
     ] {

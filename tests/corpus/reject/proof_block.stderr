@@ -4,4 +4,4 @@ error[L0110]: `@` begins a proof type, not an expression
 3 |     (n, @{ _ }) //~ error: L0110 begins a proof type
   |         ^
   |
-  = note: proof blocks `@{ ... }` were retired; evidence is an ordinary expression, and `_` asks the elaborator to find it
+  = note: `@claim` and `@(condition)` are types; evidence is an ordinary expression: request it with `let evidence: @claim = _;`, or state a claim where it stands with `prove!(condition)`

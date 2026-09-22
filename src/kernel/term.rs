@@ -17,7 +17,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::int::Integer;
 use super::machine::MachineInt;
-use super::nat::Natural;
 use super::ops::Op;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -68,11 +67,8 @@ pub struct FnId(pub(super) usize);
 pub enum Type {
     Bool,
     U8,
-    /// Natural numbers. Internal to the kernel: the model of `u8` and the
-    /// domain of induction. It has no runtime representation, so it is ghost.
-    Nat,
-    /// The integers of the logic. Like `Nat`, the type has no runtime
-    /// representation, so it is ghost.
+    /// The integers of the logic. The type has no runtime representation,
+    /// so it is ghost.
     Int,
     /// A machine integer type other than `u8`, which is `Type::U8`; the
     /// checker rejects `Machine(MachineInt::U8)`. Runtime data, like `u8`.
@@ -99,7 +95,7 @@ impl Type {
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
         match self {
-            Self::Prop | Self::Proof(_) | Self::Nat | Self::Int => true,
+            Self::Prop | Self::Proof(_) | Self::Int => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
             Self::Bool
@@ -218,7 +214,6 @@ impl Type {
         match self {
             Self::Bool
             | Self::U8
-            | Self::Nat
             | Self::Int
             | Self::Machine(_)
             | Self::Prop
@@ -244,10 +239,6 @@ fn rebind_telescope(fields: &[Type], depth: Depth, op: Rebind<'_>) -> Vec<Type> 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prim {
-    /// `Nat -> Nat`
-    Succ,
-    /// `Nat, Nat -> Nat`
-    NatAdd,
     /// `Int, Int -> Int`
     IntAdd,
     IntSub,
@@ -336,8 +327,6 @@ impl Prim {
     /// at a machine type is named without it; `Display` adds the type.
     pub fn name(self) -> &'static str {
         match self {
-            Self::Succ => "succ",
-            Self::NatAdd => "nat_add",
             Self::IntAdd => "int_add",
             Self::IntSub => "int_sub",
             Self::IntMul => "int_mul",
@@ -367,20 +356,12 @@ impl fmt::Display for Prim {
     }
 }
 
-/// The axioms of the internal `Nat`, of `Int`, of the machine integer types
-/// over `Int`, of the table of primitive operations, and of the comparisons.
+/// The axioms of `Int`, of the machine integer types over `Int`, of the
+/// table of primitive operations, and of the comparisons.
 /// Each takes terms and yields a fixed proposition about them; see the kernel
 /// contract in `atlas.html`, which names each axiom as `name` does.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Axiom {
-    /// `a + 0 == a`
-    NatAddZero(Term),
-    /// `a + succ(b) == succ(a + b)`
-    NatAddSucc(Term, Term),
-    /// `succ(a) == succ(b) => a == b`
-    NatSuccInjective(Term, Term),
-    /// `succ(a) == 0 => False`
-    NatSuccNotZero(Term),
     // The integers are a commutative ring. Below, `+`, `-`, `*`, and `<=`
     // stand for `int_add`, `int_sub` or `int_neg`, `int_mul`, and `int_le`.
     /// `(a + b) + c == a + (b + c)`
@@ -475,10 +456,6 @@ impl Axiom {
     /// The name the kernel contract gives the axiom.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::NatAddZero(_) => "nat_add_zero",
-            Self::NatAddSucc(..) => "nat_add_succ",
-            Self::NatSuccInjective(..) => "nat_succ_injective",
-            Self::NatSuccNotZero(_) => "nat_succ_not_zero",
             Self::IntAddAssoc(..) => "int_add_assoc",
             Self::IntAddComm(..) => "int_add_comm",
             Self::IntAddZero(_) => "int_add_zero",
@@ -517,10 +494,6 @@ impl Axiom {
 
     fn map(&self, f: impl Fn(&Term) -> Term) -> Axiom {
         match self {
-            Self::NatAddZero(a) => Self::NatAddZero(f(a)),
-            Self::NatAddSucc(a, b) => Self::NatAddSucc(f(a), f(b)),
-            Self::NatSuccInjective(a, b) => Self::NatSuccInjective(f(a), f(b)),
-            Self::NatSuccNotZero(a) => Self::NatSuccNotZero(f(a)),
             Self::IntAddAssoc(a, b, c) => Self::IntAddAssoc(f(a), f(b), f(c)),
             Self::IntAddComm(a, b) => Self::IntAddComm(f(a), f(b)),
             Self::IntAddZero(a) => Self::IntAddZero(f(a)),
@@ -560,9 +533,7 @@ impl Axiom {
     /// The terms the axiom is instantiated at, in order.
     pub fn terms(&self) -> Vec<&Term> {
         match self {
-            Self::NatAddZero(a)
-            | Self::NatSuccNotZero(a)
-            | Self::CmpReflect(a, _)
+            Self::CmpReflect(a, _)
             | Self::IntAddZero(a)
             | Self::IntAddNeg(a)
             | Self::IntMulOne(a)
@@ -575,9 +546,7 @@ impl Axiom {
             | Self::ViewWrap(_, a)
             | Self::WrapPeriod(_, a)
             | Self::CastDef(_, _, a) => vec![a],
-            Self::NatAddSucc(a, b)
-            | Self::NatSuccInjective(a, b)
-            | Self::IntAddComm(a, b)
+            Self::IntAddComm(a, b)
             | Self::IntSubDef(a, b)
             | Self::IntMulComm(a, b)
             | Self::IntLeAntisymm(a, b)
@@ -607,8 +576,6 @@ pub enum Term {
     Bound(u32),
     Bool(bool),
     U8(u8),
-    /// A `Nat` literal, of arbitrary size.
-    Nat(Natural),
     /// An `Int` literal, of arbitrary size and either sign.
     Int(Integer),
     /// A literal of a machine integer type other than `u8`, whose literals
@@ -796,21 +763,9 @@ pub enum Proof {
     Omitted,
     /// Big-step evaluation of a closed term whose type is plain data.
     Evaluate(Term),
-    /// `forall (x: u8) { body == true }`, by evaluating all 256 cases. The
-    /// body binds `Bound(0)`.
-    EvaluateAll(Term),
-    /// An axiom of `Nat`, of `Int`, of a machine integer type, of the table
-    /// of primitive operations, or of the comparisons.
+    /// An axiom of `Int`, of a machine integer type, of the table of
+    /// primitive operations, or of the comparisons.
     Axiom(Axiom),
-    /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
-    /// `motive[0]`; `step` binds `n` and the hypothesis `motive[n]` and
-    /// proves `motive[succ(n)]`. Concludes `motive[target]`.
-    NatInduction {
-        motive: Term,
-        base: Box<Proof>,
-        step: ProofArm,
-        target: Term,
-    },
     /// Induction over the non-negative integers. The motive binds
     /// `Bound(0)`; `base` proves `motive[0]`; `step` binds `n` and the
     /// hypotheses `0 <= n` and `motive[n]`, in that order, and proves
@@ -916,19 +871,6 @@ impl Term {
 
     pub fn prim(prim: Prim, arguments: Vec<Term>) -> Self {
         Self::Prim(prim, arguments)
-    }
-
-    /// A `Nat` literal.
-    pub fn nat(value: u64) -> Self {
-        Self::Nat(Natural::from(value))
-    }
-
-    pub fn succ(number: Term) -> Self {
-        Self::Prim(Prim::Succ, vec![number])
-    }
-
-    pub fn nat_add(left: Term, right: Term) -> Self {
-        Self::Prim(Prim::NatAdd, vec![left, right])
     }
 
     /// An `Int` literal.
@@ -1286,7 +1228,6 @@ impl Term {
             Self::Free(_)
             | Self::Bool(_)
             | Self::U8(_)
-            | Self::Nat(_)
             | Self::Int(_)
             | Self::Machine(..)
             | Self::Proof(_)
@@ -1335,7 +1276,6 @@ impl Term {
             | Self::Bound(_)
             | Self::Bool(_)
             | Self::U8(_)
-            | Self::Nat(_)
             | Self::Int(_)
             | Self::Machine(..)
             | Self::Proof(_)
@@ -1393,7 +1333,6 @@ impl Term {
             | Self::Bound(_)
             | Self::Bool(_)
             | Self::U8(_)
-            | Self::Nat(_)
             | Self::Int(_)
             | Self::Machine(..)
             | Self::Proof(_)
@@ -1460,9 +1399,7 @@ impl Term {
         match self {
             Self::Free(..) => self.rebind_free(depth, op),
             Self::Bound(..) => self.rebind_bound(depth, op),
-            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) | Self::Machine(..) => {
-                self.clone()
-            }
+            Self::Bool(_) | Self::U8(_) | Self::Int(_) | Self::Machine(..) => self.clone(),
             Self::Prim(..) => self.rebind_prim(depth, op),
             Self::Eq(..) => self.rebind_eq(depth, op),
             Self::Implies(..) => self.rebind_implies(depth, op),
@@ -1719,9 +1656,7 @@ impl Proof {
             Self::ForStep { .. } => "for_step",
             Self::Omitted => "omitted",
             Self::Evaluate(_) => "evaluate",
-            Self::EvaluateAll(_) => "evaluate_all",
             Self::Axiom(_) => "axiom",
-            Self::NatInduction { .. } => "nat_induction",
             Self::IntInduction { .. } => "int_induction",
             Self::Linear { .. } => "linear",
         }
@@ -1765,23 +1700,6 @@ impl Proof {
         }
     }
 
-    /// Builds an induction. `motive(n)` is the claim about `n`; `step(n, ih)`
-    /// proves the claim about `succ(n)` from `ih`, the claim about `n`.
-    pub fn nat_induction(
-        motive: impl FnOnce(Term) -> Term,
-        base: Proof,
-        step: impl FnOnce(Term, Proof) -> Proof,
-        target: Term,
-    ) -> Self {
-        let hole = VarId::fresh();
-        Self::NatInduction {
-            motive: motive(Term::Free(hole)).close(hole),
-            base: Box::new(base),
-            step: Self::arm(1, 1, |vars, hyps| step(vars[0].clone(), hyps[0].clone())),
-            target,
-        }
-    }
-
     /// Builds an induction over the non-negative integers. `motive(n)` is
     /// the claim about `n`; `step(n, nonneg, ih)` proves the claim about
     /// `n + 1` from `nonneg`, that `0 <= n`, and `ih`, the claim about `n`.
@@ -1813,12 +1731,6 @@ impl Proof {
                 .map(|(proof, coefficient)| (proof, Integer::from(coefficient)))
                 .collect(),
         }
-    }
-
-    /// Builds `forall (x: u8) { body(x) == true }` by evaluation.
-    pub fn evaluate_all(body: impl FnOnce(Term) -> Term) -> Self {
-        let var = VarId::fresh();
-        Self::EvaluateAll(body(Term::Free(var)).close(var))
     }
 
     pub fn forall_elim(universal: Proof, argument: Term) -> Self {
@@ -1926,9 +1838,7 @@ impl Proof {
             Self::ForStep { .. } => self.rebind_for_step(depth, op),
             Self::Omitted => Self::Omitted,
             Self::Evaluate(..) => self.rebind_evaluate(depth, op),
-            Self::EvaluateAll(..) => self.rebind_evaluate_all(depth, op),
             Self::Axiom(..) => self.rebind_axiom(depth, op),
-            Self::NatInduction { .. } => self.rebind_nat_induction(depth, op),
             Self::IntInduction { .. } => self.rebind_int_induction(depth, op),
             Self::Linear { .. } => self.rebind_linear(depth, op),
         }
@@ -2194,38 +2104,11 @@ impl Proof {
     }
 
     #[inline(never)]
-    fn rebind_evaluate_all(&self, depth: Depth, op: Rebind<'_>) -> Proof {
-        let Self::EvaluateAll(body) = self else {
-            unreachable!("dispatched on this variant")
-        };
-        Self::EvaluateAll(body.rebind(depth.under_vars(1), op))
-    }
-
-    #[inline(never)]
     fn rebind_axiom(&self, depth: Depth, op: Rebind<'_>) -> Proof {
         let Self::Axiom(axiom) = self else {
             unreachable!("dispatched on this variant")
         };
         Self::Axiom(axiom.map(|term| term.rebind(depth, op)))
-    }
-
-    #[inline(never)]
-    fn rebind_nat_induction(&self, depth: Depth, op: Rebind<'_>) -> Proof {
-        let Self::NatInduction {
-            motive,
-            base,
-            step,
-            target,
-        } = self
-        else {
-            unreachable!("dispatched on this variant")
-        };
-        Self::NatInduction {
-            motive: motive.rebind(depth.under_vars(1), op),
-            base: Box::new(base.rebind(depth, op)),
-            step: step.rebind(depth, op),
-            target: target.rebind(depth, op),
-        }
     }
 
     #[inline(never)]
@@ -2286,7 +2169,6 @@ impl fmt::Display for Type {
         match self {
             Self::Bool => f.write_str("bool"),
             Self::U8 => f.write_str("u8"),
-            Self::Nat => f.write_str("Nat"),
             Self::Int => f.write_str("Int"),
             Self::Machine(ty) => f.write_str(ty.name()),
             Self::Prop => f.write_str("Prop"),
@@ -2301,7 +2183,7 @@ impl fmt::Display for Type {
             Self::Struct(StructId(id)) => write!(f, "struct#{id}"),
             Self::Enum(EnumId(id)) => write!(f, "enum#{id}"),
             Self::Fn(params, result) => {
-                f.write_str("math fn(")?;
+                f.write_str("fn(")?;
                 for param in params {
                     write!(f, "{param}, ")?;
                 }
@@ -2328,7 +2210,6 @@ impl fmt::Display for Term {
             Self::Bound(index) => write!(f, "#{index}"),
             Self::Bool(value) => write!(f, "{value}"),
             Self::U8(value) => write!(f, "{value}"),
-            Self::Nat(value) => write!(f, "{value}n"),
             Self::Int(value) => write!(f, "{value}i"),
             Self::Machine(ty, value) => write!(f, "{value}{}", ty.name()),
             Self::Prim(prim, arguments) => {

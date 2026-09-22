@@ -190,7 +190,6 @@ impl Env<'_> {
             Type::Bool
             | Type::U8
             | Type::Machine(_)
-            | Type::Nat
             | Type::Int
             | Type::Prop
             | Type::Proof(_)
@@ -211,9 +210,7 @@ impl Env<'_> {
     pub(super) fn logic_only_data(&self, ty: &Type) -> Option<String> {
         match ty {
             Type::Bool | Type::U8 | Type::Machine(_) => None,
-            Type::Nat | Type::Int | Type::Prop | Type::Proof(_) | Type::Fn(..) => {
-                Some(String::new())
-            }
+            Type::Int | Type::Prop | Type::Proof(_) | Type::Fn(..) => Some(String::new()),
             Type::Tuple(fields) => fields.iter().enumerate().find_map(|(index, field)| {
                 self.logic_only_data(field)
                     .map(|inner| format!(".{index}{inner}"))

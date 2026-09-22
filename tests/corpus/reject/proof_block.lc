@@ -1,4 +1,4 @@
-// A retired proof block.
+// `@` begins a proof type and nothing else: `@{ _ }` is not an expression.
 fn first(n: u8) -> (out: u8, @(out == n)) {
     (n, @{ _ }) //~ error: L0110 begins a proof type
 }

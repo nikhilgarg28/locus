@@ -1,5 +1,5 @@
-// A claim about one unknown byte is no longer decided by evaluating all
-// 256 cases. When one lemma takes the step, the diagnostic names the call;
+// A claim about one unknown byte is not decided by evaluating its 256
+// values. When one lemma takes the step, the diagnostic names the call;
 // when none does, it says that a lemma or a `prove!` stepping stone is
 // what is missing. Neither claim is refuted: both hold for every byte the
 // facts allow.

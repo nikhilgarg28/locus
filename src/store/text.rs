@@ -28,7 +28,7 @@ use std::hash::Hash;
 
 use crate::kernel::{
     Axiom, Binding, CmpOp, Context, EnumId, FnId, ForLoop, HypId, HypRef, Integer, MAX_DEPTH,
-    MachineInt, Natural, Op, Prim, Proof, ProofArm, PropId, StructId, Term, TermArm, Type, VarId,
+    MachineInt, Op, Prim, Proof, ProofArm, PropId, StructId, Term, TermArm, Type, VarId,
 };
 
 /// The most bytes of text one term or proof may be.
@@ -252,7 +252,6 @@ impl Printer<'_> {
         match ty {
             Type::Bool => self.push("bool"),
             Type::U8 => self.push("u8"),
-            Type::Nat => self.push("Nat"),
             Type::Int => self.push("Int"),
             Type::Machine(ty) => self.push(ty.name()),
             Type::Prop => self.push("Prop"),
@@ -283,7 +282,6 @@ impl Printer<'_> {
             Term::Bound(index) => self.number("#", index),
             Term::Bool(value) => self.number("", value),
             Term::U8(value) => self.number("", value),
-            Term::Nat(value) => self.literal(value, "n"),
             Term::Int(value) => self.literal(value, "i"),
             Term::Machine(ty, value) => self.literal(value, ty.name()),
             Term::Prim(prim, arguments) => self.prim(*prim, arguments),
@@ -477,8 +475,7 @@ impl Printer<'_> {
             | Proof::CaseStep(term)
             | Proof::ExcludedMiddle(term)
             | Proof::ForEmpty(term)
-            | Proof::Evaluate(term)
-            | Proof::EvaluateAll(term) => self.on_term(rule, term),
+            | Proof::Evaluate(term) => self.on_term(rule, term),
             Proof::Transport {
                 eq,
                 template,
@@ -520,13 +517,7 @@ impl Printer<'_> {
                 Ok(())
             }
             Proof::Axiom(axiom) => self.axiom(axiom),
-            Proof::NatInduction {
-                motive,
-                base,
-                step,
-                target,
-            }
-            | Proof::IntInduction {
+            Proof::IntInduction {
                 motive,
                 base,
                 step,
@@ -1162,7 +1153,6 @@ impl<'a> Parser<'a> {
                 self.bump();
                 match name {
                     "bool" => Ok(Type::Bool),
-                    "Nat" => Ok(Type::Nat),
                     "Int" => Ok(Type::Int),
                     "Prop" => Ok(Type::Prop),
                     "struct" => Ok(Type::Struct(self.struct_id()?)),
@@ -1233,10 +1223,6 @@ impl<'a> Parser<'a> {
                 .parse::<u8>()
                 .map(Term::U8)
                 .map_err(|_| bad("a literal without a suffix is a byte")),
-            "n" => text
-                .parse::<Natural>()
-                .map(Term::Nat)
-                .map_err(|_| bad("a Nat literal has no sign")),
             "i" => integer().map(Term::Int),
             other => match MachineInt::from_name(other) {
                 Some(MachineInt::U8) => {
@@ -1460,8 +1446,6 @@ impl<'a> Parser<'a> {
     /// The primitive named `name`, with its type parameters if it has any.
     fn prim(&mut self, name: &str) -> Parsed<Prim> {
         let plain = match name {
-            "succ" => Some(Prim::Succ),
-            "nat_add" => Some(Prim::NatAdd),
             "int_add" => Some(Prim::IntAdd),
             "int_sub" => Some(Prim::IntSub),
             "int_mul" => Some(Prim::IntMul),
@@ -1515,7 +1499,7 @@ impl<'a> Parser<'a> {
 
     /// A rule that has arguments, by name: what reads them, after the rule's
     /// opening parenthesis. `omitted` and the hypotheses are leaves.
-    const RULES: [(&'static str, Rule<'a>); 25] = [
+    const RULES: [(&'static str, Rule<'a>); 23] = [
         ("of_term", Self::of_term),
         ("refl", Self::refl),
         ("projection", Self::projection),
@@ -1525,7 +1509,6 @@ impl<'a> Parser<'a> {
         ("excluded_middle", Self::excluded_middle),
         ("for_empty", Self::for_empty),
         ("evaluate", Self::evaluate),
-        ("evaluate_all", Self::evaluate_all),
         ("transport", Self::transport),
         ("implies_intro", Self::implies_intro),
         ("implies_elim", Self::implies_elim),
@@ -1538,7 +1521,6 @@ impl<'a> Parser<'a> {
         ("exists_elim", Self::exists_elim),
         ("for_step", Self::for_step),
         ("axiom", Self::axiom_proof),
-        ("nat_induction", Self::nat_induction),
         ("int_induction", Self::int_induction),
         ("linear", Self::linear),
     ];
@@ -1624,20 +1606,12 @@ impl<'a> Parser<'a> {
         Ok(Proof::Evaluate(self.term()?))
     }
 
-    fn evaluate_all(&mut self) -> Parsed<Proof> {
-        Ok(Proof::EvaluateAll(self.term()?))
-    }
-
     fn axiom_proof(&mut self) -> Parsed<Proof> {
         Ok(Proof::Axiom(self.axiom()?))
     }
 
-    fn nat_induction(&mut self) -> Parsed<Proof> {
-        self.induction(true)
-    }
-
     fn int_induction(&mut self) -> Parsed<Proof> {
-        self.induction(false)
+        self.induction()
     }
 
     fn transport(&mut self) -> Parsed<Proof> {
@@ -1759,7 +1733,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn induction(&mut self, nat: bool) -> Parsed<Proof> {
+    fn induction(&mut self) -> Parsed<Proof> {
         let motive = self.term()?;
         self.expect(",")?;
         let base = Box::new(self.proof()?);
@@ -1767,20 +1741,11 @@ impl<'a> Parser<'a> {
         let step = self.arm()?;
         self.expect(",")?;
         let target = self.term()?;
-        Ok(if nat {
-            Proof::NatInduction {
-                motive,
-                base,
-                step,
-                target,
-            }
-        } else {
-            Proof::IntInduction {
-                motive,
-                base,
-                step,
-                target,
-            }
+        Ok(Proof::IntInduction {
+            motive,
+            base,
+            step,
+            target,
         })
     }
 
@@ -1887,11 +1852,7 @@ enum Params {
 
 /// Every axiom by name, with the shape of its parameters. Its terms are
 /// counted by `AxiomHead::arity`.
-const AXIOMS: [(&str, Params); 37] = [
-    ("nat_add_zero", Params::None),
-    ("nat_add_succ", Params::None),
-    ("nat_succ_injective", Params::None),
-    ("nat_succ_not_zero", Params::None),
+const AXIOMS: [(&str, Params); 33] = [
     ("int_add_assoc", Params::None),
     ("int_add_comm", Params::None),
     ("int_add_zero", Params::None),
@@ -1946,8 +1907,8 @@ impl AxiomHead {
         match (self.name, &self.params) {
             (_, AxiomParams::Row(op, _)) => op.arity(),
             (
-                "nat_add_zero" | "nat_succ_not_zero" | "int_add_zero" | "int_add_neg"
-                | "int_mul_one" | "int_le_refl" | "int_lt_irrefl" | "int_div_zero",
+                "int_add_zero" | "int_add_neg" | "int_mul_one" | "int_le_refl" | "int_lt_irrefl"
+                | "int_div_zero",
                 _,
             ) => 1,
             (_, AxiomParams::Type(_) | AxiomParams::Cast(..) | AxiomParams::Flag(_)) => 1,
@@ -1971,10 +1932,6 @@ impl AxiomHead {
         let mut terms = terms.into_iter();
         let mut next = || terms.next();
         let axiom = match (self.name, self.params) {
-            ("nat_add_zero", _) => Axiom::NatAddZero(next()?),
-            ("nat_add_succ", _) => Axiom::NatAddSucc(next()?, next()?),
-            ("nat_succ_injective", _) => Axiom::NatSuccInjective(next()?, next()?),
-            ("nat_succ_not_zero", _) => Axiom::NatSuccNotZero(next()?),
             ("int_add_assoc", _) => Axiom::IntAddAssoc(next()?, next()?, next()?),
             ("int_add_comm", _) => Axiom::IntAddComm(next()?, next()?),
             ("int_add_zero", _) => Axiom::IntAddZero(next()?),

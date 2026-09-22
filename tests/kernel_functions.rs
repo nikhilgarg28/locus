@@ -564,7 +564,7 @@ fn a_function_that_needs_a_ghost_to_compute_has_no_runtime_form() {
         })
         .unwrap();
     let successor = declare_successor(&mut definitions);
-    // A Nat parameter that the result does not depend on does no harm.
+    // An `Int` parameter that the result does not depend on does no harm.
     let ignores = definitions.declare_fn(&int_to_u8, |_| Term::U8(7)).unwrap();
     assert!(!definitions.is_executable(narrow));
     assert!(!definitions.is_executable(through));

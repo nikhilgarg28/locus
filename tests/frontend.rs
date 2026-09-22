@@ -243,15 +243,13 @@ fn grouped(expr: &Expr) -> String {
         ExprKind::Return(Some(value)) => format!("(return {})", grouped(value)),
         ExprKind::Break(None) => "break".into(),
         ExprKind::Break(Some(value)) => format!("(break {})", grouped(value)),
-        ExprKind::Continue(None) => "continue".into(),
-        ExprKind::Continue(Some(next)) => format!("continue({})", list(next)),
+        ExprKind::Continue => "continue".into(),
         // The forms that end in a block, by name: their insides are
         // rendered by `rendered_statements`.
         ExprKind::Block(_) => "<block>".into(),
         ExprKind::If { .. } => "<if>".into(),
         ExprKind::Match { .. } => "<match>".into(),
-        ExprKind::Loop { result: None, .. } => "<loop>".into(),
-        ExprKind::Loop { .. } => "<loop (state)>".into(),
+        ExprKind::Loop { .. } => "<loop>".into(),
         ExprKind::While { pattern: None, .. } => "<while>".into(),
         ExprKind::While { .. } => "<while let>".into(),
         ExprKind::For { .. } => "<for>".into(),
@@ -861,7 +859,7 @@ fn grouping_unit_and_singleton_tuple_stay_distinct() {
 }
 
 #[test]
-fn a_hole_is_its_own_node_and_proof_blocks_are_retired() {
+fn a_hole_is_its_own_node_and_at_begins_no_expression() {
     assert!(matches!(expression("_").kind, ExprKind::Hole));
     let parsed = parse_text("fn f() -> @(true) { @{ reflexivity; } }");
     let error = parsed
@@ -869,7 +867,12 @@ fn a_hole_is_its_own_node_and_proof_blocks_are_retired() {
         .iter()
         .find(|d| d.code == "L0110")
         .unwrap();
-    assert!(error.notes.iter().any(|note| note.contains("retired")));
+    assert!(
+        error
+            .notes
+            .iter()
+            .any(|note| note.contains("evidence is an ordinary expression"))
+    );
 }
 
 #[test]
@@ -1029,7 +1032,6 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
             for (open, close) in [
                 ("(", ")"),
                 ("(1, ", ")"),
-                ("[", "]"),
                 ("{", "}"),
                 ("{ let x = ", "; 1 }"),
                 ("!", ""),
@@ -1044,12 +1046,9 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("match x { _ => ", " }"),
                 ("match ", " { _ => 1 }"),
                 ("S { x: ", " }"),
-                ("for i in 0..n (s: u8 = ", ") { continue(s) }"),
-                ("for i in ", "..n () { continue() }"),
-                ("loop () -> u8 { break ", " }"),
-                ("loop (s: u8 = ", ") -> u8 { break s }"),
+                ("for i in ", "..n { continue }"),
+                ("loop { break ", " }"),
                 ("break ", ""),
-                ("continue(", ")"),
                 ("prop!(forall (n: u8) { ", " })"),
                 ("prop!(exists (n: u8) { ", " })"),
                 // S5: Rust's loop forms, `return`, references, assignment,
@@ -1321,20 +1320,32 @@ fn math_and_prop_are_keywords_only_where_a_declaration_can_begin() {
 }
 
 #[test]
-fn def_is_reported_once_with_a_fix_and_still_parses() {
-    let text = "def same(x: u8, y: u8) -> Prop { prop!(x == y) }";
-    let parsed = parse_text(text);
-    assert_eq!(parsed.diagnostics.len(), 1, "{:?}", parsed.diagnostics);
-    assert_eq!(parsed.diagnostics[0].code, "L0113");
-    assert_eq!(parsed.program.declarations.len(), 1);
-    let fix = &parsed.diagnostics[0].suggestions[0];
-    let mut fixed = text.to_owned();
-    fixed.replace_range(fix.span.range(), &fix.replacement);
-    assert!(parse_text(&fixed).is_success(), "{fixed}");
-    // Elsewhere `def` is a name, as `forall` and `exists` are.
+fn def_and_math_are_names_and_begin_no_declaration() {
+    // `def` and `math fn` are not spellings of anything: a file that begins
+    // a declaration with either gets the ordinary syntax error, and the
+    // words are names everywhere, as `forall` and `exists` are.
+    for text in [
+        "def same(x: u8, y: u8) -> Prop { prop!(x == y) }",
+        "math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
+        "pub math fn f(n: u8) -> u8 { n }",
+        "struct S { x: u8 } impl S { math fn get(self) -> u8 { self.x } }",
+        "fn f(g: math fn(u8) -> u8) -> u8 { 1 }",
+    ] {
+        let parsed = parse_text(text);
+        assert!(!parsed.is_success(), "{text}");
+        assert!(
+            parsed
+                .diagnostics
+                .iter()
+                .all(|d| matches!(d.code, "L0100" | "L0101")),
+            "{text}: {:?}",
+            parsed.diagnostics
+        );
+    }
     assert!(
         parse_text("fn def(forall: u8, exists: u8) -> u8 { let def = forall; def }").is_success()
     );
+    assert!(parse_text("fn math(math: u8) -> u8 { let math = math; math }").is_success());
 }
 
 #[test]
@@ -1386,86 +1397,28 @@ fn proof_holes_and_wildcard_patterns_are_different_nodes() {
     assert!(matches!(values[1].kind, ExprKind::Hole));
 }
 
-/// Every fix in the diagnostics applied to `text`, last first so that the
-/// earlier spans stay right.
-fn fixed(text: &str, parsed: &Parsed) -> String {
-    let mut fixed = text.to_owned();
-    let mut fixes: Vec<_> = parsed
-        .diagnostics
-        .iter()
-        .flat_map(|diagnostic| diagnostic.suggestions.iter())
-        .collect();
-    fixes.sort_by_key(|fix| std::cmp::Reverse(fix.span.start));
-    for fix in fixes {
-        fixed.replace_range(fix.span.range(), &fix.replacement);
-    }
-    fixed
-}
-
 #[test]
-fn retired_brackets_are_reported_with_a_fix_that_parses() {
-    // A proposition literal, a proof type, one spanning lines, and one
-    // nested in a formula: each is L0117 once, with its own fix, and the
-    // file goes on being parsed so that every one is reported.
-    let text = "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { [x == y] }
-fn f(n: u8) -> (out: u8, @[out == n]) {
-    let claim: Prop = [
-        forall (k: u8) { k == k => [k <= 255] }
-    ];
-    let h: @[n == n] = _;
-    (n, _)
-}
-prop P(n: u8) { Small: @[n < 10] }
-const c: Prop = [true];";
-    let parsed = parse_text(text);
-    assert_eq!(
-        parsed.program.declarations.len(),
-        4,
-        "{:#?}",
-        parsed.diagnostics
-    );
-    let codes: Vec<_> = parsed.diagnostics.iter().map(|d| d.code).collect();
-    assert_eq!(codes, ["L0117"; 7], "{:#?}", parsed.diagnostics);
-    // One fix per delimiter, so that nested brackets can all be fixed at
-    // once.
-    let mut fixes = Vec::new();
-    for diagnostic in &parsed.diagnostics {
-        assert!(diagnostic.message.contains("brackets are for arrays"));
-        assert_eq!(diagnostic.suggestions.len(), 2);
-        let mut pair = Vec::new();
-        for fix in &diagnostic.suggestions {
-            assert_eq!(fix.applicability, Applicability::MaybeIncorrect);
-            pair.push((&text[fix.span.range()], fix.replacement.as_str()));
-        }
-        fixes.push((pair[0], pair[1], &text[diagnostic.labels[0].span.range()]));
+fn bracketed_formulas_spell_nothing() {
+    // `[x == y]` and `@[x == y]` spell nothing: brackets are Rust's arrays,
+    // which Locus does not have, and each is an ordinary syntax error.
+    for (text, code) in [
+        (
+            "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { [x == y] }",
+            "L0116",
+        ),
+        ("fn f(n: u8) -> (out: u8, @[out == n]) { (n, _) }", "L0100"),
+        ("fn f(n: u8) -> u8 { let h: @[n == n] = _; n }", "L0100"),
+        ("prop P(n: u8) { Small: @[n < 10] }", "L0100"),
+        ("const c: Prop = [true];", "L0116"),
+    ] {
+        let parsed = parse_text(text);
+        assert!(!parsed.is_success(), "{text}");
+        assert_eq!(
+            parsed.diagnostics[0].code, code,
+            "{text}: {:?}",
+            parsed.diagnostics
+        );
     }
-    assert_eq!(
-        fixes,
-        [
-            (("[", "prop!("), ("]", ")"), "[x == y]"),
-            (("@[", "@("), ("]", ")"), "@[out == n]"),
-            (
-                ("[", "prop!("),
-                ("]", ")"),
-                "[\n        forall (k: u8) { k == k => [k <= 255] }\n    ]"
-            ),
-            (("[", "prop!("), ("]", ")"), "[k <= 255]"),
-            (("@[", "@("), ("]", ")"), "@[n == n]"),
-            (("@[", "@("), ("]", ")"), "@[n < 10]"),
-            (("[", "prop!("), ("]", ")"), "[true]"),
-        ]
-    );
-    let fixed = fixed(text, &parsed);
-    let parsed = parse_text(&fixed);
-    assert!(parsed.is_success(), "{fixed}\n{:#?}", parsed.diagnostics);
-    assert!(fixed.contains("prop!(\n        forall (k: u8) { k == k => prop!(k <= 255) }\n    )"));
-    // The old brackets read as the new forms: the same declarations, with
-    // the same number of `prop!` nodes among them.
-    let count =
-        |program: &locus::ast::Program| format!("{program:?}").matches("Form { form: Prop").count();
-    assert_eq!(parsed.program.declarations.len(), 4);
-    assert_eq!(count(&parse_text(text).program), count(&parsed.program));
-    assert_eq!(count(&parsed.program), 4);
 }
 
 #[test]
@@ -1555,7 +1508,7 @@ fn at_is_not_a_bare_proof_hole_or_a_proof_type_in_expression_position() {
 }
 
 #[test]
-fn old_hash_proof_syntax_reports_migration_help() {
+fn a_hash_that_begins_no_attribute_is_an_error() {
     for text in [
         "fn f() -> #(true) { _ }",
         "fn f() -> @(true) { # }",
@@ -1568,7 +1521,7 @@ fn old_hash_proof_syntax_reports_migration_help() {
             .iter()
             .find(|d| d.code == "L0111")
             .unwrap();
-        assert!(error.message.contains("no longer proof syntax"));
+        assert!(error.message.contains("begins an attribute"));
     }
     // `#[condition]` reads as an attribute, which stands before an item only.
     for text in ["fn f() -> #[true] { _ }", "fn f() -> @(true) { #[true] }"] {
@@ -1588,7 +1541,7 @@ fn old_hash_proof_syntax_reports_migration_help() {
 
 #[test]
 fn bracket_errors_report_the_opening_and_preserve_following_declarations() {
-    let text = "fn f() -> @[n == n) { _ } const good: Prop = prop!(true);";
+    let text = "fn f() -> @(n == n] { _ } const good: Prop = prop!(true);";
     let parsed = parse_text(text);
     let error = parsed
         .diagnostics
@@ -1599,7 +1552,7 @@ fn bracket_errors_report_the_opening_and_preserve_following_declarations() {
         error
             .labels
             .iter()
-            .any(|label| &text[label.span.range()] == "[")
+            .any(|label| &text[label.span.range()] == "(")
     );
     assert!(matches!(
         parsed.program.declarations.last().unwrap().kind,
@@ -1649,56 +1602,6 @@ fn syntax_parser_does_not_pretend_to_enforce_prop_or_hole_types() {
     ] {
         assert!(parse_text(text).is_success(), "{text}");
     }
-}
-
-#[test]
-fn math_fn_is_reported_once_with_a_fix_that_keeps_what_is_around_it() {
-    // The retired keyword in every position it could be written: bare, after
-    // attributes and visibility, and in an `impl` block. Each is reported
-    // once, the declaration is still read, and the fix respells it as the
-    // three promises in place.
-    for (text, expected) in [
-        (
-            "math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
-            "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
-        ),
-        (
-            "/// doc\n#[no_alloc]\npub(crate) math fn f(n: u8) -> u8 { n }",
-            "/// doc\n#[no_alloc]\n#[terminates] #[no_panic] #[no_io] pub(crate) fn f(n: u8) -> u8 { n }",
-        ),
-        (
-            "struct S { x: u8 } impl S { math fn get(self) -> u8 { self.x } }",
-            "struct S { x: u8 } impl S { #[terminates] #[no_panic] #[no_io] fn get(self) -> u8 { self.x } }",
-        ),
-    ] {
-        let parsed = parse_text(text);
-        assert_eq!(
-            parsed.diagnostics.len(),
-            1,
-            "{text}: {:?}",
-            parsed.diagnostics
-        );
-        let diagnostic = &parsed.diagnostics[0];
-        assert_eq!(diagnostic.code, "L0114");
-        assert_eq!(diagnostic.suggestions.len(), 1);
-        assert_eq!(
-            diagnostic.suggestions[0].applicability,
-            Applicability::MachineApplicable
-        );
-        assert_eq!(
-            parsed.program.declarations.len(),
-            text.matches("struct").count() + 1
-        );
-        assert_eq!(fixed(text, &parsed), expected, "{text}");
-        assert!(parse_text(expected).is_success(), "{expected}");
-    }
-    // Two of them are two diagnostics.
-    let parsed = parse_text("math fn f() -> u8 { 1 } math fn g() -> u8 { 2 }");
-    assert_eq!(parsed.diagnostics.len(), 2);
-    assert_eq!(parsed.program.declarations.len(), 2);
-    // `math` is a name everywhere else, before a `fn` type included.
-    assert!(parse_text("fn math(math: u8) -> u8 { let math = math; math }").is_success());
-    assert!(!parse_text("fn f(g: math fn(u8) -> u8) -> u8 { 1 }").is_success());
 }
 
 #[test]
@@ -1971,62 +1874,44 @@ fn a_name_before_a_header_block_is_not_a_struct_literal() {
 }
 
 #[test]
-fn loops_list_their_state_and_result() {
-    let ExprKind::Loop {
-        state,
-        result,
-        body,
-    } = expression(
-        "loop (i: u8 = 0, bound: @(i <= n) = _) -> (out: u8, @(out == n)) {
-            if i == n { break (i, _) } else { continue(i.wrapping_add(1), _) }
+fn loops_are_rusts_and_break_may_carry_a_value() {
+    let ExprKind::Loop { body } = expression(
+        "loop {
+            if i == n { break (i, _) } else { i = i.wrapping_add(1); }
         }",
     )
     .kind
     else {
         panic!()
     };
-    assert_eq!(state.len(), 2);
-    assert_eq!(state[1].name.text, "bound");
-    assert!(matches!(state[1].ty.kind, TypeKind::Proof(_)));
-    assert!(matches!(state[1].initial.kind, ExprKind::Hole));
-    assert!(matches!(result.unwrap().kind, TypeKind::Tuple(_)));
-    let ExprKind::If {
-        then_branch,
-        else_branch,
-        ..
-    } = body.tail.unwrap().kind
-    else {
+    let ExprKind::If { then_branch, .. } = body.tail.unwrap().kind else {
         panic!()
     };
     assert!(matches!(
         then_branch.tail.unwrap().kind,
         ExprKind::Break(Some(value)) if matches!(value.kind, ExprKind::Tuple(_))
     ));
-    let ExprKind::Block(else_block) = else_branch.kind else {
-        panic!()
-    };
-    assert!(matches!(
-        else_block.tail.unwrap().kind,
-        ExprKind::Continue(Some(arguments)) if arguments.len() == 2
-    ));
-    // The state-passing form and Rust's are told apart by the result type,
-    // and `break` and `continue` by whether they carry anything.
-    assert!(matches!(
-        expression("loop () -> u8 { continue() }").kind,
-        ExprKind::Loop { state, result: Some(_), .. } if state.is_empty()
-    ));
-    assert!(matches!(
-        expression("loop { break 1 }").kind,
-        ExprKind::Loop { state, result: None, .. } if state.is_empty()
-    ));
     for (text, alone) in [
-        ("loop () -> u8 { break }", ExprKind::Break(None)),
-        ("loop () -> u8 { continue }", ExprKind::Continue(None)),
+        ("loop { break }", ExprKind::Break(None)),
+        ("loop { continue }", ExprKind::Continue),
     ] {
-        let ExprKind::Loop { body, .. } = expression(text).kind else {
+        let ExprKind::Loop { body } = expression(text).kind else {
             panic!("{text}")
         };
         assert_eq!(body.tail.unwrap().kind, alone, "{text}");
+    }
+    // A loop has no header, and `continue` carries nothing: the state of a
+    // loop is its `let mut` bindings.
+    for text in [
+        "loop () -> u8 { break 1 }",
+        "loop (s: u8 = 0) -> u8 { break s }",
+        "loop { continue(1) }",
+        "loop { continue() }",
+    ] {
+        assert!(
+            !parse_text(&format!("fn f() -> u8 {{ {text} }}")).is_success(),
+            "{text}"
+        );
     }
 }
 
@@ -2046,14 +1931,12 @@ fn bound_name(pattern: &locus::ast::Pattern) -> (&str, bool) {
 }
 
 #[test]
-fn a_for_header_separates_the_upper_bound_from_the_state_list() {
+fn a_for_header_reads_a_range_whose_bounds_may_be_calls() {
     let ExprKind::For {
         pattern,
         iterable,
-        state,
         body,
-    } = expression("for i in 0..n (acc: u8 = 0, same: @(acc == i) = _) { continue(acc, same) }")
-        .kind
+    } = expression("for i in 0..n { continue }").kind
     else {
         panic!()
     };
@@ -2062,41 +1945,28 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
     assert_eq!(kind, RangeKind::Exclusive);
     assert!(matches!(&lower.kind, ExprKind::Integer(literal) if literal.value == Natural::zero()));
     assert!(matches!(&upper.kind, ExprKind::Name(name) if name.text == "n"));
-    assert_eq!(state.len(), 2);
-    assert!(matches!(body.tail.unwrap().kind, ExprKind::Continue(_)));
+    assert!(matches!(body.tail.unwrap().kind, ExprKind::Continue));
 
-    // Only the group directly before the body is the state list, and only
-    // when it is empty or begins `name:`; `(a) {` closes a call.
-    let ExprKind::For {
-        iterable, state, ..
-    } = expression("for i in start(a)..limit(a, b) () { continue() }").kind
+    // `(a, b) {` after the upper bound closes a call on it, and `{` begins
+    // the body.
+    let ExprKind::For { iterable, .. } = expression("for i in start(a)..limit(a, b) { }").kind
     else {
         panic!()
     };
     let (lower, upper, _) = range(&iterable);
     assert!(matches!(lower.kind, ExprKind::Call { .. }));
     assert!(matches!(&upper.kind, ExprKind::Call { arguments, .. } if arguments.len() == 2));
-    assert!(state.is_empty());
-    let ExprKind::For {
-        iterable, state, ..
-    } = expression("for i in 0..limit(a) { continue }").kind
+    let ExprKind::For { iterable, .. } = expression("for i in 0..limit(a) { continue }").kind
     else {
         panic!()
     };
     assert!(
         matches!(&range(&iterable).1.kind, ExprKind::Call { arguments, .. } if arguments.len() == 1)
     );
-    assert!(state.is_empty());
-
-    // Rust's form, without a state list, parses with no state.
-    let ExprKind::For {
-        state, iterable, ..
-    } = expression("for i in 0..n { continue() }").kind
-    else {
-        panic!()
-    };
-    assert!(state.is_empty());
-    assert!(matches!(&range(&iterable).1.kind, ExprKind::Name(name) if name.text == "n"));
+    // A state list after the range spells nothing.
+    assert!(
+        !parse_text("fn f(n: u8) -> u8 { for i in 0..n (s: u8 = 0) { continue } n }").is_success()
+    );
 }
 
 // S5: `let mut`, assignment, `return`, Rust's loop forms, references, and
@@ -2347,11 +2217,8 @@ fn an_assignment_needs_a_place_and_a_statement_of_its_own() {
         parsed.diagnostics[0].message,
         "expected `;` after this assignment"
     );
-    // `=` after an operand is still the `=` of a state parameter.
-    assert!(
-        parse_text("fn f(n: u8) -> u8 { loop (ok: @within_limit(n) = _) -> u8 { break 1 } }")
-            .is_success()
-    );
+    // `=` after an operand still ends the proposition of a proof type.
+    assert!(parse_text("fn f(n: u8) -> u8 { let ok: @within_limit(n) = _; 1 }").is_success());
 }
 
 #[test]
@@ -2432,7 +2299,6 @@ fn return_break_and_continue_stand_alone_or_carry_a_value() {
             if x == 1 { return x } else { return (x, x); }
             loop { if x == 2 { break; } else { break x } }
             loop { if x == 3 { continue; } else { continue } }
-            loop () -> u8 { if x == 4 { continue() } else { continue(x) } }
             return
         }",
     );
@@ -2452,10 +2318,9 @@ fn return_break_and_continue_stand_alone_or_carry_a_value() {
     };
     assert_eq!(in_loop(2), ("break".to_string(), "(break x)".to_string()));
     assert_eq!(in_loop(3), ("continue".to_string(), "continue".to_string()));
-    assert_eq!(
-        in_loop(4),
-        ("continue()".to_string(), "continue(x)".to_string())
-    );
+    // `continue` carries nothing, and a group after it is an error.
+    assert!(!parse_text("fn f(x: u8) -> u8 { loop { continue() } }").is_success());
+    assert!(!parse_text("fn f(x: u8) -> u8 { loop { continue(x) } }").is_success());
     assert_eq!(grouped(block.tail.as_ref().unwrap()), "return");
     // The value of a jump is a whole expression, and a jump is an operand.
     assert_eq!(grouped(&expression("return a + b")), "(return (a + b))");
@@ -2474,7 +2339,7 @@ fn return_break_and_continue_stand_alone_or_carry_a_value() {
 }
 
 #[test]
-fn loops_take_rusts_forms_and_the_state_passing_one() {
+fn loops_take_rusts_forms() {
     let block = body(
         "fn f(n: u8, items: List, pairs: List) -> u8 {
             loop { break; }
@@ -2486,8 +2351,6 @@ fn loops_take_rusts_forms_and_the_state_passing_one() {
             for x in items { n = x; }
             for x in items.iter() { n = x; }
             for E::V(x) in items { n = x; }
-            for i in 0..n (s: u8 = 0) { continue(s) }
-            loop (s: u8 = 0) -> u8 { break s }
             n
         }",
     );
@@ -2503,30 +2366,24 @@ fn loops_take_rusts_forms_and_the_state_passing_one() {
             "<for>;",
             "<for>;",
             "<for>;",
-            "<for>;",
-            "<loop (state)>;",
             "n",
         ]
     );
-    let for_header = |index: usize| -> (String, String, usize) {
+    let for_header = |index: usize| -> (String, String) {
         let ExprKind::For {
-            pattern,
-            iterable,
-            state,
-            ..
+            pattern, iterable, ..
         } = &statement_expr(&block, index).kind
         else {
             panic!("statement {index} is not a `for`")
         };
-        (rendered_pattern(pattern), grouped(iterable), state.len())
+        (rendered_pattern(pattern), grouped(iterable))
     };
-    assert_eq!(for_header(3), ("i".into(), "(0..n)".into(), 0));
-    assert_eq!(for_header(4), ("i".into(), "(0..=n)".into(), 0));
-    assert_eq!(for_header(5), ("(a, b)".into(), "pairs".into(), 0));
-    assert_eq!(for_header(6), ("x".into(), "items".into(), 0));
-    assert_eq!(for_header(7), ("x".into(), "items.iter()".into(), 0));
-    assert_eq!(for_header(8), ("E::V(x)".into(), "items".into(), 0));
-    assert_eq!(for_header(9), ("i".into(), "(0..n)".into(), 1));
+    assert_eq!(for_header(3), ("i".into(), "(0..n)".into()));
+    assert_eq!(for_header(4), ("i".into(), "(0..=n)".into()));
+    assert_eq!(for_header(5), ("(a, b)".into(), "pairs".into()));
+    assert_eq!(for_header(6), ("x".into(), "items".into()));
+    assert_eq!(for_header(7), ("x".into(), "items.iter()".into()));
+    assert_eq!(for_header(8), ("E::V(x)".into(), "items".into()));
     let ExprKind::While {
         pattern,
         condition,
@@ -2640,8 +2497,8 @@ fn an_expression_ending_in_a_block_is_a_whole_statement() {
     }
     let block = body("fn f(c: bool) -> u8 { let x = if c { 1 } else { 2 } + 1; x }");
     assert_eq!(rendered_statements(&block), ["let x = (<if> + 1);", "x"]);
-    // The state-passing loops are statements in the same way.
-    let block = body("fn f(n: u8) -> (u8, u8) { for i in 0..n () { continue() } (n, n) }");
+    // A `for` is a statement in the same way.
+    let block = body("fn f(n: u8) -> (u8, u8) { for i in 0..n { continue } (n, n) }");
     assert_eq!(rendered_statements(&block), ["<for>;", "(n, n,)"]);
 }
 
@@ -2828,15 +2685,10 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
         ("a field of a literal", "fn f() -> S { S { {}: 1 } }", &[]),
         ("a member", "fn f() -> u8 { s.{} }", &[]),
         ("a variant of a path", "fn f() -> E { E::{} }", &[]),
-        (
-            "loop state",
-            "fn f() -> u8 { loop ({}: u8 = 0) -> u8 { break 1 } }",
-            &[],
-        ),
         // The index of a `for` is a pattern, like a binding.
         (
             "a loop index",
-            "fn f() -> u8 { for {} in 0..1 () { continue() } }",
+            "fn f() -> u8 { for {} in 0..1 { continue } }",
             &["true", "false"],
         ),
         (

@@ -125,7 +125,7 @@ pub enum LowerError {
     /// A place's path steps into something that is not a product with that
     /// field.
     BadPlace(String),
-    /// An assignment where a term is wanted: in a `math fn`, or in a
+    /// An assignment where a term is wanted: in a function of the logic, or in a
     /// branch a proof stands in.
     AssignmentInTerm,
     /// Two arguments of one call name overlapping places, and one of them
@@ -154,7 +154,10 @@ impl fmt::Display for LowerError {
             Self::Kernel(error) => write!(f, "{error}"),
             Self::Exec(error) => write!(f, "{error}"),
             Self::ImpureInMath(name) => {
-                write!(f, "math fn {name} has a body that is not pure")
+                write!(
+                    f,
+                    "the function of the logic `{name}` has a body that is not pure"
+                )
             }
             Self::ControlInExpression => f.write_str("break and continue may only end a block"),
             Self::NoEnclosingLoop => f.write_str("break or continue outside a loop"),

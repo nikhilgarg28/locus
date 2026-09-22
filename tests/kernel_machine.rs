@@ -141,11 +141,11 @@ fn decided(ctx: &mut Context, prelude: &Prelude, claim: Term, holds: bool) {
     mismatch(check_proof(ctx, &proof, &refused));
 }
 
-/// A variable of each machine type, executable, and a ghost `Int` and `Nat`.
+/// A variable of each machine type, executable, a ghost `Int`, and a bool.
 struct Vars {
     machine: Vec<Term>,
     int: Term,
-    nat: Term,
+    flag: Term,
 }
 
 impl Vars {
@@ -167,8 +167,7 @@ impl Vars {
         terms.extend([
             (self.int.clone(), Type::Int),
             (int(0), Type::Int),
-            (self.nat.clone(), Type::Nat),
-            (Term::nat(0), Type::Nat),
+            (self.flag.clone(), Type::Bool),
             (Term::Bool(true), Type::Bool),
         ]);
         terms
@@ -183,7 +182,7 @@ fn vars(ctx: &mut Context) -> Vars {
     Vars {
         machine,
         int: Term::var(ctx.declare_ghost(Type::Int).unwrap()),
-        nat: Term::var(ctx.declare_ghost(Type::Nat).unwrap()),
+        flag: Term::var(ctx.declare(Type::Bool).unwrap()),
     }
 }
 
@@ -496,8 +495,8 @@ fn view_and_wrap_are_ghost_and_cast_is_executable() {
                 Mode::Logical,
             ));
         }
-        // view of another type's value, of an Int, or of a Nat; wrap of a
-        // machine value or a Nat.
+        // view of another type's value, of an Int, or of a bool; wrap of a
+        // machine value or a bool.
         for other in ALL {
             if other != ty {
                 ill_typed(infer_term(&mut ctx, &view(ty, v.of(other)), Mode::Logical));
@@ -512,15 +511,19 @@ fn view_and_wrap_are_ghost_and_cast_is_executable() {
         ));
         ill_typed(infer_term(
             &mut ctx,
-            &view(ty, v.nat.clone()),
+            &view(ty, v.flag.clone()),
             Mode::Logical,
         ));
         ill_typed(infer_term(
             &mut ctx,
-            &wrap(ty, v.nat.clone()),
+            &wrap(ty, v.flag.clone()),
             Mode::Logical,
         ));
-        ill_typed(infer_term(&mut ctx, &wrap(ty, Term::nat(1)), Mode::Logical));
+        ill_typed(infer_term(
+            &mut ctx,
+            &wrap(ty, Term::Bool(true)),
+            Mode::Logical,
+        ));
         // The arity.
         for prim in [Prim::View(ty), Prim::Wrap(ty), Prim::Cast(ty, ty)] {
             for arguments in [vec![], vec![x.clone(), x.clone()]] {
@@ -614,7 +617,7 @@ fn the_literal_axiom_computes_one_primitive_on_literals() {
         view(U16, Term::U8(1)),
         view(U8, lit(U16, 1)),
         cast(U16, I8, lit(I16, 1)),
-        wrap(U16, Term::nat(1)),
+        wrap(U16, Term::Bool(true)),
     ] {
         assert!(
             matches!(

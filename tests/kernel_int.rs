@@ -86,12 +86,12 @@ fn ill_typed<T: std::fmt::Debug>(result: Result<T, KernelError>) {
     );
 }
 
-/// Three integer variables, a `Nat`, and a byte.
+/// Three integer variables, a boolean, and a byte.
 struct Vars {
     a: Term,
     b: Term,
     c: Term,
-    nat: Term,
+    flag: Term,
     byte: Term,
 }
 
@@ -102,13 +102,13 @@ fn vars(ctx: &mut Context) -> Vars {
         a,
         b,
         c,
-        nat: Term::var(ctx.declare_ghost(Type::Nat).unwrap()),
+        flag: Term::var(ctx.declare(Type::Bool).unwrap()),
         byte: Term::var(ctx.declare(Type::U8).unwrap()),
     }
 }
 
 /// The axiom proves exactly `statement`, and with any one argument replaced
-/// by a `Nat` or a byte it proves nothing.
+/// by a boolean or a byte it proves nothing.
 fn states(ctx: &mut Context, v: &Vars, build: &dyn Fn(&[Term]) -> Axiom, statement: Term) {
     let arguments = [v.a.clone(), v.b.clone(), v.c.clone()];
     let axiom = build(&arguments);
@@ -121,7 +121,7 @@ fn states(ctx: &mut Context, v: &Vars, build: &dyn Fn(&[Term]) -> Axiom, stateme
     );
     assert_eq!(check_proof(ctx, &ax(axiom.clone()), &statement), Ok(()));
     for position in 0..arity {
-        for wrong in [&v.nat, &v.byte, &Term::nat(0), &Term::U8(0)] {
+        for wrong in [&v.flag, &v.byte, &Term::Bool(true), &Term::U8(0)] {
             let mut arguments = arguments.clone();
             arguments[position] = wrong.clone();
             ill_typed(infer_proof(ctx, &ax(build(&arguments))));
@@ -148,7 +148,7 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
         infer_term(&mut ctx, &Term::Int(huge.clone()), Mode::Logical),
         Ok(Type::Int)
     );
-    // No runtime form, exactly as Nat has none.
+    // No runtime form.
     assert_eq!(
         infer_term(&mut ctx, &lit(3), Mode::Executable),
         Err(KernelError::GhostTypeInExecutable(Type::Int))
@@ -180,11 +180,11 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
     );
     assert_eq!(lt(n.clone(), lit(0)), le(add(n.clone(), lit(1)), lit(0)));
 
-    // Int is not Nat and not u8: nothing converts between Int and Nat, and
-    // a byte enters Int only through its view.
+    // Int is not u8: a byte enters Int only through its view, and an
+    // equation of integers is stated at Int.
     ill_typed(infer_term(
         &mut ctx,
-        &add(n.clone(), Term::nat(1)),
+        &add(n.clone(), Term::U8(1)),
         Mode::Logical,
     ));
     ill_typed(infer_term(
@@ -194,13 +194,7 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
     ));
     ill_typed(infer_term(
         &mut ctx,
-        &Term::nat_add(Term::nat(1), lit(1)),
-        Mode::Logical,
-    ));
-    ill_typed(infer_term(&mut ctx, &Term::succ(lit(1)), Mode::Logical));
-    ill_typed(infer_term(
-        &mut ctx,
-        &Term::eq(Type::Nat, lit(1), lit(1)),
+        &Term::eq(Type::U8, lit(1), lit(1)),
         Mode::Logical,
     ));
     assert!(matches!(
@@ -328,7 +322,7 @@ fn addition_is_associative_and_commutative_with_zero_and_negation() {
         &mut ctx,
         &comm,
         &Term::eq(
-            Type::Nat,
+            Type::U8,
             add(a.clone(), b.clone()),
             add(b.clone(), a.clone()),
         ),
@@ -1038,19 +1032,15 @@ fn induction_over_the_non_negative_integers_checks_its_base_and_its_step() {
         n.clone(),
     );
     mismatch(infer_proof(&mut ctx, &one_plus));
-    // The step binds one variable and two hypotheses, unlike Nat's.
-    let Proof::NatInduction { step: nat_arm, .. } =
-        Proof::nat_induction(|k| k, Proof::Omitted, |_, ih| ih, Term::nat(0))
-    else {
-        unreachable!()
-    };
+    // The step binds one variable and two hypotheses, not one.
+    let short_arm_body = Proof::arm(1, 1, |_, hyps| hyps[0].clone());
     let Proof::IntInduction { motive, .. } = induction.clone() else {
         unreachable!()
     };
     let short_arm = Proof::IntInduction {
         motive,
         base: Box::new(base()),
-        step: nat_arm,
+        step: short_arm_body,
         target: n.clone(),
     };
     assert!(matches!(
@@ -1060,14 +1050,14 @@ fn induction_over_the_non_negative_integers_checks_its_base_and_its_step() {
     // The motive must be a proposition about an Int, and the target an Int.
     let data_motive = Proof::int_induction(|k| k, base(), |_, _, ih| ih, n.clone());
     ill_typed(infer_proof(&mut ctx, &data_motive));
-    let nat_motive = Proof::int_induction(
-        |k| Term::eq(Type::Nat, k.clone(), k),
-        Proof::Refl(Term::nat(0)),
+    let byte_motive = Proof::int_induction(
+        |k| Term::eq(Type::U8, k.clone(), k),
+        Proof::Refl(Term::U8(0)),
         |_, _, ih| ih,
         n.clone(),
     );
-    ill_typed(infer_proof(&mut ctx, &nat_motive));
-    for target in [v.nat.clone(), v.byte.clone(), Term::nat(3)] {
+    ill_typed(infer_proof(&mut ctx, &byte_motive));
+    for target in [v.flag.clone(), v.byte.clone(), Term::U8(3)] {
         ill_typed(infer_proof(
             &mut ctx,
             &Proof::int_induction(claim, base(), step, target),
@@ -1182,7 +1172,7 @@ fn evaluation_computes_closed_integer_terms_and_decides_comparisons() {
     }
     for not_offered in [
         Term::eq(Type::U8, Term::U8(1), Term::U8(1)),
-        Term::eq(Type::Nat, Term::nat(1), Term::nat(1)),
+        Term::eq(Type::Bool, Term::Bool(true), Term::Bool(true)),
         implies(le(lit(0), lit(1)), le(lit(0), lit(1))),
     ] {
         assert_eq!(
@@ -1192,7 +1182,7 @@ fn evaluation_computes_closed_integer_terms_and_decides_comparisons() {
     }
     ill_typed(infer_proof(
         &mut ctx,
-        &Proof::Evaluate(le(lit(0), Term::nat(1))),
+        &Proof::Evaluate(le(lit(0), Term::U8(1))),
     ));
     // A proposition stored in data is opaque, the order included.
     let stored_type = Type::Tuple(vec![Type::Prop, Type::Int]);
@@ -1204,12 +1194,6 @@ fn evaluation_computes_closed_integer_terms_and_decides_comparisons() {
         infer_proof(&mut ctx, &Proof::Evaluate(stored.clone())),
         Ok(eq(stored, lit(2)))
     );
-
-    // Exhaustion is over a byte and never over Int.
-    ill_typed(infer_proof(
-        &mut ctx,
-        &Proof::evaluate_all(|x| le(x, lit(255))),
-    ));
 
     // A refutation is stated with False, which the prelude declares.
     let mut bare = Context::new();
@@ -1433,10 +1417,6 @@ fn integer_terms_are_held_to_the_depth_and_step_limits() {
 fn every_axiom() -> Vec<Axiom> {
     let t = || lit(0);
     vec![
-        Axiom::NatAddZero(t()),
-        Axiom::NatAddSucc(t(), t()),
-        Axiom::NatSuccInjective(t(), t()),
-        Axiom::NatSuccNotZero(t()),
         Axiom::IntAddAssoc(t(), t(), t()),
         Axiom::IntAddComm(t(), t()),
         Axiom::IntAddZero(t()),
@@ -1473,47 +1453,43 @@ fn every_axiom() -> Vec<Axiom> {
     ]
 }
 
-const AXIOMS: usize = 37;
+const AXIOMS: usize = 33;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
-        Axiom::NatAddZero(_) => 0,
-        Axiom::NatAddSucc(..) => 1,
-        Axiom::NatSuccInjective(..) => 2,
-        Axiom::NatSuccNotZero(_) => 3,
-        Axiom::IntAddAssoc(..) => 4,
-        Axiom::IntAddComm(..) => 5,
-        Axiom::IntAddZero(_) => 6,
-        Axiom::IntAddNeg(_) => 7,
-        Axiom::IntSubDef(..) => 8,
-        Axiom::IntMulAssoc(..) => 9,
-        Axiom::IntMulComm(..) => 10,
-        Axiom::IntMulOne(_) => 11,
-        Axiom::IntMulAdd(..) => 12,
-        Axiom::IntLeRefl(_) => 13,
-        Axiom::IntLeTrans(..) => 14,
-        Axiom::IntLeAntisymm(..) => 15,
-        Axiom::IntLeAdd(..) => 16,
-        Axiom::IntLeMul(..) => 17,
-        Axiom::IntLeTotal(..) => 18,
-        Axiom::IntLtIrrefl(_) => 19,
-        Axiom::IntDivRem(..) => 20,
-        Axiom::IntDivZero(_) => 21,
-        Axiom::IntRemLowerPos(..) => 22,
-        Axiom::IntRemUpperPos(..) => 23,
-        Axiom::IntRemLowerNeg(..) => 24,
-        Axiom::IntRemUpperNeg(..) => 25,
-        Axiom::IntRemNonneg(..) => 26,
-        Axiom::IntRemNonpos(..) => 27,
-        Axiom::ViewLower(..) => 28,
-        Axiom::ViewUpper(..) => 29,
-        Axiom::WrapView(..) => 30,
-        Axiom::ViewWrap(..) => 31,
-        Axiom::WrapPeriod(..) => 32,
-        Axiom::CastDef(..) => 33,
-        Axiom::OpModel(..) => 34,
-        Axiom::OpExact(..) => 35,
-        Axiom::CmpReflect(..) => 36,
+        Axiom::IntAddAssoc(..) => 0,
+        Axiom::IntAddComm(..) => 1,
+        Axiom::IntAddZero(_) => 2,
+        Axiom::IntAddNeg(_) => 3,
+        Axiom::IntSubDef(..) => 4,
+        Axiom::IntMulAssoc(..) => 5,
+        Axiom::IntMulComm(..) => 6,
+        Axiom::IntMulOne(_) => 7,
+        Axiom::IntMulAdd(..) => 8,
+        Axiom::IntLeRefl(_) => 9,
+        Axiom::IntLeTrans(..) => 10,
+        Axiom::IntLeAntisymm(..) => 11,
+        Axiom::IntLeAdd(..) => 12,
+        Axiom::IntLeMul(..) => 13,
+        Axiom::IntLeTotal(..) => 14,
+        Axiom::IntLtIrrefl(_) => 15,
+        Axiom::IntDivRem(..) => 16,
+        Axiom::IntDivZero(_) => 17,
+        Axiom::IntRemLowerPos(..) => 18,
+        Axiom::IntRemUpperPos(..) => 19,
+        Axiom::IntRemLowerNeg(..) => 20,
+        Axiom::IntRemUpperNeg(..) => 21,
+        Axiom::IntRemNonneg(..) => 22,
+        Axiom::IntRemNonpos(..) => 23,
+        Axiom::ViewLower(..) => 24,
+        Axiom::ViewUpper(..) => 25,
+        Axiom::WrapView(..) => 26,
+        Axiom::ViewWrap(..) => 27,
+        Axiom::WrapPeriod(..) => 28,
+        Axiom::CastDef(..) => 29,
+        Axiom::OpModel(..) => 30,
+        Axiom::OpExact(..) => 31,
+        Axiom::CmpReflect(..) => 32,
     }
 }
 
@@ -1564,9 +1540,7 @@ fn every_rule() -> Vec<Proof> {
         },
         Proof::Omitted,
         Proof::Evaluate(t()),
-        Proof::EvaluateAll(t()),
         Proof::Axiom(Axiom::IntLeRefl(t())),
-        Proof::nat_induction(|k| k, Proof::Omitted, |_, ih| ih, t()),
         Proof::int_induction(|k| k, Proof::Omitted, |_, _, ih| ih, t()),
         Proof::linear(t(), 1, vec![(Proof::Omitted, 1)]),
     ]
@@ -1584,7 +1558,7 @@ fn construct_rule() -> Proof {
     }
 }
 
-const RULES: usize = 27;
+const RULES: usize = 25;
 
 fn rule_index(proof: &Proof) -> usize {
     match proof {
@@ -1610,17 +1584,13 @@ fn rule_index(proof: &Proof) -> usize {
         Proof::ForStep { .. } => 19,
         Proof::Omitted => 20,
         Proof::Evaluate(_) => 21,
-        Proof::EvaluateAll(_) => 22,
-        Proof::Axiom(_) => 23,
-        Proof::NatInduction { .. } => 24,
-        Proof::IntInduction { .. } => 25,
-        Proof::Linear { .. } => 26,
+        Proof::Axiom(_) => 22,
+        Proof::IntInduction { .. } => 23,
+        Proof::Linear { .. } => 24,
     }
 }
 
-const PRIMS: [Prim; 14] = [
-    Prim::Succ,
-    Prim::NatAdd,
+const PRIMS: [Prim; 12] = [
     Prim::IntAdd,
     Prim::IntSub,
     Prim::IntMul,
@@ -1637,20 +1607,18 @@ const PRIMS: [Prim; 14] = [
 
 fn prim_index(prim: Prim) -> usize {
     match prim {
-        Prim::Succ => 0,
-        Prim::NatAdd => 1,
-        Prim::IntAdd => 2,
-        Prim::IntSub => 3,
-        Prim::IntMul => 4,
-        Prim::IntNeg => 5,
-        Prim::IntLe => 6,
-        Prim::IntDiv => 7,
-        Prim::IntRem => 8,
-        Prim::View(_) => 9,
-        Prim::Wrap(_) => 10,
-        Prim::Cast(..) => 11,
-        Prim::Op(..) => 12,
-        Prim::Cmp(..) => 13,
+        Prim::IntAdd => 0,
+        Prim::IntSub => 1,
+        Prim::IntMul => 2,
+        Prim::IntNeg => 3,
+        Prim::IntLe => 4,
+        Prim::IntDiv => 5,
+        Prim::IntRem => 6,
+        Prim::View(_) => 7,
+        Prim::Wrap(_) => 8,
+        Prim::Cast(..) => 9,
+        Prim::Op(..) => 10,
+        Prim::Cmp(..) => 11,
     }
 }
 
@@ -1847,8 +1815,8 @@ fn the_contract_reader_handles_escapes_and_whole_words() {
         atlas_document(html, "wanted"),
         vec!["a < b", "tab\there ]", "\u{1F600} \\ \"q\""]
     );
-    assert!(mentions("uses `evaluate_all(t)` here", "evaluate_all"));
-    assert!(!mentions("uses `evaluate_all(t)` here", "evaluate"));
-    assert!(!mentions("the nat_add_zero axiom", "add_zero"));
+    assert!(mentions("uses `int_induction(t)` here", "int_induction"));
+    assert!(!mentions("uses `int_induction(t)` here", "induction"));
+    assert!(!mentions("the int_add_zero axiom", "add_zero"));
     assert!(mentions("int_le", "int_le"));
 }

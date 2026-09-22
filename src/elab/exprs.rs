@@ -360,15 +360,7 @@ impl Env<'_> {
             {
                 self.loop_refused(expr)
             }
-            // The state-passing forms, removed by M3.
-            ExprKind::Loop {
-                result: Some(_), ..
-            } => self.removed_loop_form("loop", expr.span),
-            ExprKind::For { state, .. } if !state.is_empty() => {
-                self.removed_loop_form("for", expr.span)
-            }
-            ExprKind::Continue(Some(_)) => self.removed_loop_form("continue", expr.span),
-            ExprKind::Loop { body, .. } => self.loop_(body, expected, expr.span),
+            ExprKind::Loop { body } => self.loop_(body, expected, expr.span),
             ExprKind::While {
                 pattern: None,
                 condition,
@@ -406,7 +398,7 @@ impl Env<'_> {
                 ),
             },
             ExprKind::Break(value) => self.break_(expr, value.as_deref()),
-            ExprKind::Continue(None) => self.continue_(expr),
+            ExprKind::Continue => self.continue_(expr),
             ExprKind::Range { .. } => self.fail(
                 "L0290",
                 "a range is read only in the header of a `for` for now",

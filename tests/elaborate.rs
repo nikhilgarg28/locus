@@ -81,62 +81,6 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
 }
 
 #[test]
-fn the_fix_for_the_retired_math_fn_yields_a_file_that_checks_with_the_same_proofs() {
-    // Every `math fn` in the file is reported with a fix; the fixes applied,
-    // last first, give a file that parses, elaborates, and proves what the
-    // hand-written promises prove: one hole, filled the same way.
-    let retired = include_str!("corpus/reject/math_fn_keyword.lc");
-    let mut sources = SourceMap::default();
-    let file = sources.add("math_fn_keyword.lc", retired);
-    let parsed = parse(sources.get(file));
-    assert!(!parsed.is_success());
-    assert!(
-        parsed
-            .diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.code == "L0114"),
-        "{:?}",
-        parsed.diagnostics
-    );
-    let mut fixes: Vec<_> = parsed
-        .diagnostics
-        .iter()
-        .flat_map(|diagnostic| diagnostic.suggestions.iter())
-        .collect();
-    assert_eq!(fixes.len(), 3);
-    fixes.sort_by_key(|fix| std::cmp::Reverse(fix.span.start));
-    let mut fixed = retired.to_owned();
-    for fix in fixes {
-        fixed.replace_range(fix.span.range(), &fix.replacement);
-    }
-    let by_hand = retired
-        .replace("pub math fn ", "#[terminates] #[no_panic] #[no_io] pub fn ")
-        .replace(
-            "pub(crate) math fn ",
-            "#[terminates] #[no_panic] #[no_io] pub(crate) fn ",
-        )
-        .replace("\nmath fn ", "\n#[terminates] #[no_panic] #[no_io] fn ");
-    let fixed = accepted(&fixed);
-    let by_hand = accepted(&by_hand);
-    let proofs = |result: &Elaborated| -> Vec<(usize, &str, usize)> {
-        result
-            .holes
-            .iter()
-            .map(|hole| (hole.span.start, hole.tier, hole.proof_size))
-            .collect()
-    };
-    assert_eq!(proofs(&fixed), proofs(&by_hand));
-    assert_eq!(fixed.holes.len(), 1);
-    assert!(fixed.holes.iter().all(|hole| hole.solved));
-    assert_eq!(call(&fixed, "twice_of", &[4]), "8");
-    assert_eq!(call(&fixed, "math", &[4]), "4");
-    assert_eq!(
-        print_module(fixed.session.erased()),
-        print_module(by_hand.session.erased())
-    );
-}
-
-#[test]
 fn the_lock_runs_as_written() {
     let result = accepted(LOCK);
     for attempts in [0, 1, 2, 3, 4, 5, 9, 200, 255] {
@@ -556,7 +500,7 @@ fn a_wildcard_arm_covers_the_remaining_variants() {
 
 #[test]
 fn errors_name_the_problem() {
-    let cases: [(&str, &str, &str); 15] = [
+    let cases: [(&str, &str, &str); 14] = [
         (
             "fn f() -> u8 { missing }",
             "L0204",
@@ -593,11 +537,6 @@ fn errors_name_the_problem() {
             "fn f(n: u8) -> u8 { let mut a: u8 = 0; for i in 0..n { a = i; break a } a }",
             "L0218",
             "`break` with a value leaves a `while` or a `for`",
-        ),
-        (
-            "fn f(n: u8) -> u8 { loop (i: u8 = 0) -> u8 { break i } }",
-            "L0234",
-            "was removed; write `loop { ... }`",
         ),
         (
             "#[terminates] #[no_panic] #[no_io] fn f(n: u8) -> u8 { loop { break n } }",
@@ -736,7 +675,7 @@ fn connectives_are_built_and_taken_apart_by_their_constructors() {
         let (codes, full) = rejected(text);
         assert_eq!(codes, ["L0230"], "{text}");
         assert!(
-            full.contains("the search over `&&`, `||`, `=>` and `forall` was removed"),
+            full.contains("a hole takes no connective apart"),
             "{text}: {full}"
         );
         assert!(full.contains(form), "{text}: {full}");
@@ -1132,8 +1071,6 @@ fn a_loop_of_any_form_is_refused_under_terminates_at_its_keyword() {
     let bodies = [
         ("loop { break n }", "loop"),
         ("let mut a: u8 = 0; for i in 0..n { a = i; } a", "for"),
-        // The removed state-passing forms: the promise is what is reported.
-        ("loop () -> u8 { break n }", "loop"),
         ("while n < 3 { } n", "while"),
     ];
     for (body, keyword) in bodies {
@@ -1158,13 +1095,9 @@ fn a_loop_of_any_form_is_refused_under_terminates_at_its_keyword() {
         let (codes, _) = rejected(&text);
         assert_eq!(codes, ["L0215"], "{text}");
     }
-    // Without the promise Rust's forms are accepted and the state-passing
-    // ones were removed.
+    // Without the promise Rust's forms are accepted.
     accepted("fn f(n: u8) -> u8 { loop { break n } }");
     accepted("fn f(n: u8) -> u8 { while n < 3 { } n }");
-    let (codes, full) = rejected("fn f(n: u8) -> u8 { loop () -> u8 { break n } }");
-    assert_eq!(codes, ["L0234"]);
-    assert!(full.contains("was removed"), "{full}");
     // Nothing in a proposition runs.
     let (codes, full) = rejected("fn f(n: u8) -> Prop { prop!(loop { break n } == n) }");
     assert_eq!(codes, ["L0215"]);

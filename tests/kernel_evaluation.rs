@@ -7,7 +7,7 @@ use std::rc::Rc;
 use locus::kernel::derive::trans;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, CmpOp, Context, Definitions, KernelError, MachineInt, Op, Prelude, Proof, Term, Type,
+    CmpOp, Context, Definitions, KernelError, MachineInt, Op, Prelude, Proof, Term, Type,
     check_proof, infer_proof,
 };
 
@@ -224,47 +224,6 @@ fn the_evaluator_has_a_step_budget_not_a_time_limit() {
         infer_proof(&mut ctx, &Proof::Evaluate(deep)),
         Err(KernelError::StepLimit)
     );
-}
-
-#[test]
-fn a_claim_about_every_byte_is_proved_by_256_evaluations() {
-    let (definitions, _, _) = setup();
-    let mut ctx = Context::with_definitions(Rc::new(definitions));
-    let top = |x: Term| Term::cmp(CmpOp::Le, MachineInt::U8, x, Term::U8(255));
-
-    let all = Proof::evaluate_all(top);
-    let statement = Term::forall(Type::U8, |x| Term::eq(Type::Bool, top(x), Term::Bool(true)));
-    assert_eq!(check_proof(&mut ctx, &all, &statement), Ok(()));
-
-    // With reflection this is a fact about the ordering of any byte.
-    let n = Term::var(ctx.declare(Type::U8).unwrap());
-    let at_n = Proof::implies_elim(
-        Proof::Axiom(Axiom::CmpReflect(top(n.clone()), true)),
-        Proof::forall_elim(all, n.clone()),
-    );
-    assert_eq!(
-        check_proof(
-            &mut ctx,
-            &at_n,
-            &Term::int_le(
-                Term::view(MachineInt::U8, n),
-                Term::view(MachineInt::U8, Term::U8(255))
-            )
-        ),
-        Ok(())
-    );
-
-    // A claim with a counterexample is refuted, and says where.
-    let strict = Proof::evaluate_all(|x| Term::cmp(CmpOp::Lt, MachineInt::U8, x, Term::U8(255)));
-    assert_eq!(
-        infer_proof(&mut ctx, &strict),
-        Err(KernelError::Refuted(Term::U8(255)))
-    );
-    // The body must be a bool.
-    assert!(matches!(
-        infer_proof(&mut ctx, &Proof::evaluate_all(add_one)),
-        Err(KernelError::TypeMismatch { .. })
-    ));
 }
 
 #[test]

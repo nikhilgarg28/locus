@@ -1,6 +1,7 @@
-// A definition is opened only by `unfold!` and closed only by `fold!`. The
-// removed search unfolded `within_limit` on its own; `small` is evidence of
-// the body, and `fold!(within_limit, small)` is the evidence of the call.
+// A definition is opened only by `unfold!` and closed only by `fold!`: a
+// hole does not unfold `within_limit` on its own. `small` is evidence of
+// the body, and `fold!(within_limit, small)` is the evidence of the call;
+// the diagnostic names the form each way.
 #[terminates] #[no_panic] #[no_io] fn within_limit(n: u8) -> Prop {
     prop!(n <= 3)
 }

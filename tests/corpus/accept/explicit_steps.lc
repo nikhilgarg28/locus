@@ -1,4 +1,4 @@
-// The explicit forms of the steps a hole no longer takes: `rewrite!` for
+// The explicit forms of the steps a hole does not take: `rewrite!` for
 // an equation in scope, `unfold!` and `fold!` for a definition, a
 // constructor or a lemma for a connective, and a lemma call where a
 // claim about one byte used to be decided by trying all 256. Each function

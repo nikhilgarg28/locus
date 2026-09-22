@@ -65,7 +65,6 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
         Node::Type(ty) => match ty {
             Type::Bool
             | Type::U8
-            | Type::Nat
             | Type::Int
             | Type::Machine(_)
             | Type::Prop
@@ -83,7 +82,6 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             | Term::Bound(_)
             | Term::Bool(_)
             | Term::U8(_)
-            | Term::Nat(_)
             | Term::Int(_)
             | Term::Machine(..)
             | Term::Fn(_) => {}
@@ -148,7 +146,6 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
                 | Proof::CaseStep(term)
                 | Proof::ForEmpty(term)
                 | Proof::Evaluate(term)
-                | Proof::EvaluateAll(term)
                 | Proof::ExcludedMiddle(term) => out.push(Node::Term(term)),
                 Proof::Transport {
                     eq,
@@ -224,13 +221,7 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
                     out.push(Node::Proof(upper));
                 }
                 Proof::Axiom(axiom) => push_axiom(axiom, out),
-                Proof::NatInduction {
-                    motive,
-                    base,
-                    step,
-                    target,
-                }
-                | Proof::IntInduction {
+                Proof::IntInduction {
                     motive,
                     base,
                     step,

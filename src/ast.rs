@@ -513,11 +513,8 @@ pub enum ExprKind {
         scrutinee: Box<Expr>,
         arms: Vec<MatchArm>,
     },
-    /// `loop { body }`, or the state-passing `loop (state) -> R { body }`,
-    /// told apart by `result`: a loop without a state list has none.
+    /// `loop { body }`.
     Loop {
-        state: Vec<StateParameter>,
-        result: Option<Box<Type>>,
         body: Block,
     },
     /// `while condition { body }`, or `while let pattern = condition { body }`
@@ -529,12 +526,9 @@ pub enum ExprKind {
     },
     /// `for pattern in iterable { body }`. The iterable of a bounded loop is
     /// a `Range`; any other expression is an iterator, which comes later.
-    /// The state list of the state-passing form follows the iterable, and is
-    /// empty otherwise.
     For {
         pattern: Box<Pattern>,
         iterable: Box<Expr>,
-        state: Vec<StateParameter>,
         body: Block,
     },
     /// `lower..upper` or `lower..=upper`. Only the header of a `for` reads a
@@ -546,9 +540,8 @@ pub enum ExprKind {
     },
     /// `break`, or `break value`.
     Break(Option<Box<Expr>>),
-    /// Plain `continue`, or the state-passing `continue(next, ...)`, which
-    /// has the list, empty for `continue()`.
-    Continue(Option<Vec<Expr>>),
+    /// `continue`, which carries nothing.
+    Continue,
     /// `return`, or `return value`.
     Return(Option<Box<Expr>>),
     /// `&value` or `&mut value`.
@@ -630,15 +623,6 @@ impl RangeKind {
             Self::Inclusive => "..=",
         }
     }
-}
-
-/// `name: Type = initial` in a `loop` or `for` header.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StateParameter {
-    pub name: Name,
-    pub ty: Type,
-    pub initial: Expr,
-    pub span: Span,
 }
 
 /// A built-in form, spelled `name!(...)` as Rust spells a macro call. The

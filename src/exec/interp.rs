@@ -470,8 +470,7 @@ impl<'p> CheckInterpreter<'p> {
             },
             // Skipped, not evaluated.
             Term::Proof(_) => Value::Proved,
-            Term::Nat(_)
-            | Term::Int(_)
+            Term::Int(_)
             | Term::Eq(..)
             | Term::Implies(..)
             | Term::Forall(..)

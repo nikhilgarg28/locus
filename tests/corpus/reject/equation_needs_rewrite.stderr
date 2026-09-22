@@ -1,5 +1,5 @@
 error[L0230]: cannot show `second == n.wrapping_add(1).wrapping_add(1)`
-  --> tests/corpus/reject/rewriting_by_a_fact_removed.lc:12:14
+  --> tests/corpus/reject/equation_needs_rewrite.lc:12:14
    |
 12 |     (second, _) //~ error: L0230 cannot show `second == n.wrapping_add(1).wrapping_add(1)`
    |              ^

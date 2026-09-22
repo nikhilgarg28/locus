@@ -131,7 +131,8 @@ impl Passing {
     }
 }
 
-/// `fn` or `math fn`. The result type may mention the parameters.
+/// A function, ordinary (`math` false) or of the logic (`math` true), whose
+/// body is a kernel term. The result type may mention the parameters.
 ///
 /// `passing` says how each parameter is passed, in the order of `params`;
 /// a shorter list means the rest are by value. For each `&mut` parameter,

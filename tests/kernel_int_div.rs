@@ -93,11 +93,11 @@ fn ill_typed<T: std::fmt::Debug>(result: Result<T, KernelError>) {
     );
 }
 
-/// Two integer variables, a `Nat`, and a byte.
+/// Two integer variables, a boolean, and a byte.
 struct Vars {
     a: Term,
     b: Term,
-    nat: Term,
+    flag: Term,
     byte: Term,
 }
 
@@ -107,13 +107,13 @@ fn vars(ctx: &mut Context) -> Vars {
     Vars {
         a,
         b,
-        nat: Term::var(ctx.declare_ghost(Type::Nat).unwrap()),
+        flag: Term::var(ctx.declare(Type::Bool).unwrap()),
         byte: Term::var(ctx.declare(Type::U8).unwrap()),
     }
 }
 
 /// The axiom proves exactly `statement`, and with any one argument replaced
-/// by a `Nat` or a byte it proves nothing.
+/// by a boolean or a byte it proves nothing.
 fn states(ctx: &mut Context, v: &Vars, build: &dyn Fn(&[Term]) -> Axiom, statement: Term) {
     let arguments = [v.a.clone(), v.b.clone()];
     let axiom = build(&arguments);
@@ -126,7 +126,7 @@ fn states(ctx: &mut Context, v: &Vars, build: &dyn Fn(&[Term]) -> Axiom, stateme
     );
     assert_eq!(check_proof(ctx, &ax(axiom.clone()), &statement), Ok(()));
     for position in 0..arity {
-        for wrong in [&v.nat, &v.byte, &Term::nat(0), &Term::U8(0)] {
+        for wrong in [&v.flag, &v.byte, &Term::Bool(true), &Term::U8(0)] {
             let mut arguments = arguments.clone();
             arguments[position] = wrong.clone();
             ill_typed(infer_proof(ctx, &ax(build(&arguments))));
@@ -161,7 +161,7 @@ fn decided(ctx: &mut Context, prelude: &Prelude, claim: Term, holds: bool) {
 fn quotient_and_remainder_are_ghost_primitives_computed_on_literals() {
     let (mut ctx, _) = setup();
     let n = Term::var(ctx.declare_ghost(Type::Int).unwrap());
-    let nat = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
+    let flag = Term::var(ctx.declare(Type::Bool).unwrap());
 
     for term in [div(n.clone(), lit(2)), rem(lit(2), n.clone())] {
         assert_eq!(infer_term(&mut ctx, &term, Mode::Logical), Ok(Type::Int));
@@ -172,8 +172,8 @@ fn quotient_and_remainder_are_ghost_primitives_computed_on_literals() {
     }
     for prim in [Prim::IntDiv, Prim::IntRem] {
         for wrong in [
-            Term::prim(prim, vec![nat.clone(), lit(1)]),
-            Term::prim(prim, vec![lit(1), nat.clone()]),
+            Term::prim(prim, vec![flag.clone(), lit(1)]),
+            Term::prim(prim, vec![lit(1), flag.clone()]),
             Term::prim(prim, vec![Term::U8(1), lit(1)]),
         ] {
             ill_typed(infer_term(&mut ctx, &wrong, Mode::Logical));

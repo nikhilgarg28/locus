@@ -18,29 +18,11 @@ use super::env::{Env, Global};
 
 impl Env<'_> {
     /// Every declaration a term may mention, under the name the source
-    /// calls it by: the prelude's orderings on `Nat`, the theory's lemmas,
-    /// and the items declared so far, built-in propositions included.
+    /// calls it by: the theory's lemmas and the items declared so far,
+    /// built-in propositions included.
     fn definition_names(&self) -> Names {
         let mut names = Names::new();
-        names.function("nat_le", self.prelude.nat_le);
-        names.function("nat_lt", self.prelude.nat_lt);
-        let theory = &self.theory;
-        for (name, id) in [
-            ("nat_add_assoc", theory.nat_add_assoc),
-            ("nat_zero_add", theory.nat_zero_add),
-            ("nat_le_refl", theory.nat_le_refl),
-            ("nat_zero_le", theory.nat_zero_le),
-            ("nat_le_trans", theory.nat_le_trans),
-            ("nat_succ_add", theory.nat_succ_add),
-            ("nat_zero_or_succ", theory.nat_zero_or_succ),
-            ("nat_le_succ_succ", theory.nat_le_succ_succ),
-            ("nat_add_comm", theory.nat_add_comm),
-            ("nat_add_cancel_left", theory.nat_add_cancel_left),
-            ("nat_lt_or_le", theory.nat_lt_or_le),
-        ] {
-            names.function(name, id);
-        }
-        for (name, id) in theory.lemma_names() {
+        for (name, id) in self.theory.lemma_names() {
             names.function(name, id);
         }
         for (name, global) in &self.types {

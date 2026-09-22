@@ -28,7 +28,7 @@ pub(super) struct Written {
 /// a call that returns it is the ordinary way of establishing a fact, and
 /// is not elaborated where nothing runs.
 pub(super) fn logical_data(ty: &Type) -> bool {
-    matches!(ty, Type::Prop | Type::Int | Type::Nat)
+    matches!(ty, Type::Prop | Type::Int)
 }
 
 impl Env<'_> {
@@ -107,7 +107,7 @@ impl Env<'_> {
                             "`Nat` is not part of the core language",
                             name.span,
                         )
-                        .note("`Nat` is internal to the kernel; the integers of the logic are `Int`, and the machine integers are `u8` to `i64`"),
+                        .note("the integers of the logic are `Int`, and the machine integers are `u8` to `i64`"),
                     );
                     Err(())
                 }

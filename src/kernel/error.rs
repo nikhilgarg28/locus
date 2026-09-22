@@ -87,8 +87,6 @@ pub enum KernelError {
     NotClosed(Term),
     /// Evaluation offers only results that are plain data.
     NotPlainData(Type),
-    /// Evaluation found a case where the claim is false.
-    Refuted(Term),
     NotAFunction(Type),
     /// A derived form exceeded its step budget.
     StepLimit,
@@ -205,7 +203,6 @@ impl fmt::Display for KernelError {
             Self::NotPlainData(ty) => {
                 write!(f, "evaluation offers only plain data, and {ty} is not")
             }
-            Self::Refuted(term) => write!(f, "refuted by evaluation at {term}"),
             Self::NotAFunction(ty) => write!(f, "expected a function type, found {ty}"),
             Self::StepLimit => f.write_str("derived form exceeded its step budget"),
             Self::ProofExpected(term) => {

@@ -2,14 +2,23 @@
 # The checks every commit must pass: formatting, clippy, and the tests, whose
 # randomized parts use fixed seeds and small counts.
 #
-#   tools/check.sh              the fast form, for every commit
-#   tools/check.sh --extended   before a milestone: sets LOCUS_EXTENDED, under
-#                               which the randomized tests run a hundred times
-#                               as many cases, and tests in release mode so
-#                               that those counts are feasible
+#   tools/check.sh              the fast form, for every commit; its tests
+#                               are timed against FAST_LIMIT_SECONDS, the
+#                               bound the Build plan asks of them, and a run
+#                               over it is reported, not failed
+#   tools/check.sh --extended   before a milestone: the fast form, then the
+#                               whole suite again in release with
+#                               LOCUS_EXTENDED=1, under which the randomized
+#                               tests run a hundred times as many cases (the
+#                               random programs run 10,000), and then one
+#                               line per exit criterion of the Build plan,
+#                               taken from what tests/acceptance.rs and the
+#                               long runs printed
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+FAST_LIMIT_SECONDS=120
 
 extended=
 for argument in "$@"; do
@@ -26,11 +35,62 @@ for argument in "$@"; do
     esac
 done
 
+# The fast gate. Building is not timed: the tests are, from a warm build.
 cargo fmt --check
 cargo clippy --locked --offline --all-targets -- -D warnings
-if [[ -n "$extended" ]]; then
-    export LOCUS_EXTENDED=1
-    cargo test --locked --offline --release
-else
-    cargo test --locked --offline
+cargo test --locked --offline --no-run
+started=$(date +%s)
+cargo test --locked --offline
+elapsed=$(( $(date +%s) - started ))
+fast="fast tests: ${elapsed}s, limit ${FAST_LIMIT_SECONDS}s"
+if (( elapsed > FAST_LIMIT_SECONDS )); then
+    fast="$fast: OVER THE LIMIT"
 fi
+echo "$fast"
+if [[ -z "$extended" ]]; then
+    exit 0
+fi
+
+# The extended runs, in release so that the counts are feasible. Everything
+# the tests print is kept, so that the summary below can quote it.
+export LOCUS_EXTENDED=1
+log=target/check-extended.log
+started=$(date +%s)
+cargo test --locked --offline --release -- --nocapture 2>&1 | tee "$log"
+status=${PIPESTATUS[0]}
+elapsed=$(( $(date +%s) - started ))
+
+# One line per exit criterion of the Build plan. A criterion the acceptance
+# tests measure prints `criterion: ...`; the three that rest on the long
+# runs are quoted from those runs' own summaries.
+summary() {
+    local line
+    line=$(grep -m 1 -E "$1" "$log" || true)
+    if [[ -z "$line" ]]; then
+        echo "  $2: no summary line found (pattern $1)"
+    else
+        echo "  $line"
+    fi
+}
+echo
+echo "extended suite: ${elapsed}s, exit status ${status}"
+echo "exit criteria of the Build plan:"
+summary "^criterion: the target examples run" "the target examples run"
+summary "^criterion: the proofs are the ones predicted" "the proofs are the ones predicted"
+summary "^criterion: a Rust caller is held at the boundary" "a Rust caller is held at the boundary"
+summary "^criterion: an author is told why" "an author is told why"
+summary "^criterion: a crate can be checked by the kernel alone" "a crate can be checked by the kernel alone"
+summary "^criterion: checking is deterministic" "checking is deterministic"
+summary "^criterion: Locus is never more permissive than rustc" "Locus is never more permissive than rustc"
+summary "^random programs \(extended\): [0-9]+ generated" "what is checked is what runs"
+summary "^criterion: the trusted base is written down" "the trusted base is written down and tested as such"
+summary "^hand-built: [0-9]+ triples" "  kernel soundness, hand-built proofs"
+summary "^theory: [0-9]+ triples" "  kernel soundness, the theory"
+summary "^corpus: [0-9]+ triples" "  kernel soundness, the corpus"
+summary "^criterion: the parser is robust" "the parser is robust, and total for stated reasons"
+summary "^test parser_fuzz::|^test random_token_sequences_give_an_ast_or_a_diagnostic_without_a_panic \.\.\. ok" "  parser fuzz, token sequences"
+summary "^test edited_examples_give_an_ast_or_a_diagnostic_without_a_panic \.\.\. ok" "  parser fuzz, edited files"
+summary "^criterion: the legacy is gone" "the legacy is gone"
+summary "^criterion: the suites are usable" "the suites are usable"
+echo "  $fast; extended suite ${elapsed}s in release"
+exit "$status"

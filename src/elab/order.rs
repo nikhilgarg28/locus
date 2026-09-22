@@ -459,20 +459,6 @@ impl Mentions<'_> {
         self.bound.truncate(depth);
     }
 
-    /// A loop's state: its initial values are outside the loop, and its
-    /// names are in scope in the body, which `body` visits.
-    fn state(&mut self, state: &[StateParameter], body: impl FnOnce(&mut Self)) {
-        for parameter in state {
-            self.ty(&parameter.ty);
-            self.expr(&parameter.initial);
-        }
-        let names: Vec<String> = state
-            .iter()
-            .map(|parameter| parameter.name.text.clone())
-            .collect();
-        self.scoped(names, body);
-    }
-
     /// A pattern's names are in scope in `body`.
     fn with_pattern(&mut self, pattern: &Pattern, body: impl FnOnce(&mut Self)) {
         let depth = self.bound.len();
@@ -506,9 +492,7 @@ impl Mentions<'_> {
                 self.ty(ty);
             }
             ExprKind::Tuple(items) => items.iter().for_each(|item| self.expr(item)),
-            ExprKind::Continue(items) => {
-                items.iter().flatten().for_each(|item| self.expr(item));
-            }
+            ExprKind::Continue => {}
             ExprKind::Range { lower, upper, .. } => {
                 self.expr(lower);
                 self.expr(upper);
@@ -536,14 +520,7 @@ impl Mentions<'_> {
                     self.with_pattern(&arm.pattern, |this| this.expr(&arm.body));
                 }
             }
-            ExprKind::Loop {
-                state,
-                result,
-                body,
-            } => {
-                result.iter().for_each(|result| self.ty(result));
-                self.state(state, |this| this.block(body));
-            }
+            ExprKind::Loop { body } => self.block(body),
             ExprKind::While {
                 pattern,
                 condition,
@@ -558,11 +535,10 @@ impl Mentions<'_> {
             ExprKind::For {
                 pattern,
                 iterable,
-                state,
                 body,
             } => {
                 self.expr(iterable);
-                self.with_pattern(pattern, |this| this.state(state, |this| this.block(body)));
+                self.with_pattern(pattern, |this| this.block(body));
             }
             ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } => {
                 let names: Vec<String> = parameters

@@ -1,10 +1,11 @@
-// The retired `#` proof syntax, in a type and in an expression.
+// `#` begins an attribute and nothing else: in a type and in an expression
+// it is an error, and the note points at proof types and `_`.
 prop Small(n: u8) {
     Is(witness: @(n <= 9)),
 }
 
-fn first(n: u8, small: #Small(n)) -> u8 { n } //~ error: L0111 no longer proof syntax
+fn first(n: u8, small: #Small(n)) -> u8 { n } //~ error: L0111 begins an attribute
 
 fn second(n: u8) -> (out: u8, @(out == n)) {
-    (n, #{ _ }) //~ error: L0111 no longer proof syntax
+    (n, #{ _ }) //~ error: L0111 begins an attribute
 }

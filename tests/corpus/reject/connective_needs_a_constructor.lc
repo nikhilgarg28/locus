@@ -1,7 +1,7 @@
-// A hole takes no connective apart. The removed search proved `p && q`
-// from `p` and `q`, `p || q` from either, and an implication by assuming
-// its premise; each is a constructor or a lemma now, and the
-// diagnostic names which.
+// A hole takes no connective apart: `p && q` is not shown from `p` and
+// `q`, `p || q` from either, nor an implication by assuming its premise.
+// Each is a constructor or a function of the logic, and the diagnostic
+// names which.
 #[terminates] #[no_panic] #[no_io] fn both(p: Prop, q: Prop, hp: @p, hq: @q) -> @(p && q) {
     _ //~ error: L0230 cannot show `p && q`
 }

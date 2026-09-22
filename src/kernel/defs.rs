@@ -86,10 +86,6 @@ pub struct Prelude {
     pub falsehood: PropId,
     pub and: PropId,
     pub or: PropId,
-    /// `nat_le(a, b) := exists k { a + k == b }`
-    pub nat_le: FnId,
-    /// `nat_lt(a, b) := nat_le(succ(a), b)`
-    pub nat_lt: FnId,
 }
 
 impl Prelude {
@@ -107,14 +103,6 @@ impl Prelude {
 
     pub fn or_prop(&self, left: Term, right: Term) -> Term {
         Term::PropApp(self.or, vec![left, right])
-    }
-
-    pub fn nat_le_prop(&self, left: Term, right: Term) -> Term {
-        Term::call(Term::Fn(self.nat_le), vec![left, right])
-    }
-
-    pub fn nat_lt_prop(&self, left: Term, right: Term) -> Term {
-        Term::call(Term::Fn(self.nat_lt), vec![left, right])
     }
 
     /// `!p` abbreviates `p => False`.
@@ -199,37 +187,11 @@ impl Definitions {
                 ],
             )
             .expect("prelude Or");
-        // The orderings on `Nat` are ordinary definitions. The kernel names
-        // them so that the lemmas about `Nat` can be stated with them; the
-        // machine types are ordered through their views into `Int`, whose
-        // order `int_le` is primitive.
-        let relation = |over: Type| {
-            Type::function(2, move |params| match params {
-                [] | [_] => over.clone(),
-                _ => Type::Prop,
-            })
-        };
-        let nat_le = definitions
-            .declare_fn(&relation(Type::Nat), |params| {
-                let (a, b) = (params[0].clone(), params[1].clone());
-                Term::exists(Type::Nat, |k| Term::eq(Type::Nat, Term::nat_add(a, k), b))
-            })
-            .expect("prelude nat_le");
-        let nat_lt = definitions
-            .declare_fn(&relation(Type::Nat), |params| {
-                Term::call(
-                    Term::Fn(nat_le),
-                    vec![Term::succ(params[0].clone()), params[1].clone()],
-                )
-            })
-            .expect("prelude nat_lt");
         let prelude = Prelude {
             truth,
             falsehood,
             and,
             or,
-            nat_le,
-            nat_lt,
         };
         definitions.prelude = Some(prelude);
         (definitions, prelude)

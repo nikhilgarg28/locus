@@ -21,10 +21,6 @@
 //! the loop it is valid over the versions after. Tracked evidence the body
 //! does not refresh, but whose subject the loop assigns, is stale inside
 //! the body and after the loop (`mutation.rs`).
-//!
-//! The state-passing forms these replace, `loop (state) -> R`,
-//! `for i in lo..hi (state)`, and `continue(next)`, are still parsed and
-//! are reported with the new spelling (`removed_loop_form`).
 
 use crate::ast::{self, ExprKind, PatternKind, RangeKind, StatementKind};
 use crate::diagnostic::Diagnostic;
@@ -165,13 +161,9 @@ impl Scan {
             ExprKind::For {
                 pattern,
                 iterable,
-                state,
                 body,
             } => {
                 self.expr(iterable);
-                state
-                    .iter()
-                    .for_each(|parameter| self.expr(&parameter.initial));
                 self.scoped(|scan| {
                     scan.declare(pattern);
                     scan.block(body);
@@ -208,7 +200,6 @@ impl Scan {
             ExprKind::Break(inner) | ExprKind::Return(inner) => {
                 inner.iter().for_each(|inner| self.expr(inner));
             }
-            ExprKind::Continue(items) => items.iter().flatten().for_each(|item| self.expr(item)),
             ExprKind::Tuple(items)
             | ExprKind::Form {
                 arguments: items, ..
@@ -241,6 +232,7 @@ impl Scan {
             | ExprKind::Bool(_)
             | ExprKind::Unit
             | ExprKind::Hole
+            | ExprKind::Continue
             | ExprKind::Error => {}
         }
     }
@@ -719,28 +711,5 @@ impl Env<'_> {
             ty: unit_type(),
             never: true,
         })
-    }
-
-    /// One of the state-passing loop forms, which M3 removed: reported with
-    /// the spelling that replaced it. The rewrite is not mechanical, so no
-    /// fix is offered.
-    pub(super) fn removed_loop_form<T>(&mut self, what: &str, span: Span) -> Elab<T> {
-        let (message, note) = match what {
-            "loop" => (
-                "the state-passing `loop (state) -> R { ... }` was removed; write `loop { ... }`",
-                "declare the state with `let mut` before the loop and assign it in the body; `break value` gives the loop its value, and a plain `continue` starts the next pass",
-            ),
-            "for" => (
-                "the state-passing `for i in lo..hi (state) { ... }` was removed; write `for i in lo..hi { ... }`",
-                "declare the state with `let mut` before the loop and assign it in the body; the loop's value is `()`, and what it assigned is read after it",
-            ),
-            _ => (
-                "`continue(next)` was removed; write `continue`",
-                "assign the loop's `let mut` variables in the body; a `continue`, and the end of the body, start the next pass with their current values",
-            ),
-        };
-        self.diagnostics
-            .push(Diagnostic::error("L0234", message, span).note(note));
-        Err(())
     }
 }

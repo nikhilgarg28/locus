@@ -117,7 +117,7 @@ impl Env<'_> {
                     ),
                     None if self.failed.contains(&name.text) => Err(()),
                     None if matches!(name.text.as_str(), "rewrite" | "unfold" | "fold") => {
-                        self.retired_bare_form(name)
+                        self.bare_form(name)
                     }
                     None => {
                         // A function of an `impl` block is named by its type.

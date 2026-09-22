@@ -21,8 +21,7 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
         | Proof::Literal(inner)
         | Proof::Definition(inner)
         | Proof::CaseStep(inner)
-        | Proof::Evaluate(inner)
-        | Proof::EvaluateAll(inner) => term(inner),
+        | Proof::Evaluate(inner) => term(inner),
         Proof::Transport { eq, proof, .. } => sub(eq) || sub(proof),
         Proof::ImpliesIntro { body, .. } | Proof::ForallIntro { body, .. } => sub(body),
         Proof::ImpliesElim(left, right) => sub(left) || sub(right),
@@ -49,10 +48,7 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
             upper,
         } => term(looped) || sub(lower) || sub(upper),
         Proof::Axiom(axiom) => axiom.terms().into_iter().any(term),
-        Proof::NatInduction {
-            base, step, target, ..
-        }
-        | Proof::IntInduction {
+        Proof::IntInduction {
             base, step, target, ..
         } => sub(base) || sub(&step.body) || term(target),
         Proof::Linear { goal, pairs, .. } => {
@@ -75,7 +71,6 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
         | Term::Bound(_)
         | Term::Bool(_)
         | Term::U8(_)
-        | Term::Nat(_)
         | Term::Int(_)
         | Term::Machine(..) => false,
         Term::Prim(_, terms)

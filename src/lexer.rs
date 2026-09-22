@@ -1,7 +1,7 @@
 //! Handwritten tokenizer. Locus source tokenizes as Rust: every Rust keyword
 //! is reserved and every Rust token is recognized, and there is no token Rust
-//! lacks. The words of Locus alone (`prop`, `forall`, `exists`, the retired
-//! `def` and `math`) are names, which the parser reads in context. A literal
+//! lacks. The words of Locus alone (`prop`, `forall`, `exists`) are names,
+//! which the parser reads in context. A literal
 //! form Locus does not have yet is reported here and becomes an error token;
 //! an operator or a keyword it does not use yet is a token, and the parser
 //! reports it where it stands. Doc comments are tokens too, with their text,

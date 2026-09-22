@@ -59,7 +59,7 @@ pub fn erase_type(ty: &Type) -> EType {
         Type::U8 => EType::Int(crate::kernel::MachineInt::U8),
         Type::Machine(ty) => EType::Int(*ty),
         Type::Proof(_) => EType::Proved,
-        Type::Prop | Type::Nat | Type::Int => EType::Ghost,
+        Type::Prop | Type::Int => EType::Ghost,
         Type::Tuple(fields) => EType::Tuple(fields.iter().map(erase_type).collect()),
         Type::Struct(id) => EType::Struct(*id),
         Type::Enum(id) => EType::Enum(*id),

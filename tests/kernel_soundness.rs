@@ -23,7 +23,7 @@
 //! the kernel: a claim is false when some assignment of values to the
 //! context's variables makes every hypothesis true and the claim false. Its
 //! integers are `i128` with checked arithmetic, so a claim that computes
-//! past `i128` goes undecided, as does a quantifier over `Nat`, `Int`, or a
+//! past `i128` goes undecided, as does a quantifier over `Int` or a
 //! machine integer type that no sampled value settles. The machine integer
 //! types are `i128` values held in range, with their own table of widths
 //! and a reduction written out in modulus arithmetic. A claim the
@@ -210,7 +210,6 @@ struct Triple {
 enum Value {
     Bool(bool),
     U8(u8),
-    Nat(u64),
     /// An integer of the logic, as far as `i128` reaches. The oracle's
     /// arithmetic is checked, and a result outside `i128` is no value: the
     /// claim goes undecided.
@@ -234,7 +233,7 @@ enum Value {
 impl Value {
     fn is_data(&self) -> bool {
         match self {
-            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) | Self::Machine(..) => true,
+            Self::Bool(_) | Self::U8(_) | Self::Int(_) | Self::Machine(..) => true,
             Self::Product(values) | Self::Variant(_, values) => values
                 .iter()
                 .all(|value| *value == Self::Opaque || value.is_data()),
@@ -541,9 +540,6 @@ impl<'a> Oracle<'a> {
                 let Value::Fn(id) = self.value(callee)? else {
                     return None;
                 };
-                if let Some(answer) = self.ordering(id, arguments) {
-                    return answer;
-                }
                 let arguments = self.values(arguments)?;
                 let (arity, body) = self.definitions.function_body(id)?;
                 if arity != arguments.len() {
@@ -585,38 +581,10 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    /// The prelude's orderings, by what they mean. `None` when `id` is not
-    /// one of them.
-    fn ordering(&mut self, id: FnId, arguments: &[Term]) -> Option<Option<bool>> {
-        let prelude = self.prelude;
-        let strict = if id == prelude.nat_le {
-            false
-        } else if id == prelude.nat_lt {
-            true
-        } else {
-            return None;
-        };
-        let [left, right] = arguments else {
-            return Some(None);
-        };
-        let number = |value: Value| match value {
-            Value::U8(byte) => Some(u64::from(byte)),
-            Value::Nat(number) => Some(number),
-            _ => None,
-        };
-        let answer = (|| {
-            let left = number(self.value(left)?)?;
-            let right = number(self.value(right)?)?;
-            Some(if strict { left < right } else { left <= right })
-        })();
-        Some(answer)
-    }
-
     fn quantifier(&mut self, ty: &Type, body: &Term, universal: bool) -> Option<bool> {
         let (domain, complete): (Vec<Value>, bool) = match ty {
             Type::Bool => (vec![Value::Bool(false), Value::Bool(true)], true),
             Type::U8 => ((0..=255).map(Value::U8).collect(), true),
-            Type::Nat => ([0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(), false),
             Type::Int => (INT_SAMPLE.map(Value::Int).to_vec(), false),
             Type::Machine(ty) => (
                 machine_sample(*ty)
@@ -691,7 +659,6 @@ impl<'a> Oracle<'a> {
             }
             Term::Bool(value) => Some(Value::Bool(*value)),
             Term::U8(value) => Some(Value::U8(*value)),
-            Term::Nat(value) => value.to_u64().map(Value::Nat),
             Term::Int(value) => value.to_i128().map(Value::Int),
             // A literal at `u8` in this form, or outside its range, is not a
             // term and has no value.
@@ -767,8 +734,6 @@ impl<'a> Oracle<'a> {
 /// The primitives, written from their documentation in `Prim`.
 fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
     Some(match (prim, arguments) {
-        (Prim::Succ, [Value::Nat(n)]) => Value::Nat(n.checked_add(1)?),
-        (Prim::NatAdd, [Value::Nat(a), Value::Nat(b)]) => Value::Nat(a.checked_add(*b)?),
         (Prim::IntAdd, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_add(*b)?),
         (Prim::IntSub, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_sub(*b)?),
         (Prim::IntMul, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_mul(*b)?),
@@ -918,7 +883,6 @@ impl<'a> Search<'a> {
         match ty {
             Type::Bool => vec![Value::Bool(false), Value::Bool(true)],
             Type::U8 => self.bytes.iter().copied().map(Value::U8).collect(),
-            Type::Nat => [0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(),
             Type::Int => self.ints.iter().copied().map(Value::Int).collect(),
             Type::Machine(machine) => self.machine_candidates(*machine),
             Type::Tuple(_) | Type::Struct(_) if depth < 3 => self.products(ty, depth),
@@ -1129,7 +1093,6 @@ fn term_children(term: &Term) -> Vec<&Term> {
         | Term::Bound(_)
         | Term::Bool(_)
         | Term::U8(_)
-        | Term::Nat(_)
         | Term::Int(_)
         | Term::Machine(..)
         | Term::Proof(_)
@@ -1162,7 +1125,6 @@ fn term_with_children(term: &Term, children: Vec<Term>) -> Term {
         | Term::Bound(_)
         | Term::Bool(_)
         | Term::U8(_)
-        | Term::Nat(_)
         | Term::Int(_)
         | Term::Machine(..)
         | Term::Proof(_)
@@ -1270,14 +1232,6 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 }
             }
         }
-        Term::Nat(number) => {
-            if let Some(number) = number.to_u64() {
-                out.push(Term::nat(number + 1));
-                if number > 0 {
-                    out.push(Term::nat(number - 1));
-                }
-            }
-        }
         Term::Bool(value) => out.push(Term::Bool(!value)),
         Term::Bound(index) => {
             out.push(Term::Bound(index + 1));
@@ -1301,7 +1255,7 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 Prim::IntDiv => Some(Prim::IntRem),
                 Prim::IntRem => Some(Prim::IntDiv),
                 // `<` is not a primitive of its own; it is handled below.
-                Prim::NatAdd | Prim::Succ | Prim::IntNeg => None,
+                Prim::IntNeg => None,
                 Prim::IntLe => None,
                 // The machine primitives have several siblings each, below.
                 Prim::View(_) | Prim::Wrap(_) | Prim::Cast(..) => None,
@@ -1346,9 +1300,7 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
             if let [left, right] = arguments.as_slice() {
                 out.push(Term::Prim(*prim, vec![right.clone(), left.clone()]));
             }
-            if let (Prim::Succ | Prim::NatAdd | Prim::IntNeg, Some(first)) =
-                (prim, arguments.first())
-            {
+            if let (Prim::IntNeg, Some(first)) = (prim, arguments.first()) {
                 out.push(first.clone());
             }
             // `a <= b` to `a < b`, which is `a + 1 <= b`, and back.
@@ -1364,16 +1316,6 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
             }
         }
         Term::Call(callee, arguments) => {
-            if let Term::Fn(id) = &**callee {
-                let pairs = [(prelude.nat_le, prelude.nat_lt)];
-                for (le, lt) in pairs {
-                    if *id == le {
-                        out.push(Term::call(Term::Fn(lt), arguments.clone()));
-                    } else if *id == lt {
-                        out.push(Term::call(Term::Fn(le), arguments.clone()));
-                    }
-                }
-            }
             if let [left, right] = arguments.as_slice() {
                 out.push(Term::call(
                     (**callee).clone(),
@@ -1448,7 +1390,6 @@ fn proof_children(proof: &Proof) -> Vec<(&Proof, u32, u32)> {
         | Proof::ForEmpty(_)
         | Proof::Omitted
         | Proof::Evaluate(_)
-        | Proof::EvaluateAll(_)
         | Proof::Axiom(_) => Vec::new(),
         Proof::OfTerm(term) => match term {
             Term::Call(_, arguments) => embedded_in(arguments),
@@ -1475,7 +1416,7 @@ fn proof_children(proof: &Proof) -> Vec<(&Proof, u32, u32)> {
             vec![(exists, 0, 0), (&*arm.body, arm.vars, arm.hyps)]
         }
         Proof::ForStep { lower, upper, .. } => vec![(lower, 0, 0), (upper, 0, 0)],
-        Proof::NatInduction { base, step, .. } | Proof::IntInduction { base, step, .. } => {
+        Proof::IntInduction { base, step, .. } => {
             vec![(base, 0, 0), (&*step.body, step.vars, step.hyps)]
         }
         Proof::Linear { pairs, .. } => pairs.iter().map(|(proof, _)| (proof, 0, 0)).collect(),
@@ -1564,17 +1505,6 @@ fn proof_with_children(proof: &Proof, children: Vec<Proof>) -> Proof {
             lower: Box::new(take()),
             upper: Box::new(take()),
         },
-        Proof::NatInduction {
-            motive,
-            step,
-            target,
-            ..
-        } => Proof::NatInduction {
-            motive: motive.clone(),
-            base: Box::new(take()),
-            step: rearm(step, take()),
-            target: target.clone(),
-        },
         Proof::IntInduction {
             motive,
             step,
@@ -1610,10 +1540,6 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
     let mut next = terms.into_iter();
     let mut take = || next.next().expect("one term per place");
     match axiom {
-        Axiom::NatAddZero(_) => Axiom::NatAddZero(take()),
-        Axiom::NatAddSucc(..) => Axiom::NatAddSucc(take(), take()),
-        Axiom::NatSuccInjective(..) => Axiom::NatSuccInjective(take(), take()),
-        Axiom::NatSuccNotZero(_) => Axiom::NatSuccNotZero(take()),
         Axiom::CmpReflect(_, flag) => Axiom::CmpReflect(take(), *flag),
         Axiom::IntAddAssoc(..) => Axiom::IntAddAssoc(take(), take(), take()),
         Axiom::IntAddComm(..) => Axiom::IntAddComm(take(), take()),
@@ -1656,11 +1582,7 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
 /// an arm in each.
 fn machine_types(axiom: &Axiom) -> Vec<MachineInt> {
     match axiom {
-        Axiom::NatAddZero(_)
-        | Axiom::NatAddSucc(..)
-        | Axiom::NatSuccInjective(..)
-        | Axiom::NatSuccNotZero(_)
-        | Axiom::CmpReflect(..)
+        Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -1708,11 +1630,7 @@ fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
         Axiom::CastDef(_, _, x) => Axiom::CastDef(types[0], types[1], x.clone()),
         Axiom::OpModel(op, _, xs) => Axiom::OpModel(*op, types[0], xs.clone()),
         Axiom::OpExact(op, _, xs) => Axiom::OpExact(*op, types[0], xs.clone()),
-        Axiom::NatAddZero(_)
-        | Axiom::NatAddSucc(..)
-        | Axiom::NatSuccInjective(..)
-        | Axiom::NatSuccNotZero(_)
-        | Axiom::CmpReflect(..)
+        Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -1747,10 +1665,6 @@ fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
 fn every_axiom_at(t: &Term) -> Vec<Axiom> {
     let t = || t.clone();
     vec![
-        Axiom::NatAddZero(t()),
-        Axiom::NatAddSucc(t(), t()),
-        Axiom::NatSuccInjective(t(), t()),
-        Axiom::NatSuccNotZero(t()),
         Axiom::CmpReflect(t(), true),
         Axiom::CmpReflect(t(), false),
         Axiom::IntAddAssoc(t(), t(), t()),
@@ -1836,7 +1750,6 @@ fn map_node_terms(node: &Proof, f: &dyn Fn(&Term) -> Term) -> Proof {
         Proof::ExcludedMiddle(term) => Proof::ExcludedMiddle(f(term)),
         Proof::ForEmpty(term) => Proof::ForEmpty(f(term)),
         Proof::Evaluate(term) => Proof::Evaluate(f(term)),
-        Proof::EvaluateAll(term) => Proof::EvaluateAll(f(term)),
         Proof::Axiom(axiom) => Proof::Axiom(map_axiom(axiom, f)),
         Proof::Transport {
             eq,
@@ -1903,17 +1816,6 @@ fn map_node_terms(node: &Proof, f: &dyn Fn(&Term) -> Term) -> Proof {
             looped: f(looped),
             lower: lower.clone(),
             upper: upper.clone(),
-        },
-        Proof::NatInduction {
-            motive,
-            base,
-            step,
-            target,
-        } => Proof::NatInduction {
-            motive: f(motive),
-            base: base.clone(),
-            step: step.clone(),
-            target: f(target),
         },
         Proof::IntInduction {
             motive,
@@ -2042,9 +1944,6 @@ impl<'a> Material<'a> {
             Term::U8(1),
             Term::U8(255),
             Term::Bool(true),
-            Term::nat(0),
-            Term::nat(255),
-            Term::nat(256),
             Term::int(0),
             Term::int(1),
             Term::int(-1),
@@ -2131,12 +2030,6 @@ impl<'a> Material<'a> {
                 } else {
                     (**right).clone()
                 }
-            }
-            Term::Forall(ty, body) if *ty == Type::U8 => {
-                if let Term::Eq(_, inner, _) = &**body {
-                    return Proof::EvaluateAll((**inner).clone());
-                }
-                self.term(rng)
             }
             _ => self.term(rng),
         };
@@ -2257,7 +2150,6 @@ impl<'a> Material<'a> {
             Proof::ExcludedMiddle(term) => Proof::ExcludedMiddle(self.bend(term, rng)),
             Proof::ForEmpty(term) => Proof::ForEmpty(self.bend(term, rng)),
             Proof::Evaluate(term) => Proof::Evaluate(self.bend(term, rng)),
-            Proof::EvaluateAll(term) => Proof::EvaluateAll(self.bend(term, rng)),
             Proof::Axiom(axiom) => Proof::Axiom(self.change_axiom(axiom, rng)),
             Proof::Transport {
                 eq,
@@ -2288,10 +2180,9 @@ impl<'a> Material<'a> {
             Proof::ForallIntro { ty, body } => Proof::ForallIntro {
                 ty: match ty {
                     Type::U8 => Type::Bool,
-                    Type::Nat => Type::Int,
-                    Type::Int => Type::Nat,
+                    Type::Int => Type::Bool,
                     Type::Machine(machine) => Type::machine(neighbours(*machine)[0]),
-                    _ => Type::Nat,
+                    _ => Type::Int,
                 },
                 body: body.clone(),
             },
@@ -2387,24 +2278,6 @@ impl<'a> Material<'a> {
                 lower: upper.clone(),
                 upper: lower.clone(),
             },
-            Proof::NatInduction {
-                motive,
-                base,
-                step,
-                target,
-            } => {
-                let (motive, target) = if rng.below(2) == 0 {
-                    (self.bend(motive, rng), target.clone())
-                } else {
-                    (motive.clone(), self.term(rng))
-                };
-                Proof::NatInduction {
-                    motive,
-                    base: base.clone(),
-                    step: step.clone(),
-                    target,
-                }
-            }
             Proof::IntInduction {
                 motive,
                 base,
@@ -2796,10 +2669,6 @@ fn u8_eq(left: Term, right: Term) -> Term {
     Term::eq(Type::U8, left, right)
 }
 
-fn nat_eq(left: Term, right: Term) -> Term {
-    Term::eq(Type::Nat, left, right)
-}
-
 fn lemma(id: FnId, arguments: Vec<Term>) -> Proof {
     Proof::OfTerm(Term::call(Term::Fn(id), arguments))
 }
@@ -3074,54 +2943,6 @@ fn hand_built(world: &World) -> Vec<Triple> {
         add("case_data", scene, goal, proof);
     }
 
-    // The Nat axioms.
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let a = scene.declare(Type::Nat);
-        let claim = nat_eq(Term::nat_add(a.clone(), Term::nat(0)), a.clone());
-        add(
-            "nat_add_zero",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::NatAddZero(a)),
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let (a, b) = (scene.declare(Type::Nat), scene.declare(Type::Nat));
-        let claim = nat_eq(
-            Term::nat_add(a.clone(), Term::succ(b.clone())),
-            Term::succ(Term::nat_add(a.clone(), b.clone())),
-        );
-        add(
-            "nat_add_succ",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::NatAddSucc(a, b)),
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let (a, b) = (scene.declare(Type::Nat), scene.declare(Type::Nat));
-        let h = scene.assume(nat_eq(Term::succ(a.clone()), Term::succ(b.clone())));
-        let proof = Proof::implies_elim(
-            Proof::Axiom(Axiom::NatSuccInjective(a.clone(), b.clone())),
-            Proof::hyp(h),
-        );
-        add("nat_succ_injective", scene, nat_eq(a, b), proof);
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let a = scene.declare(Type::Nat);
-        let claim = prelude.not_prop(nat_eq(Term::succ(a.clone()), Term::nat(0)));
-        add(
-            "nat_succ_not_zero",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::NatSuccNotZero(a)),
-        );
-    }
-
     // Reflection of runtime comparisons at a machine type: each comparison
     // at two types, in both directions, with the claim written from the
     // test's own reading of the order of the views.
@@ -3206,31 +3027,6 @@ fn hand_built(world: &World) -> Vec<Triple> {
         );
         let claim = u8_eq(term.clone(), Term::U8(44));
         add("evaluate", scene, claim, Proof::Evaluate(term));
-    }
-    {
-        let scene = Scene::new(&world.definitions);
-        let body = |x: Term| {
-            Term::cmp(
-                CmpOp::Le,
-                MachineInt::U8,
-                Term::op(Op::WrappingSub, MachineInt::U8, vec![x.clone(), x]),
-                Term::U8(0),
-            )
-        };
-        let claim = Term::forall(Type::U8, |x| {
-            Term::eq(Type::Bool, body(x), Term::Bool(true))
-        });
-        add("evaluate_all", scene, claim, Proof::evaluate_all(body));
-    }
-
-    {
-        // Perturbed to `x <= 254`, this fails at the last byte alone.
-        let scene = Scene::new(&world.definitions);
-        let body = |x: Term| Term::cmp(CmpOp::Le, MachineInt::U8, x, Term::U8(255));
-        let claim = Term::forall(Type::U8, |x| {
-            Term::eq(Type::Bool, body(x), Term::Bool(true))
-        });
-        add("evaluate_all_edge", scene, claim, Proof::evaluate_all(body));
     }
 
     // Definitions.
@@ -4368,19 +4164,6 @@ fn corpus_triples() -> Corpus {
 /// proof, found by no search and checked when the theory was declared.
 fn theory_triples(world: &World) -> Vec<Triple> {
     let theory = &world.theory;
-    let lemmas = [
-        ("nat_add_assoc", theory.nat_add_assoc),
-        ("nat_zero_add", theory.nat_zero_add),
-        ("nat_le_refl", theory.nat_le_refl),
-        ("nat_zero_le", theory.nat_zero_le),
-        ("nat_le_trans", theory.nat_le_trans),
-        ("nat_succ_add", theory.nat_succ_add),
-        ("nat_zero_or_succ", theory.nat_zero_or_succ),
-        ("nat_le_succ_succ", theory.nat_le_succ_succ),
-        ("nat_add_comm", theory.nat_add_comm),
-        ("nat_add_cancel_left", theory.nat_add_cancel_left),
-        ("nat_lt_or_le", theory.nat_lt_or_le),
-    ];
     let mut triples = Vec::new();
     // The lemmas about `Int` and about the machine types come from the
     // table of names that E5 exposes to source, so a lemma added there is
@@ -4396,7 +4179,7 @@ fn theory_triples(world: &World) -> Vec<Triple> {
             name.starts_with("int_") || name.starts_with("u16_") || name.starts_with("i32_")
         })
         .collect();
-    for (name, id) in lemmas.iter().copied().chain(named.iter().copied()) {
+    for (name, id) in named.iter().copied() {
         let origin = format!("theory/{name}");
         let before = triples.len();
         let unplaced = math_triples(&world.definitions, id, &origin, &mut triples);
@@ -4773,12 +4556,14 @@ fn the_oracle_decides_what_it_should_and_no_more() {
         };
         assert!(*value <= 3);
     }
-    // Undecidable here: a quantifier over all of Nat or of Int that has no
-    // small counterexample, a claim about an unknown proposition, and a
+    // Undecidable here: a quantifier over all of Int that has no small
+    // counterexample, a claim about an unknown proposition, and a
     // computation past `i128`, which the oracle does not do.
     let p = scene.declare(Type::Prop);
     let found = witnesses(&scene, &p, &mut Rng(SEED));
-    let open = Term::forall(Type::Nat, |n| prelude.nat_le_prop(Term::nat(0), n));
+    let open = Term::forall(Type::Int, |n| {
+        Term::int_le(n.clone(), Term::int_add(n, Term::int(1)))
+    });
     let squares = Term::forall(Type::Int, |n| {
         Term::int_le(Term::int(0), Term::int_mul(n.clone(), n))
     });

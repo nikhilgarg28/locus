@@ -471,7 +471,6 @@ fn declared() -> (Context, Names) {
     names.proposition("Small", small);
     names.proposition("False", prelude.falsehood);
     names.proposition("And", prelude.and);
-    names.function("nat_le", prelude.nat_le);
     for (name, id) in theory.lemma_names() {
         names.function(name, id);
     }
@@ -525,8 +524,6 @@ fn every_term_and_proof_form_round_trips() {
         Term::Bool(false),
         Term::U8(0),
         Term::U8(255),
-        Term::nat(0),
-        Term::Nat("340282366920938463463374607431768211456".parse().unwrap()),
         int(0),
         int(-1),
         Term::Int("-170141183460469231731687303715884105729".parse().unwrap()),
@@ -534,8 +531,6 @@ fn every_term_and_proof_form_round_trips() {
         Term::machine_int(MachineInt::I8, -128),
         Term::machine_int(MachineInt::I64, i64::MIN.into()),
         Term::machine_int(MachineInt::U64, u64::MAX.into()),
-        Term::succ(Term::nat(1)),
-        Term::nat_add(Term::nat(1), Term::nat(2)),
         Term::int_add(int(1), int(2)),
         Term::int_sub(int(1), int(2)),
         Term::int_mul(int(1), int(2)),
@@ -622,7 +617,6 @@ fn every_term_and_proof_form_round_trips() {
     let every_type = Type::Tuple(vec![
         Type::Bool,
         Type::U8,
-        Type::Nat,
         Type::Int,
         Type::Prop,
         Type::Machine(MachineInt::I64),
@@ -713,13 +707,6 @@ fn every_term_and_proof_form_round_trips() {
         },
         Proof::Omitted,
         Proof::Evaluate(a.clone()),
-        Proof::evaluate_all(|v| Term::eq(Type::U8, v.clone(), v)),
-        Proof::NatInduction {
-            motive: Term::eq(Type::Nat, Term::Bound(0), Term::Bound(0)),
-            base: Box::new(Proof::Refl(Term::nat(0))),
-            step: arm(1, 1, Proof::Omitted),
-            target: Term::nat(5),
-        },
         Proof::IntInduction {
             motive: Term::int_le(int(0), Term::Bound(0)),
             base: Box::new(Proof::Omitted),
@@ -741,10 +728,6 @@ fn every_term_and_proof_form_round_trips() {
         },
     ];
     let axioms = vec![
-        Axiom::NatAddZero(a.clone()),
-        Axiom::NatAddSucc(a.clone(), a.clone()),
-        Axiom::NatSuccInjective(a.clone(), a.clone()),
-        Axiom::NatSuccNotZero(a.clone()),
         Axiom::IntAddAssoc(a.clone(), a.clone(), a.clone()),
         Axiom::IntAddComm(a.clone(), a.clone()),
         Axiom::IntAddZero(a.clone()),
@@ -795,7 +778,7 @@ fn every_term_and_proof_form_round_trips() {
         }
         proofs.push(Proof::Axiom(axiom));
     }
-    assert_eq!(seen.len(), 37, "every axiom is listed");
+    assert_eq!(seen.len(), 33, "every axiom is listed");
     let mut rules: Vec<&str> = Vec::new();
     for proof in &proofs {
         if !rules.contains(&proof.rule_name()) {
@@ -806,7 +789,7 @@ fn every_term_and_proof_form_round_trips() {
             .unwrap_or_else(|error| panic!("{printed}: {error}"));
         assert_eq!(&back, proof, "{printed}");
     }
-    assert_eq!(rules.len(), 27, "every rule is listed: {rules:?}");
+    assert_eq!(rules.len(), 25, "every rule is listed: {rules:?}");
 }
 
 #[test]
@@ -856,7 +839,7 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
         "(1, 2)",
         "(1 ==[u8] 2",
         "(1 => )",
-        "view[Nat](1)",
+        "view[Int](1)",
         "cast[u8](1)",
         "add(1, 2)",
         "eq[u8](1, 2).",
@@ -890,7 +873,7 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
         "construct(prop:Small, 0, (), ())) ",
         "construct(Small, 0, (), ())",
         "omitted()",
-        "nat_induction(1, omitted, |1, 1| omitted)",
+        "int_induction(1, omitted, |1, 1| omitted)",
     ] {
         assert!(parse_proof(text, &ctx, &names).is_err(), "{text:?}");
     }
@@ -941,7 +924,6 @@ const PIECES: &[&str] = &[
     "1",
     "255",
     "-1",
-    "3n",
     "-4i",
     "7u16",
     "-8i8",
@@ -949,7 +931,6 @@ const PIECES: &[&str] = &[
     "false",
     "u8",
     "Int",
-    "Nat",
     "Prop",
     "bool",
     "refl",
@@ -973,9 +954,7 @@ const PIECES: &[&str] = &[
     "for_empty",
     "for_step",
     "evaluate",
-    "evaluate_all",
     "axiom",
-    "nat_induction",
     "int_induction",
     "linear",
     "forall",

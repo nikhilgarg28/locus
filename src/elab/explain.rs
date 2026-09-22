@@ -4,10 +4,9 @@
 //! hole is filled by a fact that matches, after computing, or not at all.
 //! It shows the claim as stated, the claim after computing when that
 //! differs, and the facts in scope that speak of the same names, nearest
-//! first. Then it says what the search that used to bridge claims would
-//! have done, when it would have filled the hole, and the explicit form
-//! that is accepted instead: a lemma call, `rewrite!`, `unfold!` or
-//! `fold!`, a constructor, or a `prove!` stepping stone.
+//! first. Then it says which explicit form bridges the facts and the
+//! claim, when one does: a lemma call, `rewrite!`, `unfold!` or `fold!`, a
+//! constructor, or a `prove!` stepping stone.
 //!
 //! Every form suggested was built and checked by the kernel against the
 //! computed claim first, so the note never names a form that is refused.
@@ -18,8 +17,7 @@
 use crate::diagnostic::Diagnostic;
 use crate::kernel::derive;
 use crate::kernel::{
-    FnId, HypId, KernelError, MachineInt, Prim, Proof, Term, Type, VarId, check_proof, infer_proof,
-    same,
+    FnId, HypId, MachineInt, Prim, Proof, Term, Type, VarId, check_proof, infer_proof, same,
 };
 use crate::source::Span;
 
@@ -27,7 +25,7 @@ use super::arithmetic::ArithmeticFailure;
 use super::env::{Env, Fact};
 use super::solve::{Definition, Known, STEP_LIMIT, Step, Test, forward};
 
-/// Something the removed search would have used: a fact in scope, perhaps
+/// Something a suggested form may be built from: a fact in scope, perhaps
 /// unfolded or read off a branch, with the text that names it in source.
 struct Candidate {
     claim: Term,
@@ -44,7 +42,7 @@ enum Cases {
     Undecided,
 }
 
-/// The nesting of the search over the connectives.
+/// The nesting of the check over the connectives.
 const STRUCTURAL_DEPTH: usize = 8;
 
 impl Env<'_> {
@@ -105,7 +103,7 @@ impl Env<'_> {
 
         // What the arithmetic procedure says: values that break the claim,
         // after which nothing linear would fill it, or a budget that ran
-        // out; then what the removed search would have done.
+        // out; then the form that bridges the facts and the claim.
         let (linear, _) = self.literal_views(&normal);
         let failure = self.arithmetic_failure(&linear, &known);
         if let Some(failure) = &failure {
@@ -133,11 +131,11 @@ impl Env<'_> {
         is_name.then(|| label.clone())
     }
 
-    // --- What the removed search would have done -------------------------------------
+    // --- The form that bridges the facts and the claim ------------------------------
 
-    /// The notes about the removed tiers: the counterexample when there is
-    /// one, otherwise the explicit form that is accepted, or the kind of
-    /// step that is missing. With `refuted`, the arithmetic procedure has
+    /// The notes after the facts: the counterexample when there is one,
+    /// otherwise the explicit form that is accepted, or the kind of step
+    /// that is missing. With `refuted`, the arithmetic procedure has
     /// already shown values that break the claim, and only a definition
     /// left closed can still be what is missing.
     fn bridge(&mut self, normal: &Term, known: &Known, refuted: bool) -> Vec<String> {
@@ -172,14 +170,14 @@ impl Env<'_> {
             notes.push(form);
             return notes;
         }
-        // One lemma, where the proof by all 256 cases used to go.
+        // One lemma that takes the step from the facts to the claim.
         if let Some(form) = self.by_lemma(normal, &opened, &opened_candidates) {
             notes.push(form);
             return notes;
         }
         if let Some((equation, claim)) = self.would_rewrite(&opened, &opened_candidates) {
             notes.push(format!(
-                "rewriting by the equation `{claim}` was removed; `rewrite!({equation}, h)` carries evidence `h` across it, replacing every occurrence of the left side, and a name bound by `let` is replaced by what it stands for only when computing"
+                "`rewrite!({equation}, h)` carries evidence `h` across the equation `{claim}`, replacing every occurrence of its left side; a name bound by `let` is replaced by what it stands for only when computing"
             ));
             return notes;
         }
@@ -189,11 +187,11 @@ impl Env<'_> {
                 .and_then(|test| single_byte(&test.test))
                 .map_or_else(|| "the unknown".to_string(), |byte| self.show(&byte));
             notes.push(format!(
-                "the proof by all 256 cases of `{unknown}` was removed; this holds for every value the facts allow, and the step from the facts to it is stated with a lemma call, such as `u8_le_trans`, or a `prove!` stepping stone"
+                "this holds for every value of `{unknown}` the facts allow, and the step from the facts to it is stated with a lemma call, such as `u8_le_trans`, or a `prove!` stepping stone"
             ));
             return notes;
         }
-        // The search over the connectives.
+        // The connectives.
         if let Some(form) = self.by_structure(&opened, &opened_candidates) {
             notes.push(form);
             return notes;
@@ -321,7 +319,7 @@ impl Env<'_> {
     }
 
     /// Unfolds every call of the program's own functions and computes, until
-    /// nothing changes: what the removed tier did to both sides.
+    /// nothing changes, on both sides.
     fn opened(&mut self, term: &Term, definitions: &[Definition]) -> (Term, Vec<Step>) {
         let mut term = term.clone();
         let mut steps = Vec::new();
@@ -504,9 +502,8 @@ impl Env<'_> {
         None
     }
 
-    /// Whether replacing names by what equations in scope say they equal,
-    /// as the removed tier did, would have reached a fact: the equation it
-    /// would have used first.
+    /// Whether replacing names by what equations in scope say they equal
+    /// reaches a fact: the equation that does it first.
     fn would_rewrite(
         &mut self,
         opened: &Term,
@@ -672,8 +669,9 @@ impl Env<'_> {
         None
     }
 
-    /// Whether the search over the connectives would have found it, and the
-    /// constructor or form that states the outermost step.
+    /// Whether taking the connectives apart, down to the facts, reaches
+    /// the claim, and the constructor or form that states the outermost
+    /// step.
     fn by_structure(&mut self, goal: &Term, candidates: &[Candidate]) -> Option<String> {
         let prelude = self.prelude;
         let form = match goal {
@@ -704,7 +702,7 @@ impl Env<'_> {
             })
             .collect();
         self.structurally(goal, &mut owned, 0)
-            .then(|| format!("the search over `&&`, `||`, `=>` and `forall` was removed; {form}"))
+            .then(|| format!("a hole takes no connective apart; {form}"))
     }
 
     fn structurally(&mut self, goal: &Term, candidates: &mut Vec<Candidate>, depth: usize) -> bool {
@@ -778,9 +776,9 @@ impl Env<'_> {
         }
     }
 
-    /// Evaluates a claim about one unknown byte for all 256 values, under
-    /// the facts that speak of that byte alone. Used only to say whether the
-    /// claim is refuted, or would have been decided this way.
+    /// Evaluates a claim about one unknown byte at each of its 256 values,
+    /// under the facts that speak of that byte alone. Used only to say
+    /// whether the claim is refuted at some byte or holds at every one.
     fn all_cases(&mut self, goal: &Term, candidates: &[Candidate]) -> Cases {
         let Some(wanted) = self.as_test(goal) else {
             return Cases::Undecided;
@@ -816,12 +814,18 @@ impl Env<'_> {
                 choose(&test.test, rest, Term::Bool(true))
             }
         });
-        let all = Proof::EvaluateAll(body.abstract_over(&|term| same(term, &unknown)));
-        match infer_proof(&mut self.ctx, &all) {
-            Ok(_) => Cases::Holds,
-            Err(KernelError::Refuted(Term::U8(byte))) => Cases::Refuted(unknown, byte),
-            Err(_) => Cases::Undecided,
+        let body = body.abstract_over(&|term| same(term, &unknown));
+        for byte in 0..=255u8 {
+            let instance = body.open(&Term::U8(byte));
+            match infer_proof(&mut self.ctx, &Proof::Evaluate(instance)) {
+                Ok(Term::Eq(_, _, value)) if *value == Term::Bool(true) => {}
+                Ok(Term::Eq(_, _, value)) if *value == Term::Bool(false) => {
+                    return Cases::Refuted(unknown, byte);
+                }
+                _ => return Cases::Undecided,
+            }
         }
+        Cases::Holds
     }
 }
 

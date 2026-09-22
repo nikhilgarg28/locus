@@ -1,14 +1,14 @@
-error[L0111]: `#` is no longer proof syntax
- --> tests/corpus/reject/hash_proof_syntax.lc:6:24
+error[L0111]: `#` begins an attribute, `#[name]`, and nothing else
+ --> tests/corpus/reject/hash_proof_syntax.lc:7:24
   |
-6 | fn first(n: u8, small: #Small(n)) -> u8 { n } //~ error: L0111 no longer proof syntax
+7 | fn first(n: u8, small: #Small(n)) -> u8 { n } //~ error: L0111 begins an attribute
   |                        ^
   |
-  = note: use `@claim` or `@(condition)` for proof types, and `_` to ask the elaborator for evidence
-error[L0111]: `#` is no longer proof syntax
- --> tests/corpus/reject/hash_proof_syntax.lc:9:9
-  |
-9 |     (n, #{ _ }) //~ error: L0111 no longer proof syntax
-  |         ^
-  |
-  = note: use `@claim` or `@(condition)` for proof types, and `_` to ask the elaborator for evidence
+  = note: proof types are `@claim` or `@(condition)`, and `_` asks the elaborator for evidence
+error[L0111]: `#` begins an attribute, `#[name]`, and nothing else
+  --> tests/corpus/reject/hash_proof_syntax.lc:10:9
+   |
+10 |     (n, #{ _ }) //~ error: L0111 begins an attribute
+   |         ^
+   |
+   = note: proof types are `@claim` or `@(condition)`, and `_` asks the elaborator for evidence
