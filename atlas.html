@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 77,
-  "savedAt": "2026-09-22T16:34:29.000Z",
+  "rev": 78,
+  "savedAt": "2026-09-22T16:34:35.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7732,12 +7732,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t288",
    "n": 172,
    "title": "E6 · The operators + - * / % with their panic conditions and what the logic learns",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: K5 (LOC-163), E2 (LOC-168), E4 (LOC-170), E5 (LOC-171), M0 (LOC-176).\nUnblocks: E7 (LOC-173).\nCovers: LOC-11, LOC-12, LOC-121.\n\nScope. Operators elaborate through the table of K5. The check IR gains primitive operations that may panic, as M0 designs them: under no_panic the panic condition is an obligation at the operator and the exact result is known after; otherwise only the wrapped result is known. After a / b the divisor is known not to be zero. In a formula, an operator on a machine type is rejected, because it may panic, and the message offers as Int and the wrapping method. The reference interpreters panic on overflow by default and have a wrapping mode, since Rust does either according to the build. This commit changes the checker of the check IR, which is trusted, and updates Architecture.\n\nTests.\n- For every type and operator, at the boundary set: the interpreter in its default mode agrees with Rust built with overflow checks on, and in its wrapping mode with Rust built with them off. / and % by zero and MIN / -1 panic in both.\n- What the logic learns outside no_panic, the wrapped value, holds in both builds; a test asserts a fact proved from it against both compiled results.\n- An undischarged obligation under no_panic is reported at the operator with its condition written out.\n- Check IR built by hand that omits the evidence at an operator under no_panic is rejected by the checker.\n- The random program generator of R1 now emits arithmetic, in both build configurations.\n- The printer parenthesizes a cast that is the left operand of \u003c or \u003c\u003c (S3 found rustc reads them as generics).\n\nDone when. x + 1 means what it means in Rust, and a function that promises no_panic has shown it cannot overflow.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:34:29.000Z"
+   "updated": "2026-09-22T16:34:35.000Z"
   },
   {
    "id": "t289",
