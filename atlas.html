@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 73,
-  "savedAt": "2026-09-22T15:08:27.000Z",
+  "rev": 74,
+  "savedAt": "2026-09-22T15:38:15.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7684,23 +7684,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t284",
    "n": 168,
    "title": "E2 · Promises: terminates, no_panic, no_alloc, no_io, checked and never inferred",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: E3 (LOC-169), E6 (LOC-172), E8 (LOC-174), O2 (LOC-183), E10 (LOC-190).\nCovers: LOC-13, LOC-73, LOC-14.\n\nScope. A function keeps a promise only if everything it calls makes it. terminates forbids loops and, until recursion arrives, any call cycle. #![...] sets a default for the file. A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io and takes no &mut. math fn stays for one commit as another spelling of the three.\n\nTests.\n- A generated matrix of caller promises against callee promises, 16 by 16, accepted or rejected with the missing promise named.\n- A function mentioned in a proposition without a promise is rejected, naming the promise.\n- The file default applies and an explicit list on a function adds to it.\n\nDone when. The specification author states what a function may not do, and the checker holds them to it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. FnInfo carries the four promises from attributes plus the file default; a call to a callee lacking a promise the caller makes is L0232 at the call, a loop under terminates L0215 at the keyword, a promise on a non-function L0233; a function may appear in a proposition (or under unfold!/fold!, or as evidence) iff it promises terminates, no_panic, no_io and takes no &mut (L0209 names the missing one). Such functions lower as kernel functions with a defining equation, exactly as math fn did, so math fn is now one spelling of the three (E3 removes it). Promises reach the trusted checker through Session::declare_fn_promising; a hand-built discrepancy is caught there. 16x16 matrices tested, plus through file defaults. decreases is parsed and reported as the Recursion project's.\n\nLane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: E3 (LOC-169), E6 (LOC-172), E8 (LOC-174), O2 (LOC-183), E10 (LOC-190).\nCovers: LOC-13, LOC-73, LOC-14.\n\nScope. A function keeps a promise only if everything it calls makes it. terminates forbids loops and, until recursion arrives, any call cycle. #![...] sets a default for the file. A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io and takes no &mut. math fn stays for one commit as another spelling of the three.\n\nTests.\n- A generated matrix of caller promises against callee promises, 16 by 16, accepted or rejected with the missing promise named.\n- A function mentioned in a proposition without a promise is rejected, naming the promise.\n- The file default applies and an explicit list on a function adds to it.\n\nDone when. The specification author states what a function may not do, and the checker holds them to it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:08:27.000Z"
+   "updated": "2026-09-22T15:38:15.000Z"
   },
   {
    "id": "t285",
    "n": 169,
    "title": "E3 · Remove math fn",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-14.\n\nScope. Migrate every example and test to the promises. A migration diagnostic with a fix replaces the keyword.\n\nTests.\n- FunctionMode::Math is gone from the source.\n- The generated Rust of every example is unchanged, byte for byte.\n\nDone when. One way to say a function can be used in the logic.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T15:38:15.000Z"
   },
   {
    "id": "t286",
@@ -7755,7 +7755,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: E5 (LOC-171), E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-97, LOC-81, LOC-141.\n\nScope. Two rules that must not be confused. An erased result: a position is erased exactly when its type has no runtime form, so the evidence a call returns vanishes and the call stays. An erasable computation: a call is removed only if its result is logic-only, it promises terminates, no_panic, and no_io, and it takes no &mut to runtime storage. An expression in a logic-only context, such as the argument of snapshot!, the right side of a let of type Int, or a formula, must be an erasable computation throughout, and is rejected otherwise. Ghost\u003cT> is built by snapshot!(e). Seq\u003cT> is proposed to leave the core: no acceptance example needs it and it brings a theory of its own.\n\nTests.\n- A pure call in a logic-only context: accepted, and absent from the generated Rust.\n- A call that may panic in a logic-only context: rejected, naming the missing promise. The same for one that may not terminate, and one that does I/O.\n- An ordinary runtime call that returns only evidence and may panic or loop: accepted, kept in the generated Rust, its result erased; the three-way comparison sees its panic.\n- A call with a logic-only result and a &mut parameter to runtime storage: kept. This case is written now and enabled by O3.\n- The generated Rust of a file using Ghost and Int holds nothing of them but markers, by golden file, and the erased check rejects a hand-built erased tree that keeps a logic-only value.\n\nDone when. Specifications can carry values the program never computes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:08:10.000Z"
+   "updated": "2026-09-22T15:38:15.000Z"
   },
   {
    "id": "t291",
@@ -7766,7 +7766,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: R4 (LOC-189).\nCovers: LOC-100, LOC-101, LOC-96.\n\nScope. The remaining small parity items that touch only the elaborator and the printer.\n\nTests.\n- Corpus files for each, run and compiled.\n- A type and a value of one name coexist as in Rust.\n\nDone when. Small, independent, and a good filler for an idle lane.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:08:10.000Z"
+   "updated": "2026-09-22T15:38:15.000Z"
   },
   {
    "id": "t292",
@@ -7854,7 +7854,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T02:05:21.000Z"
+   "updated": "2026-09-22T15:38:15.000Z"
   },
   {
    "id": "t300",
