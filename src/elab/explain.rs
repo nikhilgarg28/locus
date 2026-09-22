@@ -891,7 +891,7 @@ fn bytes_in(term: &Term, is_byte: bool, unknowns: &mut Vec<Term>) -> bool {
     }
 }
 
-fn free_variables(term: &Term) -> Vec<VarId> {
+pub(super) fn free_variables(term: &Term) -> Vec<VarId> {
     // `find` visits subterms outermost first; record each and keep looking.
     let seen = std::cell::RefCell::new(Vec::new());
     let _ = term.find(&|candidate| {

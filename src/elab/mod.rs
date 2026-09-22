@@ -9,6 +9,7 @@
 //! one the checker will build, with the same identities, so that it can ask
 //! the kernel what a term's type is and test a proof before using it.
 
+mod arithmetic;
 mod blocks;
 mod calls;
 mod control;

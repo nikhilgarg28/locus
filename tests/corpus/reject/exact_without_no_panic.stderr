@@ -1,0 +1,8 @@
+error[L0230]: cannot show `s == a + b`
+ --> tests/corpus/reject/exact_without_no_panic.lc:7:5
+  |
+7 |     prove!(s as Int == a as Int + b as Int); //~ error: L0230 cannot show `s == a + b`
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: after computing, the claim is `(a + b) as Int == a + b`
+  = note: known here: `a + b == (a + b as u8)`

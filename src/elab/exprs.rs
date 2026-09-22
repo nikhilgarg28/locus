@@ -197,11 +197,23 @@ impl Env<'_> {
             } => self.short_circuit(expr, operator, left, right),
             ExprKind::Binary {
                 operator,
+                operator_span,
+                left,
+                right,
+            } if operator.is_arithmetic() => {
+                self.arithmetic(expr, *operator, *operator_span, left, right, expected)
+            }
+            ExprKind::Binary {
+                operator,
                 left,
                 right,
                 ..
             } => self.compare(expr, operator, left, right, expected),
-            ExprKind::Unary { .. } => self.operator_not_yet(expr),
+            ExprKind::Unary {
+                operator: UnaryOp::Neg,
+                operator_span,
+                expr: inner,
+            } => self.negate(expr, *operator_span, inner, expected),
             ExprKind::Cast {
                 expr: inner,
                 as_span,

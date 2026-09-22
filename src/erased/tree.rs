@@ -1,6 +1,6 @@
 //! The erased tree. It mirrors `typed::tree` without its logical content.
 
-use crate::kernel::{EnumId, MachineInt, Prim, StructId, VarId};
+use crate::kernel::{EnumId, MachineInt, Op, Prim, StructId, VarId};
 use crate::typed::{CompareOp, FnRef};
 
 /// A simple type: no propositions, no dependency.
@@ -160,6 +160,14 @@ pub enum EExpr {
     Cast {
         expr: Box<EExpr>,
         to: MachineInt,
+    },
+    /// `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, or `-a` at a machine
+    /// type: a row of the table that may panic, printed as the operator it
+    /// is, so that Rust panics exactly where the interpreters do.
+    Operate {
+        op: Op,
+        ty: MachineInt,
+        operands: Vec<EExpr>,
     },
     Call {
         callee: FnRef,

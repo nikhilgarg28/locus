@@ -7,12 +7,16 @@
 use std::fmt;
 use std::rc::Rc;
 
+use crate::kernel::derive::symm_at;
 use crate::kernel::{
-    Context, Definitions, KernelError, Mode, Term, Type, case_variants, check_call, check_proof,
-    check_type, check_values, infer_term, same_type, telescope_entry, variant_term,
+    Axiom, Context, Definitions, KernelError, MachineInt, Mode, Op, Panic, Proof, Term, Type,
+    case_variants, check_call, check_proof, check_type, check_values, infer_term, same_type,
+    telescope_entry, variant_term,
 };
 
-use super::ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Promise, Promises, Stmt, Tail};
+use super::ir::{
+    Arm, Block, ExecFn, ExecFnId, ForStmt, OperateStmt, Promise, Promises, Stmt, Tail,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
@@ -48,6 +52,19 @@ pub enum ExecError {
     /// The function promises `no_panic` and has a panic ending with no proof
     /// that it is unreachable.
     PanicUnderNoPanic,
+    /// The function promises `no_panic` and applies an operator that may
+    /// panic, `+`, `-`, `*`, `/`, `%`, or unary minus at a machine type,
+    /// with no evidence that it does not.
+    OperationUnderNoPanic {
+        op: Op,
+        ty: MachineInt,
+    },
+    /// An operation statement is not the shape its row asks for: the wrong
+    /// number of arguments, of proofs in `fits`, or of learned hypotheses.
+    BadOperation {
+        op: Op,
+        ty: MachineInt,
+    },
 }
 
 impl From<KernelError> for ExecError {
@@ -84,6 +101,18 @@ impl fmt::Display for ExecError {
             Self::PanicUnderNoPanic => f.write_str(
                 "a function that promises no_panic has a panic with no proof that it is unreachable",
             ),
+            Self::OperationUnderNoPanic { op, ty } => write!(
+                f,
+                "a function that promises no_panic applies `{}` at {}, which may panic, without evidence that it does not",
+                op.symbol(),
+                ty.name()
+            ),
+            Self::BadOperation { op, ty } => write!(
+                f,
+                "the statement for {}[{}] does not have the shape its row asks for",
+                op.name(),
+                ty.name()
+            ),
         }
     }
 }
@@ -97,8 +126,10 @@ impl std::error::Error for ExecError {}
 /// A function is also checked for each promise it makes, so that a promise
 /// of a declared function can be relied on:
 ///
-/// - `no_panic`: every callee promises it, and every panic ending carries a
-///   proof of `False` in the context of its point.
+/// - `no_panic`: every callee promises it, every panic ending carries a
+///   proof of `False` in the context of its point, and every primitive
+///   operation that may panic carries the evidence that it does not
+///   (`check_operate`).
 /// - `terminates`: every callee promises it, and the body contains no loop
 ///   and no `for`, however deeply nested. With no recursion, that leaves
 ///   nothing that can run forever.
@@ -409,7 +440,114 @@ impl Program {
                 checked?;
                 Ok(ctx.declare_with(*var, state_at(hi)?, false)?)
             }
+            Stmt::Operate(operation) => self.check_operate(ctx, operation, declared),
         }
+    }
+
+    /// A primitive operation that may panic, `let var = op[ty](arguments)`.
+    ///
+    /// The rule. The row must exist and its arguments must be executable
+    /// values of `ty`. `var` is defined by `var ==[ty] op[ty](arguments)`,
+    /// the meaning the kernel evaluates and `op_model` states, which is the
+    /// wrapped result and holds in every build. When `fits` is given, each
+    /// proof is checked against the corresponding premise of `Row::fits`,
+    /// and for a row that can overflow the exact result is then also
+    /// known: the hypothesis `view[ty](var) ==[Int] e` is assumed under the
+    /// first learned identity, justified by a proof the checker builds from
+    /// `op_exact` and the two premises and checks like any other, so that
+    /// nothing is assumed that the kernel has not derived. Under `no_panic`,
+    /// `fits` is required at every row whose panic condition is not
+    /// `Never`. For `/` and `%`, which panic in every build, the premises
+    /// themselves are assumed after the statement, `fits` or no `fits`,
+    /// under the learned identities: execution continues only if the
+    /// division did not panic, so the code after it knows the divisor was
+    /// not zero, as it knows `c` after `assert!(c)`. For `+`, `-`, `*`, and
+    /// unary minus without `fits`, nothing is learned beyond the equation,
+    /// because an overflow that only some builds check teaches nothing.
+    fn check_operate(
+        &self,
+        ctx: &mut Context,
+        operation: &OperateStmt,
+        declared: Declared<'_>,
+    ) -> Result<(), ExecError> {
+        let OperateStmt {
+            var,
+            equation,
+            op,
+            ty,
+            arguments,
+            fits,
+            learned,
+        } = operation;
+        let (op, ty) = (*op, *ty);
+        let bad = || ExecError::BadOperation { op, ty };
+        let row = op
+            .row(ty)
+            .ok_or(ExecError::Kernel(KernelError::NoRow(op, ty)))?;
+        if arguments.len() != row.arity() {
+            return Err(bad());
+        }
+        let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
+        for argument in arguments {
+            expect(ctx, argument, &Type::machine(ty))?;
+        }
+        let premises = row.fits(&prelude, arguments);
+        let exact_learned = row.panic() == Panic::Overflow && fits.is_some();
+        let expected_learned = match row.panic() {
+            Panic::Never => 0,
+            Panic::Overflow => usize::from(exact_learned),
+            Panic::Division => premises.len(),
+        };
+        if learned.len() != expected_learned {
+            return Err(bad());
+        }
+        if fits.is_none() && declared.promises.no_panic && row.panic() != Panic::Never {
+            return Err(ExecError::OperationUnderNoPanic { op, ty });
+        }
+        // The equation: the applied row, whose meaning is the wrapped result.
+        ctx.define_with(*var, *equation, &row.applied(arguments))?;
+        if let Some(proofs) = fits {
+            if proofs.len() != premises.len() {
+                return Err(bad());
+            }
+            for (proof, premise) in proofs.iter().zip(&premises) {
+                check_proof(ctx, proof, premise)?;
+            }
+            if exact_learned {
+                // op_exact: min <= e => (e <= max => view(op(xs)) == e); the
+                // two premises discharge it, and the equation moves the
+                // view from the applied row to `var`.
+                let [lower, upper] = proofs.as_slice() else {
+                    return Err(bad());
+                };
+                let of_row = Proof::implies_elim(
+                    Proof::implies_elim(
+                        Proof::Axiom(Axiom::OpExact(op, ty, arguments.clone())),
+                        lower.clone(),
+                    ),
+                    upper.clone(),
+                );
+                let exact = row.exact_term(arguments);
+                let claim = Term::eq(Type::Int, Term::view(ty, Term::var(*var)), exact.clone());
+                let proof = Proof::Transport {
+                    eq: Box::new(symm_at(
+                        &Type::machine(ty),
+                        &Term::var(*var),
+                        Proof::hyp(*equation),
+                    )),
+                    template: Term::eq(Type::Int, Term::view(ty, Term::Bound(0)), exact),
+                    proof: Box::new(of_row),
+                };
+                check_proof(ctx, &proof, &claim)?;
+                ctx.assume_with(learned[0], claim)?;
+            }
+        }
+        if row.panic() == Panic::Division {
+            for (hyp, premise) in learned.iter().zip(premises) {
+                ctx.assume_with(*hyp, premise)?;
+            }
+        }
+        Ok(())
     }
 
     /// Declares abstract state variables for a state telescope: the body of

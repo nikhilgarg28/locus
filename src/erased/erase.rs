@@ -204,7 +204,16 @@ impl Eraser<'_> {
     fn expr(&mut self, expr: &Expr) -> EExpr {
         match expr {
             Expr::Proof(_) => EExpr::Proved,
-            Expr::Prop(_) | Expr::Int(_) => EExpr::Ghost,
+            Expr::Prop(_) | Expr::Int(_) | Expr::IntArith { .. } => EExpr::Ghost,
+            // The evidence and the learned facts are logical; the operation
+            // stays the operator it is, at its type.
+            Expr::Operate {
+                op, ty, operands, ..
+            } => EExpr::Operate {
+                op: *op,
+                ty: *ty,
+                operands: self.all(operands),
+            },
             // The empty match: a marker when it stands for a ghost, a trap
             // when it stands for a value.
             Expr::Absurd { ty, .. } => marker(ty).unwrap_or(EExpr::Trap),

@@ -8,6 +8,9 @@
 //! //~ run: attempts_left(2, 9) => 1      a call and its result
 //! //~ run: f(255) => panic               a call that panics
 //! //~ run: f(255) => panic: no room      ... with exactly this message
+//! //~ run: f(255) => panic | 0           a call whose outcome depends on the
+//!                                        build: with overflow checks on, then
+//!                                        `|`, then with them off
 //! //~ rust: pub fn run(n: u8) -> u8 {    text the generated Rust contains
 //! //~ error: L0204                       an error reported on this line
 //! //~^ error: L0204 unknown name         ... on the line above; `^^` is two
@@ -22,13 +25,18 @@
 //! the parser's diagnostics are compared with its `error` lines. Any other
 //! file must be accepted: it is parsed, elaborated, and checked, every run
 //! line is called in the check-IR interpreter and in the erased-tree
-//! interpreter, and its Rust is printed.
+//! interpreter, each in both of its modes, overflow checks on and off, and
+//! its Rust is printed.
 //! The Rust of all accepted files goes into one source file, each in a `mod`
 //! of its own, with a `main` that prints one line for every run line: the
 //! value, or `panic: ` and the message of a panic it caught. rustc runs
 //! twice, with `-D warnings`: once with overflow checks on and once with
-//! them off. Each program is run, and its output is compared with the same
-//! expectations.
+//! them off. Each program is run, and its output is compared with the
+//! expectations for its build, which are the ones the interpreters were
+//! compared with in the matching mode: a run line with one outcome expects
+//! it of every build and every mode; one with two, `=> panic | 0`, expects
+//! the first with overflow checks on and the second with them off, which
+//! is where `+`, `-`, `*`, and unary minus differ between the builds.
 //!
 //! A run line has three outcomes and a fourth thing that is not one. It
 //! holds, it fails, or it is inconclusive: an interpreter ran out of fuel,
@@ -43,8 +51,8 @@
 //! `Lock { failures: 0, open: false }`, `Wrong`, `NonZero(7, Proved)`. An
 //! argument may name its enum, as in `Event::Wrong`; a result is compared as
 //! text. A panic's message is written on one line, with `\n` for a newline
-//! and `\\` for a backslash. No surface syntax panics yet, so `=> panic` is
-//! tested below on erased trees that were given a panic by hand.
+//! and `\\` for a backslash. The operators panic since E6, and `=> panic`
+//! is also tested below on erased trees that were given a panic by hand.
 //!
 //! `examine` takes a file's name and text and returns every failure in it,
 //! not the first, so the runner is tested on itself below with files whose
@@ -62,7 +70,7 @@ use std::time::Duration;
 use locus::diagnostic::Diagnostic;
 use locus::elab::elaborate;
 use locus::erased::{
-    EBlock, EExpr, EStmt, EType, Interpreter, Module, Outcome, RunError, Value, check_module,
+    self, EBlock, EExpr, EStmt, EType, Interpreter, Module, Outcome, RunError, Value, check_module,
     print_module,
 };
 use locus::exec::{CheckInterpreter, Program};
@@ -197,9 +205,12 @@ fn judge(expected: &Expected, observed: &Observed) -> Verdict {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Directive {
     Proofs(usize),
+    /// A call and its outcome; `wrapping` is the outcome in a build
+    /// without overflow checks, when the line gives one.
     Run {
         call: String,
         expected: Expected,
+        wrapping: Option<Expected>,
     },
     Rust(String),
     /// The line is the one the error is expected on, not the directive's.
@@ -242,16 +253,17 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 .map(Directive::Proofs)
                 .map_err(|_| format!("`proofs` takes a number, and `{value}` is not one")),
             "run" => match value.rsplit_once("=>") {
-                Some((call, expected)) => Ok(Directive::Run {
-                    call: call.trim().into(),
-                    expected: match expected.trim() {
-                        "panic" => Expected::Panic(None),
-                        other => match other.strip_prefix("panic:") {
-                            Some(message) => Expected::Panic(Some(message.trim().into())),
-                            None => Expected::Value(other.into()),
-                        },
-                    },
-                }),
+                Some((call, expected)) => {
+                    let (checked, wrapping) = match expected.split_once('|') {
+                        Some((checked, wrapping)) => (checked, Some(wrapping)),
+                        None => (expected, None),
+                    };
+                    Ok(Directive::Run {
+                        call: call.trim().into(),
+                        expected: expectation(checked),
+                        wrapping: wrapping.map(expectation),
+                    })
+                }
                 None => Err("a run line reads `f(arguments) => value`".into()),
             },
             "rust" => Ok(Directive::Rust(value.into())),
@@ -281,6 +293,17 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
     found
 }
 
+/// One outcome of a run line: a value, `panic`, or `panic: message`.
+fn expectation(text: &str) -> Expected {
+    match text.trim() {
+        "panic" => Expected::Panic(None),
+        other => match other.strip_prefix("panic:") {
+            Some(message) => Expected::Panic(Some(message.trim().into())),
+            None => Expected::Value(other.into()),
+        },
+    }
+}
+
 /// Whether the file says it must be rejected.
 fn expects_rejection(text: &str) -> bool {
     directives(text)
@@ -308,6 +331,8 @@ struct CompiledRun {
     /// The call as a Rust expression, from outside the module.
     call: String,
     expected: Expected,
+    /// The outcome in a build without overflow checks, when it differs.
+    wrapping: Option<Expected>,
 }
 
 /// How the compiled program treats arithmetic overflow. The harness is built
@@ -335,14 +360,25 @@ impl Overflow {
             Self::Wrapping => "overflow checks off",
         }
     }
+
+    /// The interpreters' mode that matches the build.
+    fn mode(self) -> erased::Overflow {
+        match self {
+            Self::Checked => erased::Overflow::Checks,
+            Self::Wrapping => erased::Overflow::Wrap,
+        }
+    }
 }
 
 impl CompiledRun {
-    /// What the run line expects of a build. Nothing in the language
-    /// overflows yet, so a run line has one expectation and every build must
-    /// meet it; an expectation that depends on the build belongs here.
-    fn expected_in(&self, _build: Overflow) -> &Expected {
-        &self.expected
+    /// What the run line expects of a build: its one outcome, or, for a
+    /// build without overflow checks, the outcome after `|` when the line
+    /// gives one.
+    fn expected_in(&self, build: Overflow) -> &Expected {
+        match (build, &self.wrapping) {
+            (Overflow::Wrapping, Some(wrapping)) => wrapping,
+            _ => &self.expected,
+        }
     }
 }
 
@@ -534,7 +570,11 @@ fn examine_accepted(
                     );
                 }
             }
-            Directive::Run { call, expected } => {
+            Directive::Run {
+                call,
+                expected,
+                wrapping,
+            } => {
                 let (function, arguments) = match parse_call(&call, module) {
                     Ok(parsed) => parsed,
                     Err(why) => {
@@ -544,25 +584,40 @@ fn examine_accepted(
                 };
                 // A function of the erased tree was accepted, so it has a reference.
                 let reference = module.fns[function].reference;
-                let results = [
-                    subject.program.map(|program| {
-                        (
-                            "check-IR interpreter",
-                            CheckInterpreter::new(program, fuel).call(reference, arguments.clone()),
-                        )
-                    }),
-                    Some((
-                        "erased-tree interpreter",
-                        Interpreter::new(module, fuel).call(reference, arguments.clone()),
-                    )),
-                ];
-                for (interpreter, result) in results.into_iter().flatten() {
-                    let observed = Observed::of_interpreter(result, module, fuel);
-                    match judge(&expected, &observed) {
-                        Verdict::Holds => {}
-                        Verdict::Fails(why) => fail(at, format!("{interpreter}: `{call}` {why}")),
-                        Verdict::Inconclusive(why) => {
-                            inconclusive.push(remark(at, format!("{interpreter}: `{call}` {why}")));
+                let run = CompiledRun {
+                    line: at,
+                    call: String::new(),
+                    expected,
+                    wrapping,
+                };
+                // Each interpreter in each mode, against the expectation
+                // of the build the mode matches.
+                for build in Overflow::ALL {
+                    let results = [
+                        subject.program.map(|program| {
+                            (
+                                "check-IR interpreter",
+                                CheckInterpreter::new(program, fuel)
+                                    .with_overflow(build.mode())
+                                    .call(reference, arguments.clone()),
+                            )
+                        }),
+                        Some((
+                            "erased-tree interpreter",
+                            Interpreter::new(module, fuel)
+                                .with_overflow(build.mode())
+                                .call(reference, arguments.clone()),
+                        )),
+                    ];
+                    for (interpreter, result) in results.into_iter().flatten() {
+                        let observed = Observed::of_interpreter(result, module, fuel);
+                        let where_ = format!("{interpreter}, {}: `{call}`", build.name());
+                        match judge(run.expected_in(build), &observed) {
+                            Verdict::Holds => {}
+                            Verdict::Fails(why) => fail(at, format!("{where_} {why}")),
+                            Verdict::Inconclusive(why) => {
+                                inconclusive.push(remark(at, format!("{where_} {why}")));
+                            }
                         }
                     }
                 }
@@ -571,14 +626,13 @@ fn examine_accepted(
                     .map(|value| rust_value(value, module, &compiled.module))
                     .collect();
                 compiled.runs.push(CompiledRun {
-                    line: at,
                     call: format!(
                         "{}::{}({})",
                         compiled.module,
                         module.fns[function].name,
                         arguments.join(", ")
                     ),
-                    expected,
+                    ..run
                 });
             }
             Directive::Error { .. } | Directive::ParseOnly => {}
@@ -1246,6 +1300,26 @@ fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
 }
 ";
 
+/// A failure of each interpreter in each mode, as the runner words them:
+/// the interpreters first in one mode, then in the other.
+fn in_each_interpreter(line: &str, rest: &str) -> Vec<String> {
+    let mut messages = Vec::new();
+    for build in Overflow::ALL {
+        for interpreter in ["check-IR interpreter", "erased-tree interpreter"] {
+            messages.push(format!("{line}: {interpreter}, {}: {rest}", build.name()));
+        }
+    }
+    messages
+}
+
+/// The same for the erased-tree interpreter alone, as a tree built by hand
+/// has no check IR.
+fn in_erased_interpreter(line: &str, rest: &str) -> Vec<String> {
+    Overflow::ALL
+        .map(|build| format!("{line}: erased-tree interpreter, {}: {rest}", build.name()))
+        .to_vec()
+}
+
 /// The failures of an in-memory file, as `line: message`.
 fn failures_of(text: &str) -> Vec<String> {
     examine("memory.lc", text)
@@ -1272,9 +1346,88 @@ fn a_wrong_expected_value_is_a_failure_in_each_interpreter() {
     let text = format!("{INCREMENT}//~ run: increment(1) => (3, Proved)\n");
     assert_eq!(
         failures_of(&text),
+        in_each_interpreter(
+            "4",
+            "`increment(1)` is `(2, Proved)`, expected `(3, Proved)`"
+        )
+    );
+}
+
+const BUMP: &str = "\
+fn bump(n: u8) -> u8 { n + 1 }
+";
+
+/// `=> panic | 0`: the outcome with overflow checks on, then with them
+/// off. Each interpreter is judged in the mode of the build, and each
+/// build against its own outcome.
+#[test]
+fn a_build_dependent_run_line_is_judged_per_build() {
+    let text = format!(
+        "{BUMP}//~ run: bump(255) => panic | 0
+//~ run: bump(255) => panic: attempt to add with overflow | 0
+//~ run: bump(254) => 255
+//~ run: bump(255) => panic | 1
+//~ run: bump(255) => 0 | 0
+//~ run: bump(255) => panic
+"
+    );
+    let wrong_wrapped = |line: &str| {
+        Overflow::ALL
+            .iter()
+            .filter(|build| **build == Overflow::Wrapping)
+            .flat_map(|build| {
+                ["check-IR interpreter", "erased-tree interpreter"].map(|interpreter| {
+                    format!(
+                        "{line}: {interpreter}, {}: `bump(255)` is `0`, expected `1`",
+                        build.name()
+                    )
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut expected = wrong_wrapped("5");
+    for interpreter in ["check-IR interpreter", "erased-tree interpreter"] {
+        expected.push(format!(
+            "6: {interpreter}, overflow checks on: `bump(255)` is `panic: attempt to add with overflow`, expected `0`"
+        ));
+    }
+    for interpreter in ["check-IR interpreter", "erased-tree interpreter"] {
+        expected.push(format!(
+            "7: {interpreter}, overflow checks off: `bump(255)` is `0`, expected `panic`"
+        ));
+    }
+    assert_eq!(failures_of(&text), expected);
+
+    // The compiled builds are compared with the same expectations.
+    let compiled = [examine("memory.lc", &text).compiled.unwrap()];
+    let runs = &compiled[0].runs;
+    assert_eq!(
+        runs[0].expected_in(Overflow::Checked),
+        &Expected::Panic(None)
+    );
+    assert_eq!(
+        runs[0].expected_in(Overflow::Wrapping),
+        &Expected::Value("0".into())
+    );
+    assert_eq!(runs[2].expected_in(Overflow::Wrapping), &runs[2].expected);
+    let checked_output = "panic: attempt to add with overflow\npanic: attempt to add with overflow\n255\npanic: attempt to add with overflow\npanic: attempt to add with overflow\npanic: attempt to add with overflow\n";
+    let wrapping_output = "0\n0\n255\n0\n0\n0\n";
+    let failures = |build: Overflow, output: &str| -> Vec<String> {
+        let observed: Vec<Observed> = output.lines().map(Observed::of_line).collect();
+        let report = compare(&compiled, build, &observed);
+        report.failures.iter().map(Failure::to_string).collect()
+    };
+    assert_eq!(
+        failures(Overflow::Checked, checked_output),
         [
-            "4: check-IR interpreter: `increment(1)` is `(2, Proved)`, expected `(3, Proved)`",
-            "4: erased-tree interpreter: `increment(1)` is `(2, Proved)`, expected `(3, Proved)`",
+            "memory.lc:6: compiled Rust, overflow checks on: `memory::bump(255)` is `panic: attempt to add with overflow`, expected `0`"
+        ]
+    );
+    assert_eq!(
+        failures(Overflow::Wrapping, wrapping_output),
+        [
+            "memory.lc:5: compiled Rust, overflow checks off: `memory::bump(255)` is `0`, expected `1`",
+            "memory.lc:7: compiled Rust, overflow checks off: `memory::bump(255)` is `0`, expected `panic`",
         ]
     );
 }
@@ -1338,21 +1491,21 @@ fn every_failure_in_a_file_is_reported() {
 //~^ run: increment(1) => (2, Proved)
 "
     );
-    assert_eq!(
-        failures_of(&text),
-        [
-            "10: a run line reads `f(arguments) => value`",
-            "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`",
-            "13: `^` belongs to `error`, not `run`",
-            "4: 1 proof(s) were found, expected 2",
-            "6: `increment(true)`: expected a `u8`, found `true`",
-            "7: `increment(1, 2)`: more than 1 value(s) before `)`",
-            "8: `decrement(1)`: there is no `decrement` in the erased tree; a function that exists only in proofs cannot be run",
-            "9: check-IR interpreter: `increment(1)` is `(2, Proved)`, expected `panic`",
-            "9: erased-tree interpreter: `increment(1)` is `(2, Proved)`, expected `panic`",
-            "11: the generated Rust does not contain `pub fn decrement`",
-        ]
-    );
+    let mut expected = vec![
+        "10: a run line reads `f(arguments) => value`".to_string(),
+        "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`".to_string(),
+        "13: `^` belongs to `error`, not `run`".to_string(),
+        "4: 1 proof(s) were found, expected 2".to_string(),
+        "6: `increment(true)`: expected a `u8`, found `true`".to_string(),
+        "7: `increment(1, 2)`: more than 1 value(s) before `)`".to_string(),
+        "8: `decrement(1)`: there is no `decrement` in the erased tree; a function that exists only in proofs cannot be run".to_string(),
+    ];
+    expected.extend(in_each_interpreter(
+        "9",
+        "`increment(1)` is `(2, Proved)`, expected `panic`",
+    ));
+    expected.push("11: the generated Rust does not contain `pub fn decrement`".to_string());
+    assert_eq!(failures_of(&text), expected);
 }
 
 #[test]
@@ -1590,6 +1743,9 @@ fn plant(expr: &mut EExpr) {
         | EExpr::Call {
             arguments: exprs, ..
         }
+        | EExpr::Operate {
+            operands: exprs, ..
+        }
         | EExpr::Continue(exprs) => exprs.iter_mut().for_each(plant),
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
         EExpr::Field { target: inner, .. }
@@ -1776,10 +1932,17 @@ fn trees_that_panic_agree_with_their_compiled_rust_message_included() {
     assert_eq!(
         listed(&wrong.failures),
         [
-            "wrong.lc:1: erased-tree interpreter: `at_the_top(1)` is `2`, expected `panic`",
-            "wrong.lc:2: erased-tree interpreter: `at_the_top(255)` is `panic: f(255)`, expected `panic: f(254)`",
-            "wrong.lc:3: erased-tree interpreter: `at_the_top(255)` is `panic: f(255)`, expected `0`",
+            in_erased_interpreter("wrong.lc:1", "`at_the_top(1)` is `2`, expected `panic`"),
+            in_erased_interpreter(
+                "wrong.lc:2",
+                "`at_the_top(255)` is `panic: f(255)`, expected `panic: f(254)`"
+            ),
+            in_erased_interpreter(
+                "wrong.lc:3",
+                "`at_the_top(255)` is `panic: f(255)`, expected `0`"
+            ),
         ]
+        .concat()
     );
 
     let compiled = [right.compiled.unwrap(), wrong.compiled.unwrap()];
@@ -1819,21 +1982,24 @@ fn out_of_fuel_is_inconclusive_and_is_not_a_panic() {
 ";
     let examined = examine_tree("fuel.lc", runs, &module, 25);
     assert_eq!(listed(&examined.failures), Vec::<String>::new());
+    let no_answer = "`after_three(200)` gave no answer: out of fuel after 25 steps";
     assert_eq!(
         listed(&examined.inconclusive),
         [
-            "fuel.lc:1: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
-            "fuel.lc:2: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
-            "fuel.lc:3: erased-tree interpreter: `after_three(200)` gave no answer: out of fuel after 25 steps",
+            in_erased_interpreter("fuel.lc:1", no_answer),
+            in_erased_interpreter("fuel.lc:2", no_answer),
+            in_erased_interpreter("fuel.lc:3", no_answer),
         ]
+        .concat()
     );
     // With fuel, the first two hold and the third is wrong.
     let examined = examine_tree("fuel.lc", runs, &module, FUEL);
     assert_eq!(
         listed(&examined.failures),
-        [
-            "fuel.lc:3: erased-tree interpreter: `after_three(200)` is `panic: two\\nlines`, expected `200`"
-        ]
+        in_erased_interpreter(
+            "fuel.lc:3",
+            "`after_three(200)` is `panic: two\\nlines`, expected `200`"
+        )
     );
     assert!(examined.inconclusive.is_empty());
 }
@@ -1869,11 +2035,10 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
     };
     let examined = examine_accepted("forever.lc", found, &subject, 10_000);
     let by_interpreter = |line: usize, call: &str| {
-        ["check-IR interpreter", "erased-tree interpreter"].map(|interpreter| {
-            format!(
-                "forever.lc:{line}: {interpreter}: `{call}` gave no answer: out of fuel after 10000 steps"
-            )
-        })
+        in_each_interpreter(
+            &format!("forever.lc:{line}"),
+            &format!("`{call}` gave no answer: out of fuel after 10000 steps"),
+        )
     };
     assert_eq!(
         listed(&examined.inconclusive),
@@ -1885,10 +2050,7 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
     );
     assert_eq!(
         listed(&examined.failures),
-        [
-            "forever.lc:13: check-IR interpreter: `next(3)` is `4`, expected `9`",
-            "forever.lc:13: erased-tree interpreter: `next(3)` is `4`, expected `9`",
-        ]
+        in_each_interpreter("forever.lc:13", "`next(3)` is `4`, expected `9`")
     );
 
     // Compiled, each `forever` is killed at the timeout, which is short

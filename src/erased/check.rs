@@ -384,6 +384,16 @@ impl Checker<'_> {
                 }
                 EType::Int(*to)
             }
+            EExpr::Operate { op, ty, operands } => {
+                if op.row(*ty).is_none() {
+                    return fail(format!("{} has no row at {}", op.name(), ty.name()));
+                }
+                let found = needed!(self.values(operands)?);
+                if found.len() != op.arity() || found.iter().any(|f| *f != EType::Int(*ty)) {
+                    return fail(format!("{}[{}] applied to {found:?}", op.name(), ty.name()));
+                }
+                EType::Int(*ty)
+            }
             EExpr::Call {
                 callee,
                 name,

@@ -9,10 +9,20 @@
 //! neither a value nor a panic within its budget, and nothing more. The
 //! meaning of the primitives is the kernel's native evaluation, so logic and
 //! execution share one definition.
+//!
+//! The operators `+`, `-`, `*`, `/`, `%`, and unary minus are where Rust
+//! panics, and where its two builds differ, so the interpreter has two
+//! modes, `Overflow`. In the default mode, `Checks`, every panic condition
+//! of the table in `src/kernel/ops.rs` panics with Rust's message. In
+//! `Wrap`, the overflow of `+`, `-`, `*`, and unary minus wraps instead, as
+//! a build without overflow checks does, and nothing else changes: `/` and
+//! `%` still panic on a zero divisor and on `min / -1`, in every build.
 
 use std::fmt;
 
-use crate::kernel::{CmpOp, EnumId, MachineInt, Prim, StructId, Term, VarId, evaluate_primitive};
+use crate::kernel::{
+    CmpOp, EnumId, Integer, MachineInt, Op, Panic, Prim, StructId, Term, VarId, evaluate_primitive,
+};
 use crate::typed::{CompareOp, FnRef};
 
 use super::tree::{EBlock, EExpr, EPattern, EPlace, EStmt, Module};
@@ -35,6 +45,30 @@ impl Value {
     /// A byte.
     pub fn u8(byte: u8) -> Self {
         Self::Int(MachineInt::U8, i128::from(byte))
+    }
+}
+
+/// How an interpreter treats an operation whose panic condition holds, as
+/// Rust's two builds do: `Checks` panics at every condition of the table,
+/// `Wrap` wraps the overflow of `+`, `-`, `*`, and unary minus and panics
+/// at the rest. Both interpreters take one; the default is `Checks`, the
+/// stricter behaviour.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Overflow {
+    #[default]
+    Checks,
+    Wrap,
+}
+
+impl Overflow {
+    /// Both modes, checks first.
+    pub const ALL: [Self; 2] = [Self::Checks, Self::Wrap];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Checks => "overflow checks on",
+            Self::Wrap => "overflow checks off",
+        }
     }
 }
 
@@ -132,6 +166,7 @@ const MAX_CALL_DEPTH: usize = 200;
 pub struct Interpreter<'m> {
     module: &'m Module,
     fuel: u64,
+    overflow: Overflow,
     depth: usize,
     env: Vec<(VarId, Value)>,
 }
@@ -156,9 +191,16 @@ impl<'m> Interpreter<'m> {
         Self {
             module,
             fuel,
+            overflow: Overflow::default(),
             depth: 0,
             env: Vec::new(),
         }
+    }
+
+    /// The same interpreter in the given overflow mode.
+    pub fn with_overflow(mut self, overflow: Overflow) -> Self {
+        self.overflow = overflow;
+        self
     }
 
     pub fn fuel_left(&self) -> u64 {
@@ -342,6 +384,10 @@ impl<'m> Interpreter<'m> {
                 let right = value!(self.expr(right));
                 Value::Bool(compare(*op, left, right)?)
             }
+            EExpr::Operate { op, ty, operands } => match self.all(operands)? {
+                Ok(values) => operate(self.overflow, *op, *ty, &values)?,
+                Err(flow) => return Ok(flow),
+            },
             EExpr::Cast { expr, to } => match value!(self.expr(expr)) {
                 Value::Int(from, value) => {
                     let term = Term::cast(from, *to, Term::machine_int(from, value));
@@ -499,6 +545,59 @@ fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
     match terms.and_then(|terms| term_value(Term::prim(prim, terms))) {
         Some(value) => Ok(value),
         None => stuck(format!("{} has no runtime meaning here", prim.name())),
+    }
+}
+
+/// An operator of the table applied at runtime, in the given mode: the
+/// operands must be values of the row's type; where the row's panic
+/// condition holds (`Row::fits_at`) the result is a panic with Rust's
+/// message, unless the mode is `Wrap` and the row wraps in a build without
+/// overflow checks (`Row::wraps_instead`); otherwise the value is the
+/// row's meaning, `Row::compute`, which the kernel evaluates the same.
+pub(crate) fn operate(
+    overflow: Overflow,
+    op: Op,
+    ty: MachineInt,
+    operands: &[Value],
+) -> Result<Value, Stop> {
+    let Some(row) = op.row(ty) else {
+        return stuck(format!("{} has no row at {}", op.name(), ty.name()));
+    };
+    let mut numbers = Vec::new();
+    for operand in operands {
+        match operand {
+            Value::Int(found, value) if *found == ty => numbers.push(Integer::from(*value)),
+            _ => return stuck(format!("{} applied to something else", row.applied(&[]))),
+        }
+    }
+    if numbers.len() != row.arity() {
+        return stuck(format!(
+            "{} applied to {} operands",
+            op.name(),
+            numbers.len()
+        ));
+    }
+    if !row.fits_at(&numbers) && (overflow == Overflow::Checks || !row.wraps_instead()) {
+        return Err(Stop::Panic(panic_message(op, &numbers).into()));
+    }
+    let value = row.compute(&numbers);
+    Ok(Value::Int(ty, value.to_i128().expect("at most 64 bits")))
+}
+
+/// Rust's message for the panic of an operator: for `/` and `%`, one for a
+/// zero divisor and one for `min / -1`, which Rust calls an overflow.
+fn panic_message(op: Op, operands: &[Integer]) -> &'static str {
+    let by_zero = op.panic() == Panic::Division && operands[1].is_zero();
+    match (op, by_zero) {
+        (Op::Add, _) => "attempt to add with overflow",
+        (Op::Sub, _) => "attempt to subtract with overflow",
+        (Op::Mul, _) => "attempt to multiply with overflow",
+        (Op::Neg, _) => "attempt to negate with overflow",
+        (Op::Div, true) => "attempt to divide by zero",
+        (Op::Div, false) => "attempt to divide with overflow",
+        (Op::Rem, true) => "attempt to calculate the remainder with a divisor of zero",
+        (Op::Rem, false) => "attempt to calculate the remainder with overflow",
+        _ => unreachable!("the wrapping methods never panic"),
     }
 }
 

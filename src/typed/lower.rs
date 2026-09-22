@@ -8,6 +8,13 @@
 //! the typed tree already gave it. Nothing is invented that a proof could
 //! need to mention, so proofs written against the tree stay valid.
 //!
+//! An operator at a machine type, `+`, `-`, `*`, `/`, `%`, or unary minus,
+//! is never read as a term, whatever its operands: it may panic, so it is
+//! a statement of the check IR, `Stmt::Operate`, emitted in evaluation
+//! order after its operands with the evidence and the learned identities
+//! the tree carries, and its value is the result the tree named. Only the
+//! wrapping methods, and the same operators on `Int`, are terms.
+//!
 //! Assignment has no form in the check IR. A binding declared `let mut` has
 //! versions: the binding itself, and one more for each assignment, a `let`
 //! of the old version with the assigned path replaced (`rebuilt`). Lowering
@@ -32,11 +39,11 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::erased::{self, Module};
-use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Program};
+use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, OperateStmt, Program};
 use crate::kernel::derive::symm_at;
 use crate::kernel::{
-    CmpOp, Definitions, EnumId, FnId, HypId, KernelError, MachineInt, Proof, PropId, PropVariant,
-    StructId, Term, Type, VarId, same, same_type,
+    CmpOp, Definitions, EnumId, FnId, HypId, KernelError, MachineInt, Op, Panic, Proof, PropId,
+    PropVariant, StructId, Term, Type, VarId, same, same_type,
 };
 
 use super::tree::{
@@ -276,7 +283,15 @@ pub fn is_pure(expr: &Expr) -> bool {
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => true,
-        Expr::CallFn { .. } | Expr::Loop { .. } | Expr::Break(_) | Expr::Continue(_) => false,
+        // An operator at a machine type may panic, so it is a statement and
+        // never a term, whatever its operands; only the wrapping methods
+        // and the operators of `Int` are terms.
+        Expr::CallFn { .. }
+        | Expr::Loop { .. }
+        | Expr::Break(_)
+        | Expr::Continue(_)
+        | Expr::Operate { .. } => false,
+        Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
         Expr::Struct { fields, .. } => fields.iter().all(|(_, field)| is_pure(field)),
         Expr::Variant { payload, .. } => payload.iter().all(is_pure),
@@ -502,6 +517,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
             right,
         } => compare(*op, ty, pure(left)?, pure(right)?)?,
         Expr::Cast { expr, from, to } => cast(from, to, pure(expr)?)?,
+        Expr::IntArith { op, operands } => int_arith(*op, pure_all(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), pure_all(arguments)?),
         Expr::Proof(proof) => Term::proof(proof.clone()),
         Expr::Prop(prop) => prop.clone(),
@@ -589,10 +605,26 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
                 next,
             )
         }
-        Expr::CallFn { .. } | Expr::Loop { .. } | Expr::Break(_) | Expr::Continue(_) => {
+        Expr::CallFn { .. }
+        | Expr::Loop { .. }
+        | Expr::Break(_)
+        | Expr::Continue(_)
+        | Expr::Operate { .. } => {
             return Err(LowerError::ControlInExpression);
         }
     })
+}
+
+/// `+`, `-`, `*`, `/`, `%`, or unary minus on `Int`: the primitive of the
+/// same name, which is total. The operation must have its arity.
+fn int_arith(op: Op, operands: Vec<Term>) -> Result<Term, LowerError> {
+    if operands.len() != op.arity() || !matches!(op.panic(), Panic::Overflow | Panic::Division) {
+        return Err(LowerError::Kernel(KernelError::WrongArity {
+            expected: op.arity(),
+            found: operands.len(),
+        }));
+    }
+    Ok(op.exact_term(operands))
 }
 
 /// A pure block is its tail with its lets substituted in, last to first. A
@@ -926,6 +958,7 @@ fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
             each_expr(receiver, on_expr);
             all(arguments, on_expr);
         }
+        Expr::Operate { operands, .. } | Expr::IntArith { operands, .. } => all(operands, on_expr),
         Expr::Compare { left, right, .. } => {
             each_expr(left, on_expr);
             each_expr(right, on_expr);
@@ -1115,6 +1148,30 @@ fn anf_form(
             compare(*op, ty, left, right)?
         }
         Expr::Cast { expr, from, to } => cast(from, to, anf(expr, out, env)?)?,
+        Expr::IntArith { op, operands } => int_arith(*op, each(operands, out, env)?)?,
+        // The operands first, left to right, then the operation as a
+        // statement; its value is the result the tree named.
+        Expr::Operate {
+            op,
+            ty,
+            operands,
+            result,
+            equation,
+            fits,
+            learned,
+        } => {
+            let arguments = each(operands, out, env)?;
+            out.push(exec::Stmt::Operate(Box::new(OperateStmt {
+                var: *result,
+                equation: *equation,
+                op: *op,
+                ty: *ty,
+                arguments,
+                fits: fits.clone(),
+                learned: learned.clone(),
+            })));
+            Term::var(*result)
+        }
         Expr::CallMath { id, arguments, .. } => {
             Term::call(Term::Fn(*id), each(arguments, out, env)?)
         }
@@ -1392,8 +1449,12 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
             right,
         } => compare(*op, ty, value_term(left)?, value_term(right)?)?,
         Expr::Cast { expr, from, to } => cast(from, to, value_term(expr)?)?,
+        Expr::IntArith { op, operands } => int_arith(*op, each(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
+        // An operator at a machine type is never read as a term: its value
+        // is the result of its statement.
         Expr::CallFn { result, .. }
+        | Expr::Operate { result, .. }
         | Expr::If { result, .. }
         | Expr::Match { result, .. }
         | Expr::Loop { result, .. }

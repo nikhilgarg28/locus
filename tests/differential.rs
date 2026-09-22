@@ -15,9 +15,10 @@
 mod common;
 
 use common::*;
-use locus::erased::{EExpr, Interpreter, Outcome, RunError, Value, check_module};
+use locus::erased::{EExpr, Interpreter, Outcome, Overflow, RunError, Value, check_module};
 use locus::exec::CheckInterpreter;
-use locus::typed::{FnRef, Session};
+use locus::kernel::{HypId, MachineInt, Op, Type, VarId};
+use locus::typed::{Binder, Block, Expr, FnItem, FnRef, Session};
 
 const FUEL: u64 = 200_000;
 
@@ -91,6 +92,87 @@ fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
             );
         }
     }
+}
+
+/// Both interpreters' answers in the given overflow mode.
+fn both_in(session: &Session, callee: FnRef, arguments: &[Value], mode: Overflow) -> [Answer; 2] {
+    let checked = CheckInterpreter::new(session.program(), FUEL)
+        .with_overflow(mode)
+        .call(callee, arguments.to_vec());
+    let erased = Interpreter::new(session.erased(), FUEL)
+        .with_overflow(mode)
+        .call(callee, arguments.to_vec());
+    [checked, erased]
+}
+
+/// fn f(n: u8) -> u8 { n * 3 / (n - 100) }: an overflow of `*` for large
+/// `n`, a zero divisor at `n == 100`, and an overflow of `-` below it,
+/// which wraps in one build and panics in the other.
+fn arithmetic() -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let operate = |op: Op, operands: Vec<Expr>| Expr::Operate {
+        op,
+        ty: MachineInt::U8,
+        operands,
+        result: VarId::fresh(),
+        equation: HypId::fresh(),
+        fits: None,
+        learned: if op == Op::Div {
+            vec![HypId::fresh()]
+        } else {
+            Vec::new()
+        },
+    };
+    let body = operate(
+        Op::Div,
+        vec![
+            operate(Op::Mul, vec![Expr::var(&n), Expr::u8(3)]),
+            operate(Op::Sub, vec![Expr::var(&n), Expr::u8(100)]),
+        ],
+    );
+    FnItem {
+        name: "arithmetic".into(),
+        math: false,
+        params: vec![n],
+        result: Type::U8,
+        body: Block {
+            stmts: Vec::new(),
+            tail: Some(Box::new(body)),
+        },
+    }
+}
+
+#[test]
+fn lowering_and_erasure_agree_on_the_operators_in_both_modes() {
+    let (mut session, _, _) = setup();
+    let callee = session.declare_fn(&arithmetic()).unwrap();
+    assert_eq!(check_module(session.erased()), Ok(()));
+    let (mut panics, mut values) = (0, 0);
+    for mode in Overflow::ALL {
+        for byte in 0..=255u8 {
+            let [checked, erased] = both_in(&session, callee, &[Value::u8(byte)], mode);
+            match compare(&checked, &erased) {
+                Comparison::Agree(Outcome::Value(_)) => values += 1,
+                Comparison::Agree(Outcome::Panic(_)) => panics += 1,
+                other => panic!("{mode:?} at {byte}: {other:?}: {checked:?} and {erased:?}"),
+            }
+        }
+    }
+    // Every byte panics or returns in each mode, and both happen: with
+    // overflow checks on, 0..=85 have `n - 100` wrap, which panics, and
+    // `n == 100` divides by zero in either mode.
+    assert!(panics > 0 && values > 0, "{panics} panics, {values} values");
+    let at = |byte: u8, mode: Overflow| both_in(&session, callee, &[Value::u8(byte)], mode);
+    assert_eq!(
+        at(100, Overflow::Wrap)[0],
+        Ok(Outcome::Panic("attempt to divide by zero".into()))
+    );
+    assert_eq!(
+        at(10, Overflow::Checks)[1],
+        Ok(Outcome::Panic("attempt to subtract with overflow".into()))
+    );
+    // 10 * 3 = 30, 10 - 100 wraps to 166: 30 / 166 = 0.
+    assert_eq!(at(10, Overflow::Wrap)[1], Ok(Outcome::Value(Value::u8(0))));
 }
 
 #[test]

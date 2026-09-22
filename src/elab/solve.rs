@@ -330,10 +330,21 @@ impl Env<'_> {
     /// Computes projections of written tuples and structs, matches on
     /// written constructors, and arithmetic on literals.
     fn compute(&mut self, term: &Term) -> (Term, Vec<Step>) {
+        self.compute_where(term, &computes)
+    }
+
+    /// `compute` at the redexes the predicate picks out, each of which
+    /// must be one a computation axiom decides: a projection, a case, or
+    /// a primitive on literals.
+    pub(super) fn compute_where(
+        &mut self,
+        term: &Term,
+        redex: &dyn Fn(&Term) -> bool,
+    ) -> (Term, Vec<Step>) {
         let mut term = term.clone();
         let mut steps = Vec::new();
         for _ in 0..STEP_LIMIT {
-            let Some(redex) = term.find(&|candidate| computes(candidate)).cloned() else {
+            let Some(redex) = term.find(&|candidate| redex(candidate)).cloned() else {
                 break;
             };
             let eq = match &redex {
@@ -404,7 +415,13 @@ impl Env<'_> {
 
     /// `a ==[T] b` from `view[T](a) ==[Int] view[T](b)`, by the injectivity
     /// of the view.
-    fn equal_of_views(&self, ty: MachineInt, a: &Term, b: &Term, views_equal: Proof) -> Proof {
+    pub(super) fn equal_of_views(
+        &self,
+        ty: MachineInt,
+        a: &Term,
+        b: &Term,
+        views_equal: Proof,
+    ) -> Proof {
         Proof::OfTerm(Term::call(
             Term::Fn(self.theory.machine(ty).view_injective),
             vec![a.clone(), b.clone(), Term::proof(views_equal)],
@@ -412,7 +429,7 @@ impl Env<'_> {
     }
 
     /// The converse, by congruence.
-    fn views_of_equal(ty: MachineInt, a: &Term, equal: Proof) -> Proof {
+    pub(super) fn views_of_equal(ty: MachineInt, a: &Term, equal: Proof) -> Proof {
         let view_a = Term::view(ty, a.clone());
         Proof::transport(
             equal,

@@ -1,0 +1,8 @@
+// Unary minus exists at the signed types only, as in Rust.
+fn negate(a: u8) -> u8 {
+    -a //~ error: L0237 unary `-` exists at the signed types only, and this is `u8`
+}
+
+fn negate_wide(a: u64) -> u64 {
+    -a //~ error: L0237 unary `-` exists at the signed types only, and this is `u64`
+}

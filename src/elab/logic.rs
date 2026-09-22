@@ -64,6 +64,14 @@ impl Env<'_> {
                 comparison if comparison.is_comparison() => {
                     self.comparison(*comparison, left, right)
                 }
+                // Arithmetic is a value, of `Int` in a formula, and a value
+                // is not a proposition; the general arm says so, or the
+                // operator says why it cannot stand here at all.
+                arithmetic if arithmetic.is_arithmetic() => {
+                    let value = self.infer(expr)?;
+                    let value = self.coerce(value, &Type::Prop, expr.span)?;
+                    self.term(&value, expr.span)
+                }
                 _ => self.operator_not_yet(expr),
             },
             ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } => {
@@ -189,6 +197,18 @@ impl Env<'_> {
         right: &ast::Expr,
         formula: bool,
     ) -> Elab<(Value, Value)> {
+        self.operands_of("a comparison", left, right, formula)
+    }
+
+    /// `operands` for any operator between two values of one type; `what`
+    /// names it in the error.
+    pub fn operands_of(
+        &mut self,
+        what: &str,
+        left: &ast::Expr,
+        right: &ast::Expr,
+        formula: bool,
+    ) -> Elab<(Value, Value)> {
         let (left_value, right_value) = match (untyped_literal(left), untyped_literal(right)) {
             (true, false) => {
                 let right_value = self.infer(right)?;
@@ -210,6 +230,7 @@ impl Env<'_> {
             return Ok((left_value, right_value));
         }
         self.two_types(
+            what,
             (left, &left_value.ty),
             (right, &right_value.ty),
             formula,
@@ -222,6 +243,7 @@ impl Env<'_> {
     /// formula, where the cast is exact.
     fn two_types<T>(
         &mut self,
+        what: &str,
         left: (&ast::Expr, &Type),
         right: (&ast::Expr, &Type),
         formula: bool,
@@ -235,7 +257,7 @@ impl Env<'_> {
         let mut diagnostic = Diagnostic::error(
             "L0211",
             format!(
-                "`{left_text}` is a `{left_shown}` and `{right_text}` is a `{right_shown}`; a comparison is between two values of one type"
+                "`{left_text}` is a `{left_shown}` and `{right_text}` is a `{right_shown}`; {what} is between two values of one type"
             ),
             span,
         );

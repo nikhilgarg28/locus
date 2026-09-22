@@ -2,7 +2,7 @@
 //! shown with the names the programmer wrote; the result of a call is shown
 //! as the call.
 
-use crate::kernel::{CmpOp, Integer, Mode, Prim, Term, Type, infer_term};
+use crate::kernel::{CmpOp, Integer, Mode, Op, Prim, Term, Type, infer_term};
 
 use super::env::Env;
 
@@ -193,6 +193,15 @@ impl Env<'_> {
                     self.binary("<", Level::Compare, at, &sum[0], b, bound)
                 }
                 (Prim::IntLe, [a, b]) => self.binary("<=", Level::Compare, at, a, b, bound),
+                // The view of an operator's result keeps its cast, since
+                // the operator and its counterpart on `Int` read the same:
+                // `(a + b) as Int == a + b` says what a claim about the
+                // wrapped sum says.
+                (Prim::View(_), [x @ Term::Prim(Prim::Op(op, _), _)])
+                    if !op.name().starts_with("wrapping_") =>
+                {
+                    format!("({}) as Int", self.term_at(x, Level::Implies, bound))
+                }
                 (Prim::View(_), [x]) => self.term_at(x, at, bound),
                 (Prim::Wrap(ty), [n]) => {
                     format!(
@@ -214,6 +223,16 @@ impl Env<'_> {
                 (Prim::IntDiv, [a, b]) => self.binary("/", Level::Product, at, a, b, bound),
                 (Prim::IntRem, [a, b]) => self.binary("%", Level::Product, at, a, b, bound),
                 (Prim::IntNeg, [a]) => format!("-{}", self.term_at(a, Level::Prefix, bound)),
+                // The operators at a machine type read as written; the
+                // wrapping methods fall through to the method form below.
+                (Prim::Op(Op::Add, _), [a, b]) => self.binary("+", Level::Sum, at, a, b, bound),
+                (Prim::Op(Op::Sub, _), [a, b]) => self.binary("-", Level::Sum, at, a, b, bound),
+                (Prim::Op(Op::Mul, _), [a, b]) => self.binary("*", Level::Product, at, a, b, bound),
+                (Prim::Op(Op::Div, _), [a, b]) => self.binary("/", Level::Product, at, a, b, bound),
+                (Prim::Op(Op::Rem, _), [a, b]) => self.binary("%", Level::Product, at, a, b, bound),
+                (Prim::Op(Op::Neg, _), [a]) => {
+                    format!("-{}", self.term_at(a, Level::Prefix, bound))
+                }
                 (_, [receiver, rest @ ..]) => format!(
                     "{}.{}({})",
                     self.term_at(receiver, Level::Postfix, bound),

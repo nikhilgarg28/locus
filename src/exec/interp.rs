@@ -14,7 +14,9 @@
 //! `Stop`, out through whatever loops and matches it stands in, and stops at
 //! the call of its own function, whose value it is.
 
-use crate::erased::{Outcome, RunError, Stop, Value, outcome, term_value, value_term};
+use crate::erased::{
+    Outcome, Overflow, RunError, Stop, Value, operate, outcome, term_value, value_term,
+};
 use crate::kernel::{ForLoop, MachineInt, Prim, Term, VarId};
 use crate::typed::FnRef;
 
@@ -32,6 +34,7 @@ const MAX_CALL_DEPTH: usize = 200;
 pub struct CheckInterpreter<'p> {
     program: &'p Program,
     fuel: u64,
+    overflow: Overflow,
     depth: usize,
     /// Variables bound by statements, by identity.
     free: Vec<(VarId, Value)>,
@@ -48,10 +51,18 @@ impl<'p> CheckInterpreter<'p> {
         Self {
             program,
             fuel,
+            overflow: Overflow::default(),
             depth: 0,
             free: Vec::new(),
             bound: Vec::new(),
         }
+    }
+
+    /// The same interpreter in the given overflow mode; see
+    /// `erased::Overflow`.
+    pub fn with_overflow(mut self, overflow: Overflow) -> Self {
+        self.overflow = overflow;
+        self
     }
 
     pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
@@ -211,6 +222,13 @@ impl<'p> CheckInterpreter<'p> {
                     }
                 }
                 self.free.push((*var, Value::Tuple(current)));
+            }
+            // The evidence and the learned facts are ghosts: skipped. The
+            // operation itself panics or wraps by the mode.
+            Stmt::Operate(operation) => {
+                let arguments = self.terms(&operation.arguments)?;
+                let value = operate(self.overflow, operation.op, operation.ty, &arguments)?;
+                self.free.push((operation.var, value));
             }
         }
         Ok(None)

@@ -19,7 +19,7 @@
 
 use crate::exec::ExecFnId;
 use crate::kernel::{
-    EnumId, FnId, HypId, Integer, MachineInt, Prim, Proof, StructId, Term, Type, VarId,
+    EnumId, FnId, HypId, Integer, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId,
 };
 
 /// A binding occurrence: an identity, the spelling to print, and its type.
@@ -201,6 +201,29 @@ pub enum Expr {
         prim: Prim,
         receiver: Box<Expr>,
         arguments: Vec<Expr>,
+    },
+    /// `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, or `-a` at the machine
+    /// type `ty`: a row of the table that may panic, so not a term but a
+    /// statement of the check IR, `exec::OperateStmt`, whose value is
+    /// `result` under the equation `equation`, the wrapped meaning. `fits`
+    /// is the evidence that it does not panic, one proof per premise of
+    /// `Row::fits`, which the elaborator fills under `no_panic` and leaves
+    /// out otherwise; `learned` names the facts known afterwards, as the
+    /// statement says.
+    Operate {
+        op: Op,
+        ty: MachineInt,
+        operands: Vec<Expr>,
+        result: VarId,
+        equation: HypId,
+        fits: Option<Vec<Proof>>,
+        learned: Vec<HypId>,
+    },
+    /// The same operators on `Int`, which are total: a term of the logic,
+    /// `int_add` and the rest, with no runtime form.
+    IntArith {
+        op: Op,
+        operands: Vec<Expr>,
     },
     /// A comparison of two values of one type, `ty`, which is a machine
     /// integer type or, for `==` and `!=`, `bool`. Of type `bool`.

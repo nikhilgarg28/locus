@@ -10,6 +10,7 @@ mod check;
 mod interp;
 mod ir;
 
+pub use crate::erased::Overflow;
 pub use check::{ExecError, Program};
 pub use interp::CheckInterpreter;
-pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, Promise, Promises, Stmt, Tail};
+pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, OperateStmt, Promise, Promises, Stmt, Tail};

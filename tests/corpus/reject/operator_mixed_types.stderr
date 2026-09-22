@@ -1,0 +1,24 @@
+error[L0211]: `a` is a `u8` and `b` is a `u32`; `+` is between two values of one type
+ --> tests/corpus/reject/operator_mixed_types.lc:4:5
+  |
+4 |     a + b //~ error: L0211 `a` is a `u8` and `b` is a `u32`; `+` is between two values of one type
+  |     ^^^^^
+  |
+  = note: cast one side: `a as u32` wraps into `u32`
+error[L0211]: `a` is a `u8` and `b` is a `Int`; `*` is between two values of one type
+ --> tests/corpus/reject/operator_mixed_types.lc:9:11
+  |
+9 |     prop!(a * b == 6) //~ error: L0211 `a` is a `u8` and `b` is a `Int`; `*` is between two values of one type
+  |           ^^^^^
+  |
+  = note: compare `a as Int` with `b`: a machine integer enters the logic through `as Int`
+error[L0238]: `+` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+  --> tests/corpus/reject/operator_mixed_types.lc:14:7
+   |
+14 |     a + b //~ error: L0238 `+` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+   |       ^
+error[L0238]: `-` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+  --> tests/corpus/reject/operator_mixed_types.lc:18:5
+   |
+18 |     -a //~ error: L0238 `-` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+   |     ^

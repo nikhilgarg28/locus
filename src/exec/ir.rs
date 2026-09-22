@@ -2,7 +2,7 @@
 //! program, because the program's proofs refer to them; the checker binds
 //! the same identities in the kernel context.
 
-use crate::kernel::{HypId, Proof, Term, Type, VarId};
+use crate::kernel::{HypId, MachineInt, Op, Proof, Term, Type, VarId};
 
 /// Identity of a declared ordinary function; see `Program`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -123,6 +123,41 @@ pub enum Stmt {
     },
     /// A bounded `for`; see `ForStmt`.
     For(Box<ForStmt>),
+    /// `let var = op[ty](arguments)`, a primitive operation of the table
+    /// in `src/kernel/ops.rs` that may panic: `+`, `-`, `*`, `/`, `%`, or
+    /// unary minus at a machine type. See `OperateStmt`.
+    Operate(Box<OperateStmt>),
+}
+
+/// `let var = op[ty](arguments)`: an operator applied at runtime, where
+/// Rust may panic. The checker gives `var` the equation `var ==[ty]
+/// op[ty](arguments)` as `equation`, which by `op_model` is the wrapped
+/// result, the one meaning that holds in every build.
+///
+/// `fits` is the evidence that the operation does not panic: one proof per
+/// premise of `Row::fits`, in its order. For `+`, `-`, `*`, and unary minus
+/// the premises are `min(ty) <= e` and `e <= max(ty)` for the exact result
+/// `e` of the views; for `/` and `%` they are `view(b) != 0` and, at a
+/// signed type, that the pair is not `min / -1`. A function that promises
+/// `no_panic` must give it at every row that can panic.
+///
+/// `learned` names the hypotheses that hold after the statement: for `+`,
+/// `-`, `*`, and unary minus with `fits`, one hypothesis, the exact result
+/// `view[ty](var) ==[Int] e`, derived from `op_exact` and the proofs; for
+/// `/` and `%`, one per premise, whether or not `fits` is given, because
+/// these panic in every build and execution continues only past a divisor
+/// that was not zero. Nothing else is learned: an overflow that only some
+/// builds check teaches nothing, and the wrapping methods are terms, never
+/// statements.
+#[derive(Clone, Debug)]
+pub struct OperateStmt {
+    pub var: VarId,
+    pub equation: HypId,
+    pub op: Op,
+    pub ty: MachineInt,
+    pub arguments: Vec<Term>,
+    pub fits: Option<Vec<Proof>>,
+    pub learned: Vec<HypId>,
 }
 
 /// `let var = for index in lo..hi (vars: state = init) { body }`.

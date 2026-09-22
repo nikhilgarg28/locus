@@ -1,0 +1,19 @@
+// An operator is between two values of one type, as a comparison is; the
+// error names the cast that would make them one.
+fn widen(a: u8, b: u32) -> u32 {
+    a + b //~ error: L0211 `a` is a `u8` and `b` is a `u32`; `+` is between two values of one type
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn exact(a: u8, b: Int) -> Prop {
+    prop!(a * b == 6) //~ error: L0211 `a` is a `u8` and `b` is a `Int`; `*` is between two values of one type
+}
+
+// On `bool` and other types there is no arithmetic at all.
+fn on_bools(a: bool, b: bool) -> bool {
+    a + b //~ error: L0238 `+` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+}
+
+fn negated_bool(a: bool) -> bool {
+    -a //~ error: L0238 `-` is defined on the integer types, `u8` to `i64` and `Int`, and this is `bool`
+}

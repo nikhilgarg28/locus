@@ -1,0 +1,139 @@
+// What the logic learns of `let s = a + b`, and where the operators may
+// stand (the Vision's Integers, in code and in propositions). An operator
+// on a machine type means what it means in Rust: `+ - *` and unary minus
+// panic on overflow in a build with overflow checks and wrap in one
+// without; `/` and `%` panic on a zero divisor in every build. Under
+// `no_panic` the operator carries an obligation, the condition under which
+// it does not panic, and the exact result is known afterwards; otherwise
+// only the wrapped result is known, the one fact true in every build.
+
+// Without a promise `+` may panic, and the code after it knows the wrapped
+// sum: `s == (a as Int + b as Int) as u8` holds in both builds, which the
+// corpus runner checks against the Rust compiled both ways.
+fn wrapped_sum(a: u8, b: u8) -> (s: u8, @(s == (a as Int + b as Int) as u8)) {
+    let s = a + b;
+    (s, _)
+}
+
+// The same for a difference, a product, and a negation, stated at other types.
+fn wrapped_difference(a: i16, b: i16) -> (d: i16, @(d == (a as Int - b as Int) as i16)) {
+    let d = a - b;
+    (d, _)
+}
+
+fn wrapped_product(a: u32, b: u32) -> (p: u32, @(p == (a as Int * b as Int) as u32)) {
+    let p = a * b;
+    (p, _)
+}
+
+fn wrapped_negation(a: i8) -> (n: i8, @(n == (-(a as Int)) as i8)) {
+    let n = -a;
+    (n, _)
+}
+
+// A division panics in every build where its condition fails, so what
+// follows it knows the condition held: `b != 0`, written at the machine
+// type or over the views.
+fn quotient(a: u8, b: u8) -> (q: u8, @(b != 0)) {
+    let q = a / b;
+    (q, _)
+}
+
+fn remainder(a: i64, b: i64) -> (r: i64, @(b as Int != 0)) {
+    let r = a % b;
+    prove!(b != 0);
+    (r, _)
+}
+
+// Under `no_panic` the obligation of `+` is discharged by a fact in scope:
+// the parameter states that the sum is in range, and afterwards the exact
+// sum is known. This is the design's case 7.
+#[no_panic]
+fn next(n: u32, fits: @(n as Int + 1 <= u32::MAX as Int)) -> (m: u32, @(m as Int == n as Int + 1)) {
+    let m = n + 1;
+    (m, prove!(m as Int == n as Int + 1))
+}
+
+// The obligation discharged by a `prove!` on the line before, which states
+// the premise where the operator needs it, over `Int` as the premise is;
+// the exact result follows.
+#[no_panic]
+fn ten_more(n: u8, room: @(n as Int + 10 <= 255)) -> (m: u8, @(m as Int == n as Int + 10)) {
+    prove!(n as Int + 10 <= 255);
+    let m = n + 10;
+    (m, _)
+}
+
+// A bound on the operands alone is enough: the arithmetic procedure takes
+// the premises from it and from the ranges of the views.
+#[no_panic]
+fn scaled(n: u8, small: @(n <= 50)) -> (m: u8, @(m as Int == n as Int * 5)) {
+    let m = n * 5;
+    (m, _)
+}
+
+// On literals the obligation is decided by evaluation.
+#[no_panic]
+fn hundred_and_ten() -> u8 {
+    100 + 10
+}
+
+// A division under `no_panic`: the divisor is known not to be zero, and at
+// a signed type also that the pair is not `MIN / -1`, here because the
+// divisor is positive.
+#[no_panic]
+fn halve(n: i32, d: i32, positive: @(0 < d)) -> i32 {
+    n / d
+}
+
+#[no_panic]
+fn safe_quotient(n: u8, d: u8, nonzero: @(d != 0)) -> u8 {
+    n / d
+}
+
+// The exact fact makes a chain: the obligation of `+` follows from the
+// exact product the `*` before it taught and the bound on `n`.
+#[no_panic]
+fn twice_then_one(n: u8, small: @(n <= 100)) -> u8 {
+    let d = n * 2;
+    d + 1
+}
+
+// Arithmetic on `Int` is total and stands anywhere: in a proposition, a
+// proof type, and a function of the logic.
+#[terminates] #[no_panic] #[no_io]
+fn successor_claim(n: u8) -> Prop {
+    prop!(n as Int + 1 <= 256)
+}
+
+fn stated(a: u8, b: u8, h: @(a as Int + b as Int <= 255)) -> @(a as Int + b as Int <= 255) {
+    h
+}
+
+//~ proofs: 26
+//~ run: wrapped_sum(200, 100) => panic: attempt to add with overflow | (44, Proved)
+//~ run: wrapped_sum(200, 55) => (255, Proved)
+//~ run: wrapped_difference(-32768, 1) => panic: attempt to subtract with overflow | (32767, Proved)
+//~ run: wrapped_difference(5, 7) => (-2, Proved)
+//~ run: wrapped_product(65536, 65536) => panic: attempt to multiply with overflow | (0, Proved)
+//~ run: wrapped_product(65535, 65537) => (4294967295, Proved)
+//~ run: wrapped_negation(-128) => panic: attempt to negate with overflow | (-128, Proved)
+//~ run: wrapped_negation(-127) => (127, Proved)
+//~ run: quotient(7, 2) => (3, Proved)
+//~ run: quotient(7, 0) => panic: attempt to divide by zero
+//~ run: remainder(-7, 2) => (-1, Proved)
+//~ run: remainder(-9223372036854775808, -1) => panic: attempt to calculate the remainder with overflow
+//~ run: remainder(7, 0) => panic: attempt to calculate the remainder with a divisor of zero
+//~ run: next(41, Proved) => (42, Proved)
+//~ run: ten_more(100, Proved) => (110, Proved)
+//~ run: scaled(50, Proved) => (250, Proved)
+//~ run: hundred_and_ten() => 110
+//~ run: halve(-7, 2, Proved) => -3
+//~ run: safe_quotient(7, 3, Proved) => 2
+//~ run: twice_then_one(100, Proved) => 201
+//~ rust: pub fn wrapped_sum(a: u8, b: u8) -> (u8, Proved) {
+//~ rust: let s = a + b;
+//~ rust: let n = -a;
+//~ rust: let q = a / b;
+//~ rust: d + 1
+//~ rust: 100_u8 + 10_u8

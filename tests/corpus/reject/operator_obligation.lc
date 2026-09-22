@@ -1,0 +1,35 @@
+// Under `no_panic` an operator on a machine type carries an obligation, the
+// condition under which it does not panic. Where nothing in scope shows it,
+// the error writes the condition out and says what would discharge it.
+#[no_panic]
+fn bump(n: u32) -> u32 {
+    n + 1 //~ error: L0235 `+` on `u32` may overflow, and `bump` promises no_panic
+}
+
+#[no_panic]
+fn shrink(a: i8, b: i8) -> i8 {
+    a - b //~ error: L0235 `-` on `i8` may overflow, and `shrink` promises no_panic
+}
+
+#[no_panic]
+fn halve(a: u8, b: u8) -> u8 {
+    a / b //~ error: L0235 `/` on `u8` may panic, and `halve` promises no_panic
+}
+
+// The divisor is known to be nonzero, and the other condition of a signed
+// division, that the pair is not `MIN / -1`, is what is missing.
+#[no_panic]
+fn signed_halve(a: i8, b: i8, nonzero: @(b != 0)) -> i8 {
+    a / b //~ error: L0235 `/` on `i8` may panic, and `signed_halve` promises no_panic
+}
+
+#[no_panic]
+fn negate(a: i16) -> i16 {
+    -a //~ error: L0235 `-` on `i16` may overflow, and `negate` promises no_panic
+}
+
+// A fact that speaks of the sum but does not bound it high enough.
+#[no_panic]
+fn nearly(n: u8, small: @(n <= 200)) -> u8 {
+    n + 100 //~ error: L0235 `+` on `u8` may overflow, and `nearly` promises no_panic
+}

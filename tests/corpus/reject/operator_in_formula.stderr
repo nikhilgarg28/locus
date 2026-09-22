@@ -1,0 +1,40 @@
+error[L0236]: `+` on `u8` may panic, on overflow, so it is not a proposition
+ --> tests/corpus/reject/operator_in_formula.lc:6:13
+  |
+6 |     prop!(a + b <= 255) //~ error: L0236 `+` on `u8` may panic, on overflow, so it is not a proposition
+  |             ^
+  |
+  = note: write `a as Int + b as Int` for the exact sum, or `a.wrapping_add(b)` for the wrapped one
+error[L0236]: `*` on `u8` may panic, on overflow, so it is not a proposition
+  --> tests/corpus/reject/operator_in_formula.lc:10:14
+   |
+10 |     prove!(a * b <= 255); //~ error: L0236 `*` on `u8` may panic, on overflow, so it is not a proposition
+   |              ^
+   |
+   = note: write `a as Int * b as Int` for the exact product, or `a.wrapping_mul(b)` for the wrapped one
+error[L0236]: `/` on `i32` may panic, on a zero divisor, so it is not a proposition
+  --> tests/corpus/reject/operator_in_formula.lc:14:38
+   |
+14 | fn in_a_claim(a: i32, b: i32, h: @(a / b == 2)) -> i32 { //~ error: L0236 `/` on `i32` may panic, on a zero divisor, so it is not a ...
+   |                                      ^
+   |
+   = note: write `a as Int / b as Int` for the exact quotient on `Int`, which is total: `a / 0` is `0` and `a % 0` is `a`
+error[L0236]: `-` on `i8` may panic, on overflow, so it is not a proposition
+  --> tests/corpus/reject/operator_in_formula.lc:19:11
+   |
+19 |     prop!(-a == 3) //~ error: L0236 `-` on `i8` may panic, on overflow, so it is not a proposition
+   |           ^
+   |
+   = note: write `-(a as Int)` for the exact negation, or `a.wrapping_neg()` for the wrapped one
+error[L0236]: `-` on `u8` may panic, on overflow, and `logical` is a function of the logic, which runs nothing
+  --> tests/corpus/reject/operator_in_formula.lc:25:7
+   |
+25 |     a - b //~ error: L0236 `-` on `u8` may panic, on overflow, and `logical` is a function of the logic, which runs nothing
+   |       ^
+   |
+   = note: write `a as Int - b as Int` for the exact difference, or `a.wrapping_sub(b)` for the wrapped one
+error[L0220]: expected `Prop`, found `Int`
+  --> tests/corpus/reject/operator_in_formula.lc:31:11
+   |
+31 |     prop!(a as Int + 1) //~ error: L0220 expected `Prop`, found `Int`
+   |           ^^^^^^^^^^^^

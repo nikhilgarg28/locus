@@ -19,9 +19,13 @@
 //! machine types, comparisons at each type, `if` (which is also how `!`,
 //! `&&`, and `||` appear in the tree), `match` with payload bindings, calls
 //! to functions generated earlier (so the call graph is acyclic), `math fn`s
-//! over the pure part of all this, the two loops, and since M2 `let mut`
+//! over the pure part of all this, the two loops, since M2 `let mut`
 //! with assignment, whole or by a field path, in straight-line code and in
-//! the arms of branches. The generator plays the elaborator's part for
+//! the arms of branches, and since E6 the operators `+`, `-`, `*`, `/`,
+//! `%`, and unary minus at a random machine type on random operands, so
+//! that overflow and division by zero do occur: no generated function
+//! promises `no_panic`, so no operator carries evidence, and every panic
+//! is an outcome the three sides must agree on. The generator plays the elaborator's part for
 //! mutation: a mutable local's identity is updated in place to each new
 //! version, an arm's versions are put back after it, and a branch some arm
 //! of which assigned an outer binding records the join lowering will
@@ -48,9 +52,10 @@
 //!
 //! For each accepted program the functions whose parameters are all machine
 //! integers are called on a few inputs, boundary values and random ones. The two
-//! interpreters are compared as `tests/differential.rs` compares them: out of
-//! fuel on either side is inconclusive. Then both are compared with the
-//! compiled Rust, in both builds, through the harness of `tests/corpus.rs`,
+//! interpreters are compared as `tests/differential.rs` compares them, in
+//! each of their two modes, overflow checks on and off: out of fuel on
+//! either side is inconclusive. Then both are compared with the compiled
+//! Rust, each mode with the build it matches, through the harness of `tests/corpus.rs`,
 //! copied into `tests/common/compiled.rs`: two hundred programs go into one
 //! Rust source, one `mod` each, one rustc call per build; the program answers
 //! one line per call, flushed, under `catch_unwind`, and is restarted past a
@@ -86,7 +91,9 @@ use common::setup;
 use compiled::{
     Answered, Overflow, Unit, compile, harness, observe, one_line, remove_binaries, rust_value,
 };
-use locus::erased::{Interpreter, Module, Outcome, RunError, Value, check_module, print_module};
+use locus::erased::{
+    self, Interpreter, Module, Outcome, RunError, Value, check_module, print_module,
+};
 use locus::exec::CheckInterpreter;
 use locus::kernel::{
     Axiom, CmpOp, EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId,
@@ -375,6 +382,29 @@ fn plus_one(value: Expr) -> Expr {
     }
 }
 
+/// `a op b` or `-a` at a machine type, with no evidence, as a function
+/// that promises nothing writes it: for `/` and `%` the identities of the
+/// premises learned afterwards, one at an unsigned type and two at a
+/// signed one.
+fn arith(op: Op, ty: MachineInt, operands: Vec<Expr>) -> Expr {
+    let learned = if matches!(op, Op::Div | Op::Rem) {
+        (0..if ty.signed() { 2 } else { 1 })
+            .map(|_| HypId::fresh())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Expr::Operate {
+        op,
+        ty,
+        operands,
+        result: VarId::fresh(),
+        equation: HypId::fresh(),
+        fits: None,
+        learned,
+    }
+}
+
 fn let_(binder: &Binder, value: Expr) -> Stmt {
     Stmt::Let {
         pattern: Pattern::Bind {
@@ -415,6 +445,8 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         Expr::Match { arms, .. } => arms.iter().all(|arm| block(&arm.body)),
         Expr::Block(inner) => block(inner),
         Expr::Loop { body, .. } => breaks_determined(body, locals),
+        Expr::Operate { operands, .. } => operands.iter().all(|o| determined(o, locals)),
+        Expr::IntArith { .. } => true,
         Expr::Bool(_)
         | Expr::Struct { .. }
         | Expr::Variant { .. }
@@ -459,6 +491,7 @@ fn starts_with_struct_literal(expr: &Expr) -> bool {
         Expr::Method { receiver, .. } => starts_with_struct_literal(receiver),
         Expr::Compare { left, .. } => starts_with_struct_literal(left),
         Expr::Cast { expr, .. } => starts_with_struct_literal(expr),
+        Expr::Operate { operands, .. } => operands.first().is_some_and(starts_with_struct_literal),
         _ => false,
     }
 }
@@ -507,6 +540,9 @@ enum Production {
     Method,
     /// `as` into the type from a random machine type.
     Cast,
+    /// `+`, `-`, `*`, `/`, `%`, or, at a signed type, unary minus, at the
+    /// type, on random operands: the rows that may panic, with no evidence.
+    Arith,
     /// A comparison of two values of one machine type.
     Compare,
     If,
@@ -533,6 +569,7 @@ const PRODUCTIONS: &[(Production, u32)] = &[
     (Production::Field, 3),
     (Production::Method, 5),
     (Production::Cast, 3),
+    (Production::Arith, 5),
     (Production::Compare, 5),
     (Production::If, 4),
     (Production::ShortCircuit, 2),
@@ -1161,6 +1198,8 @@ impl Generator {
             // The kernel has no case with a ghost result.
             Production::If => depth > 0 && !ty.is_ghost(),
             Production::Method | Production::Cast => depth > 0 && is_machine,
+            // An operator may panic, so it is no term of a `math fn`.
+            Production::Arith => depth > 0 && is_machine && !self.math,
             Production::Compare | Production::ShortCircuit | Production::Not => {
                 depth > 0 && is_bool
             }
@@ -1237,6 +1276,18 @@ impl Generator {
                     from: Type::machine(from),
                     to: ty.clone(),
                 }
+            }
+            Production::Arith => {
+                let machine = ty.as_machine().expect("fits");
+                let mut ops = vec![Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Rem];
+                if machine.signed() {
+                    ops.push(Op::Neg);
+                }
+                let op = *self.rng.choose(&ops);
+                let operands = (0..op.arity())
+                    .map(|_| self.expr(ty, inner, false))
+                    .collect();
+                arith(op, machine, operands)
             }
             Production::Compare => {
                 let op = *self.rng.choose(&[
@@ -1707,6 +1758,18 @@ impl Generator {
 
 type Answer = Result<Outcome, RunError>;
 
+/// An interpreter's answers in its two modes, in the order of
+/// `Overflow::ALL`: overflow checks on, then off.
+type Answers = [Answer; 2];
+
+/// The interpreters' mode that matches a build.
+fn mode_of(build: Overflow) -> erased::Overflow {
+    match build {
+        Overflow::Checked => erased::Overflow::Checks,
+        Overflow::Wrapping => erased::Overflow::Wrap,
+    }
+}
+
 /// Inputs for an entry with the given parameter types: boundary values
 /// mixed with random ones.
 fn inputs(rng: &mut Rng, params: &[MachineInt]) -> Vec<Vec<Value>> {
@@ -1731,19 +1794,27 @@ fn inputs(rng: &mut Rng, params: &[MachineInt]) -> Vec<Vec<Value>> {
         .collect()
 }
 
-/// Both interpreters' answers.
-fn interpret(session: &Session, callee: FnRef, input: &[Value]) -> [Answer; 2] {
-    let checked = CheckInterpreter::new(session.program(), FUEL).call(callee, input.to_vec());
-    let erased = Interpreter::new(session.erased(), FUEL).call(callee, input.to_vec());
+/// Both interpreters' answers, each in both modes.
+fn interpret(session: &Session, callee: FnRef, input: &[Value]) -> [Answers; 2] {
+    let checked = Overflow::ALL.map(|build| {
+        CheckInterpreter::new(session.program(), FUEL)
+            .with_overflow(mode_of(build))
+            .call(callee, input.to_vec())
+    });
+    let erased = Overflow::ALL.map(|build| {
+        Interpreter::new(session.erased(), FUEL)
+            .with_overflow(mode_of(build))
+            .call(callee, input.to_vec())
+    });
     [checked, erased]
 }
 
-/// Everything observed of one call: the two interpreters, and the compiled
-/// program in each build when it was run.
+/// Everything observed of one call: the two interpreters, each in both
+/// modes, and the compiled program in each build when it was run.
 #[derive(Clone, Debug)]
 struct Observed {
-    checked: Answer,
-    erased: Answer,
+    checked: Answers,
+    erased: Answers,
     rust: [Option<Answered>; 2],
 }
 
@@ -1754,41 +1825,51 @@ enum Verdict {
     Inconclusive(String),
 }
 
-/// How the three agree, or do not. Out of fuel is inconclusive, as in
+/// How the three agree, or do not, in each mode: the two interpreters in
+/// a mode must agree with each other, and the compiled program of the
+/// matching build with them. Out of fuel is inconclusive, as in
 /// `tests/differential.rs`; a compiled program killed at the timeout is too.
 fn judge(observed: &Observed, module: &Module) -> Verdict {
     let show = |answer: &Answer| match answer {
         Ok(outcome) => outcome.debug(module),
         Err(error) => format!("error: {error}"),
     };
-    let (checked, erased) = match (&observed.checked, &observed.erased) {
-        (Err(error), _) => {
+    for (slot, build) in Overflow::ALL.into_iter().enumerate() {
+        let (checked, erased) = match (&observed.checked[slot], &observed.erased[slot]) {
+            (Err(error), _) => {
+                return Verdict::Disagree(format!(
+                    "the check IR interpreter, {}, could not run it: {error}",
+                    build.name()
+                ));
+            }
+            (_, Err(error)) => {
+                return Verdict::Disagree(format!(
+                    "the erased interpreter, {}, could not run it: {error}",
+                    build.name()
+                ));
+            }
+            (Ok(Outcome::OutOfFuel), _) | (_, Ok(Outcome::OutOfFuel)) => {
+                return Verdict::Inconclusive(format!(
+                    "an interpreter ran out of fuel, {}",
+                    build.name()
+                ));
+            }
+            (Ok(checked), Ok(erased)) => (checked, erased),
+        };
+        if checked != erased {
             return Verdict::Disagree(format!(
-                "the check IR interpreter could not run it: {error}"
+                "the interpreters differ, {}: check IR {}, erased {}",
+                build.name(),
+                show(&observed.checked[slot]),
+                show(&observed.erased[slot])
             ));
         }
-        (_, Err(error)) => {
-            return Verdict::Disagree(format!("the erased interpreter could not run it: {error}"));
-        }
-        (Ok(Outcome::OutOfFuel), _) | (_, Ok(Outcome::OutOfFuel)) => {
-            return Verdict::Inconclusive("an interpreter ran out of fuel".into());
-        }
-        (Ok(checked), Ok(erased)) => (checked, erased),
-    };
-    if checked != erased {
-        return Verdict::Disagree(format!(
-            "the interpreters differ: check IR {}, erased {}",
-            show(&observed.checked),
-            show(&observed.erased)
-        ));
-    }
-    let expected = match erased {
-        Outcome::Value(value) => Answered::Value(value.debug(module)),
-        Outcome::Panic(message) => Answered::Panic(one_line(message)),
-        Outcome::OutOfFuel => unreachable!("handled above"),
-    };
-    for (build, answered) in Overflow::ALL.iter().zip(&observed.rust) {
-        match answered {
+        let expected = match erased {
+            Outcome::Value(value) => Answered::Value(value.debug(module)),
+            Outcome::Panic(message) => Answered::Panic(one_line(message)),
+            Outcome::OutOfFuel => unreachable!("handled above"),
+        };
+        match &observed.rust[slot] {
             None => {}
             Some(Answered::NoAnswer(why)) => {
                 return Verdict::Inconclusive(format!("compiled Rust, {}: {why}", build.name()));
@@ -1817,7 +1898,7 @@ type Judge<'a> = dyn Fn(&Observed, &Module) -> Verdict + 'a;
 struct Case {
     entry: usize,
     input: Vec<Value>,
-    answers: [Answer; 2],
+    answers: [Answers; 2],
 }
 
 /// A program that was generated and checked, with the calls to make.
@@ -1875,6 +1956,13 @@ struct Summary {
     /// what the weights of `STMTS` are set for.
     assigning: usize,
     branching_assignment: usize,
+    /// Programs with an operator that may panic, and among the cases those
+    /// that panicked with overflow checks on, and those whose outcome
+    /// differed between the two modes: what the weight of `Arith` is set
+    /// for, and the proof that the table's conditions are reached.
+    arithmetic: usize,
+    panicked: usize,
+    build_dependent: usize,
     rejected: Vec<Rejection>,
     /// Generation or checking panicked: the seed and the message.
     crashed: Vec<(u64, String)>,
@@ -2054,6 +2142,13 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
             let (assigns, in_branches) = assignments_of(&prepared.program);
             summary.assigning += usize::from(assigns);
             summary.branching_assignment += usize::from(in_branches);
+            summary.arithmetic += usize::from(has_operator(&prepared.program));
+            for case in &prepared.cases {
+                let [checked, wrapped] = &case.answers[1];
+                summary.panicked += usize::from(matches!(checked, Ok(Outcome::Panic(_))));
+                summary.build_dependent +=
+                    usize::from(matches!((checked, wrapped), (Ok(a), Ok(b)) if a != b));
+            }
             Some(prepared)
         }
         Ok(Err(rejection)) => {
@@ -2073,6 +2168,17 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
 }
 
 /// Whether the program assigns anywhere, and inside an arm of a branch.
+/// Whether the program applies an operator that may panic.
+fn has_operator(program: &Program) -> bool {
+    let mut counting = program.clone();
+    let mut found = false;
+    counting.visit_exprs(&mut |expr, _, _| {
+        found |= matches!(expr, Expr::Operate { .. });
+        false
+    });
+    found
+}
+
 fn assignments_of(program: &Program) -> (bool, bool) {
     let mut counting = program.clone();
     let (mut assigns, mut in_branches) = (false, false);
@@ -2166,14 +2272,24 @@ fn report(disagreement: &Disagreement, base: &Session) -> String {
         program.fns[*entry].item.name,
         show_input(input, module)
     );
-    let _ = writeln!(out, "  check IR interpreter: {}", show(&observed.checked));
-    let _ = writeln!(out, "  erased interpreter:   {}", show(&observed.erased));
-    for (build, answered) in Overflow::ALL.iter().zip(&observed.rust) {
+    for (slot, build) in Overflow::ALL.into_iter().enumerate() {
+        let _ = writeln!(
+            out,
+            "  check IR interpreter, {}: {}",
+            build.name(),
+            show(&observed.checked[slot])
+        );
+        let _ = writeln!(
+            out,
+            "  erased interpreter, {}:   {}",
+            build.name(),
+            show(&observed.erased[slot])
+        );
         let _ = writeln!(
             out,
             "  compiled Rust, {}: {}",
             build.name(),
-            answered
+            observed.rust[slot]
                 .as_ref()
                 .map_or_else(|| "not run".to_string(), ToString::to_string)
         );
@@ -2461,6 +2577,14 @@ fn walk_expr(
             ty, left, right, ..
         } => walk_expr(left, Some(ty), scope, visit) || walk_expr(right, Some(ty), scope, visit),
         Expr::Cast { expr, from, .. } => walk_expr(expr, Some(from), scope, visit),
+        Expr::Operate { ty, operands, .. } => {
+            let types = vec![Type::machine(*ty); operands.len()];
+            walk_all(operands, &types, scope, visit)
+        }
+        Expr::IntArith { operands, .. } => {
+            let types = vec![Type::Int; operands.len()];
+            walk_all(operands, &types, scope, visit)
+        }
         Expr::CallMath { id, arguments, .. } => {
             let types = scope.tables.params.get(&FnRef::Math(*id)).cloned();
             walk_all(arguments, &types.unwrap_or_default(), scope, visit)
@@ -2715,6 +2839,7 @@ fn hoistable(expr: &Expr, expected: Option<&Type>, tables: &Tables) -> Vec<Expr>
         } => std::iter::once((**receiver).clone())
             .chain(arguments.iter().cloned())
             .collect(),
+        Expr::Operate { operands, .. } => operands.clone(),
         Expr::CallFn { id, arguments, .. } => arguments_like(FnRef::Exec(*id), arguments),
         Expr::CallMath { id, arguments, .. } => arguments_like(FnRef::Math(*id), arguments),
         _ => Vec::new(),
@@ -2940,13 +3065,16 @@ fn shortened(text: &str) -> String {
 
 fn print_summary(summary: &Summary, mode: &str) {
     let mut out = format!(
-        "random programs ({mode}): {} generated ({} assign, {} in a branch), {} rejected by the checker, {} crashed, {} cases: {} agreed, {} inconclusive, {} disagreed\n",
+        "random programs ({mode}): {} generated ({} assign, {} in a branch, {} with an operator), {} rejected by the checker, {} crashed, {} cases ({} panic with overflow checks on, {} differ between the builds): {} agreed, {} inconclusive, {} disagreed\n",
         summary.generated,
         summary.assigning,
         summary.branching_assignment,
+        summary.arithmetic,
         summary.rejected.len(),
         summary.crashed.len(),
         summary.cases,
+        summary.panicked,
+        summary.build_dependent,
         summary.agreed,
         summary.inconclusive.len(),
         summary.disagreements.len()
@@ -3106,7 +3234,7 @@ fn planted(base: &Session) -> (Program, Session) {
 /// A comparator that calls the value 7 a disagreement, as if one side had
 /// returned something else.
 fn planted_judge(observed: &Observed, module: &Module) -> Verdict {
-    if let Ok(Outcome::Value(Value::Int(MachineInt::U8, 7))) = observed.erased {
+    if let Ok(Outcome::Value(Value::Int(MachineInt::U8, 7))) = observed.erased[0] {
         return Verdict::Disagree("the planted comparator calls 7 a disagreement".into());
     }
     judge(observed, module)
@@ -3151,9 +3279,11 @@ fn a_planted_disagreement_is_reported_with_its_seed_and_shrunk() {
     for expected in [
         "random program with seed 7777 disagrees at f0(3)",
         "the planted comparator calls 7 a disagreement",
-        "check IR interpreter: 7",
-        "erased interpreter:   7",
+        "check IR interpreter, overflow checks on: 7",
+        "erased interpreter, overflow checks on:   7",
         "compiled Rust, overflow checks on: 7",
+        "check IR interpreter, overflow checks off: 7",
+        "erased interpreter, overflow checks off:   7",
         "compiled Rust, overflow checks off: 7",
         "let v3 = (v2, v1);",
         "the typed tree:",

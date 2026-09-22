@@ -1,7 +1,7 @@
 //! Operators outside a formula: `!`, `&&` and `||`, which are an `if`, and
 //! the comparisons, between two values of one machine integer type, or two
 //! `bool` for `==` and `!=`. Whether `p || q` is a proposition instead is
-//! decided here too.
+//! decided here too. The arithmetic operators are in `arithmetic`.
 
 use crate::ast::{self, BinaryOp, ExprKind, Form};
 use crate::diagnostic::Diagnostic;
@@ -149,58 +149,26 @@ impl Env<'_> {
         ))
     }
 
-    /// The operators that parse and have no meaning yet: the arithmetic and
-    /// bit operators, and unary minus on anything but a literal. Each names
-    /// the commit that gives it one.
+    /// The operators that parse and have no meaning yet: the shifts and
+    /// the bitwise operators, which come after the core.
     #[inline(never)]
     pub(super) fn operator_not_yet<T>(&mut self, expr: &ast::Expr) -> Elab<T> {
-        let (what, span, note) = match &expr.kind {
-            ExprKind::Binary {
-                operator,
-                operator_span,
-                ..
-            } if operator.is_bitwise() => (
-                format!("the `{}` operator", operator.spelling()),
-                *operator_span,
-                "bit operators and shifts come after the core",
-            ),
-            ExprKind::Binary {
-                operator,
-                operator_span,
-                ..
-            } => (
-                format!("the `{}` operator", operator.spelling()),
-                *operator_span,
-                "it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions",
-            ),
-            ExprKind::Unary {
-                operator,
-                operator_span,
-                ..
-            } => (
-                format!("unary `{}`", operator.spelling()),
-                *operator_span,
-                "it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions",
-            ),
-            _ => unreachable!("only an operator without a meaning is reported here"),
-        };
-        let mut diagnostic =
-            Diagnostic::error("L0290", format!("{what} is not in Locus yet"), span).note(note);
-        if let ExprKind::Binary {
-            operator: operator @ (BinaryOp::Add | BinaryOp::Sub),
+        let ExprKind::Binary {
+            operator,
+            operator_span,
             ..
         } = &expr.kind
-        {
-            let method = if *operator == BinaryOp::Add {
-                "wrapping_add"
-            } else {
-                "wrapping_sub"
-            };
-            diagnostic = diagnostic.note(format!(
-                "until then, machine arithmetic says what happens on overflow: write `a.{method}(b)`"
-            ));
-        }
-        self.diagnostics.push(diagnostic);
+        else {
+            unreachable!("only an operator without a meaning is reported here")
+        };
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0290",
+                format!("the `{}` operator is not in Locus yet", operator.spelling()),
+                *operator_span,
+            )
+            .note("bit operators and shifts come after the core"),
+        );
         Err(())
     }
 }

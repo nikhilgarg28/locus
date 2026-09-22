@@ -1,0 +1,9 @@
+// Without `no_panic` an operator carries no evidence, and only the wrapped
+// result is known: the exact sum is not, because a build without overflow
+// checks may have wrapped it. The same claim holds under `no_panic`, where
+// the operator's obligation was met (tests/corpus/accept/arithmetic_facts.lc).
+fn sum(a: u8, b: u8) -> u8 {
+    let s = a + b;
+    prove!(s as Int == a as Int + b as Int); //~ error: L0230 cannot show `s == a + b`
+    s
+}
