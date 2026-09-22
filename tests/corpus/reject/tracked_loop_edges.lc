@@ -1,0 +1,70 @@
+// Tracked evidence carried by a loop must be valid wherever the loop's
+// state is supplied: at every `continue`, at the end of the body, and at
+// every `break`. Case 2 of the mutation design with a refresh removed at
+// each of those places. The flow analysis reports it first; had it not,
+// lowering would supply the stale `ok`, typed over the `n` of the pass's
+// entry, where the state wants `n <= 10` over the current `n`, and the
+// checker would reject the tree.
+#[terminates] #[no_panic] #[no_io]
+fn advance(n: u8, ok: @(n <= 10)) -> (m: u8, @(m <= 10)) {
+    if n < 10 {
+        let fits = prove!(n as Int + 1 <= u8::MAX as Int);
+        let m = n + 1;
+        (m, prove!(m <= 10))
+    } else {
+        (n, ok)
+    }
+}
+
+fn not_at_the_continue(start: u8, first: @(start <= 10)) -> (n: u8, @(n <= 10)) {
+    let mut n = start;
+    let mut ok: @(n <= 10) = first;
+    loop {
+        if n == 10 {
+            break;
+        } else {
+        }
+        let (m, still) = advance(n, ok);
+        n = m;
+        if n == 5 {
+            continue; //~ error: L0246 `ok` speaks of `n`, which was assigned at line 28
+        } else {
+        }
+        ok = still;
+    }
+    (n, ok)
+}
+
+fn not_at_the_end(start: u8, first: @(start <= 10)) -> (n: u8, @(n <= 10)) {
+    let mut n = start;
+    let mut ok: @(n <= 10) = first;
+    loop {
+        if n == 10 {
+            break;
+        } else {
+        }
+        let (m, still) = advance(n, ok);
+        n = m;
+        if n == 5 {
+            ok = still;
+            continue;
+        } else {
+        }
+    } //~ error: L0246 `ok` speaks of `n`, which was assigned at line 47
+    (n, ok)
+}
+
+fn not_at_the_break(start: u8, first: @(start <= 10)) -> (n: u8, @(n <= 10)) {
+    let mut n = start;
+    let mut ok: @(n <= 10) = first;
+    loop {
+        let (m, still) = advance(n, ok);
+        n = m;
+        if n == 10 {
+            break; //~ error: L0246 `ok` speaks of `n`, which was assigned at line 62
+        } else {
+        }
+        ok = still;
+    }
+    (n, ok)
+}

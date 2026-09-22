@@ -16,9 +16,25 @@
 //! in a proof is a proof the kernel rejects, and a wrong version in an
 //! executable position is a stale mention lowering refuses.
 //!
-//! Tracked evidence, `let mut ok: @P`, is M4's. Until then a proposition or
-//! a type that mentions a mutable binding names the version current where
-//! it was written: a snapshot.
+//! Tracked evidence, `let mut ok: @P`, is a mutable binding whose declared
+//! type mentions other mutable bindings (`Tracked`). Its type is fixed as
+//! written, over those bindings and not over their versions: at each point
+//! the type of its current version is `P` over the versions current there
+//! (`version_type`), which is what an assignment to it is checked against,
+//! what its version in a join's tuple or a loop's state has, and what a
+//! use of it produces. The flow analysis here says when it is available:
+//! an assignment to a binding it mentions makes it stale until an
+//! assignment to it, `ok = _;` or `ok = proof;`, refreshes it; after a
+//! branch it is stale when it is stale at the end of any arm that reaches
+//! the join, and a branch joins it only when every such arm leaves it
+//! valid; a loop carries it when it is valid at entry, needs it valid at
+//! every `continue` and `break` and at the end of the body, and gives it
+//! back valid (`loops.rs`). A use of a stale one is an error shaped like a
+//! use after move, naming the assignment. None of this is trusted:
+//! lowering gives each version its type over the versions current there,
+//! and a stale use is a version of another type than the one wanted, which
+//! the checker rejects. A snapshot, evidence bound with `let`, keeps its
+//! type as written.
 
 use crate::ast::{self, ExprKind};
 use crate::diagnostic::Diagnostic;
@@ -30,28 +46,75 @@ use crate::typed::{
 
 use super::env::{Elab, Env, Fact, Mark};
 
-/// The mutable bindings in scope at the entry of a branch or a loop: each
-/// one's slot among the names, its identity, and its version at entry.
+/// Tracked evidence: what its declared type mentions, and whether it is
+/// valid here.
+#[derive(Clone, Debug)]
+pub(super) struct Tracked {
+    /// The mutable bindings the declared type mentions, by identity, each
+    /// with the version of it the type was written over.
+    pub deps: Vec<(VarId, VarId)>,
+    /// `None` while the evidence is valid; otherwise what made it stale.
+    pub stale: Option<Stale>,
+}
+
+/// Why tracked evidence is not available: the binding it mentions that was
+/// changed, and the assignment, or the loop, that changed it.
+#[derive(Clone, Debug)]
+pub(super) struct Stale {
+    pub dep: String,
+    pub span: Span,
+    pub by_loop: bool,
+}
+
+/// The value a join produces: its type when no path reaches the join, and
+/// the identity and equation it is bound under when the join has one, a
+/// `loop`'s value or a branch's.
+pub(super) struct JoinValue {
+    pub fallback: Type,
+    pub bound: Option<(VarId, HypId)>,
+}
+
+/// One mutable binding at the entry of a branch or a loop: its slot among
+/// the names, its identity, its version at entry, and for tracked evidence
+/// whether it was valid there.
 #[derive(Clone)]
-pub(super) struct Entry(Vec<(usize, VarId, VarId)>);
+struct EntryBinding {
+    slot: usize,
+    binding: VarId,
+    version: VarId,
+    stale: Option<Stale>,
+}
+
+/// The mutable bindings in scope at the entry of a branch or a loop.
+#[derive(Clone)]
+pub(super) struct Entry(Vec<EntryBinding>);
 
 impl Entry {
     /// The positions in the entry of the bindings at the given slots.
     pub fn positions(&self, slots: &[usize]) -> Vec<usize> {
         (0..self.0.len())
-            .filter(|&i| slots.contains(&self.0[i].0))
+            .filter(|&i| slots.contains(&self.0[i].slot))
             .collect()
+    }
+
+    /// The versions the entry bindings had at entry.
+    fn versions(&self) -> Vec<VarId> {
+        self.0.iter().map(|entry| entry.version).collect()
     }
 }
 
 /// What one arm of a branch, or one exit of a loop, ended with: the version
-/// each entry binding had, the type of the value, and whether the arm
-/// transfers control.
+/// each entry binding had and whether it was valid, the type of the value,
+/// whether the arm transfers control, and whether it does so by the shape
+/// of its tree (`typed::block_leaves`), in which case what it assigned is
+/// not joined, as lowering builds no tuple from it.
 #[derive(Clone)]
 pub(super) struct ArmEnd {
     pub versions: Vec<VarId>,
+    pub stale: Vec<Option<Stale>>,
     pub ty: Type,
     pub never: bool,
+    pub leaves: bool,
 }
 
 /// One field of the left side of an assignment, as written.
@@ -97,10 +160,129 @@ pub(super) fn type_mentions(ty: &Type, id: VarId) -> bool {
 }
 
 impl Env<'_> {
-    /// Marks the name just bound as declared `let mut`.
+    /// Marks the name just bound as declared `let mut`. When its type
+    /// mentions other mutable bindings it is tracked evidence, valid as
+    /// declared.
     pub(super) fn make_mutable(&mut self, id: VarId) {
-        if let Some(local) = self.names.iter_mut().rev().find(|local| local.id == id) {
-            local.binding = Some(id);
+        let Some(slot) = self.names.iter().rposition(|local| local.id == id) else {
+            return;
+        };
+        let deps: Vec<(VarId, VarId)> = self
+            .names
+            .iter()
+            .filter(|local| local.id != id)
+            .filter_map(|local| {
+                let binding = local.binding?;
+                type_mentions(&self.names[slot].ty, local.id).then_some((binding, local.id))
+            })
+            .collect();
+        let local = &mut self.names[slot];
+        local.binding = Some(id);
+        if !deps.is_empty() {
+            local.tracked = Some(Tracked { deps, stale: None });
+        }
+    }
+
+    /// The current version of a mutable binding, by identity.
+    fn current_version(&self, binding: VarId) -> Option<VarId> {
+        self.names
+            .iter()
+            .rev()
+            .find(|local| local.binding == Some(binding))
+            .map(|local| local.id)
+    }
+
+    /// The type of the binding at `slot` here: as declared, and for tracked
+    /// evidence over the current versions of what it mentions. This is the
+    /// type lowering gives each version (`typed::lower`).
+    pub(super) fn version_type(&self, slot: usize) -> Type {
+        let local = &self.names[slot];
+        let Some(tracked) = &local.tracked else {
+            return local.ty.clone();
+        };
+        tracked
+            .deps
+            .iter()
+            .fold(local.ty.clone(), |ty, &(binding, written)| {
+                match self.current_version(binding) {
+                    Some(current) if current != written => {
+                        ty.replace_var(written, &Term::var(current))
+                    }
+                    _ => ty,
+                }
+            })
+    }
+
+    /// An assignment to `binding`, or a loop that assigns it, makes every
+    /// tracked evidence that mentions it stale.
+    fn invalidate(&mut self, binding: VarId, stale: &Stale) {
+        for local in &mut self.names {
+            if let Some(tracked) = &mut local.tracked
+                && tracked.deps.iter().any(|(dep, _)| *dep == binding)
+            {
+                tracked.stale = Some(stale.clone());
+            }
+        }
+    }
+
+    fn line_of(&self, span: Span) -> usize {
+        self.source
+            .line_column(span.start)
+            .map_or(0, |(line, _)| line)
+    }
+
+    /// The error for tracked evidence that is stale where it is needed:
+    /// `L0245` at a use, `L0246` at a point of control where it must be
+    /// valid, with `when` saying which. Shaped like a use after move.
+    pub(super) fn stale_error<T>(
+        &mut self,
+        slot: usize,
+        stale: &Stale,
+        code: &'static str,
+        when: &str,
+        span: Span,
+    ) -> Elab<T> {
+        let name = self.names[slot].name.clone();
+        let line = self.line_of(stale.span);
+        let (changed, label) = if stale.by_loop {
+            (
+                format!("which the loop at line {line} assigns"),
+                format!("this loop assigns `{}`", stale.dep),
+            )
+        } else {
+            (
+                format!("which was assigned at line {line}"),
+                format!("`{}` is assigned here", stale.dep),
+            )
+        };
+        self.diagnostics.push(
+            Diagnostic::error(
+                code,
+                format!(
+                    "`{name}` speaks of `{}`, {changed}; refresh it with `{name} = _;` or `{name} = <proof>;` {when}",
+                    stale.dep
+                ),
+                span,
+            )
+            .label(stale.span, label)
+            .note(format!(
+                "`{name}` is tracked evidence, declared with `let mut`: it speaks of `{}` as it is now, and an assignment leaves it to be established again",
+                stale.dep
+            )),
+        );
+        Err(())
+    }
+
+    /// Every tracked evidence among `slots` must be valid here: at a point
+    /// of control where lowering supplies it at the current versions.
+    pub(super) fn require_valid(&mut self, slots: &[usize], when: &str, span: Span) -> Elab<()> {
+        let first_stale = slots.iter().find_map(|&slot| {
+            let stale = self.names[slot].tracked.as_ref()?.stale.clone()?;
+            Some((slot, stale))
+        });
+        match first_stale {
+            Some((slot, stale)) => self.stale_error(slot, &stale, "L0246", when, span),
+            None => Ok(()),
         }
     }
 
@@ -136,7 +318,8 @@ impl Env<'_> {
             return Err(());
         };
         let name = local.name.clone();
-        let declared = local.ty.clone();
+        let declared = self.version_type(slot);
+        let local = &self.names[slot];
         let mut target = Term::var(local.id);
         let mut ty = declared.clone();
         let mut steps = Vec::new();
@@ -244,6 +427,20 @@ impl Env<'_> {
         self.names[slot].id = version;
         self.labels.insert(version, name.clone());
         self.learn_from(&Term::var(version), &found);
+        // Evidence that speaks of this binding is stale from here; the
+        // binding itself, if it is tracked evidence, has just been
+        // established over the current versions.
+        self.invalidate(
+            binding,
+            &Stale {
+                dep: name.clone(),
+                span,
+                by_loop: false,
+            },
+        );
+        if let Some(tracked) = &mut self.names[slot].tracked {
+            tracked.stale = None;
+        }
         Ok(Stmt::Assign {
             place: Place {
                 binding,
@@ -311,7 +508,17 @@ impl Env<'_> {
             self.names
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, local)| local.binding.map(|binding| (slot, binding, local.id)))
+                .filter_map(|(slot, local)| {
+                    local.binding.map(|binding| EntryBinding {
+                        slot,
+                        binding,
+                        version: local.id,
+                        stale: local
+                            .tracked
+                            .as_ref()
+                            .and_then(|tracked| tracked.stale.clone()),
+                    })
+                })
                 .collect(),
         )
     }
@@ -322,26 +529,55 @@ impl Env<'_> {
         entry
             .0
             .iter()
-            .map(|(slot, _, _)| self.names[*slot].id)
+            .map(|binding| self.names[binding.slot].id)
             .collect()
+    }
+
+    /// Which of the entry bindings are stale tracked evidence now, and why.
+    pub(super) fn stale_now(&self, entry: &Entry) -> Vec<Option<Stale>> {
+        entry
+            .0
+            .iter()
+            .map(|binding| {
+                self.names[binding.slot]
+                    .tracked
+                    .as_ref()
+                    .and_then(|tracked| tracked.stale.clone())
+            })
+            .collect()
+    }
+
+    /// What an exit of a loop ended with: a path that reaches the join.
+    pub(super) fn arm_end(&self, entry: &Entry, ty: Type, never: bool) -> ArmEnd {
+        ArmEnd {
+            versions: self.versions_now(entry),
+            stale: self.stale_now(entry),
+            ty,
+            never,
+            leaves: false,
+        }
     }
 
     /// The facts a block added, when it assigned an entry binding: they
     /// speak of identities that stay declared, and what the block assigned
     /// is what the code after it reads.
     pub(super) fn facts_since(&self, mark: &Mark, entry: &Entry) -> Vec<Fact> {
-        if self.versions_now(entry) == entry.0.iter().map(|(_, _, v)| *v).collect::<Vec<_>>() {
+        if self.versions_now(entry) == entry.versions() {
             return Vec::new();
         }
         self.facts[mark.facts()..].to_vec()
     }
 
-    /// Puts the entry versions back once an arm's scope has closed: what
-    /// the arm assigned reaches the code after the branch through the join
-    /// alone.
+    /// Puts the entry versions back once an arm's scope has closed, and
+    /// with them whether each tracked evidence was valid: what the arm
+    /// assigned reaches the code after the branch through the join alone.
     pub(super) fn restore_versions(&mut self, entry: &Entry) {
-        for (slot, _, version) in &entry.0 {
-            self.names[*slot].id = *version;
+        for binding in &entry.0 {
+            let local = &mut self.names[binding.slot];
+            local.id = binding.version;
+            if let Some(tracked) = &mut local.tracked {
+                tracked.stale = binding.stale.clone();
+            }
         }
     }
 
@@ -352,14 +588,16 @@ impl Env<'_> {
             .0
             .iter()
             .zip(versions)
-            .any(|((_, _, at_entry), now)| now != at_entry && type_mentions(ty, *now))
+            .any(|(binding, now)| *now != binding.version && type_mentions(ty, *now))
     }
 
     /// Joins the arms of a branch. When no arm assigned an entry binding,
     /// nothing happens and the type is `fallback`, the one the branch has
     /// today. Otherwise every assigned binding gets a version for after the
     /// branch, the value's type is stated over those versions, and the
-    /// mirrored context binds the tuple's parts as lowering will.
+    /// mirrored context binds the tuple's parts as lowering will. Either
+    /// way, tracked evidence the branch did not assign is stale afterwards
+    /// when it is stale at the end of any arm that reaches the join.
     pub(super) fn join(
         &mut self,
         entry: &Entry,
@@ -368,19 +606,43 @@ impl Env<'_> {
         result: VarId,
         span: Span,
     ) -> Elab<(Option<Joined>, Type)> {
+        // As lowering computes it: over the arms that reach the join, less
+        // the evidence some such arm leaves stale, which lowering lets the
+        // join leave out; that evidence is stale afterwards, and its next
+        // use is where it is reported.
+        let reaching: Vec<&ArmEnd> = arms.iter().filter(|arm| !arm.leaves).collect();
         let assigned: Vec<usize> = (0..entry.0.len())
-            .filter(|&i| arms.iter().any(|arm| arm.versions[i] != entry.0[i].2))
+            .filter(|&i| {
+                reaching
+                    .iter()
+                    .any(|arm| arm.versions[i] != entry.0[i].version)
+                    && !(matches!(self.names[entry.0[i].slot].ty, Type::Proof(_))
+                        && reaching.iter().any(|arm| arm.stale[i].is_some()))
+            })
             .collect();
+        for (i, binding) in entry.0.iter().enumerate() {
+            if assigned.contains(&i) {
+                continue;
+            }
+            let stale = reaching.iter().find_map(|arm| arm.stale[i].clone());
+            if let Some(tracked) = &mut self.names[binding.slot].tracked {
+                tracked.stale = stale;
+            }
+        }
         if assigned.is_empty() {
             return Ok((None, fallback));
         }
         let equation = HypId::fresh();
+        let value = JoinValue {
+            fallback,
+            bound: Some((result, equation)),
+        };
         let (tuple, joins, ty) = self.join_over(
             entry,
             &assigned,
             arms,
-            fallback,
-            Some((result, equation)),
+            value,
+            "before this arm ends, since the branch joins it",
             span,
         )?;
         Ok((
@@ -395,36 +657,55 @@ impl Env<'_> {
 
     /// Joins the paths that reach the end of a branch, or leave a loop,
     /// given which entry bindings (by position) were assigned: each gets a
-    /// version for afterwards, the value's type is stated over those
-    /// versions, and the mirrored context binds the tuple's parts as
-    /// lowering will, the versions and then the value under the identity
-    /// and equation of `value` when there is one. Returns the tuple's
-    /// identity, the joins, and the value's type.
+    /// version for afterwards, typed over the versions before it, so that
+    /// tracked evidence in the tuple speaks of the joined versions of what
+    /// it mentions; the value's type is stated over those versions, and the
+    /// mirrored context binds the tuple's parts as lowering will, the
+    /// versions and then the value under the identity and equation `value`
+    /// binds it to when it has one. Tracked evidence that is assigned must be
+    /// valid at the end of every path that reaches the join, since each
+    /// supplies it at its own versions; afterwards it is valid. Returns the
+    /// tuple's identity, the joins, and the value's type.
     pub(super) fn join_over(
         &mut self,
         entry: &Entry,
         assigned: &[usize],
         arms: &[ArmEnd],
-        fallback: Type,
-        value: Option<(VarId, HypId)>,
+        value: JoinValue,
+        when: &str,
         span: Span,
     ) -> Elab<(VarId, Vec<Join>, Type)> {
-        let joins: Vec<Join> = assigned
-            .iter()
-            .map(|&i| {
-                let (slot, binding, _) = entry.0[i];
-                let local = &self.names[slot];
-                Join {
-                    binding,
-                    version: Binder {
-                        id: VarId::fresh(),
-                        name: local.name.clone(),
-                        ty: local.ty.clone(),
-                    },
-                    equation: HypId::fresh(),
-                }
-            })
-            .collect();
+        let JoinValue { fallback, bound } = value;
+        for &i in assigned {
+            let slot = entry.0[i].slot;
+            if self.names[slot].tracked.is_none() {
+                continue;
+            }
+            if let Some(stale) = arms
+                .iter()
+                .filter(|arm| !arm.leaves)
+                .find_map(|arm| arm.stale[i].clone())
+            {
+                return self.stale_error(slot, &stale, "L0246", when, span);
+            }
+        }
+        // Each joined version is typed over the ones before it: the type is
+        // stated once the earlier bindings are at their joined versions.
+        let mut joins: Vec<Join> = Vec::new();
+        for &i in assigned {
+            let slot = entry.0[i].slot;
+            let join = Join {
+                binding: entry.0[i].binding,
+                version: Binder {
+                    id: VarId::fresh(),
+                    name: self.names[slot].name.clone(),
+                    ty: self.version_type(slot),
+                },
+                equation: HypId::fresh(),
+            };
+            self.names[slot].id = join.version.id;
+            joins.push(join);
+        }
         // An arm's value is typed over the versions it ended with; over the
         // joined versions it is the type of the whole. When the arms agree
         // only as written, the type is a snapshot of what they wrote.
@@ -457,7 +738,7 @@ impl Env<'_> {
         let tuple = VarId::fresh();
         let declared = self.ctx.declare_with(
             tuple,
-            join_type(&joins, value.map(|(result, _)| (result, &ty))),
+            join_type(&joins, bound.map(|(result, _)| (result, &ty))),
             false,
         );
         self.kernel(declared, span)?;
@@ -478,13 +759,15 @@ impl Env<'_> {
                 &mut earlier,
                 span,
             )?;
-            let slot = entry.0[i].0;
-            self.names[slot].id = join.version.id;
+            let slot = entry.0[i].slot;
             self.labels
                 .insert(join.version.id, join.version.name.clone());
             self.learn_from(&Term::var(join.version.id), &found);
+            if let Some(tracked) = &mut self.names[slot].tracked {
+                tracked.stale = None;
+            }
         }
-        if let Some((result, equation)) = value {
+        if let Some((result, equation)) = bound {
             let found = self.bind_part(
                 &tuple_term,
                 joins.len(),

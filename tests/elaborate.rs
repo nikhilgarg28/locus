@@ -176,8 +176,12 @@ fn the_lock_runs_as_written() {
             // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
             // it stands.
             (31, 80, "evaluation", 11),
-            // run: `prove!(0u8 <= 3)` for the initial state.
-            (54, 65, "evaluation", 11),
+            // run: `prove!(0u8 <= 3)` for the initial `ok`.
+            (56, 68, "evaluation", 11),
+            // run: `ok = still` refreshes the tracked evidence over the
+            // `lock` just assigned: `still` speaks of `next`, and `lock`
+            // is `next` after `lock = next`, which computing bridges.
+            (60, 14, "computed", 52),
         ]
     );
 }
@@ -193,9 +197,11 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
         "    match event {",
         "            if lock.failures < 3_u8 {",
         "                (Lock { failures: lock.failures.wrapping_add(1_u8), open: false }, Proved)",
+        "    let mut ok = Proved;",
         "    for attempt in 0_u8..attempts {",
-        "        let (lock, bounded) = state;",
-        "        state = step(lock, bounded, event_at(attempt, correct));",
+        "        let (next, still) = step(lock, ok, event_at(attempt, correct));",
+        "        lock = next;",
+        "        ok = Proved;",
         "    (3_u8.wrapping_sub(failures), Proved)",
         "    let (last, bounded) = run(attempts, correct);",
     ] {

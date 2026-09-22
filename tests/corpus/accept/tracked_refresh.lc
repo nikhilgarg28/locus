@@ -1,0 +1,70 @@
+// Tracked evidence, cases 1 and 10 of the mutation design (How mutation is
+// checked): `let mut ok: @P` speaks of `x` as it is now. An assignment to
+// `x` leaves `ok` stale; `ok = _;` or `ok = prove!(...)` establishes it
+// again over the current `x`. Lowering gives each refresh a new version of
+// `ok`, typed over the version of `x` current there, and the checker of the
+// check IR sees only versions: a stale `ok` is evidence of another type
+// than the one wanted, whatever the elaborator said.
+
+fn use_it(x: u8, ok: @(x <= 3)) -> u8 {
+    x
+}
+
+// Case 1. `x = x + 1` leaves `ok` stale. The arm that leaves the loop is not
+// a path to `use_it`; the arm that stays refreshes `ok`, so after the
+// branch `ok` is valid. The `break` stands for the early `return` of the
+// design's case, which M5 adds.
+fn bump_within(n: u8, small: @(n <= 3)) -> u8 {
+    let mut x = n;
+    let mut ok: @(x <= 3) = small;
+    x = x.wrapping_add(1);
+    loop {
+        if x > 3 {
+            break 0
+        } else {
+            ok = prove!(x <= 3);
+        }
+        break use_it(x, ok)
+    }
+}
+
+// Case 10. Both arms assign `x` and refresh `ok`, and the condition reads
+// the `x` of entry. After the join `x` and `ok` are the parts of the
+// branch's tuple, `ok` typed over the joined `x`: valid, with nothing
+// carried by hand (`assign_join_evidence.lc` is the spelling without
+// tracked evidence). One arm refreshes with `_`, the other by stating the
+// claim; both are checked over the `x` just assigned.
+fn clamp(n: u8) -> u8 {
+    let mut x: u8 = 0;
+    let mut ok: @(x <= 3) = _;
+    if n < 3 {
+        x = n;
+        ok = _;
+    } else {
+        x = 3;
+        ok = prove!(x <= 3);
+    }
+    use_it(x, ok)
+}
+
+// Only the arm that assigns `x` must refresh `ok`; the other passes the
+// entry versions of both through the join, where `ok` still fits.
+fn maybe_reset(n: u8, small: @(n <= 3), reset: bool) -> u8 {
+    let mut x = n;
+    let mut ok: @(x <= 3) = small;
+    if reset {
+        x = 0;
+        ok = _;
+    } else {
+    }
+    use_it(x, ok)
+}
+
+//~ proofs: 7
+//~ run: bump_within(2, Proved) => 3
+//~ run: bump_within(3, Proved) => 0
+//~ run: clamp(1) => 1
+//~ run: clamp(200) => 3
+//~ run: maybe_reset(2, Proved, true) => 0
+//~ run: maybe_reset(2, Proved, false) => 2
+//~ rust: let mut ok = Proved;

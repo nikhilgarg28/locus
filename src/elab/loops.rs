@@ -14,6 +14,14 @@
 //! carried set itself and rejects a tree that names another, and a wrong
 //! version in a proof is a proof the kernel rejects.
 //!
+//! Tracked evidence the body refreshes is carried like any binding, typed
+//! in the state over the versions the body sees; the entry, every
+//! `continue` and `break`, the end of the body, and the exit of a `while`
+//! supply it at the current versions, so it must be valid there, and after
+//! the loop it is valid over the versions after. Tracked evidence the body
+//! does not refresh, but whose subject the loop assigns, is stale inside
+//! the body and after the loop (`mutation.rs`).
+//!
 //! The state-passing forms these replace, `loop (state) -> R`,
 //! `for i in lo..hi (state)`, and `continue(next)`, are still parsed and
 //! are reported with the new spelling (`removed_loop_form`).
@@ -27,7 +35,7 @@ use crate::typed::{self, Binder, Carried, Expr};
 use super::env::{Elab, Env, LoopTarget};
 use super::exprs::{Value, unit_type};
 use super::literals::untyped_literal;
-use super::mutation::{ArmEnd, Entry};
+use super::mutation::{Entry, JoinValue, Stale};
 
 /// The names assigned somewhere in a loop's body, or in its condition,
 /// that resolve outside the loop: a name declared inside, by a `let` or a
@@ -235,7 +243,7 @@ impl Env<'_> {
         &mut self,
         body: &ast::Block,
         condition: Option<&ast::Expr>,
-        target: LoopTarget,
+        mut target: LoopTarget,
         span: Span,
     ) -> Elab<(Vec<usize>, Vec<Binder>)> {
         let mut slots: Vec<usize> = assigned_outside(body, condition)
@@ -245,13 +253,28 @@ impl Env<'_> {
             .collect();
         slots.sort_unstable();
         slots.dedup();
+        // Evidence that is stale on entry is not carried: the versions the
+        // body makes of it stay in the body, and it is stale after the
+        // loop. Lowering allows this for a binding of proof type alone; any
+        // other binding is carried, and the entry supplies the state at the
+        // current versions, so tracked evidence among them must be valid.
+        slots.retain(|&slot| {
+            let local = &self.names[slot];
+            !matches!(local.ty, Type::Proof(_))
+                || local
+                    .tracked
+                    .as_ref()
+                    .is_none_or(|tracked| tracked.stale.is_none())
+        });
+        self.require_valid(&slots, "before the loop, which carries it", target.head)?;
         let mut state = Vec::new();
         for &slot in &slots {
-            let local = &self.names[slot];
+            // Typed over the versions the body sees of what it mentions,
+            // which are in place by now: the slots are in declaration order.
             let inside = Binder {
                 id: VarId::fresh(),
-                name: local.name.clone(),
-                ty: local.ty.clone(),
+                name: self.names[slot].name.clone(),
+                ty: self.version_type(slot),
             };
             let declared = self.ctx.declare_with(inside.id, inside.ty.clone(), false);
             self.kernel(declared, span)?;
@@ -260,8 +283,51 @@ impl Env<'_> {
             self.learn_from(&Term::var(inside.id), &inside.ty);
             state.push(inside);
         }
+        self.assigned_by_loop(&slots, target.head);
+        target.carried = slots.clone();
         self.loops.push(target);
         Ok((slots, state))
+    }
+
+    /// Tracked evidence the loop does not carry, but which speaks of a
+    /// binding it does, is stale from the loop on: inside the body, where
+    /// that binding is at a version the body sees, and after the loop.
+    fn assigned_by_loop(&mut self, carried: &[usize], head: Span) {
+        let bindings: Vec<(VarId, String)> = carried
+            .iter()
+            .map(|&slot| {
+                let local = &self.names[slot];
+                (
+                    local.binding.expect("carried bindings are mutable"),
+                    local.name.clone(),
+                )
+            })
+            .collect();
+        for (slot, local) in self.names.iter_mut().enumerate() {
+            if carried.contains(&slot) {
+                continue;
+            }
+            let Some(tracked) = &mut local.tracked else {
+                continue;
+            };
+            // Already stale: the assignment that made it so is the one to
+            // name.
+            if tracked.stale.is_some() {
+                continue;
+            }
+            if let Some((_, dep)) = bindings.iter().find(|(binding, _)| {
+                tracked
+                    .deps
+                    .iter()
+                    .any(|(mentioned, _)| mentioned == binding)
+            }) {
+                tracked.stale = Some(Stale {
+                    dep: dep.clone(),
+                    span: head,
+                    by_loop: true,
+                });
+            }
+        }
     }
 
     /// Elaborates a loop's inside under its own scope: `inside` runs after
@@ -307,25 +373,55 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<(Carried, Type)> {
         let assigned = entry.positions(&elaborated.slots);
+        let value = JoinValue {
+            fallback,
+            bound: value,
+        };
         let (tuple, joins, ty) = self.join_over(
             entry,
             &assigned,
             &elaborated.target.exits,
-            fallback,
             value,
+            "before the loop is left",
             span,
         )?;
         self.leave_loop_moves(&elaborated.target.moves);
+        self.assigned_by_loop(&elaborated.slots, elaborated.target.head);
         Ok((Carried { tuple, joins }, ty))
+    }
+
+    /// The slots of the bindings the innermost loop carries.
+    fn carried_slots(&self) -> Vec<usize> {
+        self.loops
+            .last()
+            .map(|target| target.carried.clone())
+            .unwrap_or_default()
+    }
+
+    /// The keyword a loop starts with, for a message.
+    fn head_span(&self, span: Span) -> Span {
+        let text = self.text(span);
+        let keyword = ["loop", "while", "for"]
+            .into_iter()
+            .find(|keyword| text.starts_with(keyword))
+            .map_or(0, str::len);
+        Span::new(span.file, span.start, span.start + keyword)
     }
 
     /// The body of a loop, which produces no value: it ends in `()`, or in
     /// a transfer of control.
     fn loop_body(&mut self, body: &ast::Block) -> Elab<typed::Block> {
         let (block, _, never) = self.block(body, Some(&unit_type()))?;
-        // The end of the body is a back edge (`moves.rs`).
+        // The end of the body is a back edge (`moves.rs`), and starts the
+        // next pass with the current versions, as a `continue` does.
         if !never {
             self.back_edge();
+            let end = Span::new(
+                body.span.file,
+                body.span.end.saturating_sub(1),
+                body.span.end,
+            );
+            self.require_valid(&self.carried_slots(), "before the loop repeats", end)?;
         }
         Ok(block)
     }
@@ -346,6 +442,8 @@ impl Env<'_> {
             entry: entry.clone(),
             exits: Vec::new(),
             moves: self.loop_moves(),
+            carried: Vec::new(),
+            head: self.head_span(span),
         };
         let elaborated = self.in_loop(body, None, target, span, |env| env.loop_body(body))?;
         let never = elaborated.target.exits.is_empty();
@@ -390,22 +488,26 @@ impl Env<'_> {
             entry: entry.clone(),
             exits: Vec::new(),
             moves: self.loop_moves(),
+            carried: Vec::new(),
+            head: self.head_span(span),
         };
         let elaborated = self.in_loop(body, Some(condition), target, span, |env| {
             let condition_value = env.check(condition, &Type::Bool)?;
             let (tested, negated) = env.tested(&condition_value, condition.span)?;
             let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
             env.loop_exit();
-            let versions = env.versions_now(&entry);
+            // The exit supplies the state at the versions the condition left.
+            env.require_valid(
+                &env.carried_slots(),
+                "before the loop is left",
+                condition.span,
+            )?;
+            let exit = env.arm_end(&entry, unit_type(), false);
             env.loops
                 .last_mut()
                 .expect("inside the loop")
                 .exits
-                .push(ArmEnd {
-                    versions,
-                    ty: unit_type(),
-                    never: false,
-                });
+                .push(exit);
             let mark = env.mark();
             let holds = Term::eq(Type::Bool, tested, Term::Bool(!negated));
             let block = env
@@ -479,6 +581,8 @@ impl Env<'_> {
             entry: entry.clone(),
             exits: Vec::new(),
             moves: self.loop_moves(),
+            carried: Vec::new(),
+            head: self.head_span(span),
         };
         let elaborated = self.in_loop(body, None, target, span, |env| {
             // An empty range leaves the loop at entry (`moves.rs`).
@@ -555,20 +659,20 @@ impl Env<'_> {
                 expr.span,
             );
         }
-        let versions = {
+        // The break supplies the loop's state at the current versions.
+        self.require_valid(&self.carried_slots(), "before the loop is left", expr.span)?;
+        let exit = {
             let target = self.loops.last().expect("checked above");
-            self.versions_now(&target.entry)
+            self.arm_end(&target.entry, ty, false)
         };
         self.loop_exit();
         let target = self.loops.last_mut().expect("checked above");
-        if target.result.is_none() && !Env::mentions_arm_version(&target.entry, &versions, &ty) {
-            target.result = Some(ty.clone());
+        if target.result.is_none()
+            && !Env::mentions_arm_version(&target.entry, &exit.versions, &exit.ty)
+        {
+            target.result = Some(exit.ty.clone());
         }
-        target.exits.push(ArmEnd {
-            versions,
-            ty,
-            never: false,
-        });
+        target.exits.push(exit);
         Ok(Value {
             expr: Expr::Break(value.map(|value| Box::new(value.expr))),
             ty: unit_type(),
@@ -582,6 +686,8 @@ impl Env<'_> {
         }
         // A `continue` is a back edge (`moves.rs`).
         self.back_edge();
+        // The next pass starts with the current versions.
+        self.require_valid(&self.carried_slots(), "before the loop repeats", expr.span)?;
         Ok(Value {
             expr: Expr::Continue,
             ty: unit_type(),

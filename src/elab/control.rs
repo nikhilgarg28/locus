@@ -4,7 +4,7 @@
 use crate::ast::{self, ExprKind, PatternKind};
 use crate::kernel::{HypId, Term, Type, VarId, case_variants, telescope_entry, variant_term};
 use crate::source::Span;
-use crate::typed::{self, Binder, CompareOp, Expr, MatchArm, is_pure};
+use crate::typed::{self, Binder, CompareOp, Expr, MatchArm, block_leaves, is_pure};
 
 use super::env::{Elab, Env};
 use super::exprs::{Value, unit_type};
@@ -94,6 +94,7 @@ impl Env<'_> {
             .and_then(|()| self.branch(&then, expected));
         let then_versions = self.versions_now(&entry);
         let then_moves = self.moves_now();
+        let then_stale = self.stale_now(&entry);
         self.close(mark);
         self.restore_versions(&entry);
         self.restore_moves(&moves_entry);
@@ -112,6 +113,7 @@ impl Env<'_> {
             .and_then(|()| self.branch(&otherwise, expected_else.as_ref()));
         let else_versions = self.versions_now(&entry);
         let else_moves = self.moves_now();
+        let else_stale = self.stale_now(&entry);
         self.close(mark);
         self.restore_versions(&entry);
         let (else_block, else_ty, else_never) = else_result?;
@@ -130,13 +132,17 @@ impl Env<'_> {
         let arms = [
             ArmEnd {
                 versions: then_versions,
+                stale: then_stale,
                 ty: then_ty,
                 never: then_never,
+                leaves: block_leaves(&then_block),
             },
             ArmEnd {
                 versions: else_versions,
+                stale: else_stale,
                 ty: else_ty,
                 never: else_never,
+                leaves: block_leaves(&else_block),
             },
         ];
         let (joined, ty) = self.join(&entry, &arms, ty, result, span)?;
@@ -291,6 +297,7 @@ impl Env<'_> {
             })();
             let versions = self.versions_now(&entry);
             let moves = self.moves_now();
+            let stale = self.stale_now(&entry);
             self.close(mark);
             self.restore_versions(&entry);
             self.restore_moves(&moves_entry);
@@ -304,8 +311,10 @@ impl Env<'_> {
             }
             ends.push(ArmEnd {
                 versions,
+                stale,
                 ty: body_ty,
                 never: body_never,
+                leaves: block_leaves(&body),
             });
             typed_arms.push(MatchArm {
                 variant_name: variant_name.clone(),

@@ -27,18 +27,34 @@
 //! in declaration order, then the value (`join_type`). Each arm ends by
 //! building that tuple from its own current versions, so an arm that does
 //! not assign a binding passes the entry version through, and an arm that
-//! transfers control contributes nothing. After the match the versions and
-//! the value are bound by projection. The set of assigned bindings is
-//! computed here and not taken from the tree; the tree supplies the
-//! identities of the new versions, which its proofs may mention, and a tree
-//! whose set differs is rejected. Tracked evidence (`let mut ok: @P`) is
-//! M4's; here a proposition or a type that mentions a mutable binding names
-//! the version current where it was written, which is what a snapshot means.
+//! transfers control contributes nothing, and what it assigns does not put
+//! a binding in the tuple, since nothing after the branch sees it
+//! (`block_leaves`). After the match the versions and the value are bound
+//! by projection. The set of assigned bindings is computed here and not
+//! taken from the tree; the tree supplies the identities of the new
+//! versions, which its proofs may mention, and a tree whose set differs is
+//! rejected.
+//!
+//! Tracked evidence, `let mut ok: @P`, is a mutable binding like any other.
+//! Its declared type mentions the versions of other mutable bindings that
+//! were current where it was written, and the type of each of its versions,
+//! at an assignment, in the tuple of a join, or in the state of a loop, is
+//! that declared type over the versions current at that point
+//! (`Versions::version_type`). Nothing else is needed: a refresh is an
+//! assignment whose value is checked against that type, and a use of a
+//! version whose type speaks of an old version of what it mentions, where
+//! the claim over the current one is wanted, is a mismatch the checker
+//! rejects. The elaborator's flow analysis, which says when evidence must be
+//! refreshed, is not trusted for this; it gives the early error.
 //!
 //! A loop carries, as the state of the check IR's `loop` or `for`, the tuple
 //! of the bindings declared outside it that its body assigns, in declaration
 //! order, and for a `while` those its condition assigns too; the set is
-//! computed here as a branch's is (`carried_bindings`). The entry supplies
+//! computed here as a branch's is (`carried_bindings`), except that the
+//! tree may leave out a binding of proof type, which the elaborator does
+//! when the evidence is stale on entry; the versions the body makes of it
+//! then stay in the body, and its version from before the loop remains a
+//! fact about the versions it speaks of. The entry supplies
 //! the versions current before the loop; the body sees the versions the
 //! tree names for its state; each `continue`, and the end of the body,
 //! supplies the versions current at that point; a `break` supplies them
@@ -342,6 +358,27 @@ fn stmt_is_pure(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } | Stmt::Expr(value) => is_pure(value),
         Stmt::Assign { .. } => false,
+    }
+}
+
+/// Whether every path through the block ends in `break`, `continue`, or a
+/// panic: through the arms of an `if` or `match` in its tail, and a block
+/// in its tail. Such an arm of a branch never reaches the end of the
+/// branch, so lowering never builds the join's tuple from it
+/// (`lower_tail`), and what it assigns is not the branch's to join. The
+/// test is on the tree's shape, and says nothing of a loop that never
+/// breaks.
+pub fn block_leaves(block: &Block) -> bool {
+    match block.tail.as_deref() {
+        Some(Expr::Break(_) | Expr::Continue | Expr::Panic { .. }) => true,
+        Some(Expr::If {
+            then_block,
+            else_block,
+            ..
+        }) => block_leaves(then_block) && block_leaves(else_block),
+        Some(Expr::Match { arms, .. }) => arms.iter().all(|arm| block_leaves(&arm.body)),
+        Some(Expr::Block(inner)) => block_leaves(inner),
+        _ => false,
     }
 }
 
@@ -783,6 +820,36 @@ impl Versions {
             .ok_or_else(|| LowerError::AssignToUnknown(name.to_string()))
     }
 
+    /// The type a new version of a binding has here: its declared type,
+    /// with every version of a mutable binding it mentions replaced by the
+    /// current one. For a binding whose type mentions none, the declared
+    /// type itself. This is what makes tracked evidence work: `ok: @P`
+    /// declared over `lock` is, at each refresh, evidence of `P` over the
+    /// `lock` of that moment, and a stale `ok` is a value of another type.
+    fn version_type(&self, binding: VarId, name: &str) -> Result<Type, LowerError> {
+        let mut ty = self.declared_type(binding, name)?.clone();
+        for (version, of) in &self.binding {
+            let current = self.current(*of, name)?;
+            if *version != current {
+                ty = ty.replace_var(*version, &Term::var(current));
+            }
+        }
+        Ok(ty)
+    }
+
+    /// The types the tree must give the new versions of `bindings`, in
+    /// order, each over the versions before it in the same list: the type
+    /// of a join's tuple, or of a loop's state, field by field.
+    fn version_types(&self, versions: &[(VarId, VarId, &str)]) -> Result<Vec<Type>, LowerError> {
+        let mut env = self.clone();
+        let mut types = Vec::new();
+        for (binding, version, name) in versions {
+            types.push(env.version_type(*binding, name)?);
+            env.assign(*binding, *version, name)?;
+        }
+        Ok(types)
+    }
+
     /// A new version of a binding, which every later mention must use.
     fn assign(&mut self, binding: VarId, version: VarId, name: &str) -> Result<(), LowerError> {
         self.current(binding, name)?;
@@ -830,13 +897,19 @@ impl Versions {
             .collect()
     }
 
-    /// The current versions of the given bindings.
+    /// The current versions of the given bindings, as the fields of a
+    /// tuple: a version of tracked evidence is given as the proof it is.
     fn versions(&self, bindings: &[VarId]) -> Result<Vec<Term>, LowerError> {
         bindings
             .iter()
             .map(|binding| {
-                let (name, _) = &self.declared[binding];
-                self.current(*binding, name).map(Term::var)
+                let (name, ty) = &self.declared[binding];
+                let current = Term::var(self.current(*binding, name)?);
+                Ok(if matches!(ty, Type::Proof(_)) {
+                    Term::proof(Proof::OfTerm(current))
+                } else {
+                    current
+                })
             })
             .collect()
     }
@@ -1104,17 +1177,50 @@ fn carried_bindings(
     state: &[Binder],
     carried: &Carried,
 ) -> Result<Vec<VarId>, LowerError> {
-    let assigned = env.assigned_in(blocks, exprs);
     let named: Vec<VarId> = carried.joins.iter().map(|join| join.binding).collect();
+    // A binding of proof type may be left out: its version from before the
+    // loop remains a true fact about the versions it speaks of, and the
+    // versions the body makes of it stay in the body. A binding of data
+    // left out would keep an equation the loop has falsified, so every
+    // other assigned binding must be carried.
+    let assigned: Vec<VarId> = env
+        .assigned_in(blocks, exprs)
+        .into_iter()
+        .filter(|binding| {
+            named.contains(binding) || !matches!(env.declared[binding].1, Type::Proof(_))
+        })
+        .collect();
     if named != assigned || state.len() != assigned.len() {
         return Err(LowerError::JoinMismatch);
     }
-    for (join, inside) in carried.joins.iter().zip(state) {
-        let declared = env.declared_type(join.binding, &join.version.name)?;
-        for found in [&join.version.ty, &inside.ty] {
-            if !same_type(declared, found) {
+    // The versions the body sees, and those after the loop, each typed
+    // over the ones before it.
+    let inside: Vec<(VarId, VarId, &str)> = carried
+        .joins
+        .iter()
+        .zip(state)
+        .map(|(join, inside)| (join.binding, inside.id, join.version.name.as_str()))
+        .collect();
+    let after: Vec<(VarId, VarId, &str)> = carried
+        .joins
+        .iter()
+        .map(|join| (join.binding, join.version.id, join.version.name.as_str()))
+        .collect();
+    let inside_types = env.version_types(&inside)?;
+    let after_types = env.version_types(&after)?;
+    for ((join, binder), (expected_inside, expected_after)) in carried
+        .joins
+        .iter()
+        .zip(state)
+        .zip(inside_types.iter().zip(&after_types))
+    {
+        for (expected, found) in [
+            (expected_inside, &binder.ty),
+            (expected_after, &join.version.ty),
+        ] {
+            if !same_type(expected, found) {
                 return Err(LowerError::Kernel(KernelError::TypeMismatch {
-                    expected: declared.clone(),
+                    expected: expected.clone(),
                     found: found.clone(),
                 }));
             }
@@ -1537,11 +1643,13 @@ fn anf_form(
 }
 
 /// A branch in statement or value position: a match statement. When some
-/// arm assigns a binding declared outside the branch, the match produces
-/// the tuple of the assigned bindings' new versions and the value, each arm
-/// ends by building it from its own versions, and afterwards the versions
-/// and the value are bound by projection. The set of assigned bindings is
-/// computed here; the tree's `joined` must name exactly those, in order.
+/// arm that reaches the end of the branch assigns a binding declared
+/// outside it, the match produces the tuple of the assigned bindings' new
+/// versions and the value, each such arm ends by building it from its own
+/// versions, and afterwards the versions and the value are bound by
+/// projection. The set of assigned bindings is computed here, over the arms
+/// that do not leave (`block_leaves`); the tree's `joined` must name
+/// exactly those, in order.
 fn lower_branch(
     out: &mut Vec<exec::Stmt>,
     env: &mut Versions,
@@ -1551,8 +1659,27 @@ fn lower_branch(
     scrutinee: Term,
     arms: Vec<(Vec<VarId>, HypId, &Block)>,
 ) -> Result<Term, LowerError> {
-    let blocks: Vec<&Block> = arms.iter().map(|(_, _, block)| *block).collect();
-    let assigned = env.assigned_in(&blocks, &[]);
+    // What the branch assigns is what the arms that reach its end assign:
+    // an arm that leaves supplies no tuple, so nothing it assigned is seen
+    // after the branch.
+    let reaching: Vec<&Block> = arms
+        .iter()
+        .map(|(_, _, block)| *block)
+        .filter(|block| !block_leaves(block))
+        .collect();
+    // As for a loop, a binding of proof type may be left out of the join:
+    // its version from before the branch remains a true fact, and the
+    // versions the arms make of it stay in the arms.
+    let named: Vec<VarId> = joined
+        .map(|joined| joined.joins.iter().map(|join| join.binding).collect())
+        .unwrap_or_default();
+    let assigned: Vec<VarId> = env
+        .assigned_in(&reaching, &[])
+        .into_iter()
+        .filter(|binding| {
+            named.contains(binding) || !matches!(env.declared[binding].1, Type::Proof(_))
+        })
+        .collect();
     let lower_arms = |end: End<'_>, env: &Versions| -> Result<Vec<Arm>, LowerError> {
         arms.iter()
             .map(|(payload, fact, block)| {
@@ -1582,11 +1709,15 @@ fn lower_branch(
     if bindings != assigned {
         return Err(LowerError::JoinMismatch);
     }
-    for join in &joined.joins {
-        let declared = env.declared_type(join.binding, &join.version.name)?;
-        if !same_type(declared, &join.version.ty) {
+    let after: Vec<(VarId, VarId, &str)> = joined
+        .joins
+        .iter()
+        .map(|join| (join.binding, join.version.id, join.version.name.as_str()))
+        .collect();
+    for (join, expected) in joined.joins.iter().zip(env.version_types(&after)?) {
+        if !same_type(&expected, &join.version.ty) {
             return Err(LowerError::Kernel(KernelError::TypeMismatch {
-                expected: declared.clone(),
+                expected,
                 found: join.version.ty.clone(),
             }));
         }
@@ -1721,7 +1852,7 @@ fn lower_stmts(
                 // place, from the versions current after it.
                 let value = anf(value, out, env)?;
                 let current = env.current(place.binding, &place.name)?;
-                let ty = env.declared_type(place.binding, &place.name)?.clone();
+                let ty = env.version_type(place.binding, &place.name)?;
                 let value = rebuilt(Term::var(current), &place.path, value)?;
                 out.push(exec::Stmt::Let {
                     var: version.id,

@@ -250,7 +250,10 @@ fn a_for_is_a_statement_of_the_check_ir_and_never_a_kernel_term() {
 
 use locus::erased::{Interpreter, Outcome, Value};
 use locus::exec::{CheckInterpreter, Stmt as ExecStmt, Tail};
-use locus::typed::{Block, CompareOp};
+use locus::kernel::MachineInt;
+use locus::kernel::derive::symm_at;
+use locus::kernel::theory::Theory;
+use locus::typed::{Block, CompareOp, Place};
 use locus::typed::{Joined, Pattern, Session, Step, Stmt, StructItem};
 
 /// Declares a function and runs it on a byte in both interpreters, which
@@ -981,4 +984,385 @@ fn a_block_that_assigns_keeps_its_version_and_mut_is_printed_only_when_needed() 
     session.declare_fn(&unassigned).unwrap();
     let rust = locus::erased::print_module(session.erased());
     assert!(rust.contains("let x = n;"), "{rust}");
+}
+
+// --- Tracked evidence (M4): versions of proof type ---------------------------------------
+
+/// `lemma zero_le(x) : 0 <= x` for bytes.
+fn zero_le(theory: Theory, x: Term) -> Proof {
+    lemma(
+        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+        vec![x],
+    )
+}
+
+/// `let mut binder = value;` under a known equation.
+fn let_mut_with(binder: &Binder, equation: HypId, value: Expr) -> Stmt {
+    Stmt::Let {
+        pattern: Pattern::Bind {
+            binder: binder.clone(),
+            equation,
+            mutable: true,
+        },
+        value,
+    }
+}
+
+/// `binding = value;` giving the binding the version `version`, under a
+/// known equation.
+fn assign_with(binding: &Binder, value: Expr, version: &Binder, equation: HypId) -> Stmt {
+    Stmt::Assign {
+        place: Place {
+            binding: binding.id,
+            name: binding.name.clone(),
+            path: vec![],
+        },
+        value,
+        version: version.clone(),
+        equation,
+    }
+}
+
+/// `@[x <= 3]`, tracked evidence about a byte.
+fn at_most_three(x: &Binder) -> Type {
+    Type::proof(u8_le(x.term(), Term::U8(3)))
+}
+
+/// Evidence of `version <= 3` after `version = 0` under `equation`: `0 <= 3`
+/// carried along the equation.
+fn refreshed(theory: Theory, version: &Binder, equation: HypId) -> Proof {
+    Proof::transport(
+        symm_at(&Type::U8, &version.term(), Proof::hyp(equation)),
+        |hole| u8_le(hole, Term::U8(3)),
+        zero_le(theory, Term::U8(3)),
+    )
+}
+
+/// fn f(n: u8, small: @[n <= 3]) -> (out: u8, @[out <= 3]) {
+///     let mut x = n;
+///     let mut ok: @[x <= 3] = small;
+///     x = 0;
+///     <refresh>            // `ok = <0 <= 3 along x == 0>;`, or nothing
+///     (x, ok)
+/// }
+/// The tree that skips the refresh passes the old `ok`, evidence about the
+/// `x` of entry, where `x <= 3` about the new one is wanted. Lowering
+/// accepts it: the old version is the current version of `ok`. The checker
+/// rejects it, and that is the whole safety of tracked evidence.
+fn stale_or_refreshed(theory: Theory, refresh: bool) -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let small = Binder::new("small", Type::proof(u8_le(n.term(), Term::U8(3))));
+    let x = Binder::new("x", Type::U8);
+    let ok = Binder::new("ok", at_most_three(&x));
+    let x1 = Binder::new("x", Type::U8);
+    let ok1 = Binder::new("ok", at_most_three(&x1));
+    let (x_is_n, x_is_zero) = (HypId::fresh(), HypId::fresh());
+    // `small` is about `n`; `ok` is declared about `x`, which is `n`.
+    let about_x = Proof::transport(
+        symm_at(&Type::U8, &x.term(), Proof::hyp(x_is_n)),
+        |hole| u8_le(hole, Term::U8(3)),
+        Proof::OfTerm(small.term()),
+    );
+    let mut stmts = vec![
+        let_mut_with(&x, x_is_n, Expr::var(&n)),
+        let_mut(&ok, Expr::Proof(about_x)),
+        assign_with(&x, Expr::u8(0), &x1, x_is_zero),
+    ];
+    let current = if refresh {
+        stmts.push(assign(
+            &ok,
+            vec![],
+            Expr::Proof(refreshed(theory, &x1, x_is_zero)),
+            &ok1,
+        ));
+        ok1
+    } else {
+        ok
+    };
+    FnItem {
+        name: "stale_or_refreshed".into(),
+        math: false,
+        params: vec![n, small],
+        result: data_with_evidence(|out| u8_le(out, Term::U8(3))),
+        body: block(
+            stmts,
+            Expr::Tuple {
+                ty: data_with_evidence(|out| u8_le(out, Term::U8(3))),
+                fields: vec![Expr::var(&x1), Expr::var(&current)],
+            },
+        ),
+    }
+}
+
+#[test]
+fn a_stale_use_of_tracked_evidence_is_rejected_by_the_checker_and_not_by_lowering() {
+    let (mut session, _, theory) = setup();
+    assert!(
+        session
+            .declare_fn(&stale_or_refreshed(theory, true))
+            .is_ok()
+    );
+    // A type mismatch from the checker: the old `ok` speaks of the old `x`.
+    assert!(matches!(
+        session.declare_fn(&stale_or_refreshed(theory, false)),
+        Err(LowerError::Exec(ExecError::Kernel(_)))
+    ));
+}
+
+/// fn count(limit: u8) -> (out: u8, @[0 <= out]) {
+///     let mut i = 0;
+///     let mut ok: @[0 <= i] = zero_le(0);
+///     loop {
+///         if i == limit { break (i, ok) } else { i = i + 1; ok = <refresh>; }
+///     }
+/// }
+/// with the loop's state `(i, ok: @[0 <= i])` typed over the `i` the body
+/// sees, or, when `over_entry`, over the `i` of entry, which lowering
+/// rejects; and the refresh either `zero_le(i')` about the new `i` or the
+/// old `ok`, which the checker rejects at the `continue`.
+fn counting_with_evidence(theory: Theory, over_entry: bool, honest: bool) -> FnItem {
+    let limit = Binder::new("limit", Type::U8);
+    let i = Binder::new("i", Type::U8);
+    let at_least_zero = |i: &Binder| Type::proof(u8_le(Term::U8(0), i.term()));
+    let ok = Binder::new("ok", at_least_zero(&i));
+    let (i_in, i_after) = versions(&i);
+    let ok_in = Binder::new("ok", at_least_zero(if over_entry { &i } else { &i_in }));
+    let ok_after = Binder::new("ok", at_least_zero(&i_after));
+    let i1 = Binder::new("i", Type::U8);
+    let ok1 = Binder::new("ok", at_least_zero(&i1));
+    let value = data_with_evidence(|out| u8_le(Term::U8(0), out));
+    let refresh = if honest {
+        Expr::Proof(zero_le(theory, i1.term()))
+    } else {
+        Expr::var(&ok_in)
+    };
+    let stop = block(
+        vec![],
+        break_(Some(Expr::Tuple {
+            ty: value.clone(),
+            fields: vec![Expr::var(&i_in), Expr::var(&ok_in)],
+        })),
+    );
+    let go = unit_block(vec![
+        assign(&i, vec![], plus_one(Expr::var(&i_in)), &i1),
+        assign(&ok, vec![], refresh, &ok1),
+    ]);
+    let body = Block {
+        stmts: vec![],
+        tail: Some(Box::new(if_(
+            compare_u8(CompareOp::Eq, Expr::var(&i_in), Expr::var(&limit)),
+            stop,
+            go,
+            Type::Tuple(vec![]),
+            None,
+        ))),
+    };
+    let i_is_zero = HypId::fresh();
+    FnItem {
+        name: "counting_with_evidence".into(),
+        math: false,
+        params: vec![limit],
+        result: value.clone(),
+        body: block(
+            vec![
+                let_mut_with(&i, i_is_zero, Expr::u8(0)),
+                let_mut(
+                    &ok,
+                    Expr::Proof(Proof::transport(
+                        symm_at(&Type::U8, &i.term(), Proof::hyp(i_is_zero)),
+                        |hole| u8_le(Term::U8(0), hole),
+                        zero_le(theory, Term::U8(0)),
+                    )),
+                ),
+            ],
+            loop_(
+                vec![i_in, ok_in],
+                carried(vec![(&i, &i_after), (&ok, &ok_after)]),
+                value,
+                body,
+            ),
+        ),
+    }
+}
+
+#[test]
+fn a_loop_carries_tracked_evidence_typed_over_the_versions_its_body_sees() {
+    let (mut session, _, theory) = setup();
+    let honest = counting_with_evidence(theory, false, true);
+    for limit in [0, 7, 255] {
+        let (out, _) = match agreed(&mut session.clone(), &honest, limit) {
+            Value::Tuple(fields) => match fields.as_slice() {
+                [Value::Int(_, out), proof] => (*out as u8, proof.clone()),
+                _ => panic!("not a byte with evidence"),
+            },
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(out, limit);
+    }
+    let reference = session.declare_fn(&honest).unwrap();
+    assert_eq!(carried_arity(&session, reference), 2);
+    // The state names the evidence over the `i` of entry: not the type
+    // lowering gives the version the body sees.
+    assert!(matches!(
+        session.declare_fn(&counting_with_evidence(theory, true, true)),
+        Err(LowerError::Kernel(KernelError::TypeMismatch { .. }))
+    ));
+    // The refresh is the old `ok`, about the old `i`: lowering passes it
+    // on, and the checker rejects the tree.
+    assert!(matches!(
+        session.declare_fn(&counting_with_evidence(theory, false, false)),
+        Err(LowerError::Exec(ExecError::Kernel(_)))
+    ));
+}
+
+#[test]
+fn a_binding_of_proof_type_may_be_left_out_of_what_a_loop_carries() {
+    // fn f(n: u8) -> u8 {
+    //     let mut x = n;
+    //     let mut ok: @[0 <= x] = zero_le(x);
+    //     for i in 0..n { x = x + 1; ok = zero_le(x'); }
+    //     x
+    // }
+    // The tree carries `ok`, or leaves it out: both check, since the old
+    // `ok` stays a fact about the old `x`, and nothing after reads `ok`.
+    let (mut session, _, theory) = setup();
+    let build = |carry_ok: bool| {
+        let n = Binder::new("n", Type::U8);
+        let x = Binder::new("x", Type::U8);
+        let at_least_zero = |x: &Binder| Type::proof(u8_le(Term::U8(0), x.term()));
+        let ok = Binder::new("ok", at_least_zero(&x));
+        let (x_in, x_after) = versions(&x);
+        let ok_in = Binder::new("ok", at_least_zero(&x_in));
+        let ok_after = Binder::new("ok", at_least_zero(&x_after));
+        let x1 = Binder::new("x", Type::U8);
+        let ok1 = Binder::new("ok", at_least_zero(&x1));
+        let body = unit_block(vec![
+            assign(&x, vec![], plus_one(Expr::var(&x_in)), &x1),
+            assign(&ok, vec![], Expr::Proof(zero_le(theory, x1.term())), &ok1),
+        ]);
+        let (state, joins) = if carry_ok {
+            (vec![x_in, ok_in], vec![(&x, &x_after), (&ok, &ok_after)])
+        } else {
+            (vec![x_in], vec![(&x, &x_after)])
+        };
+        let carried = carried(joins);
+        FnItem {
+            name: if carry_ok { "carried" } else { "left_out" }.into(),
+            math: false,
+            params: vec![n.clone()],
+            result: Type::U8,
+            body: block(
+                vec![
+                    let_mut(&x, Expr::var(&n)),
+                    let_mut(&ok, Expr::Proof(zero_le(theory, x.term()))),
+                    Stmt::Expr(for_(
+                        &Binder::new("i", Type::U8),
+                        Expr::u8(0),
+                        Expr::var(&n),
+                        state,
+                        carried,
+                        body,
+                    )),
+                ],
+                Expr::var(&x_after),
+            ),
+        }
+    };
+    for carry_ok in [false, true] {
+        let item = build(carry_ok);
+        for byte in [0, 3, 200] {
+            assert_eq!(
+                agreed(&mut session.clone(), &item, byte),
+                Value::u8(byte.wrapping_add(byte))
+            );
+        }
+        let reference = session.declare_fn(&item).unwrap();
+        assert_eq!(
+            carried_arity(&session, reference),
+            if carry_ok { 2 } else { 1 }
+        );
+    }
+}
+
+/// fn clamp(n: u8) -> (out: u8, @[out <= 3]) {
+///     let mut x = 0;
+///     let mut ok: @[x <= 3] = <0 <= 3 along x == 0>;
+///     if n == 0 { x = 0; <refresh>; } else { }
+///     (x, ok)
+/// }
+/// The join names `x` and `ok`, `ok` typed over the joined `x`; the else
+/// arm restates `ok` over the `x` of entry, which is still current there.
+/// The then arm refreshes `ok` after assigning `x`, or does not, in which
+/// case it supplies the old `ok` in its tuple, evidence about the `x` of
+/// entry where `x <= 3` over the joined `x` is wanted: lowering passes it
+/// on, and the checker rejects it.
+fn joining_with_evidence(theory: Theory, refresh: bool) -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let x = Binder::new("x", Type::U8);
+    let ok = Binder::new("ok", at_most_three(&x));
+    let x_then = Binder::new("x", Type::U8);
+    let ok_then = Binder::new("ok", at_most_three(&x_then));
+    let ok_else = Binder::new("ok", at_most_three(&x));
+    let x_join = Binder::new("x", Type::U8);
+    let ok_join = Binder::new("ok", at_most_three(&x_join));
+    let (x_is_zero, x_then_is_zero) = (HypId::fresh(), HypId::fresh());
+    let otherwise = vec![assign(
+        &ok,
+        vec![],
+        Expr::Proof(refreshed(theory, &x, x_is_zero)),
+        &ok_else,
+    )];
+    let mut then = vec![assign_with(&x, Expr::u8(0), &x_then, x_then_is_zero)];
+    if refresh {
+        then.push(assign(
+            &ok,
+            vec![],
+            Expr::Proof(refreshed(theory, &x_then, x_then_is_zero)),
+            &ok_then,
+        ));
+    }
+    let value = data_with_evidence(|out| u8_le(out, Term::U8(3)));
+    FnItem {
+        name: "joining_with_evidence".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: value.clone(),
+        body: block(
+            vec![
+                let_mut_with(&x, x_is_zero, Expr::u8(0)),
+                let_mut(&ok, Expr::Proof(refreshed(theory, &x, x_is_zero))),
+                Stmt::Expr(if_(
+                    is_zero(&n),
+                    unit_block(then),
+                    unit_block(otherwise),
+                    Type::Tuple(vec![]),
+                    Some(joined(vec![(&x, &x_join), (&ok, &ok_join)])),
+                )),
+            ],
+            Expr::Tuple {
+                ty: value,
+                fields: vec![Expr::var(&x_join), Expr::var(&ok_join)],
+            },
+        ),
+    }
+}
+
+#[test]
+fn a_join_carries_tracked_evidence_typed_over_the_joined_versions() {
+    let (mut session, _, theory) = setup();
+    let honest = joining_with_evidence(theory, true);
+    for byte in [0, 1] {
+        assert!(matches!(
+            agreed(&mut session.clone(), &honest, byte),
+            Value::Tuple(fields) if matches!(fields.as_slice(), [Value::Int(_, 0), _])
+        ));
+    }
+    let reference = session.declare_fn(&honest).unwrap();
+    // The tuple: x, ok, and the value of the branch.
+    let (arity, _) = joining_match(&session, reference);
+    assert_eq!(arity, 3);
+    assert!(matches!(
+        session.declare_fn(&joining_with_evidence(theory, false)),
+        Err(LowerError::Exec(ExecError::Kernel(_)))
+    ));
 }

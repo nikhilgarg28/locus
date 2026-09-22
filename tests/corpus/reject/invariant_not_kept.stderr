@@ -1,7 +1,7 @@
 error[L0230]: cannot show `total <= 3`
-  --> tests/corpus/reject/invariant_not_kept.lc:10:27
+  --> tests/corpus/reject/invariant_not_kept.lc:11:27
    |
-10 |             break (total, prove!(total <= 3)) //~ error: L0230 cannot show `total <= 3`
+11 |             break (total, prove!(total <= 3)) //~ error: L0230 cannot show `total <= 3`
    |                           ^^^^^^^^^^^^^^^^^^
    |
    = note: known here: `total == n`

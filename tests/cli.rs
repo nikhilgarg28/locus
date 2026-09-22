@@ -74,7 +74,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     assert!(
         String::from_utf8(output.stdout)
             .unwrap()
-            .contains("Checked 6 function(s); 4 proof(s) found and accepted by the kernel.")
+            .contains("Checked 6 function(s); 5 proof(s) found and accepted by the kernel.")
     );
     let output = locus()
         .arg("check")

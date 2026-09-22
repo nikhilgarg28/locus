@@ -1,0 +1,9 @@
+error[L0245]: `now` speaks of `x`, which was assigned at line 14; refresh it with `now = _;` or `now = <proof>;` before using it
+  --> tests/corpus/reject/tracked_stale_use.lc:15:14
+   |
+14 |     x = 9;
+   |     ------ `x` is assigned here
+15 |     takes(x, now) //~ error: L0245 `now` speaks of `x`, which was assigned at line 14
+   |              ^^^
+   |
+   = note: `now` is tracked evidence, declared with `let mut`: it speaks of `x` as it is now, and an assignment leaves it to be established again

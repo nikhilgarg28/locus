@@ -47,17 +47,21 @@ fn event_at(attempt: u32, correct: u32) -> Event {
     if attempt == correct { Event::Right } else { Event::Wrong }
 }
 
-// The invariant travels beside the lock it describes: the loop assigns one
-// value that holds both, and `step` returns exactly that value, typed over
-// the lock it hands back.
+// The invariant travels beside the lock it describes, as tracked evidence:
+// `ok` is declared `let mut` with a claim about `lock`, so it speaks of
+// `lock` as it is wherever `ok` is used. `lock = next` leaves it stale, and
+// `ok = still` establishes it again, with the evidence `step` returned
+// about the lock it handed back. The `for` carries both as its state, and
+// the checker does the induction: nothing names an invariant.
 fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
-    let mut state: (lock: Lock, @within_limit(lock.failures)) =
-        (Lock { failures: 0, open: false }, fold!(within_limit, prove!(0u32 <= 3)));
+    let mut lock = Lock { failures: 0, open: false };
+    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(0u32 <= 3));
     for attempt in 0..attempts {
-        let (lock, bounded) = state;
-        state = step(lock, bounded, event_at(attempt, correct));
+        let (next, still) = step(lock, ok, event_at(attempt, correct));
+        lock = next;
+        ok = still;
     }
-    state
+    (lock, ok)
 }
 
 // Needs the bound: without it the subtraction could wrap. `unfold!` opens
@@ -74,7 +78,7 @@ fn attempts_left(attempts: u32, correct: u32) -> u32 {
     left
 }
 
-//~ proofs: 4
+//~ proofs: 5
 //~ run: attempts_left(2, 9) => 1
 //~ run: attempts_left(5, 9) => 0
 //~ run: attempts_left(3, 2) => 3

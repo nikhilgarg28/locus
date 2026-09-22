@@ -1,0 +1,43 @@
+// Snapshot against tracked, cases 3 and 4 of the mutation design. Evidence
+// bound with `let` is a snapshot: it keeps its claim about the versions
+// captured where it was written, whatever is assigned later. Evidence bound
+// with `let mut` is tracked, about the values as they are wherever it is
+// used. In the check IR both are one fact about the old `x`; the difference
+// is what a use means. The halves that must fail are in `reject`:
+// `tracked_stale_use.lc` and `tracked_captured.lc`.
+
+fn takes(x: u8, ok: @(x <= 3)) -> u8 {
+    x
+}
+
+fn takes_p(p: Prop, ok: @p) -> u8 {
+    0
+}
+
+// Case 3. `before` is about the `x` of line 20, which was 2, and serves
+// where that claim is wanted after `x` has changed. `now` is stale after
+// the assignment and is established again before it is used.
+fn snapshot_and_tracked(h: @(2u8 <= 3)) -> u8 {
+    let mut x: u8 = 2;
+    let before: @(x <= 3) = h;
+    let mut now: @(x <= 3) = h;
+    x = 3;
+    now = _;
+    takes(2, before).wrapping_add(takes(x, now))
+}
+
+// Case 4. `p` is let-bound, so it is the proposition about the old `x` for
+// good: `@p` mentions `p` and not `x`, the assignment invalidates nothing,
+// and `takes_p(p, ok)` is accepted.
+fn captured(h: @(2u8 <= 3)) -> u8 {
+    let mut x: u8 = 2;
+    let p = prop!(x <= 3);
+    let mut ok: @p = h;
+    x = 9;
+    takes_p(p, ok)
+}
+
+//~ proofs: 5
+//~ run: snapshot_and_tracked(Proved) => 5
+//~ run: captured(Proved) => 0
+//~ rust: let mut now = Proved;

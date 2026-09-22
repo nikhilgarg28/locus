@@ -15,7 +15,7 @@ use crate::typed::{Binder, Derive, FnRef, Session};
 
 use super::items::{HoleReport, ItemReport};
 use super::moves::{LoopMoves, Moved, Moves};
-use super::mutation::{ArmEnd, Entry};
+use super::mutation::{ArmEnd, Entry, Tracked};
 
 pub(super) type Elab<T> = Result<T, ()>;
 
@@ -148,6 +148,10 @@ pub(super) struct Local {
     pub binding: Option<VarId>,
     /// What has been moved out of it, and where (`moves.rs`).
     pub moved: Vec<Moved>,
+    /// For a mutable binding whose declared type mentions other mutable
+    /// bindings, tracked evidence: what it mentions, and whether it is
+    /// valid here (`mutation.rs`).
+    pub tracked: Option<Tracked>,
 }
 
 /// Something known at this point, with the proof that it holds.
@@ -194,6 +198,11 @@ pub(super) struct LoopTarget {
     pub exits: Vec<ArmEnd>,
     /// What was moved at entry and at each exit (`moves.rs`).
     pub moves: LoopMoves,
+    /// The slots of the bindings the loop carries: tracked evidence among
+    /// them must be valid wherever the loop's state is supplied.
+    pub carried: Vec<usize>,
+    /// The loop's keyword, for messages.
+    pub head: Span,
 }
 
 /// A point to return to at the end of a lexical scope.
@@ -338,6 +347,7 @@ impl Env<'_> {
             poisoned: false,
             binding: None,
             moved: Vec::new(),
+            tracked: None,
         });
         self.learn_from(&Term::var(id), ty);
     }
@@ -353,6 +363,7 @@ impl Env<'_> {
                 poisoned: true,
                 binding: None,
                 moved: Vec::new(),
+                tracked: None,
             }),
             PatternKind::Group(inner) => self.poison(inner),
             PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.poison(part)),

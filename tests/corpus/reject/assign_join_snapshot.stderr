@@ -1,7 +1,7 @@
 error[L0230]: cannot show `x <= 2`
-  --> tests/corpus/reject/assign_join_snapshot.lc:15:5
+  --> tests/corpus/reject/assign_join_snapshot.lc:16:5
    |
-15 |     prove!(x <= 2); //~ error: L0230 cannot show `x <= 2`
+16 |     prove!(x <= 2); //~ error: L0230 cannot show `x <= 2`
    |     ^^^^^^^^^^^^^^
    |
    = note: after computing, the claim is `if x < 2 { x = 1; prove!(x <= 2); } else { x = 2; prove!(x <= 2); }.0 <= 2`

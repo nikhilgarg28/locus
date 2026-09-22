@@ -1,14 +1,17 @@
-//~ parse-only
 // The lock with 32-bit counts, from Target examples, as written there. It
-// parses whole after S5. `step`, `event_at`, and `remaining` check, run,
-// and compile since E7 (`step` and `remaining` in
-// `tests/corpus/accept/lock32_step.lc`); `run` still needs `let mut` of
-// evidence, refreshed as `lock` changes (M4), and `#[derive(Clone, Copy)]`
-// needs O1, so the whole file stays parse-only.
-#[derive(Clone, Copy)]
+// parses whole after S5, `step`, `event_at`, and `remaining` check, run,
+// and compile since E7, `#[derive(Clone, Copy)]` has its meaning since O1,
+// and `run` checks, runs, and compiles since M4: `ok` is tracked evidence,
+// `let mut` of a proof type, stale after `lock = next` and refreshed by
+// `ok = still`, carried by the `for` as loop state typed over the `lock`
+// the body sees. The whole file now runs three ways. `Debug` is added to
+// the derives Target examples writes, since the compiled harness prints
+// the values a run line asks for; the printer emits the list as
+// written, so nothing else would give `Lock` and `Event` a `Debug`.
+#[derive(Clone, Copy, Debug)]
 pub enum Event { Wrong, Right }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Lock { failures: u32, open: bool }
 
 #[terminates] #[no_panic] #[no_io]
@@ -63,3 +66,15 @@ pub fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32,
     let left = 3 - failures;                                                    // the obligation of -: arithmetic, from small
     (left, prove!(left <= 3))                                                   // arithmetic
 }
+
+//~ proofs: 11
+//~ run: run(0, 9) => (Lock { failures: 0, open: false }, Proved)
+//~ run: run(2, 9) => (Lock { failures: 2, open: false }, Proved)
+//~ run: run(3, 2) => (Lock { failures: 0, open: true }, Proved)
+//~ run: run(300, 9) => (Lock { failures: 3, open: false }, Proved)
+//~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
+//~ run: step(Lock { failures: 3, open: true }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
+//~ run: event_at(4294967295, 4294967295) => Right
+//~ run: remaining(3, Proved) => (0, Proved)
+//~ rust: let mut ok = Proved;
+//~ rust: let (next, still) = step(lock, ok, event_at(attempt, correct));

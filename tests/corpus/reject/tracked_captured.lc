@@ -1,0 +1,29 @@
+// Case 4 of the mutation design, the halves that must fail. `p` is a
+// let-bound proposition, the term `x <= 3` about the old `x` for good, so
+// `ok: @p` is not invalidated by `x = 9`, and where `@(x <= 3)` at the
+// current `x` is wanted it does not fit: the kernel, not the flow analysis,
+// rejects it. With `let mut p`, assigning `p` invalidates `ok` by the same
+// rule as any other binding it mentions.
+fn takes(x: u8, ok: @(x <= 3)) -> u8 {
+    x
+}
+
+fn takes_p(p: Prop, ok: @p) -> u8 {
+    0
+}
+
+fn captured_is_about_the_old_x(h: @(2u8 <= 3)) -> u8 {
+    let mut x: u8 = 2;
+    let p = prop!(x <= 3);
+    let mut ok: @p = h;
+    x = 9;
+    takes(x, ok) //~ error: L0230 this is evidence of `p`, and `x <= 3` is needed
+}
+
+fn mutable_p_is_tracked(h: @(2u8 <= 3)) -> u8 {
+    let mut x: u8 = 2;
+    let mut p = prop!(x <= 3);
+    let mut ok: @p = h;
+    p = prop!(x <= 4);
+    takes_p(p, ok) //~ error: L0245 `ok` speaks of `p`, which was assigned at line 27
+}

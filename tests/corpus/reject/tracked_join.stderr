@@ -1,0 +1,20 @@
+error[L0245]: `ok` speaks of `x`, which was assigned at line 19; refresh it with `ok = _;` or `ok = <proof>;` before using it
+  --> tests/corpus/reject/tracked_join.lc:21:15
+   |
+19 |         x = 3;
+   |         ------ `x` is assigned here
+20 |     }
+21 |     use_it(x, ok) //~ error: L0245 `ok` speaks of `x`, which was assigned at line 19
+   |               ^^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `x` as it is now, and an assignment leaves it to be established again
+error[L0245]: `ok` speaks of `x`, which the loop at line 29 assigns; refresh it with `ok = _;` or `ok = <proof>;` before using it
+  --> tests/corpus/reject/tracked_join.lc:32:15
+   |
+29 |     for i in 0..n {
+   |     --- this loop assigns `x`
+...
+32 |     use_it(x, ok) //~ error: L0245 `ok` speaks of `x`, which the loop at line 29 assigns
+   |               ^^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `x` as it is now, and an assignment leaves it to be established again

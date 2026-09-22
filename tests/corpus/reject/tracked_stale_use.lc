@@ -1,0 +1,16 @@
+// Case 3 of the mutation design, the half that must fail: `now` is tracked
+// evidence about `x`, and `x = 9` leaves it stale. Using it before a
+// refresh is an error shaped like a use after move, naming the assignment.
+// Only the elaborator's flow analysis reports this; had it said nothing,
+// lowering would pass evidence of `x <= 3` about the old `x` where the claim
+// about the new one is wanted, and the checker would reject the call.
+fn takes(x: u8, ok: @(x <= 3)) -> u8 {
+    x
+}
+
+fn tracked_is_stale(h: @(2u8 <= 3)) -> u8 {
+    let mut x: u8 = 2;
+    let mut now: @(x <= 3) = h;
+    x = 9;
+    takes(x, now) //~ error: L0245 `now` speaks of `x`, which was assigned at line 14
+}

@@ -1,0 +1,33 @@
+// Case 10 of the mutation design, the half that must fail: one arm assigns
+// `x` and does not refresh `ok`. The branch leaves `ok` out of its join, so
+// after it `ok` is stale on that path, and the use after the join is where
+// it is reported, naming the assignment in the arm. Had the analysis said
+// nothing, lowering would put the old `ok` in that arm's tuple, evidence
+// about the `x` of entry where `x <= 3` over the joined `x` is wanted, and
+// the checker would reject it.
+fn use_it(x: u8, ok: @(x <= 3)) -> u8 {
+    x
+}
+
+fn one_arm_forgets(n: u8) -> u8 {
+    let mut x: u8 = 0;
+    let mut ok: @(x <= 3) = _;
+    if n < 3 {
+        x = n;
+        ok = _;
+    } else {
+        x = 3;
+    }
+    use_it(x, ok) //~ error: L0245 `ok` speaks of `x`, which was assigned at line 19
+}
+
+// After a loop that assigns `x` without refreshing `ok`, `ok` is stale as
+// well, and the loop is what the message names.
+fn the_loop_forgets(n: u8) -> u8 {
+    let mut x: u8 = 0;
+    let mut ok: @(x <= 3) = _;
+    for i in 0..n {
+        x = i;
+    }
+    use_it(x, ok) //~ error: L0245 `ok` speaks of `x`, which the loop at line 29 assigns
+}

@@ -1,5 +1,0 @@
-error[L0290]: `let mut` of evidence is not in Locus yet; M4 adds tracked evidence, refreshed as the values it speaks of change
- --> tests/corpus/reject/let_mut_evidence.lc:5:9
-  |
-5 |     let mut ok = prove!(x == n); //~ error: L0290 `let mut` of evidence is not in Locus yet
-  |         ^^^^^^

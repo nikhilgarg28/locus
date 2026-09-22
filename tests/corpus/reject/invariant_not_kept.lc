@@ -1,8 +1,9 @@
 // The evidence a `break` supplies is about the values current at the break,
 // and nothing carried from earlier passes speaks of `total` there: after
 // `total = total.wrapping_add(1)` nothing is known of it, and the bound
-// cannot be shown at the break. Evidence that holds across passes is M4's
-// tracked evidence.
+// cannot be shown at the break. Evidence that holds across passes is
+// tracked evidence, `let mut ok: @(total <= 3)`, refreshed as `total`
+// changes (`tracked_loop.lc` in `accept`).
 fn count(n: u8) -> (total: u8, @(total <= 3)) {
     let mut total: u8 = 0;
     loop {

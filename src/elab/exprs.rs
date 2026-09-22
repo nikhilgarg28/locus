@@ -359,7 +359,17 @@ impl Env<'_> {
             if local.poisoned {
                 return Err(());
             }
-            let (id, ty) = (local.id, local.ty.clone());
+            // Tracked evidence is read at its current version, typed over
+            // the current versions of what it mentions, and only while it
+            // is valid (`mutation.rs`).
+            if let Some(stale) = local
+                .tracked
+                .as_ref()
+                .and_then(|tracked| tracked.stale.clone())
+            {
+                return self.stale_error(slot, &stale, "L0245", "before using it", name.span);
+            }
+            let (id, ty) = (local.id, self.version_type(slot));
             return Ok(Value::new(
                 Expr::Var {
                     id,

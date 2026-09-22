@@ -1,0 +1,30 @@
+error[L0246]: `ok` speaks of `n`, which was assigned at line 28; refresh it with `ok = _;` or `ok = <proof>;` before the loop repeats
+  --> tests/corpus/reject/tracked_loop_edges.lc:30:13
+   |
+28 |         n = m;
+   |         ------ `n` is assigned here
+29 |         if n == 5 {
+30 |             continue; //~ error: L0246 `ok` speaks of `n`, which was assigned at line 28
+   |             ^^^^^^^^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `n` as it is now, and an assignment leaves it to be established again
+error[L0246]: `ok` speaks of `n`, which was assigned at line 47; refresh it with `ok = _;` or `ok = <proof>;` before the loop repeats
+  --> tests/corpus/reject/tracked_loop_edges.lc:53:5
+   |
+47 |         n = m;
+   |         ------ `n` is assigned here
+...
+53 |     } //~ error: L0246 `ok` speaks of `n`, which was assigned at line 47
+   |     ^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `n` as it is now, and an assignment leaves it to be established again
+error[L0246]: `ok` speaks of `n`, which was assigned at line 62; refresh it with `ok = _;` or `ok = <proof>;` before the loop is left
+  --> tests/corpus/reject/tracked_loop_edges.lc:64:13
+   |
+62 |         n = m;
+   |         ------ `n` is assigned here
+63 |         if n == 10 {
+64 |             break; //~ error: L0246 `ok` speaks of `n`, which was assigned at line 62
+   |             ^^^^^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `n` as it is now, and an assignment leaves it to be established again

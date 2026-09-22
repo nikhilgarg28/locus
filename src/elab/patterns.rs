@@ -3,7 +3,8 @@
 //! A tuple pattern opens a dependent product over its own names: in
 //! `let (next, still) = step(...)`, `still` is typed over `next`, not over
 //! `step(...).0` (`typed::opened_part`, which lowering uses too). A name
-//! with `mut` is a mutable binding (`mutation.rs`).
+//! with `mut` is a mutable binding, and one whose type mentions other
+//! mutable bindings is tracked evidence (`mutation.rs`).
 
 use crate::ast::{self, PatternKind};
 use crate::kernel::{HypId, Proof, Term, Type, VarId};
@@ -35,13 +36,6 @@ impl Env<'_> {
                 let value = opened_part(&value, &opened, earlier);
                 let defined = self.ctx.define_with(id, equation, &value);
                 let ty = self.kernel(defined, pattern.span)?;
-                if *mutable && matches!(ty, Type::Proof(_)) {
-                    return self.fail(
-                        "L0290",
-                        "`let mut` of evidence is not in Locus yet; M4 adds tracked evidence, refreshed as the values it speaks of change",
-                        pattern.span,
-                    );
-                }
                 if !matches!(ty, Type::Proof(_)) {
                     self.facts.push(Fact::definition(
                         Proof::hyp(equation),

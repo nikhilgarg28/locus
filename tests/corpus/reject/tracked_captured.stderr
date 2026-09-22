@@ -1,0 +1,17 @@
+error[L0230]: this is evidence of `p`, and `x <= 3` is needed
+  --> tests/corpus/reject/tracked_captured.lc:20:14
+   |
+20 |     takes(x, ok) //~ error: L0230 this is evidence of `p`, and `x <= 3` is needed
+   |              ^^
+   |
+   = note: after computing, the claim is `9u8 <= 3`
+   = note: nothing known here speaks of the values in this claim
+error[L0245]: `ok` speaks of `p`, which was assigned at line 27; refresh it with `ok = _;` or `ok = <proof>;` before using it
+  --> tests/corpus/reject/tracked_captured.lc:28:16
+   |
+27 |     p = prop!(x <= 4);
+   |     ------------------ `p` is assigned here
+28 |     takes_p(p, ok) //~ error: L0245 `ok` speaks of `p`, which was assigned at line 27
+   |                ^^
+   |
+   = note: `ok` is tracked evidence, declared with `let mut`: it speaks of `p` as it is now, and an assignment leaves it to be established again

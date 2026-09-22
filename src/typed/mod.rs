@@ -11,8 +11,8 @@ mod tree;
 
 pub(crate) use lower::visit_block as each_stmt;
 pub use lower::{
-    FnRef, LowerError, Named, Session, is_pure, join_type, opened_part, opened_type, rebuilt,
-    value_term,
+    FnRef, LowerError, Named, Session, block_leaves, is_pure, join_type, opened_part, opened_type,
+    rebuilt, value_term,
 };
 pub(crate) use lower::{each_expr, visit_expr as each_stmt_under};
 pub use tree::{

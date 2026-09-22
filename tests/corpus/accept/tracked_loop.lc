@@ -1,0 +1,87 @@
+// Tracked evidence carried by a loop: case 2 of the mutation design, and
+// the shape of the lock's `run`. The evidence is loop state, typed in the
+// state over the version of `n` the body sees; the entry, every `continue`
+// and `break`, and the end of the body supply it at the versions current
+// there, and after the loop it is known over the versions after. There is
+// no invariant construct: the invariant is `ok`, refreshed as `n` changes.
+
+#[terminates] #[no_panic] #[no_io]
+fn advance(n: u8, ok: @(n <= 10)) -> (m: u8, @(m <= 10)) {
+    if n < 10 {
+        let fits = prove!(n as Int + 1 <= u8::MAX as Int);
+        let m = n + 1;
+        (m, prove!(m <= 10))
+    } else {
+        (n, ok)
+    }
+}
+
+// Case 2. `n = m` leaves `ok` stale. The `continue` refreshes it first, as
+// the end of the body does; the `break` leaves with the versions of this
+// pass's entry, where `ok` is valid. After the loop `n` and `ok` are the
+// parts of the loop's result, and that `n <= 10` is all that is known of `n`.
+fn walk(start: u8, first: @(start <= 10)) -> (n: u8, @(n <= 10)) {
+    let mut n = start;
+    let mut ok: @(n <= 10) = first;
+    loop {
+        if n == 10 {
+            break;
+        } else {
+        }
+        let (m, still) = advance(n, ok);
+        n = m;
+        if n == 5 {
+            ok = still;
+            continue;
+        } else {
+        }
+        ok = still;
+    }
+    (n, ok)
+}
+
+// A bounded `for` that carries the bound as evidence, refreshed with `_`:
+// `i < limit` is known afresh on each pass, and the exact sum after `+`.
+#[no_panic]
+fn count_to(limit: u8) -> (n: u8, @(n <= limit)) {
+    let mut n: u8 = 0;
+    let mut ok: @(n <= limit) = _;
+    for i in 0..limit {
+        n = i + 1;
+        ok = _;
+    }
+    (n, ok)
+}
+
+// Evidence that is stale on entry is not carried: `n = 0` leaves `ok`
+// stale, the loop assigns `n`, and nothing after the loop wants `ok`. The
+// body establishes it afresh on each pass, for the call, from `n < 10`;
+// the `break` before any refresh is then no obligation, and the branch
+// leaves `ok` out of its join too, since `n = m` leaves it stale.
+fn stale_on_entry(start: u8, first: @(start <= 10)) -> u8 {
+    let mut n = start;
+    let mut ok: @(n <= 10) = first;
+    n = 0;
+    let mut total: u8 = 0;
+    loop {
+        if n < 10 {
+            ok = _;
+            let (m, _) = advance(n, ok);
+            n = m;
+            total = total.wrapping_add(n);
+        } else {
+            break;
+        }
+    }
+    total
+}
+
+//~ proofs: 13
+//~ run: walk(0, Proved) => (10, Proved)
+//~ run: walk(7, Proved) => (10, Proved)
+//~ run: walk(10, Proved) => (10, Proved)
+//~ run: count_to(0) => (0, Proved)
+//~ run: count_to(9) => (9, Proved)
+//~ run: count_to(255) => (255, Proved)
+//~ run: stale_on_entry(3, Proved) => 55
+//~ rust: let (m, still) = advance(n, ok);

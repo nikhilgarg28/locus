@@ -1,8 +1,9 @@
 // Case 10 of the mutation design, the half that must fail: the arms assign
 // `x` and prove the bound, but nothing carries the evidence out of the
-// branch, so after the join nothing is known of `x`. Evidence is a
-// snapshot until M4 tracks it; `assign_join_evidence.lc` carries it out as
-// the branch's value.
+// branch, so after the join nothing is known of `x`. Evidence bound with
+// `let`, or stated with `prove!`, is a snapshot; `assign_join_evidence.lc`
+// carries it out as the branch's value, and `tracked_refresh.lc` in
+// `accept` carries it as tracked evidence, `let mut ok: @(x <= 2)`.
 fn clamp(n: u8) -> u8 {
     let mut x = n;
     if x < 2 {
