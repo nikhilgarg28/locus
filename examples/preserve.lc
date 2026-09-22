@@ -1,6 +1,8 @@
+// The branch taken knows `n == 0`; the claim `0 == n` is the same equation
+// the other way round, which is a step to state, not a match.
 fn preserve(n: u8) -> (out: u8, @(out == n)) {
     if n == 0 {
-        (0, _)
+        (0, u8_eq_symm(n, 0, prove!(n == 0)))
     } else {
         (n, _)
     }

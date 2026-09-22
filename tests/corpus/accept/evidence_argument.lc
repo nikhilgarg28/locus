@@ -1,21 +1,26 @@
 // Evidence is an argument like any other. At runtime it is `Proved`, and a
 // run line passes it as such.
 
+// Subtracting more leaves less: the lemma gives `255.wrapping_sub(250) <=
+// 255.wrapping_sub(n)`, and the difference of literals computes to 5.
 fn headroom(n: u8, small: @(n <= 250)) -> (out: u8, @(out >= 5)) {
-    (255.wrapping_sub(n), _)
+    (255.wrapping_sub(n), u8_sub_le_sub(255, n, 250, small, prove!(250 <= 255)))
 }
 
 fn clamp(n: u8) -> (out: u8, @(out <= 250)) {
     if n <= 250 { (n, _) } else { (250, _) }
 }
 
+// `bound` comes out of the call typed over `small`, which is what
+// `headroom` asks for: no conversion.
 fn room_after_clamp(n: u8) -> u8 {
     let (small, bound) = clamp(n);
     let (room, _) = headroom(small, bound);
     room
 }
 
-// Three `_`, and one conversion of `bound` to what `headroom` asks for.
+// Two `_`, one `prove!`, and the conversion of the lemma's claim to the one
+// stated, by computing.
 //~ proofs: 4
 //~ run: headroom(250, Proved) => (5, Proved)
 //~ run: clamp(255) => (250, Proved)

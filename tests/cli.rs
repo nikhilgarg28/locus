@@ -74,7 +74,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     assert!(
         String::from_utf8(output.stdout)
             .unwrap()
-            .contains("Checked 6 function(s); 8 proof(s) found and accepted by the kernel.")
+            .contains("Checked 6 function(s); 5 proof(s) found and accepted by the kernel.")
     );
     let output = locus()
         .arg("check")
@@ -83,7 +83,9 @@ fn a_file_is_checked_run_and_printed_as_rust() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("filled (all 256 cases,"), "{stdout}");
+    assert!(stdout.contains("filled (computed,"), "{stdout}");
+    assert!(stdout.contains("filled (evaluation,"), "{stdout}");
+    assert!(!stdout.contains("256"), "{stdout}");
     let output = locus()
         .arg("run")
         .arg(example("lock.lc"))
@@ -108,4 +110,45 @@ fn a_file_is_checked_run_and_printed_as_rust() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
+}
+
+/// The `--holes` listing without its timings, which are the one thing in it
+/// that may differ between runs.
+fn holes_without_timings(stdout: &str) -> String {
+    stdout
+        .lines()
+        .map(|line| match line.rfind(", ") {
+            Some(cut) if line.ends_with(" us)") => format!("{})", &line[..cut]),
+            _ => line.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn checking_is_deterministic() {
+    // Which tier fills each hole, and how large the proof is, is a function
+    // of the file alone: two runs over every example agree byte for byte.
+    let examples = std::fs::read_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "lc"));
+    let mut seen = 0;
+    for path in examples {
+        let run = || {
+            let output = Command::new(env!("CARGO_BIN_EXE_locus"))
+                .arg("check")
+                .arg(&path)
+                .arg("--holes")
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}", path.display());
+            holes_without_timings(&String::from_utf8(output.stdout).unwrap())
+        };
+        let (first, second) = (run(), run());
+        assert_eq!(first, second, "{}", path.display());
+        assert!(first.contains("filled ("), "{}: {first}", path.display());
+        seen += 1;
+    }
+    assert!(seen >= 5);
 }

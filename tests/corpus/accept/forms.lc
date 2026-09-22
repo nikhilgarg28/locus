@@ -7,17 +7,22 @@ math fn nonzero(x: u8) -> Prop {
     prop!(x != 0)
 }
 
-// The statement leaves `n <= 9` in scope; the value is the second field.
+// The statement leaves `n.wrapping_add(1) <= 10` in scope, which `fits`
+// established; the value is the second field, which computing matches to it.
 fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
-    prove!(n <= 9);
+    let fits = u8_succ_le_of_lt(n, 10, small);
+    prove!(n.wrapping_add(1) <= 10);
     let out = n.wrapping_add(1);
     (out, prove!(out <= 10))
 }
 
+// Each branch knows what it tested, and `fold!` closes the definition.
 fn named(n: u8) -> (out: u8, @nonzero(out)) {
-    let out = if n == 0 { 1 } else { n };
-    let plain = prove!(out != 0);
-    (out, fold!(nonzero, plain))
+    if n == 0 {
+        (1, fold!(nonzero, prove!(1 != 0)))
+    } else {
+        (n, fold!(nonzero, prove!(n != 0)))
+    }
 }
 
 math fn back(n: u8, h: @nonzero(n)) -> @(n != 0) {
@@ -35,8 +40,8 @@ fn exists(forall: u8, prove: u8) -> u8 {
 
 const general: Prop = prop!(forall (x: u8) { x <= 9 => prop!(exists (y: u8) { x < y }) });
 
-// Two `prove!` in `bump`, one in `named`; each counts as one proof.
-//~ proofs: 3
+// Two `prove!` in `bump`, two in `named`; each counts as one proof.
+//~ proofs: 4
 //~ run: bump(9, Proved) => (10, Proved)
 //~ run: bump(0, Proved) => (1, Proved)
 //~ run: named(0) => (1, Proved)

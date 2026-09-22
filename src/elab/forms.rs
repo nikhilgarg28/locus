@@ -49,7 +49,7 @@ impl Env<'_> {
     /// for what follows. It erases to nothing, so no statement is kept.
     pub(super) fn prove_statement(&mut self, formula: &ast::Expr, span: Span) -> Elab<()> {
         let (proof, claim) = self.prove_claim(formula, span)?;
-        self.facts.push(Fact { proof, claim });
+        self.facts.push(Fact::new(proof, claim));
         Ok(())
     }
 

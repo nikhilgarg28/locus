@@ -1,0 +1,9 @@
+error[L0230]: cannot show `second == n.wrapping_add(1).wrapping_add(1)`
+  --> tests/corpus/reject/rewriting_by_a_fact_removed.lc:12:14
+   |
+12 |     (second, _) //~ error: L0230 cannot show `second == n.wrapping_add(1).wrapping_add(1)`
+   |              ^
+   |
+   = note: after computing, the claim is `bump(first).0 == n.wrapping_add(1).wrapping_add(1)`
+   = note: known here: `second_is: bump(first).0 == bump(n).0.wrapping_add(1)`, `first_is: bump(n).0 == n.wrapping_add(1)`
+   = note: this follows from `second_is` by `rewrite!(first_is, second_is)`: an equation in scope rewrites nothing by itself

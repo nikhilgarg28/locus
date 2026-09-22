@@ -34,13 +34,15 @@ prop Small(n: u8) {
     Below(bound: @(n < 10)),
 }
 
+// The `Zero` arm knows `n == 0`, and the claim about `0` is evaluated; the
+// equation is turned round and the claim carried across it.
 math fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
     match small {
-        Small::Zero => _,
+        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0 < 10)),
         Small::Below(bound) => bound,
     }
 }
 
-//~ proofs: 2
+//~ proofs: 3
 //~ run: reflexivity_claim(5) => (Ghost, Proved)
 //~ rust: pub fn reflexivity_claim(n: u8) -> (Ghost, Proved) {

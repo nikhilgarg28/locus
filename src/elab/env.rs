@@ -84,6 +84,27 @@ pub(super) struct Local {
 pub(super) struct Fact {
     pub proof: Proof,
     pub claim: Term,
+    /// The equation `name == value` of a `let`: what computing replaces the
+    /// name by. Any other fact is used exactly, and never to rewrite.
+    pub definition: bool,
+}
+
+impl Fact {
+    pub fn new(proof: Proof, claim: Term) -> Self {
+        Self {
+            proof,
+            claim,
+            definition: false,
+        }
+    }
+
+    pub fn definition(proof: Proof, claim: Term) -> Self {
+        Self {
+            proof,
+            claim,
+            definition: true,
+        }
+    }
 }
 
 /// The loop a `break` or `continue` belongs to.
@@ -262,10 +283,7 @@ impl Env<'_> {
     pub fn assume(&mut self, id: HypId, claim: Term, span: Span) -> Elab<()> {
         let result = self.ctx.assume_with(id, claim.clone());
         self.kernel(result, span)?;
-        self.facts.push(Fact {
-            proof: Proof::hyp(id),
-            claim,
-        });
+        self.facts.push(Fact::new(Proof::hyp(id), claim));
         Ok(())
     }
 
@@ -273,10 +291,9 @@ impl Env<'_> {
     /// fields of a tuple or struct, each about the value's own fields.
     fn learn_from(&mut self, value: &Term, ty: &Type) {
         match ty {
-            Type::Proof(claim) => self.facts.push(Fact {
-                proof: Proof::OfTerm(value.clone()),
-                claim: (**claim).clone(),
-            }),
+            Type::Proof(claim) => self
+                .facts
+                .push(Fact::new(Proof::OfTerm(value.clone()), (**claim).clone())),
             Type::Tuple(fields) => {
                 let earlier: Vec<Term> = (0..fields.len())
                     .map(|index| Term::proj(value.clone(), index))

@@ -12,9 +12,10 @@ use std::fmt;
 
 use crate::erased::{self, Module};
 use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Program};
+use crate::kernel::derive::symm_at;
 use crate::kernel::{
     Definitions, EnumId, FnId, HypId, KernelError, Prim, Proof, PropId, PropVariant, StructId,
-    Term, Type, VarId,
+    Term, Type, VarId, same,
 };
 
 use super::tree::{
@@ -455,20 +456,123 @@ fn substitute_stmt(stmt: &Stmt, term: Term) -> Result<Term, LowerError> {
     }
 }
 
-fn substitute_pattern(pattern: &Pattern, value: &Term, term: Term) -> Result<Term, LowerError> {
-    Ok(match pattern {
-        Pattern::Wildcard => term,
-        Pattern::Bind { binder, equation } => term
-            .replace_var(binder.id, value)
-            .replace_hyp(*equation, &Proof::Refl(value.clone())),
-        Pattern::Tuple(patterns) => {
-            let mut term = term;
-            for (index, pattern) in patterns.iter().enumerate() {
-                term = substitute_pattern(pattern, &Term::proj(value.clone(), index), term)?;
+/// The parts a pattern binds, in order, each with the value it is bound
+/// to: a later part's value may mention an earlier name (`opened_part`).
+fn bound_parts(pattern: &Pattern, value: &Term, earlier: &mut Vec<Named>) -> Vec<Named> {
+    match pattern {
+        Pattern::Wildcard => Vec::new(),
+        Pattern::Bind { binder, equation } => {
+            let named = Named {
+                id: binder.id,
+                equation: *equation,
+                ty: binder.ty.clone(),
+                value: opened_part(value, &binder.ty, earlier),
+            };
+            if !matches!(binder.ty, Type::Proof(_)) {
+                earlier.push(named.clone());
             }
-            term
+            vec![named]
         }
-    })
+        Pattern::Tuple(patterns) => patterns
+            .iter()
+            .enumerate()
+            .flat_map(|(index, pattern)| {
+                bound_parts(pattern, &Term::proj(value.clone(), index), earlier)
+            })
+            .collect(),
+    }
+}
+
+/// Substitutes the names a pattern binds, last to first: a later part's
+/// value may mention an earlier name, which the earlier substitution then
+/// replaces.
+fn substitute_pattern(pattern: &Pattern, value: &Term, term: Term) -> Result<Term, LowerError> {
+    let parts = bound_parts(pattern, value, &mut Vec::new());
+    Ok(parts.iter().rev().fold(term, |term, named| {
+        term.replace_var(named.id, &named.value)
+            .replace_hyp(named.equation, &Proof::Refl(named.value.clone()))
+    }))
+}
+
+// --- Opening a dependent pattern ------------------------------------------------
+
+/// A name an earlier part of a pattern bound, with the equation
+/// `name == value` the checker has for it.
+#[derive(Clone, Debug)]
+pub struct Named {
+    pub id: VarId,
+    pub equation: HypId,
+    pub ty: Type,
+    pub value: Term,
+}
+
+/// Opening a dependent pattern: the value a part of a `let` pattern is bound
+/// to, stated over the names the pattern bound before it.
+///
+/// In `let (next, still) = step(...)`, the second part is evidence whose
+/// claim speaks of the first part as `step(...).0`. It is bound as
+/// evidence of the claim over `next` instead: each earlier name's equation
+/// `name == value` carries the evidence across, a fixed step the elaborator
+/// and lowering both take, so that what the elaborator typed is what the
+/// checker sees. A part that is not evidence, or whose claim mentions no
+/// earlier name, is the projection itself.
+///
+/// `opened` is the part's type as the elaborator states it, over the
+/// names; `part` is the projection the part stands for.
+pub fn opened_part(part: &Term, opened: &Type, earlier: &[Named]) -> Term {
+    let Type::Proof(claim) = opened else {
+        return part.clone();
+    };
+    // The claim over the projections, which is what the kernel gives the
+    // projection itself.
+    let over_projections = earlier.iter().fold((**claim).clone(), |claim, named| {
+        claim.replace_var(named.id, &named.value)
+    });
+    let (proof, _, changed) = open_claim(&over_projections, earlier, Proof::OfTerm(part.clone()));
+    if changed {
+        Term::proof(proof)
+    } else {
+        part.clone()
+    }
+}
+
+/// The type of a part of a pattern, as the elaborator states it: a claim
+/// over the projections restated over the names bound earlier.
+pub fn opened_type(ty: &Type, earlier: &[Named]) -> Type {
+    match ty {
+        Type::Proof(claim) => {
+            let (_, opened, _) = open_claim(claim, earlier, Proof::Omitted);
+            Type::proof(opened)
+        }
+        other => other.clone(),
+    }
+}
+
+/// Restates `claim` over the earlier names, one transport per name that
+/// occurs, around `proof`: the proof, the claim it arrives at, and whether
+/// any name occurred.
+fn open_claim(claim: &Term, earlier: &[Named], proof: Proof) -> (Proof, Term, bool) {
+    let mut current = claim.clone();
+    let mut proof = proof;
+    let mut changed = false;
+    for named in earlier {
+        if current.find(&|term| same(term, &named.value)).is_none() {
+            continue;
+        }
+        let template = current.abstract_over(&|term| same(term, &named.value));
+        current = template.open(&Term::var(named.id));
+        proof = Proof::Transport {
+            eq: Box::new(symm_at(
+                &named.ty,
+                &Term::var(named.id),
+                Proof::hyp(named.equation),
+            )),
+            template,
+            proof: Box::new(proof),
+        };
+        changed = true;
+    }
+    (proof, current, changed)
 }
 
 // --- Expressions that may not return: the check IR --------------------------------
@@ -731,19 +835,13 @@ fn lower_stmts(stmts: &[Stmt], out: &mut Vec<exec::Stmt>) -> Result<(), LowerErr
 }
 
 fn bind_pattern(pattern: &Pattern, value: Term, out: &mut Vec<exec::Stmt>) {
-    match pattern {
-        Pattern::Wildcard => {}
-        Pattern::Bind { binder, equation } => out.push(exec::Stmt::Let {
-            var: binder.id,
-            equation: *equation,
-            ty: Some(binder.ty.clone()),
-            value,
-        }),
-        Pattern::Tuple(patterns) => {
-            for (index, pattern) in patterns.iter().enumerate() {
-                bind_pattern(pattern, Term::proj(value.clone(), index), out);
-            }
-        }
+    for named in bound_parts(pattern, &value, &mut Vec::new()) {
+        out.push(exec::Stmt::Let {
+            var: named.id,
+            equation: named.equation,
+            ty: Some(named.ty),
+            value: named.value,
+        });
     }
 }
 

@@ -2,12 +2,13 @@
 //! `break` and `continue` that leave or advance them.
 
 use crate::ast;
-use crate::kernel::{HypId, Term, Type, VarId};
+use crate::kernel::{HypId, Proof, Term, Type, VarId, check_proof};
 use crate::source::Span;
 use crate::typed::{self, Binder, Expr, is_pure};
 
 use super::env::{Elab, Env, LoopTarget};
 use super::exprs::{Value, unit_type};
+use super::items::{FoundProof, HoleReport};
 use super::types::tuple_over;
 
 impl Env<'_> {
@@ -133,8 +134,7 @@ impl Env<'_> {
         let lo_term = self.term(&lo, lower.span)?;
         let hi_term = self.term(&hi, upper.span)?;
         let prelude = self.prelude;
-        let ordered_claim = prelude.u8_le_prop(lo_term.clone(), hi_term.clone());
-        let ordered = self.solve(&ordered_claim, lower.span.through(upper.span), None)?;
+        let ordered = self.range_evidence(&lo_term, &hi_term, lower.span.through(upper.span))?;
 
         let index = Binder {
             id: VarId::fresh(),
@@ -191,6 +191,35 @@ impl Env<'_> {
             self.declare_result(result, &ty, span)?;
         }
         Ok(Value::new(expr, ty))
+    }
+
+    /// Evidence that the range `lo..hi` is ordered, `lo <= hi`. A range
+    /// that starts at `0` is ordered by the lemma `u8_zero_le`, which the
+    /// elaborator applies here because the range has no place to write it;
+    /// any other range needs the fact in scope, as a hole does.
+    fn range_evidence(&mut self, lo: &Term, hi: &Term, span: Span) -> Elab<Proof> {
+        let claim = self.prelude.u8_le_prop(lo.clone(), hi.clone());
+        if *lo != Term::U8(0) {
+            return self.solve(&claim, span, None);
+        }
+        let started = std::time::Instant::now();
+        let lemma = self.theory.u8_zero_le;
+        let proof = Proof::OfTerm(Term::call(Term::Fn(lemma), vec![hi.clone()]));
+        let checked = check_proof(&mut self.ctx, &proof, &claim);
+        self.kernel(checked, span)?;
+        self.holes.push(HoleReport {
+            span,
+            solved: true,
+            tier: "u8_zero_le",
+            proof_size: 3,
+            micros: started.elapsed().as_micros(),
+            found: Some(FoundProof {
+                context: self.ctx.clone(),
+                claim,
+                proof: proof.clone(),
+            }),
+        });
+        Ok(proof)
     }
 
     pub(super) fn break_(&mut self, expr: &ast::Expr, value: &ast::Expr) -> Elab<Value> {

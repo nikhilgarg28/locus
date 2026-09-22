@@ -16,18 +16,22 @@ math fn within_limit(failures: u8) -> Prop {
 }
 
 // One transition. The caller proves the bound once; the result carries it on.
+// Evidence is stated where it is not already in scope: `fold!` closes the
+// definition of `within_limit` over evidence of its body, and a lemma call
+// takes the step from `lock.failures < 3` to a bound on the successor.
 fn step(
     lock: Lock,
     bounded: @within_limit(lock.failures),
     event: Event,
 ) -> (next: Lock, @within_limit(next.failures)) {
     match event {
-        Event::Right => (Lock { failures: 0, open: true }, _),
+        Event::Right => (Lock { failures: 0, open: true }, fold!(within_limit, prove!(0 <= 3))),
         Event::Wrong => {
             if lock.failures < 3 {
-                (Lock { failures: lock.failures.wrapping_add(1), open: false }, _)
+                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                (Lock { failures: lock.failures.wrapping_add(1), open: false }, fold!(within_limit, fits))
             } else {
-                (Lock { failures: lock.failures, open: false }, _)
+                (Lock { failures: lock.failures, open: false }, bounded)
             }
         }
     }
@@ -39,19 +43,23 @@ fn event_at(attempt: u8, correct: u8) -> Event {
 }
 
 // The invariant is loop state: evidence travels beside the lock it describes.
+// `still_bounded` comes out of the call typed over `next`, so it is the
+// evidence the next round needs, exactly.
 fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) {
     for attempt in 0..attempts (
         lock: Lock = Lock { failures: 0, open: false },
-        bounded: @within_limit(lock.failures) = _,
+        bounded: @within_limit(lock.failures) = fold!(within_limit, prove!(0 <= 3)),
     ) {
         let (next, still_bounded) = step(lock, bounded, event_at(attempt, correct));
         continue(next, still_bounded)
     }
 }
 
-// Needs the bound: without it the subtraction could wrap.
+// Needs the bound: without it the subtraction could wrap. `unfold!` opens
+// the definition, and the lemma says a difference under the bound stays
+// under it.
 fn remaining(failures: u8, bounded: @within_limit(failures)) -> (left: u8, @(left <= 3)) {
-    (3.wrapping_sub(failures), _)
+    (3.wrapping_sub(failures), u8_sub_le(3, failures, unfold!(within_limit, bounded)))
 }
 
 // The caller reuses the evidence `run` returned; nothing is proved twice.
@@ -61,7 +69,7 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
     left
 }
 
-//~ proofs: 8
+//~ proofs: 5
 //~ run: attempts_left(2, 9) => 1
 //~ run: attempts_left(5, 9) => 0
 //~ run: attempts_left(3, 2) => 3

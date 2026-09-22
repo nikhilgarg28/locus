@@ -16,15 +16,19 @@ const some_byte_is_zero: Prop = prop!(
     exists (n: u8) { n == 0 }
 );
 
-// Evidence is an ordinary expression. `unfold!` is written out here; a `_`
-// performs the same step on its own.
+// Evidence is an ordinary expression. `unfold!` opens the definition, and
+// `rewrite!` carries a claim across the equation it gave: every `x` in the
+// claim becomes `y`. The left side is named first so that it stays; a name
+// bound by `let` is replaced by what it stands for only when computing,
+// which is how the result is the claim as stated.
 math fn increment_preserves_equality(
     x: u8,
     y: u8,
     equal: @same(x, y),
 ) -> @(x.wrapping_add(1) == y.wrapping_add(1)) {
     let plain: @(x == y) = unfold!(same, equal);
-    _
+    let next = x.wrapping_add(1);
+    rewrite!(plain, prove!(next == x.wrapping_add(1)))
 }
 
 math fn self_equal(n: u8) -> @(n == n) {
@@ -33,12 +37,14 @@ math fn self_equal(n: u8) -> @(n == n) {
     evidence
 }
 
-// A call returning Prop can be used directly as a proof type's target.
+// A call returning Prop can be used directly as a proof type's target. The
+// definition is closed over evidence of its body, which holds by computing:
+// `out` is what it was bound to, and the equation is reflexive.
 fn increment(n: u8) -> (out: u8, @same(out, n.wrapping_add(1))) {
     let out = n.wrapping_add(1);
-    (out, _)
+    (out, fold!(same, prove!(out == n.wrapping_add(1))))
 }
 
 // Only `increment` exists at runtime; the rest of the file is logic.
-//~ proofs: 4
+//~ proofs: 5
 //~ run: increment(9) => (10, Proved)

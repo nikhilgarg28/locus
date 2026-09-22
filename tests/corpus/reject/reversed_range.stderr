@@ -4,5 +4,5 @@ error[L0230]: cannot show `5 <= n`
 3 |     for i in 5..n () { //~ error: L0230 cannot show `5 <= n`
   |              ^^^^
   |
-  = note: it fails when `n` is 0, which the facts known here allow
   = note: nothing known here speaks of the values in this claim
+  = note: it fails when `n` is 0, which the facts known here allow

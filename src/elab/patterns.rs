@@ -1,27 +1,49 @@
 //! `let` patterns: binding names to a value and to its projections.
+//!
+//! A tuple pattern opens a dependent product over its own names: in
+//! `let (next, still) = step(...)`, `still` is typed over `next`, not over
+//! `step(...).0` (`typed::opened_part`, which lowering uses too).
 
 use crate::ast::{self, PatternKind};
 use crate::kernel::{HypId, Proof, Term, Type, VarId};
-use crate::typed::{Binder, Pattern};
+use crate::typed::{Binder, Named, Pattern, opened_part, opened_type};
 
-use super::env::{Elab, Env};
+use super::env::{Elab, Env, Fact};
 
 impl Env<'_> {
     /// Binds a `let` pattern to a value, as the checker will: a name is
     /// declared with the equation `name == value`, and a tuple pattern binds
-    /// each part to a projection.
+    /// each part to a projection, stated over the parts before it.
     pub(super) fn bind_pattern(&mut self, pattern: &ast::Pattern, value: Term) -> Elab<Pattern> {
+        self.bind_pattern_in(pattern, value, &mut Vec::new())
+    }
+
+    fn bind_pattern_in(
+        &mut self,
+        pattern: &ast::Pattern,
+        value: Term,
+        earlier: &mut Vec<Named>,
+    ) -> Elab<Pattern> {
         match &pattern.kind {
             PatternKind::Wildcard => Ok(Pattern::Wildcard),
-            PatternKind::Group(inner) => self.bind_pattern(inner, value),
+            PatternKind::Group(inner) => self.bind_pattern_in(inner, value, earlier),
             PatternKind::Name(name) => {
                 let (id, equation) = (VarId::fresh(), HypId::fresh());
+                let over_projections = self.type_of(&value, pattern.span)?;
+                let opened = opened_type(&over_projections, earlier);
+                let value = opened_part(&value, &opened, earlier);
                 let defined = self.ctx.define_with(id, equation, &value);
                 let ty = self.kernel(defined, pattern.span)?;
                 if !matches!(ty, Type::Proof(_)) {
-                    self.facts.push(super::env::Fact {
-                        proof: Proof::hyp(equation),
-                        claim: Term::eq(ty.clone(), Term::var(id), value),
+                    self.facts.push(Fact::definition(
+                        Proof::hyp(equation),
+                        Term::eq(ty.clone(), Term::var(id), value.clone()),
+                    ));
+                    earlier.push(Named {
+                        id,
+                        equation,
+                        ty: ty.clone(),
+                        value,
                     });
                 }
                 self.bind(&name.text, id, &ty);
@@ -50,7 +72,8 @@ impl Env<'_> {
                 }
                 let mut parts = Vec::new();
                 for (index, part) in patterns.iter().enumerate() {
-                    parts.push(self.bind_pattern(part, Term::proj(value.clone(), index))?);
+                    let projection = Term::proj(value.clone(), index);
+                    parts.push(self.bind_pattern_in(part, projection, earlier)?);
                 }
                 Ok(Pattern::Tuple(parts))
             }

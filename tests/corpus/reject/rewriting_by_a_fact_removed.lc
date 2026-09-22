@@ -1,0 +1,13 @@
+// An equation in scope rewrites nothing by itself. `first_is` says what
+// `first` is, and `second_is` speaks of `first`; the removed search used
+// the one to rewrite the other. Now `rewrite!(first_is, second_is)` states
+// the step, and the diagnostic names it.
+fn bump(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    (n.wrapping_add(1), _)
+}
+
+fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {
+    let (first, first_is) = bump(n);
+    let (second, second_is) = bump(first);
+    (second, _) //~ error: L0230 cannot show `second == n.wrapping_add(1).wrapping_add(1)`
+}

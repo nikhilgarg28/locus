@@ -8,7 +8,7 @@
 use crate::ast::{self, BinaryOp, ExprKind};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
-use crate::typed::{Expr, value_term};
+use crate::typed::{Expr, FnRef, value_term};
 
 use super::control::Branch;
 use super::env::{Elab, Env, Global};
@@ -63,10 +63,10 @@ impl Env<'_> {
         if let (Type::Proof(found), Type::Proof(wanted)) = (&value.ty, expected) {
             let mark = self.mark();
             let term = self.term(&value, span)?;
-            self.facts.push(super::env::Fact {
-                proof: Proof::OfTerm(term),
-                claim: (**found).clone(),
-            });
+            self.facts.push(super::env::Fact::new(
+                Proof::OfTerm(term),
+                (**found).clone(),
+            ));
             let solved = self.solve(wanted, span, Some(found));
             self.close_names(mark);
             return Ok(Value::new(Expr::Proof(solved?), expected.clone()));
@@ -244,7 +244,15 @@ impl Env<'_> {
         }
         match self.globals.get(&name.text).cloned() {
             Some(Global::Fn(info)) if info.constant => self.call_fn(&info, &[], name.span),
-            Some(Global::Fn(info)) if matches!(expected, Some(Type::Proof(_))) => {
+            // A `math fn` returning evidence is evidence of its general claim,
+            // where evidence is expected or where nothing in particular is,
+            // as the second argument of `fold!` or `rewrite!`.
+            Some(Global::Fn(info))
+                if matches!(expected, Some(Type::Proof(_)))
+                    || (expected.is_none()
+                        && matches!(info.reference, FnRef::Math(_))
+                        && matches!(info.result, Type::Proof(_))) =>
+            {
                 self.function_as_evidence(&info, name.span)
             }
             Some(Global::Fn(_)) => self.fail(

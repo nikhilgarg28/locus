@@ -92,9 +92,38 @@ fn the_lock_runs_as_written() {
             );
         }
     }
-    // Every `_` was filled by the search and accepted by the kernel.
-    assert_eq!(result.holes.len(), 8);
+    // Every `_` and `prove!` was filled and accepted by the kernel.
     assert!(result.holes.iter().all(|hole| hole.solved));
+    // The proofs of `lock.lc`, by position, tier, and size, asserted
+    // exactly on purpose: a hole is filled by a fact that matches, after
+    // computing, or by evaluation, and nothing else, so a change in what
+    // is found, or in how large it is, is a change to review.
+    let mut sources = SourceMap::default();
+    let file = sources.add("lock.lc", LOCK);
+    let source = sources.get(file);
+    let found: Vec<(usize, usize, &str, usize)> = result
+        .holes
+        .iter()
+        .map(|hole| {
+            let (line, column) = source.line_column(hole.span.start).unwrap();
+            (line, column, hole.tier, hole.proof_size)
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            // step: `prove!(lock.failures < 3)` is the branch taken, reflected.
+            (31, 63, "computed", 12),
+            // step: `bounded` serves for `within_limit((Lock { .. }).failures)`.
+            (34, 65, "computed", 37),
+            // step: `prove!(0 <= 3)`.
+            (28, 80, "evaluation", 12),
+            // run: the range `0..attempts`.
+            (49, 20, "u8_zero_le", 3),
+            // run: `prove!(0 <= 3)` for the initial state.
+            (51, 69, "evaluation", 12),
+        ]
+    );
 }
 
 #[test]
@@ -157,9 +186,10 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
 #[test]
 fn a_missing_guard_is_reported_with_the_claim_the_facts_and_a_failing_case() {
     let guarded = "            if lock.failures < 3 {
-                (Lock { failures: lock.failures.wrapping_add(1), open: false }, _)
+                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                (Lock { failures: lock.failures.wrapping_add(1), open: false }, fold!(within_limit, fits))
             } else {
-                (Lock { failures: lock.failures, open: false }, _)
+                (Lock { failures: lock.failures, open: false }, bounded)
             }";
     assert!(LOCK.contains(guarded));
     let unguarded = LOCK.replace(
@@ -178,9 +208,8 @@ fn a_missing_guard_is_reported_with_the_claim_the_facts_and_a_failing_case() {
     assert_eq!(
         error.notes,
         [
-            "after computing, the claim is `lock.failures.wrapping_add(1) <= 3`",
+            "known here: `bounded: within_limit(lock.failures)`",
             "it fails when `lock.failures` is 3, which the facts known here allow",
-            "known here: `lock.failures <= 3`",
         ]
     );
     // Nothing unverified was emitted.
@@ -215,21 +244,91 @@ fn introducing_a_local_needs_no_proof_repair() {
 
 #[test]
 fn destructuring_a_result_keeps_its_evidence_usable() {
+    // `first_is` is an equation about `first`, and `rewrite!` carries
+    // `second_is` across it; the result is the claim stated, exactly.
     let result = accepted(&format!(
         "{INCREMENT}
         fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {{
             let (first, first_is) = increment(n);
             let (second, second_is) = increment(first);
-            (second, _)
+            (second, rewrite!(first_is, second_is))
         }}
         fn twice_without_names(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {{
             let once = increment(n);
             let again = increment(once.0);
-            (again.0, _)
+            (again.0, rewrite!(once.1, again.1))
         }}"
     ));
     assert_eq!(call(&result, "twice", &[254]), "(0, Proved)");
     assert_eq!(call(&result, "twice_without_names", &[1]), "(3, Proved)");
+    // Without the step, the equation in scope rewrites nothing by itself,
+    // and the diagnostic names the step.
+    let (codes, full) = rejected(&format!(
+        "{INCREMENT}
+        fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {{
+            let (first, first_is) = increment(n);
+            let (second, second_is) = increment(first);
+            (second, _)
+        }}"
+    ));
+    assert_eq!(codes, ["L0230"]);
+    assert!(
+        full.contains("this follows from `second_is` by `rewrite!(first_is, second_is)`"),
+        "{full}"
+    );
+}
+
+#[test]
+fn a_dependent_pattern_opens_over_its_own_names() {
+    // Finding 2 of the target examples: in `let (next, still) = bump(..)`,
+    // `still` is evidence about `next`, not about `bump(..).0`, so it is
+    // exactly what the result asks for and no hole is filled at all.
+    let result = accepted(
+        "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+            (n.wrapping_add(1), u8_succ_le_of_lt(n, 10, small))
+        }
+        fn use_it(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+            let (next, still) = bump(n, small);
+            (next, still)
+        }",
+    );
+    assert!(result.holes.is_empty(), "{:#?}", result.holes);
+    let module = result.session.erased();
+    let value = Interpreter::new(module, FUEL)
+        .call(
+            result.function("use_it").unwrap(),
+            vec![Value::U8(9), Value::Proved],
+        )
+        .unwrap();
+    assert_eq!(value.debug(module), "(10, Proved)");
+    // The type of `still` speaks of `next`, as a mismatch shows.
+    let (codes, full) = rejected(
+        "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+            (n.wrapping_add(1), u8_succ_le_of_lt(n, 10, small))
+        }
+        fn use_it(n: u8, small: @(n < 10)) -> @(n <= 10) {
+            let (next, still) = bump(n, small);
+            still
+        }",
+    );
+    assert_eq!(codes, ["L0230"]);
+    assert!(
+        full.starts_with("this is evidence of `next <= 10`, and `n <= 10` is needed"),
+        "{full}"
+    );
+    // A later part may speak of two earlier names, and a name that is not
+    // data leaves no equation behind.
+    let result = accepted(
+        "fn pair(n: u8) -> (a: u8, b: u8, @(a <= b)) {
+            (n, n, u8_le_refl(n))
+        }
+        fn use_pair(n: u8) -> (a: u8, b: u8, @(a <= b)) {
+            let (x, y, ordered) = pair(n);
+            (x, y, ordered)
+        }",
+    );
+    assert!(result.holes.is_empty(), "{:#?}", result.holes);
+    assert_eq!(call(&result, "use_pair", &[4]), "(4, 4, Proved)");
 }
 
 #[test]
@@ -239,11 +338,15 @@ fn extracting_a_helper_needs_no_proof_repair() {
     let result = accepted(
         "math fn within_limit(failures: u8) -> Prop { prop!(failures <= 3) }
         fn bump(failures: u8, bounded: @within_limit(failures)) -> (next: u8, @within_limit(next)) {
-            if failures < 3 { (failures.wrapping_add(1), _) } else { (failures, _) }
+            if failures < 3 {
+                (failures.wrapping_add(1), fold!(within_limit, u8_succ_le_of_lt(failures, 3, prove!(failures < 3))))
+            } else {
+                (failures, bounded)
+            }
         }
         fn record(failures: u8, bounded: @within_limit(failures), wrong: u8) -> (next: u8, @within_limit(next)) {
             if wrong == 0 {
-                (0, _)
+                (0, fold!(within_limit, prove!(0 <= 3)))
             } else {
                 let (next, still) = bump(failures, bounded);
                 (next, still)
@@ -262,26 +365,30 @@ fn extracting_a_helper_needs_no_proof_repair() {
 }
 
 #[test]
-fn evidence_about_a_projection_serves_for_the_name_bound_to_it() {
-    // `still` is evidence about `bump(...).0`; it is accepted as evidence
-    // about `next`, which is that projection.
+fn evidence_about_a_name_serves_for_a_name_bound_to_it() {
+    // `still` is evidence about `next`; `copy` is bound to `next`, and
+    // computing replaces the name, so the evidence serves.
     let result = accepted(
-        "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) { (n.wrapping_add(1), _) }
+        "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+            (n.wrapping_add(1), u8_succ_le_of_lt(n, 10, small))
+        }
         fn use_it(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
             let (next, still) = bump(n, small);
             let copy = next;
             (copy, still)
         }",
     );
-    assert_eq!(result.holes.iter().filter(|hole| hole.solved).count(), 2);
+    let tiers: Vec<&str> = result.holes.iter().map(|hole| hole.tier).collect();
+    assert_eq!(tiers, ["computed"]);
 }
 
 #[test]
 fn a_math_fn_runs_and_is_usable_in_claims() {
     let result = accepted(
-        "math fn double_step(n: u8) -> u8 { n.wrapping_add(2) }
+        "math fn double_step(n: u8) -> u8 { n.wrapping_add(1).wrapping_add(1) }
         fn advance(n: u8) -> (out: u8, @(out == double_step(n))) {
-            (n.wrapping_add(1).wrapping_add(1), _)
+            let out = n.wrapping_add(1).wrapping_add(1);
+            (out, fold!(double_step, prove!(out == n.wrapping_add(1).wrapping_add(1))))
         }",
     );
     assert_eq!(call(&result, "double_step", &[254]), "0");
@@ -292,11 +399,11 @@ fn a_math_fn_runs_and_is_usable_in_claims() {
 fn a_loop_carries_its_invariant_as_state() {
     let result = accepted(
         "fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
-            loop (i: u8 = 0, bound: @(i <= limit) = _) -> (out: u8, @(out <= limit)) {
+            loop (i: u8 = 0, bound: @(i <= limit) = u8_zero_le(limit)) -> (out: u8, @(out <= limit)) {
                 if i == limit {
                     break (i, bound)
                 } else {
-                    continue(limit, _)
+                    continue(limit, u8_le_refl(limit))
                 }
             }
         }",
@@ -305,10 +412,12 @@ fn a_loop_carries_its_invariant_as_state() {
 }
 
 #[test]
-fn boolean_connectives_short_circuit_and_feed_branch_facts() {
+fn boolean_connectives_short_circuit_and_each_test_feeds_its_branch() {
+    // `3 <= n && n <= 9` is an `if`, whose branch knows the whole test and
+    // not its parts; a test whose outcome a branch needs is its own `if`.
     let result = accepted(
         "fn clamp(n: u8) -> (out: u8, @(out <= 9)) {
-            if 3 <= n && n <= 9 { (n, _) } else { (9, _) }
+            if 3 <= n { if n <= 9 { (n, _) } else { (9, _) } } else { (9, _) }
         }
         fn either(n: u8) -> bool { n == 0 || !(n < 200) }",
     );
@@ -441,28 +550,30 @@ fn matching_on_evidence_gives_each_arm_its_index_equations() {
             Five: @SmallPrime(5),
             Seven: @SmallPrime(7),
         }
-        math fn small_prime_is_small(n: u8, h: @SmallPrime(n)) -> @(n <= 7) {
+        math fn small_prime_is_small(n: u8, h: @SmallPrime(n)) -> @(n <= 8) {
             match h {
-                SmallPrime::Two => _,
-                SmallPrime::Three => _,
-                SmallPrime::Five => _,
-                SmallPrime::Seven => _,
+                SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2 <= 8)),
+                SmallPrime::Three => rewrite!(u8_eq_symm(n, 3, prove!(n == 3)), prove!(3 <= 8)),
+                SmallPrime::Five => rewrite!(u8_eq_symm(n, 5, prove!(n == 5)), prove!(5 <= 8)),
+                SmallPrime::Seven => rewrite!(u8_eq_symm(n, 7, prove!(n == 7)), prove!(7 <= 8)),
             }
         }
-        math fn seven_is(h: @SmallPrime(7)) -> @(7 <= 7) { small_prime_is_small(7, h) }
+        math fn seven_is(h: @SmallPrime(7)) -> @(7 <= 8) { small_prime_is_small(7, h) }
         math fn five() -> @SmallPrime(5) { SmallPrime::Five }",
     );
-    // The equations are what make the arms provable.
+    // The equations are what make the arms provable: each is a fact the
+    // arm has, and the diagnostic names the step that uses it.
     let (codes, full) = rejected(
         "prop SmallPrime(n: u8) { Two: @SmallPrime(2), Seven: @SmallPrime(7) }
         math fn too_small(n: u8, h: @SmallPrime(n)) -> @(n <= 6) {
             match h { SmallPrime::Two => _, SmallPrime::Seven => _ }
         }",
     );
+    // The first arm to fail ends the match; here that is `Two`.
     assert_eq!(codes, ["L0230"]);
     assert!(full.contains("cannot show `n <= 6`"), "{full}");
     assert!(
-        full.contains("after computing, the claim is `7 <= 6`"),
+        full.contains("this is `rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2 <= 6))`"),
         "{full}"
     );
 }
@@ -483,14 +594,38 @@ fn connectives_are_built_and_taken_apart_by_their_constructors() {
         math fn anything(p: Prop, h: @(false)) -> @p { match h {} }
         fn unreachable(n: u8, h: @(false)) -> u8 { match h {} }",
     );
-    // A hole does the same within its budget.
-    accepted(
-        "math fn swap(p: Prop, q: Prop, h: @(p && q)) -> @(q && p) { _ }
-        math fn weaken(p: Prop, q: Prop, hq: @q) -> @(p || q) { _ }
-        math fn curry(p: Prop, q: Prop, hq: @q) -> @(p => q && q) { _ }
-        math fn modus(p: Prop, q: Prop, hp: @p, h: @(!p)) -> @(false) { _ }
-        math fn ordered() -> @(forall (x: u8) { x <= 3 => x < 4 }) { _ }",
-    );
+    // A hole takes a connective apart for no one: the search over them was
+    // removed, and the diagnostic names the constructor or form instead.
+    for (text, form) in [
+        (
+            "math fn swap(p: Prop, q: Prop, h: @(p && q)) -> @(q && p) { _ }",
+            "`And::Intro(_, _)`",
+        ),
+        (
+            "math fn weaken(p: Prop, q: Prop, hq: @q) -> @(p || q) { _ }",
+            "`Or::Left(_)` or `Or::Right(_)`",
+        ),
+        (
+            "math fn curry(p: Prop, q: Prop, hq: @q) -> @(p => q && q) { _ }",
+            "evidence of `p => q` is a `math fn`",
+        ),
+        (
+            "math fn modus(p: Prop, q: Prop, hp: @p, h: @(!p)) -> @(false) { _ }",
+            "evidence of `false` is a refuted claim applied to its evidence",
+        ),
+        (
+            "math fn ordered() -> @(forall (x: u8) { x <= 3 => x <= 3 }) { _ }",
+            "evidence of `forall (x: T) { p }` is a `math fn`",
+        ),
+    ] {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, ["L0230"], "{text}");
+        assert!(
+            full.contains("the search over `&&`, `||`, `=>` and `forall` was removed"),
+            "{text}: {full}"
+        );
+        assert!(full.contains(form), "{text}: {full}");
+    }
 }
 
 #[test]
@@ -548,7 +683,7 @@ fn a_constant_is_used_by_name() {
     let result = accepted(
         "const LIMIT: u8 = 3;
         const limit_is_small: Prop = prop!(LIMIT <= 9);
-        math fn known() -> @limit_is_small { _ }
+        math fn known() -> @limit_is_small { fold!(limit_is_small, prove!(LIMIT <= 9)) }
         fn clamp(n: u8) -> (out: u8, @(out <= LIMIT)) {
             if n <= LIMIT { (n, _) } else { (LIMIT, _) }
         }",
@@ -574,13 +709,15 @@ fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
     // is what is known, and `n <= 9` is what the statement proved.
     let result = accepted(
         "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
-            prove!(n <= 9);
+            let fits = u8_succ_le_of_lt(n, 10, small);
+            prove!(n.wrapping_add(1) <= 10);
             let out = n.wrapping_add(1);
             let h = prove!(out <= 10);
             (out, h)
         }
-        fn stated(n: u8, small: @(n < 10)) -> @(n <= 9) {
-            prove!(n <= 9);
+        fn stated(n: u8, small: @(n < 10)) -> @(n.wrapping_add(1) <= 10) {
+            let fits = u8_succ_le_of_lt(n, 10, small);
+            prove!(n.wrapping_add(1) <= 10);
             _
         }
         fn valued(n: u8) -> (out: u8, @(out == n)) { (n, prove!(n == n)) }",
@@ -598,11 +735,15 @@ fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
     // the fact the statement left in scope.
     assert_eq!(result.holes.len(), 5);
     assert!(result.holes.iter().all(|hole| hole.solved));
-    assert_eq!(result.holes[3].tier, "fact");
+    assert_eq!(result.holes[3].tier, "exact");
     // A statement erases to nothing, a value to the marker.
     let rust = print_module(result.session.erased());
-    assert!(rust.contains("    let h = Proved;\n    (out, h)"), "{rust}");
-    assert!(!rust.contains("Proved;\n    let out"), "{rust}");
+    assert!(
+        rust.contains(
+            "    let fits = Proved;\n    let out = n.wrapping_add(1);\n    let h = Proved;\n    (out, h)"
+        ),
+        "{rust}"
+    );
     assert!(rust.contains("(n, Proved)"), "{rust}");
 }
 
@@ -692,9 +833,14 @@ fn quantifier_words_are_names_outside_a_formula_and_formulas_nest() {
     let result = accepted(
         "fn exists(n: u8) -> bool { n == 0 }
         fn f(forall: u8) -> u8 { let exists = forall; exists }
-        const twice: Prop = prop!(forall (x: u8) { prop!(x == x) && prop!(prop!(x <= 255)) });
-        math fn holds() -> @twice { _ }
-        math fn general(n: u8) -> @(forall (x: u8) { x <= n => x <= 255 }) { _ }",
+        const twice: Prop = prop!(forall (x: u8) { prop!(x == x) && prop!(prop!(0 <= x)) });
+        math fn each(x: u8) -> @(x == x && 0 <= x) { And::Intro(prove!(x == x), u8_zero_le(x)) }
+        math fn holds() -> @twice { fold!(twice, each) }
+        math fn below(n: u8, x: u8, h: @(x <= n)) -> @(0 <= x) { u8_zero_le(x) }
+        math fn general(n: u8) -> @(forall (x: u8) { x <= n => 0 <= x }) {
+            let all: @(forall (m: u8) { forall (x: u8) { x <= m => 0 <= x } }) = below;
+            all(n)
+        }",
     );
     assert_eq!(call(&result, "exists", &[0]), "true");
     assert_eq!(call(&result, "f", &[7]), "7");

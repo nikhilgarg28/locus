@@ -4,13 +4,14 @@
 
 use crate::ast::{self, ExprKind, Form, PatternKind};
 use crate::kernel::derive;
-use crate::kernel::{HypId, Proof, Term, Type, VarId, infer_proof};
+use crate::kernel::{HypId, KernelError, Proof, Term, Type, VarId, infer_proof};
 use crate::source::Span;
 use crate::typed::{Binder, Expr, FnRef, value_term};
 
 use super::control::Branch;
 use super::env::{Elab, Env, FnInfo, Global, PropInfo, substitute};
 use super::exprs::Value;
+use super::solve::forward;
 
 impl Env<'_> {
     /// The kernel proof an evidence-typed value stands for.
@@ -392,7 +393,24 @@ impl Env<'_> {
                 );
                 return Err(());
             };
-            derive::fold(&mut self.ctx, function, &target, goal)
+            // Both sides are computed first, as evidence is matched:
+            // `within_limit(next.failures)` with `next` a struct just
+            // written is `within_limit(0)` to the definition, and evidence
+            // of `out == n.wrapping_add(1)` with `out` bound to that sum is
+            // evidence of a reflexive equation.
+            let known = self.knowledge();
+            let (computed, steps) = self.normalize(goal, &known.definitions);
+            let target = match infer_proof(&mut self.ctx, &target) {
+                Ok(claim) => {
+                    let (_, target_steps) = self.normalize(&claim, &known.definitions);
+                    forward(target, target_steps)
+                }
+                Err(_) => target,
+            };
+            derive::fold(&mut self.ctx, function, &target, &computed).and_then(|folded| {
+                self.back_to_stated(folded, steps)
+                    .ok_or(KernelError::NoComputationStep((**goal).clone()))
+            })
         };
         match result {
             Ok(proof) => self.proved(proof, span),

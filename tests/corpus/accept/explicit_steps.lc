@@ -1,0 +1,66 @@
+// The explicit forms of the steps a hole no longer takes: `rewrite!` for
+// an equation in scope, `unfold!` and `fold!` for a definition, a
+// constructor or a `math fn` for a connective, and a lemma call where a
+// claim about one byte used to be decided by trying all 256. Each function
+// here is the accepted form of one in `tests/corpus/reject/*_removed.lc`.
+
+fn bump(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    (n.wrapping_add(1), _)
+}
+
+// Rewriting by a fact: `first_is` carries `second_is` to the claim stated.
+fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {
+    let (first, first_is) = bump(n);
+    let (second, second_is) = bump(first);
+    (second, rewrite!(first_is, second_is))
+}
+
+math fn within_limit(n: u8) -> Prop {
+    prop!(n <= 3)
+}
+
+// Unfolding: the definition is closed and opened on request only.
+fn bounded(n: u8, small: @(n <= 3)) -> @within_limit(n) {
+    fold!(within_limit, small)
+}
+
+fn opened(n: u8, bounded: @within_limit(n)) -> @(n <= 3) {
+    unfold!(within_limit, bounded)
+}
+
+// The connectives: constructors, and a `math fn` named as evidence.
+math fn both(p: Prop, q: Prop, hp: @p, hq: @q) -> @(p && q) {
+    And::Intro(hp, hq)
+}
+
+math fn either(p: Prop, q: Prop, hq: @q) -> @(p || q) {
+    Or::Right(hq)
+}
+
+math fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
+    hq
+}
+
+math fn implied(p: Prop, q: Prop, hq: @q) -> @(p => q) {
+    let general: @(forall (a: Prop) { forall (b: Prop) { b => a => b } }) = from_q;
+    general(p)(q)(hq)
+}
+
+// All 256 cases: one lemma takes the step, or two with computing between.
+fn stepped(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
+    (n.wrapping_add(1), u8_succ_le_of_lt(n, 10, small))
+}
+
+fn headroom(n: u8, small: @(n <= 250)) -> (out: u8, @(out >= 5)) {
+    (255.wrapping_sub(n), u8_sub_le_sub(255, n, 250, small, prove!(250 <= 255)))
+}
+
+// One `_` in `bump`, one `prove!` in `headroom`, and the conversion of the
+// lemma's claim there to the one stated.
+//~ proofs: 3
+//~ run: twice(254) => (0, Proved)
+//~ run: twice(1) => (3, Proved)
+//~ run: stepped(9, Proved) => (10, Proved)
+//~ run: headroom(250, Proved) => (5, Proved)
+//~ run: headroom(0, Proved) => (255, Proved)
+//~ rust: pub fn twice(n: u8) -> (u8, Proved) {

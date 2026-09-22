@@ -4049,6 +4049,13 @@ fn theory_triples(world: &World) -> Vec<Triple> {
         ("nat_le_succ_succ", theory.nat_le_succ_succ),
         ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
         ("u8_succ_le_of_lt", theory.u8_succ_le_of_lt),
+        ("nat_add_comm", theory.nat_add_comm),
+        ("nat_add_cancel_left", theory.nat_add_cancel_left),
+        ("nat_lt_or_le", theory.nat_lt_or_le),
+        ("u8_sub_model", theory.u8_sub_model),
+        ("u8_sub_le", theory.u8_sub_le),
+        ("u8_sub_le_sub", theory.u8_sub_le_sub),
+        ("u8_eq_symm", theory.u8_eq_symm),
     ];
     let mut triples = Vec::new();
     for (name, id) in lemmas {

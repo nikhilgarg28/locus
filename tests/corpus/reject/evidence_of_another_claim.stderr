@@ -4,5 +4,5 @@ error[L0230]: this is evidence of `failures <= 9`, and `failures <= 3` is needed
 7 |     remaining(failures, small) //~ error: L0230 this is evidence of `failures <= 9`, and `failures <= 3` is needed
   |                         ^^^^^
   |
+  = note: known here: `small: failures <= 9`
   = note: it fails when `failures` is 4, which the facts known here allow
-  = note: known here: `failures <= 9`

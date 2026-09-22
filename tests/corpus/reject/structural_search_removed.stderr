@@ -1,0 +1,24 @@
+error[L0230]: cannot show `p && q`
+ --> tests/corpus/reject/structural_search_removed.lc:6:5
+  |
+6 |     _ //~ error: L0230 cannot show `p && q`
+  |     ^
+  |
+  = note: known here: `hq: q`, `hp: p`
+  = note: the search over `&&`, `||`, `=>` and `forall` was removed; evidence of `p && q` is `And::Intro(_, _)`, one part at a time
+error[L0230]: cannot show `p || q`
+  --> tests/corpus/reject/structural_search_removed.lc:10:5
+   |
+10 |     _ //~ error: L0230 cannot show `p || q`
+   |     ^
+   |
+   = note: known here: `hq: q`
+   = note: the search over `&&`, `||`, `=>` and `forall` was removed; evidence of `p || q` is `Or::Left(_)` or `Or::Right(_)`
+error[L0230]: cannot show `p => q`
+  --> tests/corpus/reject/structural_search_removed.lc:14:5
+   |
+14 |     _ //~ error: L0230 cannot show `p => q`
+   |     ^
+   |
+   = note: known here: `hq: q`
+   = note: the search over `&&`, `||`, `=>` and `forall` was removed; evidence of `p => q` is a `math fn` that takes evidence of `p` and returns evidence of `q`, named as a value

@@ -14,6 +14,7 @@ mod calls;
 mod control;
 mod data;
 mod env;
+mod explain;
 mod exprs;
 mod forms;
 mod items;
