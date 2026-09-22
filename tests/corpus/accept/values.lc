@@ -51,5 +51,5 @@ fn width(shape: Shape) -> u8 {
 //~ run: width(Dot) => 1
 //~ run: width(Line(9)) => 9
 //~ run: width(Shape::Box(4, false)) => 4
-//~ rust: pub fn swap(pair: (u8, bool)) -> (bool, u8) {
+//~ rust: fn swap(pair: (u8, bool)) -> (bool, u8) {
 //~ rust: Box(u8, bool),

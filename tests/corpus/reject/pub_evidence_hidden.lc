@@ -1,0 +1,42 @@
+// The export boundary, with the evidence hidden inside a parameter type: a
+// `pub` function that takes a value Rust could build or alter around a
+// marker takes evidence as surely as one with a `@P` parameter. The struct
+// with the `pub` field is `pub(crate)`, so the struct itself passes; the
+// `pub` function taking it does not.
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u8) -> Prop {
+    prop!(failures <= 3)
+}
+
+pub(crate) struct Lock {
+    pub failures: u8,
+    pub bounded: @within_limit(failures),
+}
+
+pub fn failures_of(lock: Lock) -> u8 { //~ error: L0244 `failures_of` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `lock.bounded` is evidence
+    lock.failures
+}
+
+// A `pub` data field beside a private evidence field: Rust could change
+// the data the evidence speaks of.
+pub(crate) struct Percent {
+    pub value: u8,
+    in_range: @(value <= 100),
+}
+
+pub fn value_of(percent: Percent) -> u8 { //~ error: L0244 `value_of` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `percent` is a `Percent`, which carries evidence, in `in_range`, and whose field `value` is `pub`
+    percent.value
+}
+
+// A variant's payload is built by whoever names the variant.
+pub enum Checked {
+    Yes(u8, @within_limit(0)),
+    No,
+}
+
+pub fn unwrap(checked: Checked) -> u8 { //~ error: L0244 `unwrap` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `checked` may be `Checked::Yes`, whose payload at `1` is evidence
+    match checked {
+        Checked::Yes(n, _) => n,
+        Checked::No => 0,
+    }
+}

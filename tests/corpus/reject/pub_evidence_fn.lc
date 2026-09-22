@@ -1,0 +1,50 @@
+// The export boundary (Target language: What is generated). Plain `pub`
+// means exported to Rust, and a Rust caller can obtain a marker honestly,
+// from any function that returns evidence, so nothing exported may take
+// one: the marker replay attack, written as Locus. `step` may be
+// `pub(crate)`, which every module of the generated crate sees and Rust
+// never does, or take a validated type instead.
+#[derive(Clone, Copy, Debug)]
+pub struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u8) -> Prop {
+    prop!(failures <= 3)
+}
+
+// Honest: evidence is returned to Rust, which can do nothing with it.
+pub fn bounded_zero() -> @within_limit(0) {
+    fold!(within_limit, prove!(0u8 <= 3))
+}
+
+pub fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) { //~ error: L0244 `step` takes evidence and cannot be `pub`
+    (lock, bounded)
+}
+
+// Evidence inside a tuple a Rust caller can build.
+pub fn paired(pair: (n: u8, @within_limit(n))) -> u8 { //~ error: L0244 `paired` takes evidence and cannot be `pub`
+    pair.0
+}
+
+// A validated type: every field private, so Rust can hold one and neither
+// make nor change it. Fine to export.
+pub struct Percent {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+pub fn value_of(percent: Percent) -> u8 {
+    percent.value
+}
+
+// The restricted forms mean what they mean in Rust; none reaches Rust.
+pub(crate) fn step_in_crate(lock: Lock, bounded: @within_limit(lock.failures)) -> Lock {
+    lock
+}
+
+pub(super) fn step_in_parent(lock: Lock, bounded: @within_limit(lock.failures)) -> Lock {
+    lock
+}

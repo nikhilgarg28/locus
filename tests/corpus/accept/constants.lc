@@ -80,9 +80,9 @@ fn known() -> @four_is_double {
 //~ run: level(Mode::Off) => 0
 //~ run: corner_x() => 3
 //~ run: pair_first() => 3
-//~ rust: pub const LIMIT: u8 = 3_u8;
-//~ rust: pub const WIDE: u32 = (300_u16 as u32);
-//~ rust: pub const PAIR: (u8, bool) = (LIMIT, OPEN);
-//~ rust: pub const CORNER: Point = Point { x: LIMIT, y: SUM };
-//~ rust: pub const DIM: Mode = Mode::On { level: LIMIT };
+//~ rust: const LIMIT: u8 = 3_u8;
+//~ rust: const WIDE: u32 = (300_u16 as u32);
+//~ rust: const PAIR: (u8, bool) = (LIMIT, OPEN);
+//~ rust: const CORNER: Point = Point { x: LIMIT, y: SUM };
+//~ rust: const DIM: Mode = Mode::On { level: LIMIT };
 //~ rust: n.wrapping_add(LIMIT)

@@ -26,4 +26,4 @@ fn room_after_clamp(n: u8) -> u8 {
 //~ run: clamp(255) => (250, Proved)
 //~ run: room_after_clamp(0) => 255
 //~ run: room_after_clamp(255) => 5
-//~ rust: pub fn headroom(n: u8, small: Proved) -> (u8, Proved) {
+//~ rust: fn headroom(n: u8, small: Proved) -> (u8, Proved) {

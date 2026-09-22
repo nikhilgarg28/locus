@@ -3,8 +3,9 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::ast::{self, AttributeKind, DeclarationKind};
-use crate::diagnostic::Diagnostic;
+use crate::ast::{self, AttributeKind, DeclarationKind, VisibilityScope};
+use crate::diagnostic::{Applicability, Diagnostic, Suggestion};
+use crate::erased::Visibilities;
 use crate::exec::Promises;
 use crate::kernel::theory;
 use crate::kernel::{Context, Definitions, FnId, Proof, PropVariant, Term, Type};
@@ -64,6 +65,8 @@ pub struct Elaborated {
     pub diagnostics: Vec<Diagnostic>,
     pub holes: Vec<HoleReport>,
     pub items: Vec<ItemReport>,
+    /// What each accepted item and field is marked with, for the printer.
+    pub visibilities: Visibilities,
 }
 
 impl Elaborated {
@@ -190,6 +193,7 @@ pub fn elaborate_with(
         }
     }
     accepted.sort_by_key(|(index, _, _)| *index);
+    let visibilities = env.export_boundary(program);
     env.diagnostics
         .sort_by_key(|diagnostic| diagnostic.labels[0].span.start);
     Elaborated {
@@ -201,6 +205,358 @@ pub fn elaborate_with(
         diagnostics: env.diagnostics,
         holes: env.holes,
         items: env.items,
+        visibilities,
+    }
+}
+
+/// A visibility as Rust spells it, and as the printer writes it: `pub`,
+/// `pub(crate)`, `pub(super)`, `pub(in path)`, and nothing for private,
+/// which `pub(self)` also is.
+fn spelled(visibility: Option<&ast::Visibility>) -> String {
+    match visibility.map(|visibility| &visibility.scope) {
+        None | Some(VisibilityScope::SelfModule) => String::new(),
+        Some(VisibilityScope::Public) => "pub".into(),
+        Some(VisibilityScope::Crate) => "pub(crate)".into(),
+        Some(VisibilityScope::Super) => "pub(super)".into(),
+        Some(VisibilityScope::In(path)) => format!("pub(in {})", path.text()),
+    }
+}
+
+fn is_public(visibility: Option<&ast::Visibility>) -> bool {
+    matches!(
+        visibility,
+        Some(ast::Visibility {
+            scope: VisibilityScope::Public,
+            ..
+        })
+    )
+}
+
+/// Why a Rust caller could supply a value of a type whose evidence does not
+/// hold: the path into the value, `.1` or `.bounded` and so on, and what is
+/// found there.
+struct Forgery {
+    path: String,
+    reason: String,
+}
+
+impl Forgery {
+    fn under(mut self, segment: &str) -> Self {
+        self.path = format!("{segment}{}", self.path);
+        self
+    }
+
+    /// The sentence: "`lock.bounded` is evidence".
+    fn sentence(&self, root: &str) -> String {
+        format!("`{root}{}` {}", self.path, self.reason)
+    }
+
+    /// " at `1.bounded`" for a path into a value that has no name, or
+    /// nothing for an empty path.
+    fn located(&self) -> String {
+        if self.path.is_empty() {
+            String::new()
+        } else {
+            format!(" at `{}`", self.path.trim_start_matches('.'))
+        }
+    }
+}
+
+impl Env<'_> {
+    /// The export boundary (Target language: What is generated), checked
+    /// once every item is declared, and what each accepted item and field
+    /// is marked with, for the printer.
+    ///
+    /// Plain `pub` means exported to Rust, and a Rust caller can obtain a
+    /// marker honestly, from any function that returns evidence, so the
+    /// guarantee rests on what is exported taking no evidence:
+    ///
+    /// - A `pub` function may take no evidence, directly or inside a
+    ///   parameter whose type a Rust caller could build or alter, which is a
+    ///   tuple, an enum, or a struct with a `pub` field (`L0244`). It may be
+    ///   `pub(crate)`, or any restricted form, which Rust never sees; or it
+    ///   may take a validated type, a struct whose fields are all private,
+    ///   which Rust can hold and cannot make or change.
+    /// - A `pub` struct that carries evidence has every field private
+    ///   (`L0245`): a `pub` evidence field could be written with a marker,
+    ///   and a `pub` data field could be changed under the evidence that
+    ///   speaks of it.
+    ///
+    /// Within one file everything is in scope, so a use of a private item
+    /// is never an error here; and a proposition or a function of the logic
+    /// has no runtime form and is emitted under no visibility at all.
+    fn export_boundary(&mut self, program: &ast::Program) -> Visibilities {
+        let mut visibilities = Visibilities::default();
+        for declaration in &program.declarations {
+            let Some(name) = declared_name(declaration) else {
+                continue;
+            };
+            if self.failed.contains(&name.text) {
+                continue;
+            }
+            match &declaration.kind {
+                DeclarationKind::Struct { fields, .. } => {
+                    let Some(Global::Struct(info)) = self.types.get(&name.text) else {
+                        continue;
+                    };
+                    let info = Rc::clone(info);
+                    visibilities.set_type(&name.text, &spelled(info.visibility.as_ref()));
+                    for (binder, visibility) in info.fields.iter().zip(&info.field_visibility) {
+                        visibilities.set_field(
+                            &name.text,
+                            &binder.name,
+                            &spelled(visibility.as_ref()),
+                        );
+                    }
+                    if is_public(info.visibility.as_ref()) {
+                        self.check_exported_struct(&info, fields);
+                    }
+                }
+                DeclarationKind::Enum { .. } => {
+                    if let Some(Global::Enum(info)) = self.types.get(&name.text) {
+                        visibilities.set_type(&name.text, &spelled(info.visibility.as_ref()));
+                    }
+                }
+                DeclarationKind::Function { parameters, .. } => {
+                    let Some(Global::Fn(info)) = self.values.get(&name.text) else {
+                        continue;
+                    };
+                    let info = Rc::clone(info);
+                    visibilities.set_value(&name.text, &spelled(info.visibility.as_ref()));
+                    if is_public(info.visibility.as_ref()) {
+                        self.check_exported_fn(&info, parameters);
+                    }
+                }
+                DeclarationKind::Constant { .. } => {
+                    if let Some(Global::Fn(info)) = self.values.get(&name.text) {
+                        visibilities.set_value(&name.text, &spelled(info.visibility.as_ref()));
+                    }
+                }
+                DeclarationKind::Prop { .. } | DeclarationKind::Impl { .. } => {}
+            }
+        }
+        visibilities
+    }
+
+    /// Rule one: a `pub` function takes no evidence a Rust caller could
+    /// supply.
+    fn check_exported_fn(&mut self, info: &FnInfo, parameters: &[ast::Parameter]) {
+        let Some(visibility) = &info.visibility else {
+            return;
+        };
+        for (parameter, binder) in parameters.iter().zip(&info.params) {
+            let Some(forgery) = self.forgery(&binder.ty) else {
+                continue;
+            };
+            let name = &info.name;
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0244",
+                    format!(
+                        "`{name}` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since {}",
+                        forgery.sentence(&binder.name)
+                    ),
+                    visibility.span,
+                )
+                .label(parameter.span, "the evidence is taken here")
+                .note("a marker cannot be made outside the generated code, and a Rust caller can obtain one honestly, from any function that returns evidence, and pass it on")
+                .suggest(Suggestion {
+                    message: "make it `pub(crate)`, visible throughout the generated crate and never to Rust, or take a validated type, a struct whose fields are all private, and check plain data at runtime".into(),
+                    span: visibility.span,
+                    replacement: "pub(crate)".into(),
+                    applicability: Applicability::MaybeIncorrect,
+                }),
+            );
+            return;
+        }
+    }
+
+    /// Rule two: a `pub` struct that carries evidence has every field
+    /// private.
+    fn check_exported_struct(&mut self, info: &StructInfo, fields: &[ast::Field]) {
+        let Some(visibility) = &info.visibility else {
+            return;
+        };
+        if !info
+            .fields
+            .iter()
+            .any(|field| self.carries_evidence(&field.ty))
+        {
+            return;
+        }
+        let speaking = self.speaking_field(info).map(|field| field.name.clone());
+        for (field, binder) in fields.iter().zip(&info.fields) {
+            let Some(field_visibility) = &field.visibility else {
+                continue;
+            };
+            if matches!(field_visibility.scope, VisibilityScope::SelfModule) {
+                continue;
+            }
+            let (item, name) = (&info.name, &binder.name);
+            let message = match (self.forgery(&binder.ty), &speaking) {
+                (Some(forgery), _) if forgery.path.is_empty() => format!(
+                    "evidence in the `pub` field `{item}.{name}` of a `pub` struct can be forged by a Rust caller; make the field private"
+                ),
+                (Some(forgery), _) => format!(
+                    "evidence in the `pub` field `{item}.{name}` of a `pub` struct can be forged by a Rust caller, since {}; make the field private",
+                    forgery.sentence(name)
+                ),
+                (None, Some(speaking)) if speaking != name => format!(
+                    "`{item}` carries evidence, in `{speaking}`, and its `pub` field `{name}` can be written by a Rust caller, under that evidence; make the field private"
+                ),
+                // A field the evidence of no sibling can speak of, such as
+                // a validated struct: one valid value for another.
+                (None, _) => continue,
+            };
+            self.diagnostics.push(
+                Diagnostic::error("L0245", message, field_visibility.span)
+                    .label(visibility.span, "the struct is exported to Rust here")
+                    .note("a validated type has every field private: Rust can hold one and pass it back, and can neither make one nor change what its evidence speaks of"),
+            );
+        }
+    }
+
+    /// Whether a value of the type holds evidence anywhere in it.
+    fn carries_evidence(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Proof(_) => true,
+            Type::Tuple(fields) => fields.iter().any(|field| self.carries_evidence(field)),
+            Type::Struct(id) => self.struct_by_id(*id).is_some_and(|info| {
+                info.fields
+                    .iter()
+                    .any(|field| self.carries_evidence(&field.ty))
+            }),
+            Type::Enum(id) => self.enum_by_id(*id).is_some_and(|info| {
+                info.variants.iter().any(|variant| {
+                    variant
+                        .payload
+                        .iter()
+                        .any(|field| self.carries_evidence(&field.ty))
+                })
+            }),
+            Type::Fn(_, result) => self.carries_evidence(result),
+            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Nat | Type::Int => false,
+        }
+    }
+
+    /// A field of the struct whose type is evidence, or holds evidence
+    /// where its claim can mention the fields beside it: a proof, or a tuple
+    /// with one in it, whose type is written over the fields before it. The
+    /// evidence inside a struct or an enum speaks of that type's own fields
+    /// alone, so one valid value of it can stand in for another.
+    fn speaking_field<'i>(&self, info: &'i StructInfo) -> Option<&'i Binder> {
+        info.fields
+            .iter()
+            .find(|field| self.speaks_of_siblings(&field.ty))
+    }
+
+    fn speaks_of_siblings(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Proof(_) => true,
+            Type::Tuple(fields) => fields.iter().any(|field| self.speaks_of_siblings(field)),
+            Type::Fn(_, result) => self.carries_evidence(result),
+            Type::Struct(_)
+            | Type::Enum(_)
+            | Type::Bool
+            | Type::U8
+            | Type::Machine(_)
+            | Type::Prop
+            | Type::Nat
+            | Type::Int => false,
+        }
+    }
+
+    /// Why a Rust caller could supply a value of the type whose evidence
+    /// does not hold, or `None` when it could not. Evidence itself can be
+    /// any marker; a tuple or an enum is built from its parts; a struct is
+    /// safe when every field is private, since a `pub` field is a way in,
+    /// to write evidence or to change the data its siblings' evidence
+    /// speaks of; and a function value could return a marker.
+    fn forgery(&self, ty: &Type) -> Option<Forgery> {
+        match ty {
+            Type::Proof(_) => Some(Forgery {
+                path: String::new(),
+                reason: "is evidence".into(),
+            }),
+            Type::Tuple(fields) => fields.iter().enumerate().find_map(|(index, field)| {
+                self.forgery(field)
+                    .map(|forgery| forgery.under(&format!(".{index}")))
+            }),
+            Type::Struct(id) => {
+                let info = self.struct_by_id(*id)?;
+                if !info
+                    .fields
+                    .iter()
+                    .any(|field| self.carries_evidence(&field.ty))
+                {
+                    return None;
+                }
+                let public: Vec<&Binder> = info
+                    .fields
+                    .iter()
+                    .zip(&info.field_visibility)
+                    .filter(|(_, visibility)| {
+                        visibility.as_ref().is_some_and(|visibility| {
+                            !matches!(visibility.scope, VisibilityScope::SelfModule)
+                        })
+                    })
+                    .map(|(field, _)| field)
+                    .collect();
+                // A `pub` field that is itself a way in, then a `pub` data
+                // field under the evidence of a sibling.
+                if let Some(forgery) = public.iter().find_map(|field| {
+                    Some(self.forgery(&field.ty)?.under(&format!(".{}", field.name)))
+                }) {
+                    return Some(forgery);
+                }
+                let speaking = self.speaking_field(&info)?;
+                let field = public.iter().find(|field| field.name != speaking.name)?;
+                Some(Forgery {
+                    path: String::new(),
+                    reason: format!(
+                        "is a `{}`, which carries evidence, in `{}`, and whose field `{}` is `pub`, so that a Rust caller can change what the evidence speaks of",
+                        info.name, speaking.name, field.name
+                    ),
+                })
+            }
+            Type::Enum(id) => {
+                let info = self.enum_by_id(*id)?;
+                info.variants.iter().find_map(|variant| {
+                    let forgery =
+                        variant
+                            .payload
+                            .iter()
+                            .enumerate()
+                            .find_map(|(index, field)| {
+                                let position = if variant.named {
+                                    field.name.clone()
+                                } else {
+                                    index.to_string()
+                                };
+                                Some(self.forgery(&field.ty)?.under(&format!(".{position}")))
+                            })?;
+                    Some(Forgery {
+                        path: String::new(),
+                        reason: format!(
+                            "may be `{}::{}`, whose payload{} {}",
+                            info.name,
+                            variant.name,
+                            forgery.located(),
+                            forgery.reason
+                        ),
+                    })
+                })
+            }
+            Type::Fn(_, result) => self.forgery(result).map(|forgery| Forgery {
+                path: String::new(),
+                reason: format!(
+                    "is a function whose result{} {}",
+                    forgery.located(),
+                    forgery.reason
+                ),
+            }),
+            Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Nat | Type::Int => None,
+        }
     }
 }
 
@@ -451,6 +807,10 @@ impl Env<'_> {
             DeclarationKind::Struct { name, fields } => {
                 self.refuse_promises(attributes, name, "a struct");
                 self.start_item(&name.text, true, LOGICAL);
+                let field_visibility: Vec<Option<ast::Visibility>> = fields
+                    .iter()
+                    .map(|field| field.visibility.clone())
+                    .collect();
                 let fields = self.telescope(
                     fields
                         .iter()
@@ -472,6 +832,8 @@ impl Env<'_> {
                     name: name.text.clone(),
                     fields,
                     derives,
+                    visibility: declaration.visibility.clone(),
+                    field_visibility: field_visibility.clone(),
                 })))
             }
             DeclarationKind::Enum { name, variants } => {
@@ -529,6 +891,7 @@ impl Env<'_> {
                     name: name.text.clone(),
                     variants: items,
                     derives,
+                    visibility: declaration.visibility.clone(),
                 })))
             }
             DeclarationKind::Function {
@@ -548,6 +911,7 @@ impl Env<'_> {
                     takes_mut,
                     body: Body::Block(body),
                     constant: false,
+                    visibility: declaration.visibility.clone(),
                 };
                 self.function(name, parameters, result, function)
             }
@@ -559,6 +923,7 @@ impl Env<'_> {
                     takes_mut: false,
                     body: Body::Expr(value),
                     constant: true,
+                    visibility: declaration.visibility.clone(),
                 };
                 self.function(name, &[], ty, function)
             }
@@ -589,6 +954,7 @@ impl Env<'_> {
             takes_mut,
             body,
             constant,
+            visibility,
         } = function;
         let started = std::time::Instant::now();
         // A function that may appear in a proposition is a function of the
@@ -652,6 +1018,7 @@ impl Env<'_> {
             promises,
             takes_mut,
             not_a_term,
+            visibility,
         })))
     }
 
@@ -883,6 +1250,7 @@ impl Env<'_> {
                     },
                     takes_mut: false,
                     not_a_term: None,
+                    visibility: None,
                 })),
             );
         }
@@ -1021,4 +1389,6 @@ struct Function<'a> {
     body: Body<'a>,
     /// Declared with `const`: used by name, without a call.
     constant: bool,
+    /// `pub` or a restricted form, as written; private without one.
+    visibility: Option<ast::Visibility>,
 }

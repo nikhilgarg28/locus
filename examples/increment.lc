@@ -12,4 +12,4 @@ fn consume(n: u8) -> u8 {
 //~ run: increment(7) => (8, Proved)
 //~ run: increment(255) => (0, Proved)
 //~ run: consume(41) => 42
-//~ rust: pub fn increment(n: u8) -> (u8, Proved) {
+//~ rust: fn increment(n: u8) -> (u8, Proved) {

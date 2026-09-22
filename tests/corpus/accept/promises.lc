@@ -80,4 +80,4 @@ fn four() -> (out: u8, @four_by_double) {
 //~ run: level(Mode::On(3)) => 3
 //~ run: level(Mode::On(30)) => 10
 //~ run: four() => (4, Proved)
-//~ rust: pub fn double(n: u8) -> u8 {
+//~ rust: fn double(n: u8) -> u8 {

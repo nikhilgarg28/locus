@@ -86,5 +86,5 @@ fn attempts_left(attempts: u32, correct: u32) -> u32 {
 //~ run: run(300, 9) => (Lock { failures: 3, open: false }, Proved)
 //~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
 //~ run: event_at(4294967295, 4294967295) => Right
-//~ rust: pub fn attempts_left(attempts: u32, correct: u32) -> u32 {
+//~ rust: fn attempts_left(attempts: u32, correct: u32) -> u32 {
 //~ rust: if lock.failures < 3_u32 {

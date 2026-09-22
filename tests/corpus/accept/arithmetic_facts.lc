@@ -131,7 +131,7 @@ fn stated(a: u8, b: u8, h: @(a as Int + b as Int <= 255)) -> @(a as Int + b as I
 //~ run: halve(-7, 2, Proved) => -3
 //~ run: safe_quotient(7, 3, Proved) => 2
 //~ run: twice_then_one(100, Proved) => 201
-//~ rust: pub fn wrapped_sum(a: u8, b: u8) -> (u8, Proved) {
+//~ rust: fn wrapped_sum(a: u8, b: u8) -> (u8, Proved) {
 //~ rust: let s = a + b;
 //~ rust: let n = -a;
 //~ rust: let q = a / b;

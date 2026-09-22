@@ -83,5 +83,5 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
 //~ run: run(200, 9) => (Lock { failures: 3, open: false }, Proved)
 //~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
 //~ run: event_at(4, 4) => Right
-//~ rust: pub fn attempts_left(attempts: u8, correct: u8) -> u8 {
-//~ rust: pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {
+//~ rust: fn attempts_left(attempts: u8, correct: u8) -> u8 {
+//~ rust: fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {

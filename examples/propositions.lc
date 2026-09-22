@@ -54,4 +54,4 @@ fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
 
 //~ proofs: 3
 //~ run: reflexivity_claim(5) => (Ghost, Proved)
-//~ rust: pub fn reflexivity_claim(n: u8) -> (Ghost, Proved) {
+//~ rust: fn reflexivity_claim(n: u8) -> (Ghost, Proved) {

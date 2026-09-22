@@ -50,6 +50,6 @@ const general: Prop = prop!(forall (x: u8) { x <= 9 => prop!(exists (y: u8) { x 
 //~ run: named(0) => (1, Proved)
 //~ run: named(7) => (7, Proved)
 //~ run: exists(2, 3) => 5
-//~ rust: pub fn bump(n: u8, small: Proved) -> (u8, Proved) {
+//~ rust: fn bump(n: u8, small: Proved) -> (u8, Proved) {
 //~ rust: (out, Proved)
-//~ rust: pub fn exists(forall: u8, prove: u8) -> u8 {
+//~ rust: fn exists(forall: u8, prove: u8) -> u8 {

@@ -104,7 +104,7 @@ fn pair(n: u8) -> (u8, u8) {
 //~ run: first_over(10) => 4
 //~ run: first_over(255) => 0
 //~ run: pair(7) => (4, 3)
-//~ rust: pub fn find(n: u8) -> u8 {
+//~ rust: fn find(n: u8) -> u8 {
 //~ rust: let mut i = 0_u8;
 //~ rust: loop {
 //~ rust: break i.wrapping_add(100_u8)
@@ -112,4 +112,4 @@ fn pair(n: u8) -> (u8, u8) {
 //~ rust: while k < n {
 //~ rust: for i in 0_u8..n {
 //~ rust: total = total.wrapping_add(i);
-//~ rust: pub fn forever(n: u8) -> u8 {
+//~ rust: fn forever(n: u8) -> u8 {

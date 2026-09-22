@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use crate::ast;
 use crate::diagnostic::Diagnostic;
 use crate::exec::{Promise, Promises};
 use crate::kernel::theory::Theory;
@@ -27,6 +28,10 @@ pub(super) struct StructInfo {
     pub fields: Vec<Binder>,
     /// `#[derive(...)]`, checked: `Copy` in it makes the type reusable.
     pub derives: Vec<Derive>,
+    /// `pub` or a restricted form, as written; private without one.
+    pub visibility: Option<ast::Visibility>,
+    /// Each field's, in the order of `fields`.
+    pub field_visibility: Vec<Option<ast::Visibility>>,
 }
 
 #[derive(Debug)]
@@ -36,6 +41,9 @@ pub(super) struct EnumInfo {
     pub variants: Vec<VariantInfo>,
     /// `#[derive(...)]`, checked: `Copy` in it makes the type reusable.
     pub derives: Vec<Derive>,
+    /// `pub` or a restricted form, as written; private without one. A
+    /// variant is as visible as its enum.
+    pub visibility: Option<ast::Visibility>,
 }
 
 #[derive(Debug)]
@@ -88,6 +96,8 @@ pub(super) struct FnInfo {
     /// It is checked as an ordinary function with its promises, and is
     /// known by its contract only, which nothing supports yet (LOC-193).
     pub not_a_term: Option<(String, usize)>,
+    /// `pub` or a restricted form, as written; private without one.
+    pub visibility: Option<ast::Visibility>,
 }
 
 /// The promises that let a function appear in a proposition: it always

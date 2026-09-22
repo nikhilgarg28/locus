@@ -94,7 +94,8 @@ use compiled::{
     Answered, Overflow, Unit, compile, harness, observe, one_line, remove_binaries, rust_value,
 };
 use locus::erased::{
-    self, Interpreter, Module, Outcome, RunError, Value, check_module, print_module,
+    self, Interpreter, Module, Outcome, RunError, Value, Visibilities, check_module, print_items,
+    print_module,
 };
 use locus::exec::CheckInterpreter;
 use locus::kernel::{
@@ -2409,13 +2410,9 @@ fn run(seed: u64, count: u64, judge: &Judge) -> Summary {
 
 /// The program as Rust, without the printer's fixed header.
 fn rendering(session: &Session) -> String {
-    let printed = print_module(session.erased());
-    match printed.find("pub struct Ghost;\n") {
-        Some(at) => printed[at + "pub struct Ghost;\n".len()..]
-            .trim()
-            .to_string(),
-        None => printed,
-    }
+    print_items(session.erased(), &Visibilities::everything_public())
+        .trim()
+        .to_string()
 }
 
 fn report(disagreement: &Disagreement, base: &Session) -> String {

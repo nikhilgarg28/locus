@@ -7,7 +7,8 @@
 // the body sees. The whole file now runs three ways. `Debug` is added to
 // the derives Target examples writes, since the compiled harness prints
 // the values a run line asks for; the printer emits the list as
-// written, so nothing else would give `Lock` and `Event` a `Debug`.
+// written, so nothing else would give `Lock` and `Event` a `Debug`. `step`
+// and `remaining` take evidence, so they are `pub(crate)`, never plain `pub` (O2).
 #[derive(Clone, Copy, Debug)]
 pub enum Event { Wrong, Right }
 
@@ -20,7 +21,7 @@ fn within_limit(failures: u32) -> Prop {
 }
 
 #[terminates] #[no_panic] #[no_io]
-pub fn step(
+pub(crate) fn step(
     lock: Lock,
     bounded: @within_limit(lock.failures),
     event: Event,
@@ -61,7 +62,7 @@ pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failu
 }
 
 #[terminates] #[no_panic] #[no_io]
-pub fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
+pub(crate) fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
     let small = unfold!(within_limit, bounded);                                 // failures <= 3
     let left = 3 - failures;                                                    // the obligation of -: arithmetic, from small
     (left, prove!(left <= 3))                                                   // arithmetic

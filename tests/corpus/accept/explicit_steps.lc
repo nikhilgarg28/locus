@@ -68,4 +68,4 @@ fn headroom(n: u8, small: @(n <= 250)) -> (out: u8, @(out >= 5)) {
 //~ run: stepped(9, Proved) => (10, Proved)
 //~ run: headroom(250, Proved) => (5, Proved)
 //~ run: headroom(0, Proved) => (255, Proved)
-//~ rust: pub fn twice(n: u8) -> (u8, Proved) {
+//~ rust: fn twice(n: u8) -> (u8, Proved) {

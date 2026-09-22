@@ -403,7 +403,7 @@ fn below(a: u8, b: u8, h: @(a as Int <= b as Int - 1)) -> @(a < b) {
 fn the_midpoint_checks_and_runs() {
     let result = accepted(
         "#[terminates] #[no_panic] #[no_io]
-pub fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
+pub(crate) fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
     -> (mid: u32, @(mid as Int == (lo as Int + hi as Int) / 2))
 {
     let half = (hi - lo) / 2;

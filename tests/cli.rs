@@ -98,11 +98,14 @@ fn a_file_is_checked_run_and_printed_as_rust() {
         .arg(example("lock.lc"))
         .output()
         .unwrap();
+    // Nothing in the example is marked `pub`, so nothing is exported: the
+    // functions are printed as written, private.
+    let rust = String::from_utf8(output.stdout).unwrap();
     assert!(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .contains("pub fn attempts_left(attempts: u8, correct: u8) -> u8 {")
+        rust.contains("\nfn attempts_left(attempts: u8, correct: u8) -> u8 {"),
+        "{rust}"
     );
+    assert!(!rust.contains("pub fn"), "{rust}");
     let output = locus()
         .arg("run")
         .arg(example("lock.lc"))
@@ -110,6 +113,119 @@ fn a_file_is_checked_run_and_printed_as_rust() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
+}
+
+#[test]
+fn build_writes_a_crate_that_compiles_and_is_the_same_twice() {
+    let locus = || Command::new(env!("CARGO_BIN_EXE_locus"));
+    let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli_build_lock");
+    let build = || {
+        let output = locus()
+            .arg("build")
+            .arg(example("lock.lc"))
+            .arg(example("increment.lc"))
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            stdout.contains("Wrote the crate `cli_build_lock`, 2 module(s), under"),
+            "{stdout}"
+        );
+        [
+            "Cargo.toml",
+            "src/lib.rs",
+            "src/increment.rs",
+            "src/lock.rs",
+        ]
+        .map(|path| std::fs::read_to_string(out.join(path)).unwrap())
+    };
+    let first = build();
+    assert!(
+        first[1].contains("pub mod increment;\n\npub mod lock;\n"),
+        "{}",
+        first[1]
+    );
+    assert!(
+        first[3].contains("\nfn attempts_left(attempts: u8, correct: u8) -> u8 {"),
+        "{}",
+        first[3]
+    );
+    // The crate compiles as a library under `-D warnings`, with the edition
+    // its manifest names.
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let output = Command::new(rustc)
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "-D",
+            "warnings",
+            "-o",
+        ])
+        .arg(out.join("libcli_build_lock.rlib"))
+        .arg(out.join("src/lib.rs"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(build(), first);
+    // Usage errors, and a file that is refused, write no crate.
+    let output = locus()
+        .arg("build")
+        .arg(example("lock.lc"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("`--out <dir>` says where the crate goes")
+    );
+    let refused = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli_build_refused");
+    let output = locus()
+        .arg("build")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/corpus/reject/pub_evidence_fn.lc"),
+        )
+        .arg("--out")
+        .arg(&refused)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("error[L0244]")
+    );
+    assert!(!refused.exists());
+    // A file whose name is no module name.
+    let odd = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("Odd-Name.lc");
+    std::fs::write(&odd, "fn f() -> u8 { 1 }\n").unwrap();
+    let output = locus()
+        .arg("build")
+        .arg(&odd)
+        .arg("--out")
+        .arg(&refused)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("a module's name is a lower-case identifier")
+    );
 }
 
 /// The `--holes` listing without its timings, which are the one thing in it

@@ -71,6 +71,7 @@
 //! three, because the panic is the meaning of the program as written, and
 //! what the interpreters and the compiled program are compared on.
 
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::kernel::{MachineInt, Op, Prim};
@@ -84,39 +85,200 @@ const HEADER: &str = "\
 #![allow(dead_code, unused_variables, unused_parens, unused_braces, unreachable_code, unused_comparisons, unused_assignments)]
 #![allow(arithmetic_overflow, unconditional_panic, overflowing_literals)]
 #![allow(clippy::all)]
-
-/// The erasure of a proof. It occupies no space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Proved;
-
-/// The erasure of any other ghost value. It occupies no space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Ghost;
 ";
+
+/// The markers, defined once for all the generated modules (Target language:
+/// What is generated). Each is a struct with a private field, so that no
+/// code outside the module that defines them, and the modules under it, can
+/// make one: the only value is the private constant of the same name, which
+/// the generated code names as it names the type. `Debug` is written by
+/// hand so that a marker prints as its name, as the interpreter prints it.
+///
+/// That a marker cannot be made from nothing stops casual misuse and is no
+/// part of the guarantee: hand-written Rust can obtain a marker honestly,
+/// from any function that returns evidence, and the guarantee rests on no
+/// exported function taking one, which the elaborator checks.
+pub const MARKERS: &str = "\
+/// The erasure of a proof. It occupies no space, and cannot be made outside
+/// the generated code.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Proved {
+    _private: (),
+}
+
+/// The erasure of any other ghost value. It occupies no space, and cannot be
+/// made outside the generated code.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Ghost {
+    _private: (),
+}
+
+#[allow(non_upper_case_globals)]
+const Proved: Proved = Proved { _private: () };
+
+#[allow(non_upper_case_globals)]
+const Ghost: Ghost = Ghost { _private: () };
+
+impl std::fmt::Debug for Proved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(\"Proved\")
+    }
+}
+
+impl std::fmt::Debug for Ghost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(\"Ghost\")
+    }
+}
+";
+
+/// What a module under the generated root begins with in place of the
+/// marker definitions. A module may use neither marker, so the import may
+/// be unused.
+const IMPORTED_MARKERS: &str = "\
+#[allow(unused_imports)]
+use crate::{Ghost, Proved};
+";
+
+/// Where the markers are: defined in the module printed, which is what
+/// `locus rust` prints for one file, or in the root of the generated crate,
+/// from which each module under it imports them (`locus build`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Markers {
+    Here,
+    InRoot,
+}
+
+/// What each generated item and field is marked with, as the printer writes
+/// it: `pub`, `pub(crate)`, `pub(super)`, `pub(in path)`, or nothing for
+/// private. The erased tree does not carry it, since it is no runtime
+/// matter; the elaborator records it beside the tree, and the printer looks
+/// each name up in its namespace, types or values. A name not recorded is
+/// private, which is what an item is without `pub`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Visibilities {
+    types: BTreeMap<String, String>,
+    values: BTreeMap<String, String>,
+    /// By the struct's name and the field's.
+    fields: BTreeMap<(String, String), String>,
+    /// Everything `pub`, whatever was recorded: for a tree built by hand,
+    /// which has no visibilities, and for a test that calls into the module
+    /// from outside it.
+    everything_public: bool,
+}
+
+impl Visibilities {
+    /// Every item and field `pub`.
+    pub fn everything_public() -> Self {
+        Self {
+            everything_public: true,
+            ..Self::default()
+        }
+    }
+
+    /// Records a struct's or an enum's visibility, spelled as Rust spells
+    /// it, or as the empty string for private.
+    pub fn set_type(&mut self, name: &str, spelling: &str) {
+        self.types.insert(name.to_string(), spelling.to_string());
+    }
+
+    /// Records a function's or a constant's visibility.
+    pub fn set_value(&mut self, name: &str, spelling: &str) {
+        self.values.insert(name.to_string(), spelling.to_string());
+    }
+
+    /// Records a struct field's visibility.
+    pub fn set_field(&mut self, item: &str, field: &str, spelling: &str) {
+        self.fields
+            .insert((item.to_string(), field.to_string()), spelling.to_string());
+    }
+
+    /// The spelling with the space after it, or nothing for private.
+    fn spelled(&self, recorded: Option<&String>) -> String {
+        if self.everything_public {
+            return "pub ".into();
+        }
+        match recorded.map(String::as_str) {
+            None | Some("") => String::new(),
+            Some(spelling) => format!("{spelling} "),
+        }
+    }
+
+    fn of_type(&self, name: &str) -> String {
+        self.spelled(self.types.get(name))
+    }
+
+    fn of_value(&self, name: &str) -> String {
+        self.spelled(self.values.get(name))
+    }
+
+    fn of_field(&self, item: &str, field: &str) -> String {
+        self.spelled(self.fields.get(&(item.to_string(), field.to_string())))
+    }
+}
 
 struct Printer<'m> {
     module: &'m Module,
     out: String,
 }
 
-/// The module as Rust source.
+/// The module as Rust source with every item and field `pub` and the
+/// markers defined in it: the printing of a tree built by hand, which has no
+/// visibilities, and of a test's module that is called from outside.
 pub fn print_module(module: &Module) -> String {
+    print_module_with(module, &Visibilities::everything_public(), Markers::Here)
+}
+
+/// The module as Rust source: the header, the markers or their import, and
+/// the items with the visibilities recorded for them.
+pub fn print_module_with(module: &Module, visibilities: &Visibilities, markers: Markers) -> String {
+    let mut source = String::from(HEADER);
+    source.push_str(match markers {
+        Markers::Here => MARKERS,
+        Markers::InRoot => IMPORTED_MARKERS,
+    });
+    source.push_str(&items(module, visibilities));
+    indent(&source)
+}
+
+/// The items alone, without the header and the markers: what a report of a
+/// program shows.
+pub fn print_items(module: &Module, visibilities: &Visibilities) -> String {
+    indent(&items(module, visibilities))
+}
+
+/// The root of a generated crate, `src/lib.rs`: the header, the markers, and
+/// one `pub mod` for each module under it, in the order given.
+pub fn print_root(modules: &[String]) -> String {
+    let mut source = String::from(HEADER);
+    source.push_str(MARKERS);
+    for module in modules {
+        let _ = writeln!(source, "\npub mod {module};");
+    }
+    indent(&source)
+}
+
+/// The items, before indentation.
+fn items(module: &Module, visibilities: &Visibilities) -> String {
     let mut printer = Printer {
         module,
-        out: String::from(HEADER),
+        out: String::new(),
     };
     for item in &module.structs {
         printer.derives(&item.derives);
-        let _ = writeln!(printer.out, "pub struct {} {{", item.name);
+        let visibility = visibilities.of_type(&item.name);
+        let _ = writeln!(printer.out, "{visibility}struct {} {{", item.name);
         for (name, ty) in &item.fields {
             let ty = printer.ty(ty);
-            let _ = writeln!(printer.out, "    pub {name}: {ty},");
+            let visibility = visibilities.of_field(&item.name, name);
+            let _ = writeln!(printer.out, "    {visibility}{name}: {ty},");
         }
         printer.out.push_str("}\n");
     }
     for item in &module.enums {
         printer.derives(&item.derives);
-        let _ = writeln!(printer.out, "pub enum {} {{", item.name);
+        let visibility = visibilities.of_type(&item.name);
+        let _ = writeln!(printer.out, "{visibility}enum {} {{", item.name);
         for variant in &item.variants {
             let payload: Vec<String> = variant.payload.iter().map(|ty| printer.ty(ty)).collect();
             if let Some(fields) = &variant.fields {
@@ -141,6 +303,7 @@ pub fn print_module(module: &Module) -> String {
     }
     for function in &module.fns {
         let result = printer.ty(&function.result);
+        let visibility = visibilities.of_value(&function.name);
         // A constant is a `const` item: its body is one expression, which
         // Rust computes at compile time (the elaborator saw that it can).
         if function.constant
@@ -151,7 +314,7 @@ pub fn print_module(module: &Module) -> String {
             let value = printer.expr(value);
             let _ = writeln!(
                 printer.out,
-                "\npub const {}: {result} = {value};",
+                "\n{visibility}const {}: {result} = {value};",
                 function.name
             );
             continue;
@@ -163,7 +326,7 @@ pub fn print_module(module: &Module) -> String {
             .collect();
         let _ = write!(
             printer.out,
-            "\npub fn {}({}) -> {result} ",
+            "\n{visibility}fn {}({}) -> {result} ",
             function.name,
             params.join(", ")
         );
@@ -171,7 +334,7 @@ pub fn print_module(module: &Module) -> String {
         printer.out.push_str(&body);
         printer.out.push('\n');
     }
-    indent(&printer.out)
+    printer.out
 }
 
 /// Indents by brace depth. The printer emits one statement per line, and a

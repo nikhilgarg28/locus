@@ -132,6 +132,6 @@ fn until(limit: u8) -> u8 {
 //~ run: peek(Empty) => 0
 //~ run: until(3) => 3
 //~ rust: #[derive(Debug)]
-//~ rust: pub struct Token {
+//~ rust: struct Token {
 //~ rust: let a = consume(t);
 //~ rust: t = Token { id: second };

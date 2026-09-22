@@ -4,9 +4,9 @@
 // obligations of `-` and `+` and the claim are discharged by the arithmetic
 // procedure (E7); `2 != 0` by evaluation. With every promise of the logic
 // and operators in its body, `midpoint` is checked as an ordinary function
-// with its promises, by the interim rule of LOC-193.
+// with its promises, by the interim rule of LOC-193. It takes evidence, so it is `pub(crate)` (O2).
 #[terminates] #[no_panic] #[no_io]
-pub fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
+pub(crate) fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
     -> (mid: u32, @(mid as Int == (lo as Int + hi as Int) / 2))
 {
     let half = (hi - lo) / 2;          // the obligations of -: arithmetic, from ordered. 2 is not zero: evaluation
@@ -20,5 +20,5 @@ pub fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
 //~ run: midpoint(3, 10, Proved) => (6, Proved)
 //~ run: midpoint(4294967294, 4294967295, Proved) => (4294967294, Proved)
 //~ run: midpoint(7, 7, Proved) => (7, Proved)
-//~ rust: pub fn midpoint(lo: u32, hi: u32, ordered: Proved) -> (u32, Proved) {
+//~ rust: pub(crate) fn midpoint(lo: u32, hi: u32, ordered: Proved) -> (u32, Proved) {
 //~ rust: let half = (hi - lo) / 2_u32;

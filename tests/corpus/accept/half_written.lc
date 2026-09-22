@@ -39,5 +39,5 @@ fn settle(account: Account) -> u8 {
 //~ run: withdraw(Account { balance: 10, holds: 3 }, 20) => (Account { balance: 10, holds: 3 }, Proved)
 //~ run: withdraw(Account { balance: 10, holds: 3 }, 2) => panic: not yet implemented: the withdrawal itself
 //~ run: settle(Account { balance: 10, holds: 3 }) => panic: not yet implemented
-//~ rust: pub fn deposit(account: Account, amount: u8) -> Account {
+//~ rust: fn deposit(account: Account, amount: u8) -> Account {
 //~ rust: let cleared: Account = todo!();

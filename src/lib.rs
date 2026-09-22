@@ -7,6 +7,7 @@
 
 pub mod arith;
 pub mod ast;
+pub mod build;
 pub mod diagnostic;
 pub mod elab;
 pub mod erased;

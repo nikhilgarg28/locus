@@ -73,6 +73,6 @@ fn twice(c: Checked) -> (Checked, Checked) {
 //~ run: twice(Checked::Large(200)) => (Large(200), Large(200))
 //~ rust: #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 //~ rust: #[derive(Clone, Debug)]
-//~ rust: pub struct Bounded {
+//~ rust: struct Bounded {
 //~ rust: #[derive(Debug, Clone, Copy)]
-//~ rust: pub enum Mode {
+//~ rust: enum Mode {

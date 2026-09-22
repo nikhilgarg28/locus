@@ -1,0 +1,45 @@
+// The export boundary, for a struct: a `pub` struct that carries evidence
+// has every field private. A `pub` evidence field could be written with a
+// marker, and a `pub` data field could be changed under the evidence that
+// speaks of it; either way the value no longer means what its type says.
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u8) -> Prop {
+    prop!(failures <= 3)
+}
+
+pub struct Lock {
+    failures: u8,
+    pub bounded: @within_limit(failures), //~ error: L0245 evidence in the `pub` field `Lock.bounded` of a `pub` struct can be forged by a Rust caller
+}
+
+pub struct Percent {
+    pub value: u8, //~ error: L0245 `Percent` carries evidence, in `in_range`, and its `pub` field `value` can be written by a Rust caller
+    in_range: @(value <= 100),
+}
+
+// Evidence at depth: `Inner` is validated, so `Outer` may hold one in a
+// `pub` field; `Open` is not, so `Holder` may not.
+pub struct Inner {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+pub struct Outer {
+    pub inner: Inner,
+}
+
+struct Open {
+    value: u8,
+    pub in_range: @(value <= 100),
+}
+
+pub struct Holder {
+    pub open: Open, //~ error: L0245 evidence in the `pub` field `Holder.open` of a `pub` struct can be forged by a Rust caller, since `open.in_range` is evidence
+}
+
+// Not exported: a `pub(crate)` struct may carry evidence in a `pub` field,
+// since only the generated crate sees it.
+pub(crate) struct Carried {
+    pub failures: u8,
+    pub bounded: @within_limit(failures),
+}

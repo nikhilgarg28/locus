@@ -1,0 +1,28 @@
+error[L0245]: evidence in the `pub` field `Lock.bounded` of a `pub` struct can be forged by a Rust caller; make the field private
+  --> tests/corpus/reject/pub_evidence_field.lc:12:5
+   |
+10 | pub struct Lock {
+   | --- the struct is exported to Rust here
+11 |     failures: u8,
+12 |     pub bounded: @within_limit(failures), //~ error: L0245 evidence in the `pub` field `Lock.bounded` of a `pub` struct can be forge...
+   |     ^^^
+   |
+   = note: a validated type has every field private: Rust can hold one and pass it back, and can neither make one nor change what its evidence speaks of
+error[L0245]: `Percent` carries evidence, in `in_range`, and its `pub` field `value` can be written by a Rust caller, under that evidence; make the field private
+  --> tests/corpus/reject/pub_evidence_field.lc:16:5
+   |
+15 | pub struct Percent {
+   | --- the struct is exported to Rust here
+16 |     pub value: u8, //~ error: L0245 `Percent` carries evidence, in `in_range`, and its `pub` field `value` can be written by a Rust ...
+   |     ^^^
+   |
+   = note: a validated type has every field private: Rust can hold one and pass it back, and can neither make one nor change what its evidence speaks of
+error[L0245]: evidence in the `pub` field `Holder.open` of a `pub` struct can be forged by a Rust caller, since `open.in_range` is evidence; make the field private
+  --> tests/corpus/reject/pub_evidence_field.lc:37:5
+   |
+36 | pub struct Holder {
+   | --- the struct is exported to Rust here
+37 |     pub open: Open, //~ error: L0245 evidence in the `pub` field `Holder.open` of a `pub` struct can be forged by a Rust caller, sin...
+   |     ^^^
+   |
+   = note: a validated type has every field private: Rust can hold one and pass it back, and can neither make one nor change what its evidence speaks of
