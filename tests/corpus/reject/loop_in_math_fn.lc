@@ -1,5 +1,5 @@
-// A `loop` in a `math fn`, which promises to return.
-math fn first(n: u8) -> u8 {
+// A `loop` in a function that promises to return.
+#[terminates] #[no_panic] #[no_io] fn first(n: u8) -> u8 {
     loop () -> u8 { //~ error: L0215 `loop` cannot appear in `first`, which promises terminates
         break n
     }

@@ -60,8 +60,7 @@ pub(super) struct FnInfo {
     pub result: Type,
     /// Declared with `const`: used by name, without a call.
     pub constant: bool,
-    /// What the function promises: its attributes, the file's defaults, and
-    /// `math`, which spells the three of `LOGICAL`.
+    /// What the function promises: its attributes and the file's defaults.
     pub promises: Promises,
     /// A parameter is `&mut`: the function writes what its caller can see.
     pub takes_mut: bool,
@@ -195,8 +194,8 @@ pub(super) struct Env<'a> {
     /// How to print each identity: a name, or the source text of the
     /// expression whose result it is.
     pub labels: HashMap<VarId, String>,
-    /// Inside a `math fn`, a proposition, or a proof type, where nothing may
-    /// fail to return.
+    /// Inside a function of the logic, a proposition, or a proof type,
+    /// where nothing may fail to return.
     pub total: bool,
     /// The name of the item being elaborated, for messages.
     pub item_name: String,

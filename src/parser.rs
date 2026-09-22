@@ -301,9 +301,9 @@ impl Parser<'_> {
         })
     }
 
-    /// `math`, `prop`, and the retired `def` are ordinary identifiers except
-    /// where a declaration or a function type can begin, and `forall` and
-    /// `exists` except before `(` inside a formula.
+    /// `prop` and the retired `def` and `math` are ordinary identifiers
+    /// except where a declaration can begin, and `forall` and `exists`
+    /// except before `(` inside a formula.
     fn at_word(&self, word: &str) -> bool {
         self.at(K::Name) && self.source.slice(self.current().span) == Some(word)
     }
@@ -318,6 +318,7 @@ impl Parser<'_> {
         self.source.slice(self.current().span).unwrap_or_default()
     }
 
+    /// The retired `math fn`, recognised only to be reported with its fix.
     fn at_math_fn(&self) -> bool {
         self.at_word("math") && self.peek(1) == K::Fn
     }
@@ -408,11 +409,11 @@ impl Parser<'_> {
         let (doc, attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
         if self.in_impl && !matches!(self.current().kind, K::Fn) && !self.at_math_fn() {
-            return self.fail("an `impl` block holds functions: `fn` or `math fn`");
+            return self.fail("an `impl` block holds functions: `fn`");
         }
         if !self.declaration_start() {
             return self.fail(
-                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
+                "expected a declaration: `fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
             );
         }
         let (kind, end) = self.item(visibility.as_ref().map(|visibility| visibility.span))?;
@@ -573,7 +574,7 @@ impl Parser<'_> {
     fn item(&mut self, visible: Option<Span>) -> ParseResult<(DeclarationKind, Span)> {
         let start = self.bump();
         match start.kind {
-            K::Fn => self.function(FunctionMode::Runtime),
+            K::Fn => self.function(),
             K::Struct => {
                 let name = self.name()?;
                 self.no_generics()?;
@@ -590,35 +591,70 @@ impl Parser<'_> {
                 let end = self.semicolon(value.span, "constant declaration")?;
                 Ok((DeclarationKind::Constant { name, ty, value }, end.span))
             }
-            K::Keyword if self.source.slice(start.span) == Some("impl") => {
-                self.impl_block(visible)
-            }
-            K::Keyword => self.fail(
-                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
-            ),
+            K::Keyword if self.source.slice(start.span) == Some("impl") => self.impl_block(visible),
+            K::Keyword => self
+                .fail("expected a declaration: `fn`, `struct`, `enum`, `prop`, `const`, or `impl`"),
             // `declaration_start` leaves the three contextual words.
             _ if self.at(K::Fn) => {
-                self.bump();
-                self.function(FunctionMode::Math)
+                // The retired `math fn`: reported once, with the promises
+                // that say the same, and read as the function it declares.
+                let keyword = self.bump();
+                self.retired_keyword(
+                    "L0114",
+                    "`math fn` was retired: a function may be used in the logic when it promises `terminates`, `no_panic`, and `no_io`",
+                    start.span.through(keyword.span),
+                    visible,
+                );
+                self.function()
             }
             _ if self.source.slice(start.span) == Some("def") => {
-                self.diagnostics.push(
-                    Diagnostic::error("L0113", "`def` was renamed to `math fn`", start.span)
-                        .note("a `math fn` is pure and total, so it can be used in propositions; it also runs when its body is executable")
-                        .suggest(Suggestion {
-                            message: "write `math fn`".into(),
-                            span: start.span,
-                            replacement: "math fn".into(),
-                            applicability: Applicability::MachineApplicable,
-                        }),
+                self.retired_keyword(
+                    "L0113",
+                    "`def` was retired: a function may be used in the logic when it promises `terminates`, `no_panic`, and `no_io`",
+                    start.span,
+                    visible,
                 );
-                self.function(FunctionMode::Math)
+                self.function()
             }
             _ => self.prop(),
         }
     }
 
-    fn function(&mut self, mode: FunctionMode) -> ParseResult<(DeclarationKind, Span)> {
+    /// A retired spelling of a function of the logic, with the fix that
+    /// respells it as the three promises. Attributes already written stay
+    /// where they are; a visibility is kept after the promises, where an
+    /// attribute goes.
+    fn retired_keyword(
+        &mut self,
+        code: &'static str,
+        message: &str,
+        span: Span,
+        visible: Option<Span>,
+    ) {
+        const PROMISES: &str = "#[terminates] #[no_panic] #[no_io]";
+        let (fix_span, replacement) = match visible {
+            Some(visibility) => (
+                visibility.through(span),
+                format!(
+                    "{PROMISES} {} fn",
+                    self.source.slice(visibility).unwrap_or("pub")
+                ),
+            ),
+            None => (span, format!("{PROMISES} fn")),
+        };
+        self.diagnostics.push(
+            Diagnostic::error(code, message, span)
+                .note("a function that promises `terminates`, `no_panic`, and `no_io` and takes no `&mut` may appear in a proposition, and it runs when its body is executable")
+                .suggest(Suggestion {
+                    message: format!("write `{replacement}`"),
+                    span: fix_span,
+                    replacement,
+                    applicability: Applicability::MachineApplicable,
+                }),
+        );
+    }
+
+    fn function(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         self.no_generics()?;
         let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
@@ -631,7 +667,6 @@ impl Parser<'_> {
         let end = body.span;
         Ok((
             DeclarationKind::Function {
-                mode,
                 name,
                 self_param,
                 parameters,
@@ -970,11 +1005,7 @@ impl Parser<'_> {
     fn ty_inner(&mut self) -> ParseResult<Type> {
         let start = self.current();
         match start.kind {
-            K::Fn => self.function_type(start, FunctionMode::Runtime),
-            K::Name if self.at_math_fn() => {
-                self.bump();
-                self.function_type(start, FunctionMode::Math)
-            }
+            K::Fn => self.function_type(start),
             K::Name | K::Keyword if self.at_named() => self.named_type(false),
             K::At => {
                 self.bump();
@@ -1238,7 +1269,7 @@ impl Parser<'_> {
         self.diagnostics.push(diagnostic);
     }
 
-    fn function_type(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Type> {
+    fn function_type(&mut self, start: Token) -> ParseResult<Type> {
         self.expect(K::Fn)?;
         let (parameters, _) = self.type_fields()?;
         self.expect(K::Arrow)?;
@@ -1246,7 +1277,6 @@ impl Parser<'_> {
         Ok(Type {
             span: start.span.through(result.span),
             kind: TypeKind::Function {
-                mode,
                 parameters,
                 result: Box::new(result),
             },
@@ -1817,7 +1847,7 @@ impl Parser<'_> {
     fn cast(&mut self, expr: Expr) -> ParseResult<Expr> {
         let token = self.expect(K::As)?;
         // Directly after `as`, a `<` is the comparison that follows the cast.
-        let ty = if self.at_named() && !self.at_math_fn() {
+        let ty = if self.at_named() {
             self.nested(|parser| parser.named_type(true))?
         } else {
             self.ty()?

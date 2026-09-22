@@ -1,5 +1,5 @@
-error[L0290]: values of `fn` type are not supported yet; a `math fn` type is
- --> tests/corpus/reject/fn_type.lc:2:13
+error[L0207]: a `fn(u8) -> u8` cannot be applied
+ --> tests/corpus/reject/fn_type.lc:4:5
   |
-2 | fn apply(f: fn(u8) -> u8, n: u8) -> u8 { //~ error: L0290 values of `fn` type are not supported yet
-  |             ^^^^^^^^^^^^
+4 |     f(n) //~ error: L0207 a `fn(u8) -> u8` cannot be applied
+  |     ^^^^

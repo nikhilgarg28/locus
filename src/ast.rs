@@ -211,7 +211,6 @@ pub struct Declaration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
     Function {
-        mode: FunctionMode,
         name: Name,
         /// The receiver of a method in an `impl` block.
         self_param: Option<SelfParam>,
@@ -274,13 +273,6 @@ impl SelfKind {
             Self::RefMut => "&mut self",
         }
     }
-}
-
-/// `fn` may diverge and runs; `math fn` is pure, total, and usable in logic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FunctionMode {
-    Runtime,
-    Math,
 }
 
 /// `name: Type`, or `mut name: Type` for a parameter the body may assign
@@ -358,8 +350,9 @@ pub enum TypeKind {
     Group(Box<Type>),
     Tuple(Vec<TypeField>),
     Proof(Box<Expr>),
+    /// `fn(T, U) -> R`, or with named parameters `fn(x: T) -> @(x == x)`:
+    /// the type of a function, which a proposition applies.
     Function {
-        mode: FunctionMode,
         parameters: Vec<TypeField>,
         result: Box<Type>,
     },

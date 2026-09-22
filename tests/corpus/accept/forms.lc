@@ -3,7 +3,8 @@
 // `rewrite!`, `unfold!`, and `fold!` are the explicit equality steps. The
 // words `forall` and `exists` are names outside a formula.
 
-math fn nonzero(x: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn nonzero(x: u8) -> Prop {
     prop!(x != 0)
 }
 
@@ -25,11 +26,13 @@ fn named(n: u8) -> (out: u8, @nonzero(out)) {
     }
 }
 
-math fn back(n: u8, h: @nonzero(n)) -> @(n != 0) {
+#[terminates] #[no_panic] #[no_io]
+fn back(n: u8, h: @nonzero(n)) -> @(n != 0) {
     unfold!(nonzero, h)
 }
 
-math fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
+#[terminates] #[no_panic] #[no_io]
+fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
     rewrite!(same, small)
 }
 

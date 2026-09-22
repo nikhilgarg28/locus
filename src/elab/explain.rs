@@ -673,10 +673,10 @@ impl Env<'_> {
                 "evidence of `false` is a refuted claim applied to its evidence, `h(prove!(p))` for `h: @(!p)`"
             }
             Term::Implies(..) => {
-                "evidence of `p => q` is a `math fn` that takes evidence of `p` and returns evidence of `q`, named as a value"
+                "evidence of `p => q` is a function of the logic that takes evidence of `p` and returns evidence of `q`, named as a value"
             }
             Term::Forall(..) => {
-                "evidence of `forall (x: T) { p }` is a `math fn` with `x` as a parameter, named as a value"
+                "evidence of `forall (x: T) { p }` is a function of the logic with `x` as a parameter, named as a value"
             }
             _ => return None,
         };

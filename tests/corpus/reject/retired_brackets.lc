@@ -1,6 +1,6 @@
 // The retired proposition literal `[condition]` and proof type
 // `@[condition]`, each with a fix, and the rest of the file still read.
-math fn same(x: u8, y: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop {
     [x == y] //~ error: L0117 a proposition is written `prop!(condition)`
 }
 

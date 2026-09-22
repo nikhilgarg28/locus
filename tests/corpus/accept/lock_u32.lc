@@ -13,7 +13,8 @@ struct Lock {
     open: bool,
 }
 
-math fn within_limit(failures: u32) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u32) -> Prop {
     prop!(failures <= 3)
 }
 

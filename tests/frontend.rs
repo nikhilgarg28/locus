@@ -1,6 +1,6 @@
 use locus::ast::{
-    BinaryOp, Block, DeclarationKind, Expr, ExprKind, Form, FunctionMode, IntegerLiteral,
-    IntegerSuffix, PatternKind, RangeKind, StatementKind, Type, TypeKind,
+    BinaryOp, Block, DeclarationKind, Expr, ExprKind, Form, IntegerLiteral, IntegerSuffix,
+    PatternKind, RangeKind, StatementKind, Type, TypeKind,
 };
 use locus::diagnostic::Applicability;
 use locus::kernel::Natural;
@@ -347,7 +347,6 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
     };
     match &declaration.kind {
         DeclarationKind::Function {
-            mode,
             name,
             self_param,
             parameters,
@@ -367,12 +366,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 )
             }));
             out.push_str(&format!(
-                "{}fn {}({}) -> {} {{ {} statement(s) }}",
-                if *mode == FunctionMode::Math {
-                    "math "
-                } else {
-                    ""
-                },
+                "fn {}({}) -> {} {{ {} statement(s) }}",
                 name.text,
                 params.join(", "),
                 grouped_ty(result),
@@ -487,8 +481,8 @@ fn every_item_form_renders_from_its_syntax_tree() {
             "fn f(n: u8) -> u8 { 1 statement(s) }",
         ),
         (
-            "pub math fn f(n: u8) -> Prop { prop!(n <= 3) }",
-            "pub math fn f(n: u8) -> Prop { 1 statement(s) }",
+            "#[terminates] #[no_panic] #[no_io] pub fn f(n: u8) -> Prop { prop!(n <= 3) }",
+            "#[terminates] #[no_panic] #[no_io] pub fn f(n: u8) -> Prop { 1 statement(s) }",
         ),
         (
             "/// doc\n#[terminates] #[no_panic] #[no_alloc] #[no_io]\npub(crate) fn f(n: u8) -> (out: u8, @(out == n)) { let x = n; (x, _) }",
@@ -566,11 +560,11 @@ fn impl_blocks_hold_methods_and_associated_functions() {
     for (text, message) in [
         (
             "impl S { struct T { x: u8 } }",
-            "an `impl` block holds functions: `fn` or `math fn`",
+            "an `impl` block holds functions: `fn`",
         ),
         (
             "impl S { const N: u8 = 1; }",
-            "an `impl` block holds functions: `fn` or `math fn`",
+            "an `impl` block holds functions: `fn`",
         ),
         (
             "impl S { fn f(n: u8, self) -> u8 { 1 } }",
@@ -1150,7 +1144,7 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("(u8, ", ")"),
                 ("fn(", ") -> u8"),
                 ("fn() -> ", ""),
-                ("math fn(x: ", ") -> u8"),
+                ("fn(x: ", ") -> u8"),
                 ("@(forall (h: ", ") { true })"),
                 // S5: references in types.
                 ("&", ""),
@@ -1291,7 +1285,7 @@ fn malformed_inputs_terminate_and_keep_valid_diagnostic_spans() {
 fn constants_and_math_functions_state_propositions() {
     let parsed = parse_text(
         "const reflexive: Prop = prop!(forall (n: u8) { n == n });
-         math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
+         #[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let DeclarationKind::Constant { name, ty, value } = &parsed.program.declarations[0].kind else {
@@ -1320,7 +1314,7 @@ fn constants_and_math_functions_state_propositions() {
 #[test]
 fn math_and_prop_are_keywords_only_where_a_declaration_can_begin() {
     let parsed = parse_text(
-        "math fn prop(math: u8) -> u8 { let prop = math; prop }
+        "#[terminates] #[no_panic] #[no_io] fn prop(math: u8) -> u8 { let prop = math; prop }
          fn math(prop: u8) -> u8 { prop }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
@@ -1413,7 +1407,7 @@ fn retired_brackets_are_reported_with_a_fix_that_parses() {
     // A proposition literal, a proof type, one spanning lines, and one
     // nested in a formula: each is L0117 once, with its own fix, and the
     // file goes on being parsed so that every one is reported.
-    let text = "math fn same(x: u8, y: u8) -> Prop { [x == y] }
+    let text = "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { [x == y] }
 fn f(n: u8) -> (out: u8, @[out == n]) {
     let claim: Prop = [
         forall (k: u8) { k == k => [k <= 255] }
@@ -1632,7 +1626,7 @@ fn missing_constant_semicolon_fix_and_recovery_work() {
 fn a_missing_brace_does_not_consume_the_next_declaration() {
     for next in [
         "fn good() -> u8 { 1 }",
-        "math fn good() -> u8 { 1 }",
+        "#[terminates] #[no_panic] #[no_io] fn good() -> u8 { 1 }",
         "struct Good { x: u8 }",
         "enum Good { A }",
         "prop Good { Trivial }",
@@ -1658,49 +1652,67 @@ fn syntax_parser_does_not_pretend_to_enforce_prop_or_hole_types() {
 }
 
 #[test]
-fn fn_and_math_fn_preserve_their_modes() {
-    let parsed = parse_text(
-        "math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }
-         math fn keep(p: Prop, h: @p) -> @p { h }
-         fn self_equal(n: u8) -> @(same(n, n)) { _ }",
-    );
-    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
-    let modes: Vec<_> = parsed
-        .program
-        .declarations
-        .iter()
-        .map(|declaration| {
-            let DeclarationKind::Function { mode, .. } = declaration.kind else {
-                panic!()
-            };
-            mode
-        })
-        .collect();
-    assert_eq!(
-        modes,
-        [
-            FunctionMode::Math,
-            FunctionMode::Math,
-            FunctionMode::Runtime
-        ]
-    );
+fn math_fn_is_reported_once_with_a_fix_that_keeps_what_is_around_it() {
+    // The retired keyword in every position it could be written: bare, after
+    // attributes and visibility, and in an `impl` block. Each is reported
+    // once, the declaration is still read, and the fix respells it as the
+    // three promises in place.
+    for (text, expected) in [
+        (
+            "math fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
+            "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { prop!(x == y) }",
+        ),
+        (
+            "/// doc\n#[no_alloc]\npub(crate) math fn f(n: u8) -> u8 { n }",
+            "/// doc\n#[no_alloc]\n#[terminates] #[no_panic] #[no_io] pub(crate) fn f(n: u8) -> u8 { n }",
+        ),
+        (
+            "struct S { x: u8 } impl S { math fn get(self) -> u8 { self.x } }",
+            "struct S { x: u8 } impl S { #[terminates] #[no_panic] #[no_io] fn get(self) -> u8 { self.x } }",
+        ),
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:?}",
+            parsed.diagnostics
+        );
+        let diagnostic = &parsed.diagnostics[0];
+        assert_eq!(diagnostic.code, "L0114");
+        assert_eq!(diagnostic.suggestions.len(), 1);
+        assert_eq!(
+            diagnostic.suggestions[0].applicability,
+            Applicability::MachineApplicable
+        );
+        assert_eq!(
+            parsed.program.declarations.len(),
+            text.matches("struct").count() + 1
+        );
+        assert_eq!(fixed(text, &parsed), expected, "{text}");
+        assert!(parse_text(expected).is_success(), "{expected}");
+    }
+    // Two of them are two diagnostics.
+    let parsed = parse_text("math fn f() -> u8 { 1 } math fn g() -> u8 { 2 }");
+    assert_eq!(parsed.diagnostics.len(), 2);
+    assert_eq!(parsed.program.declarations.len(), 2);
+    // `math` is a name everywhere else, before a `fn` type included.
+    assert!(parse_text("fn math(math: u8) -> u8 { let math = math; math }").is_success());
+    assert!(!parse_text("fn f(g: math fn(u8) -> u8) -> u8 { 1 }").is_success());
 }
 
 #[test]
-fn recovery_keeps_math_functions_after_a_broken_function() {
+fn recovery_keeps_functions_after_a_broken_function() {
     let parsed = parse_text(
         "fn broken() -> u8 { 1
-         math fn good() -> Prop { prop!(true) }
+         #[terminates] #[no_panic] #[no_io] fn good() -> Prop { prop!(true) }
          const claim: Prop = prop!(true);",
     );
     assert!(!parsed.is_success());
     assert_eq!(parsed.program.declarations.len(), 2, "{parsed:?}");
     assert!(matches!(
         parsed.program.declarations[0].kind,
-        DeclarationKind::Function {
-            mode: FunctionMode::Math,
-            ..
-        }
+        DeclarationKind::Function { .. }
     ));
     assert!(matches!(
         parsed.program.declarations[1].kind,
@@ -2701,28 +2713,26 @@ fn references_and_the_never_type_parse_in_types_and_expressions() {
 }
 
 #[test]
-fn function_types_record_their_mode_and_parameter_names() {
+fn function_types_record_their_parameter_names() {
     let parsed = parse_text(
-        "math fn apply(f: math fn(x: u8) -> @(x == x), g: fn(u8, bool) -> u8) -> () { () }",
+        "#[terminates] #[no_panic] #[no_io] fn apply(f: fn(x: u8) -> @(x == x), g: fn(u8, bool) -> u8) -> () { () }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
     let DeclarationKind::Function { parameters, .. } = &parsed.program.declarations[0].kind else {
         panic!()
     };
     let TypeKind::Function {
-        mode,
         parameters: inputs,
         result,
     } = &parameters[0].ty.kind
     else {
         panic!()
     };
-    assert_eq!(*mode, FunctionMode::Math);
     assert_eq!(inputs[0].name.as_ref().unwrap().text, "x");
     assert!(matches!(result.kind, TypeKind::Proof(_)));
     assert!(matches!(
         &parameters[1].ty.kind,
-        TypeKind::Function { mode: FunctionMode::Runtime, parameters, .. } if parameters.len() == 2
+        TypeKind::Function { parameters, .. } if parameters.len() == 2
     ));
 }
 

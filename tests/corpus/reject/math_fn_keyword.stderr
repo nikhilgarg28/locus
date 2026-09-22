@@ -1,0 +1,24 @@
+error[L0114]: `math fn` was retired: a function may be used in the logic when it promises `terminates`, `no_panic`, and `no_io`
+ --> tests/corpus/reject/math_fn_keyword.lc:4:1
+  |
+4 | math fn same(x: u8, y: u8) -> Prop { //~ error: L0114 `math fn` was retired
+  | ^^^^^^^
+  |
+  = note: a function that promises `terminates`, `no_panic`, and `no_io` and takes no `&mut` may appear in a proposition, and it runs when its body is executable
+  = help: write `#[terminates] #[no_panic] #[no_io] fn`
+error[L0114]: `math fn` was retired: a function may be used in the logic when it promises `terminates`, `no_panic`, and `no_io`
+ --> tests/corpus/reject/math_fn_keyword.lc:9:5
+  |
+9 | pub math fn double(n: u8) -> u8 { //~ error: L0114 `math fn` was retired
+  |     ^^^^^^^
+  |
+  = note: a function that promises `terminates`, `no_panic`, and `no_io` and takes no `&mut` may appear in a proposition, and it runs when its body is executable
+  = help: write `#[terminates] #[no_panic] #[no_io] pub fn`
+error[L0114]: `math fn` was retired: a function may be used in the logic when it promises `terminates`, `no_panic`, and `no_io`
+  --> tests/corpus/reject/math_fn_keyword.lc:14:12
+   |
+14 | pub(crate) math fn twice_of(n: u8) -> u8 { //~ error: L0114 `math fn` was retired
+   |            ^^^^^^^
+   |
+   = note: a function that promises `terminates`, `no_panic`, and `no_io` and takes no `&mut` may appear in a proposition, and it runs when its body is executable
+   = help: write `#[terminates] #[no_panic] #[no_io] pub(crate) fn`

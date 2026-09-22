@@ -1,5 +1,5 @@
 // `Int` is the integers of the logic and has no runtime form: it is a type
-// in a claim, a `math fn`, and a proof type, and nowhere a value runs.
+// in a claim, a function of the logic, and a proof type, and nowhere a value runs.
 fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
     0
 }
@@ -19,6 +19,6 @@ fn back_again(n: u8) -> u8 {
     (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
 }
 
-math fn fine(n: u8) -> Int {
+#[terminates] #[no_panic] #[no_io] fn fine(n: u8) -> Int {
     n as Int
 }

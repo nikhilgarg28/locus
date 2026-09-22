@@ -1,4 +1,5 @@
-math fn same(x: u8, y: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn same(x: u8, y: u8) -> Prop {
     prop!(x == y)
 }
 
@@ -21,7 +22,8 @@ const some_byte_is_zero: Prop = prop!(
 // claim becomes `y`. The left side is named first so that it stays; a name
 // bound by `let` is replaced by what it stands for only when computing,
 // which is how the result is the claim as stated.
-math fn increment_preserves_equality(
+#[terminates] #[no_panic] #[no_io]
+fn increment_preserves_equality(
     x: u8,
     y: u8,
     equal: @same(x, y),
@@ -31,7 +33,8 @@ math fn increment_preserves_equality(
     rewrite!(plain, prove!(next == x.wrapping_add(1)))
 }
 
-math fn self_equal(n: u8) -> @(n == n) {
+#[terminates] #[no_panic] #[no_io]
+fn self_equal(n: u8) -> @(n == n) {
     let claim: Prop = prop!(n == n);
     let evidence: @claim = _;
     evidence

@@ -493,7 +493,7 @@ impl Env<'_> {
         Ok(current)
     }
 
-    /// A `math fn` that returns evidence, named as evidence itself: its
+    /// A function of the logic that returns evidence, named as evidence itself: its
     /// parameters become quantifiers and premises, in order.
     pub fn function_as_evidence(&mut self, info: &FnInfo, span: Span) -> Elab<Value> {
         // Its claim is a proposition that mentions it at every argument.

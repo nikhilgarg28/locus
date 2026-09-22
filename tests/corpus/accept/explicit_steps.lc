@@ -1,6 +1,6 @@
 // The explicit forms of the steps a hole no longer takes: `rewrite!` for
 // an equation in scope, `unfold!` and `fold!` for a definition, a
-// constructor or a `math fn` for a connective, and a lemma call where a
+// constructor or a lemma for a connective, and a lemma call where a
 // claim about one byte used to be decided by trying all 256. Each function
 // here is the accepted form of one in `tests/corpus/reject/*_removed.lc`.
 
@@ -15,7 +15,8 @@ fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {
     (second, rewrite!(first_is, second_is))
 }
 
-math fn within_limit(n: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(n: u8) -> Prop {
     prop!(n <= 3)
 }
 
@@ -28,20 +29,24 @@ fn opened(n: u8, bounded: @within_limit(n)) -> @(n <= 3) {
     unfold!(within_limit, bounded)
 }
 
-// The connectives: constructors, and a `math fn` named as evidence.
-math fn both(p: Prop, q: Prop, hp: @p, hq: @q) -> @(p && q) {
+// The connectives: constructors, and a lemma named as evidence.
+#[terminates] #[no_panic] #[no_io]
+fn both(p: Prop, q: Prop, hp: @p, hq: @q) -> @(p && q) {
     And::Intro(hp, hq)
 }
 
-math fn either(p: Prop, q: Prop, hq: @q) -> @(p || q) {
+#[terminates] #[no_panic] #[no_io]
+fn either(p: Prop, q: Prop, hq: @q) -> @(p || q) {
     Or::Right(hq)
 }
 
-math fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
+#[terminates] #[no_panic] #[no_io]
+fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
     hq
 }
 
-math fn implied(p: Prop, q: Prop, hq: @q) -> @(p => q) {
+#[terminates] #[no_panic] #[no_io]
+fn implied(p: Prop, q: Prop, hq: @q) -> @(p => q) {
     let general: @(forall (a: Prop) { forall (b: Prop) { b => a => b } }) = from_q;
     general(p)(q)(hq)
 }

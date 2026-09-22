@@ -4,4 +4,4 @@ error[L0215]: `loop` cannot appear in `first`, which promises terminates
 3 |     loop () -> u8 { //~ error: L0215 `loop` cannot appear in `first`, which promises terminates
   |     ^^^^
   |
-  = note: a function that promises terminates, as a `math fn` does, contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion
+  = note: a function that promises terminates contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion

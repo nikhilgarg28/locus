@@ -1,5 +1,5 @@
 // An arm on evidence that is neither a variant nor `_`.
-math fn first(p: Prop, q: Prop, both: @(p && q)) -> @p {
+#[terminates] #[no_panic] #[no_io] fn first(p: Prop, q: Prop, both: @(p && q)) -> @p {
     match both {
         (hp, hq) => hp, //~ error: L0212 an arm here is `And::Variant(names...)` or `_`
     }

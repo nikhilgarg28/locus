@@ -11,7 +11,7 @@ fn wait(light: Light) -> u8 {
     }
 }
 
-math fn first(p: Prop, q: Prop, r: Prop, all: @(p && (q && r))) -> @p {
+#[terminates] #[no_panic] #[no_io] fn first(p: Prop, q: Prop, r: Prop, all: @(p && (q && r))) -> @p {
     match all {
         And::Intro(hp, And::Intro(hq, hr)) => hp, //~ error: L0290 patterns inside a variant are names or `_` for now
     }

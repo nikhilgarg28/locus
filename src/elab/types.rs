@@ -16,8 +16,8 @@ impl Env<'_> {
                     Ok(Type::machine(MachineInt::from_name(machine).unwrap()))
                 }
                 // The integers of the logic have no runtime form: they are
-                // written where nothing runs, in a proposition, a `math fn`,
-                // or a proof type.
+                // written where nothing runs, in a proposition, a function
+                // of the logic, or a proof type.
                 "Int" if self.total => Ok(Type::Int),
                 "Int" => {
                     self.diagnostics.push(
@@ -26,7 +26,7 @@ impl Env<'_> {
                             "`Int` has no runtime form",
                             name.span,
                         )
-                        .note("`Int` is the integers of the logic: it is written in a proposition, in a `math fn`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim"),
+                        .note("`Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim"),
                     );
                     Err(())
                 }
@@ -97,11 +97,9 @@ impl Env<'_> {
                 self.total = was_total;
                 Ok(Type::proof(claim?))
             }
-            ast::TypeKind::Function {
-                mode: ast::FunctionMode::Math,
-                parameters,
-                result,
-            } => {
+            // The type of a function of the logic: a value of it is applied
+            // in a proposition, and nothing runs it.
+            ast::TypeKind::Function { parameters, result } => {
                 let mark = self.mark();
                 let signature = (|| {
                     let binders = self.telescope(
@@ -115,11 +113,6 @@ impl Env<'_> {
                 self.close(mark);
                 signature
             }
-            ast::TypeKind::Function { .. } => self.fail(
-                "L0290",
-                "values of `fn` type are not supported yet; a `math fn` type is",
-                ty.span,
-            ),
             ast::TypeKind::Ref { .. } => self.fail(
                 "L0290",
                 "references (`&T`, `&mut T`) are not in Locus yet; O3 adds them",

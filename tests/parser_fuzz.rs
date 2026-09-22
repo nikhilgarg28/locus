@@ -251,7 +251,7 @@ const WORDS: &[&str] = &[
 /// random input reaches further than the first token of a declaration.
 const FRAGMENTS: &[&str] = &[
     "fn f() -> u8 {",
-    "math fn g(n: u8) -> Prop {",
+    "#[terminates] #[no_panic] #[no_io] fn g(n: u8) -> Prop {",
     "fn h(x: u8, p: @(x == x)) -> (out: u8, @(out == x)) {",
     "struct S { x: u8, y: bool }",
     "struct S {",

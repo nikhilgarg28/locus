@@ -21,4 +21,4 @@ error[L0230]: cannot show `p => q`
    |     ^
    |
    = note: known here: `hq: q`
-   = note: the search over `&&`, `||`, `=>` and `forall` was removed; evidence of `p => q` is a `math fn` that takes evidence of `p` and returns evidence of `q`, named as a value
+   = note: the search over `&&`, `||`, `=>` and `forall` was removed; evidence of `p => q` is a function of the logic that takes evidence of `p` and returns evidence of `q`, named as a value

@@ -1,5 +1,5 @@
 // An arm on evidence that names more values than its variant carries.
-math fn first(p: Prop, q: Prop, both: @(p && q)) -> @p {
+#[terminates] #[no_panic] #[no_io] fn first(p: Prop, q: Prop, both: @(p && q)) -> @p {
     match both {
         And::Intro(hp, hq, more) => hp, //~ error: L0208 carries 2 value(s), and the pattern names 3
     }

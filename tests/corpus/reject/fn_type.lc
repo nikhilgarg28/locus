@@ -1,4 +1,5 @@
-// A parameter of `fn` type.
-fn apply(f: fn(u8) -> u8, n: u8) -> u8 { //~ error: L0290 values of `fn` type are not supported yet
-    n
+// A parameter of `fn` type is a function of the logic, and a call applies
+// it only in a proposition, not at runtime.
+fn apply(f: fn(u8) -> u8, n: u8) -> u8 {
+    f(n) //~ error: L0207 a `fn(u8) -> u8` cannot be applied
 }

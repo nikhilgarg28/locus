@@ -1,29 +1,37 @@
-// These math functions construct claims; the final two transport or establish evidence.
-math fn positive(n: u8) -> Prop {
+// These functions promise `terminates`, `no_panic`, and `no_io`, so they may
+// appear in propositions: the first ones construct claims; the final two
+// transport or establish evidence.
+#[terminates] #[no_panic] #[no_io]
+fn positive(n: u8) -> Prop {
     prop!(n > 0)
 }
 
-math fn outside_range(n: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn outside_range(n: u8) -> Prop {
     let above_zero: Prop = prop!(n > 0);
     let below_ten: Prop = prop!(n < 10);
     let inside = above_zero && below_ten;
     !inside
 }
 
-math fn either(p: Prop, q: Prop) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn either(p: Prop, q: Prop) -> Prop {
     p || q
 }
 
-math fn implies(p: Prop, q: Prop) -> Prop {
+#[terminates] #[no_panic] #[no_io]
+fn implies(p: Prop, q: Prop) -> Prop {
     prop!(p => q)
 }
 
-math fn keep(p: Prop, evidence: @p) -> @p {
+#[terminates] #[no_panic] #[no_io]
+fn keep(p: Prop, evidence: @p) -> @p {
     evidence
 }
 
 // Both the returned claim and its evidence are logical values.
-math fn reflexivity_claim(n: u8) -> (claim: Prop, @claim) {
+#[terminates] #[no_panic] #[no_io]
+fn reflexivity_claim(n: u8) -> (claim: Prop, @claim) {
     let claim: Prop = prop!(n == n);
     (claim, _)
 }
@@ -36,7 +44,8 @@ prop Small(n: u8) {
 
 // The `Zero` arm knows `n == 0`, and the claim about `0` is evaluated; the
 // equation is turned round and the claim carried across it.
-math fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
+#[terminates] #[no_panic] #[no_io]
+fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
     match small {
         Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0u8 < 10)),
         Small::Below(bound) => bound,

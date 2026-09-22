@@ -66,7 +66,7 @@ impl Env<'_> {
                 ),
                 span,
             )
-            .note("a function that promises terminates, as a `math fn` does, contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion"),
+            .note("a function that promises terminates contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion"),
         };
         self.diagnostics.push(diagnostic);
         Err(())
@@ -342,7 +342,7 @@ impl Env<'_> {
         }
         match self.globals.get(&name.text).cloned() {
             Some(Global::Fn(info)) if info.constant => self.call_fn(&info, &[], name.span),
-            // A `math fn` returning evidence is evidence of its general claim,
+            // A function of the logic returning evidence is evidence of its general claim,
             // where evidence is expected or where nothing in particular is,
             // as the second argument of `fold!` or `rewrite!`.
             Some(Global::Fn(info))

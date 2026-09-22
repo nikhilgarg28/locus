@@ -36,9 +36,9 @@ fn run(n: u8) -> u8 {
     careful(n)
 }
 
-// A `math fn` promises the three; writing them on one is redundant.
+// A promise written twice, on the function and for the file, is one promise.
 #[terminates] #[no_panic] #[no_io]
-math fn twice(n: u8) -> u8 {
+fn twice(n: u8) -> u8 {
     double(n)
 }
 

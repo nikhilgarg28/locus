@@ -1,6 +1,6 @@
-// A `math fn` that returns data, named where evidence is needed.
-math fn double(x: u8) -> u8 { x.wrapping_add(x) }
+// A function of the logic that returns data, named where evidence is needed.
+#[terminates] #[no_panic] #[no_io] fn double(x: u8) -> u8 { x.wrapping_add(x) }
 
-math fn all_self_equal() -> @(forall (x: u8) { x == x }) {
+#[terminates] #[no_panic] #[no_io] fn all_self_equal() -> @(forall (x: u8) { x == x }) {
     double //~ error: L0220 `double` does not return evidence
 }

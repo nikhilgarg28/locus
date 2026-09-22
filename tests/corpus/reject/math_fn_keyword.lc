@@ -1,0 +1,25 @@
+// The retired `math fn`: a function is used in the logic when it promises
+// `terminates`, `no_panic`, and `no_io`. Each one is reported once, with a
+// fix that respells it in place, and the rest of the file is still read.
+math fn same(x: u8, y: u8) -> Prop { //~ error: L0114 `math fn` was retired
+    prop!(x == y)
+}
+
+#[no_alloc]
+pub math fn double(n: u8) -> u8 { //~ error: L0114 `math fn` was retired
+    n.wrapping_add(n)
+}
+
+/// With a restricted visibility.
+pub(crate) math fn twice_of(n: u8) -> u8 { //~ error: L0114 `math fn` was retired
+    double(n)
+}
+
+// `math` is a name everywhere else.
+fn math(n: u8) -> u8 {
+    n
+}
+
+fn uses_them() -> @same(twice_of(4), 8) {
+    fold!(same, prove!(twice_of(4) == 8))
+}

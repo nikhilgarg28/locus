@@ -71,7 +71,7 @@ impl Env<'_> {
                 }
                 let result = self.type_at(result, bound);
                 bound.truncate(depth);
-                format!("math fn{shown} -> {result}")
+                format!("fn{shown} -> {result}")
             }
         }
     }

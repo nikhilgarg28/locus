@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::ast::{self, AttributeKind, DeclarationKind, FunctionMode};
+use crate::ast::{self, AttributeKind, DeclarationKind};
 use crate::diagnostic::Diagnostic;
 use crate::exec::Promises;
 use crate::kernel::theory;
@@ -359,22 +359,13 @@ impl Env<'_> {
                 })))
             }
             DeclarationKind::Function {
-                mode,
                 name,
                 parameters,
                 result,
                 body,
                 ..
             } => {
-                // `math fn` is another spelling of the three promises that
-                // admit a function to a proposition; an attribute on one is
-                // redundant, or adds `no_alloc`.
-                let mut promises = self.promises_of(attributes, self.file_promises);
-                if *mode == FunctionMode::Math {
-                    promises.terminates = true;
-                    promises.no_panic = true;
-                    promises.no_io = true;
-                }
+                let promises = self.promises_of(attributes, self.file_promises);
                 let takes_mut = parameters.iter().any(|parameter| {
                     matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
                 });

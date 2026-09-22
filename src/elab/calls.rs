@@ -88,8 +88,7 @@ impl Env<'_> {
 
     /// The rule that admits a function to a proposition, or to the value of
     /// a constant: it promises `terminates`, `no_panic`, and `no_io`, and
-    /// takes no `&mut`. A `math fn` does by definition. `L0209` names what
-    /// is missing.
+    /// takes no `&mut`. `L0209` names what is missing.
     pub(super) fn admit_to_formula(&mut self, info: &FnInfo, place: &str, span: Span) -> Elab<()> {
         let Some(gap) = info.logical_gap() else {
             return Ok(());
@@ -100,7 +99,7 @@ impl Env<'_> {
                 format!("`{}` cannot appear in {place}: {gap}", info.name),
                 span,
             )
-            .note("a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value; a `math fn` promises the three"),
+            .note("a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value"),
         );
         Err(())
     }

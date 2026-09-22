@@ -4,18 +4,18 @@ error[L0209]: `run` cannot appear in a proposition: it does not promise terminat
 10 | fn about_run(n: u8) -> @(run(n) == n) { //~ error: L0209 `run` cannot appear in a proposition: it does not promise terminates
    |                          ^^^^^^
    |
-   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value; a `math fn` promises the three
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
 error[L0209]: `quiet` cannot appear in a proposition: it does not promise no_io
   --> tests/corpus/reject/fn_in_proposition.lc:15:11
    |
 15 |     prop!(quiet(n) == n) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
    |           ^^^^^^^^
    |
-   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value; a `math fn` promises the three
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
 error[L0209]: `quiet` cannot appear in a proposition: it does not promise no_io
   --> tests/corpus/reject/fn_in_proposition.lc:19:13
    |
 19 |     unfold!(quiet, h) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
    |             ^^^^^
    |
-   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value; a `math fn` promises the three
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
