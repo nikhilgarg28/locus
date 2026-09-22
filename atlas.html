@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 94,
-  "savedAt": "2026-09-22T21:41:45.000Z",
+  "rev": 95,
+  "savedAt": "2026-09-22T21:43:47.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -2432,10 +2432,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Found proofs are stored",
     "",
-    "src/store keeps a file beside each source with one entry per obligation, keyed by a hash of the context and the claim as kernel terms in a text form that names definitions and numbers context positions, so that renaming and reformatting leave the key unchanged. A stored proof is read by a total reader and handed to the kernel like any found proof; a proof that does not check is a miss. locus check --locked runs no search at all, which is what a reviewer or a build server uses."
+    "src/store keeps a file beside each source with one entry per obligation, keyed by a hash of the context and the claim as kernel terms in a text form that names definitions and numbers context positions, so that renaming and reformatting leave the key unchanged. A stored proof is read by a total reader and handed to the kernel like any found proof; a proof that does not check is a miss. locus check --locked runs no search at all, which is what a reviewer or a build server uses.",
+    "",
+    "## References last one call",
+    "",
+    "A reference lasts for one call, so it lowers to nothing but values. A shared reference parameter is the value lent and adds nothing to the logic. A mutable reference parameter is a mutable binding inside the callee, elaborated and lowered exactly as a let mut, and its final version travels out as one more field of the function's result tuple, ahead of the declared result whose type may speak of it through the exit binder. At the call site the argument is a path read at the versions current there, the tuple is bound by the existing call statement, and each lent root receives a new version built by the same inside-out rebuilding an assignment uses, so tracked evidence about the root goes stale and evidence the callee returns about its exit value is what refreshes it. Lowering alone decides which arguments may share a root, because two write-backs to one place would let the logic keep the wrong one; the elaborator gives the earlier, rustc-shaped error. Nothing about the write-back reaches the checker beyond well-typed lets, and what a panic carries is a side table the interpreters read and the checker ignores."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T20:37:36.000Z"
+   "updated": "2026-09-22T21:43:47.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7898,23 +7902,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t300",
    "n": 184,
    "title": "O3 · References as parameters: &T and &mut T, path arguments, disjointness, old!",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n- A field that evidence in its struct depends on cannot be lent: &mut percent.value is rejected by lowering, and &mut percent is accepted.\n- A panic carries the values of the &mut parameters at that moment, in both interpreters and in the compiled harness, which reads the arguments after catch_unwind. A callee that writes and then panics, called directly and through a caller that lent a field of its own &mut parameter.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. Tier 0 of references: &T and &mut T as parameter types only; arguments are paths; a &mut parameter is a let mut inside the callee whose final version is one more field of the result tuple, bound at the call and written back to the root by the inside-out rebuilding an assignment uses, so tracked evidence goes stale and the callee's returned evidence about the exit value refreshes it; old!(x) names the entry value in propositions. Overlapping arguments are refused by lowering and, earlier, by the elaborator with rustc's codes (L0263: E0499, E0502, E0503, E0505); E0596, E0507 likewise; all observed from rustc on the printed twins. The panic rule as designed: the value at the moment of the panic is what the caller observes, in both interpreters (a side table the checker never reads) and in the compiled harness under catch_unwind. Lending a field that evidence depends on is refused (L0233). The generator lends; E8's &mut test is enabled. *x place syntax waits for O4.\n\nLane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n- A field that evidence in its struct depends on cannot be lent: &mut percent.value is rejected by lowering, and &mut percent is accepted.\n- A panic carries the values of the &mut parameters at that moment, in both interpreters and in the compiled harness, which reads the arguments after catch_unwind. A callee that writes and then panics, called directly and through a caller that lent a field of its own &mut parameter.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T20:22:59.000Z"
+   "updated": "2026-09-22T21:43:47.000Z"
   },
   {
    "id": "t301",
    "n": 185,
    "title": "O4 · Inherent impl blocks and self; the protected type end to end",
-   "status": "backlog",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 11.\nDepends on: O2 (LOC-183), O3 (LOC-184).\nUnblocks: R4 (LOC-189).\n\nScope. Methods and associated functions in impl blocks, with self, &self, and &mut self. The Percent example checks and builds, with an enum of its own in place of Option, which waits for generics.\n\nTests.\n- Percent moves from parse-only to run.\n- The Rust caller crate of O2 uses Percent: checked works, new is not visible, the fields are not visible.\n- The Rust caller calls a method that updates a Percent through &mut self under catch_unwind, with an input chosen to make it panic if anything can, and then reads the value that survives: it satisfies the invariant. If the rule decided forbids the method instead, the rejected file is the test.\n- Case 11: a method that completes one valid replacement and then panics; the Rust caller finds the new valid value.\n\nDone when. The fourth milestone: every program in Target examples works.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-22T21:43:47.000Z"
   },
   {
    "id": "t302",
