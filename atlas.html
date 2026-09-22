@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 52,
-  "savedAt": "2026-09-22T00:03:20.000Z",
+  "rev": 53,
+  "savedAt": "2026-09-22T00:04:53.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2402,10 +2402,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## The kernel is attacked",
     "",
-    "tests/kernel_soundness.rs pairs every proof it can find, hand-built, from the theory, and from the corpus, with claims known to be false by an evaluator of its own, and with thousands of one-node mutations of the proof, and requires the kernel to reject every pairing. A mutant that proves some other claim is checked against the oracle too. Sabotaging the kernel in a dozen ways was confirmed to produce findings before the test was kept."
+    "tests/kernel_soundness.rs pairs every proof it can find, hand-built, from the theory, and from the corpus, with claims known to be false by an evaluator of its own, and with thousands of one-node mutations of the proof, and requires the kernel to reject every pairing. A mutant that proves some other claim is checked against the oracle too. Sabotaging the kernel in a dozen ways was confirmed to produce findings before the test was kept.",
+    "",
+    "## Random programs, three ways",
+    "",
+    "tests/random_programs.rs generates random well-typed programs as typed trees, declares each through the real Session so that it is lowered, checked, and erased, and runs it in the check-IR interpreter, the erased interpreter, and as compiled Rust in both overflow configurations. Loops are bounded by construction. A disagreement is printed with its seed and shrunk. The fast run is 300 programs; the extended run is 10,000."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-21T23:42:04.000Z"
+   "updated": "2026-09-22T00:04:53.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7051,12 +7055,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t278",
    "n": 162,
    "title": "K4 · A model for each machine integer type, from one table",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 4.\nDepends on: K3 (LOC-161).\nUnblocks: K5 (LOC-163), K7 (LOC-165), K8 (LOC-166), E5 (LOC-171).\nCovers: LOC-120, LOC-145.\n\nScope. For u8 to u64 and i8 to i64: a view to Int, a wrap from Int, the range of the view, and the round trips. as between machine types is the wrap of the view. The u8 model over Nat is restated over Int and its separate axioms are removed, so the contract holds one schema and not a list per type.\n\nTests.\n- The 8-bit types exhaustively against Rust: every value for the view and round trip, every pair of types for as.\n- The wider types at a boundary set (0, 1, MAX, MAX - 1, MIN, MIN + 1, -1, powers of two and their neighbours) and at random.\n- Every existing kernel_numbers test passes on the new model.\n\nDone when. What the logic says about a machine value is what Rust computes, tested where it can be tested exhaustively and at the edges where it cannot.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. MachineInt table (u8 to u64, i8 to i64) in src/kernel/machine.rs; Type::Machine for the seven non-u8 types beside Type::U8; Term::Machine literals checked in range; view, wrap, cast primitives; six axiom schemas named in the contract. The u8 model over Nat is kept beside the Int model until E5 moves the elaborator, then removed (added to E5). Exhaustive at 8 bits against Rust, boundaries and random above, 19 s extended.\n\nLane: Kernel. Wave 4.\nDepends on: K3 (LOC-161).\nUnblocks: K5 (LOC-163), K7 (LOC-165), K8 (LOC-166), E5 (LOC-171).\nCovers: LOC-120, LOC-145.\n\nScope. For u8 to u64 and i8 to i64: a view to Int, a wrap from Int, the range of the view, and the round trips. as between machine types is the wrap of the view. The u8 model over Nat is restated over Int and its separate axioms are removed, so the contract holds one schema and not a list per type.\n\nTests.\n- The 8-bit types exhaustively against Rust: every value for the view and round trip, every pair of types for as.\n- The wider types at a boundary set (0, 1, MAX, MAX - 1, MIN, MIN + 1, -1, powers of two and their neighbours) and at random.\n- Every existing kernel_numbers test passes on the new model.\n\nDone when. What the logic says about a machine value is what Rust computes, tested where it can be tested exhaustively and at the edges where it cannot.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:37:26.000Z"
+   "updated": "2026-09-22T00:04:53.000Z"
   },
   {
    "id": "t279",
@@ -7153,9 +7157,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "status": "backlog",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 5.\nDepends on: K4 (LOC-162), S3 (LOC-156).\nUnblocks: E6 (LOC-172), E8 (LOC-174).\nCovers: LOC-2, LOC-3, LOC-9, LOC-94, LOC-99, LOC-96.\n\nScope. The typed tree, both interpreters, the erased check, and the printer learn u8 to u64 and i8 to i64. A literal takes the expected type, else i32, or its suffix, and is checked against the range. as between integer types wraps; as Int is exact and Int is logic-only. == != and the orderings need both sides of one type. u32::MAX and MIN resolve as associated constants.\n\nTests.\n- Literals one past each range are rejected.\n- as for every pair of types at the boundary set, compared with compiled Rust through the corpus runner.\n- A comparison across types is rejected and the message shows the cast to add.\n- lock.lc with u32 counts runs.\n\nDone when. Programs are no longer limited to bytes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Lane: Elaborator. Wave 5.\nDepends on: K4 (LOC-162), S3 (LOC-156).\nUnblocks: E6 (LOC-172), E8 (LOC-174).\nCovers: LOC-2, LOC-3, LOC-9, LOC-94, LOC-99, LOC-96.\n\nScope. The typed tree, both interpreters, the erased check, and the printer learn u8 to u64 and i8 to i64. A literal takes the expected type, else i32, or its suffix, and is checked against the range. as between integer types wraps; as Int is exact and Int is logic-only. == != and the orderings need both sides of one type. u32::MAX and MIN resolve as associated constants.\n\nTests.\n- Literals one past each range are rejected.\n- as for every pair of types at the boundary set, compared with compiled Rust through the corpus runner.\n- A comparison across types is rejected and the message shows the cast to add.\n- lock.lc with u32 counts runs.\n- The u8 model over Nat (to_nat, of_nat, the wrapping models, reflect on u8, the Nat lemmas of theory.rs) is removed once the elaborator builds on the Int model; the contract then lists one schema. The ignored test of R1 (a byte typed by a literal alone as a receiver, E0689) passes: the printer suffixes literals or annotates the let.\n\nDone when. Programs are no longer limited to bytes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T00:04:53.000Z"
   },
   {
    "id": "t288",
@@ -7315,12 +7319,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t302",
    "n": 186,
    "title": "R1 · A generator of random well-typed programs, compared three ways",
-   "status": "doing",
+   "status": "done",
    "priority": 3,
    "project": "p266",
-   "notes": "Lane: Robustness. Wave 2.\nDepends on: H1 (LOC-151), H2 (LOC-152).\nUnblocks: R4 (LOC-189).\n\nScope. Programs over the runtime fragment with trivial evidence, run in the check-IR interpreter, the erased interpreter, and as compiled Rust, two hundred to a rustc call. Loops are generated bounded by construction (a counter with a literal limit, never assigned in the body), because interpreter fuel does not bound the compiled program; the process timeout of E4 is a safeguard and its firing is inconclusive. The fast suite runs a few hundred programs with a fixed seed; the extended suite runs thousands with fresh seeds. E6, M2, M3, and O3 each extend the generator as part of their own exit.\n\nTests.\n- Three-way agreement on every generated program, panics included once E4 lands, and in both overflow configurations once E6 lands.\n- A failing program is printed with its seed and shrunk by deleting statements.\n- An inconclusive run is counted and printed, and the extended suite fails if more than a handful are.\n\nDone when. Differences between what is checked and what runs are found by machine, not by luck.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September as tests/random_programs.rs with tests/common/compiled.rs (harness pieces copied from tests/corpus.rs, to deduplicate later). Type-directed generation of typed trees with weighted productions; loops bounded by construction; every program declared through the real Session and checked. Fast: 300 programs, 2,617 cases, 6 s; extended: 10,000 programs, 90,633 cases, 0 inconclusive, 0 disagreements, 180 s. Shrinking tested on a planted disagreement. Finding, not fixed: the printer writes byte literals without a suffix, so let k = 200; k.wrapping_add(n) and a for index used as a receiver are accepted by Locus and rejected by rustc (E0689); kept as an ignored test and given to E5.\n\nLane: Robustness. Wave 2.\nDepends on: H1 (LOC-151), H2 (LOC-152).\nUnblocks: R4 (LOC-189).\n\nScope. Programs over the runtime fragment with trivial evidence, run in the check-IR interpreter, the erased interpreter, and as compiled Rust, two hundred to a rustc call. Loops are generated bounded by construction (a counter with a literal limit, never assigned in the body), because interpreter fuel does not bound the compiled program; the process timeout of E4 is a safeguard and its firing is inconclusive. The fast suite runs a few hundred programs with a fixed seed; the extended suite runs thousands with fresh seeds. E6, M2, M3, and O3 each extend the generator as part of their own exit.\n\nTests.\n- Three-way agreement on every generated program, panics included once E4 lands, and in both overflow configurations once E6 lands.\n- A failing program is printed with its seed and shrunk by deleting statements.\n- An inconclusive run is counted and printed, and the extended suite fails if more than a handful are.\n\nDone when. Differences between what is checked and what runs are found by machine, not by luck.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:57.000Z"
+   "updated": "2026-09-22T00:04:53.000Z"
   },
   {
    "id": "t303",
