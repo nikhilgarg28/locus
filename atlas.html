@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 76,
-  "savedAt": "2026-09-22T16:13:31.000Z",
+  "rev": 77,
+  "savedAt": "2026-09-22T16:34:29.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7699,12 +7699,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t285",
    "n": 169,
    "title": "E3 · Remove math fn",
-   "status": "todo",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 7.\nDepends on: E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-14.\n\nScope. Migrate every example and test to the promises. A migration diagnostic with a fix replaces the keyword.\n\nTests.\n- FunctionMode::Math is gone from the source.\n- The generated Rust of every example is unchanged, byte for byte.\n\nDone when. One way to say a function can be used in the logic.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. math fn is gone: L0114 reports it with a machine-applicable fix to #[terminates] #[no_panic] #[no_io] fn; the logical test is the promises alone; fn(..) -> .. is the one function type. Generated Rust of every example and accept file was byte-identical before and after.\n\nLane: Elaborator. Wave 7.\nDepends on: E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-14.\n\nScope. Migrate every example and test to the promises. A migration diagnostic with a fix replaces the keyword.\n\nTests.\n- FunctionMode::Math is gone from the source.\n- The generated Rust of every example is unchanged, byte for byte.\n\nDone when. One way to say a function can be used in the logic.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:38:15.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t286",
@@ -7732,12 +7732,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t288",
    "n": 172,
    "title": "E6 · The operators + - * / % with their panic conditions and what the logic learns",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: K5 (LOC-163), E2 (LOC-168), E4 (LOC-170), E5 (LOC-171), M0 (LOC-176).\nUnblocks: E7 (LOC-173).\nCovers: LOC-11, LOC-12, LOC-121.\n\nScope. Operators elaborate through the table of K5. The check IR gains primitive operations that may panic, as M0 designs them: under no_panic the panic condition is an obligation at the operator and the exact result is known after; otherwise only the wrapped result is known. After a / b the divisor is known not to be zero. In a formula, an operator on a machine type is rejected, because it may panic, and the message offers as Int and the wrapping method. The reference interpreters panic on overflow by default and have a wrapping mode, since Rust does either according to the build. This commit changes the checker of the check IR, which is trusted, and updates Architecture.\n\nTests.\n- For every type and operator, at the boundary set: the interpreter in its default mode agrees with Rust built with overflow checks on, and in its wrapping mode with Rust built with them off. / and % by zero and MIN / -1 panic in both.\n- What the logic learns outside no_panic, the wrapped value, holds in both builds; a test asserts a fact proved from it against both compiled results.\n- An undischarged obligation under no_panic is reported at the operator with its condition written out.\n- Check IR built by hand that omits the evidence at an operator under no_panic is rejected by the checker.\n- The random program generator of R1 now emits arithmetic, in both build configurations.\n- The printer parenthesizes a cast that is the left operand of \u003c or \u003c\u003c (S3 found rustc reads them as generics).\n\nDone when. x + 1 means what it means in Rust, and a function that promises no_panic has shown it cannot overflow.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t289",
@@ -7759,18 +7759,18 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: E5 (LOC-171), E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-97, LOC-81, LOC-141.\n\nScope. Two rules that must not be confused. An erased result: a position is erased exactly when its type has no runtime form, so the evidence a call returns vanishes and the call stays. An erasable computation: a call is removed only if its result is logic-only, it promises terminates, no_panic, and no_io, and it takes no &mut to runtime storage. An expression in a logic-only context, such as the argument of snapshot!, the right side of a let of type Int, or a formula, must be an erasable computation throughout, and is rejected otherwise. Ghost\u003cT> is built by snapshot!(e). Seq\u003cT> is proposed to leave the core: no acceptance example needs it and it brings a theory of its own.\n\nTests.\n- A pure call in a logic-only context: accepted, and absent from the generated Rust.\n- A call that may panic in a logic-only context: rejected, naming the missing promise. The same for one that may not terminate, and one that does I/O.\n- An ordinary runtime call that returns only evidence and may panic or loop: accepted, kept in the generated Rust, its result erased; the three-way comparison sees its panic.\n- A call with a logic-only result and a &mut parameter to runtime storage: kept. This case is written now and enabled by O3.\n- The generated Rust of a file using Ghost and Int holds nothing of them but markers, by golden file, and the erased check rejects a hand-built erased tree that keeps a logic-only value.\n\nDone when. Specifications can carry values the program never computes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:38:15.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t291",
    "n": 175,
    "title": "E9 · Variants with named fields, const as a Rust const, separate type and value namespaces",
-   "status": "todo",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: R4 (LOC-189).\nCovers: LOC-100, LOC-101, LOC-96.\n\nScope. The remaining small parity items that touch only the elaborator and the printer.\n\nTests.\n- Corpus files for each, run and compiled.\n- A type and a value of one name coexist as in Rust.\n\nDone when. Small, independent, and a good filler for an idle lane.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. Variants with named fields elaborate (fields by position in the kernel, names in the elaborator; L0224 for wrong fields; props too); const prints as a Rust const when Rust can evaluate the initializer (L0234 otherwise) and keeps its equation in the logic; Env has separate type and value namespaces, tested with a struct and a function of one name. Found and fixed on the way: false recursion (L0203) when a local was named like an item; order.rs is now scope-aware.\n\nLane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: R4 (LOC-189).\nCovers: LOC-100, LOC-101, LOC-96.\n\nScope. The remaining small parity items that touch only the elaborator and the printer.\n\nTests.\n- Corpus files for each, run and compiled.\n- A type and a value of one name coexist as in Rust.\n\nDone when. Small, independent, and a good filler for an idle lane.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:38:15.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t292",
@@ -7847,7 +7847,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Ownership. Wave 8.\nDepends on: M2 (LOC-178), S4 (LOC-157).\nUnblocks: O3 (LOC-184).\nCovers: LOC-89, LOC-25, LOC-141, LOC-99.\n\nScope. Values move by default. Copy, Clone, PartialEq, Eq, and Debug by derive only. Types with no runtime form are always Copy. Use after move is an error; assignment reinitialises. A proposition in a body cannot mention a moved local. PartialEq is derivable only for a type with no logic-only data at any depth.\n\nTests.\n- rustc as the oracle, for runtime uses only: each program rejected for using a moved runtime value, printed as Rust through a test hook that skips the move check, is also rejected by rustc with E0382. A program rejected only because a proposition or erased expression mentions a moved local has no counterpart in the generated Rust, where that use is gone; those are tested as Locus rejections alone.\n- Every accepted program compiles, which the runner already enforces.\n- The fifth case of M0.\n\nDone when. Locus is never more permissive than rustc about moves, and the generated Rust never surprises its compiler.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:13:17.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t299",
@@ -7858,7 +7858,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:38:15.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t300",
@@ -7930,12 +7930,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t306",
    "n": 190,
    "title": "E10 · The forms that panic: panic!, assert!, unreachable!, todo!, debug_assert!",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: M1 (LOC-177), E2 (LOC-168), S2 (LOC-155).\nUnblocks: R4 (LOC-189).\nCovers: LOC-71, LOC-85, LOC-95.\n\nScope. The forms with their Rust meaning and string literal messages, lowered to the panic ending of M1. Their type is the never type where Rust's is. Under no_panic, assert!(c) needs evidence of c and unreachable!() needs evidence of false, as Target language states; panic! and todo! are rejected there.\n\nTests.\n- Each form three ways, message included.\n- After assert!(c), c is a fact; under no_panic without evidence it is an error at the assert.\n- Check IR built by hand with a panic ending and no evidence of false is rejected under no_panic by the checker.\n\nDone when. A half-written file checks with todo!(), and a runtime check can teach the logic a fact.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:27:28.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T16:34:29.000Z"
   },
   {
    "id": "t307",
