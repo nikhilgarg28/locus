@@ -1087,17 +1087,12 @@ fn view_and_the_round_trips_agree_with_rust_for_every_8_bit_value() {
             assert_eq!(rust_wrap(ty, value), value);
         }
     }
-    // On bytes, the model over Int and the model over Nat name the same
-    // number: view(u8) and to_nat agree on every byte.
+    // On bytes, the view is the number of the byte.
     for byte in u8::MIN..=u8::MAX {
         let literal = Term::U8(byte);
         assert!(same(
             &evaluated(&mut ctx, &view(U8, literal.clone()), &Type::Int),
             &int(byte.into())
-        ));
-        assert!(same(
-            &evaluated(&mut ctx, &Term::to_nat(literal), &Type::Nat),
-            &Term::nat(byte.into())
         ));
     }
 }

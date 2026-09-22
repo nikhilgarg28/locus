@@ -1,4 +1,4 @@
-// `==` at runtime is defined on `u8`.
-fn same(a: bool, b: bool) -> bool {
-    a == b //~ error: L0211 cannot be compared at runtime
+// `==` and `!=` compare two `bool` at runtime; `bool` has no ordering.
+fn below(a: bool, b: bool) -> bool {
+    a < b //~ error: L0211 `bool` has no ordering
 }

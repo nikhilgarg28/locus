@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::kernel::{Prim, VarId};
-use crate::typed::FnRef;
+use crate::typed::{CompareOp, FnRef};
 
 use super::tree::{EBlock, EExpr, EPattern, EStmt, EType, Module};
 
@@ -243,7 +243,12 @@ impl Checker<'_> {
                 None => return fail(format!("{name} is not in scope")),
             },
             EExpr::Bool(_) => EType::Bool,
-            EExpr::U8(_) => EType::U8,
+            EExpr::Literal(ty, value) => {
+                if !ty.contains(&crate::kernel::Integer::from(*value)) {
+                    return fail(format!("{value} is not a value of {}", ty.name()));
+                }
+                EType::Int(*ty)
+            }
             EExpr::Proved => EType::Proved,
             EExpr::Ghost => EType::Ghost,
             EExpr::Trap | EExpr::Panic { .. } => return Ok(None),
@@ -297,22 +302,40 @@ impl Checker<'_> {
                 receiver,
                 arguments,
             } => {
-                if !matches!(prim, Prim::WrappingAdd | Prim::WrappingSub) {
+                // A row of the table is the one primitive with a runtime
+                // form that is called as a method.
+                let Prim::Op(op, ty) = prim else {
                     return fail(format!("{} has no runtime form", prim.name()));
+                };
+                if op.row(*ty).is_none() {
+                    return fail(format!("{} has no row at {}", op.name(), ty.name()));
                 }
                 let operands = std::iter::once(&**receiver).chain(arguments);
                 let operands = needed!(self.values(operands)?);
-                if operands != [EType::U8, EType::U8] {
-                    return fail(format!("{} applied to {operands:?}", prim.name()));
+                if operands.len() != op.arity()
+                    || operands.iter().any(|found| *found != EType::Int(*ty))
+                {
+                    return fail(format!("{prim} applied to {operands:?}"));
                 }
-                EType::U8
+                EType::Int(*ty)
             }
-            EExpr::Compare { left, right, .. } => {
+            EExpr::Compare { op, left, right } => {
                 let operands = needed!(self.values([&**left, &**right])?);
-                if operands != [EType::U8, EType::U8] {
+                let ordered =
+                    matches!(operands.as_slice(), [EType::Int(a), EType::Int(b)] if a == b);
+                let equated = matches!(op, CompareOp::Eq | CompareOp::Ne)
+                    && operands == [EType::Bool, EType::Bool];
+                if !ordered && !equated {
                     return fail(format!("a comparison of {operands:?}"));
                 }
                 EType::Bool
+            }
+            EExpr::Cast { expr, to } => {
+                let found = needed!(self.expr(expr)?);
+                if !matches!(found, EType::Int(_)) {
+                    return fail(format!("a cast of {found:?}"));
+                }
+                EType::Int(*to)
             }
             EExpr::Call {
                 callee,
@@ -395,14 +418,22 @@ impl Checker<'_> {
                 body,
             } => {
                 let bounds = self.values([&**lo, &**hi])?;
-                if bounds
-                    .as_ref()
-                    .is_some_and(|tys| tys != &[EType::U8, EType::U8])
-                {
-                    return fail("a for bound that is not a u8");
-                }
+                let index_type = match bounds.as_deref() {
+                    Some([EType::Int(lo), EType::Int(hi)]) if lo == hi => Some(*lo),
+                    Some(_) => {
+                        return fail("for bounds that are not two machine integers of one type");
+                    }
+                    // The bounds never yield; the body is checked at any index type.
+                    None => None,
+                };
                 let (types, yields) = self.state(state)?;
-                self.iterate(state, types.clone(), None, body, Some(index.0))?;
+                self.iterate(
+                    state,
+                    types.clone(),
+                    None,
+                    body,
+                    Some((index.0, index_type.unwrap_or(crate::kernel::MachineInt::U8))),
+                )?;
                 needed!(bounds.and(yields));
                 EType::Tuple(types)
             }
@@ -443,11 +474,11 @@ impl Checker<'_> {
         types: Vec<EType>,
         result: Option<EType>,
         body: &EBlock,
-        index: Option<VarId>,
+        index: Option<(VarId, crate::kernel::MachineInt)>,
     ) -> Result<(), TypeError> {
         let scope = self.env.len();
-        if let Some(index) = index {
-            self.env.push((index, EType::U8));
+        if let Some((index, ty)) = index {
+            self.env.push((index, EType::Int(ty)));
         }
         for (id, _, ty, _) in state {
             self.env.push((*id, ty.clone()));

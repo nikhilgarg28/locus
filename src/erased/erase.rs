@@ -15,10 +15,10 @@ use super::tree::{EArm, EBlock, EEnum, EExpr, EFn, EPattern, EStmt, EStruct, ETy
 pub fn erase_type(ty: &Type) -> EType {
     match ty {
         Type::Bool => EType::Bool,
-        Type::U8 => EType::U8,
+        Type::U8 => EType::Int(crate::kernel::MachineInt::U8),
+        Type::Machine(ty) => EType::Int(*ty),
         Type::Proof(_) => EType::Proved,
         Type::Prop | Type::Nat | Type::Int => EType::Ghost,
-        Type::Machine(ty) => unimplemented!("erasure of {} comes with E5", ty.name()),
         Type::Tuple(fields) => EType::Tuple(fields.iter().map(erase_type).collect()),
         Type::Struct(id) => EType::Struct(*id),
         Type::Enum(id) => EType::Enum(*id),
@@ -120,7 +120,7 @@ impl Eraser<'_> {
     fn expr(&self, expr: &Expr) -> EExpr {
         match expr {
             Expr::Proof(_) => EExpr::Proved,
-            Expr::Prop(_) => EExpr::Ghost,
+            Expr::Prop(_) | Expr::Int(_) => EExpr::Ghost,
             // The empty match: a marker when it stands for a ghost, a trap
             // when it stands for a value.
             Expr::Absurd { ty, .. } => marker(ty).unwrap_or(EExpr::Trap),
@@ -134,7 +134,7 @@ impl Eraser<'_> {
                 name: name.clone(),
             },
             Expr::Bool(value) => EExpr::Bool(*value),
-            Expr::U8(value) => EExpr::U8(*value),
+            Expr::Literal(ty, value) => EExpr::Literal(*ty, *value),
             Expr::Tuple { fields, .. } => EExpr::Tuple(self.all(fields)),
             Expr::Struct { id, name, fields } => EExpr::Struct {
                 id: *id,
@@ -176,10 +176,22 @@ impl Eraser<'_> {
                 receiver: Box::new(self.expr(receiver)),
                 arguments: self.all(arguments),
             },
-            Expr::Compare { op, left, right } => EExpr::Compare {
+            Expr::Compare {
+                op, left, right, ..
+            } => EExpr::Compare {
                 op: *op,
                 left: Box::new(self.expr(left)),
                 right: Box::new(self.expr(right)),
+            },
+            // `as Int` is ghost. `Int as T` is not, but its argument is, so
+            // it stands only in a function with no runtime form, which is
+            // never erased; the marker is what an erasure of it would be.
+            Expr::Cast { expr, from, to } => match (from.as_machine(), to.as_machine()) {
+                (Some(_), Some(to)) => EExpr::Cast {
+                    expr: Box::new(self.expr(expr)),
+                    to,
+                },
+                _ => EExpr::Ghost,
             },
             Expr::CallMath {
                 id,

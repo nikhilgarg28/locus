@@ -1,7 +1,7 @@
-error[L0211]: values of type `bool` cannot be compared at runtime in the core
+error[L0211]: `bool` has no ordering
  --> tests/corpus/reject/runtime_comparison_of_bools.lc:3:5
   |
-3 |     a == b //~ error: L0211 cannot be compared at runtime
-  |     ^^^^^^
+3 |     a < b //~ error: L0211 `bool` has no ordering
+  |     ^^^^^
   |
-  = note: runtime comparison is defined on `u8`; inside a formula, `==` states equality at any type
+  = note: `==` and `!=` compare two `bool`; the orderings compare two machine integers

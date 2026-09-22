@@ -1,0 +1,49 @@
+// A literal one past the range of its type, at every width and both signs,
+// and one below the least value of a signed type.
+fn u8_past() -> u8 {
+    256 //~ error: L0205 `256` does not fit in `u8`, whose range is 0 to 255
+}
+
+fn u16_past() -> u16 {
+    65536 //~ error: L0205 `65536` does not fit in `u16`, whose range is 0 to 65535
+}
+
+fn u32_past() -> u32 {
+    4294967296 //~ error: L0205 `4294967296` does not fit in `u32`, whose range is 0 to 4294967295
+}
+
+fn u64_past() -> u64 {
+    18446744073709551616 //~ error: L0205 `18446744073709551616` does not fit in `u64`
+}
+
+fn i8_past() -> i8 {
+    128 //~ error: L0205 `128` does not fit in `i8`, whose range is -128 to 127
+}
+
+fn i16_past() -> i16 {
+    32768 //~ error: L0205 `32768` does not fit in `i16`, whose range is -32768 to 32767
+}
+
+fn i32_past() -> i32 {
+    2147483648 //~ error: L0205 `2147483648` does not fit in `i32`
+}
+
+fn i64_past() -> i64 {
+    9223372036854775808 //~ error: L0205 `9223372036854775808` does not fit in `i64`
+}
+
+fn i8_below() -> i8 {
+    -129 //~ error: L0205 `-129` does not fit in `i8`, whose range is -128 to 127
+}
+
+fn unsigned_below() -> u32 {
+    -1 //~ error: L0205 `-1` does not fit in `u32`, whose range is 0 to 4294967295
+}
+
+fn suffixed_past() -> i64 {
+    2147483648i32 //~ error: L0205 `2147483648` does not fit in `i32`
+}
+
+fn defaulted_past() -> bool {
+    2147483648 == 0 //~ error: L0205 `2147483648` does not fit in `i32`
+}

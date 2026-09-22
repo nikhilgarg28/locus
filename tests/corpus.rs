@@ -66,6 +66,7 @@ use locus::erased::{
     print_module,
 };
 use locus::exec::{CheckInterpreter, Program};
+use locus::kernel::MachineInt;
 use locus::parser::parse;
 use locus::source::{SourceFile, SourceMap};
 
@@ -733,11 +734,24 @@ impl<'a> Cursor<'a> {
                 "false" => Ok(Value::Bool(false)),
                 other => Err(format!("expected a `bool`, found `{other}`")),
             },
-            EType::U8 => {
+            EType::Int(ty) => {
+                // A number, possibly negative, within the type's range, as
+                // the harness prints one: without a suffix.
+                let negative = self.eat("-");
                 let word = self.word();
-                word.parse()
-                    .map(Value::U8)
-                    .map_err(|_| format!("expected a `u8`, found `{word}`"))
+                let value = word
+                    .parse::<i128>()
+                    .ok()
+                    .map(|value| if negative { -value } else { value })
+                    .filter(|value| ty.contains(&locus::kernel::Integer::from(*value)));
+                match value {
+                    Some(value) => Ok(Value::Int(*ty, value)),
+                    None => Err(format!(
+                        "expected a `{}`, found `{}{word}`",
+                        ty.name(),
+                        if negative { "-" } else { "" }
+                    )),
+                }
             }
             EType::Proved => match self.word() {
                 "Proved" => Ok(Value::Proved),
@@ -844,7 +858,9 @@ fn rust_value(value: &Value, module: &Module, path: &str) -> String {
             .collect()
     };
     match value {
-        Value::Bool(_) | Value::U8(_) => value.debug(module),
+        // A bare number: the parameter's type fixes it, a negative one
+        // included.
+        Value::Bool(_) | Value::Int(..) => value.debug(module),
         Value::Proved | Value::Ghost => format!("{path}::{}", value.debug(module)),
         Value::Tuple(fields) => match all(fields).as_slice() {
             [only] => format!("({only},)"),
@@ -1521,24 +1537,25 @@ fn plant(expr: &mut EExpr) {
         EExpr::Call {
             name, arguments, ..
         } if name == "panics" || name == "returns_pair" => {
-            let [EExpr::U8(which)] = arguments.as_slice() else {
+            let [EExpr::Literal(MachineInt::U8, which)] = arguments.as_slice() else {
                 panic!("`{name}` takes a literal")
             };
             let which = *which;
+            let index = usize::try_from(which).expect("a small byte");
             *expr = if name == "panics" {
                 EExpr::Panic {
-                    message: MESSAGES[usize::from(which)].into(),
+                    message: MESSAGES[index].into(),
                 }
             } else {
                 EExpr::Return(Box::new(EExpr::Tuple(vec![
-                    EExpr::U8(which),
-                    EExpr::U8(which),
+                    EExpr::Literal(MachineInt::U8, which),
+                    EExpr::Literal(MachineInt::U8, which),
                 ])))
             };
         }
         EExpr::Var { .. }
         | EExpr::Bool(_)
-        | EExpr::U8(_)
+        | EExpr::Literal(..)
         | EExpr::Proved
         | EExpr::Ghost
         | EExpr::Trap
@@ -1550,7 +1567,10 @@ fn plant(expr: &mut EExpr) {
         }
         | EExpr::Continue(exprs) => exprs.iter_mut().for_each(plant),
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
-        EExpr::Field { target: inner, .. } | EExpr::Break(inner) | EExpr::Return(inner) => {
+        EExpr::Field { target: inner, .. }
+        | EExpr::Cast { expr: inner, .. }
+        | EExpr::Break(inner)
+        | EExpr::Return(inner) => {
             plant(inner);
         }
         EExpr::Method {
@@ -1644,7 +1664,7 @@ fn from_a_for(n: u8) -> u8 {
 
 fn from_an_arm(event: Event) -> u8 {
     let (value, _) = match event {
-        Event::Wrong => (returns(4), 0),
+        Event::Wrong => (returns(4), 0u8),
         Event::Right(n) => (n, n),
     };
     value
@@ -1673,16 +1693,16 @@ const RETURNS_RUNS: &str = "\
 //~ run: through_a_call(0) => 17
 //~ run: through_a_call(5) => 16
 //~ rust: let m: u8 = panic!(\"{}\", \"in a let\");
-//~ rust: let m: u8 = if n == 0 {
-//~ rust: return 7
-//~ rust: break (return i.wrapping_add(100))
-//~ rust: let _ = if i == 2 {
-//~ rust: return 50
+//~ rust: let m: u8 = if n == 0_u8 {
+//~ rust: return 7_u8
+//~ rust: break (return i.wrapping_add(100_u8))
+//~ rust: let _ = if i == 2_u8 {
+//~ rust: return 50_u8
 //~ rust: let (value, _): (u8, _) = match event {
 //~ rust: Event::Wrong => {
-//~ rust: ((return 4), 0)
-//~ rust: let (a, _): (u8, ()) = if n == 0 {
-//~ rust: return (6, 6)
+//~ rust: ((return 4_u8), 0_u8)
+//~ rust: let (a, _): (u8, ()) = if n == 0_u8 {
+//~ rust: return (6_u8, 6_u8)
 ";
 
 #[test]
@@ -1712,7 +1732,9 @@ fn trees_that_panic_agree_with_their_compiled_rust_message_included() {
     // message with more `{` than `}` is indented as it would be without it.
     let rust = &right.compiled.as_ref().unwrap().rust;
     assert!(
-        rust.contains("\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut state_i: u8 = 0;\n"),
+        rust.contains(
+            "\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut state_i: u8 = 0_u8;\n"
+        ),
         "{rust}"
     );
 

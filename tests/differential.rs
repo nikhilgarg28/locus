@@ -57,8 +57,8 @@ fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
     let programs = [
         increment_ref,
         session.declare_fn(&increment(true)).unwrap(),
-        session.declare_fn(&preserve(false, true)).unwrap(),
-        session.declare_fn(&preserve(true, true)).unwrap(),
+        session.declare_fn(&preserve(theory, false, true)).unwrap(),
+        session.declare_fn(&preserve(theory, true, true)).unwrap(),
         session
             .declare_fn(&bounded_walk(prelude, theory, true))
             .unwrap(),
@@ -76,7 +76,7 @@ fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
 
     for callee in programs {
         for byte in 0..=255u8 {
-            let [checked, erased] = both(&session, callee, &[Value::U8(byte)]);
+            let [checked, erased] = both(&session, callee, &[Value::u8(byte)]);
             assert!(
                 matches!(
                     compare(&checked, &erased),
@@ -106,14 +106,14 @@ fn a_divergent_call_runs_out_of_fuel_in_both_branches() {
 
 #[test]
 fn outcomes_are_compared_as_outcomes() {
-    let value = |byte| Ok(Outcome::Value(Value::U8(byte)));
+    let value = |byte| Ok(Outcome::Value(Value::u8(byte)));
     let panic = |message: &str| Ok(Outcome::Panic(message.into()));
     let out_of_fuel = Ok(Outcome::OutOfFuel);
     let stuck = Err(RunError::Stuck("somewhere".into()));
 
     assert_eq!(
         compare(&value(1), &value(1)),
-        Comparison::Agree(Outcome::Value(Value::U8(1)))
+        Comparison::Agree(Outcome::Value(Value::u8(1)))
     );
     assert_eq!(compare(&value(1), &value(2)), Comparison::Disagree);
     // A panic agrees with a panic that has the same message, and only that.
@@ -142,8 +142,8 @@ fn the_comparison_has_teeth() {
     // If erasure read the tree differently from lowering, the interpreters
     // would disagree. Simulate that by exchanging the branches of preserve
     // in the erased module only.
-    let (mut session, _, _) = setup();
-    let preserve_ref = session.declare_fn(&preserve(false, true)).unwrap();
+    let (mut session, _, theory) = setup();
+    let preserve_ref = session.declare_fn(&preserve(theory, false, true)).unwrap();
     let mut tampered = session.erased().clone();
     let Some(EExpr::If {
         then_block,
@@ -157,10 +157,10 @@ fn the_comparison_has_teeth() {
     // Still well typed: the type checker cannot see this kind of mistake.
     assert_eq!(check_module(&tampered), Ok(()));
 
-    let argument = vec![Value::U8(7)];
+    let argument = vec![Value::u8(7)];
     let returned = |byte| {
         Ok(Outcome::Value(Value::Tuple(vec![
-            Value::U8(byte),
+            Value::u8(byte),
             Value::Proved,
         ])))
     };

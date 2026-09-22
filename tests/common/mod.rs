@@ -5,7 +5,8 @@
 use locus::kernel::derive::symm_at;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Definitions, EnumId, FnId, HypId, Prelude, Prim, Proof, Term, Type, VarId,
+    Axiom, CmpOp, Definitions, EnumId, FnId, HypId, MachineInt, Op, Prelude, Prim, Proof, Term,
+    Type, VarId,
 };
 use locus::typed::{
     Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, MatchArm, Pattern, Session, Stmt,
@@ -23,7 +24,42 @@ pub fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 pub fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::successor(MachineInt::U8, term)
+}
+
+/// `view[u8](x)`: the value of a byte in the logic.
+pub fn view(term: Term) -> Term {
+    Term::view(MachineInt::U8, term)
+}
+
+/// `a <= b` between bytes, over their views.
+pub fn u8_le(left: Term, right: Term) -> Term {
+    Term::int_le(view(left), view(right))
+}
+
+/// `a < b` between bytes, over their views.
+pub fn u8_lt(left: Term, right: Term) -> Term {
+    Term::int_lt(view(left), view(right))
+}
+
+/// `view[u8](a) == view[u8](b)`: what `cmp_reflect` says of `eq[u8](a, b)`.
+pub fn views_eq(left: Term, right: Term) -> Term {
+    Term::eq(Type::Int, view(left), view(right))
+}
+
+/// `eq[u8](a, b)`, the runtime test.
+pub fn u8_test_eq(left: Term, right: Term) -> Term {
+    Term::cmp(CmpOp::Eq, MachineInt::U8, left, right)
+}
+
+/// A comparison of bytes in the typed tree.
+pub fn compare_u8(op: CompareOp, left: Expr, right: Expr) -> Expr {
+    Expr::Compare {
+        op,
+        ty: Type::U8,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
 }
 
 pub fn lemma(id: FnId, arguments: Vec<Term>) -> Proof {
@@ -33,9 +69,9 @@ pub fn lemma(id: FnId, arguments: Vec<Term>) -> Proof {
 /// `value.wrapping_add(1)`
 pub fn plus_one(value: Expr) -> Expr {
     Expr::Method {
-        prim: Prim::WrappingAdd,
+        prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
         receiver: Box::new(value),
-        arguments: vec![Expr::U8(1)],
+        arguments: vec![Expr::u8(1)],
     }
 }
 
@@ -110,7 +146,7 @@ pub fn increment(math: bool) -> FnItem {
 /// fn preserve(n: u8) -> (out: u8, @[out == n]) {
 ///     if n == 0 { (0, _) } else { (n, _) }
 /// }
-pub fn preserve(math: bool, use_the_fact: bool) -> FnItem {
+pub fn preserve(theory: Theory, math: bool, use_the_fact: bool) -> FnItem {
     let n = Binder::new("n", Type::U8);
     let n_term = n.term();
     let result = data_with_evidence({
@@ -119,11 +155,16 @@ pub fn preserve(math: bool, use_the_fact: bool) -> FnItem {
     });
     let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
     // The fact of the then branch is about the comparison the condition
-    // performs; reflection turns it into n == 0.
-    let comparison = Term::prim(Prim::U8Eq, vec![n_term.clone(), Term::U8(0)]);
-    let n_is_zero = Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(comparison, true)),
+    // performs; reflection turns it into an equality of the views, and the
+    // injectivity of the view into n == 0.
+    let comparison = u8_test_eq(n_term.clone(), Term::U8(0));
+    let views_equal = Proof::implies_elim(
+        Proof::Axiom(Axiom::CmpReflect(comparison, true)),
         Proof::hyp(then_fact),
+    );
+    let n_is_zero = lemma(
+        theory.machine(MachineInt::U8).view_injective,
+        vec![n_term.clone(), Term::U8(0), Term::proof(views_equal)],
     );
     let target = n_term.clone();
     let zero_is_n = Proof::transport(
@@ -150,12 +191,13 @@ pub fn preserve(math: bool, use_the_fact: bool) -> FnItem {
             tail: Some(Box::new(Expr::If {
                 condition: Box::new(Expr::Compare {
                     op: CompareOp::Eq,
+                    ty: Type::U8,
                     left: Box::new(Expr::var(&n)),
-                    right: Box::new(Expr::U8(0)),
+                    right: Box::new(Expr::u8(0)),
                 }),
                 then_fact,
                 else_fact,
-                then_block: block(vec![], pair(Expr::U8(0), evidence)),
+                then_block: block(vec![], pair(Expr::u8(0), evidence)),
                 else_block: block(vec![], pair(Expr::var(&n), Proof::Refl(n_term))),
                 ty: result.clone(),
                 result: VarId::fresh(),
@@ -171,28 +213,26 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
     let limit_term = limit.term();
     let result = data_with_evidence({
         let limit_term = limit_term.clone();
-        move |value| prelude.u8_le_prop(value, limit_term.clone())
+        move |value| u8_le(value, limit_term.clone())
     });
     let i = Binder::new("i", Type::U8);
-    let bound = Binder::new(
-        "bound",
-        Type::proof(prelude.u8_le_prop(i.term(), limit_term.clone())),
-    );
+    let bound = Binder::new("bound", Type::proof(u8_le(i.term(), limit_term.clone())));
     let next = Binder::new("next", Type::U8);
     let next_bound = Binder::new(
         "next_bound",
-        Type::proof(prelude.u8_le_prop(next.term(), limit_term.clone())),
+        Type::proof(u8_le(next.term(), limit_term.clone())),
     );
     let differs = Binder::new(
         "differs",
-        Type::proof(prelude.not_prop(u8_eq(i.term(), limit_term.clone()))),
+        Type::proof(prelude.not_prop(Term::eq(
+            Type::Int,
+            view(i.term()),
+            view(limit_term.clone()),
+        ))),
     );
-    let below = Binder::new(
-        "below",
-        Type::proof(prelude.u8_lt_prop(i.term(), limit_term.clone())),
-    );
+    let below = Binder::new("below", Type::proof(u8_lt(i.term(), limit_term.clone())));
     let (then_fact, else_fact, next_is) = (HypId::fresh(), HypId::fresh(), HypId::fresh());
-    let comparison = Term::prim(Prim::U8Eq, vec![i.term(), limit_term.clone()]);
+    let comparison = u8_test_eq(i.term(), limit_term.clone());
     let as_proof = |binder: &Binder| Proof::OfTerm(binder.term());
     let limit_in = limit_term.clone();
     let carried = if carry_the_invariant {
@@ -206,7 +246,7 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
                 &differs,
                 HypId::fresh(),
                 Expr::Proof(Proof::implies_elim(
-                    Proof::Axiom(Axiom::Reflect(comparison, false)),
+                    Proof::Axiom(Axiom::CmpReflect(comparison, false)),
                     Proof::hyp(else_fact),
                 )),
             ),
@@ -214,7 +254,7 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
                 &below,
                 HypId::fresh(),
                 Expr::Proof(lemma(
-                    theory.u8_lt_of_le_of_ne,
+                    theory.machine(MachineInt::U8).lt_of_le_of_ne,
                     vec![
                         i.term(),
                         limit_term.clone(),
@@ -229,9 +269,9 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
                 HypId::fresh(),
                 Expr::Proof(Proof::transport(
                     symm_at(&Type::U8, &next.term(), Proof::hyp(next_is)),
-                    |hole| prelude.u8_le_prop(hole, limit_in.clone()),
+                    |hole| u8_le(hole, limit_in.clone()),
                     lemma(
-                        theory.u8_succ_le_of_lt,
+                        theory.machine(MachineInt::U8).succ_le_of_lt,
                         vec![i.term(), limit_term.clone(), Term::proof(as_proof(&below))],
                     ),
                 )),
@@ -255,10 +295,13 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
             stmts: vec![],
             tail: Some(Box::new(Expr::Loop {
                 state: vec![
-                    (i.clone(), Expr::U8(0)),
+                    (i.clone(), Expr::u8(0)),
                     (
                         bound.clone(),
-                        Expr::Proof(lemma(theory.u8_zero_le, vec![limit_term.clone()])),
+                        Expr::Proof(lemma(
+                            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                            vec![limit_term.clone()],
+                        )),
                     ),
                 ],
                 result_ty: result,
@@ -267,6 +310,7 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
                     tail: Some(Box::new(Expr::If {
                         condition: Box::new(Expr::Compare {
                             op: CompareOp::Eq,
+                            ty: Type::U8,
                             left: Box::new(Expr::var(&i)),
                             right: Box::new(Expr::var(&limit)),
                         }),
@@ -346,11 +390,14 @@ pub fn counting_loop(theory: Theory, math: bool, step: Option<locus::exec::ExecF
                 index: i.clone(),
                 lower: HypId::fresh(),
                 upper: HypId::fresh(),
-                lo: Box::new(Expr::U8(0)),
+                lo: Box::new(Expr::u8(0)),
                 hi: Box::new(Expr::var(&n)),
-                ordered: lemma(theory.u8_zero_le, vec![n.term()]),
+                ordered: lemma(
+                    theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                    vec![n.term()],
+                ),
                 state: vec![
-                    (acc.clone(), Expr::U8(0)),
+                    (acc.clone(), Expr::u8(0)),
                     (same.clone(), Expr::Proof(Proof::Refl(Term::U8(0)))),
                 ],
                 body: block(stmts, Expr::Continue(vec![stepped, Expr::Proof(advanced)])),
@@ -401,12 +448,13 @@ pub fn caller_of_spin(prelude: Prelude, spin: locus::exec::ExecFnId) -> FnItem {
                     ty: falsehood,
                 },
             )],
-            Expr::U8(0),
+            Expr::u8(0),
         ),
     }
 }
 
 /// enum Classified { Zero(value: u8, @[value == 0]), NonZero(value: u8, @[value != 0]) }
+/// with the claims stated over the views, as reflecting the test gives them.
 pub fn classified_enum(prelude: Prelude) -> EnumItem {
     let payload = |claim: fn(&Prelude, Term) -> Term| {
         let value = Binder::new("value", Type::U8);
@@ -418,11 +466,11 @@ pub fn classified_enum(prelude: Prelude) -> EnumItem {
         variants: vec![
             VariantItem {
                 name: "Zero".into(),
-                payload: payload(|_, value| u8_eq(value, Term::U8(0))),
+                payload: payload(|_, value| views_eq(value, Term::U8(0))),
             },
             VariantItem {
                 name: "NonZero".into(),
-                payload: payload(|prelude, value| prelude.not_prop(u8_eq(value, Term::U8(0)))),
+                payload: payload(|prelude, value| prelude.not_prop(views_eq(value, Term::U8(0)))),
             },
         ],
     }
@@ -435,11 +483,11 @@ pub fn classified_enum(prelude: Prelude) -> EnumItem {
 /// comparison n == 0 came out false.
 pub fn classify(classified: EnumId) -> FnItem {
     let n = Binder::new("n", Type::U8);
-    let comparison = Term::prim(Prim::U8Eq, vec![n.term(), Term::U8(0)]);
+    let comparison = u8_test_eq(n.term(), Term::U8(0));
     let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
     let reflect = |flag: bool, fact: HypId| {
         Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison.clone(), flag)),
+            Proof::Axiom(Axiom::CmpReflect(comparison.clone(), flag)),
             Proof::hyp(fact),
         )
     };
@@ -460,8 +508,9 @@ pub fn classify(classified: EnumId) -> FnItem {
             tail: Some(Box::new(Expr::If {
                 condition: Box::new(Expr::Compare {
                     op: CompareOp::Ne,
+                    ty: Type::U8,
                     left: Box::new(Expr::var(&n)),
-                    right: Box::new(Expr::U8(0)),
+                    right: Box::new(Expr::u8(0)),
                 }),
                 then_fact,
                 else_fact,
@@ -510,9 +559,9 @@ pub fn zero_or_self(
                 }),
                 enum_name: "Classified".into(),
                 arms: vec![
-                    arm("Zero", |_, v| u8_eq(v, Term::U8(0))),
+                    arm("Zero", |_, v| views_eq(v, Term::U8(0))),
                     arm("NonZero", |prelude, v| {
-                        prelude.not_prop(u8_eq(v, Term::U8(0)))
+                        prelude.not_prop(views_eq(v, Term::U8(0)))
                     }),
                 ],
                 ty: Type::U8,

@@ -19,7 +19,7 @@ fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
 // Each branch knows what it tested, and `fold!` closes the definition.
 fn named(n: u8) -> (out: u8, @nonzero(out)) {
     if n == 0 {
-        (1, fold!(nonzero, prove!(1 != 0)))
+        (1, fold!(nonzero, prove!(1u8 != 0)))
     } else {
         (n, fold!(nonzero, prove!(n != 0)))
     }

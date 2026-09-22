@@ -13,9 +13,10 @@
 //! produces an expression of that type, from a small set of productions with
 //! weights (`PRODUCTIONS`); adding a construct to the fragment is a line in
 //! that table and an arm in `fits` and `produce`. The fragment is the runtime
-//! one: `u8`, `bool`, unit, tuples, a few structs and enums per program,
-//! literals, locals, `let` with binding, tuple, and wildcard patterns, field
-//! access, the wrapping methods, comparisons, `if` (which is also how `!`,
+//! one: the eight machine integer types, `bool`, unit, tuples, a few structs
+//! and enums per program, literals, locals, `let` with binding, tuple, and
+//! wildcard patterns, field access, the wrapping methods, `as` between
+//! machine types, comparisons at each type, `if` (which is also how `!`,
 //! `&&`, and `||` appear in the tree), `match` with payload bindings, calls
 //! to functions generated earlier (so the call graph is acyclic), `math fn`s
 //! over the pure part of all this, and the two loops. Where the tree needs
@@ -39,8 +40,8 @@
 //! test fails if more than a small fraction are rejected, so the generator
 //! cannot rot in silence.
 //!
-//! For each accepted program the functions whose parameters are all bytes are
-//! called on a few inputs, boundary bytes and random ones. The two
+//! For each accepted program the functions whose parameters are all machine
+//! integers are called on a few inputs, boundary values and random ones. The two
 //! interpreters are compared as `tests/differential.rs` compares them: out of
 //! fuel on either side is inconclusive. Then both are compared with the
 //! compiled Rust, in both builds, through the harness of `tests/corpus.rs`,
@@ -81,7 +82,10 @@ use compiled::{
 };
 use locus::erased::{Interpreter, Module, Outcome, RunError, Value, check_module, print_module};
 use locus::exec::CheckInterpreter;
-use locus::kernel::{Axiom, EnumId, HypId, Prim, Proof, StructId, Term, Type, VarId, same_type};
+use locus::kernel::{
+    Axiom, CmpOp, EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId,
+    same_type,
+};
 use locus::typed::{
     Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, MatchArm, Pattern, Session, Stmt,
     StructItem, VariantItem,
@@ -118,9 +122,55 @@ const BUDGET: u64 = 4_000;
 /// How deeply expressions nest.
 const MAX_DEPTH: usize = 3;
 
-/// Inputs per entry function: boundary bytes mixed with random ones.
+/// Inputs per entry function: boundary values mixed with random ones.
 const INPUTS: usize = 6;
-const BOUNDARY: [u8; 6] = [0, 1, 127, 128, 254, 255];
+
+/// The boundary values of a machine type: the ends of its range and their
+/// neighbours, zero and its neighbours, and the middle of an unsigned range,
+/// each within the range.
+fn boundary(ty: MachineInt) -> Vec<i128> {
+    let (min, max) = (number(ty.min()), number(ty.max()));
+    let half = (max + 1) / 2;
+    let mut values: Vec<i128> = vec![
+        min,
+        min + 1,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        7,
+        half - 1,
+        half,
+        max - 1,
+        max,
+    ];
+    values.retain(|value| (min..=max).contains(value));
+    values.dedup();
+    values
+}
+
+fn number(value: locus::kernel::Integer) -> i128 {
+    value
+        .to_i128()
+        .expect("a bound of a machine type fits an i128")
+}
+
+/// A random value of the type: a boundary value half the time, else one
+/// drawn from the whole range.
+fn random_value(rng: &mut Rng, ty: MachineInt) -> i128 {
+    if rng.chance(1, 2) {
+        return *rng.choose(&boundary(ty));
+    }
+    let (min, max) = (number(ty.min()), number(ty.max()));
+    let width = (max - min + 1) as u128;
+    let offset = if width > u128::from(u64::MAX) {
+        u128::from(rng.next_u64())
+    } else {
+        u128::from(rng.below(width as u64))
+    };
+    min + offset as i128
+}
 
 /// How many disagreements are shrunk and reported in full.
 const SHRUNK: usize = 3;
@@ -180,7 +230,7 @@ impl Program {
                     .item
                     .params
                     .iter()
-                    .all(|param| same_type(&param.ty, &Type::U8))
+                    .all(|param| param.ty.as_machine().is_some())
                     && module
                         .fns
                         .iter()
@@ -263,10 +313,15 @@ fn evidence() -> Expr {
 
 /// `lo <= hi` for two literals, by evaluating the comparison and reflecting
 /// the result: the trivial evidence a `for` over literal bounds needs.
-fn ordered(lo: u8, hi: u8) -> Proof {
-    let comparison = Term::prim(Prim::U8Le, vec![Term::U8(lo), Term::U8(hi)]);
+fn ordered(ty: MachineInt, lo: i128, hi: i128) -> Proof {
+    let comparison = Term::cmp(
+        CmpOp::Le,
+        ty,
+        Term::machine_int(ty, lo),
+        Term::machine_int(ty, hi),
+    );
     Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(comparison.clone(), true)),
+        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true)),
         Proof::Evaluate(comparison),
     )
 }
@@ -290,9 +345,10 @@ fn tail_block(tail: Expr) -> Block {
     }
 }
 
-fn compare(op: CompareOp, left: Expr, right: Expr) -> Expr {
+fn compare(op: CompareOp, ty: MachineInt, left: Expr, right: Expr) -> Expr {
     Expr::Compare {
         op,
+        ty: Type::machine(ty),
         left: Box::new(left),
         right: Box::new(right),
     }
@@ -300,9 +356,9 @@ fn compare(op: CompareOp, left: Expr, right: Expr) -> Expr {
 
 fn plus_one(value: Expr) -> Expr {
     Expr::Method {
-        prim: Prim::WrappingAdd,
+        prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
         receiver: Box::new(value),
-        arguments: vec![Expr::U8(1)],
+        arguments: vec![Expr::u8(1)],
     }
 }
 
@@ -318,11 +374,13 @@ fn let_(binder: &Binder, value: Expr) -> Stmt {
 
 // --- Rust's inference and lints, which the printed program must satisfy ---------------
 
-/// Whether Rust can tell the expression's type from the expression alone. A
-/// bare literal is `{integer}` until something fixes it, and calling
+/// Whether Rust can tell the expression's type from the expression alone.
+/// Since E5 the printer suffixes every literal, so every expression of the
+/// fragment is determined, and this is kept only as the place the rule
+/// lives should a form without a type of its own return. It was: a bare
+/// literal is `{integer}` until something fixes it, and calling
 /// `wrapping_add` on one is an error, so the generator never lets a `let` of
-/// an undetermined value be a receiver. The rule is conservative: an `if`
-/// with one determined branch is determined in Rust and not here.
+/// an undetermined value be a receiver.
 fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
     let block = |block: &Block| {
         block
@@ -331,7 +389,7 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
             .is_none_or(|tail| determined(tail, locals))
     };
     match expr {
-        Expr::U8(_) => false,
+        Expr::Literal(..) | Expr::Int(_) => true,
         Expr::Var { id, .. } => locals.get(id).copied().unwrap_or(true),
         Expr::Tuple { fields, .. } => fields.iter().all(|field| determined(field, locals)),
         Expr::Field { target, .. } => determined(target, locals),
@@ -348,6 +406,7 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         | Expr::Variant { .. }
         | Expr::Method { .. }
         | Expr::Compare { .. }
+        | Expr::Cast { .. }
         | Expr::CallMath { .. }
         | Expr::CallFn { .. }
         | Expr::For { .. }
@@ -385,6 +444,7 @@ fn starts_with_struct_literal(expr: &Expr) -> bool {
         Expr::Field { target, .. } => starts_with_struct_literal(target),
         Expr::Method { receiver, .. } => starts_with_struct_literal(receiver),
         Expr::Compare { left, .. } => starts_with_struct_literal(left),
+        Expr::Cast { expr, .. } => starts_with_struct_literal(expr),
         _ => false,
     }
 }
@@ -403,7 +463,7 @@ fn guarded(expr: Expr) -> Expr {
 /// inlined as, and something replacing it by a literal cannot shrink.
 fn is_literal(expr: &Expr) -> bool {
     match expr {
-        Expr::Bool(_) | Expr::U8(_) | Expr::Proof(_) => true,
+        Expr::Bool(_) | Expr::Literal(..) | Expr::Proof(_) => true,
         Expr::Tuple { fields, .. }
         | Expr::Variant {
             payload: fields, ..
@@ -421,16 +481,19 @@ fn is_literal(expr: &Expr) -> bool {
 /// with no function of the type, falls back to a leaf.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Production {
-    /// A literal of the type: a byte, a bool, the evidence, or a tuple,
-    /// struct, or variant of generated fields.
+    /// A literal of the type: a machine integer, a bool, the evidence, or a
+    /// tuple, struct, or variant of generated fields.
     Literal,
     /// A local of the type.
     Var,
     /// A field of a local, or of a generated tuple, that has the type.
     Field,
-    /// `wrapping_add` or `wrapping_sub`.
+    /// A wrapping method at the type: `wrapping_add`, `wrapping_sub`,
+    /// `wrapping_mul`, or, at a signed type, `wrapping_neg`.
     Method,
-    /// A comparison of bytes.
+    /// `as` into the type from a random machine type.
+    Cast,
+    /// A comparison of two values of one machine type.
     Compare,
     If,
     /// `a && b` or `a || b`, which the tree spells as an `if`.
@@ -455,6 +518,7 @@ const PRODUCTIONS: &[(Production, u32)] = &[
     (Production::Var, 10),
     (Production::Field, 3),
     (Production::Method, 5),
+    (Production::Cast, 3),
     (Production::Compare, 5),
     (Production::If, 4),
     (Production::ShortCircuit, 2),
@@ -497,7 +561,7 @@ const STMTS: &[(StmtKind, u32)] = &[
 
 #[derive(Clone, Copy, Debug)]
 enum TypeKind {
-    U8,
+    Machine,
     Bool,
     Unit,
     Evidence,
@@ -583,19 +647,25 @@ impl Generator {
         None
     }
 
-    fn byte(&mut self) -> u8 {
-        if self.rng.chance(1, 2) {
-            *self.rng.choose(&[0, 1, 2, 3, 7, 127, 128, 254, 255])
+    /// A random machine type, `u8` a third of the time so that the byte
+    /// programs of the fragment's first form stay common.
+    fn machine_type(&mut self) -> MachineInt {
+        if self.rng.chance(1, 3) {
+            MachineInt::U8
         } else {
-            self.rng.below(256) as u8
+            *self.rng.choose(&MachineInt::ALL)
         }
+    }
+
+    fn value_of(&mut self, ty: MachineInt) -> i128 {
+        random_value(&mut self.rng, ty)
     }
 
     // --- Types and declarations ---
 
     fn random_type(&mut self, depth: usize) -> Type {
         let mut choices = vec![
-            (TypeKind::U8, 8),
+            (TypeKind::Machine, 8),
             (TypeKind::Bool, 4),
             (TypeKind::Unit, 1),
             (TypeKind::Evidence, 1),
@@ -610,7 +680,7 @@ impl Generator {
             choices.push((TypeKind::Enum, 2));
         }
         match self.weighted(&choices).expect("the choices have weight") {
-            TypeKind::U8 => Type::U8,
+            TypeKind::Machine => Type::machine(self.machine_type()),
             TypeKind::Bool => Type::Bool,
             TypeKind::Unit => unit(),
             TypeKind::Evidence => evidence_type(),
@@ -682,7 +752,11 @@ impl Generator {
         };
         let params: Vec<Binder> = (0..arity)
             .map(|_| {
-                let ty = if last { Type::U8 } else { self.random_type(1) };
+                let ty = if last {
+                    Type::machine(self.machine_type())
+                } else {
+                    self.random_type(1)
+                };
                 self.fresh(ty)
             })
             .collect();
@@ -843,10 +917,10 @@ impl Generator {
     }
 
     fn fits(&self, production: Production, ty: &Type, depth: usize, determined: bool) -> bool {
-        let is_u8 = same_type(ty, &Type::U8);
+        let is_machine = ty.as_machine().is_some();
         let is_bool = same_type(ty, &Type::Bool);
         match production {
-            Production::Literal => !(determined && is_u8),
+            Production::Literal => !(determined && is_machine),
             Production::Var => self
                 .locals
                 .iter()
@@ -854,7 +928,7 @@ impl Generator {
             Production::Field | Production::Block => depth > 0,
             // The kernel has no case with a ghost result.
             Production::If => depth > 0 && !ty.is_ghost(),
-            Production::Method => depth > 0 && is_u8,
+            Production::Method | Production::Cast => depth > 0 && is_machine,
             Production::Compare | Production::ShortCircuit | Production::Not => {
                 depth > 0 && is_bool
             }
@@ -901,19 +975,35 @@ impl Generator {
             }
             Production::Field => self.field(ty, inner, determined),
             Production::Method => {
-                let prim = *self.rng.choose(&[Prim::WrappingAdd, Prim::WrappingSub]);
+                let machine = ty.as_machine().expect("fits");
+                let mut ops = vec![Op::WrappingAdd, Op::WrappingSub, Op::WrappingMul];
+                if machine.signed() {
+                    ops.push(Op::WrappingNeg);
+                }
+                let op = *self.rng.choose(&ops);
                 // A literal receiver is printed with its suffix, so it is
                 // determined on its own.
                 let receiver = if self.rng.chance(1, 5) {
-                    Expr::U8(self.byte())
+                    Expr::Literal(machine, self.value_of(machine))
                 } else {
-                    self.expr(&Type::U8, inner, true)
+                    self.expr(ty, inner, true)
                 };
-                let argument = self.expr(&Type::U8, inner, false);
+                let arguments = (1..op.arity())
+                    .map(|_| self.expr(ty, inner, false))
+                    .collect();
                 Expr::Method {
-                    prim,
+                    prim: Prim::Op(op, machine),
                     receiver: Box::new(receiver),
-                    arguments: vec![argument],
+                    arguments,
+                }
+            }
+            Production::Cast => {
+                let from = self.machine_type();
+                let value = self.expr(&Type::machine(from), inner, false);
+                Expr::Cast {
+                    expr: Box::new(value),
+                    from: Type::machine(from),
+                    to: ty.clone(),
                 }
             }
             Production::Compare => {
@@ -925,13 +1015,10 @@ impl Generator {
                     CompareOp::Gt,
                     CompareOp::Ge,
                 ]);
-                let mut left = self.expr(&Type::U8, inner, false);
-                let mut right = self.expr(&Type::U8, inner, false);
-                if !matches!(op, CompareOp::Eq | CompareOp::Ne) {
-                    self.away_from_the_limits(&mut left);
-                    self.away_from_the_limits(&mut right);
-                }
-                compare(op, left, right)
+                let machine = self.machine_type();
+                let left = self.expr(&Type::machine(machine), inner, false);
+                let right = self.expr(&Type::machine(machine), inner, false);
+                compare(op, machine, left, right)
             }
             Production::If => {
                 let condition = self.condition(inner);
@@ -967,16 +1054,24 @@ impl Generator {
         })
     }
 
-    /// A leaf of the type, when nothing else fits: a literal, or for a byte
-    /// that must be determined, a method on a suffixed literal.
+    /// A leaf of the type, when nothing else fits: a literal, or for a
+    /// machine integer that must be determined, a method on a suffixed
+    /// literal.
     fn leaf(&mut self, ty: &Type, determined: bool) -> Expr {
         match ty {
-            Type::U8 if determined => Expr::Method {
-                prim: Prim::WrappingAdd,
-                receiver: Box::new(Expr::U8(self.byte())),
-                arguments: vec![Expr::U8(0)],
-            },
-            Type::U8 => Expr::U8(self.byte()),
+            Type::U8 | Type::Machine(_) => {
+                let machine = ty.as_machine().expect("a machine type");
+                let literal = Expr::Literal(machine, self.value_of(machine));
+                if determined {
+                    Expr::Method {
+                        prim: Prim::Op(Op::WrappingAdd, machine),
+                        receiver: Box::new(literal),
+                        arguments: vec![Expr::Literal(machine, 0)],
+                    }
+                } else {
+                    literal
+                }
+            }
             Type::Bool => Expr::Bool(self.rng.chance(1, 2)),
             Type::Proof(_) => evidence(),
             Type::Tuple(fields) => Expr::Tuple {
@@ -1066,14 +1161,6 @@ impl Generator {
     fn condition(&mut self, depth: usize) -> Expr {
         let condition = self.expr(&Type::Bool, depth, false);
         guarded(condition)
-    }
-
-    /// Rust rejects `x >= 0` and `x <= 255` as comparisons that are always
-    /// true; a literal operand of an ordering stays inside the limits.
-    fn away_from_the_limits(&mut self, operand: &mut Expr) {
-        if matches!(operand, Expr::U8(0 | 255)) {
-            *operand = Expr::U8(1 + self.rng.below(254) as u8);
-        }
     }
 
     /// A field of a local whose product type has one of the type, or of a
@@ -1203,7 +1290,7 @@ impl Generator {
         let limit = self.rng.below(6) as u8;
         let scope = self.locals.len();
         let counter = self.fresh(Type::U8);
-        let mut state = vec![(counter.clone(), Expr::U8(0))];
+        let mut state = vec![(counter.clone(), Expr::u8(0))];
         for _ in 0..self.rng.below(3) {
             let state_ty = self.random_type(1);
             // Evaluated before the state is in scope.
@@ -1230,18 +1317,29 @@ impl Generator {
         self.multiplier = outer;
         self.locals.truncate(scope);
         let i = Expr::var(&counter);
-        let at_limit = Expr::U8(limit);
-        // `i >= 0` and `i < 0` are comparisons Rust rejects as constant.
-        let spelling = if limit == 0 {
-            self.rng.below(2)
-        } else {
-            self.rng.below(4)
-        };
+        let at_limit = Expr::u8(limit);
+        let spelling = self.rng.below(4);
         let (condition, then_block, else_block) = match spelling {
-            0 => (compare(CompareOp::Eq, i, at_limit), stop, go),
-            1 => (compare(CompareOp::Ne, i, at_limit), go, stop),
-            2 => (compare(CompareOp::Ge, i, at_limit), stop, go),
-            _ => (compare(CompareOp::Lt, i, at_limit), go, stop),
+            0 => (
+                compare(CompareOp::Eq, MachineInt::U8, i, at_limit),
+                stop,
+                go,
+            ),
+            1 => (
+                compare(CompareOp::Ne, MachineInt::U8, i, at_limit),
+                go,
+                stop,
+            ),
+            2 => (
+                compare(CompareOp::Ge, MachineInt::U8, i, at_limit),
+                stop,
+                go,
+            ),
+            _ => (
+                compare(CompareOp::Lt, MachineInt::U8, i, at_limit),
+                go,
+                stop,
+            ),
         };
         let body = Block {
             stmts: head,
@@ -1261,8 +1359,12 @@ impl Generator {
         let Type::Tuple(fields) = ty else {
             unreachable!("a for is produced for a tuple type")
         };
-        let lo = self.rng.below(4) as u8;
-        let hi = lo + self.rng.below(6) as u8;
+        // The index has a random machine type; the bounds are literals
+        // near zero, so that a signed range may start below it.
+        let machine = self.machine_type();
+        let base = if machine.signed() { -2 } else { 0 };
+        let lo = base + self.rng.below(4) as i128;
+        let hi = lo + self.rng.below(6) as i128;
         let scope = self.locals.len();
         let state: Vec<(Binder, Expr)> = fields
             .clone()
@@ -1272,14 +1374,14 @@ impl Generator {
                 (self.fresh(field), init)
             })
             .collect();
-        let index = self.fresh(Type::U8);
-        // Over literal bounds, Rust gives the index no type of its own.
-        self.bind(index.clone(), false);
+        let index = self.fresh(Type::machine(machine));
+        // The bounds are suffixed literals, so the index has a type.
+        self.bind(index.clone(), true);
         for (binder, _) in &state {
             self.bind(binder.clone(), true);
         }
         let outer = self.multiplier;
-        self.multiplier = outer * (u64::from(hi - lo) + 1);
+        self.multiplier = outer * ((hi - lo) as u64 + 1);
         let body = self.advance(None, &state, depth);
         self.multiplier = outer;
         self.locals.truncate(scope);
@@ -1287,9 +1389,9 @@ impl Generator {
             index,
             lower: HypId::fresh(),
             upper: HypId::fresh(),
-            lo: Box::new(Expr::U8(lo)),
-            hi: Box::new(Expr::U8(hi)),
-            ordered: ordered(lo, hi),
+            lo: Box::new(Expr::Literal(machine, lo)),
+            hi: Box::new(Expr::Literal(machine, hi)),
+            ordered: ordered(machine, lo, hi),
             state,
             body,
             result: VarId::fresh(),
@@ -1356,21 +1458,24 @@ impl Generator {
 
 type Answer = Result<Outcome, RunError>;
 
-/// Inputs for an entry of the arity: boundary bytes mixed with random ones.
-fn inputs(rng: &mut Rng, arity: usize) -> Vec<Vec<Value>> {
-    if arity == 0 {
+/// Inputs for an entry with the given parameter types: boundary values
+/// mixed with random ones.
+fn inputs(rng: &mut Rng, params: &[MachineInt]) -> Vec<Vec<Value>> {
+    if params.is_empty() {
         return vec![Vec::new()];
     }
     (0..INPUTS)
         .map(|index| {
-            (0..arity)
-                .map(|_| {
-                    let byte = if index < BOUNDARY.len() && rng.chance(2, 3) {
-                        BOUNDARY[index]
+            params
+                .iter()
+                .map(|&ty| {
+                    let edge = boundary(ty);
+                    let value = if index < edge.len() && rng.chance(2, 3) {
+                        edge[index]
                     } else {
-                        rng.below(256) as u8
+                        random_value(rng, ty)
                     };
-                    Value::U8(byte)
+                    Value::Int(ty, value)
                 })
                 .collect()
         })
@@ -1477,7 +1582,18 @@ fn prepare(program: Program, session: Session, rng: &mut Rng) -> Prepared {
     let mut cases = Vec::new();
     for entry in program.entries(session.erased()) {
         let function = &program.fns[entry];
-        for input in inputs(rng, function.item.params.len()) {
+        let params: Vec<MachineInt> = function
+            .item
+            .params
+            .iter()
+            .map(|param| {
+                param
+                    .ty
+                    .as_machine()
+                    .expect("an entry takes machine integers")
+            })
+            .collect();
+        for input in inputs(rng, &params) {
             let answers = interpret(&session, function.reference, &input);
             cases.push(Case {
                 entry,
@@ -2024,17 +2140,22 @@ fn walk_expr(
         }
         Expr::Field { target, .. } => walk_expr(target, None, scope, visit),
         Expr::Method {
+            prim,
             receiver,
             arguments,
-            ..
         } => {
-            walk_expr(receiver, Some(&Type::U8), scope, visit)
-                || walk_all(arguments, &[Type::U8], scope, visit)
+            let ty = match prim {
+                Prim::Op(_, ty) => Type::machine(*ty),
+                _ => Type::U8,
+            };
+            let types = vec![ty.clone(); arguments.len()];
+            walk_expr(receiver, Some(&ty), scope, visit)
+                || walk_all(arguments, &types, scope, visit)
         }
-        Expr::Compare { left, right, .. } => {
-            walk_expr(left, Some(&Type::U8), scope, visit)
-                || walk_expr(right, Some(&Type::U8), scope, visit)
-        }
+        Expr::Compare {
+            ty, left, right, ..
+        } => walk_expr(left, Some(ty), scope, visit) || walk_expr(right, Some(ty), scope, visit),
+        Expr::Cast { expr, from, .. } => walk_expr(expr, Some(from), scope, visit),
         Expr::CallMath { id, arguments, .. } => {
             let types = scope.tables.params.get(&FnRef::Math(*id)).cloned();
             walk_all(arguments, &types.unwrap_or_default(), scope, visit)
@@ -2090,14 +2211,15 @@ fn walk_expr(
             stopped
         }
         Expr::For {
+            index,
             lo,
             hi,
             state,
             body,
             ..
         } => {
-            if walk_expr(lo, Some(&Type::U8), scope, visit)
-                || walk_expr(hi, Some(&Type::U8), scope, visit)
+            if walk_expr(lo, Some(&index.ty), scope, visit)
+                || walk_expr(hi, Some(&index.ty), scope, visit)
             {
                 return true;
             }
@@ -2126,7 +2248,8 @@ fn walk_expr(
         }
         Expr::Var { .. }
         | Expr::Bool(_)
-        | Expr::U8(_)
+        | Expr::Literal(..)
+        | Expr::Int(_)
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => false,
@@ -2190,7 +2313,10 @@ fn literals_of(ty: &Type, tables: &Tables) -> Vec<Expr> {
     let first = |ty: &Type| literals_of(ty, tables).into_iter().next();
     let all = |types: &[Type]| types.iter().map(first).collect::<Option<Vec<Expr>>>();
     match ty {
-        Type::U8 => vec![Expr::U8(0), Expr::U8(1)],
+        Type::U8 | Type::Machine(_) => {
+            let machine = ty.as_machine().expect("a machine type");
+            vec![Expr::Literal(machine, 0), Expr::Literal(machine, 1)]
+        }
         Type::Bool => vec![Expr::Bool(false), Expr::Bool(true)],
         Type::Proof(_) => vec![evidence()],
         Type::Tuple(fields) => all(fields)
@@ -2625,8 +2751,8 @@ fn planted(base: &Session) -> (Program, Session) {
                 let_(
                     &v2,
                     if_(
-                        compare(CompareOp::Eq, Expr::var(&v0), Expr::U8(3)),
-                        tail_block(Expr::U8(7)),
+                        compare(CompareOp::Eq, MachineInt::U8, Expr::var(&v0), Expr::u8(3)),
+                        tail_block(Expr::u8(7)),
                         tail_block(Expr::var(&v1)),
                         &Type::U8,
                     ),
@@ -2667,7 +2793,7 @@ fn planted(base: &Session) -> (Program, Session) {
 /// A comparator that calls the value 7 a disagreement, as if one side had
 /// returned something else.
 fn planted_judge(observed: &Observed, module: &Module) -> Verdict {
-    if let Ok(Outcome::Value(Value::U8(7))) = observed.erased {
+    if let Ok(Outcome::Value(Value::Int(MachineInt::U8, 7))) = observed.erased {
         return Verdict::Disagree("the planted comparator calls 7 a disagreement".into());
     }
     judge(observed, module)
@@ -2682,8 +2808,8 @@ fn a_planted_disagreement_is_reported_with_its_seed_and_shrunk() {
             .into_iter()
             .map(|byte| Case {
                 entry: 0,
-                input: vec![Value::U8(byte)],
-                answers: interpret(&session, program.fns[0].reference, &[Value::U8(byte)]),
+                input: vec![Value::u8(byte)],
+                answers: interpret(&session, program.fns[0].reference, &[Value::u8(byte)]),
             })
             .collect(),
         program,
@@ -2701,7 +2827,7 @@ fn a_planted_disagreement_is_reported_with_its_seed_and_shrunk() {
     let [disagreement] = summary.disagreements.as_slice() else {
         panic!("one disagreement, not {:?}", summary.disagreements);
     };
-    assert_eq!(disagreement.input, vec![Value::U8(3)]);
+    assert_eq!(disagreement.input, vec![Value::u8(3)]);
     assert!(
         disagreement.why.contains("seed 7777"),
         "{}",
@@ -2733,14 +2859,14 @@ fn a_planted_disagreement_is_reported_with_its_seed_and_shrunk() {
     let body = &shrunk.fns[0].item.body;
     assert!(body.stmts.is_empty(), "{body:?}");
     assert!(
-        matches!(body.tail.as_deref(), Some(Expr::U8(7))),
+        matches!(body.tail.as_deref(), Some(Expr::Literal(MachineInt::U8, 7))),
         "{body:?}"
     );
     assert!(shrunk.declare(&base).is_ok());
     assert!(report.contains("shrunk by"), "{report}");
     let shrunk_rust = rendering(&shrunk.declare(&base).unwrap());
     assert!(
-        shrunk_rust.contains("pub fn f0(v0: u8) -> u8 {\n    7\n}"),
+        shrunk_rust.contains("pub fn f0(v0: u8) -> u8 {\n    7_u8\n}"),
         "{shrunk_rust}"
     );
 }
@@ -2758,7 +2884,7 @@ fn a_shrink_step_that_breaks_the_program_is_not_kept() {
     assert!(!still_disagrees(
         &broken,
         0,
-        &[Value::U8(3)],
+        &[Value::u8(3)],
         &base,
         false,
         &planted_judge
@@ -2809,15 +2935,13 @@ fn the_programs_of_a_seed_are_the_same_every_time() {
     assert_eq!(first.map_err(|r| r.error), second.map_err(|r| r.error));
 }
 
-/// The printer writes a byte literal without a suffix, and Rust cannot call
-/// `wrapping_add` on a value whose type only a literal gave it: a `let` of a
-/// bare literal, or the index of a `for` between two literals, used as a
-/// receiver. Both programs are accepted by the checker and both
-/// interpreters and rejected by rustc. Found by the generator, which now
-/// avoids the shapes (see `determined`). The fix belongs to
-/// `src/erased/rust.rs`.
+/// A value whose type only a literal gave it, a `let` of a bare literal or
+/// the index of a `for` between two literals, used as a receiver of
+/// `wrapping_add`. Rust cannot call a method on an `{integer}`, so until E5
+/// the printed program did not compile and the generator avoided the shapes
+/// (see `determined`). The printer now writes every literal with its type
+/// as a suffix, and both programs compile and agree.
 #[test]
-#[ignore = "a byte that only a literal typed, used as a receiver, is printed as Rust that does not compile"]
 fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
     let (base, _, _) = setup();
     // fn by_let(n: u8) -> u8 { let k = 200; k.wrapping_add(n) }
@@ -2829,9 +2953,9 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
         params: vec![n.clone()],
         result: Type::U8,
         body: Block {
-            stmts: vec![let_(&k, Expr::U8(200))],
+            stmts: vec![let_(&k, Expr::u8(200))],
             tail: Some(Box::new(Expr::Method {
-                prim: Prim::WrappingAdd,
+                prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
                 receiver: Box::new(Expr::var(&k)),
                 arguments: vec![Expr::var(&n)],
             })),
@@ -2850,12 +2974,12 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
             index: i.clone(),
             lower: HypId::fresh(),
             upper: HypId::fresh(),
-            lo: Box::new(Expr::U8(0)),
-            hi: Box::new(Expr::U8(3)),
-            ordered: ordered(0, 3),
+            lo: Box::new(Expr::u8(0)),
+            hi: Box::new(Expr::u8(3)),
+            ordered: ordered(MachineInt::U8, 0, 3),
             state: vec![(acc.clone(), Expr::var(&n))],
             body: tail_block(Expr::Continue(vec![Expr::Method {
-                prim: Prim::WrappingAdd,
+                prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
                 receiver: Box::new(Expr::var(&i)),
                 arguments: vec![Expr::var(&acc)],
             }])),

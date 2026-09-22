@@ -5,7 +5,7 @@
 //! type expected of it when there is one, which is how a `_` learns what to
 //! prove and how a tuple learns that its second field speaks of its first.
 
-use crate::ast::{self, BinaryOp, ExprKind, PatternKind, RangeKind};
+use crate::ast::{self, BinaryOp, ExprKind, PatternKind, RangeKind, UnaryOp};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
 use crate::typed::{Expr, FnRef, value_term};
@@ -85,28 +85,18 @@ impl Env<'_> {
             ExprKind::Group(inner) => self.expr(inner, expected),
             ExprKind::Unit => Ok(Value::new(Expr::unit(), unit_type())),
             ExprKind::Bool(value) => Ok(Value::new(Expr::Bool(*value), Type::Bool)),
-            // Until literals are typed, `u8` is the one integer type.
-            ExprKind::Integer(literal) => match literal.suffix {
-                None | Some(ast::IntegerSuffix::U8) => {
-                    let value = literal.value.to_u64().map(u8::try_from);
-                    match value {
-                        Some(Ok(value)) => Ok(Value::new(Expr::U8(value), Type::U8)),
-                        _ => self.fail(
-                            "L0205",
-                            format!(
-                                "`{}` does not fit in `u8`, whose largest value is 255",
-                                literal.value
-                            ),
-                            expr.span,
-                        ),
-                    }
-                }
-                Some(suffix) => self.fail(
-                    "L0290",
-                    format!("the type `{}` is not in Locus yet", suffix.name()),
-                    expr.span,
-                ),
-            },
+            ExprKind::Integer(literal) => self.literal(literal, false, expected, expr.span),
+            // A negative literal is one literal, so that `-128i8` fits.
+            ExprKind::Unary {
+                operator: UnaryOp::Neg,
+                expr: inner,
+                ..
+            } if matches!(inner.kind, ExprKind::Integer(_)) => {
+                let ExprKind::Integer(literal) = &inner.kind else {
+                    unreachable!("matched just above")
+                };
+                self.literal(literal, true, expected, expr.span)
+            }
             ExprKind::String(_) => {
                 self.fail("L0290", "string literals are not in Locus yet", expr.span)
             }
@@ -174,7 +164,12 @@ impl Env<'_> {
                 right,
                 ..
             } => self.compare(expr, operator, left, right, expected),
-            ExprKind::Unary { .. } | ExprKind::Cast { .. } => self.operator_not_yet(expr),
+            ExprKind::Unary { .. } => self.operator_not_yet(expr),
+            ExprKind::Cast {
+                expr: inner,
+                as_span,
+                ty,
+            } => self.cast(inner, ty, *as_span),
             ExprKind::Struct { path, fields } => match path.single() {
                 Some(name) => self.struct_literal(name, fields, expr.span),
                 None => self.fail(
@@ -183,7 +178,10 @@ impl Env<'_> {
                     expr.span,
                 ),
             },
-            ExprKind::Path(path) => self.variant(path, &[], expected, expr.span),
+            ExprKind::Path(path) => match self.associated_constant(path) {
+                Some(constant) => constant,
+                None => self.variant(path, &[], expected, expr.span),
+            },
             ExprKind::Call { callee, arguments } => {
                 self.call(callee, arguments, expected, expr.span)
             }

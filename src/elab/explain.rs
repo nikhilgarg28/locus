@@ -18,7 +18,8 @@
 use crate::diagnostic::Diagnostic;
 use crate::kernel::derive;
 use crate::kernel::{
-    FnId, HypId, KernelError, Prim, Proof, Term, Type, VarId, check_proof, infer_proof, same,
+    FnId, HypId, KernelError, MachineInt, Prim, Proof, Term, Type, VarId, check_proof, infer_proof,
+    same,
 };
 use crate::source::Span;
 
@@ -231,29 +232,30 @@ impl Env<'_> {
                     test: (**test).clone(),
                     outcome,
                 };
-                let proof = self.reflect_test(&claim, &test, fact.proof.clone());
-                let text = format!("prove!({})", self.show(&claim));
-                candidates.push(Candidate { claim, proof, text });
+                let claim = self.computed(&claim);
+                if let Some(proof) = self.reflect_test(&claim, &test, fact.proof.clone()) {
+                    let text = format!("prove!({})", self.show(&claim));
+                    candidates.push(Candidate { claim, proof, text });
+                }
             }
         }
         candidates
     }
 
-    /// The proposition a comparison decides: `u8_lt(a, b)` for `a < b`
-    /// known true, its negation for one known false.
+    /// The proposition a comparison decides: `a ==[T] b` for `eq[T](a, b)`,
+    /// and the order of the views for `lt[T]` and `le[T]`, when the test is
+    /// known true; its negation for one known false.
     fn comparison_claim(&self, test: &Term, outcome: bool) -> Option<Term> {
-        let Term::Prim(prim, operands) = test else {
+        let Term::Prim(Prim::Cmp(op, ty), operands) = test else {
             return None;
         };
         let [a, b] = operands.as_slice() else {
             return None;
         };
         let prelude = self.prelude;
-        let positive = match prim {
-            Prim::U8Eq => Term::eq(Type::U8, a.clone(), b.clone()),
-            Prim::U8Le => prelude.u8_le_prop(a.clone(), b.clone()),
-            Prim::U8Lt => prelude.u8_lt_prop(a.clone(), b.clone()),
-            _ => return None,
+        let positive = match op {
+            crate::kernel::CmpOp::Eq => Term::eq(Type::machine(*ty), a.clone(), b.clone()),
+            op => op.claim(Term::view(*ty, a.clone()), Term::view(*ty, b.clone())),
         };
         Some(if outcome {
             positive
@@ -417,9 +419,9 @@ impl Env<'_> {
             let Term::Eq(ty, a, b) = &equation.claim else {
                 continue;
             };
-            let flipped = (*ty == Type::U8)
-                .then(|| self.lookup_lemma("u8_eq_symm"))
-                .flatten()
+            let flipped = ty
+                .as_machine()
+                .map(|machine| self.theory.machine(machine).eq_symm)
                 .map(|symm| {
                     (
                         Proof::OfTerm(Term::call(
@@ -431,7 +433,8 @@ impl Env<'_> {
                             ],
                         )),
                         format!(
-                            "u8_eq_symm({}, {}, {})",
+                            "{}_eq_symm({}, {}, {})",
+                            ty.as_machine().map_or("", MachineInt::name),
                             self.show(a),
                             self.show(b),
                             equation.text
@@ -549,16 +552,6 @@ impl Env<'_> {
         let run = Proof::Evaluate(wanted.test.clone());
         let evaluated = matches!(infer_proof(&mut self.ctx, &run), Ok(Term::Eq(_, _, value)) if *value == Term::Bool(wanted.outcome));
         (known || evaluated).then_some(used)
-    }
-
-    fn lookup_lemma(&self, name: &str) -> Option<FnId> {
-        match self.globals.get(name) {
-            Some(super::env::Global::Fn(info)) => match info.reference {
-                crate::typed::FnRef::Math(id) => Some(id),
-                crate::typed::FnRef::Exec(_) => None,
-            },
-            _ => None,
-        }
     }
 
     /// One application of a callable lemma whose conclusion is the claim
@@ -867,21 +860,17 @@ fn single_byte(test: &Term) -> Option<Term> {
 fn bytes_in(term: &Term, is_byte: bool, unknowns: &mut Vec<Term>) -> bool {
     match term {
         Term::Bool(_) | Term::U8(_) => true,
-        Term::Prim(
-            Prim::U8Eq | Prim::U8Lt | Prim::U8Le | Prim::WrappingAdd | Prim::WrappingSub,
-            operands,
-        ) => operands
-            .iter()
-            .all(|operand| bytes_in(operand, true, unknowns)),
+        Term::Prim(Prim::Cmp(_, MachineInt::U8) | Prim::Op(_, MachineInt::U8), operands) => {
+            operands
+                .iter()
+                .all(|operand| bytes_in(operand, true, unknowns))
+        }
         Term::Case {
             scrutinee,
             result: Type::Bool | Type::U8,
             arms,
         } if arms.iter().all(|arm| arm.binders == 0)
-            && matches!(
-                **scrutinee,
-                Term::Prim(Prim::U8Eq | Prim::U8Lt | Prim::U8Le, _)
-            ) =>
+            && matches!(**scrutinee, Term::Prim(Prim::Cmp(_, MachineInt::U8), _)) =>
         {
             bytes_in(scrutinee, false, unknowns)
                 && arms

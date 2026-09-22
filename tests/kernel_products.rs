@@ -6,8 +6,8 @@
 use std::rc::Rc;
 
 use locus::kernel::{
-    Context, Definitions, KernelError, Mode, Proof, StructId, Term, Type, check_proof, check_type,
-    infer_proof, infer_term, same,
+    Context, Definitions, KernelError, MachineInt, Mode, Op, Proof, StructId, Term, Type,
+    check_proof, check_type, infer_proof, infer_term, same,
 };
 
 fn u8_eq(left: Term, right: Term) -> Term {
@@ -15,7 +15,7 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
 }
 
 /// `(out: u8, @[out == n.wrapping_add(1)])`
@@ -35,7 +35,7 @@ fn declare_sum(definitions: &mut Definitions) -> StructId {
     let fields = Type::tuple(|earlier| match earlier {
         [] | [_] => Some(Type::U8),
         [a, b] => Some(Type::proof(u8_eq(
-            Term::wrapping_add(a.clone(), b.clone()),
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![a.clone(), b.clone()]),
             Term::U8(10),
         ))),
         _ => None,
@@ -44,7 +44,11 @@ fn declare_sum(definitions: &mut Definitions) -> StructId {
 }
 
 fn sum_value(id: StructId, a: u8, b: u8) -> Term {
-    let evidence = Proof::Literal(Term::wrapping_add(Term::U8(a), Term::U8(b)));
+    let evidence = Proof::Literal(Term::op(
+        Op::WrappingAdd,
+        MachineInt::U8,
+        vec![Term::U8(a), Term::U8(b)],
+    ));
     Term::Struct(id, vec![Term::U8(a), Term::U8(b), Term::proof(evidence)])
 }
 
@@ -115,8 +119,16 @@ fn equal_data_with_different_proofs_is_equal_without_a_proof_step() {
 
     // Two proofs of 3.wrapping_add(7) == 10: the literal axiom, and the same
     // fact routed through a hypothesis-free detour.
-    let direct = Proof::Literal(Term::wrapping_add(Term::U8(3), Term::U8(7)));
-    let target = Term::wrapping_add(Term::U8(3), Term::U8(7));
+    let direct = Proof::Literal(Term::op(
+        Op::WrappingAdd,
+        MachineInt::U8,
+        vec![Term::U8(3), Term::U8(7)],
+    ));
+    let target = Term::op(
+        Op::WrappingAdd,
+        MachineInt::U8,
+        vec![Term::U8(3), Term::U8(7)],
+    );
     let detour = Proof::transport(
         Proof::Refl(Term::U8(10)),
         |hole| u8_eq(target.clone(), hole),
@@ -147,12 +159,20 @@ fn literal_arithmetic_is_an_explicit_step() {
         Ok(())
     );
 
-    let wraps = Term::wrapping_add(Term::U8(255), Term::U8(1));
+    let wraps = Term::op(
+        Op::WrappingAdd,
+        MachineInt::U8,
+        vec![Term::U8(255), Term::U8(1)],
+    );
     assert_eq!(
         infer_proof(&mut ctx, &Proof::Literal(wraps.clone())),
         Ok(u8_eq(wraps, Term::U8(0)))
     );
-    let borrows = Term::wrapping_sub(Term::U8(0), Term::U8(1));
+    let borrows = Term::op(
+        Op::WrappingSub,
+        MachineInt::U8,
+        vec![Term::U8(0), Term::U8(1)],
+    );
     assert_eq!(
         infer_proof(&mut ctx, &Proof::Literal(borrows.clone())),
         Ok(u8_eq(borrows, Term::U8(255)))

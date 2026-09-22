@@ -1,7 +1,7 @@
 //! Surface types to kernel types.
 
 use crate::ast;
-use crate::kernel::{Type, VarId};
+use crate::kernel::{MachineInt, Type, VarId};
 use crate::typed::Binder;
 
 use super::env::{Elab, Env, Global};
@@ -11,19 +11,41 @@ impl Env<'_> {
         match &ty.kind {
             ast::TypeKind::Named(name) => match name.text.as_str() {
                 "bool" => Ok(Type::Bool),
-                "u8" => Ok(Type::U8),
                 "Prop" => Ok(Type::Prop),
-                "Nat" | "Int" => {
+                machine if MachineInt::from_name(machine).is_some() => {
+                    Ok(Type::machine(MachineInt::from_name(machine).unwrap()))
+                }
+                // The integers of the logic have no runtime form: they are
+                // written where nothing runs, in a proposition, a `math fn`,
+                // or a proof type.
+                "Int" if self.total => Ok(Type::Int),
+                "Int" => {
                     self.diagnostics.push(
                         crate::diagnostic::Diagnostic::error(
                             "L0201",
-                            format!("`{}` is not part of the core language", name.text),
+                            "`Int` has no runtime form",
                             name.span,
                         )
-                        .note("the core has `bool` and `u8`; mathematical integers arrive in a later milestone"),
+                        .note("`Int` is the integers of the logic: it is written in a proposition, in a `math fn`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim"),
                     );
                     Err(())
                 }
+                "Nat" => {
+                    self.diagnostics.push(
+                        crate::diagnostic::Diagnostic::error(
+                            "L0201",
+                            "`Nat` is not part of the core language",
+                            name.span,
+                        )
+                        .note("`Nat` is internal to the kernel; the integers of the logic are `Int`, and the machine integers are `u8` to `i64`"),
+                    );
+                    Err(())
+                }
+                wide @ ("u128" | "usize" | "i128" | "isize") => self.fail(
+                    "L0290",
+                    format!("the type `{wide}` is not in Locus yet"),
+                    name.span,
+                ),
                 other => match self.globals.get(other) {
                     Some(Global::Struct(info)) => Ok(Type::Struct(info.id)),
                     Some(Global::Enum(info)) => Ok(Type::Enum(info.id)),

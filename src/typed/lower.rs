@@ -14,8 +14,8 @@ use crate::erased::{self, Module};
 use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Program};
 use crate::kernel::derive::symm_at;
 use crate::kernel::{
-    Definitions, EnumId, FnId, HypId, KernelError, Prim, Proof, PropId, PropVariant, StructId,
-    Term, Type, VarId, same,
+    CmpOp, Definitions, EnumId, FnId, HypId, KernelError, MachineInt, Proof, PropId, PropVariant,
+    StructId, Term, Type, VarId, same,
 };
 
 use super::tree::{
@@ -187,7 +187,8 @@ pub fn is_pure(expr: &Expr) -> bool {
     match expr {
         Expr::Var { .. }
         | Expr::Bool(_)
-        | Expr::U8(_)
+        | Expr::Literal(..)
+        | Expr::Int(_)
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => true,
@@ -202,6 +203,7 @@ pub fn is_pure(expr: &Expr) -> bool {
             ..
         } => is_pure(receiver) && arguments.iter().all(is_pure),
         Expr::Compare { left, right, .. } => is_pure(left) && is_pure(right),
+        Expr::Cast { expr, .. } => is_pure(expr),
         Expr::CallMath { arguments, .. } => arguments.iter().all(is_pure),
         Expr::If {
             condition,
@@ -250,24 +252,80 @@ fn pure_all(exprs: &[Expr]) -> Result<Vec<Term>, LowerError> {
     exprs.iter().map(pure).collect()
 }
 
-fn compare(op: CompareOp, left: Term, right: Term) -> Term {
-    let prim = |prim, a, b| Term::prim(prim, vec![a, b]);
-    match op {
-        CompareOp::Eq => prim(Prim::U8Eq, left, right),
-        CompareOp::Lt => prim(Prim::U8Lt, left, right),
-        CompareOp::Le => prim(Prim::U8Le, left, right),
-        CompareOp::Gt => prim(Prim::U8Lt, right, left),
-        CompareOp::Ge => prim(Prim::U8Le, right, left),
+/// `if test { if_true } else { if_false }` as a term of type `bool`.
+fn choose(test: Term, if_false: Term, if_true: Term) -> Term {
+    Term::case_with(
+        test,
+        Type::Bool,
+        vec![
+            (Vec::new(), HypId::fresh(), if_false),
+            (Vec::new(), HypId::fresh(), if_true),
+        ],
+    )
+}
+
+/// A comparison of two values of `ty`, as the kernel term whose value it
+/// is. At a machine type, `==`, `<`, and `<=` are the primitives `eq[T]`,
+/// `lt[T]`, and `le[T]`; `>` and `>=` are the last two with their operands
+/// exchanged; `!=` is a case on `eq[T]` with the branches exchanged. At
+/// `bool`, `==` is a case on the left operand, `if a { b } else { !b }`,
+/// and `!=` the same with the branches exchanged; `bool` has no ordering.
+fn compare(op: CompareOp, ty: &Type, left: Term, right: Term) -> Result<Term, LowerError> {
+    let Some(machine) = ty.as_machine() else {
+        if !matches!(ty, Type::Bool) || !matches!(op, CompareOp::Eq | CompareOp::Ne) {
+            return Err(LowerError::Kernel(KernelError::TypeMismatch {
+                expected: Type::U8,
+                found: ty.clone(),
+            }));
+        }
+        let not_right = choose(right.clone(), Term::Bool(true), Term::Bool(false));
+        return Ok(match op {
+            CompareOp::Eq => choose(left, not_right, right),
+            _ => choose(left, right, not_right),
+        });
+    };
+    let cmp = |op, a, b| Term::cmp(op, machine, a, b);
+    Ok(match op {
+        CompareOp::Eq => cmp(CmpOp::Eq, left, right),
+        CompareOp::Lt => cmp(CmpOp::Lt, left, right),
+        CompareOp::Le => cmp(CmpOp::Le, left, right),
+        CompareOp::Gt => cmp(CmpOp::Lt, right, left),
+        CompareOp::Ge => cmp(CmpOp::Le, right, left),
         // `a != b` as a value is the negation of the comparison.
-        CompareOp::Ne => Term::case_with(
-            prim(Prim::U8Eq, left, right),
-            Type::Bool,
-            vec![
-                (Vec::new(), HypId::fresh(), Term::Bool(true)),
-                (Vec::new(), HypId::fresh(), Term::Bool(false)),
-            ],
+        CompareOp::Ne => choose(
+            cmp(CmpOp::Eq, left, right),
+            Term::Bool(true),
+            Term::Bool(false),
         ),
-    }
+    })
+}
+
+/// `expr as to` for a value of type `from`: `cast[S, T]` between machine
+/// types, `view[S]` into `Int`, and `wrap[T]` out of it.
+fn cast(from: &Type, to: &Type, value: Term) -> Result<Term, LowerError> {
+    Ok(match (from.as_machine(), to.as_machine()) {
+        (Some(from), Some(to)) => Term::cast(from, to, value),
+        (Some(from), None) if matches!(to, Type::Int) => Term::view(from, value),
+        (None, Some(to)) if matches!(from, Type::Int) => Term::wrap(to, value),
+        _ => {
+            return Err(LowerError::Kernel(KernelError::TypeMismatch {
+                expected: to.clone(),
+                found: from.clone(),
+            }));
+        }
+    })
+}
+
+/// The machine type of a `for` index; a binder of any other type is a
+/// tree the elaborator never builds.
+fn index_type(index: &Binder) -> Result<MachineInt, LowerError> {
+    index
+        .ty
+        .as_machine()
+        .ok_or(LowerError::Kernel(KernelError::TypeMismatch {
+            expected: Type::U8,
+            found: index.ty.clone(),
+        }))
 }
 
 /// The comparison a condition performs, and whether the condition is its
@@ -278,11 +336,13 @@ fn condition(expr: &Expr) -> (Expr, bool) {
     match expr {
         Expr::Compare {
             op: CompareOp::Ne,
+            ty,
             left,
             right,
         } => (
             Expr::Compare {
                 op: CompareOp::Eq,
+                ty: ty.clone(),
                 left: left.clone(),
                 right: right.clone(),
             },
@@ -327,7 +387,8 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
     Ok(match expr {
         Expr::Var { id, .. } => Term::var(*id),
         Expr::Bool(value) => Term::Bool(*value),
-        Expr::U8(value) => Term::U8(*value),
+        Expr::Literal(ty, value) => Term::machine_int(*ty, *value),
+        Expr::Int(value) => Term::Int(value.clone()),
         Expr::Tuple { ty, fields } => Term::tuple(ty, pure_all(fields)?),
         Expr::Struct { id, fields, .. } => Term::Struct(
             *id,
@@ -349,7 +410,13 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
             operands.extend(pure_all(arguments)?);
             Term::prim(*prim, operands)
         }
-        Expr::Compare { op, left, right } => compare(*op, pure(left)?, pure(right)?),
+        Expr::Compare {
+            op,
+            ty,
+            left,
+            right,
+        } => compare(*op, ty, pure(left)?, pure(right)?)?,
+        Expr::Cast { expr, from, to } => cast(from, to, pure(expr)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), pure_all(arguments)?),
         Expr::Proof(proof) => Term::proof(proof.clone()),
         Expr::Prop(prop) => prop.clone(),
@@ -417,6 +484,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
                 .map(|(_, init)| pure(init))
                 .collect::<Result<_, _>>()?;
             Term::for_with(
+                index_type(index)?,
                 index.id,
                 *lower,
                 *upper,
@@ -613,11 +681,17 @@ fn anf_form(expr: &Expr, out: &mut Vec<exec::Stmt>) -> Result<Term, LowerError> 
             operands.extend(each(arguments, out)?);
             Term::prim(*prim, operands)
         }
-        Expr::Compare { op, left, right } => {
+        Expr::Compare {
+            op,
+            ty,
+            left,
+            right,
+        } => {
             let left = anf(left, out)?;
             let right = anf(right, out)?;
-            compare(*op, left, right)
+            compare(*op, ty, left, right)?
         }
+        Expr::Cast { expr, from, to } => cast(from, to, anf(expr, out)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments, out)?),
         Expr::CallFn {
             id,
@@ -734,7 +808,7 @@ fn anf_form(expr: &Expr, out: &mut Vec<exec::Stmt>) -> Result<Term, LowerError> 
                 lo,
                 hi,
                 ordered: ordered.clone(),
-                state: Type::function_over(&[(index.id, Type::U8)], &telescope(&binders)),
+                state: Type::function_over(&[(index.id, index.ty.clone())], &telescope(&binders)),
                 vars: binders.iter().map(|binder| binder.id).collect(),
                 init,
                 body: lower_block(body)?,
@@ -745,7 +819,8 @@ fn anf_form(expr: &Expr, out: &mut Vec<exec::Stmt>) -> Result<Term, LowerError> 
         // Handled by the purity test above.
         Expr::Var { .. }
         | Expr::Bool(_)
-        | Expr::U8(_)
+        | Expr::Literal(..)
+        | Expr::Int(_)
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => pure(expr)?,
@@ -785,7 +860,13 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
             operands.extend(each(arguments)?);
             Term::prim(*prim, operands)
         }
-        Expr::Compare { op, left, right } => compare(*op, value_term(left)?, value_term(right)?),
+        Expr::Compare {
+            op,
+            ty,
+            left,
+            right,
+        } => compare(*op, ty, value_term(left)?, value_term(right)?)?,
+        Expr::Cast { expr, from, to } => cast(from, to, value_term(expr)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
         Expr::CallFn { result, .. }
         | Expr::If { result, .. }
@@ -799,7 +880,8 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
         Expr::Break(_) | Expr::Continue(_) => return Err(LowerError::ControlInExpression),
         Expr::Var { .. }
         | Expr::Bool(_)
-        | Expr::U8(_)
+        | Expr::Literal(..)
+        | Expr::Int(_)
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => return pure(expr),

@@ -4,7 +4,7 @@
 // Subtracting more leaves less: the lemma gives `255.wrapping_sub(250) <=
 // 255.wrapping_sub(n)`, and the difference of literals computes to 5.
 fn headroom(n: u8, small: @(n <= 250)) -> (out: u8, @(out >= 5)) {
-    (255.wrapping_sub(n), u8_sub_le_sub(255, n, 250, small, prove!(250 <= 255)))
+    (255.wrapping_sub(n), u8_sub_le_sub(255, n, 250, small, prove!(250u8 <= 255)))
 }
 
 fn clamp(n: u8) -> (out: u8, @(out <= 250)) {

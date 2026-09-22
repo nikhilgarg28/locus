@@ -18,7 +18,7 @@ mod tree;
 pub use check::{TypeError, check_module};
 pub use erase::{erase_enum, erase_fn, erase_struct, erase_type};
 pub use interp::{Interpreter, Outcome, RunError, Value};
-pub(crate) use interp::{Stop, outcome};
+pub(crate) use interp::{Stop, outcome, term_value, value_term};
 pub use rust::print_module;
 pub use tree::{
     EArm, EBlock, EEnum, EExpr, EFn, EPattern, EStmt, EStruct, EType, EVariant, Module,

@@ -81,20 +81,20 @@ fn a_nested_call_is_named_by_the_tree_and_sequenced_by_lowering() {
 
 #[test]
 fn one_tree_lowers_as_an_ordinary_function_and_as_a_math_function() {
-    let (mut session, _, _) = setup();
+    let (mut session, _, theory) = setup();
     assert!(matches!(
-        session.declare_fn(&preserve(false, true)),
+        session.declare_fn(&preserve(theory, false, true)),
         Ok(FnRef::Exec(_))
     ));
     assert!(matches!(
-        session.declare_fn(&preserve(true, true)),
+        session.declare_fn(&preserve(theory, true, true)),
         Ok(FnRef::Math(_))
     ));
     // Either way the branch must use its fact.
-    assert!(session.declare_fn(&preserve(false, false)).is_err());
-    assert!(session.declare_fn(&preserve(true, false)).is_err());
+    assert!(session.declare_fn(&preserve(theory, false, false)).is_err());
+    assert!(session.declare_fn(&preserve(theory, true, false)).is_err());
     // The math version is a kernel function the logic can compute with.
-    let FnRef::Math(id) = session.declare_fn(&preserve(true, true)).unwrap() else {
+    let FnRef::Math(id) = session.declare_fn(&preserve(theory, true, true)).unwrap() else {
         panic!()
     };
     assert!(session.program().definitions().is_executable(id));
@@ -180,7 +180,7 @@ fn a_math_function_must_be_pure() {
                 HypId::fresh(),
                 Expr::Proof(Proof::Refl(Term::U8(1))),
             )],
-            Expr::U8(0),
+            Expr::u8(0),
         ),
     };
     assert!(matches!(

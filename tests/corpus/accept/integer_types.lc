@@ -1,0 +1,155 @@
+// Every machine integer type: literals take the type expected of them, else
+// their suffix, else `i32`; a negative literal is one literal; `T::MAX` and
+// `T::MIN` are literals of `T`; `as` between the types wraps; comparisons
+// and the wrapping methods exist at every type.
+
+fn suffixed() -> u16 {
+    1_000u16
+}
+
+fn expected_type(n: u64) -> u64 {
+    n.wrapping_add(18446744073709551615)
+}
+
+fn defaults_to_i32() -> i32 {
+    2147483647
+}
+
+fn negative() -> i8 {
+    -128
+}
+
+fn negative_receiver() -> i16 {
+    (-5).wrapping_neg()
+}
+
+fn largest_u32() -> u32 {
+    u32::MAX
+}
+
+fn smallest_i64() -> i64 {
+    i64::MIN
+}
+
+fn widen(a: u8) -> u32 {
+    a as u32
+}
+
+fn narrow(a: i64) -> i8 {
+    a as i8
+}
+
+fn signs(a: i8) -> u64 {
+    a as u64
+}
+
+fn cast_then_compare(a: u8, b: u32) -> bool {
+    a as u32 < b
+}
+
+fn less_i8(a: i8, b: i8) -> bool {
+    a < b
+}
+
+fn at_most_u16(a: u16, b: u16) -> bool {
+    a <= b
+}
+
+fn more_i32(a: i32, b: i32) -> bool {
+    a > b
+}
+
+fn at_least_u64(a: u64, b: u64) -> bool {
+    a >= b
+}
+
+fn same_i64(a: i64, b: i64) -> bool {
+    a == b
+}
+
+fn differ_u32(a: u32, b: u32) -> bool {
+    a != b
+}
+
+fn same_flag(a: bool, b: bool) -> bool {
+    a == b
+}
+
+fn wrapping_i32(a: i32, b: i32) -> (i32, i32, i32, i32) {
+    (a.wrapping_add(b), a.wrapping_sub(b), a.wrapping_mul(b), a.wrapping_neg())
+}
+
+fn wrapping_u64(a: u64, b: u64) -> (u64, u64, u64) {
+    (a.wrapping_add(b), a.wrapping_sub(b), a.wrapping_mul(b))
+}
+
+// A bounded `for` over each kind of index: an unsigned range from `0` needs
+// no evidence of its order, and its final state is the value.
+fn count_u32(n: u32) -> u32 {
+    let (total,) = for i in 0..n (total: u32 = 0) {
+        continue(total.wrapping_add(i))
+    };
+    total
+}
+
+fn count_i16(n: i16, ordered: @(-3 <= n)) -> i16 {
+    let (total,) = for i in -3..n (total: i16 = 0) {
+        continue(total.wrapping_add(i))
+    };
+    total
+}
+
+// In a claim, an ordering of two machine values is the order of their
+// values in the logic, and `as Int` says so exactly; the lemmas of every
+// type speak of it.
+fn ordered_i64(a: i64, b: i64, c: i64, ab: @(a <= b), bc: @(b <= c)) -> @(a <= c) {
+    i64_le_trans(a, b, c, ab, bc)
+}
+
+fn viewed(a: u16, b: u16, h: @(a < b)) -> @(a as Int <= b as Int) {
+    u16_le_of_lt(a, b, h)
+}
+
+math fn bound(a: i32) -> Prop {
+    prop!(a as Int <= 2147483647)
+}
+
+fn within(a: i32) -> @bound(a) {
+    let bounds = i32_view_bounds(a);
+    fold!(bound, prove!(a as Int <= 2147483647))
+}
+
+//~ run: suffixed() => 1000
+//~ run: expected_type(5) => 4
+//~ run: defaults_to_i32() => 2147483647
+//~ run: negative() => -128
+//~ run: negative_receiver() => 5
+//~ run: largest_u32() => 4294967295
+//~ run: smallest_i64() => -9223372036854775808
+//~ run: widen(200) => 200
+//~ run: narrow(300) => 44
+//~ run: narrow(-129) => 127
+//~ run: signs(-1) => 18446744073709551615
+//~ run: cast_then_compare(255, 256) => true
+//~ run: cast_then_compare(255, 255) => false
+//~ run: less_i8(-1, 0) => true
+//~ run: less_i8(127, -128) => false
+//~ run: at_most_u16(65535, 65535) => true
+//~ run: more_i32(-2147483648, 2147483647) => false
+//~ run: at_least_u64(18446744073709551615, 0) => true
+//~ run: same_i64(-9223372036854775808, -9223372036854775808) => true
+//~ run: differ_u32(1, 2) => true
+//~ run: same_flag(true, false) => false
+//~ run: wrapping_i32(2147483647, 1) => (-2147483648, 2147483646, 2147483647, -2147483647)
+//~ run: wrapping_i32(-2147483648, -1) => (2147483647, -2147483647, -2147483648, -2147483648)
+//~ run: wrapping_u64(18446744073709551615, 2) => (1, 18446744073709551613, 18446744073709551614)
+//~ run: count_u32(100000) => 704982704
+//~ run: count_i16(5, Proved) => 4
+//~ run: viewed(1, 2, Proved) => Proved
+//~ run: within(7) => Proved
+//~ rust: pub fn negative() -> i8 {
+//~ rust: (-128_i8)
+//~ rust: ((a as u32) < b)
+//~ rust: for i in (-3_i16)..n {
+//~ rust: pub fn largest_u32() -> u32 {
+//~ rust: 4294967295_u32

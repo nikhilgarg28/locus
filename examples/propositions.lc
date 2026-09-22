@@ -38,7 +38,7 @@ prop Small(n: u8) {
 // equation is turned round and the claim carried across it.
 math fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
     match small {
-        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0 < 10)),
+        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0u8 < 10)),
         Small::Below(bound) => bound,
     }
 }

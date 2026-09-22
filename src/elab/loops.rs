@@ -2,13 +2,14 @@
 //! `break` and `continue` that leave or advance them.
 
 use crate::ast;
-use crate::kernel::{HypId, Proof, Term, Type, VarId, check_proof};
+use crate::kernel::{HypId, MachineInt, Proof, Term, Type, VarId, check_proof};
 use crate::source::Span;
 use crate::typed::{self, Binder, Expr, is_pure};
 
 use super::env::{Elab, Env, LoopTarget};
 use super::exprs::{Value, unit_type};
 use super::items::{FoundProof, HoleReport};
+use super::literals::untyped_literal;
 use super::types::tuple_over;
 
 impl Env<'_> {
@@ -129,17 +130,34 @@ impl Env<'_> {
         body: &ast::Block,
         span: Span,
     ) -> Elab<Value> {
-        let lo = self.check(lower, &Type::U8)?;
-        let hi = self.check(upper, &Type::U8)?;
+        // The bounds have one machine type; a literal takes the other's.
+        let (lo, hi) = if untyped_literal(lower) && !untyped_literal(upper) {
+            let hi = self.infer(upper)?;
+            let lo = self.check(lower, &hi.ty.clone())?;
+            (lo, hi)
+        } else {
+            let lo = self.infer(lower)?;
+            let hi = self.check(upper, &lo.ty.clone())?;
+            (lo, hi)
+        };
+        let Some(ty) = lo.ty.as_machine() else {
+            let shown = self.show_type(&lo.ty);
+            return self.fail(
+                "L0220",
+                format!("the bounds of a `for` are machine integers, and this is `{shown}`"),
+                lower.span,
+            );
+        };
         let lo_term = self.term(&lo, lower.span)?;
         let hi_term = self.term(&hi, upper.span)?;
-        let prelude = self.prelude;
-        let ordered = self.range_evidence(&lo_term, &hi_term, lower.span.through(upper.span))?;
+        let view = |x: &Term| Term::view(ty, x.clone());
+        let ordered =
+            self.range_evidence(ty, &lo_term, &hi_term, lower.span.through(upper.span))?;
 
         let index = Binder {
             id: VarId::fresh(),
             name: index.text.clone(),
-            ty: Type::U8,
+            ty: Type::machine(ty),
         };
         let state = self.loop_state(state, Some((&index, &lo_term)))?;
         let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();
@@ -153,17 +171,17 @@ impl Env<'_> {
             }
             self.assume(
                 lower_fact,
-                prelude.u8_le_prop(lo_term.clone(), index.term()),
+                Term::int_le(view(&lo_term), view(&index.term())),
                 span,
             )?;
             self.assume(
                 upper_fact,
-                prelude.u8_lt_prop(index.term(), hi_term.clone()),
+                Term::int_lt(view(&index.term()), view(&hi_term)),
                 span,
             )?;
             self.loops.push(LoopTarget {
                 state: binders.clone(),
-                advance: Some((index.id, Term::wrapping_add(index.term(), Term::U8(1)))),
+                advance: Some((index.id, Term::successor(ty, index.term()))),
                 result: None,
             });
             let block = self.loop_body(body, "the body of a `for`");
@@ -193,25 +211,37 @@ impl Env<'_> {
         Ok(Value::new(expr, ty))
     }
 
-    /// Evidence that the range `lo..hi` is ordered, `lo <= hi`. A range
-    /// that starts at `0` is ordered by the lemma `u8_zero_le`, which the
-    /// elaborator applies here because the range has no place to write it;
-    /// any other range needs the fact in scope, as a hole does.
-    fn range_evidence(&mut self, lo: &Term, hi: &Term, span: Span) -> Elab<Proof> {
-        let claim = self.prelude.u8_le_prop(lo.clone(), hi.clone());
-        if *lo != Term::U8(0) {
+    /// Evidence that the range `lo..hi` is ordered, `lo <= hi` over the
+    /// views. A range over an unsigned type that starts at `0` is ordered by
+    /// the lemma `<T>_zero_le`, which the elaborator applies here because
+    /// the range has no place to write it; any other range needs the fact
+    /// in scope, as a hole does.
+    fn range_evidence(&mut self, ty: MachineInt, lo: &Term, hi: &Term, span: Span) -> Elab<Proof> {
+        let view = |x: &Term| Term::view(ty, x.clone());
+        let claim = Term::int_le(view(lo), view(hi));
+        let zero_le = self
+            .theory
+            .machine(ty)
+            .unsigned
+            .map(|lemmas| lemmas.zero_le);
+        let (Some(zero_le), true) = (zero_le, *lo == Term::machine_int(ty, 0)) else {
             return self.solve(&claim, span, None);
-        }
+        };
         let started = std::time::Instant::now();
-        let lemma = self.theory.u8_zero_le;
-        let proof = Proof::OfTerm(Term::call(Term::Fn(lemma), vec![hi.clone()]));
+        let proof = Proof::OfTerm(Term::call(Term::Fn(zero_le), vec![hi.clone()]));
         let checked = check_proof(&mut self.ctx, &proof, &claim);
         self.kernel(checked, span)?;
+        let tier = self
+            .theory
+            .lemma_names()
+            .into_iter()
+            .find(|(_, id)| *id == zero_le)
+            .map_or("zero_le", |(name, _)| name);
         self.holes.push(HoleReport {
             span,
             solved: true,
-            tier: "u8_zero_le",
-            proof_size: 3,
+            tier,
+            proof_size: super::solve::proof_size(&proof),
             micros: started.elapsed().as_micros(),
             found: Some(FoundProof {
                 context: self.ctx.clone(),

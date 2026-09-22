@@ -128,12 +128,14 @@ pub enum Stmt {
 /// `let var = for index in lo..hi (vars: state = init) { body }`.
 ///
 /// `state` is a function type from the index to the state's tuple type,
-/// `math fn(u8) -> (A_0, ..., A_n)`, which is how a state type mentions the
-/// index: an invariant can say what holds after `index` steps. `ordered`
-/// proves `lo <= hi`. The body sees the index, abstract state, and the facts
-/// `lo <= index` (`lower`) and `index < hi` (`upper`), and must end every
-/// path in `continue` with the state for `index + 1`, in `return`, or in a
-/// panic. There is no `break`. `var` is the state at `hi`.
+/// `math fn(T) -> (A_0, ..., A_n)` for the machine type `T` of the index and
+/// the bounds, which is how a state type mentions the index: an invariant
+/// can say what holds after `index` steps. `ordered` proves
+/// `int_le(view[T](lo), view[T](hi))`. The body sees the index, abstract
+/// state, and the facts `lo <= index` (`lower`) and `index < hi` (`upper`),
+/// both over the views, and must end every path in `continue` with the
+/// state for `wrapping_add[T](index, 1)`, in `return`, or in a panic. There
+/// is no `break`. `var` is the state at `hi`.
 #[derive(Clone, Debug)]
 pub struct ForStmt {
     pub var: VarId,

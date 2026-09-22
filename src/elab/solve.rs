@@ -9,10 +9,11 @@
 //!    constructor, and arithmetic on literals are carried out; a claim
 //!    `a == a` holds by reflexivity; and a comparison the branch taken
 //!    knows `== true` or `== false` is the fact of that comparison (the
-//!    kernel's `Reflect`). Evidence of `p && q` is evidence of each part.
-//!    Every step is fixed by the claim and the facts, so this is a
-//!    procedure and not a search;
-//! 3. **evaluation**: a closed comparison is run by the kernel.
+//!    kernel's `cmp_reflect`, which speaks of the views). Evidence of
+//!    `p && q` is evidence of each part. Every step is fixed by the claim
+//!    and the facts, so this is a procedure and not a search;
+//! 3. **evaluation**: a closed comparison is run by the kernel: one of
+//!    integers directly, one of machine values as the runtime test it is.
 //!
 //! Nothing else happens by itself: no fact is used to reach another, no
 //! function is unfolded unless `unfold!` or `fold!` asks, and no claim is
@@ -27,7 +28,8 @@ use std::time::Instant;
 
 use crate::kernel::derive::symm;
 use crate::kernel::{
-    Axiom, Prim, Proof, Term, Type, check_proof, evaluate_primitive, infer_proof, same,
+    Axiom, CmpOp, Integer, MachineInt, Prim, Proof, Term, Type, check_proof, evaluate_primitive,
+    infer_proof, same,
 };
 use crate::source::Span;
 
@@ -61,11 +63,31 @@ pub(super) fn forward(proof: Proof, steps: Vec<Step>) -> Proof {
         })
 }
 
-/// A claim read as the outcome of a test: `test == outcome`.
+/// A claim read as the outcome of a test: `test == outcome`, where `test`
+/// is a runtime comparison at a machine type, `Prim::Cmp`.
 #[derive(Clone)]
 pub(super) struct Test {
     pub test: Term,
     pub outcome: bool,
+}
+
+impl Test {
+    /// The comparison, its type, and its operands.
+    pub fn parts(&self) -> Option<(CmpOp, MachineInt, &Term, &Term)> {
+        match &self.test {
+            Term::Prim(Prim::Cmp(op, ty), operands) => match operands.as_slice() {
+                [a, b] => Some((*op, *ty, a, b)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Whether a fact about `other` decides this test: the same comparison
+    /// with the same outcome.
+    pub fn decided_by(&self, other: &Test) -> bool {
+        self.outcome == other.outcome && same(&self.test, &other.test)
+    }
 }
 
 /// The facts in scope, computed: what a hole is filled from.
@@ -156,21 +178,52 @@ impl Env<'_> {
             return Some(Proof::Refl((**left).clone()));
         }
         let wanted = self.as_test(normal)?;
-        let found = known.facts.iter().rev().find_map(|(_, fact)| {
-            let test = self.as_test(&fact.claim)?;
-            (test.outcome == wanted.outcome && same(&test.test, &wanted.test))
-                .then(|| self.test_evidence(&fact.claim, &test, fact.proof.clone()))
-        })?;
-        Some(self.reflect_test(normal, &wanted, found))
+        let candidates: Vec<(Term, Test, Proof)> = known
+            .facts
+            .iter()
+            .rev()
+            .filter_map(|(_, fact)| {
+                let test = self.as_test(&fact.claim)?;
+                wanted
+                    .decided_by(&test)
+                    .then(|| (fact.claim.clone(), test, fact.proof.clone()))
+            })
+            .collect();
+        for (claim, test, proof) in candidates {
+            let Some(evidence) = self.test_evidence(&claim, &test, proof) else {
+                continue;
+            };
+            if let Some(proof) = self.reflect_test(normal, &test, evidence) {
+                return Some(proof);
+            }
+        }
+        None
     }
 
-    /// Tier 3: a closed comparison, run.
+    /// Tier 3: a closed comparison, run. A comparison of integers, `int_le`
+    /// or `==` at `Int`, is decided by the kernel as it stands, its
+    /// negation included; a comparison of machine values is run as the
+    /// runtime test it is and reflected.
     pub(super) fn evaluated(&mut self, normal: &Term) -> Option<Proof> {
+        let inner = match normal {
+            Term::Implies(premise, conclusion) if **conclusion == self.prelude.falsehood_prop() => {
+                &**premise
+            }
+            other => other,
+        };
+        let integers = matches!(inner, Term::Prim(Prim::IntLe, _) | Term::Eq(Type::Int, ..));
+        if integers && inner.is_closed() {
+            let run = Proof::Evaluate(inner.clone());
+            return match infer_proof(&mut self.ctx, &run) {
+                Ok(claim) if same(&claim, normal) => Some(run),
+                _ => None,
+            };
+        }
         let wanted = self.as_test(normal)?;
         let run = Proof::Evaluate(wanted.test.clone());
         match infer_proof(&mut self.ctx, &run) {
             Ok(Term::Eq(_, _, value)) if *value == Term::Bool(wanted.outcome) => {
-                Some(self.reflect_test(normal, &wanted, run))
+                self.reflect_test(normal, &wanted, run)
             }
             _ => None,
         }
@@ -304,25 +357,14 @@ impl Env<'_> {
 
     // --- Comparisons as tests -----------------------------------------------------
 
-    /// Reads a claim as the outcome of a runtime test, when it is one.
+    /// Reads a claim as the outcome of a runtime test, when it is one: the
+    /// claim `c == true` or `c == false` about a comparison `c`; `a ==[T] b`
+    /// at a machine type, which `eq[T](a, b)` decides; and the order of two
+    /// views, `int_le(view[T](a), view[T](b))` for `le[T]`, with `int_add(
+    /// view[T](a), 1i)` on the left for `lt[T]`, and an `Int` literal in
+    /// the range of `T` in place of either view, which computing a view of
+    /// a literal leaves behind; each also negated, as `P => False`.
     pub(super) fn as_test(&self, claim: &Term) -> Option<Test> {
-        let positive = |claim: &Term| -> Option<Term> {
-            let comparison =
-                |prim, a: &Term, b: &Term| Term::prim(prim, vec![a.clone(), b.clone()]);
-            match claim {
-                Term::Eq(Type::U8, a, b) => Some(comparison(Prim::U8Eq, a, b)),
-                Term::Call(callee, arguments) => match (&**callee, arguments.as_slice()) {
-                    (Term::Fn(id), [a, b]) if *id == self.prelude.u8_le => {
-                        Some(comparison(Prim::U8Le, a, b))
-                    }
-                    (Term::Fn(id), [a, b]) if *id == self.prelude.u8_lt => {
-                        Some(comparison(Prim::U8Lt, a, b))
-                    }
-                    _ => None,
-                },
-                _ => None,
-            }
-        };
         match claim {
             Term::Eq(Type::Bool, test, outcome) => match **outcome {
                 Term::Bool(outcome) => Some(Test {
@@ -332,12 +374,12 @@ impl Env<'_> {
                 _ => None,
             },
             Term::Implies(premise, conclusion) if **conclusion == self.prelude.falsehood_prop() => {
-                positive(premise).map(|test| Test {
+                comparison_of(premise).map(|test| Test {
                     test,
                     outcome: false,
                 })
             }
-            claim => positive(claim).map(|test| Test {
+            claim => comparison_of(claim).map(|test| Test {
                 test,
                 outcome: true,
             }),
@@ -348,25 +390,90 @@ impl Env<'_> {
         Term::eq(Type::Bool, test.test.clone(), Term::Bool(test.outcome))
     }
 
-    /// From evidence of a claim, evidence of `test == outcome`.
-    pub(super) fn test_evidence(&self, claim: &Term, test: &Test, evidence: Proof) -> Proof {
+    /// What `cmp_reflect` says of the test when it comes out as it does:
+    /// the proposition over the views, or its negation.
+    fn reflected_claim(&self, test: &Test) -> Option<Term> {
+        let (op, ty, a, b) = test.parts()?;
+        let claim = op.claim(Term::view(ty, a.clone()), Term::view(ty, b.clone()));
+        Some(if test.outcome {
+            claim
+        } else {
+            self.prelude.not_prop(claim)
+        })
+    }
+
+    /// `a ==[T] b` from `view[T](a) ==[Int] view[T](b)`, by the injectivity
+    /// of the view.
+    fn equal_of_views(&self, ty: MachineInt, a: &Term, b: &Term, views_equal: Proof) -> Proof {
+        Proof::OfTerm(Term::call(
+            Term::Fn(self.theory.machine(ty).view_injective),
+            vec![a.clone(), b.clone(), Term::proof(views_equal)],
+        ))
+    }
+
+    /// The converse, by congruence.
+    fn views_of_equal(ty: MachineInt, a: &Term, equal: Proof) -> Proof {
+        let view_a = Term::view(ty, a.clone());
+        Proof::transport(
+            equal,
+            |hole| Term::eq(Type::Int, view_a.clone(), Term::view(ty, hole)),
+            Proof::Refl(view_a.clone()),
+        )
+    }
+
+    /// From evidence of a claim, evidence of `test == outcome`. The claim
+    /// is computed, as the facts are; `None` when what the test reflects to
+    /// does not compute to it.
+    pub(super) fn test_evidence(
+        &mut self,
+        claim: &Term,
+        test: &Test,
+        evidence: Proof,
+    ) -> Option<Proof> {
         if matches!(claim, Term::Eq(Type::Bool, ..)) {
-            return evidence;
+            return Some(evidence);
         }
+        let (op, ty, a, b) = test.parts()?;
+        let (a, b) = (a.clone(), b.clone());
+        // Evidence of what reflection speaks of, over the views.
+        let of_views = match (op, test.outcome) {
+            (CmpOp::Eq, true) => Self::views_of_equal(ty, &a, evidence),
+            (CmpOp::Eq, false) => {
+                // `!(a == b)` gives `!(v(a) == v(b))`: an equality of the
+                // views gives one of the values.
+                let equal_views = Term::eq(
+                    Type::Int,
+                    Term::view(ty, a.clone()),
+                    Term::view(ty, b.clone()),
+                );
+                let refute = |views_equal| {
+                    Proof::implies_elim(evidence, self.equal_of_views(ty, &a, &b, views_equal))
+                };
+                Proof::implies_intro(equal_views, refute)
+            }
+            _ => {
+                let reflected = self.reflected_claim(test)?;
+                let (computed, steps) = self.compute(&reflected);
+                if !same(&computed, claim) {
+                    return None;
+                }
+                self.back_to_stated(evidence, steps)?
+            }
+        };
         let goal = Self::test_claim(test);
         // In the arm where the test came out the other way, reflection
         // contradicts the evidence.
         let contradiction = |other: Proof| {
             let reflected = Proof::implies_elim(
-                Proof::Axiom(Axiom::Reflect(test.test.clone(), !test.outcome)),
+                Proof::Axiom(Axiom::CmpReflect(test.test.clone(), !test.outcome)),
                 other,
             );
             let falsehood = if test.outcome {
                 // reflected: claim => False
-                Proof::implies_elim(reflected, evidence.clone())
+                Proof::implies_elim(reflected, of_views.clone())
             } else {
-                // evidence: premise => False; reflected: premise
-                Proof::implies_elim(evidence.clone(), reflected)
+                // of_views: claim => False; reflected: claim
+                Proof::implies_elim(of_views.clone(), reflected)
             };
             Proof::CaseProof {
                 scrutinee: Box::new(falsehood),
@@ -376,7 +483,7 @@ impl Env<'_> {
         };
         let agree = Proof::arm(0, 1, |_, hyps| hyps[0].clone());
         let differ = Proof::arm(0, 1, |_, hyps| contradiction(hyps[0].clone()));
-        Proof::CaseData {
+        Some(Proof::CaseData {
             scrutinee: test.test.clone(),
             goal: goal.clone(),
             // The arms of a bool are `false`, then `true`.
@@ -385,31 +492,111 @@ impl Env<'_> {
             } else {
                 vec![agree, differ]
             },
-        }
+        })
     }
 
-    /// From evidence of `test == outcome`, evidence of the claim.
-    pub(super) fn reflect_test(&self, claim: &Term, test: &Test, evidence: Proof) -> Proof {
+    /// From evidence of `test == outcome`, evidence of the claim, which is
+    /// computed. `None` when what the test reflects to does not compute to
+    /// the claim.
+    pub(super) fn reflect_test(
+        &mut self,
+        claim: &Term,
+        test: &Test,
+        evidence: Proof,
+    ) -> Option<Proof> {
         if matches!(claim, Term::Eq(Type::Bool, ..)) {
-            return evidence;
+            return Some(evidence);
         }
-        Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(test.test.clone(), test.outcome)),
+        let (op, ty, a, b) = test.parts()?;
+        let (a, b) = (a.clone(), b.clone());
+        let reflected = Proof::implies_elim(
+            Proof::Axiom(Axiom::CmpReflect(test.test.clone(), test.outcome)),
             evidence,
-        )
+        );
+        let (stated, proof) = match (op, test.outcome) {
+            // An equality of the views is one of the values.
+            (CmpOp::Eq, true) => (
+                Term::eq(Type::machine(ty), a.clone(), b.clone()),
+                self.equal_of_views(ty, &a, &b, reflected),
+            ),
+            (CmpOp::Eq, false) => {
+                let equal = Term::eq(Type::machine(ty), a.clone(), b.clone());
+                let proof = Proof::implies_intro(equal.clone(), |equal| {
+                    Proof::implies_elim(reflected, Self::views_of_equal(ty, &a, equal))
+                });
+                (self.prelude.not_prop(equal), proof)
+            }
+            _ => (self.reflected_claim(test)?, reflected),
+        };
+        let (computed, steps) = self.compute(&stated);
+        same(&computed, claim).then(|| forward(proof, steps))
+    }
+}
+
+/// The runtime comparison a proposition is decided by, when it is one; see
+/// `Env::as_test`.
+fn comparison_of(claim: &Term) -> Option<Term> {
+    match claim {
+        Term::Eq(ty, a, b) => {
+            let ty = ty.as_machine()?;
+            Some(Term::cmp(CmpOp::Eq, ty, (**a).clone(), (**b).clone()))
+        }
+        Term::Prim(Prim::IntLe, sides) => {
+            let [left, right] = sides.as_slice() else {
+                return None;
+            };
+            // `a < b` is `a + 1 <= b`.
+            let (op, left) = match left {
+                Term::Prim(Prim::IntAdd, parts) => match parts.as_slice() {
+                    [a, Term::Int(one)] if *one == Integer::from(1i64) => (CmpOp::Lt, a),
+                    _ => (CmpOp::Le, left),
+                },
+                _ => (CmpOp::Le, left),
+            };
+            let (ty, a, b) = machine_sides(left, right)?;
+            Some(Term::cmp(op, ty, a, b))
+        }
+        _ => None,
+    }
+}
+
+/// Two `Int` terms as the machine values they are the views of: two views
+/// at one type, or a view and an `Int` literal in the range of its type.
+fn machine_sides(left: &Term, right: &Term) -> Option<(MachineInt, Term, Term)> {
+    let view = |term: &Term| match term {
+        Term::Prim(Prim::View(ty), operand) => match operand.as_slice() {
+            [x] => Some((*ty, x.clone())),
+            _ => None,
+        },
+        _ => None,
+    };
+    let literal = |ty: MachineInt, term: &Term| match term {
+        Term::Int(value) if ty.contains(value) => Some(Term::machine(ty, value.clone())),
+        _ => None,
+    };
+    match (view(left), view(right)) {
+        (Some((ty, a)), Some((other, b))) if ty == other => Some((ty, a, b)),
+        (Some((ty, a)), None) => Some((ty, a, literal(ty, right)?)),
+        (None, Some((ty, b))) => Some((ty, literal(ty, left)?, b)),
+        _ => None,
     }
 }
 
 /// Whether a computation axiom applies at the head of the term: a
 /// projection of a written tuple or struct, a match on a written
 /// constructor, or a primitive on literals. A call of a function is not
-/// computed: that is unfolding, which only `unfold!` and `fold!` do.
+/// computed: that is unfolding, which only `unfold!` and `fold!` do. The
+/// view of a literal is not computed either: `x <= 3` between machine
+/// values is `int_le(view[T](x), view[T](3))`, and it stays in that shape,
+/// the one the lemmas about `T` and the reflection of a test speak in, so
+/// that a claim reads back as it was written.
 fn computes(term: &Term) -> bool {
     if !term.is_closed() {
         return false;
     }
     match term {
         Term::Proj(target, _) => matches!(**target, Term::Tuple(..) | Term::Struct(..)),
+        Term::Prim(Prim::View(_), _) => false,
         Term::Prim(prim, operands) => evaluate_primitive(*prim, operands).is_some(),
         Term::Case { scrutinee, .. } => {
             matches!(**scrutinee, Term::Bool(_) | Term::Variant(..))

@@ -180,7 +180,8 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
     );
     assert_eq!(lt(n.clone(), lit(0)), le(add(n.clone(), lit(1)), lit(0)));
 
-    // Int is not Nat and not u8: nothing converts between them yet.
+    // Int is not Nat and not u8: nothing converts between Int and Nat, and
+    // a byte enters Int only through its view.
     ill_typed(infer_term(
         &mut ctx,
         &add(n.clone(), Term::nat(1)),
@@ -196,7 +197,7 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
         &Term::nat_add(Term::nat(1), lit(1)),
         Mode::Logical,
     ));
-    ill_typed(infer_term(&mut ctx, &Term::of_nat(lit(1)), Mode::Logical));
+    ill_typed(infer_term(&mut ctx, &Term::succ(lit(1)), Mode::Logical));
     ill_typed(infer_term(
         &mut ctx,
         &Term::eq(Type::Nat, lit(1), lit(1)),
@@ -1436,13 +1437,6 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::NatAddSucc(t(), t()),
         Axiom::NatSuccInjective(t(), t()),
         Axiom::NatSuccNotZero(t()),
-        Axiom::ToNatBound(t()),
-        Axiom::OfToNat(t()),
-        Axiom::ToOfNat(t()),
-        Axiom::OfNatWrap(t()),
-        Axiom::WrappingAddModel(t(), t()),
-        Axiom::WrappingSubModel(t(), t()),
-        Axiom::Reflect(t(), true),
         Axiom::IntAddAssoc(t(), t(), t()),
         Axiom::IntAddComm(t(), t()),
         Axiom::IntAddZero(t()),
@@ -1479,7 +1473,7 @@ fn every_axiom() -> Vec<Axiom> {
     ]
 }
 
-const AXIOMS: usize = 44;
+const AXIOMS: usize = 37;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1487,46 +1481,39 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::NatAddSucc(..) => 1,
         Axiom::NatSuccInjective(..) => 2,
         Axiom::NatSuccNotZero(_) => 3,
-        Axiom::ToNatBound(_) => 4,
-        Axiom::OfToNat(_) => 5,
-        Axiom::ToOfNat(_) => 6,
-        Axiom::OfNatWrap(_) => 7,
-        Axiom::WrappingAddModel(..) => 8,
-        Axiom::WrappingSubModel(..) => 9,
-        Axiom::Reflect(..) => 10,
-        Axiom::IntAddAssoc(..) => 11,
-        Axiom::IntAddComm(..) => 12,
-        Axiom::IntAddZero(_) => 13,
-        Axiom::IntAddNeg(_) => 14,
-        Axiom::IntSubDef(..) => 15,
-        Axiom::IntMulAssoc(..) => 16,
-        Axiom::IntMulComm(..) => 17,
-        Axiom::IntMulOne(_) => 18,
-        Axiom::IntMulAdd(..) => 19,
-        Axiom::IntLeRefl(_) => 20,
-        Axiom::IntLeTrans(..) => 21,
-        Axiom::IntLeAntisymm(..) => 22,
-        Axiom::IntLeAdd(..) => 23,
-        Axiom::IntLeMul(..) => 24,
-        Axiom::IntLeTotal(..) => 25,
-        Axiom::IntLtIrrefl(_) => 26,
-        Axiom::IntDivRem(..) => 27,
-        Axiom::IntDivZero(_) => 28,
-        Axiom::IntRemLowerPos(..) => 29,
-        Axiom::IntRemUpperPos(..) => 30,
-        Axiom::IntRemLowerNeg(..) => 31,
-        Axiom::IntRemUpperNeg(..) => 32,
-        Axiom::IntRemNonneg(..) => 33,
-        Axiom::IntRemNonpos(..) => 34,
-        Axiom::ViewLower(..) => 35,
-        Axiom::ViewUpper(..) => 36,
-        Axiom::WrapView(..) => 37,
-        Axiom::ViewWrap(..) => 38,
-        Axiom::WrapPeriod(..) => 39,
-        Axiom::CastDef(..) => 40,
-        Axiom::OpModel(..) => 41,
-        Axiom::OpExact(..) => 42,
-        Axiom::CmpReflect(..) => 43,
+        Axiom::IntAddAssoc(..) => 4,
+        Axiom::IntAddComm(..) => 5,
+        Axiom::IntAddZero(_) => 6,
+        Axiom::IntAddNeg(_) => 7,
+        Axiom::IntSubDef(..) => 8,
+        Axiom::IntMulAssoc(..) => 9,
+        Axiom::IntMulComm(..) => 10,
+        Axiom::IntMulOne(_) => 11,
+        Axiom::IntMulAdd(..) => 12,
+        Axiom::IntLeRefl(_) => 13,
+        Axiom::IntLeTrans(..) => 14,
+        Axiom::IntLeAntisymm(..) => 15,
+        Axiom::IntLeAdd(..) => 16,
+        Axiom::IntLeMul(..) => 17,
+        Axiom::IntLeTotal(..) => 18,
+        Axiom::IntLtIrrefl(_) => 19,
+        Axiom::IntDivRem(..) => 20,
+        Axiom::IntDivZero(_) => 21,
+        Axiom::IntRemLowerPos(..) => 22,
+        Axiom::IntRemUpperPos(..) => 23,
+        Axiom::IntRemLowerNeg(..) => 24,
+        Axiom::IntRemUpperNeg(..) => 25,
+        Axiom::IntRemNonneg(..) => 26,
+        Axiom::IntRemNonpos(..) => 27,
+        Axiom::ViewLower(..) => 28,
+        Axiom::ViewUpper(..) => 29,
+        Axiom::WrapView(..) => 30,
+        Axiom::ViewWrap(..) => 31,
+        Axiom::WrapPeriod(..) => 32,
+        Axiom::CastDef(..) => 33,
+        Axiom::OpModel(..) => 34,
+        Axiom::OpExact(..) => 35,
+        Axiom::CmpReflect(..) => 36,
     }
 }
 
@@ -1631,14 +1618,7 @@ fn rule_index(proof: &Proof) -> usize {
     }
 }
 
-const PRIMS: [Prim; 21] = [
-    Prim::WrappingAdd,
-    Prim::WrappingSub,
-    Prim::U8Eq,
-    Prim::U8Lt,
-    Prim::U8Le,
-    Prim::ToNat,
-    Prim::OfNat,
+const PRIMS: [Prim; 14] = [
     Prim::Succ,
     Prim::NatAdd,
     Prim::IntAdd,
@@ -1657,27 +1637,20 @@ const PRIMS: [Prim; 21] = [
 
 fn prim_index(prim: Prim) -> usize {
     match prim {
-        Prim::WrappingAdd => 0,
-        Prim::WrappingSub => 1,
-        Prim::U8Eq => 2,
-        Prim::U8Lt => 3,
-        Prim::U8Le => 4,
-        Prim::ToNat => 5,
-        Prim::OfNat => 6,
-        Prim::Succ => 7,
-        Prim::NatAdd => 8,
-        Prim::IntAdd => 9,
-        Prim::IntSub => 10,
-        Prim::IntMul => 11,
-        Prim::IntNeg => 12,
-        Prim::IntLe => 13,
-        Prim::IntDiv => 14,
-        Prim::IntRem => 15,
-        Prim::View(_) => 16,
-        Prim::Wrap(_) => 17,
-        Prim::Cast(..) => 18,
-        Prim::Op(..) => 19,
-        Prim::Cmp(..) => 20,
+        Prim::Succ => 0,
+        Prim::NatAdd => 1,
+        Prim::IntAdd => 2,
+        Prim::IntSub => 3,
+        Prim::IntMul => 4,
+        Prim::IntNeg => 5,
+        Prim::IntLe => 6,
+        Prim::IntDiv => 7,
+        Prim::IntRem => 8,
+        Prim::View(_) => 9,
+        Prim::Wrap(_) => 10,
+        Prim::Cast(..) => 11,
+        Prim::Op(..) => 12,
+        Prim::Cmp(..) => 13,
     }
 }
 

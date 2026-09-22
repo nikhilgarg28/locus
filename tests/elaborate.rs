@@ -45,7 +45,7 @@ fn rejected(text: &str) -> (Vec<&'static str>, String) {
 fn call(result: &Elaborated, name: &str, arguments: &[u8]) -> String {
     let module = result.session.erased();
     let function = result.function(name).expect("the function exists");
-    let values = arguments.iter().copied().map(Value::U8).collect();
+    let values = arguments.iter().copied().map(Value::u8).collect();
     Interpreter::new(module, FUEL)
         .call(function, values)
         .expect("the call returns")
@@ -112,16 +112,19 @@ fn the_lock_runs_as_written() {
     assert_eq!(
         found,
         [
-            // step: `prove!(lock.failures < 3)` is the branch taken, reflected.
-            (31, 63, "computed", 12),
+            // step: `prove!(lock.failures < 3)` is the branch taken, reflected
+            // through `cmp_reflect`, whose comparison names its type.
+            (31, 63, "computed", 14),
             // step: `bounded` serves for `within_limit((Lock { .. }).failures)`.
             (34, 65, "computed", 37),
-            // step: `prove!(0 <= 3)`.
-            (28, 80, "evaluation", 12),
-            // run: the range `0..attempts`.
-            (49, 20, "u8_zero_le", 3),
-            // run: `prove!(0 <= 3)` for the initial state.
-            (51, 69, "evaluation", 12),
+            // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
+            // it stands.
+            (28, 80, "evaluation", 11),
+            // run: the range `0..attempts`, by the lemma at `attempts`, whose
+            // size is measured now rather than assumed.
+            (49, 20, "u8_zero_le", 6),
+            // run: `prove!(0u8 <= 3)` for the initial state.
+            (51, 69, "evaluation", 11),
         ]
     );
 }
@@ -135,9 +138,9 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
         "pub struct Lock {",
         "pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {",
         "    match event {",
-        "            if lock.failures < 3 {",
-        "                (Lock { failures: lock.failures.wrapping_add(1), open: false }, Proved)",
-        "    for attempt in 0..attempts {",
+        "            if lock.failures < 3_u8 {",
+        "                (Lock { failures: lock.failures.wrapping_add(1_u8), open: false }, Proved)",
+        "    for attempt in 0_u8..attempts {",
         "        let (next, still_bounded) = step(lock, bounded, event_at(attempt, correct));",
         "    (3_u8.wrapping_sub(failures), Proved)",
         "    let (last, bounded) = run(attempts, correct);",
@@ -229,7 +232,7 @@ const INCREMENT: &str = "fn increment(n: u8) -> (out: u8, @(out == n.wrapping_ad
 fn introducing_a_local_needs_no_proof_repair() {
     let result = accepted(
         "fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
-            let one = 1;
+            let one: u8 = 1;
             let sum = n.wrapping_add(one);
             let out = sum;
             (out, _)
@@ -297,7 +300,7 @@ fn a_dependent_pattern_opens_over_its_own_names() {
     let value = Interpreter::new(module, FUEL)
         .call(
             result.function("use_it").unwrap(),
-            vec![Value::U8(9), Value::Proved],
+            vec![Value::u8(9), Value::Proved],
         )
         .unwrap();
     assert_eq!(value.debug(module), "(10, Proved)");
@@ -346,7 +349,7 @@ fn extracting_a_helper_needs_no_proof_repair() {
         }
         fn record(failures: u8, bounded: @within_limit(failures), wrong: u8) -> (next: u8, @within_limit(next)) {
             if wrong == 0 {
-                (0, fold!(within_limit, prove!(0 <= 3)))
+                (0, fold!(within_limit, prove!(0u8 <= 3)))
             } else {
                 let (next, still) = bump(failures, bounded);
                 (next, still)
@@ -358,7 +361,7 @@ fn extracting_a_helper_needs_no_proof_repair() {
     let value = Interpreter::new(module, FUEL)
         .call(
             result.function("record").unwrap(),
-            vec![Value::U8(3), Value::Proved, Value::U8(1)],
+            vec![Value::u8(3), Value::Proved, Value::u8(1)],
         )
         .unwrap();
     assert_eq!(value.debug(module), "(3, Proved)");
@@ -552,13 +555,13 @@ fn matching_on_evidence_gives_each_arm_its_index_equations() {
         }
         math fn small_prime_is_small(n: u8, h: @SmallPrime(n)) -> @(n <= 8) {
             match h {
-                SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2 <= 8)),
-                SmallPrime::Three => rewrite!(u8_eq_symm(n, 3, prove!(n == 3)), prove!(3 <= 8)),
-                SmallPrime::Five => rewrite!(u8_eq_symm(n, 5, prove!(n == 5)), prove!(5 <= 8)),
-                SmallPrime::Seven => rewrite!(u8_eq_symm(n, 7, prove!(n == 7)), prove!(7 <= 8)),
+                SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 8)),
+                SmallPrime::Three => rewrite!(u8_eq_symm(n, 3, prove!(n == 3)), prove!(3u8 <= 8)),
+                SmallPrime::Five => rewrite!(u8_eq_symm(n, 5, prove!(n == 5)), prove!(5u8 <= 8)),
+                SmallPrime::Seven => rewrite!(u8_eq_symm(n, 7, prove!(n == 7)), prove!(7u8 <= 8)),
             }
         }
-        math fn seven_is(h: @SmallPrime(7)) -> @(7 <= 8) { small_prime_is_small(7, h) }
+        math fn seven_is(h: @SmallPrime(7)) -> @(7u8 <= 8) { small_prime_is_small(7, h) }
         math fn five() -> @SmallPrime(5) { SmallPrime::Five }",
     );
     // The equations are what make the arms provable: each is a fact the
@@ -573,7 +576,7 @@ fn matching_on_evidence_gives_each_arm_its_index_equations() {
     assert_eq!(codes, ["L0230"]);
     assert!(full.contains("cannot show `n <= 6`"), "{full}");
     assert!(
-        full.contains("this is `rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2 <= 6))`"),
+        full.contains("this is `rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 6))`"),
         "{full}"
     );
 }
@@ -726,7 +729,7 @@ fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
     let bumped = Interpreter::new(module, FUEL)
         .call(
             result.function("bump").unwrap(),
-            vec![Value::U8(9), Value::Proved],
+            vec![Value::u8(9), Value::Proved],
         )
         .unwrap();
     assert_eq!(bumped.debug(module), "(10, Proved)");
@@ -740,7 +743,7 @@ fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
     let rust = print_module(result.session.erased());
     assert!(
         rust.contains(
-            "    let fits = Proved;\n    let out = n.wrapping_add(1);\n    let h = Proved;\n    (out, h)"
+            "    let fits = Proved;\n    let out = n.wrapping_add(1_u8);\n    let h = Proved;\n    (out, h)"
         ),
         "{rust}"
     );

@@ -589,9 +589,9 @@ impl<'a> Oracle<'a> {
     /// one of them.
     fn ordering(&mut self, id: FnId, arguments: &[Term]) -> Option<Option<bool>> {
         let prelude = self.prelude;
-        let strict = if id == prelude.nat_le || id == prelude.u8_le {
+        let strict = if id == prelude.nat_le {
             false
-        } else if id == prelude.nat_lt || id == prelude.u8_lt {
+        } else if id == prelude.nat_lt {
             true
         } else {
             return None;
@@ -767,17 +767,6 @@ impl<'a> Oracle<'a> {
 /// The primitives, written from their documentation in `Prim`.
 fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
     Some(match (prim, arguments) {
-        (Prim::WrappingAdd, [Value::U8(a), Value::U8(b)]) => {
-            Value::U8(((u16::from(*a) + u16::from(*b)) % 256) as u8)
-        }
-        (Prim::WrappingSub, [Value::U8(a), Value::U8(b)]) => {
-            Value::U8(((256 + u16::from(*a) - u16::from(*b)) % 256) as u8)
-        }
-        (Prim::U8Eq, [Value::U8(a), Value::U8(b)]) => Value::Bool(a == b),
-        (Prim::U8Lt, [Value::U8(a), Value::U8(b)]) => Value::Bool(a < b),
-        (Prim::U8Le, [Value::U8(a), Value::U8(b)]) => Value::Bool(a <= b),
-        (Prim::ToNat, [Value::U8(a)]) => Value::Nat(u64::from(*a)),
-        (Prim::OfNat, [Value::Nat(n)]) => Value::U8((n % 256) as u8),
         (Prim::Succ, [Value::Nat(n)]) => Value::Nat(n.checked_add(1)?),
         (Prim::NatAdd, [Value::Nat(a), Value::Nat(b)]) => Value::Nat(a.checked_add(*b)?),
         (Prim::IntAdd, [Value::Int(a), Value::Int(b)]) => Value::Int(a.checked_add(*b)?),
@@ -1306,18 +1295,13 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
         }
         Term::Prim(prim, arguments) => {
             let sibling = match prim {
-                Prim::U8Le => Some(Prim::U8Lt),
-                Prim::U8Lt => Some(Prim::U8Le),
-                Prim::U8Eq => Some(Prim::U8Lt),
-                Prim::WrappingAdd => Some(Prim::WrappingSub),
-                Prim::WrappingSub => Some(Prim::WrappingAdd),
                 Prim::IntAdd => Some(Prim::IntSub),
                 Prim::IntSub => Some(Prim::IntAdd),
                 Prim::IntMul => Some(Prim::IntAdd),
                 Prim::IntDiv => Some(Prim::IntRem),
                 Prim::IntRem => Some(Prim::IntDiv),
                 // `<` is not a primitive of its own; it is handled below.
-                Prim::NatAdd | Prim::Succ | Prim::ToNat | Prim::OfNat | Prim::IntNeg => None,
+                Prim::NatAdd | Prim::Succ | Prim::IntNeg => None,
                 Prim::IntLe => None,
                 // The machine primitives have several siblings each, below.
                 Prim::View(_) | Prim::Wrap(_) | Prim::Cast(..) => None,
@@ -1381,10 +1365,7 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
         }
         Term::Call(callee, arguments) => {
             if let Term::Fn(id) = &**callee {
-                let pairs = [
-                    (prelude.u8_le, prelude.u8_lt),
-                    (prelude.nat_le, prelude.nat_lt),
-                ];
+                let pairs = [(prelude.nat_le, prelude.nat_lt)];
                 for (le, lt) in pairs {
                     if *id == le {
                         out.push(Term::call(Term::Fn(lt), arguments.clone()));
@@ -1633,13 +1614,6 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
         Axiom::NatAddSucc(..) => Axiom::NatAddSucc(take(), take()),
         Axiom::NatSuccInjective(..) => Axiom::NatSuccInjective(take(), take()),
         Axiom::NatSuccNotZero(_) => Axiom::NatSuccNotZero(take()),
-        Axiom::ToNatBound(_) => Axiom::ToNatBound(take()),
-        Axiom::OfToNat(_) => Axiom::OfToNat(take()),
-        Axiom::ToOfNat(_) => Axiom::ToOfNat(take()),
-        Axiom::OfNatWrap(_) => Axiom::OfNatWrap(take()),
-        Axiom::WrappingAddModel(..) => Axiom::WrappingAddModel(take(), take()),
-        Axiom::WrappingSubModel(..) => Axiom::WrappingSubModel(take(), take()),
-        Axiom::Reflect(_, flag) => Axiom::Reflect(take(), *flag),
         Axiom::CmpReflect(_, flag) => Axiom::CmpReflect(take(), *flag),
         Axiom::IntAddAssoc(..) => Axiom::IntAddAssoc(take(), take(), take()),
         Axiom::IntAddComm(..) => Axiom::IntAddComm(take(), take()),
@@ -1686,13 +1660,6 @@ fn machine_types(axiom: &Axiom) -> Vec<MachineInt> {
         | Axiom::NatAddSucc(..)
         | Axiom::NatSuccInjective(..)
         | Axiom::NatSuccNotZero(_)
-        | Axiom::ToNatBound(_)
-        | Axiom::OfToNat(_)
-        | Axiom::ToOfNat(_)
-        | Axiom::OfNatWrap(_)
-        | Axiom::WrappingAddModel(..)
-        | Axiom::WrappingSubModel(..)
-        | Axiom::Reflect(..)
         | Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
@@ -1745,13 +1712,6 @@ fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
         | Axiom::NatAddSucc(..)
         | Axiom::NatSuccInjective(..)
         | Axiom::NatSuccNotZero(_)
-        | Axiom::ToNatBound(_)
-        | Axiom::OfToNat(_)
-        | Axiom::ToOfNat(_)
-        | Axiom::OfNatWrap(_)
-        | Axiom::WrappingAddModel(..)
-        | Axiom::WrappingSubModel(..)
-        | Axiom::Reflect(..)
         | Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
@@ -1791,14 +1751,6 @@ fn every_axiom_at(t: &Term) -> Vec<Axiom> {
         Axiom::NatAddSucc(t(), t()),
         Axiom::NatSuccInjective(t(), t()),
         Axiom::NatSuccNotZero(t()),
-        Axiom::ToNatBound(t()),
-        Axiom::OfToNat(t()),
-        Axiom::ToOfNat(t()),
-        Axiom::OfNatWrap(t()),
-        Axiom::WrappingAddModel(t(), t()),
-        Axiom::WrappingSubModel(t(), t()),
-        Axiom::Reflect(t(), true),
-        Axiom::Reflect(t(), false),
         Axiom::CmpReflect(t(), true),
         Axiom::CmpReflect(t(), false),
         Axiom::IntAddAssoc(t(), t(), t()),
@@ -2206,8 +2158,7 @@ impl<'a> Material<'a> {
         let mut terms: Vec<Term> = axiom.terms().into_iter().cloned().collect();
         let arity = terms.len();
         let own_types = machine_types(axiom);
-        let has_extra =
-            matches!(axiom, Axiom::Reflect(..) | Axiom::CmpReflect(..)) || !own_types.is_empty();
+        let has_extra = matches!(axiom, Axiom::CmpReflect(..)) || !own_types.is_empty();
         let choice = rng.below(if has_extra { 4 } else { 3 });
         match choice {
             // One term perturbed, or replaced by any other.
@@ -2255,7 +2206,6 @@ impl<'a> Material<'a> {
                 }
             }
             _ => match axiom {
-                Axiom::Reflect(comparison, flag) => Axiom::Reflect(comparison.clone(), !flag),
                 Axiom::CmpReflect(comparison, flag) => Axiom::CmpReflect(comparison.clone(), !flag),
                 // An axiom about the table, half the time at the sibling
                 // operation instead: a row that does not exist, a row with
@@ -2773,7 +2723,13 @@ fn world() -> World {
                 [] => Type::U8,
                 _ => Type::U8,
             }),
-            |params| Term::wrapping_add(params[0].clone(), params[0].clone()),
+            |params| {
+                Term::op(
+                    Op::WrappingAdd,
+                    MachineInt::U8,
+                    vec![params[0].clone(), params[0].clone()],
+                )
+            },
         )
         .expect("double is declared");
     let within = definitions
@@ -2782,7 +2738,12 @@ fn world() -> World {
                 [] => Type::U8,
                 _ => Type::Prop,
             }),
-            |params| prelude.u8_le_prop(params[0].clone(), Term::U8(3)),
+            |params| {
+                Term::int_le(
+                    Term::view(MachineInt::U8, params[0].clone()),
+                    Term::view(MachineInt::U8, Term::U8(3)),
+                )
+            },
         )
         .expect("within is declared");
     let int_double = definitions
@@ -2872,7 +2833,12 @@ fn hand_built(world: &World) -> Vec<Triple> {
             proof,
         });
     };
-    let le = |left: &Term, right: u8| prelude.u8_le_prop(left.clone(), Term::U8(right));
+    let le = |left: &Term, right: u8| {
+        Term::int_le(
+            Term::view(MachineInt::U8, left.clone()),
+            Term::view(MachineInt::U8, Term::U8(right)),
+        )
+    };
 
     // Propositional structure.
     {
@@ -2966,9 +2932,23 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let mut scene = Scene::new(&world.definitions);
         let x = scene.declare(Type::U8);
         let h = scene.assume(Term::forall(Type::U8, |n| {
-            u8_eq(Term::wrapping_add(n.clone(), Term::U8(0)), n)
+            u8_eq(
+                Term::op(
+                    Op::WrappingAdd,
+                    MachineInt::U8,
+                    vec![n.clone(), Term::U8(0)],
+                ),
+                n,
+            )
         }));
-        let claim = u8_eq(Term::wrapping_add(x.clone(), Term::U8(0)), x.clone());
+        let claim = u8_eq(
+            Term::op(
+                Op::WrappingAdd,
+                MachineInt::U8,
+                vec![x.clone(), Term::U8(0)],
+            ),
+            x.clone(),
+        );
         add(
             "forall_elim",
             scene,
@@ -3003,7 +2983,12 @@ fn hand_built(world: &World) -> Vec<Triple> {
                 arms: vec![Proof::arm(2, 0, |payload, _| {
                     Proof::transport(
                         Proof::OfTerm(payload[0].clone()),
-                        |hole| prelude.u8_le_prop(hole, Term::U8(3)),
+                        |hole| {
+                            Term::int_le(
+                                Term::view(MachineInt::U8, hole),
+                                Term::view(MachineInt::U8, Term::U8(3)),
+                            )
+                        },
                         Proof::OfTerm(payload[1].clone()),
                     )
                 })],
@@ -3020,7 +3005,12 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let bound = scene.assume(le(&x, 3));
         let proof = Proof::transport(
             Proof::hyp(eq),
-            |hole| prelude.u8_le_prop(hole, Term::U8(3)),
+            |hole| {
+                Term::int_le(
+                    Term::view(MachineInt::U8, hole),
+                    Term::view(MachineInt::U8, Term::U8(3)),
+                )
+            },
             Proof::hyp(bound),
         );
         add("transport", scene, le(&y, 3), proof);
@@ -3132,112 +3122,6 @@ fn hand_built(world: &World) -> Vec<Triple> {
         );
     }
 
-    // The u8 model.
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let x = scene.declare(Type::U8);
-        let claim = prelude.nat_lt_prop(Term::to_nat(x.clone()), Term::nat(256));
-        add(
-            "to_nat_bound",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::ToNatBound(x)),
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let x = scene.declare(Type::U8);
-        let claim = u8_eq(Term::of_nat(Term::to_nat(x.clone())), x.clone());
-        add("of_to_nat", scene, claim, Proof::Axiom(Axiom::OfToNat(x)));
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let n = scene.declare(Type::Nat);
-        let h = scene.assume(prelude.nat_lt_prop(n.clone(), Term::nat(256)));
-        let claim = nat_eq(Term::to_nat(Term::of_nat(n.clone())), n.clone());
-        let proof = Proof::implies_elim(Proof::Axiom(Axiom::ToOfNat(n)), Proof::hyp(h));
-        add("to_of_nat", scene, claim, proof);
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let n = scene.declare(Type::Nat);
-        let claim = u8_eq(
-            Term::of_nat(Term::nat_add(n.clone(), Term::nat(256))),
-            Term::of_nat(n.clone()),
-        );
-        add(
-            "of_nat_wrap",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::OfNatWrap(n)),
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let (a, b) = (scene.declare(Type::U8), scene.declare(Type::U8));
-        let claim = u8_eq(
-            Term::wrapping_add(a.clone(), b.clone()),
-            Term::of_nat(Term::nat_add(
-                Term::to_nat(a.clone()),
-                Term::to_nat(b.clone()),
-            )),
-        );
-        add(
-            "wrapping_add_model",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::WrappingAddModel(a, b)),
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let (a, b) = (scene.declare(Type::U8), scene.declare(Type::U8));
-        let claim = u8_eq(
-            Term::wrapping_add(Term::wrapping_sub(a.clone(), b.clone()), b.clone()),
-            a.clone(),
-        );
-        add(
-            "wrapping_sub_model",
-            scene,
-            claim,
-            Proof::Axiom(Axiom::WrappingSubModel(a, b)),
-        );
-    }
-
-    // Reflection of runtime comparisons.
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let x = scene.declare(Type::U8);
-        let comparison = Term::prim(Prim::U8Lt, vec![x.clone(), Term::U8(3)]);
-        let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(true)));
-        let proof = Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison, true)),
-            Proof::hyp(h),
-        );
-        add(
-            "reflect_true",
-            scene,
-            prelude.u8_lt_prop(x, Term::U8(3)),
-            proof,
-        );
-    }
-    {
-        let mut scene = Scene::new(&world.definitions);
-        let x = scene.declare(Type::U8);
-        let comparison = Term::prim(Prim::U8Eq, vec![x.clone(), Term::U8(0)]);
-        let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(false)));
-        let proof = Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison, false)),
-            Proof::hyp(h),
-        );
-        add(
-            "reflect_false",
-            scene,
-            prelude.not_prop(u8_eq(x, Term::U8(0))),
-            proof,
-        );
-    }
-
     // Reflection of runtime comparisons at a machine type: each comparison
     // at two types, in both directions, with the claim written from the
     // test's own reading of the order of the views.
@@ -3302,7 +3186,11 @@ fn hand_built(world: &World) -> Vec<Triple> {
     // Evaluation.
     {
         let scene = Scene::new(&world.definitions);
-        let sum = Term::wrapping_add(Term::U8(250), Term::U8(10));
+        let sum = Term::op(
+            Op::WrappingAdd,
+            MachineInt::U8,
+            vec![Term::U8(250), Term::U8(10)],
+        );
         let claim = u8_eq(sum.clone(), Term::U8(4));
         add("literal", scene, claim, Proof::Literal(sum));
     }
@@ -3310,7 +3198,11 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let scene = Scene::new(&world.definitions);
         let term = Term::call(
             Term::Fn(world.double),
-            vec![Term::wrapping_add(Term::U8(100), Term::U8(50))],
+            vec![Term::op(
+                Op::WrappingAdd,
+                MachineInt::U8,
+                vec![Term::U8(100), Term::U8(50)],
+            )],
         );
         let claim = u8_eq(term.clone(), Term::U8(44));
         add("evaluate", scene, claim, Proof::Evaluate(term));
@@ -3318,9 +3210,11 @@ fn hand_built(world: &World) -> Vec<Triple> {
     {
         let scene = Scene::new(&world.definitions);
         let body = |x: Term| {
-            Term::prim(
-                Prim::U8Le,
-                vec![Term::wrapping_sub(x.clone(), x), Term::U8(0)],
+            Term::cmp(
+                CmpOp::Le,
+                MachineInt::U8,
+                Term::op(Op::WrappingSub, MachineInt::U8, vec![x.clone(), x]),
+                Term::U8(0),
             )
         };
         let claim = Term::forall(Type::U8, |x| {
@@ -3332,7 +3226,7 @@ fn hand_built(world: &World) -> Vec<Triple> {
     {
         // Perturbed to `x <= 254`, this fails at the last byte alone.
         let scene = Scene::new(&world.definitions);
-        let body = |x: Term| Term::prim(Prim::U8Le, vec![x, Term::U8(255)]);
+        let body = |x: Term| Term::cmp(CmpOp::Le, MachineInt::U8, x, Term::U8(255));
         let claim = Term::forall(Type::U8, |x| {
             Term::eq(Type::Bool, body(x), Term::Bool(true))
         });
@@ -3344,7 +3238,10 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let mut scene = Scene::new(&world.definitions);
         let x = scene.declare(Type::U8);
         let call = Term::call(Term::Fn(world.double), vec![x.clone()]);
-        let claim = u8_eq(call.clone(), Term::wrapping_add(x.clone(), x));
+        let claim = u8_eq(
+            call.clone(),
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![x.clone(), x]),
+        );
         add("definition", scene, claim, Proof::Definition(call));
     }
     {
@@ -3370,10 +3267,16 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let a = scene.declare(Type::U8);
         let b = scene.declare(Type::U8);
         let c = scene.declare(Type::U8);
-        let ab = scene.assume(prelude.u8_le_prop(a.clone(), b.clone()));
-        let bc = scene.assume(prelude.u8_le_prop(b.clone(), c.clone()));
+        let ab = scene.assume(Term::int_le(
+            Term::view(MachineInt::U8, a.clone()),
+            Term::view(MachineInt::U8, b.clone()),
+        ));
+        let bc = scene.assume(Term::int_le(
+            Term::view(MachineInt::U8, b.clone()),
+            Term::view(MachineInt::U8, c.clone()),
+        ));
         let proof = lemma(
-            world.theory.u8_le_trans,
+            world.theory.machine(MachineInt::U8).le_trans,
             vec![
                 a.clone(),
                 b,
@@ -3382,7 +3285,12 @@ fn hand_built(world: &World) -> Vec<Triple> {
                 Term::proof(Proof::hyp(bc)),
             ],
         );
-        add("lemma_call", scene, prelude.u8_le_prop(a, c), proof);
+        add(
+            "lemma_call",
+            scene,
+            Term::int_le(Term::view(MachineInt::U8, a), Term::view(MachineInt::U8, c)),
+            proof,
+        );
     }
     {
         // A `for` over an empty range is its initial state.
@@ -3393,7 +3301,7 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let looped = Term::for_range(
             x.clone(),
             x.clone(),
-            lemma(world.theory.u8_le_refl, vec![x]),
+            lemma(world.theory.machine(MachineInt::U8).le_refl, vec![x]),
             |_| state.clone(),
             init.clone(),
             |_, s, _, _| s,
@@ -4086,7 +3994,7 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let scene = Scene::new(&world.definitions);
         let (a, b) = (Term::U8(200), Term::U8(100));
         let row = op(Op::WrappingAdd, U8, vec![a.clone(), b.clone()]);
-        let model = Term::wrapping_add(a, b);
+        let model = Term::op(Op::WrappingAdd, MachineInt::U8, vec![a, b]);
         let proof = Chain::new(Type::U8, row.clone())
             .step(Proof::Evaluate(row.clone()))
             .step_rev(&model, Proof::Evaluate(model.clone()))
@@ -4466,21 +4374,12 @@ fn theory_triples(world: &World) -> Vec<Triple> {
         ("nat_le_refl", theory.nat_le_refl),
         ("nat_zero_le", theory.nat_zero_le),
         ("nat_le_trans", theory.nat_le_trans),
-        ("u8_le_refl", theory.u8_le_refl),
-        ("u8_zero_le", theory.u8_zero_le),
-        ("u8_le_trans", theory.u8_le_trans),
         ("nat_succ_add", theory.nat_succ_add),
         ("nat_zero_or_succ", theory.nat_zero_or_succ),
         ("nat_le_succ_succ", theory.nat_le_succ_succ),
-        ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
-        ("u8_succ_le_of_lt", theory.u8_succ_le_of_lt),
         ("nat_add_comm", theory.nat_add_comm),
         ("nat_add_cancel_left", theory.nat_add_cancel_left),
         ("nat_lt_or_le", theory.nat_lt_or_le),
-        ("u8_sub_model", theory.u8_sub_model),
-        ("u8_sub_le", theory.u8_sub_le),
-        ("u8_sub_le_sub", theory.u8_sub_le_sub),
-        ("u8_eq_symm", theory.u8_eq_symm),
     ];
     let mut triples = Vec::new();
     // The lemmas about `Int` and about the machine types come from the
@@ -4523,18 +4422,21 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
         }
         let sub = |rng: &mut Rng| byte(rng, world, depth - 1);
         match rng.below(6) {
-            0 => Term::wrapping_add(sub(rng), sub(rng)),
-            1 => Term::wrapping_sub(sub(rng), sub(rng)),
+            0 => Term::op(Op::WrappingAdd, MachineInt::U8, vec![sub(rng), sub(rng)]),
+            1 => Term::op(Op::WrappingSub, MachineInt::U8, vec![sub(rng), sub(rng)]),
             2 => Term::call(Term::Fn(world.double), vec![sub(rng)]),
-            3 => Term::of_nat(Term::nat_add(
-                Term::to_nat(sub(rng)),
-                Term::succ(Term::to_nat(sub(rng))),
-            )),
+            3 => Term::wrap(
+                MachineInt::U8,
+                Term::int_add(
+                    Term::view(MachineInt::U8, sub(rng)),
+                    Term::int_add(Term::view(MachineInt::U8, sub(rng)), Term::int(1)),
+                ),
+            ),
             4 => {
                 let (no, yes) = (sub(rng), sub(rng));
-                let prim = *rng.pick(&[Prim::U8Eq, Prim::U8Lt, Prim::U8Le]).unwrap();
+                let op = *rng.pick(&CmpOp::ALL).unwrap();
                 Term::case(
-                    Term::prim(prim, vec![sub(rng), sub(rng)]),
+                    Term::cmp(op, MachineInt::U8, sub(rng), sub(rng)),
                     Type::U8,
                     vec![
                         (0, Box::new(move |_, _| no)),
@@ -4589,7 +4491,12 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
             _ => {
                 let (no, yes) = (sub(rng), sub(rng));
                 Term::case(
-                    Term::prim(Prim::U8Lt, vec![byte(rng, world, 1), byte(rng, world, 1)]),
+                    Term::cmp(
+                        CmpOp::Lt,
+                        MachineInt::U8,
+                        byte(rng, world, 1),
+                        byte(rng, world, 1),
+                    ),
                     Type::Int,
                     vec![
                         (0, Box::new(move |_, _| no)),
@@ -4745,10 +4652,10 @@ fn the_oracle_reduces_into_a_range_as_the_kernel_table_does() {
     assert!(compared > 8 * 40, "{compared}");
 }
 
-/// The oracle reads the prelude's orderings by what they mean. The kernel
-/// defines them through `Nat` and relates them to the runtime comparisons
-/// by reflection. For every pair of bytes tried, what the oracle says is
-/// what the kernel proves, and the kernel does not prove the opposite.
+/// The oracle reads the order of the views by what it means. The kernel
+/// relates it to the runtime comparisons by reflection. For every pair of
+/// bytes tried, what the oracle says is what the kernel proves, and the
+/// kernel does not prove the opposite.
 #[test]
 fn the_oracle_reads_the_orderings_as_the_kernel_does() {
     let world = world();
@@ -4761,23 +4668,29 @@ fn the_oracle_reads_the_orderings_as_the_kernel_does() {
             let (a, b) = (Term::U8(left), Term::U8(right));
             let orderings = [
                 (
-                    Prim::U8Le,
-                    prelude.u8_le_prop(a.clone(), b.clone()),
+                    CmpOp::Le,
+                    Term::int_le(
+                        Term::view(MachineInt::U8, a.clone()),
+                        Term::view(MachineInt::U8, b.clone()),
+                    ),
                     left <= right,
                 ),
                 (
-                    Prim::U8Lt,
-                    prelude.u8_lt_prop(a.clone(), b.clone()),
+                    CmpOp::Lt,
+                    Term::int_lt(
+                        Term::view(MachineInt::U8, a.clone()),
+                        Term::view(MachineInt::U8, b.clone()),
+                    ),
                     left < right,
                 ),
             ];
-            for (prim, claim, holds) in orderings {
+            for (op, claim, holds) in orderings {
                 let mut oracle = Oracle::new(&scene);
                 assert_eq!(oracle.prop(&claim), Some(holds), "{claim}");
-                let comparison = Term::prim(prim, vec![a.clone(), b.clone()]);
+                let comparison = Term::cmp(op, MachineInt::U8, a.clone(), b.clone());
                 let by_reflection = |flag: bool| {
                     Proof::implies_elim(
-                        Proof::Axiom(Axiom::Reflect(comparison.clone(), flag)),
+                        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), flag)),
                         Proof::Evaluate(comparison.clone()),
                     )
                 };
@@ -4831,10 +4744,18 @@ fn the_oracle_decides_what_it_should_and_no_more() {
     let prelude = &world.prelude;
     let mut scene = Scene::new(&world.definitions);
     let x = scene.declare(Type::U8);
-    scene.assume(prelude.u8_le_prop(x.clone(), Term::U8(3)));
+    scene.assume(Term::int_le(
+        Term::view(MachineInt::U8, x.clone()),
+        Term::view(MachineInt::U8, Term::U8(3)),
+    ));
     let found = witnesses(&scene, &prelude.truth_prop(), &mut Rng(SEED));
     assert!(!found.is_empty());
-    let le = |bound: u8| prelude.u8_le_prop(x.clone(), Term::U8(bound));
+    let le = |bound: u8| {
+        Term::int_le(
+            Term::view(MachineInt::U8, x.clone()),
+            Term::view(MachineInt::U8, Term::U8(bound)),
+        )
+    };
     // True of every witness: never refuted.
     for claim in [le(3), le(4), le(255), prelude.truth_prop()] {
         assert!(refute(&scene, &claim, &found).is_none(), "{claim}");
@@ -4942,7 +4863,10 @@ fn the_oracle_decides_what_it_should_and_no_more() {
     assert!(refute(&scene, &round, &found).is_none());
     assert!(refute(&scene, &prelude.not_prop(round), &found).is_none());
     // An inconsistent context has no witness, so nothing is false in it.
-    scene.assume(prelude.u8_lt_prop(Term::U8(9), x));
+    scene.assume(Term::int_lt(
+        Term::view(MachineInt::U8, Term::U8(9)),
+        Term::view(MachineInt::U8, x),
+    ));
     assert!(witnesses(&scene, &prelude.falsehood_prop(), &mut Rng(SEED)).is_empty());
 }
 

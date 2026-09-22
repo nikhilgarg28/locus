@@ -61,6 +61,11 @@ impl MachineInt {
         }
     }
 
+    /// The type of this name, `u8` to `i64`, if there is one.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|ty| ty.name() == name)
+    }
+
     /// `2^bits`, the number of values of the type and the period of `wrap`.
     pub fn modulus(self) -> Integer {
         Integer::from(1u128 << self.bits())

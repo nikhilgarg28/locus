@@ -7,8 +7,8 @@ use std::rc::Rc;
 use locus::kernel::derive::trans;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Context, Definitions, KernelError, Prelude, Prim, Proof, Term, Type, check_proof,
-    infer_proof,
+    Axiom, CmpOp, Context, Definitions, KernelError, MachineInt, Op, Prelude, Proof, Term, Type,
+    check_proof, infer_proof,
 };
 
 fn setup() -> (Definitions, Prelude, Theory) {
@@ -22,7 +22,7 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
 }
 
 fn lemma(id: locus::kernel::FnId, arguments: Vec<Term>) -> Proof {
@@ -38,13 +38,20 @@ fn sum_below(theory: &Theory, n: Term) -> Term {
     Term::for_range(
         Term::U8(0),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n],
+        ),
         sum_state,
         Term::tuple(&sum_state(Term::U8(0)), vec![Term::U8(0)]),
         |i, s, _, _| {
             Term::tuple(
                 &sum_state(Term::U8(0)),
-                vec![Term::wrapping_add(Term::proj(s, 0), i)],
+                vec![Term::op(
+                    Op::WrappingAdd,
+                    MachineInt::U8,
+                    vec![Term::proj(s, 0), i],
+                )],
             )
         },
     )
@@ -64,7 +71,10 @@ fn count_up(theory: &Theory, n: Term) -> Term {
     Term::for_range(
         zero.clone(),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n],
+        ),
         counting_state,
         Term::tuple(
             &counting_state(zero.clone()),
@@ -128,7 +138,7 @@ fn a_closed_term_evaluates_in_one_step() {
     // A case and a product.
     let pair_type = Type::Tuple(vec![Type::U8, Type::Bool]);
     let chosen = Term::case(
-        Term::prim(Prim::U8Lt, vec![Term::U8(3), Term::U8(4)]),
+        Term::cmp(CmpOp::Lt, MachineInt::U8, Term::U8(3), Term::U8(4)),
         pair_type.clone(),
         vec![
             (
@@ -199,7 +209,10 @@ fn the_evaluator_has_a_step_budget_not_a_time_limit() {
         Term::for_range(
             Term::U8(0),
             Term::U8(200),
-            lemma(theory.u8_zero_le, vec![Term::U8(200)]),
+            lemma(
+                theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                vec![Term::U8(200)],
+            ),
             sum_state,
             Term::tuple(&sum_state(Term::U8(0)), vec![Term::U8(0)]),
             move |_, _, _, _| inner.clone(),
@@ -215,9 +228,9 @@ fn the_evaluator_has_a_step_budget_not_a_time_limit() {
 
 #[test]
 fn a_claim_about_every_byte_is_proved_by_256_evaluations() {
-    let (definitions, prelude, _) = setup();
+    let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
-    let top = |x: Term| Term::prim(Prim::U8Le, vec![x, Term::U8(255)]);
+    let top = |x: Term| Term::cmp(CmpOp::Le, MachineInt::U8, x, Term::U8(255));
 
     let all = Proof::evaluate_all(top);
     let statement = Term::forall(Type::U8, |x| Term::eq(Type::Bool, top(x), Term::Bool(true)));
@@ -226,16 +239,23 @@ fn a_claim_about_every_byte_is_proved_by_256_evaluations() {
     // With reflection this is a fact about the ordering of any byte.
     let n = Term::var(ctx.declare(Type::U8).unwrap());
     let at_n = Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(top(n.clone()), true)),
+        Proof::Axiom(Axiom::CmpReflect(top(n.clone()), true)),
         Proof::forall_elim(all, n.clone()),
     );
     assert_eq!(
-        check_proof(&mut ctx, &at_n, &prelude.u8_le_prop(n, Term::U8(255))),
+        check_proof(
+            &mut ctx,
+            &at_n,
+            &Term::int_le(
+                Term::view(MachineInt::U8, n),
+                Term::view(MachineInt::U8, Term::U8(255))
+            )
+        ),
         Ok(())
     );
 
     // A claim with a counterexample is refuted, and says where.
-    let strict = Proof::evaluate_all(|x| Term::prim(Prim::U8Lt, vec![x, Term::U8(255)]));
+    let strict = Proof::evaluate_all(|x| Term::cmp(CmpOp::Lt, MachineInt::U8, x, Term::U8(255)));
     assert_eq!(
         infer_proof(&mut ctx, &strict),
         Err(KernelError::Refuted(Term::U8(255)))
@@ -249,15 +269,21 @@ fn a_claim_about_every_byte_is_proved_by_256_evaluations() {
 
 #[test]
 fn a_loop_unrolls_one_step_at_a_successor_bound() {
-    let (definitions, prelude, theory) = setup();
+    let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
     let h = Term::var(ctx.declare(Type::U8).unwrap());
     let next = add_one(h.clone());
     // h + 1 does not wrap.
     let no_wrap = ctx
-        .assume(prelude.u8_lt_prop(h.clone(), next.clone()))
+        .assume(Term::int_lt(
+            Term::view(MachineInt::U8, h.clone()),
+            Term::view(MachineInt::U8, next.clone()),
+        ))
         .unwrap();
-    let lower = lemma(theory.u8_zero_le, vec![h.clone()]);
+    let lower = lemma(
+        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+        vec![h.clone()],
+    );
 
     // sum_below(h + 1) == (sum_below(h).0 + h,)
     let looped = sum_below(&theory, next.clone());
@@ -269,7 +295,11 @@ fn a_loop_unrolls_one_step_at_a_successor_bound() {
     let previous = sum_below(&theory, h.clone());
     let expected = Term::tuple(
         &sum_state(Term::U8(0)),
-        vec![Term::wrapping_add(Term::proj(previous, 0), h.clone())],
+        vec![Term::op(
+            Op::WrappingAdd,
+            MachineInt::U8,
+            vec![Term::proj(previous, 0), h.clone()],
+        )],
     );
     assert_eq!(
         check_proof(
@@ -318,14 +348,20 @@ fn a_loop_unrolls_one_step_at_a_successor_bound() {
 #[test]
 fn unrolling_and_the_empty_range_compute_a_loop_symbolically() {
     // sum_below(0 + 1) == (0 + 0,): one successor step, then the empty range.
-    let (definitions, prelude, theory) = setup();
+    let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
     let zero = Term::U8(0);
     let one = add_one(zero.clone());
     let no_wrap = ctx
-        .assume(prelude.u8_lt_prop(zero.clone(), one.clone()))
+        .assume(Term::int_lt(
+            Term::view(MachineInt::U8, zero.clone()),
+            Term::view(MachineInt::U8, one.clone()),
+        ))
         .unwrap();
-    let lower = lemma(theory.u8_zero_le, vec![zero.clone()]);
+    let lower = lemma(
+        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+        vec![zero.clone()],
+    );
 
     let looped = sum_below(&theory, one);
     let unroll = Proof::ForStep {
@@ -345,22 +381,28 @@ fn unrolling_and_the_empty_range_compute_a_loop_symbolically() {
                 state.clone(),
                 Term::tuple(
                     &state,
-                    vec![Term::wrapping_add(
-                        Term::proj(empty.clone(), 0),
-                        Term::U8(0),
+                    vec![Term::op(
+                        Op::WrappingAdd,
+                        MachineInt::U8,
+                        vec![Term::proj(empty.clone(), 0), Term::U8(0)],
                     )],
                 ),
                 Term::tuple(
                     &state,
-                    vec![Term::wrapping_add(Term::proj(hole, 0), Term::U8(0))],
+                    vec![Term::op(
+                        Op::WrappingAdd,
+                        MachineInt::U8,
+                        vec![Term::proj(hole, 0), Term::U8(0)],
+                    )],
                 ),
             )
         },
         Proof::Refl(Term::tuple(
             &state,
-            vec![Term::wrapping_add(
-                Term::proj(empty.clone(), 0),
-                Term::U8(0),
+            vec![Term::op(
+                Op::WrappingAdd,
+                MachineInt::U8,
+                vec![Term::proj(empty.clone(), 0), Term::U8(0)],
             )],
         )),
     );
@@ -370,7 +412,11 @@ fn unrolling_and_the_empty_range_compute_a_loop_symbolically() {
         looped,
         Term::tuple(
             &state,
-            vec![Term::wrapping_add(Term::proj(init, 0), Term::U8(0))],
+            vec![Term::op(
+                Op::WrappingAdd,
+                MachineInt::U8,
+                vec![Term::proj(init, 0), Term::U8(0)],
+            )],
         ),
     );
     assert_eq!(check_proof(&mut ctx, &both, &goal), Ok(()));

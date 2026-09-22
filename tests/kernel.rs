@@ -5,8 +5,8 @@
 //! Every term here is written by hand; nothing comes from the parser.
 
 use locus::kernel::{
-    Context, HypId, KernelError, Mode, Proof, Term, Type, VarId, check_proof, infer_proof,
-    infer_term, same,
+    Context, HypId, KernelError, MachineInt, Mode, Op, Proof, Term, Type, VarId, check_proof,
+    infer_proof, infer_term, same,
 };
 
 fn u8_eq(left: Term, right: Term) -> Term {
@@ -14,7 +14,7 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
 }
 
 /// From `eq: a == b`, a proof of `b == a`.
@@ -75,7 +75,11 @@ fn a_ghost_variable_is_rejected_in_an_executable_term() {
     let mut ctx = Context::new();
     let n = ctx.declare(Type::U8).unwrap();
     let k = ctx.declare_ghost(Type::U8).unwrap();
-    let sum = Term::wrapping_add(Term::var(n), Term::var(k));
+    let sum = Term::op(
+        Op::WrappingAdd,
+        MachineInt::U8,
+        vec![Term::var(n), Term::var(k)],
+    );
 
     assert_eq!(
         infer_term(&mut ctx, &sum, Mode::Executable),
@@ -95,7 +99,10 @@ fn ghost_and_executable_variables_mix_freely_inside_a_proposition() {
     let mut ctx = Context::new();
     let n = Term::var(ctx.declare(Type::U8).unwrap());
     let k = Term::var(ctx.declare_ghost(Type::U8).unwrap());
-    let claim = u8_eq(n, Term::wrapping_add(k.clone(), k));
+    let claim = u8_eq(
+        n,
+        Term::op(Op::WrappingAdd, MachineInt::U8, vec![k.clone(), k]),
+    );
     assert_eq!(infer_term(&mut ctx, &claim, Mode::Logical), Ok(Type::Prop));
     assert!(ctx.assume(claim).is_ok());
 }
@@ -434,7 +441,7 @@ fn ill_formed_terms_are_rejected() {
     assert_eq!(
         infer_term(
             &mut ctx,
-            &Term::Prim(locus::kernel::Prim::WrappingAdd, vec![Term::U8(1)]),
+            &Term::op(Op::WrappingAdd, MachineInt::U8, vec![Term::U8(1)]),
             Mode::Logical
         ),
         Err(KernelError::WrongArity {

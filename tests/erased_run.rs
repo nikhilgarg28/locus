@@ -8,7 +8,7 @@ use locus::erased::{
     EArm, EBlock, EExpr, EFn, EPattern, EStmt, EType, Interpreter, Module, Outcome, RunError,
     TypeError, Value, check_module,
 };
-use locus::kernel::{Definitions, FnId, Prim, Proof, Term, Type, VarId};
+use locus::kernel::{Definitions, FnId, MachineInt, Op, Prim, Proof, Term, Type, VarId};
 use locus::typed::{Binder, CompareOp, Expr, FnItem, FnRef};
 
 const FUEL: u64 = 100_000;
@@ -25,7 +25,7 @@ fn lonely_function() -> FnId {
 }
 
 fn with_evidence(byte: u8) -> Outcome {
-    Outcome::Value(Value::Tuple(vec![Value::U8(byte), Value::Proved]))
+    Outcome::Value(Value::Tuple(vec![Value::u8(byte), Value::Proved]))
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn erasure_keeps_the_shape_and_fills_ghost_positions_with_markers() {
     assert_eq!(function.name, "increment");
     assert_eq!(
         function.result,
-        EType::Tuple(vec![EType::U8, EType::Proved])
+        EType::Tuple(vec![EType::Int(MachineInt::U8), EType::Proved])
     );
     assert_eq!(function.params.len(), 1);
     assert_eq!(function.body.stmts.len(), 1);
@@ -53,11 +53,11 @@ fn erasure_keeps_the_shape_and_fills_ghost_positions_with_markers() {
     ));
 
     assert_eq!(
-        run(module, increment, vec![Value::U8(41)]),
+        run(module, increment, vec![Value::u8(41)]),
         Ok(with_evidence(42))
     );
     assert_eq!(
-        run(module, increment, vec![Value::U8(255)]),
+        run(module, increment, vec![Value::u8(255)]),
         Ok(with_evidence(0))
     );
 }
@@ -65,8 +65,8 @@ fn erasure_keeps_the_shape_and_fills_ghost_positions_with_markers() {
 #[test]
 fn the_programs_of_the_specification_run() {
     let (mut session, prelude, theory) = setup();
-    let preserve_fn = session.declare_fn(&preserve(false, true)).unwrap();
-    let preserve_math = session.declare_fn(&preserve(true, true)).unwrap();
+    let preserve_fn = session.declare_fn(&preserve(theory, false, true)).unwrap();
+    let preserve_math = session.declare_fn(&preserve(theory, true, true)).unwrap();
     let walk = session
         .declare_fn(&bounded_walk(prelude, theory, true))
         .unwrap();
@@ -84,7 +84,7 @@ fn the_programs_of_the_specification_run() {
     assert_eq!(check_module(module), Ok(()));
 
     for byte in [0u8, 1, 7, 200, 255] {
-        let argument = vec![Value::U8(byte)];
+        let argument = vec![Value::u8(byte)];
         for callee in [
             preserve_fn,
             preserve_math,
@@ -170,8 +170,8 @@ fn a_panic_ends_the_call_and_everything_around_it() {
     assert_eq!(check_module(&module), Ok(()));
 
     let panicked = Ok(Outcome::Panic("no sum".into()));
-    assert_eq!(run(&module, increment, vec![Value::U8(1)]), panicked);
-    assert_eq!(run(&module, caller_ref, vec![Value::U8(1)]), panicked);
+    assert_eq!(run(&module, increment, vec![Value::u8(1)]), panicked);
+    assert_eq!(run(&module, caller_ref, vec![Value::u8(1)]), panicked);
 }
 
 /// The first parameter of a function, as an expression.
@@ -266,7 +266,7 @@ fn a_function_with_no_runtime_form_is_not_emitted() {
     assert_eq!(names, ["uses_lemma"]);
     // The call to the lemma became its marker.
     assert_eq!(
-        run(module, user_ref, vec![Value::U8(9)]),
+        run(module, user_ref, vec![Value::u8(9)]),
         Ok(with_evidence(9))
     );
 }
@@ -291,7 +291,7 @@ fn the_type_checker_guards_erasure() {
         .is_err()
     );
     // A ghost position dropped instead of filled.
-    assert!(broken(|f| f.result = EType::U8).is_err());
+    assert!(broken(|f| f.result = EType::Int(MachineInt::U8)).is_err());
     // A reference to something that is not in scope.
     assert!(
         broken(|f| {
@@ -312,7 +312,7 @@ fn the_type_checker_guards_erasure() {
         tail: Some(Box::new(EExpr::Call {
             callee: increment,
             name: "increment".into(),
-            arguments: vec![EExpr::U8(1)],
+            arguments: vec![EExpr::Literal(MachineInt::U8, 1)],
         })),
     };
     module.fns = vec![caller];
@@ -325,14 +325,14 @@ fn the_type_checker_guards_erasure() {
 fn u8_to_u8(session: &locus::typed::Session, body: EBlock) -> Module {
     let mut module = session.erased().clone();
     module.fns.truncate(1);
-    module.fns[0].result = EType::U8;
+    module.fns[0].result = EType::Int(MachineInt::U8);
     module.fns[0].body = body;
     module
 }
 
 fn wrapping_add(receiver: EExpr, argument: EExpr) -> EExpr {
     EExpr::Method {
-        prim: Prim::WrappingAdd,
+        prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
         receiver: Box::new(receiver),
         arguments: vec![argument],
     }
@@ -379,8 +379,13 @@ fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
         u8_to_u8(
             &session,
             tail(EExpr::Loop {
-                state: vec![(i_id, "i".into(), EType::U8, EExpr::U8(0))],
-                result: EType::U8,
+                state: vec![(
+                    i_id,
+                    "i".into(),
+                    EType::Int(MachineInt::U8),
+                    EExpr::Literal(MachineInt::U8, 0),
+                )],
+                result: EType::Int(MachineInt::U8),
                 body: tail(EExpr::If {
                     condition: Box::new(EExpr::Compare {
                         op: CompareOp::Eq,
@@ -388,21 +393,24 @@ fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
                         right: Box::new(n.clone()),
                     }),
                     then_block: tail(EExpr::Return(Box::new(returned))),
-                    else_block: tail(EExpr::Continue(vec![wrapping_add(i(), EExpr::U8(1))])),
+                    else_block: tail(EExpr::Continue(vec![wrapping_add(
+                        i(),
+                        EExpr::Literal(MachineInt::U8, 1),
+                    )])),
                 }),
             }),
         )
     };
-    let module = looping(wrapping_add(i(), EExpr::U8(100)));
+    let module = looping(wrapping_add(i(), EExpr::Literal(MachineInt::U8, 100)));
     assert_eq!(check_module(&module), Ok(()));
     assert_eq!(
-        run(&module, reference, vec![Value::U8(0)]),
-        Ok(Outcome::Value(Value::U8(100)))
+        run(&module, reference, vec![Value::u8(0)]),
+        Ok(Outcome::Value(Value::u8(100)))
     );
     // Three iterations, then the return.
     assert_eq!(
-        run(&module, reference, vec![Value::U8(3)]),
-        Ok(Outcome::Value(Value::U8(103)))
+        run(&module, reference, vec![Value::u8(3)]),
+        Ok(Outcome::Value(Value::u8(103)))
     );
 
     // A return must supply the function's result type.
@@ -410,7 +418,7 @@ fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
     assert_eq!(
         check_module(&wrong),
         Err(TypeError(
-            "a returned value has type Bool, expected U8".into()
+            "a returned value has type Bool, expected Int(U8)".into()
         ))
     );
 }
@@ -426,7 +434,7 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
 
     // let m: u8 = panic!("never"); <rest>; m.wrapping_add(1)
     let sequel = |first: EExpr, rest: EExpr| {
-        let (m, m_var) = bind("m", EType::U8);
+        let (m, m_var) = bind("m", EType::Int(MachineInt::U8));
         u8_to_u8(
             &session,
             EBlock {
@@ -437,13 +445,22 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
                     },
                     EStmt::Expr(rest),
                 ],
-                tail: Some(Box::new(wrapping_add(m_var, EExpr::U8(1)))),
+                tail: Some(Box::new(wrapping_add(
+                    m_var,
+                    EExpr::Literal(MachineInt::U8, 1),
+                ))),
             },
         )
     };
-    assert_eq!(check_module(&sequel(panics(), EExpr::U8(0))), Ok(()));
+    assert_eq!(
+        check_module(&sequel(panics(), EExpr::Literal(MachineInt::U8, 0))),
+        Ok(())
+    );
     // The statement after the panic is checked.
-    let ill = sequel(panics(), wrapping_add(EExpr::Bool(true), EExpr::U8(1)));
+    let ill = sequel(
+        panics(),
+        wrapping_add(EExpr::Bool(true), EExpr::Literal(MachineInt::U8, 1)),
+    );
     assert!(check_module(&ill).is_err());
     // So is the tail, through the type the name carries.
     let (b, b_var) = bind("b", EType::Bool);
@@ -454,7 +471,10 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
                 pattern: b,
                 value: panics(),
             }],
-            tail: Some(Box::new(wrapping_add(b_var, EExpr::U8(1)))),
+            tail: Some(Box::new(wrapping_add(
+                b_var,
+                EExpr::Literal(MachineInt::U8, 1),
+            ))),
         },
     );
     assert!(check_module(&tail_ill).is_err());
@@ -465,9 +485,9 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
         EBlock {
             stmts: vec![EStmt::Let {
                 pattern: b,
-                value: EExpr::U8(1),
+                value: EExpr::Literal(MachineInt::U8, 1),
             }],
-            tail: Some(Box::new(EExpr::U8(2))),
+            tail: Some(Box::new(EExpr::Literal(MachineInt::U8, 2))),
         },
     );
     assert!(check_module(&disagrees).is_err());
@@ -485,17 +505,23 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
             tail(EExpr::Match {
                 scrutinee: Box::new(panics()),
                 enum_name: "Classified".into(),
-                arms: vec![arm("Zero", EExpr::U8(0)), arm("NonZero", arm_value)],
+                arms: vec![
+                    arm("Zero", EExpr::Literal(MachineInt::U8, 0)),
+                    arm("NonZero", arm_value),
+                ],
             }),
         )
     };
-    assert_eq!(check_module(&matching(EExpr::U8(1))), Ok(()));
+    assert_eq!(
+        check_module(&matching(EExpr::Literal(MachineInt::U8, 1))),
+        Ok(())
+    );
     assert!(check_module(&matching(EExpr::Bool(true))).is_err());
     // No arm is ever reached.
-    let module = matching(EExpr::U8(1));
+    let module = matching(EExpr::Literal(MachineInt::U8, 1));
     let reference = module.fns[0].reference;
     assert_eq!(
-        run(&module, reference, vec![Value::U8(0)]),
+        run(&module, reference, vec![Value::u8(0)]),
         Ok(Outcome::Panic("never".into()))
     );
 }

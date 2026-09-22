@@ -2,7 +2,7 @@
 //! shown with the names the programmer wrote; the result of a call is shown
 //! as the call.
 
-use crate::kernel::{Mode, Prim, Term, Type, infer_term};
+use crate::kernel::{CmpOp, Integer, Mode, Prim, Term, Type, infer_term};
 
 use super::env::Env;
 
@@ -13,8 +13,21 @@ enum Level {
     Or,
     And,
     Compare,
+    Sum,
+    Product,
     Prefix,
     Postfix,
+}
+
+/// A machine literal, or the view of one, as its type and number.
+fn literal_of(term: &Term) -> Option<(crate::kernel::MachineInt, Integer)> {
+    match term {
+        Term::Prim(Prim::View(_), operand) => match operand.as_slice() {
+            [inner] => inner.machine_value(),
+            _ => None,
+        },
+        other => other.machine_value(),
+    }
 }
 
 impl Env<'_> {
@@ -92,7 +105,7 @@ impl Env<'_> {
     fn is_operator(&self, term: &Term) -> bool {
         match term {
             Term::Call(callee, _) => {
-                matches!(&**callee, Term::Fn(id) if *id == self.prelude.u8_le || *id == self.prelude.u8_lt || *id == self.prelude.nat_le || *id == self.prelude.nat_lt)
+                matches!(&**callee, Term::Fn(id) if *id == self.prelude.nat_le || *id == self.prelude.nat_lt)
             }
             Term::PropApp(id, _) => [
                 self.prelude.and,
@@ -114,18 +127,24 @@ impl Env<'_> {
         right: &Term,
         bound: &mut Vec<String>,
     ) -> String {
-        // Comparisons do not chain, so both sides bind tighter.
+        // Comparisons do not chain, so both sides bind tighter; the
+        // arithmetic operators associate to the left.
         let (l, r) = match level {
             Level::Implies => (Level::Or, Level::Implies),
             Level::Or => (Level::Or, Level::And),
             Level::And => (Level::And, Level::Compare),
+            Level::Compare => (Level::Sum, Level::Sum),
+            Level::Sum => (Level::Sum, Level::Product),
+            Level::Product => (Level::Product, Level::Prefix),
             _ => (Level::Prefix, Level::Prefix),
         };
-        let text = format!(
-            "{} {op} {}",
-            self.term_at(left, l, bound),
-            self.term_at(right, r, bound)
-        );
+        // A comparison of two literals names the type on the first, as the
+        // source must, since two bare literals would be `i32`.
+        let left_text = match (level, literal_of(left), literal_of(right)) {
+            (Level::Compare, Some((ty, value)), Some(_)) => format!("{value}{}", ty.name()),
+            _ => self.term_at(left, l, bound),
+        };
+        let text = format!("{left_text} {op} {}", self.term_at(right, r, bound));
         if at > level {
             format!("({text})")
         } else {
@@ -154,11 +173,47 @@ impl Env<'_> {
             Term::U8(value) => value.to_string(),
             Term::Nat(value) => format!("{value}"),
             Term::Int(value) => format!("{value}"),
-            Term::Machine(_, value) => format!("{value}"),
+            // A literal of a type other than `u8` shows its type, so that
+            // `0i32 <= 3i32` is not mistaken for a claim about bytes.
+            Term::Machine(ty, value) => format!("{value}{}", ty.name()),
             Term::Prim(prim, operands) => match (prim, operands.as_slice()) {
-                (Prim::U8Eq, [a, b]) => self.binary("==", Level::Compare, at, a, b, bound),
-                (Prim::U8Lt, [a, b]) => self.binary("<", Level::Compare, at, a, b, bound),
-                (Prim::U8Le, [a, b]) => self.binary("<=", Level::Compare, at, a, b, bound),
+                (Prim::Cmp(CmpOp::Eq, _), [a, b]) => {
+                    self.binary("==", Level::Compare, at, a, b, bound)
+                }
+                (Prim::Cmp(CmpOp::Lt, _), [a, b]) => {
+                    self.binary("<", Level::Compare, at, a, b, bound)
+                }
+                (Prim::Cmp(CmpOp::Le, _), [a, b]) => {
+                    self.binary("<=", Level::Compare, at, a, b, bound)
+                }
+                // `a < b` over `Int` is `a + 1 <= b`; a view of a machine
+                // value is written as it was, without its cast, so that
+                // `x <= 3` reads back as `x <= 3`.
+                (Prim::IntLe, [Term::Prim(Prim::IntAdd, sum), b]) if matches!(sum.as_slice(), [_, Term::Int(one)] if *one == Integer::from(1i64)) => {
+                    self.binary("<", Level::Compare, at, &sum[0], b, bound)
+                }
+                (Prim::IntLe, [a, b]) => self.binary("<=", Level::Compare, at, a, b, bound),
+                (Prim::View(_), [x]) => self.term_at(x, at, bound),
+                (Prim::Wrap(ty), [n]) => {
+                    format!(
+                        "({} as {})",
+                        self.term_at(n, Level::Implies, bound),
+                        ty.name()
+                    )
+                }
+                (Prim::Cast(_, to), [x]) => {
+                    format!(
+                        "({} as {})",
+                        self.term_at(x, Level::Implies, bound),
+                        to.name()
+                    )
+                }
+                (Prim::IntAdd, [a, b]) => self.binary("+", Level::Sum, at, a, b, bound),
+                (Prim::IntSub, [a, b]) => self.binary("-", Level::Sum, at, a, b, bound),
+                (Prim::IntMul, [a, b]) => self.binary("*", Level::Product, at, a, b, bound),
+                (Prim::IntDiv, [a, b]) => self.binary("/", Level::Product, at, a, b, bound),
+                (Prim::IntRem, [a, b]) => self.binary("%", Level::Product, at, a, b, bound),
+                (Prim::IntNeg, [a]) => format!("-{}", self.term_at(a, Level::Prefix, bound)),
                 (_, [receiver, rest @ ..]) => format!(
                     "{}.{}({})",
                     self.term_at(receiver, Level::Postfix, bound),
@@ -237,12 +292,7 @@ impl Env<'_> {
             }
             Term::Proof(_) => "_".into(),
             Term::Fn(id) => {
-                let named = [
-                    (prelude.u8_le, "u8_le"),
-                    (prelude.u8_lt, "u8_lt"),
-                    (prelude.nat_le, "nat_le"),
-                    (prelude.nat_lt, "nat_lt"),
-                ];
+                let named = [(prelude.nat_le, "nat_le"), (prelude.nat_lt, "nat_lt")];
                 match self.fn_by_id(*id) {
                     Some(info) => info.name.clone(),
                     None => named
@@ -252,10 +302,10 @@ impl Env<'_> {
                 }
             }
             Term::Call(callee, arguments) => match (&**callee, arguments.as_slice()) {
-                (Term::Fn(id), [a, b]) if *id == prelude.u8_le || *id == prelude.nat_le => {
+                (Term::Fn(id), [a, b]) if *id == prelude.nat_le => {
                     self.binary("<=", Level::Compare, at, a, b, bound)
                 }
-                (Term::Fn(id), [a, b]) if *id == prelude.u8_lt || *id == prelude.nat_lt => {
+                (Term::Fn(id), [a, b]) if *id == prelude.nat_lt => {
                     self.binary("<", Level::Compare, at, a, b, bound)
                 }
                 _ => format!(

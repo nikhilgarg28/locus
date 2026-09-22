@@ -687,11 +687,15 @@ fn the_wrapping_rows_at_u8_agree_with_the_primitives_of_the_u8_model() {
         for b in &values {
             let (ta, tb) = (Term::U8(*a), Term::U8(*b));
             let row = app(Op::WrappingAdd, U8, &[ta.clone(), tb.clone()]);
-            let model = Term::wrapping_add(ta.clone(), tb.clone());
+            let model = Term::op(
+                Op::WrappingAdd,
+                MachineInt::U8,
+                vec![ta.clone(), tb.clone()],
+            );
             assert_eq!(evaluated(&mut ctx, &row, U8), a.wrapping_add(*b).into());
             assert_eq!(evaluated(&mut ctx, &model, U8), a.wrapping_add(*b).into());
             let row = app(Op::WrappingSub, U8, &[ta.clone(), tb.clone()]);
-            let model = Term::wrapping_sub(ta, tb);
+            let model = Term::op(Op::WrappingSub, MachineInt::U8, vec![ta, tb]);
             assert_eq!(evaluated(&mut ctx, &row, U8), a.wrapping_sub(*b).into());
             assert_eq!(evaluated(&mut ctx, &model, U8), a.wrapping_sub(*b).into());
         }
@@ -699,7 +703,7 @@ fn the_wrapping_rows_at_u8_agree_with_the_primitives_of_the_u8_model() {
     // The kernel proves them equal on closed values, by evaluating each.
     let (ta, tb) = (Term::U8(200), Term::U8(100));
     let row = app(Op::WrappingAdd, U8, &[ta.clone(), tb.clone()]);
-    let model = Term::wrapping_add(ta, tb);
+    let model = Term::op(Op::WrappingAdd, MachineInt::U8, vec![ta, tb]);
     let proof = Chain::new(Type::U8, row.clone())
         .step(Proof::Evaluate(row.clone()))
         .step_rev(&model, Proof::Evaluate(model.clone()))

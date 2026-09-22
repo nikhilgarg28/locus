@@ -90,10 +90,6 @@ pub struct Prelude {
     pub nat_le: FnId,
     /// `nat_lt(a, b) := nat_le(succ(a), b)`
     pub nat_lt: FnId,
-    /// `u8_le(a, b) := nat_le(to_nat(a), to_nat(b))`
-    pub u8_le: FnId,
-    /// `u8_lt(a, b) := nat_lt(to_nat(a), to_nat(b))`
-    pub u8_lt: FnId,
 }
 
 impl Prelude {
@@ -119,14 +115,6 @@ impl Prelude {
 
     pub fn nat_lt_prop(&self, left: Term, right: Term) -> Term {
         Term::call(Term::Fn(self.nat_lt), vec![left, right])
-    }
-
-    pub fn u8_le_prop(&self, left: Term, right: Term) -> Term {
-        Term::call(Term::Fn(self.u8_le), vec![left, right])
-    }
-
-    pub fn u8_lt_prop(&self, left: Term, right: Term) -> Term {
-        Term::call(Term::Fn(self.u8_lt), vec![left, right])
     }
 
     /// `!p` abbreviates `p => False`.
@@ -211,8 +199,10 @@ impl Definitions {
                 ],
             )
             .expect("prelude Or");
-        // The orderings are ordinary definitions over the Nat model. The
-        // kernel names them because the u8 axioms are stated with them.
+        // The orderings on `Nat` are ordinary definitions. The kernel names
+        // them so that the lemmas about `Nat` can be stated with them; the
+        // machine types are ordered through their views into `Int`, whose
+        // order `int_le` is primitive.
         let relation = |over: Type| {
             Type::function(2, move |params| match params {
                 [] | [_] => over.clone(),
@@ -233,23 +223,6 @@ impl Definitions {
                 )
             })
             .expect("prelude nat_lt");
-        let lifted = |relation: FnId| {
-            move |params: &[Term]| {
-                Term::call(
-                    Term::Fn(relation),
-                    vec![
-                        Term::to_nat(params[0].clone()),
-                        Term::to_nat(params[1].clone()),
-                    ],
-                )
-            }
-        };
-        let u8_le = definitions
-            .declare_fn(&relation(Type::U8), lifted(nat_le))
-            .expect("prelude u8_le");
-        let u8_lt = definitions
-            .declare_fn(&relation(Type::U8), lifted(nat_lt))
-            .expect("prelude u8_lt");
         let prelude = Prelude {
             truth,
             falsehood,
@@ -257,8 +230,6 @@ impl Definitions {
             or,
             nat_le,
             nat_lt,
-            u8_le,
-            u8_lt,
         };
         definitions.prelude = Some(prelude);
         (definitions, prelude)
@@ -421,8 +392,8 @@ impl Definitions {
 
         // The function has a runtime form only if its body is itself an
         // executable term. Otherwise a ghost argument could reach executable
-        // data through the call: `f(n: Nat) -> u8 { of_nat(n) }` would turn a
-        // ghost number into a byte. Such a function is still a perfectly
+        // data through the call: `f(n: Int) -> u8 { wrap[u8](n) }` would turn
+        // a ghost number into a byte. Such a function is still a perfectly
         // good logical function; it is just not callable at runtime.
         let executable = !expected.is_ghost()
             && expect_type(&mut ctx, &body, &expected, Mode::Executable).is_ok();

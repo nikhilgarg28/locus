@@ -1,13 +1,14 @@
 //! The erased tree. It mirrors `typed::tree` without its logical content.
 
-use crate::kernel::{EnumId, Prim, StructId, VarId};
+use crate::kernel::{EnumId, MachineInt, Prim, StructId, VarId};
 use crate::typed::{CompareOp, FnRef};
 
 /// A simple type: no propositions, no dependency.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EType {
     Bool,
-    U8,
+    /// A machine integer type.
+    Int(MachineInt),
     /// The erasure of a proof.
     Proved,
     /// The erasure of any other ghost value.
@@ -93,7 +94,8 @@ pub enum EExpr {
         name: String,
     },
     Bool(bool),
-    U8(u8),
+    /// A literal of a machine integer type, within its range.
+    Literal(MachineInt, i128),
     Proved,
     Ghost,
     Tuple(Vec<EExpr>),
@@ -119,10 +121,17 @@ pub enum EExpr {
         receiver: Box<EExpr>,
         arguments: Vec<EExpr>,
     },
+    /// A comparison of two values of one type: a machine type, or `bool`
+    /// for `==` and `!=`.
     Compare {
         op: CompareOp,
         left: Box<EExpr>,
         right: Box<EExpr>,
+    },
+    /// `expr as to`, between machine types; it wraps.
+    Cast {
+        expr: Box<EExpr>,
+        to: MachineInt,
     },
     Call {
         callee: FnRef,

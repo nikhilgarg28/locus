@@ -1,0 +1,60 @@
+error[L0205]: `256` does not fit in `u8`, whose range is 0 to 255
+ --> tests/corpus/reject/literal_out_of_range.lc:4:5
+  |
+4 |     256 //~ error: L0205 `256` does not fit in `u8`, whose range is 0 to 255
+  |     ^^^
+error[L0205]: `65536` does not fit in `u16`, whose range is 0 to 65535
+ --> tests/corpus/reject/literal_out_of_range.lc:8:5
+  |
+8 |     65536 //~ error: L0205 `65536` does not fit in `u16`, whose range is 0 to 65535
+  |     ^^^^^
+error[L0205]: `4294967296` does not fit in `u32`, whose range is 0 to 4294967295
+  --> tests/corpus/reject/literal_out_of_range.lc:12:5
+   |
+12 |     4294967296 //~ error: L0205 `4294967296` does not fit in `u32`, whose range is 0 to 4294967295
+   |     ^^^^^^^^^^
+error[L0205]: `18446744073709551616` does not fit in `u64`, whose range is 0 to 18446744073709551615
+  --> tests/corpus/reject/literal_out_of_range.lc:16:5
+   |
+16 |     18446744073709551616 //~ error: L0205 `18446744073709551616` does not fit in `u64`
+   |     ^^^^^^^^^^^^^^^^^^^^
+error[L0205]: `128` does not fit in `i8`, whose range is -128 to 127
+  --> tests/corpus/reject/literal_out_of_range.lc:20:5
+   |
+20 |     128 //~ error: L0205 `128` does not fit in `i8`, whose range is -128 to 127
+   |     ^^^
+error[L0205]: `32768` does not fit in `i16`, whose range is -32768 to 32767
+  --> tests/corpus/reject/literal_out_of_range.lc:24:5
+   |
+24 |     32768 //~ error: L0205 `32768` does not fit in `i16`, whose range is -32768 to 32767
+   |     ^^^^^
+error[L0205]: `2147483648` does not fit in `i32`, whose range is -2147483648 to 2147483647
+  --> tests/corpus/reject/literal_out_of_range.lc:28:5
+   |
+28 |     2147483648 //~ error: L0205 `2147483648` does not fit in `i32`
+   |     ^^^^^^^^^^
+error[L0205]: `9223372036854775808` does not fit in `i64`, whose range is -9223372036854775808 to 9223372036854775807
+  --> tests/corpus/reject/literal_out_of_range.lc:32:5
+   |
+32 |     9223372036854775808 //~ error: L0205 `9223372036854775808` does not fit in `i64`
+   |     ^^^^^^^^^^^^^^^^^^^
+error[L0205]: `-129` does not fit in `i8`, whose range is -128 to 127
+  --> tests/corpus/reject/literal_out_of_range.lc:36:5
+   |
+36 |     -129 //~ error: L0205 `-129` does not fit in `i8`, whose range is -128 to 127
+   |     ^^^^
+error[L0205]: `-1` does not fit in `u32`, whose range is 0 to 4294967295
+  --> tests/corpus/reject/literal_out_of_range.lc:40:5
+   |
+40 |     -1 //~ error: L0205 `-1` does not fit in `u32`, whose range is 0 to 4294967295
+   |     ^^
+error[L0205]: `2147483648` does not fit in `i32`, whose range is -2147483648 to 2147483647
+  --> tests/corpus/reject/literal_out_of_range.lc:44:5
+   |
+44 |     2147483648i32 //~ error: L0205 `2147483648` does not fit in `i32`
+   |     ^^^^^^^^^^^^^
+error[L0205]: `2147483648` does not fit in `i32`, whose range is -2147483648 to 2147483647
+  --> tests/corpus/reject/literal_out_of_range.lc:48:5
+   |
+48 |     2147483648 == 0 //~ error: L0205 `2147483648` does not fit in `i32`
+   |     ^^^^^^^^^^

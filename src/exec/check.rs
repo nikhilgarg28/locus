@@ -364,33 +364,40 @@ impl Program {
                 if declared.promises.terminates {
                     return Err(ExecError::LoopUnderTerminates);
                 }
-                let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
-                for bound in [lo, hi] {
-                    expect(ctx, bound, &Type::U8)?;
-                }
-                // Ordered bounds make the final index hi.
-                check_proof(ctx, ordered, &prelude.u8_le_prop(lo.clone(), hi.clone()))?;
+                self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
+                // The index type is the state function's parameter, a
+                // machine type, and both bounds have it.
                 check_type(ctx, state)?;
-                let state_at = |at: &Term| match state {
-                    Type::Fn(params, _) if params.as_slice() == [Type::U8] => {
-                        telescope_entry(state, 1, std::slice::from_ref(at))
-                            .filter(|ty| matches!(ty, Type::Tuple(_)))
-                            .ok_or(ExecError::BadLoopState)
-                    }
-                    _ => Err(ExecError::BadLoopState),
+                let index_type = match state {
+                    Type::Fn(params, _) => match params.as_slice() {
+                        [param] => param.as_machine().ok_or(ExecError::BadLoopState)?,
+                        _ => return Err(ExecError::BadLoopState),
+                    },
+                    _ => return Err(ExecError::BadLoopState),
+                };
+                for bound in [lo, hi] {
+                    expect(ctx, bound, &Type::machine(index_type))?;
+                }
+                let view = |x: &Term| Term::view(index_type, x.clone());
+                // Ordered bounds make the final index hi.
+                check_proof(ctx, ordered, &Term::int_le(view(lo), view(hi)))?;
+                let state_at = |at: &Term| {
+                    telescope_entry(state, 1, std::slice::from_ref(at))
+                        .filter(|ty| matches!(ty, Type::Tuple(_)))
+                        .ok_or(ExecError::BadLoopState)
                 };
                 check_values(ctx, &state_at(lo)?, init, Mode::Executable)?;
 
                 let scope = ctx.checkpoint();
                 let checked = (|| {
-                    ctx.declare_with(*index, Type::U8, false)?;
+                    ctx.declare_with(*index, Type::machine(index_type), false)?;
                     let i = Term::var(*index);
                     let current = state_at(&i)?;
                     // index < hi, so the successor does not wrap.
-                    let next = state_at(&Term::wrapping_add(i.clone(), Term::U8(1)))?;
+                    let next = state_at(&Term::successor(index_type, i.clone()))?;
                     self.declare_state(ctx, &current, vars)?;
-                    ctx.assume_with(*lower, prelude.u8_le_prop(lo.clone(), i.clone()))?;
-                    ctx.assume_with(*upper, prelude.u8_lt_prop(i, hi.clone()))?;
+                    ctx.assume_with(*lower, Term::int_le(view(lo), view(&i)))?;
+                    ctx.assume_with(*upper, Term::int_lt(view(&i), view(hi)))?;
                     let mut inner = loops.to_vec();
                     inner.push(Target {
                         state: &next,

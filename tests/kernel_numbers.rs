@@ -1,15 +1,15 @@
 //! Acceptance tests for kernel gate K5 (the kernel contract in atlas.html): the internal
-//! `Nat` with induction, the `u8` model, reflection of runtime comparisons,
-//! and agreement between native evaluation and the model.
+//! `Nat` with induction, the model of `u8` over `Int`, reflection of runtime
+//! comparisons, and agreement between native evaluation and the model.
 //! Every term here is written by hand; nothing comes from the parser.
 
 use std::rc::Rc;
 
-use locus::kernel::derive::{Chain, fold_claim, symm_at};
+use locus::kernel::derive::{Chain, symm_at};
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Context, Definitions, KernelError, Mode, Prelude, Prim, Proof, Term, Type, check_proof,
-    infer_proof, infer_term, proof_is_classical,
+    Axiom, CmpOp, Context, Definitions, KernelError, MachineInt, Mode, Op, Prelude, Proof, Term,
+    Type, check_proof, infer_proof, infer_term, proof_is_classical,
 };
 
 fn setup() -> (Rc<Definitions>, Prelude, Theory) {
@@ -36,21 +36,27 @@ fn lemma(id: locus::kernel::FnId, arguments: Vec<Term>) -> Proof {
 fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
     // Declaring the theory is the proof: every lemma in it was checked by
     // the kernel, by reasoning and induction over Nat.
-    let (definitions, prelude, theory) = setup();
+    let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::clone(&definitions));
 
     let a = Term::var(ctx.declare(Type::U8).unwrap());
     let b = Term::var(ctx.declare(Type::U8).unwrap());
     let c = Term::var(ctx.declare(Type::U8).unwrap());
     let ab = ctx
-        .assume(prelude.u8_le_prop(a.clone(), b.clone()))
+        .assume(Term::int_le(
+            Term::view(MachineInt::U8, a.clone()),
+            Term::view(MachineInt::U8, b.clone()),
+        ))
         .unwrap();
     let bc = ctx
-        .assume(prelude.u8_le_prop(b.clone(), c.clone()))
+        .assume(Term::int_le(
+            Term::view(MachineInt::U8, b.clone()),
+            Term::view(MachineInt::U8, c.clone()),
+        ))
         .unwrap();
 
     let ac = lemma(
-        theory.u8_le_trans,
+        theory.machine(MachineInt::U8).le_trans,
         vec![
             a.clone(),
             b.clone(),
@@ -60,12 +66,19 @@ fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
         ],
     );
     assert_eq!(
-        check_proof(&mut ctx, &ac, &prelude.u8_le_prop(a.clone(), c.clone())),
+        check_proof(
+            &mut ctx,
+            &ac,
+            &Term::int_le(
+                Term::view(MachineInt::U8, a.clone()),
+                Term::view(MachineInt::U8, c.clone())
+            )
+        ),
         Ok(())
     );
     // The premises are checked against the instantiated parameters.
     let crossed = lemma(
-        theory.u8_le_trans,
+        theory.machine(MachineInt::U8).le_trans,
         vec![
             a.clone(),
             b,
@@ -82,80 +95,31 @@ fn a_u8_ordering_lemma_over_three_variables_is_proved_from_the_model() {
     for id in [
         theory.nat_add_assoc,
         theory.nat_le_trans,
-        theory.u8_le_trans,
-        theory.u8_zero_le,
+        theory.machine(MachineInt::U8).le_trans,
+        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
     ] {
         assert!(!definitions.is_classical(id));
     }
     assert_eq!(
         check_proof(
             &mut ctx,
-            &lemma(theory.u8_zero_le, vec![a.clone()]),
-            &prelude.u8_le_prop(Term::U8(0), a)
+            &lemma(
+                theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                vec![a.clone()]
+            ),
+            &Term::int_le(
+                Term::view(MachineInt::U8, Term::U8(0)),
+                Term::view(MachineInt::U8, a)
+            )
         ),
         Ok(())
     );
     assert!(!proof_is_classical(&definitions, &ac));
 }
 
-/// A kernel proof that `nat_le(x, y)` for literals with `x <= y`.
-fn literal_le(prelude: &Prelude, x: u64, y: u64) -> Proof {
-    let (left, right) = (Term::nat(x), Term::nat(y));
-    let body = Term::exists(Type::Nat, |k| {
-        nat_eq(Term::nat_add(left.clone(), k), right.clone())
-    });
-    let witness = Term::nat(y - x);
-    let sum = Proof::Literal(Term::nat_add(left.clone(), witness.clone()));
-    fold_claim(
-        &prelude.nat_le_prop(left.clone(), right.clone()),
-        Proof::ExistsIntro {
-            prop: body,
-            witness,
-            proof: Box::new(sum),
-        },
-    )
-}
-
-/// A kernel proof that `nat_lt(x, y)` for literals with `x < y`.
-fn literal_lt(prelude: &Prelude, x: u64, y: u64) -> Proof {
-    // nat_lt(x, y) unfolds to nat_le(succ(x), y); succ(x) evaluates to x + 1.
-    let (left, right) = (Term::nat(x), Term::nat(y));
-    let evaluated = Proof::Literal(Term::succ(left.clone()));
-    let at_successor = Proof::transport(
-        symm_at(&Type::Nat, &Term::succ(left.clone()), evaluated),
-        |hole| prelude.nat_le_prop(hole, right.clone()),
-        literal_le(prelude, x + 1, y),
-    );
-    fold_claim(&prelude.nat_lt_prop(left, right.clone()), at_successor)
-}
-
-/// Moves a fact about the models `a` and `b` onto `to_nat` of the bytes.
-fn onto_bytes(
-    a: u8,
-    b: u8,
-    claim: impl Fn(Term, Term) -> Term,
-    about_models: Proof,
-    swap: bool,
-) -> Proof {
-    let (first, second) = if swap { (b, a) } else { (a, b) };
-    let model = |byte: u8| Term::to_nat(Term::U8(byte));
-    let second_literal = Term::nat(u64::from(second));
-    let first_done = Proof::transport(
-        symm_at(&Type::Nat, &model(first), Proof::Literal(model(first))),
-        |hole| claim(hole, second_literal.clone()),
-        about_models,
-    );
-    let first_model = model(first);
-    Proof::transport(
-        symm_at(&Type::Nat, &model(second), Proof::Literal(model(second))),
-        |hole| claim(first_model.clone(), hole),
-        first_done,
-    )
-}
-
 /// What the kernel's native evaluation answers for a comparison of literals.
-fn native_comparison(ctx: &mut Context, prim: Prim, a: u8, b: u8) -> bool {
-    let comparison = Term::prim(prim, vec![Term::U8(a), Term::U8(b)]);
+fn native_comparison(ctx: &mut Context, op: CmpOp, a: u8, b: u8) -> bool {
+    let comparison = Term::cmp(op, MachineInt::U8, Term::U8(a), Term::U8(b));
     match infer_proof(ctx, &Proof::Literal(comparison)) {
         Ok(Term::Eq(_, _, value)) => *value == Term::Bool(true),
         other => panic!("no literal step: {other:?}"),
@@ -164,71 +128,102 @@ fn native_comparison(ctx: &mut Context, prim: Prim, a: u8, b: u8) -> bool {
 
 #[test]
 fn native_comparisons_agree_with_the_model_for_every_pair_of_bytes() {
+    // Whatever a native comparison answers, the matching fact about the
+    // views is provable: reflected from the evaluated comparison, and
+    // decided again by evaluating the views themselves.
     let (definitions, prelude, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
-    let le = |x, y| prelude.nat_le_prop(x, y);
-    let lt = |x, y| prelude.nat_lt_prop(x, y);
+    let view = |byte: u8| Term::view(MachineInt::U8, Term::U8(byte));
 
     for a in 0..=255u8 {
         for b in 0..=255u8 {
-            let (x, y) = (u64::from(a), u64::from(b));
-            let native_lt = native_comparison(&mut ctx, Prim::U8Lt, a, b);
-            let native_le = native_comparison(&mut ctx, Prim::U8Le, a, b);
-            let native_eq = native_comparison(&mut ctx, Prim::U8Eq, a, b);
-            // Whatever the native comparison answers, the model must be able
-            // to prove the matching fact about to_nat(a) and to_nat(b).
-            let (proof, claim) = if native_lt {
-                let claim = prelude.u8_lt_prop(Term::U8(a), Term::U8(b));
-                let fact = onto_bytes(a, b, lt, literal_lt(&prelude, x, y), false);
-                (fold_claim(&claim, fact), claim)
-            } else {
-                let claim = prelude.u8_le_prop(Term::U8(b), Term::U8(a));
-                let fact = onto_bytes(a, b, le, literal_le(&prelude, y, x), true);
-                (fold_claim(&claim, fact), claim)
-            };
-            assert_eq!(check_proof(&mut ctx, &proof, &claim), Ok(()), "{a} < {b}");
-            assert_eq!(native_le, native_lt || native_eq);
+            let native_lt = native_comparison(&mut ctx, CmpOp::Lt, a, b);
+            let native_le = native_comparison(&mut ctx, CmpOp::Le, a, b);
+            let native_eq = native_comparison(&mut ctx, CmpOp::Eq, a, b);
+            assert_eq!(native_lt, a < b);
+            assert_eq!(native_le, a <= b);
             assert_eq!(native_eq, a == b);
+            let comparison = Term::cmp(CmpOp::Lt, MachineInt::U8, Term::U8(a), Term::U8(b));
+            let reflected = Proof::implies_elim(
+                Proof::Axiom(Axiom::CmpReflect(comparison.clone(), native_lt)),
+                Proof::Literal(comparison),
+            );
+            let below = Term::int_lt(view(a), view(b));
+            let claim = if native_lt {
+                below.clone()
+            } else {
+                prelude.not_prop(below.clone())
+            };
+            assert_eq!(
+                check_proof(&mut ctx, &reflected, &claim),
+                Ok(()),
+                "{a} < {b}"
+            );
+            if a % 17 == 0 || b % 17 == 0 {
+                assert_eq!(
+                    check_proof(&mut ctx, &Proof::Evaluate(below), &claim),
+                    Ok(())
+                );
+            }
         }
     }
 }
 
 #[test]
 fn native_arithmetic_agrees_with_the_model_for_every_pair_of_bytes() {
+    // wrapping_add: the native answer is what op_model says, wrap of the
+    // sum of the views, evaluated step by step through the literal axiom.
     let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
     let literal = |ctx: &mut Context, term: Term| match infer_proof(ctx, &Proof::Literal(term)) {
         Ok(Term::Eq(_, _, value)) => *value,
         other => panic!("no literal step: {other:?}"),
     };
+    let view = |x: &Term| Term::view(MachineInt::U8, x.clone());
 
     for a in 0..=255u8 {
         for b in 0..=255u8 {
             let (x, y) = (Term::U8(a), Term::U8(b));
-            // wrapping_add: the native answer must be what the model axiom
-            // says, of_nat(to_nat(a) + to_nat(b)), evaluated step by step.
-            let native = literal(&mut ctx, Term::wrapping_add(x.clone(), y.clone()));
-            let (na, nb) = (Term::nat(u64::from(a)), Term::nat(u64::from(b)));
-            let sum = Term::nat_add(na.clone(), nb.clone());
-            let by_model = Chain::new(Type::U8, Term::wrapping_add(x.clone(), y.clone()))
-                .step(Proof::Axiom(Axiom::WrappingAddModel(x.clone(), y.clone())))
+            let sum = Term::op(Op::WrappingAdd, MachineInt::U8, vec![x.clone(), y.clone()]);
+            let native = literal(&mut ctx, sum.clone());
+            assert_eq!(native, Term::U8(a.wrapping_add(b)));
+            let (ia, ib) = (Term::int(i64::from(a)), Term::int(i64::from(b)));
+            let exact = Term::int_add(ia.clone(), ib.clone());
+            let by_model = Chain::new(Type::U8, sum.clone())
+                .step(Proof::Axiom(Axiom::OpModel(
+                    Op::WrappingAdd,
+                    MachineInt::U8,
+                    vec![x.clone(), y.clone()],
+                )))
                 .rewrite(
-                    |hole| Term::of_nat(Term::nat_add(hole, Term::to_nat(y.clone()))),
-                    Proof::Literal(Term::to_nat(x.clone())),
+                    |hole| Term::wrap(MachineInt::U8, Term::int_add(hole, view(&y))),
+                    Proof::Literal(view(&x)),
                 )
                 .rewrite(
-                    |hole| Term::of_nat(Term::nat_add(na.clone(), hole)),
-                    Proof::Literal(Term::to_nat(y.clone())),
+                    |hole| Term::wrap(MachineInt::U8, Term::int_add(ia.clone(), hole)),
+                    Proof::Literal(view(&y)),
                 )
-                .rewrite(Term::of_nat, Proof::Literal(sum.clone()))
-                .step(Proof::Literal(Term::of_nat(literal(&mut ctx, sum))))
+                .rewrite(
+                    |hole| Term::wrap(MachineInt::U8, hole),
+                    Proof::Literal(exact.clone()),
+                )
+                .step(Proof::Literal(Term::wrap(
+                    MachineInt::U8,
+                    literal(&mut ctx, exact),
+                )))
                 .finish();
-            let goal = u8_eq(Term::wrapping_add(x.clone(), y.clone()), native);
+            let goal = u8_eq(sum, native);
             assert_eq!(check_proof(&mut ctx, &by_model, &goal), Ok(()), "{a} + {b}");
 
-            // wrapping_sub: the model axiom says adding b back gives a.
-            let difference = literal(&mut ctx, Term::wrapping_sub(x.clone(), y.clone()));
-            let restored = literal(&mut ctx, Term::wrapping_add(difference, y));
+            // wrapping_sub: adding b back gives a.
+            let difference = literal(
+                &mut ctx,
+                Term::op(Op::WrappingSub, MachineInt::U8, vec![x.clone(), y.clone()]),
+            );
+            let restored = literal(
+                &mut ctx,
+                Term::op(Op::WrappingAdd, MachineInt::U8, vec![difference, y]),
+            );
             assert_eq!(restored, x, "{a} - {b}");
         }
     }
@@ -236,27 +231,37 @@ fn native_arithmetic_agrees_with_the_model_for_every_pair_of_bytes() {
 
 #[test]
 fn native_conversions_agree_with_the_model_axioms() {
+    // view and wrap on literals, against the axioms of the model of u8
+    // over Int: the round trips close, and wrap has period 256.
     let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
     let mut literal = |term: Term| match infer_proof(&mut ctx, &Proof::Literal(term)) {
         Ok(Term::Eq(_, _, value)) => *value,
         other => panic!("no literal step: {other:?}"),
     };
-    for n in 0..1024u64 {
-        let byte = literal(Term::of_nat(Term::nat(n)));
-        // n < 256 => to_nat(of_nat(n)) == n
-        if n < 256 {
-            assert_eq!(literal(Term::to_nat(byte.clone())), Term::nat(n));
+    for n in -300i64..1024 {
+        let byte = literal(Term::wrap(MachineInt::U8, Term::int(n)));
+        assert_eq!(byte, Term::U8(n.rem_euclid(256) as u8));
+        // 0 <= n <= 255 => view(wrap(n)) == n
+        if (0..256).contains(&n) {
+            assert_eq!(
+                literal(Term::view(MachineInt::U8, byte.clone())),
+                Term::int(n)
+            );
         }
-        // of_nat(n + 256) == of_nat(n)
-        let wrapped = literal(Term::nat_add(Term::nat(n), Term::nat(256)));
-        assert_eq!(literal(Term::of_nat(wrapped)), byte);
-        // to_nat(x) < 256, and of_nat(to_nat(x)) == x
-        let Term::Nat(model) = literal(Term::to_nat(byte.clone())) else {
+        // wrap(n + 256) == wrap(n)
+        let shifted = literal(Term::int_add(Term::int(n), Term::int(256)));
+        assert_eq!(literal(Term::wrap(MachineInt::U8, shifted)), byte);
+        // 0 <= view(x) <= 255, and wrap(view(x)) == x
+        let Term::Int(model) = literal(Term::view(MachineInt::U8, byte.clone())) else {
             panic!()
         };
-        assert!(model.to_u64().is_some_and(|model| model < 256));
-        assert_eq!(literal(Term::of_nat(Term::Nat(model))), byte);
+        assert!(
+            model
+                .to_i128()
+                .is_some_and(|model| (0..256).contains(&model))
+        );
+        assert_eq!(literal(Term::wrap(MachineInt::U8, Term::Int(model))), byte);
     }
 }
 
@@ -378,22 +383,33 @@ fn nat_is_ghost_and_axioms_are_typed() {
 
     // The model of an executable byte is not executable.
     assert!(matches!(
-        infer_term(&mut ctx, &Term::to_nat(x.clone()), Mode::Executable),
-        Err(KernelError::GhostTypeInExecutable(Type::Nat))
+        infer_term(
+            &mut ctx,
+            &Term::view(MachineInt::U8, x.clone()),
+            Mode::Executable
+        ),
+        Err(KernelError::GhostTypeInExecutable(Type::Int))
     ));
     assert_eq!(
-        infer_term(&mut ctx, &Term::to_nat(x.clone()), Mode::Logical),
-        Ok(Type::Nat)
+        infer_term(
+            &mut ctx,
+            &Term::view(MachineInt::U8, x.clone()),
+            Mode::Logical
+        ),
+        Ok(Type::Int)
     );
     // The runtime comparison is executable and has type bool.
-    let comparison = Term::prim(Prim::U8Lt, vec![x.clone(), Term::U8(9)]);
+    let comparison = Term::cmp(CmpOp::Lt, MachineInt::U8, x.clone(), Term::U8(9));
     assert_eq!(
         infer_term(&mut ctx, &comparison, Mode::Executable),
         Ok(Type::Bool)
     );
     // An axiom about bytes does not accept a Nat, and conversely.
     assert!(matches!(
-        infer_proof(&mut ctx, &Proof::Axiom(Axiom::ToNatBound(Term::nat(3)))),
+        infer_proof(
+            &mut ctx,
+            &Proof::Axiom(Axiom::ViewLower(MachineInt::U8, Term::nat(3)))
+        ),
         Err(KernelError::TypeMismatch { .. })
     ));
     assert!(matches!(
@@ -401,7 +417,7 @@ fn nat_is_ghost_and_axioms_are_typed() {
         Err(KernelError::TypeMismatch { .. })
     ));
     assert!(matches!(
-        infer_proof(&mut ctx, &Proof::Axiom(Axiom::Reflect(x, true))),
+        infer_proof(&mut ctx, &Proof::Axiom(Axiom::CmpReflect(x, true))),
         Err(KernelError::TypeMismatch { .. })
     ));
     // The axioms are stated with the prelude's orderings.
@@ -410,19 +426,20 @@ fn nat_is_ghost_and_axioms_are_typed() {
         infer_proof(&mut bare, &Proof::Axiom(Axiom::NatAddZero(Term::nat(1)))),
         Err(KernelError::NoPrelude)
     );
-    // Nat literals are not machine integers: arithmetic continues past u64.
+    // Nat literals are not machine integers: arithmetic continues past u64,
+    // and a Nat is not an Int, so wrap has no step on one.
     let past = Term::succ(Term::nat(u64::MAX));
     let Ok(Term::Eq(_, _, value)) = infer_proof(&mut ctx, &Proof::Literal(past)) else {
         panic!("succ has a literal step at any size")
     };
     assert_eq!(value.to_string(), "18446744073709551616n");
-    assert_eq!(
-        infer_proof(&mut ctx, &Proof::Literal(Term::of_nat(*value))),
-        Ok(u8_eq(
-            Term::of_nat(Term::Nat(locus::kernel::Natural::from(u64::MAX).succ())),
-            Term::U8(0)
-        ))
-    );
+    assert!(matches!(
+        infer_proof(
+            &mut ctx,
+            &Proof::Literal(Term::wrap(MachineInt::U8, *value))
+        ),
+        Err(KernelError::TypeMismatch { .. } | KernelError::NoComputationStep(_))
+    ));
 }
 
 #[test]
@@ -435,8 +452,8 @@ fn a_runtime_comparison_reflects_into_its_proposition() {
     let mut ctx = Context::with_definitions(definitions);
     let a = Term::var(ctx.declare(Type::U8).unwrap());
     let b = Term::var(ctx.declare(Type::U8).unwrap());
-    let comparison = Term::prim(Prim::U8Lt, vec![a.clone(), b.clone()]);
-    let claim = prelude.u8_lt_prop(a, b);
+    let comparison = Term::cmp(CmpOp::Lt, MachineInt::U8, a.clone(), b.clone());
+    let claim = Term::int_lt(Term::view(MachineInt::U8, a), Term::view(MachineInt::U8, b));
     let refutation = prelude.not_prop(claim.clone());
     let goal = prelude.or_prop(claim.clone(), refutation.clone());
 
@@ -452,12 +469,12 @@ fn a_runtime_comparison_reflects_into_its_proposition() {
         arms: vec![
             // comparison == false
             Proof::arm(0, 1, |_, facts| {
-                let reflect = Proof::Axiom(Axiom::Reflect(comparison.clone(), false));
+                let reflect = Proof::Axiom(Axiom::CmpReflect(comparison.clone(), false));
                 side(1, Proof::implies_elim(reflect, facts[0].clone()))
             }),
             // comparison == true
             Proof::arm(0, 1, |_, facts| {
-                let reflect = Proof::Axiom(Axiom::Reflect(comparison.clone(), true));
+                let reflect = Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true));
                 side(0, Proof::implies_elim(reflect, facts[0].clone()))
             }),
         ],
@@ -468,13 +485,17 @@ fn a_runtime_comparison_reflects_into_its_proposition() {
 
 #[test]
 fn nonzero_is_now_expressible() {
-    // struct NonZero { value: u8, evidence: @[value != 0] }
+    // struct NonZero { value: u8, evidence: @[value != 0] }, the claim over
+    // the views, as reflecting the test gives it.
     let (mut definitions, prelude) = Definitions::with_prelude();
-    let fields = Type::tuple(|earlier| match earlier {
+    let view = |x: Term| Term::view(MachineInt::U8, x);
+    let fields = Type::tuple(move |earlier| match earlier {
         [] => Some(Type::U8),
-        [value] => Some(Type::proof(
-            prelude.not_prop(u8_eq(value.clone(), Term::U8(0))),
-        )),
+        [value] => Some(Type::proof(prelude.not_prop(Term::eq(
+            Type::Int,
+            view(value.clone()),
+            view(Term::U8(0)),
+        )))),
         _ => None,
     });
     let nonzero = definitions.declare_struct(&fields).unwrap();
@@ -483,9 +504,9 @@ fn nonzero_is_now_expressible() {
     // For a literal, the evidence is the runtime comparison, evaluated and
     // reflected: u8_eq(5, 0) == false, hence 5 == 0 => False.
     let evidence_for = |byte: u8| {
-        let comparison = Term::prim(Prim::U8Eq, vec![Term::U8(byte), Term::U8(0)]);
+        let comparison = Term::cmp(CmpOp::Eq, MachineInt::U8, Term::U8(byte), Term::U8(0));
         Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison.clone(), false)),
+            Proof::Axiom(Axiom::CmpReflect(comparison.clone(), false)),
             Proof::Literal(comparison),
         )
     };
@@ -514,14 +535,21 @@ fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
     let i = Term::var(ctx.declare(Type::U8).unwrap());
     let limit = Term::var(ctx.declare(Type::U8).unwrap());
     let bound = ctx
-        .assume(prelude.u8_le_prop(i.clone(), limit.clone()))
+        .assume(Term::int_le(
+            Term::view(MachineInt::U8, i.clone()),
+            Term::view(MachineInt::U8, limit.clone()),
+        ))
         .unwrap();
     let differs = ctx
-        .assume(prelude.not_prop(u8_eq(i.clone(), limit.clone())))
+        .assume(prelude.not_prop(Term::eq(
+            Type::Int,
+            Term::view(MachineInt::U8, i.clone()),
+            Term::view(MachineInt::U8, limit.clone()),
+        )))
         .unwrap();
 
     let below = lemma(
-        theory.u8_lt_of_le_of_ne,
+        theory.machine(MachineInt::U8).lt_of_le_of_ne,
         vec![
             i.clone(),
             limit.clone(),
@@ -533,30 +561,45 @@ fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
         check_proof(
             &mut ctx,
             &below,
-            &prelude.u8_lt_prop(i.clone(), limit.clone())
+            &Term::int_lt(
+                Term::view(MachineInt::U8, i.clone()),
+                Term::view(MachineInt::U8, limit.clone())
+            )
         ),
         Ok(())
     );
 
     let (next, next_is) = ctx
-        .define(&Term::wrapping_add(i.clone(), Term::U8(1)))
+        .define(&Term::op(
+            Op::WrappingAdd,
+            MachineInt::U8,
+            vec![i.clone(), Term::U8(1)],
+        ))
         .unwrap();
     let at_successor = lemma(
-        theory.u8_succ_le_of_lt,
+        theory.machine(MachineInt::U8).succ_le_of_lt,
         vec![i.clone(), limit.clone(), Term::proof(below)],
     );
     // The lemma speaks of i.wrapping_add(1); the let equation carries it to
     // `next`, which is the step the elaborator inserts silently.
     let next_bound = Proof::transport(
         symm_at(&Type::U8, &Term::var(next), Proof::hyp(next_is)),
-        |hole| prelude.u8_le_prop(hole, limit.clone()),
+        |hole| {
+            Term::int_le(
+                Term::view(MachineInt::U8, hole),
+                Term::view(MachineInt::U8, limit.clone()),
+            )
+        },
         at_successor,
     );
     assert_eq!(
         check_proof(
             &mut ctx,
             &next_bound,
-            &prelude.u8_le_prop(Term::var(next), limit.clone())
+            &Term::int_le(
+                Term::view(MachineInt::U8, Term::var(next)),
+                Term::view(MachineInt::U8, limit.clone())
+            )
         ),
         Ok(())
     );
@@ -565,8 +608,14 @@ fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
     assert!(
         check_proof(
             &mut ctx,
-            &lemma(theory.u8_zero_le, vec![limit.clone()]),
-            &prelude.u8_le_prop(Term::U8(0), limit)
+            &lemma(
+                theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                vec![limit.clone()]
+            ),
+            &Term::int_le(
+                Term::view(MachineInt::U8, Term::U8(0)),
+                Term::view(MachineInt::U8, limit)
+            )
         )
         .is_ok()
     );
@@ -574,8 +623,8 @@ fn the_facts_bounded_walk_needs_are_lemmas_over_the_model() {
         theory.nat_succ_add,
         theory.nat_zero_or_succ,
         theory.nat_le_succ_succ,
-        theory.u8_lt_of_le_of_ne,
-        theory.u8_succ_le_of_lt,
+        theory.machine(MachineInt::U8).lt_of_le_of_ne,
+        theory.machine(MachineInt::U8).succ_le_of_lt,
     ] {
         assert!(!definitions.is_classical(id));
     }

@@ -8,7 +8,6 @@
 use std::rc::Rc;
 use std::time::Instant;
 
-use locus::kernel::derive::Chain;
 use locus::kernel::theory::{self, MachineLemmas, Theory};
 use locus::kernel::{
     Axiom, CmpOp, Context, Definitions, HypId, Integer, KernelError, MachineInt, Mode, Prelude,
@@ -146,7 +145,7 @@ fn nodes(proof: &Proof) -> usize {
 // --- The names -----------------------------------------------------------------------
 
 /// The lemmas about one machine type, in the order of the table.
-const MACHINE_LEMMAS: [&str; 16] = [
+const MACHINE_LEMMAS: [&str; 18] = [
     "le_refl",
     "le_trans",
     "le_of_lt",
@@ -163,7 +162,12 @@ const MACHINE_LEMMAS: [&str; 16] = [
     "cmp_of_eq",
     "lt_of_not_le",
     "le_of_not_lt",
+    "succ_le_of_lt",
+    "eq_symm",
 ];
+
+/// The three more at each unsigned type.
+const UNSIGNED_LEMMAS: [&str; 3] = ["zero_le", "sub_le", "sub_le_sub"];
 
 const INT_LEMMAS: [&str; 6] = [
     "int_le_of_lt",
@@ -184,11 +188,16 @@ fn the_lemma_names_are_stable() {
         for lemma in MACHINE_LEMMAS {
             expected.push(format!("{}_{lemma}", ty.name()));
         }
+        if !ty.signed() {
+            for lemma in UNSIGNED_LEMMAS {
+                expected.push(format!("{}_{lemma}", ty.name()));
+            }
+        }
     }
     let names = theory.lemma_names();
     let found: Vec<String> = names.iter().map(|(name, _)| name.to_string()).collect();
     assert_eq!(found, expected);
-    assert_eq!(names.len(), 6 + 8 * 16);
+    assert_eq!(names.len(), 6 + 8 * 18 + 4 * 3);
 
     // Distinct names, distinct identities, each a declared function.
     let mut distinct = found.clone();
@@ -228,21 +237,42 @@ fn the_lemma_names_are_stable() {
         );
     }
 
-    // The u8 lemmas over the Nat model keep their names in the elaborator
-    // until E5, so the same source name would reach two lemmas then: the
-    // table records the view family, and E5 replaces the other.
-    let legacy = [
-        ("u8_le_refl", theory.u8_le_refl),
-        ("u8_le_trans", theory.u8_le_trans),
-        ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
+    // The names the examples call are the family at `u8`: E5 rebound them
+    // from the lemmas over the model of `u8` in `Nat` to the table.
+    let rebound = [
+        ("u8_le_refl", theory.machine(MachineInt::U8).le_refl),
+        ("u8_le_trans", theory.machine(MachineInt::U8).le_trans),
+        (
+            "u8_lt_of_le_of_ne",
+            theory.machine(MachineInt::U8).lt_of_le_of_ne,
+        ),
+        (
+            "u8_succ_le_of_lt",
+            theory.machine(MachineInt::U8).succ_le_of_lt,
+        ),
+        ("u8_eq_symm", theory.machine(MachineInt::U8).eq_symm),
+        (
+            "u8_zero_le",
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+        ),
+        (
+            "u8_sub_le",
+            theory.machine(MachineInt::U8).unsigned.unwrap().sub_le,
+        ),
+        (
+            "u8_sub_le_sub",
+            theory.machine(MachineInt::U8).unsigned.unwrap().sub_le_sub,
+        ),
     ];
-    for (name, id) in legacy {
+    for (name, id) in rebound {
         let (_, in_table) = names
             .iter()
             .find(|(other, _)| *other == name)
-            .expect("the view family has the name");
-        assert_ne!(*in_table, id, "{name} in the table is the lemma over views");
+            .expect("the family has the name");
+        assert_eq!(*in_table, id, "{name} in the table is the lemma over views");
     }
+    // A signed type has no `zero_le`.
+    assert!(!names.iter().any(|(name, _)| *name == "i8_zero_le"));
 }
 
 // --- Every lemma at every type, at variables and at literals ----------------------------
@@ -690,7 +720,10 @@ fn every_lemma_is_short() {
         let count = nodes(proof);
         println!("{name}: {count} nodes");
         widest = widest.max(count);
-        assert!(count <= 16, "{name} has {count} nodes");
+        // The lemmas that go through the table, `succ_le_of_lt` and the
+        // two about differences, carry a model step and two certificates
+        // for each row they speak of.
+        assert!(count <= 28, "{name} has {count} nodes");
     }
     assert!(widest > 1);
 }
@@ -761,52 +794,6 @@ fn cmp_agrees_with_rust_on_every_pair_of_bytes() {
                         );
                         assert_eq!(infer_proof(&mut ctx, &Proof::Evaluate(term)), Ok(expected));
                     }
-                }
-            }
-        }
-    }
-}
-
-/// At `u8`, the three comparisons agree with the primitives of the `u8`
-/// model on every pair of bytes, and the kernel proves the two equal on
-/// closed values by evaluating each.
-#[test]
-fn cmp_at_u8_agrees_with_the_legacy_comparisons() {
-    let (definitions, _, _) = setup();
-    let mut ctx = Context::with_definitions(definitions);
-    for (op, legacy) in [
-        (CmpOp::Eq, Prim::U8Eq),
-        (CmpOp::Lt, Prim::U8Lt),
-        (CmpOp::Le, Prim::U8Le),
-    ] {
-        for a in 0..=255u8 {
-            for b in 0..=255u8 {
-                let new = cmp(op, U8, &Term::U8(a), &Term::U8(b));
-                let old = Term::prim(legacy, vec![Term::U8(a), Term::U8(b)]);
-                let Ok(Term::Eq(_, _, new_value)) =
-                    infer_proof(&mut ctx, &Proof::Evaluate(new.clone()))
-                else {
-                    panic!("{new} evaluates")
-                };
-                let Ok(Term::Eq(_, _, old_value)) =
-                    infer_proof(&mut ctx, &Proof::Evaluate(old.clone()))
-                else {
-                    panic!("{old} evaluates")
-                };
-                assert_eq!(new_value, old_value, "{new} and {old}");
-                if a % 51 == 0 && b % 51 == 0 {
-                    // Both sides evaluate to the same literal, so a chain of
-                    // the two evaluations proves the equation.
-                    let chain = Chain::new(Type::Bool, new.clone())
-                        .step(Proof::Evaluate(new.clone()))
-                        .step_rev(&old, Proof::Evaluate(old.clone()))
-                        .finish();
-                    check_proof(
-                        &mut ctx,
-                        &chain,
-                        &Term::eq(Type::Bool, new.clone(), old.clone()),
-                    )
-                    .unwrap_or_else(|error| panic!("{error}: {new} == {old}"));
                 }
             }
         }
@@ -961,21 +948,10 @@ fn cmp_reflect_is_used_both_ways_at_every_type_and_near_missed() {
             // The views at another type are a different claim.
             let elsewhere = op.claim(view(neighbour, &a), view(neighbour, &b));
             assert!(check_proof(&mut s.ctx, &from_true, &elsewhere).is_err());
-            // A comparison that is not `Prim::Cmp`: a bool literal, and the
-            // `u8` model's comparison, which `reflect` speaks of instead.
+            // A comparison that is not `Prim::Cmp`: a bool literal.
             assert_eq!(
                 s.infer(&Proof::Axiom(Axiom::CmpReflect(Term::Bool(true), true))),
                 Err(KernelError::NoComputationStep(Term::Bool(true)))
-            );
-            let legacy = Term::prim(Prim::U8Le, vec![Term::U8(1), Term::U8(2)]);
-            assert_eq!(
-                s.infer(&Proof::Axiom(Axiom::CmpReflect(legacy.clone(), true))),
-                Err(KernelError::NoComputationStep(legacy))
-            );
-            // And `reflect` does not speak of `Prim::Cmp`.
-            assert_eq!(
-                s.infer(&Proof::Axiom(Axiom::Reflect(comparison.clone(), true))),
-                Err(KernelError::NoComputationStep(comparison.clone()))
             );
             // The name.
             assert_eq!(Axiom::CmpReflect(comparison, true).name(), "cmp_reflect");

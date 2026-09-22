@@ -2,7 +2,6 @@
 //! the kernel contract in `atlas.html`.
 
 use super::context::{Context, Mode};
-use super::defs::Prelude;
 use super::depth::check_depth;
 use super::error::KernelError;
 use super::eval::{Evaluator, is_plain_data};
@@ -519,40 +518,50 @@ fn type_of_for(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kerne
     let Term::For(looped) = term else {
         unreachable!("dispatched on this variant")
     };
-    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
     let (lo, hi) = (&looped.lo, &looped.hi);
-    expect_type(ctx, lo, &Type::U8, mode)?;
-    expect_type(ctx, hi, &Type::U8, mode)?;
+    // The bounds have one machine type, read off the lower one.
+    let ty = bound_type(ctx, lo, mode)?;
+    let index_type = Type::machine(ty);
+    expect_type(ctx, hi, &index_type, mode)?;
+    let view = |x: &Term| Term::view(ty, x.clone());
     // Ordered bounds make the final index hi, so the result type
     // needs no case distinction.
-    proof_of(
-        ctx,
-        &looped.ordered,
-        &prelude.u8_le_prop(lo.clone(), hi.clone()),
-    )?;
+    proof_of(ctx, &looped.ordered, &Term::int_le(view(lo), view(hi)))?;
     let state_at = |index: &Term| Type::Tuple(looped.state.clone()).open(index);
     expect_type(ctx, &looped.init, &state_at(lo), mode)?;
 
     let scope = ctx.len();
     let local = mode == Mode::Logical;
-    let index = ctx.push_local(Type::U8, local);
+    let index = ctx.push_local(index_type, local);
     let i = Term::Free(index);
     let mut checked = type_ok(ctx, &state_at(&i));
     if checked.is_ok() {
         let state = ctx.push_local(state_at(&i), local);
-        let lower = ctx.push_hyp(prelude.u8_le_prop(lo.clone(), i.clone()));
-        let upper = ctx.push_hyp(prelude.u8_lt_prop(i.clone(), hi.clone()));
+        let lower = ctx.push_hyp(Term::int_le(view(lo), view(&i)));
+        let upper = ctx.push_hyp(Term::int_lt(view(&i), view(hi)));
         let body = looped
             .body
             .instantiate(2, |j| Term::Free([index, state][j]))
             .open_hyps(&[lower, upper]);
         // i < hi, so the successor does not wrap.
-        let next = Term::wrapping_add(i, Term::U8(1));
+        let next = Term::successor(ty, i);
         checked = expect_type(ctx, &body, &state_at(&next), mode);
     }
     ctx.truncate(scope);
     checked?;
     Ok(state_at(hi))
+}
+
+/// The machine type of a bound of a `for`, which must be a machine integer
+/// type; any other type is reported against `u8`, the type the rule was
+/// first stated at.
+fn bound_type(ctx: &mut Context, bound: &Term, mode: Mode) -> Result<MachineInt, KernelError> {
+    let found = term_type(ctx, bound, mode)?;
+    found.as_machine().ok_or(KernelError::TypeMismatch {
+        expected: Type::U8,
+        found,
+    })
 }
 
 /// The payload telescopes of a data type that supports case analysis:
@@ -662,10 +671,6 @@ fn expect_arm_count(arms: &[ProofArm], variants: usize) -> Result<(), KernelErro
 /// The parameter types and the result type of a primitive.
 fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
     match prim {
-        Prim::WrappingAdd | Prim::WrappingSub => (vec![Type::U8, Type::U8], Type::U8),
-        Prim::U8Eq | Prim::U8Lt | Prim::U8Le => (vec![Type::U8, Type::U8], Type::Bool),
-        Prim::ToNat => (vec![Type::U8], Type::Nat),
-        Prim::OfNat => (vec![Type::Nat], Type::U8),
         Prim::Succ => (vec![Type::Nat], Type::Nat),
         Prim::NatAdd => (vec![Type::Nat, Type::Nat], Type::Nat),
         Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntDiv | Prim::IntRem => {
@@ -683,10 +688,10 @@ fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
 }
 
 /// Native evaluation of a primitive applied to literals. This is the
-/// implementation that must agree with the `u8` model, with the integers
-/// as a model of the `Int` axioms, with the machine integers as a model of
-/// the axioms about `view`, `wrap`, and `cast`, and with the table of
-/// primitive operations. `int_le` is a proposition and has no value;
+/// implementation that must agree with the integers as a model of the `Int`
+/// axioms, with the machine integers as a model of the axioms about `view`,
+/// `wrap`, and `cast`, with the table of primitive operations, and with
+/// Rust's comparisons. `int_le` is a proposition and has no value;
 /// `evaluate` decides it.
 pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
     // A machine literal of the type the primitive expects, as a number.
@@ -715,13 +720,6 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         // A comparison of two values of a type is the comparison of their
         // numbers, which is what `cmp_reflect` states of the views.
         (Prim::Cmp(op, ty), [a, b]) => Term::Bool(op.holds(&machine(ty, a)?, &machine(ty, b)?)),
-        (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
-        (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
-        (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
-        (Prim::U8Lt, [Term::U8(a), Term::U8(b)]) => Term::Bool(a < b),
-        (Prim::U8Le, [Term::U8(a), Term::U8(b)]) => Term::Bool(a <= b),
-        (Prim::ToNat, [Term::U8(a)]) => Term::nat(u64::from(*a)),
-        (Prim::OfNat, [Term::Nat(n)]) => Term::U8(n.low_byte()),
         (Prim::Succ, [Term::Nat(n)]) => Term::Nat(n.succ()),
         (Prim::NatAdd, [Term::Nat(a), Term::Nat(b)]) => Term::Nat(a.add(b)),
         (Prim::IntAdd, [Term::Int(a), Term::Int(b)]) => Term::Int(a.add(b)),
@@ -742,13 +740,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         Axiom::NatAddZero(_)
         | Axiom::NatAddSucc(..)
         | Axiom::NatSuccInjective(..)
-        | Axiom::NatSuccNotZero(_)
-        | Axiom::ToOfNat(_)
-        | Axiom::OfNatWrap(_) => Some(Type::Nat),
-        Axiom::ToNatBound(_)
-        | Axiom::OfToNat(_)
-        | Axiom::WrappingAddModel(..)
-        | Axiom::WrappingSubModel(..) => Some(Type::U8),
+        | Axiom::NatSuccNotZero(_) => Some(Type::Nat),
         Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -781,7 +773,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::CastDef(ty, _, _)
         | Axiom::OpModel(_, ty, _)
         | Axiom::OpExact(_, ty, _) => Some(Type::machine(*ty)),
-        Axiom::Reflect(..) | Axiom::CmpReflect(..) => None,
+        Axiom::CmpReflect(..) => None,
     };
     if let Some(expected) = &expected {
         for term in axiom.terms() {
@@ -789,8 +781,6 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         }
     }
     let nat_eq = |left: Term, right: Term| Term::eq(Type::Nat, left, right);
-    let u8_eq = |left: Term, right: Term| Term::eq(Type::U8, left, right);
-    let bound = Term::nat(256);
     let int_eq = |left: Term, right: Term| Term::eq(Type::Int, left, right);
     let (add, mul, le) = (Term::int_add, Term::int_mul, Term::int_le);
     let (div, rem, lt) = (Term::int_div, Term::int_rem, Term::int_lt);
@@ -805,35 +795,6 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
             nat_eq(a, b),
         ),
         Axiom::NatSuccNotZero(a) => prelude.not_prop(nat_eq(Term::succ(a), Term::nat(0))),
-        Axiom::ToNatBound(x) => prelude.nat_lt_prop(Term::to_nat(x), bound),
-        Axiom::OfToNat(x) => u8_eq(Term::of_nat(Term::to_nat(x.clone())), x),
-        Axiom::ToOfNat(n) => Term::implies(
-            prelude.nat_lt_prop(n.clone(), bound),
-            nat_eq(Term::to_nat(Term::of_nat(n.clone())), n),
-        ),
-        Axiom::OfNatWrap(n) => u8_eq(
-            Term::of_nat(Term::nat_add(n.clone(), bound)),
-            Term::of_nat(n),
-        ),
-        Axiom::WrappingAddModel(a, b) => u8_eq(
-            Term::wrapping_add(a.clone(), b.clone()),
-            Term::of_nat(Term::nat_add(Term::to_nat(a), Term::to_nat(b))),
-        ),
-        Axiom::WrappingSubModel(a, b) => u8_eq(
-            Term::wrapping_add(Term::wrapping_sub(a.clone(), b.clone()), b),
-            a,
-        ),
-        Axiom::Reflect(comparison, flag) => {
-            expect_type(ctx, &comparison, &Type::Bool, Mode::Logical)?;
-            let claim = comparison_claim(&prelude, &comparison)
-                .ok_or_else(|| KernelError::NoComputationStep(comparison.clone()))?;
-            let observed = Term::eq(Type::Bool, comparison, Term::Bool(flag));
-            if flag {
-                Term::implies(observed, claim)
-            } else {
-                Term::implies(observed, prelude.not_prop(claim))
-            }
-        }
         Axiom::IntAddAssoc(a, b, c) => {
             int_eq(add(add(a.clone(), b.clone()), c.clone()), add(a, add(b, c)))
         }
@@ -981,23 +942,6 @@ fn table_row(op: Op, ty: MachineInt, operands: &[Term]) -> Result<Row, KernelErr
         });
     }
     Ok(row)
-}
-
-/// The proposition a runtime comparison decides.
-fn comparison_claim(prelude: &Prelude, comparison: &Term) -> Option<Term> {
-    let Term::Prim(prim, arguments) = comparison else {
-        return None;
-    };
-    let [left, right] = arguments.as_slice() else {
-        return None;
-    };
-    let (left, right) = (left.clone(), right.clone());
-    match prim {
-        Prim::U8Eq => Some(Term::eq(Type::U8, left, right)),
-        Prim::U8Lt => Some(prelude.u8_lt_prop(left, right)),
-        Prim::U8Le => Some(prelude.u8_le_prop(left, right)),
-        _ => None,
-    }
 }
 
 /// A term of a ghost type has no runtime value, so it is never executable.
@@ -1503,16 +1447,21 @@ fn claim_of_for_step(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelErr
     let Term::For(this) = looped else {
         return Err(no_step());
     };
-    let Term::Prim(Prim::WrappingAdd, bound) = &this.hi else {
+    // The upper bound is written as the successor of h at the index type.
+    let Term::Prim(Prim::Op(Op::WrappingAdd, index_type), bound) = &this.hi else {
         return Err(no_step());
     };
-    let [h, Term::U8(1)] = bound.as_slice() else {
+    let [h, one] = bound.as_slice() else {
         return Err(no_step());
     };
-    let prelude = ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
+    if *one != Term::machine_int(*index_type, 1) {
+        return Err(no_step());
+    }
+    ctx.definitions().prelude().ok_or(KernelError::NoPrelude)?;
     let ty = term_type(ctx, looped, Mode::Logical)?;
-    proof_of(ctx, lower, &prelude.u8_le_prop(this.lo.clone(), h.clone()))?;
-    proof_of(ctx, upper, &prelude.u8_lt_prop(h.clone(), this.hi.clone()))?;
+    let view = |x: &Term| Term::view(*index_type, x.clone());
+    proof_of(ctx, lower, &Term::int_le(view(&this.lo), view(h)))?;
+    proof_of(ctx, upper, &Term::int_lt(view(h), view(&this.hi)))?;
     // The loop up to h. Its body is the same term, now read under the
     // hypothesis i < h; a body whose proofs rely on the old upper
     // bound does not type-check here, and then there is no step.

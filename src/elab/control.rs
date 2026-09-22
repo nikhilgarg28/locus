@@ -57,11 +57,13 @@ impl Env<'_> {
         let (tested, negated) = match &condition_value.expr {
             Expr::Compare {
                 op: CompareOp::Ne,
+                ty,
                 left,
                 right,
             } => (
                 Expr::Compare {
                     op: CompareOp::Eq,
+                    ty: ty.clone(),
                     left: left.clone(),
                     right: right.clone(),
                 },

@@ -3,12 +3,14 @@
 
 use locus::kernel::derive::Chain;
 use locus::kernel::{
-    Context, Definitions, KernelError, MAX_DEPTH, Mode, Proof, Term, Type, check_proof,
-    infer_proof, infer_term,
+    Context, Definitions, KernelError, MAX_DEPTH, MachineInt, Mode, Op, Proof, Term, Type,
+    check_proof, infer_proof, infer_term,
 };
 
 fn nested_sum(depth: usize) -> Term {
-    (0..depth).fold(Term::U8(0), |term, _| Term::wrapping_add(term, Term::U8(1)))
+    (0..depth).fold(Term::U8(0), |term, _| {
+        Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
+    })
 }
 
 fn long_chain(links: usize) -> Proof {
@@ -92,7 +94,11 @@ fn call_chain(count: usize) -> (Definitions, Term) {
     for _ in 0..count {
         previous = definitions
             .declare_fn(&signature, |_| {
-                Term::wrapping_add(Term::call(Term::Fn(previous), vec![]), Term::U8(1))
+                Term::op(
+                    Op::WrappingAdd,
+                    MachineInt::U8,
+                    vec![Term::call(Term::Fn(previous), vec![]), Term::U8(1)],
+                )
             })
             .unwrap();
     }

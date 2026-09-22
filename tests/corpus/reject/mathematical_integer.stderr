@@ -4,4 +4,4 @@ error[L0201]: `Nat` is not part of the core language
 2 | fn first(n: Nat) -> u8 { 1 } //~ error: L0201 `Nat` is not part of the core language
   |             ^^^
   |
-  = note: the core has `bool` and `u8`; mathematical integers arrive in a later milestone
+  = note: `Nat` is internal to the kernel; the integers of the logic are `Int`, and the machine integers are `u8` to `i64`

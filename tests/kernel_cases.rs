@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use locus::kernel::derive::{symm, trans};
 use locus::kernel::{
-    Context, Definitions, EnumId, KernelError, Mode, Prelude, Proof, PropId, PropVariant, Term,
-    Type, check_proof, infer_proof, infer_term, proof_is_classical, same,
+    CmpOp, Context, Definitions, EnumId, KernelError, MachineInt, Mode, Op, Prelude, Proof, PropId,
+    PropVariant, Term, Type, check_proof, infer_proof, infer_term, proof_is_classical, same,
 };
 
 fn u8_eq(left: Term, right: Term) -> Term {
@@ -628,7 +628,12 @@ fn an_existential_is_opened_only_to_prove_something_else() {
     let n = Term::var(ctx.declare(Type::U8).unwrap());
 
     // exists k { n == k.wrapping_add(k) }, witnessed by a ghost value.
-    let doubled = |k: Term| u8_eq(n.clone(), Term::wrapping_add(k.clone(), k));
+    let doubled = |k: Term| {
+        u8_eq(
+            n.clone(),
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![k.clone(), k]),
+        )
+    };
     let claim = Term::exists(Type::U8, doubled);
     let k = Term::var(ctx.declare_ghost(Type::U8).unwrap());
     let fact = ctx.assume(doubled(k.clone())).unwrap();
@@ -647,7 +652,10 @@ fn an_existential_is_opened_only_to_prove_something_else() {
 
     // Opening it: exists k { k + k == n }, the same fact flipped.
     let flipped = Term::exists(Type::U8, |k| {
-        u8_eq(Term::wrapping_add(k.clone(), k), n.clone())
+        u8_eq(
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![k.clone(), k]),
+            n.clone(),
+        )
     });
     let h = ctx.assume(claim).unwrap();
     // From n == w + w, get w + w == n, and repackage it.
@@ -790,7 +798,8 @@ fn a_branch_of_a_math_function_knows_which_branch_it_is() {
     // }
     // The first hole needs the branch fact: the comparison was true, so
     // n == 0, so 0 == n.
-    use locus::kernel::{Axiom, Prim};
+    use locus::kernel::Axiom;
+    use locus::kernel::derive::Chain;
     let (mut definitions, _) = Definitions::with_prelude();
     let result_for = |n: &Term| {
         let n = n.clone();
@@ -807,7 +816,7 @@ fn a_branch_of_a_math_function_knows_which_branch_it_is() {
     });
     let body = |n: &Term, use_the_fact: bool| {
         let n = n.clone();
-        let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+        let comparison = Term::cmp(CmpOp::Eq, MachineInt::U8, n.clone(), Term::U8(0));
         let result = result_for(&n);
         let (result_true, result_false) = (result.clone(), result.clone());
         let (n_true, n_false) = (n.clone(), n.clone());
@@ -830,10 +839,22 @@ fn a_branch_of_a_math_function_knows_which_branch_it_is() {
                 (
                     0,
                     Box::new(move |_, fact| {
-                        let n_is_zero = Proof::implies_elim(
-                            Proof::Axiom(Axiom::Reflect(reflected, true)),
+                        // The fact reflects to an equality of the views;
+                        // wrap_view carries it to the bytes: n is
+                        // wrap(view(n)), which is wrap(view(0)), which is 0.
+                        let views_equal = Proof::implies_elim(
+                            Proof::Axiom(Axiom::CmpReflect(reflected, true)),
                             fact,
                         );
+                        let view = |x: Term| Term::view(MachineInt::U8, x);
+                        let n_is_zero = Chain::new(Type::U8, n_true.clone())
+                            .step_rev(
+                                &Term::wrap(MachineInt::U8, view(n_true.clone())),
+                                Proof::Axiom(Axiom::WrapView(MachineInt::U8, n_true.clone())),
+                            )
+                            .rewrite(|hole| Term::wrap(MachineInt::U8, hole), views_equal)
+                            .step(Proof::Axiom(Axiom::WrapView(MachineInt::U8, Term::U8(0))))
+                            .finish();
                         let zero_is_n = Proof::transport(
                             n_is_zero,
                             |hole| u8_eq(hole, n_true.clone()),

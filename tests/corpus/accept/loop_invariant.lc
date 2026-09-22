@@ -27,4 +27,4 @@ fn count(n: u8) -> u8 {
 //~ run: walk(9) => (9, Proved)
 //~ run: count(0) => 0
 //~ run: count(255) => 255
-//~ rust: for step in 0..n {
+//~ rust: for step in 0_u8..n {

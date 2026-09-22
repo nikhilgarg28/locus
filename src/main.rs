@@ -6,7 +6,8 @@ use std::process::ExitCode;
 
 use locus::diagnostic::Diagnostic;
 use locus::elab;
-use locus::erased::{Interpreter, Outcome, Value, print_module};
+use locus::erased::{EType, Interpreter, Outcome, Value, print_module};
+use locus::kernel::Integer;
 use locus::lexer;
 use locus::parser;
 use locus::source::SourceMap;
@@ -182,21 +183,35 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
                     )?;
                     return Ok(1);
                 };
+                // Each argument is read at the type of its parameter: a
+                // `bool`, or a machine integer within its type's range.
+                let params: Vec<EType> = module
+                    .fns
+                    .iter()
+                    .find(|item| item.reference == function)
+                    .map(|item| item.params.iter().map(|(_, _, ty)| ty.clone()).collect())
+                    .unwrap_or_default();
                 let mut values = Vec::new();
-                for argument in &arguments[3..] {
+                for (index, argument) in arguments[3..].iter().enumerate() {
                     let text = argument.to_string_lossy();
-                    values.push(match (text.as_ref(), text.parse::<u8>()) {
-                        ("true", _) => Value::Bool(true),
-                        ("false", _) => Value::Bool(false),
-                        (_, Ok(byte)) => Value::U8(byte),
-                        _ => {
-                            writeln!(
-                                io::stderr(),
-                                "error: `{text}` is not a `u8` or a `bool`; other arguments cannot be given on the command line"
-                            )?;
-                            return Ok(2);
-                        }
-                    });
+                    let value = match (params.get(index), text.as_ref()) {
+                        (Some(EType::Bool), "true") => Some(Value::Bool(true)),
+                        (Some(EType::Bool), "false") => Some(Value::Bool(false)),
+                        (Some(EType::Int(ty)), text) => text
+                            .parse::<i128>()
+                            .ok()
+                            .filter(|value| ty.contains(&Integer::from(*value)))
+                            .map(|value| Value::Int(*ty, value)),
+                        _ => None,
+                    };
+                    let Some(value) = value else {
+                        writeln!(
+                            io::stderr(),
+                            "error: `{text}` is not a value of the parameter's type; only a `bool` or a machine integer can be given on the command line"
+                        )?;
+                        return Ok(2);
+                    };
+                    values.push(value);
                 }
                 match Interpreter::new(module, FUEL).call(function, values) {
                     Ok(Outcome::Value(value)) => writeln!(output, "{}", value.debug(module))?,

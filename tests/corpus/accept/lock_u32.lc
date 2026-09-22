@@ -1,5 +1,7 @@
-// A lock that tolerates three wrong codes. The failure count never exceeds
-// the limit, and every function that hands the count on says so with evidence.
+// The lock of examples/lock.lc with `u32` counts: the same program, the same
+// proofs, with the lemmas of `u32` in place of those of `u8`. The failure
+// count never exceeds the limit, and every function that hands the count on
+// says so with evidence.
 
 enum Event {
     Wrong,
@@ -7,11 +9,11 @@ enum Event {
 }
 
 struct Lock {
-    failures: u8,
+    failures: u32,
     open: bool,
 }
 
-math fn within_limit(failures: u8) -> Prop {
+math fn within_limit(failures: u32) -> Prop {
     prop!(failures <= 3)
 }
 
@@ -25,10 +27,10 @@ fn step(
     event: Event,
 ) -> (next: Lock, @within_limit(next.failures)) {
     match event {
-        Event::Right => (Lock { failures: 0, open: true }, fold!(within_limit, prove!(0u8 <= 3))),
+        Event::Right => (Lock { failures: 0, open: true }, fold!(within_limit, prove!(0u32 <= 3))),
         Event::Wrong => {
             if lock.failures < 3 {
-                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                let fits = u32_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
                 (Lock { failures: lock.failures.wrapping_add(1), open: false }, fold!(within_limit, fits))
             } else {
                 (Lock { failures: lock.failures, open: false }, bounded)
@@ -38,17 +40,17 @@ fn step(
 }
 
 // The code is right on the attempt numbered `correct`, and wrong otherwise.
-fn event_at(attempt: u8, correct: u8) -> Event {
+fn event_at(attempt: u32, correct: u32) -> Event {
     if attempt == correct { Event::Right } else { Event::Wrong }
 }
 
 // The invariant is loop state: evidence travels beside the lock it describes.
 // `still_bounded` comes out of the call typed over `next`, so it is the
 // evidence the next round needs, exactly.
-fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) {
+fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
     for attempt in 0..attempts (
         lock: Lock = Lock { failures: 0, open: false },
-        bounded: @within_limit(lock.failures) = fold!(within_limit, prove!(0u8 <= 3)),
+        bounded: @within_limit(lock.failures) = fold!(within_limit, prove!(0u32 <= 3)),
     ) {
         let (next, still_bounded) = step(lock, bounded, event_at(attempt, correct));
         continue(next, still_bounded)
@@ -58,12 +60,12 @@ fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) 
 // Needs the bound: without it the subtraction could wrap. `unfold!` opens
 // the definition, and the lemma says a difference under the bound stays
 // under it.
-fn remaining(failures: u8, bounded: @within_limit(failures)) -> (left: u8, @(left <= 3)) {
-    (3.wrapping_sub(failures), u8_sub_le(3, failures, unfold!(within_limit, bounded)))
+fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
+    (3.wrapping_sub(failures), u32_sub_le(3, failures, unfold!(within_limit, bounded)))
 }
 
 // The caller reuses the evidence `run` returned; nothing is proved twice.
-fn attempts_left(attempts: u8, correct: u8) -> u8 {
+fn attempts_left(attempts: u32, correct: u32) -> u32 {
     let (last, bounded) = run(attempts, correct);
     let (left, _) = remaining(last.failures, bounded);
     left
@@ -73,8 +75,9 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
 //~ run: attempts_left(2, 9) => 1
 //~ run: attempts_left(5, 9) => 0
 //~ run: attempts_left(3, 2) => 3
-//~ run: run(200, 9) => (Lock { failures: 3, open: false }, Proved)
+//~ run: attempts_left(70000, 9) => 0
+//~ run: run(300, 9) => (Lock { failures: 3, open: false }, Proved)
 //~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
-//~ run: event_at(4, 4) => Right
-//~ rust: pub fn attempts_left(attempts: u8, correct: u8) -> u8 {
-//~ rust: pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {
+//~ run: event_at(4294967295, 4294967295) => Right
+//~ rust: pub fn attempts_left(attempts: u32, correct: u32) -> u32 {
+//~ rust: if lock.failures < 3_u32 {

@@ -189,14 +189,23 @@ impl<'d> Evaluator<'d> {
 
     #[inline(never)]
     fn eval_for(&mut self, term: &Term, looped: &ForLoop) -> Result<Term, KernelError> {
-        let (Term::U8(lo), Term::U8(hi)) = (self.eval(&looped.lo)?, self.eval(&looped.hi)?) else {
+        let (lo, hi) = (self.eval(&looped.lo)?, self.eval(&looped.hi)?);
+        // The bounds are two literals of one machine type; each fits an
+        // i128, so the indices are counted natively.
+        let (Some((ty, lo)), Some((hi_type, hi))) = (lo.machine_value(), hi.machine_value()) else {
             return Err(stuck(term));
         };
+        let (Some(lo), Some(hi)) = (lo.to_i128(), hi.to_i128()) else {
+            return Err(stuck(term));
+        };
+        if ty != hi_type {
+            return Err(stuck(term));
+        }
         // Iterations run one after another, not one inside another, so a
         // long loop costs steps and not depth.
         let mut state = self.eval(&looped.init)?;
         for index in lo..hi {
-            let arguments = [Term::U8(index), state];
+            let arguments = [Term::machine_int(ty, index), state];
             let body = looped.body.instantiate(2, |j| arguments[j].clone());
             state = self.eval(&body)?;
         }

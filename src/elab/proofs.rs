@@ -4,7 +4,7 @@
 
 use crate::ast::{self, ExprKind, Form, PatternKind};
 use crate::kernel::derive;
-use crate::kernel::{HypId, KernelError, Proof, Term, Type, VarId, infer_proof};
+use crate::kernel::{HypId, KernelError, Proof, Term, Type, VarId, check_proof, infer_proof};
 use crate::source::Span;
 use crate::typed::{Binder, Expr, FnRef, value_term};
 
@@ -415,10 +415,25 @@ impl Env<'_> {
                 }
                 Err(_) => target,
             };
-            derive::fold(&mut self.ctx, function, &target, &computed).and_then(|folded| {
-                self.back_to_stated(folded, steps)
-                    .ok_or(KernelError::NoComputationStep((**goal).clone()))
-            })
+            let folded =
+                derive::fold(&mut self.ctx, function, &target, &computed).and_then(|folded| {
+                    self.back_to_stated(folded, steps)
+                        .ok_or(KernelError::NoComputationStep((**goal).clone()))
+                });
+            // A fold that reaches the definition and then does not fit it
+            // is evidence of the wrong claim, which is said as such.
+            if let Ok(folded) = &folded
+                && check_proof(&mut self.ctx, folded, goal).is_err()
+                && let Ok(claim) = infer_proof(&mut self.ctx, &target)
+            {
+                let (given, wanted) = (self.show(&claim), self.show(goal));
+                return self.fail(
+                    "L0230",
+                    format!("this is evidence of `{given}`, and `{wanted}` is needed"),
+                    second.span,
+                );
+            }
+            folded
         };
         match result {
             Ok(proof) => self.proved(proof, span),

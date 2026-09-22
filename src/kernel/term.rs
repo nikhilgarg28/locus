@@ -244,17 +244,6 @@ fn rebind_telescope(fields: &[Type], depth: Depth, op: Rebind<'_>) -> Vec<Type> 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prim {
-    /// `u8, u8 -> u8`
-    WrappingAdd,
-    WrappingSub,
-    /// `u8, u8 -> bool`: the runtime comparisons.
-    U8Eq,
-    U8Lt,
-    U8Le,
-    /// `u8 -> Nat`: the model of a byte.
-    ToNat,
-    /// `Nat -> u8`: reduction modulo 256.
-    OfNat,
     /// `Nat -> Nat`
     Succ,
     /// `Nat, Nat -> Nat`
@@ -347,13 +336,6 @@ impl Prim {
     /// at a machine type is named without it; `Display` adds the type.
     pub fn name(self) -> &'static str {
         match self {
-            Self::WrappingAdd => "wrapping_add",
-            Self::WrappingSub => "wrapping_sub",
-            Self::U8Eq => "u8_eq",
-            Self::U8Lt => "u8_lt",
-            Self::U8Le => "u8_le",
-            Self::ToNat => "to_nat",
-            Self::OfNat => "of_nat",
             Self::Succ => "succ",
             Self::NatAdd => "nat_add",
             Self::IntAdd => "int_add",
@@ -385,8 +367,9 @@ impl fmt::Display for Prim {
     }
 }
 
-/// The axioms of the internal `Nat`, of the `u8` model, and of `Int`. Each
-/// takes terms and yields a fixed proposition about them; see the kernel
+/// The axioms of the internal `Nat`, of `Int`, of the machine integer types
+/// over `Int`, of the table of primitive operations, and of the comparisons.
+/// Each takes terms and yields a fixed proposition about them; see the kernel
 /// contract in `atlas.html`, which names each axiom as `name` does.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Axiom {
@@ -398,21 +381,6 @@ pub enum Axiom {
     NatSuccInjective(Term, Term),
     /// `succ(a) == 0 => False`
     NatSuccNotZero(Term),
-    /// `to_nat(x) < 256`
-    ToNatBound(Term),
-    /// `of_nat(to_nat(x)) == x`
-    OfToNat(Term),
-    /// `n < 256 => to_nat(of_nat(n)) == n`
-    ToOfNat(Term),
-    /// `of_nat(n + 256) == of_nat(n)`
-    OfNatWrap(Term),
-    /// `a.wrapping_add(b) == of_nat(to_nat(a) + to_nat(b))`
-    WrappingAddModel(Term, Term),
-    /// `a.wrapping_sub(b).wrapping_add(b) == a`
-    WrappingSubModel(Term, Term),
-    /// For a comparison `c` and its proposition `P`: `c == true => P` when
-    /// the flag is true, `c == false => (P => False)` when it is false.
-    Reflect(Term, bool),
     // The integers are a commutative ring. Below, `+`, `-`, `*`, and `<=`
     // stand for `int_add`, `int_sub` or `int_neg`, `int_mul`, and `int_le`.
     /// `(a + b) + c == a + (b + c)`
@@ -498,7 +466,7 @@ pub enum Axiom {
     /// For a comparison `c` of the form `op[T](a, b)`, `Prim::Cmp`, and its
     /// proposition `P` over the views, `CmpOp::claim` of `view[T](a)` and
     /// `view[T](b)`: `c == true => P` when the flag is true, and
-    /// `c == false => (P => False)` when it is false. `Reflect` for every
+    /// `c == false => (P => False)` when it is false. Reflection at every
     /// machine type; the type is read off the comparison.
     CmpReflect(Term, bool),
 }
@@ -511,13 +479,6 @@ impl Axiom {
             Self::NatAddSucc(..) => "nat_add_succ",
             Self::NatSuccInjective(..) => "nat_succ_injective",
             Self::NatSuccNotZero(_) => "nat_succ_not_zero",
-            Self::ToNatBound(_) => "to_nat_bound",
-            Self::OfToNat(_) => "of_to_nat",
-            Self::ToOfNat(_) => "to_of_nat",
-            Self::OfNatWrap(_) => "of_nat_wrap",
-            Self::WrappingAddModel(..) => "wrapping_add_model",
-            Self::WrappingSubModel(..) => "wrapping_sub_model",
-            Self::Reflect(..) => "reflect",
             Self::IntAddAssoc(..) => "int_add_assoc",
             Self::IntAddComm(..) => "int_add_comm",
             Self::IntAddZero(_) => "int_add_zero",
@@ -560,13 +521,6 @@ impl Axiom {
             Self::NatAddSucc(a, b) => Self::NatAddSucc(f(a), f(b)),
             Self::NatSuccInjective(a, b) => Self::NatSuccInjective(f(a), f(b)),
             Self::NatSuccNotZero(a) => Self::NatSuccNotZero(f(a)),
-            Self::ToNatBound(x) => Self::ToNatBound(f(x)),
-            Self::OfToNat(x) => Self::OfToNat(f(x)),
-            Self::ToOfNat(n) => Self::ToOfNat(f(n)),
-            Self::OfNatWrap(n) => Self::OfNatWrap(f(n)),
-            Self::WrappingAddModel(a, b) => Self::WrappingAddModel(f(a), f(b)),
-            Self::WrappingSubModel(a, b) => Self::WrappingSubModel(f(a), f(b)),
-            Self::Reflect(c, flag) => Self::Reflect(f(c), *flag),
             Self::IntAddAssoc(a, b, c) => Self::IntAddAssoc(f(a), f(b), f(c)),
             Self::IntAddComm(a, b) => Self::IntAddComm(f(a), f(b)),
             Self::IntAddZero(a) => Self::IntAddZero(f(a)),
@@ -608,11 +562,6 @@ impl Axiom {
         match self {
             Self::NatAddZero(a)
             | Self::NatSuccNotZero(a)
-            | Self::ToNatBound(a)
-            | Self::OfToNat(a)
-            | Self::ToOfNat(a)
-            | Self::OfNatWrap(a)
-            | Self::Reflect(a, _)
             | Self::CmpReflect(a, _)
             | Self::IntAddZero(a)
             | Self::IntAddNeg(a)
@@ -628,8 +577,6 @@ impl Axiom {
             | Self::CastDef(_, _, a) => vec![a],
             Self::NatAddSucc(a, b)
             | Self::NatSuccInjective(a, b)
-            | Self::WrappingAddModel(a, b)
-            | Self::WrappingSubModel(a, b)
             | Self::IntAddComm(a, b)
             | Self::IntSubDef(a, b)
             | Self::IntMulComm(a, b)
@@ -711,16 +658,18 @@ pub enum Term {
 
 /// `for i in lo..hi (state = init) { body }`.
 ///
-/// The state is a tuple whose telescope is under one binder, the index, so
-/// an invariant may relate the state to the progress made. `body` is under
-/// two term binders, the index (`Bound(1)`) and the current state
-/// (`Bound(0)`), and two hypothesis binders, `lo <= i` (`Bound(1)`) and
-/// `i < hi` (`Bound(0)`). It produces the state for index `i + 1`.
+/// The bounds and the index have one machine integer type `T`, read off
+/// `lo`. The state is a tuple whose telescope is under one binder, the
+/// index, so an invariant may relate the state to the progress made. `body`
+/// is under two term binders, the index (`Bound(1)`) and the current state
+/// (`Bound(0)`), and two hypothesis binders, `int_le(view[T](lo),
+/// view[T](i))` (`Bound(1)`) and `int_lt(view[T](i), view[T](hi))`
+/// (`Bound(0)`). It produces the state for index `wrapping_add[T](i, 1)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForLoop {
     pub lo: Term,
     pub hi: Term,
-    /// Proves `u8_le(lo, hi)`.
+    /// Proves `int_le(view[T](lo), view[T](hi))`.
     pub ordered: Proof,
     pub state: Vec<Type>,
     pub init: Term,
@@ -850,7 +799,8 @@ pub enum Proof {
     /// `forall (x: u8) { body == true }`, by evaluating all 256 cases. The
     /// body binds `Bound(0)`.
     EvaluateAll(Term),
-    /// An axiom of `Nat`, of the `u8` model, or of `Int`.
+    /// An axiom of `Nat`, of `Int`, of a machine integer type, of the table
+    /// of primitive operations, or of the comparisons.
     Axiom(Axiom),
     /// Induction over `Nat`. The motive binds `Bound(0)`; `base` proves
     /// `motive[0]`; `step` binds `n` and the hypothesis `motive[n]` and
@@ -964,14 +914,6 @@ impl Term {
         Self::Forall(ty, Box::new(body))
     }
 
-    pub fn wrapping_add(left: Term, right: Term) -> Self {
-        Self::Prim(Prim::WrappingAdd, vec![left, right])
-    }
-
-    pub fn wrapping_sub(left: Term, right: Term) -> Self {
-        Self::Prim(Prim::WrappingSub, vec![left, right])
-    }
-
     pub fn prim(prim: Prim, arguments: Vec<Term>) -> Self {
         Self::Prim(prim, arguments)
     }
@@ -979,14 +921,6 @@ impl Term {
     /// A `Nat` literal.
     pub fn nat(value: u64) -> Self {
         Self::Nat(Natural::from(value))
-    }
-
-    pub fn to_nat(byte: Term) -> Self {
-        Self::Prim(Prim::ToNat, vec![byte])
-    }
-
-    pub fn of_nat(number: Term) -> Self {
-        Self::Prim(Prim::OfNat, vec![number])
     }
 
     pub fn succ(number: Term) -> Self {
@@ -1054,6 +988,18 @@ impl Term {
             }
             other => Self::Machine(other, value),
         }
+    }
+
+    /// The literal of a machine integer type from a small number; see
+    /// `Term::machine`.
+    pub fn machine_int(ty: MachineInt, value: i128) -> Self {
+        Self::machine(ty, Integer::from(value))
+    }
+
+    /// `wrapping_add[T](x, 1)`: the successor of a machine integer, which is
+    /// what a bounded `for` steps its index by.
+    pub fn successor(ty: MachineInt, value: Term) -> Self {
+        Self::op(Op::WrappingAdd, ty, vec![value, Self::machine_int(ty, 1)])
     }
 
     /// The type and value of a well-formed machine integer literal, `U8`
@@ -1215,13 +1161,15 @@ impl Term {
         }
     }
 
-    /// A `for` written against identities the caller chose. `state` lists
+    /// A `for` written against identities the caller chose. The index has
+    /// the machine type `index_type`, the type of both bounds. `state` lists
     /// the state variables with their types, which may mention `index` and
     /// the state variables before them. `next` gives the state for the
     /// following index, as one term per state variable, and may mention the
     /// index, the state variables, and the two facts.
     #[allow(clippy::too_many_arguments)]
     pub fn for_with(
+        index_type: MachineInt,
         index: VarId,
         lower: HypId,
         upper: HypId,
@@ -1242,7 +1190,7 @@ impl Term {
             }
         };
         let i = Self::Free(index);
-        let successor = Self::wrapping_add(i.clone(), Self::U8(1));
+        let successor = Self::successor(index_type, i.clone());
         // The body sees the state as one tuple, so each state variable
         // becomes a projection from it.
         let whole = VarId::fresh();

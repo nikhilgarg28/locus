@@ -1,0 +1,24 @@
+// `Int` is the integers of the logic and has no runtime form: it is a type
+// in a claim, a `math fn`, and a proof type, and nowhere a value runs.
+fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
+    0
+}
+
+fn local(n: u8) -> u8 {
+    let wide: Int = n as Int; //~ error: L0201 `Int` has no runtime form
+    n
+}
+
+fn result(n: u8) -> Int { //~ error: L0201 `Int` has no runtime form
+    n as Int
+}
+
+// `x as Int` speaks of `x` in a claim; outside one it names `Int` where a
+// value runs, and so does the `Int as u8` that would bring it back.
+fn back_again(n: u8) -> u8 {
+    (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
+}
+
+math fn fine(n: u8) -> Int {
+    n as Int
+}

@@ -104,7 +104,9 @@ pub fn rust_value(value: &Value, module: &Module, path: &str) -> String {
             .collect()
     };
     match value {
-        Value::Bool(_) | Value::U8(_) => value.debug(module),
+        // A bare number: the parameter's type fixes it, a negative one
+        // included.
+        Value::Bool(_) | Value::Int(..) => value.debug(module),
         Value::Proved | Value::Ghost => format!("{path}::{}", value.debug(module)),
         Value::Tuple(fields) => match all(fields).as_slice() {
             [only] => format!("({only},)"),

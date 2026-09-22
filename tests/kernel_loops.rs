@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Context, Definitions, KernelError, Mode, Prelude, Proof, Term, Type, check_proof, infer_proof,
-    infer_term, same,
+    Context, Definitions, KernelError, MachineInt, Mode, Op, Prelude, Proof, Term, Type,
+    check_proof, infer_proof, infer_term, same,
 };
 
 fn setup() -> (Rc<Definitions>, Prelude, Theory) {
@@ -21,7 +21,7 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
 }
 
 fn lemma(id: locus::kernel::FnId, arguments: Vec<Term>) -> Proof {
@@ -61,7 +61,10 @@ fn count_up(theory: &Theory, n: Term) -> Term {
     Term::for_range(
         zero.clone(),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n],
+        ),
         counting_state,
         Term::tuple(
             &counting_state(zero.clone()),
@@ -117,7 +120,10 @@ fn the_invariant_must_be_re_established_at_the_next_index() {
         &counting_state(zero.clone()),
         vec![zero.clone(), Term::proof(Proof::Refl(zero.clone()))],
     );
-    let ordered = lemma(theory.u8_zero_le, vec![n.clone()]);
+    let ordered = lemma(
+        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+        vec![n.clone()],
+    );
 
     // Returning the state unchanged proves acc == i, not acc == i + 1.
     let stuck = Term::for_range(
@@ -182,7 +188,7 @@ fn an_empty_range_is_its_initial_state() {
     let empty = Term::for_range(
         k.clone(),
         k.clone(),
-        lemma(theory.u8_le_refl, vec![k.clone()]),
+        lemma(theory.machine(MachineInt::U8).le_refl, vec![k.clone()]),
         counting_state,
         init.clone(),
         |i, s, _, _| counting_step(i, s),
@@ -216,9 +222,12 @@ fn reversed_bounds_are_rejected_for_want_of_evidence() {
     // There is no proof of u8_le(5, 3) to give. Every fact that is at hand
     // proves some other ordering, and the rule checks which.
     for ordered in [
-        lemma(theory.u8_le_refl, vec![five.clone()]),
-        lemma(theory.u8_le_refl, vec![three.clone()]),
-        lemma(theory.u8_zero_le, vec![three.clone()]),
+        lemma(theory.machine(MachineInt::U8).le_refl, vec![five.clone()]),
+        lemma(theory.machine(MachineInt::U8).le_refl, vec![three.clone()]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![three.clone()],
+        ),
     ] {
         let reversed = Term::for_range(
             five.clone(),
@@ -237,7 +246,7 @@ fn reversed_bounds_are_rejected_for_want_of_evidence() {
 
 #[test]
 fn a_range_may_end_at_255_and_the_body_knows_its_bounds() {
-    let (definitions, prelude, theory) = setup();
+    let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(definitions);
     let (zero, top) = (Term::U8(0), Term::U8(255));
     let init = Term::tuple(
@@ -247,7 +256,10 @@ fn a_range_may_end_at_255_and_the_body_knows_its_bounds() {
     let looped = Term::for_range(
         zero.clone(),
         top.clone(),
-        lemma(theory.u8_zero_le, vec![top.clone()]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![top.clone()],
+        ),
         counting_state,
         init,
         |i, s, lower, upper| {
@@ -259,8 +271,14 @@ fn a_range_may_end_at_255_and_the_body_knows_its_bounds() {
             let Some(Term::Proof(proof)) = values.pop() else {
                 unreachable!()
             };
-            let at_least_lo = prelude.u8_le_prop(Term::U8(0), i.clone());
-            let below_hi = prelude.u8_lt_prop(i, Term::U8(255));
+            let at_least_lo = Term::int_le(
+                Term::view(MachineInt::U8, Term::U8(0)),
+                Term::view(MachineInt::U8, i.clone()),
+            );
+            let below_hi = Term::int_lt(
+                Term::view(MachineInt::U8, i),
+                Term::view(MachineInt::U8, Term::U8(255)),
+            );
             let guarded = Proof::implies_elim(
                 Proof::implies_intro(below_hi, |_| {
                     Proof::implies_elim(Proof::implies_intro(at_least_lo, |_| *proof), lower)
@@ -293,7 +311,10 @@ fn iteration_nests_and_an_inner_state_may_mention_the_outer_index() {
     let nested = Term::for_range(
         zero.clone(),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n],
+        ),
         outer_state,
         Term::tuple(&outer_state(zero.clone()), vec![zero.clone()]),
         |i, _, _, _| {
@@ -312,7 +333,10 @@ fn iteration_nests_and_an_inner_state_may_mention_the_outer_index() {
             let inner = Term::for_range(
                 Term::U8(0),
                 m.clone(),
-                lemma(theory.u8_zero_le, vec![m.clone()]),
+                lemma(
+                    theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                    vec![m.clone()],
+                ),
                 pinned(i.clone()),
                 Term::tuple(
                     &inner_state(Term::U8(0)),
@@ -358,7 +382,10 @@ fn an_executable_loop_cannot_take_its_bounds_or_state_from_ghosts() {
     let last_index = Term::for_range(
         Term::U8(0),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n.clone()]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n.clone()],
+        ),
         state,
         Term::tuple(&state(Term::U8(0)), vec![Term::U8(0)]),
         |i, _, _, _| Term::tuple(&state(Term::U8(0)), vec![i]),
@@ -368,7 +395,10 @@ fn an_executable_loop_cannot_take_its_bounds_or_state_from_ghosts() {
     let leaky = Term::for_range(
         Term::U8(0),
         n.clone(),
-        lemma(theory.u8_zero_le, vec![n]),
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![n],
+        ),
         state,
         Term::tuple(&state(Term::U8(0)), vec![Term::U8(0)]),
         |_, _, _, _| Term::tuple(&state(Term::U8(0)), vec![g.clone()]),
@@ -397,9 +427,9 @@ fn the_ordering_proof_is_irrelevant_to_comparison() {
             |i, s, _, _| counting_step(i, s),
         )
     };
-    let direct = lemma(theory.u8_le_refl, vec![k.clone()]);
+    let direct = lemma(theory.machine(MachineInt::U8).le_refl, vec![k.clone()]);
     let via_transitivity = lemma(
-        theory.u8_le_trans,
+        theory.machine(MachineInt::U8).le_trans,
         vec![
             k.clone(),
             k.clone(),

@@ -16,7 +16,7 @@ use super::types::tuple_over;
 
 /// One `_`, `prove!`, or conversion of evidence, or the range of a `for`:
 /// whether it was filled, by which tier (`exact`, `computed`, `evaluation`,
-/// or the lemma `u8_zero_le` for a range from `0`), and what that cost.
+/// or the lemma `<T>_zero_le` for a range from `0`), and what that cost.
 #[derive(Clone, Debug)]
 pub struct HoleReport {
     pub span: Span,
@@ -516,20 +516,11 @@ impl Env<'_> {
         }
     }
 
-    /// The checked lemmas about `u8`, callable by name: what a step between
-    /// two claims is written with, since a hole takes none by itself.
+    /// The checked lemmas about `Int` and about every machine integer type,
+    /// callable by name: what a step between two claims is written with,
+    /// since a hole takes none by itself. The table is the theory's.
     pub(super) fn builtin_lemmas(&self) -> Vec<(&'static str, FnId)> {
-        let theory = self.theory;
-        vec![
-            ("u8_le_refl", theory.u8_le_refl),
-            ("u8_zero_le", theory.u8_zero_le),
-            ("u8_le_trans", theory.u8_le_trans),
-            ("u8_lt_of_le_of_ne", theory.u8_lt_of_le_of_ne),
-            ("u8_succ_le_of_lt", theory.u8_succ_le_of_lt),
-            ("u8_sub_le", theory.u8_sub_le),
-            ("u8_sub_le_sub", theory.u8_sub_le_sub),
-            ("u8_eq_symm", theory.u8_eq_symm),
-        ]
+        self.theory.lemma_names()
     }
 
     pub(super) fn declare_builtin_lemmas(&mut self) {

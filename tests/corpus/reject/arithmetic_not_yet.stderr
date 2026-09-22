@@ -5,7 +5,7 @@ error[L0290]: the `+` operator is not in Locus yet
   |       ^
   |
   = note: it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions
-  = note: until then, `u8` arithmetic says what happens on overflow: write `a.wrapping_add(b)`
+  = note: until then, machine arithmetic says what happens on overflow: write `a.wrapping_add(b)`
 error[L0290]: the `-` operator is not in Locus yet
  --> tests/corpus/reject/arithmetic_not_yet.lc:8:7
   |
@@ -13,7 +13,7 @@ error[L0290]: the `-` operator is not in Locus yet
   |       ^
   |
   = note: it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions
-  = note: until then, `u8` arithmetic says what happens on overflow: write `a.wrapping_sub(b)`
+  = note: until then, machine arithmetic says what happens on overflow: write `a.wrapping_sub(b)`
 error[L0290]: the `*` operator is not in Locus yet
   --> tests/corpus/reject/arithmetic_not_yet.lc:12:7
    |
@@ -42,25 +42,18 @@ error[L0290]: unary `-` is not in Locus yet
    |     ^
    |
    = note: it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions
-error[L0290]: `as` is not in Locus yet
-  --> tests/corpus/reject/arithmetic_not_yet.lc:28:7
-   |
-28 |     a as u8 //~ error: L0290 `as` is not in Locus yet
-   |       ^^
-   |
-   = note: it arrives with E5 (LOC-171): every machine integer type, and `as` between them
 error[L0290]: the `+` operator is not in Locus yet
-  --> tests/corpus/reject/arithmetic_not_yet.lc:32:14
+  --> tests/corpus/reject/arithmetic_not_yet.lc:28:14
    |
-32 |     prove!(a + b <= 255); //~ error: L0290 the `+` operator is not in Locus yet
+28 |     prove!(a + b <= 255); //~ error: L0290 the `+` operator is not in Locus yet
    |              ^
    |
    = note: it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions
-   = note: until then, `u8` arithmetic says what happens on overflow: write `a.wrapping_add(b)`
+   = note: until then, machine arithmetic says what happens on overflow: write `a.wrapping_add(b)`
 error[L0290]: the `*` operator is not in Locus yet
-  --> tests/corpus/reject/arithmetic_not_yet.lc:37:13
+  --> tests/corpus/reject/arithmetic_not_yet.lc:33:13
    |
-37 |     prop!(a * b) //~ error: L0290 the `*` operator is not in Locus yet
+33 |     prop!(a * b) //~ error: L0290 the `*` operator is not in Locus yet
    |             ^
    |
    = note: it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions

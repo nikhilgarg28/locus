@@ -18,6 +18,7 @@ mod explain;
 mod exprs;
 mod forms;
 mod items;
+mod literals;
 mod logic;
 mod loops;
 mod operators;

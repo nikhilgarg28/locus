@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use locus::kernel::derive::{fold, rewrite, symm, trans, unfold};
 use locus::kernel::{
-    Context, Definitions, FnId, KernelError, Mode, Proof, Term, Type, check_proof, infer_proof,
-    infer_term, same,
+    Context, Definitions, FnId, KernelError, MachineInt, Mode, Op, Proof, Term, Type, check_proof,
+    infer_proof, infer_term, same,
 };
 
 fn u8_eq(left: Term, right: Term) -> Term {
@@ -16,7 +16,7 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::op(Op::WrappingAdd, MachineInt::U8, vec![term, Term::U8(1)])
 }
 
 fn u8_to_u8() -> Type {
@@ -469,13 +469,19 @@ fn rewrite_replaces_every_closed_occurrence() {
     let b = Term::var(ctx.declare(Type::U8).unwrap());
     let ab = ctx.assume(u8_eq(a.clone(), b.clone())).unwrap();
     let fact = ctx
-        .assume(u8_eq(add_one(a.clone()), Term::wrapping_add(a.clone(), a)))
+        .assume(u8_eq(
+            add_one(a.clone()),
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![a.clone(), a]),
+        ))
         .unwrap();
 
     let rewritten = rewrite(&mut ctx, &Proof::hyp(ab), &Proof::hyp(fact)).unwrap();
     assert_eq!(
         infer_proof(&mut ctx, &rewritten),
-        Ok(u8_eq(add_one(b.clone()), Term::wrapping_add(b.clone(), b)))
+        Ok(u8_eq(
+            add_one(b.clone()),
+            Term::op(Op::WrappingAdd, MachineInt::U8, vec![b.clone(), b])
+        ))
     );
     // Nothing to unfold is reported, not silently accepted.
     let mut definitions = Definitions::new();
@@ -538,37 +544,39 @@ fn unfold_and_fold_reach_calls_under_binders() {
 
 #[test]
 fn a_function_that_needs_a_ghost_to_compute_has_no_runtime_form() {
-    // math fn narrow(n: Nat) -> u8 { of_nat(n) }: a fine logical function,
+    // math fn narrow(n: Int) -> u8 { wrap[u8](n) }: a fine logical function,
     // but a call to it would turn an erased number into a byte.
     let mut definitions = Definitions::new();
-    let nat_to_u8 = Type::function(1, |params| match params {
-        [] => Type::Nat,
+    let int_to_u8 = Type::function(1, |params| match params {
+        [] => Type::Int,
         _ => Type::U8,
     });
     let narrow = definitions
-        .declare_fn(&nat_to_u8, |params| Term::of_nat(params[0].clone()))
+        .declare_fn(&int_to_u8, |params| {
+            Term::wrap(MachineInt::U8, params[0].clone())
+        })
         .unwrap();
     // The restriction survives function boundaries: a caller is logical-only
     // too, even though its own signature is all executable data.
     let through = definitions
         .declare_fn(&u8_to_u8(), |params| {
-            call(narrow, vec![Term::to_nat(params[0].clone())])
+            call(narrow, vec![Term::view(MachineInt::U8, params[0].clone())])
         })
         .unwrap();
     let successor = declare_successor(&mut definitions);
     // A Nat parameter that the result does not depend on does no harm.
-    let ignores = definitions.declare_fn(&nat_to_u8, |_| Term::U8(7)).unwrap();
+    let ignores = definitions.declare_fn(&int_to_u8, |_| Term::U8(7)).unwrap();
     assert!(!definitions.is_executable(narrow));
     assert!(!definitions.is_executable(through));
     assert!(definitions.is_executable(successor));
     assert!(definitions.is_executable(ignores));
 
     let mut ctx = Context::with_definitions(Rc::new(definitions));
-    let n = Term::var(ctx.declare_ghost(Type::Nat).unwrap());
+    let n = Term::var(ctx.declare_ghost(Type::Int).unwrap());
     let x = Term::var(ctx.declare(Type::U8).unwrap());
     for (term, allowed) in [
         (call(narrow, vec![n.clone()]), false),
-        (call(narrow, vec![Term::nat(1)]), false),
+        (call(narrow, vec![Term::int(1)]), false),
         (call(through, vec![x.clone()]), false),
         (Term::Fn(narrow), false),
         (call(ignores, vec![n.clone()]), true),
@@ -589,7 +597,7 @@ fn a_function_that_needs_a_ghost_to_compute_has_no_runtime_form() {
     // Logic still computes with it: narrow(0) and narrow(1) differ, which is
     // exactly why no erased program may depend on the call.
     for k in [0u8, 1] {
-        let applied = call(narrow, vec![Term::nat(u64::from(k))]);
+        let applied = call(narrow, vec![Term::int(i64::from(k))]);
         assert_eq!(
             infer_proof(&mut ctx, &Proof::Evaluate(applied.clone())),
             Ok(u8_eq(applied, Term::U8(k)))

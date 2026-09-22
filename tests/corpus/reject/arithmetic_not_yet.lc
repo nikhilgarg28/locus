@@ -1,5 +1,5 @@
-// The arithmetic operators, unary minus, and `as` parse with Rust's
-// precedence; the elaborator says which commit gives each its meaning.
+// The arithmetic operators and unary minus parse with Rust's precedence;
+// the elaborator says which commit gives each its meaning.
 fn add(a: u8, b: u8) -> u8 {
     a + b //~ error: L0290 the `+` operator is not in Locus yet
 }
@@ -22,10 +22,6 @@ fn remainder(a: u8, b: u8) -> u8 {
 
 fn negate(a: u8) -> u8 {
     -a //~ error: L0290 unary `-` is not in Locus yet
-}
-
-fn cast(a: u8) -> u8 {
-    a as u8 //~ error: L0290 `as` is not in Locus yet
 }
 
 fn in_a_formula(a: u8, b: u8) -> u8 {

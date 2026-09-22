@@ -10,7 +10,8 @@ use locus::exec::{
 use locus::kernel::derive::symm_at;
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Definitions, EnumId, HypId, KernelError, Prelude, Prim, Proof, Term, Type, VarId,
+    Axiom, CmpOp, Definitions, EnumId, HypId, KernelError, MachineInt, Prelude, Proof, Term, Type,
+    VarId,
 };
 
 struct World {
@@ -24,6 +25,7 @@ fn world() -> World {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory checks");
     // enum Classified { Zero(value: u8, @[value == 0]), NonZero(value: u8, @[value != 0]) }
+    // with the claims over the views, as reflecting the test gives them.
     let payload = |claim: fn(&Prelude, Term) -> Term| {
         Type::tuple(move |earlier| match earlier {
             [] => Some(Type::U8),
@@ -33,8 +35,8 @@ fn world() -> World {
     };
     let classified = definitions
         .declare_enum(&[
-            payload(|_, value| u8_eq(value, Term::U8(0))),
-            payload(|prelude, value| prelude.not_prop(u8_eq(value, Term::U8(0)))),
+            payload(|_, value| views_eq(value, Term::U8(0))),
+            payload(|prelude, value| prelude.not_prop(views_eq(value, Term::U8(0)))),
         ])
         .unwrap();
     World {
@@ -50,7 +52,28 @@ fn u8_eq(left: Term, right: Term) -> Term {
 }
 
 fn add_one(term: Term) -> Term {
-    Term::wrapping_add(term, Term::U8(1))
+    Term::successor(MachineInt::U8, term)
+}
+
+fn view(term: Term) -> Term {
+    Term::view(MachineInt::U8, term)
+}
+
+/// `view[u8](a) == view[u8](b)`: what `cmp_reflect` says of `eq[u8](a, b)`.
+fn views_eq(left: Term, right: Term) -> Term {
+    Term::eq(Type::Int, view(left), view(right))
+}
+
+fn u8_le(left: Term, right: Term) -> Term {
+    Term::int_le(view(left), view(right))
+}
+
+fn u8_lt(left: Term, right: Term) -> Term {
+    Term::int_lt(view(left), view(right))
+}
+
+fn u8_test_eq(left: Term, right: Term) -> Term {
+    Term::cmp(CmpOp::Eq, MachineInt::U8, left, right)
 }
 
 fn var() -> (VarId, Term) {
@@ -185,7 +208,7 @@ fn a_dependent_result_and_a_caller_that_reuses_its_evidence() {
 /// fn preserve(n: u8) -> (out: u8, @[out == n]) {
 ///     if n == 0 { (0, _) } else { (n, _) }
 /// }
-fn preserve(use_the_fact: bool) -> ExecFn {
+fn preserve(theory: Theory, use_the_fact: bool) -> ExecFn {
     let (n_id, n) = var();
     let result = |n: &Term| {
         let n = n.clone();
@@ -195,11 +218,15 @@ fn preserve(use_the_fact: bool) -> ExecFn {
             _ => None,
         })
     };
-    let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+    let comparison = u8_test_eq(n.clone(), Term::U8(0));
     let (when_false, when_true) = (HypId::fresh(), HypId::fresh());
-    let n_is_zero = Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(comparison.clone(), true)),
+    let views_equal = Proof::implies_elim(
+        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true)),
         Proof::hyp(when_true),
+    );
+    let n_is_zero = lemma(
+        theory.machine(MachineInt::U8).view_injective,
+        vec![n.clone(), Term::U8(0), Term::proof(views_equal)],
     );
     let target = n.clone();
     let zero_is_n = Proof::transport(
@@ -257,9 +284,9 @@ fn preserve(use_the_fact: bool) -> ExecFn {
 fn each_branch_of_an_if_learns_the_condition() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
-    assert!(program.declare(preserve(true)).is_ok());
+    assert!(program.declare(preserve(world.theory, true)).is_ok());
     assert!(matches!(
-        program.declare(preserve(false)),
+        program.declare(preserve(world.theory, false)),
         Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
     ));
 }
@@ -272,11 +299,11 @@ fn an_enum_carries_the_decision_and_its_evidence() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
     let (n_id, n) = var();
-    let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+    let comparison = u8_test_eq(n.clone(), Term::U8(0));
     let (when_false, when_true) = (HypId::fresh(), HypId::fresh());
     let reflect = |flag: bool, fact: HypId| {
         Proof::implies_elim(
-            Proof::Axiom(Axiom::Reflect(comparison.clone(), flag)),
+            Proof::Axiom(Axiom::CmpReflect(comparison.clone(), flag)),
             Proof::hyp(fact),
         )
     };
@@ -326,7 +353,7 @@ fn an_enum_carries_the_decision_and_its_evidence() {
         let stmts = if uses_evidence {
             vec![Stmt::Have {
                 hyp: HypId::fresh(),
-                claim: u8_eq(v.clone(), Term::U8(0)),
+                claim: views_eq(v.clone(), Term::U8(0)),
                 proof: Proof::OfTerm(h),
             }]
         } else {
@@ -376,15 +403,13 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
         let limit = limit.clone();
         Type::tuple(move |earlier| match earlier {
             [] => Some(Type::U8),
-            [value] => Some(Type::proof(
-                prelude.u8_le_prop(value.clone(), limit.clone()),
-            )),
+            [value] => Some(Type::proof(u8_le(value.clone(), limit.clone()))),
             _ => None,
         })
     };
     // (i: u8, bound: @[i <= limit])
     let state = result(&limit);
-    let comparison = Term::prim(Prim::U8Eq, vec![i.clone(), limit.clone()]);
+    let comparison = u8_test_eq(i.clone(), limit.clone());
     let (when_false, when_true) = (HypId::fresh(), HypId::fresh());
     let (differs, below, next_is, next_bound) = (
         HypId::fresh(),
@@ -403,17 +428,17 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
         vec![
             Stmt::Have {
                 hyp: differs,
-                claim: prelude.not_prop(u8_eq(i.clone(), limit.clone())),
+                claim: prelude.not_prop(views_eq(i.clone(), limit.clone())),
                 proof: Proof::implies_elim(
-                    Proof::Axiom(Axiom::Reflect(comparison.clone(), false)),
+                    Proof::Axiom(Axiom::CmpReflect(comparison.clone(), false)),
                     Proof::hyp(when_false),
                 ),
             },
             Stmt::Have {
                 hyp: below,
-                claim: prelude.u8_lt_prop(i.clone(), limit.clone()),
+                claim: u8_lt(i.clone(), limit.clone()),
                 proof: lemma(
-                    theory.u8_lt_of_le_of_ne,
+                    theory.machine(MachineInt::U8).lt_of_le_of_ne,
                     vec![
                         i.clone(),
                         limit.clone(),
@@ -430,12 +455,12 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
             },
             Stmt::Have {
                 hyp: next_bound,
-                claim: prelude.u8_le_prop(next.clone(), limit.clone()),
+                claim: u8_le(next.clone(), limit.clone()),
                 proof: Proof::transport(
                     symm_at(&Type::U8, &next, Proof::hyp(next_is)),
-                    |hole| prelude.u8_le_prop(hole, limit_in.clone()),
+                    |hole| u8_le(hole, limit_in.clone()),
                     lemma(
-                        theory.u8_succ_le_of_lt,
+                        theory.machine(MachineInt::U8).succ_le_of_lt,
                         vec![i.clone(), limit.clone(), Term::proof(Proof::hyp(below))],
                     ),
                 ),
@@ -465,7 +490,10 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
                 vars: vec![i_id, bound_id],
                 init: vec![
                     Term::U8(0),
-                    Term::proof(lemma(theory.u8_zero_le, vec![limit.clone()])),
+                    Term::proof(lemma(
+                        theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+                        vec![limit.clone()],
+                    )),
                 ],
                 result: result(&limit),
                 body: block(
@@ -654,13 +682,13 @@ fn control_flow_is_checked() {
 fn a_ghost_cannot_reach_executable_data_or_control() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
-    // let k = of_nat(to_nat(n)) is a u8 that only logic can compute: to_nat
-    // has no runtime form. So k is ghost.
+    // let k = wrap[u8](view[u8](n)) is a u8 that only logic can compute:
+    // view has no runtime form. So k is ghost.
     let ghost_let = |k: VarId, n: &Term| Stmt::Let {
         var: k,
         equation: HypId::fresh(),
         ty: None,
-        value: Term::of_nat(Term::to_nat(n.clone())),
+        value: Term::wrap(MachineInt::U8, view(n.clone())),
     };
 
     let (n_id, n) = var();
@@ -688,7 +716,7 @@ fn a_ghost_cannot_reach_executable_data_or_control() {
         block(
             vec![ghost_let(k_id, &n)],
             Tail::Match {
-                scrutinee: Term::prim(Prim::U8Eq, vec![k, Term::U8(0)]),
+                scrutinee: u8_test_eq(k, Term::U8(0)),
                 arms: vec![arm(0), arm(1)],
             },
         ),
@@ -923,9 +951,20 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
     };
     let ordered = if bug == CountBug::Unordered {
         // A true fact, about the wrong bounds.
-        lemma(world.theory.u8_le_refl, vec![n.clone()])
+        lemma(
+            world.theory.machine(MachineInt::U8).le_refl,
+            vec![n.clone()],
+        )
     } else {
-        lemma(world.theory.u8_zero_le, vec![n.clone()])
+        lemma(
+            world
+                .theory
+                .machine(MachineInt::U8)
+                .unsigned
+                .unwrap()
+                .zero_le,
+            vec![n.clone()],
+        )
     };
     ExecFn {
         promises: Promises::default(),
@@ -1043,7 +1082,15 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
                             upper: HypId::fresh(),
                             lo: Term::U8(0),
                             hi: n.clone(),
-                            ordered: lemma(world.theory.u8_zero_le, vec![n]),
+                            ordered: lemma(
+                                world
+                                    .theory
+                                    .machine(MachineInt::U8)
+                                    .unsigned
+                                    .unwrap()
+                                    .zero_le,
+                                vec![n],
+                            ),
                             state: plain_state(),
                             vars: vec![VarId::fresh()],
                             init: vec![Term::U8(0)],
@@ -1086,7 +1133,7 @@ fn a_for_checks_its_bounds_and_state_shape() {
                         var: k_id,
                         equation: HypId::fresh(),
                         ty: None,
-                        value: Term::of_nat(Term::to_nat(n)),
+                        value: Term::wrap(MachineInt::U8, Term::view(MachineInt::U8, n)),
                     },
                     Stmt::For(Box::new(ForStmt {
                         var: done_id,
@@ -1095,7 +1142,15 @@ fn a_for_checks_its_bounds_and_state_shape() {
                         upper: HypId::fresh(),
                         lo: Term::U8(0),
                         hi: hi.clone(),
-                        ordered: lemma(world.theory.u8_zero_le, vec![hi]),
+                        ordered: lemma(
+                            world
+                                .theory
+                                .machine(MachineInt::U8)
+                                .unsigned
+                                .unwrap()
+                                .zero_le,
+                            vec![hi],
+                        ),
                         state,
                         vars: vec![VarId::fresh()],
                         init: vec![Term::U8(0)],
@@ -1135,19 +1190,19 @@ fn a_for_checks_its_bounds_and_state_shape() {
 #[test]
 fn a_logical_only_function_cannot_be_called_from_executable_code() {
     // The reviewer's counterexample: fn leak() -> u8 { narrow(1) } where
-    // math fn narrow(n: Nat) -> u8 { of_nat(n) }.
+    // math fn narrow(n: Int) -> u8 { wrap[u8](n) }.
     let (mut definitions, _) = Definitions::with_prelude();
     let narrow = definitions
         .declare_fn(
             &Type::function(1, |params| match params {
-                [] => Type::Nat,
+                [] => Type::Int,
                 _ => Type::U8,
             }),
-            |params| Term::of_nat(params[0].clone()),
+            |params| Term::wrap(MachineInt::U8, params[0].clone()),
         )
         .unwrap();
     let mut program = Program::new(definitions);
-    let applied = Term::call(Term::Fn(narrow), vec![Term::nat(1)]);
+    let applied = Term::call(Term::Fn(narrow), vec![Term::int(1)]);
     let leak = returns_u8(vec![], 0, block(vec![], Tail::Value(applied.clone())));
     assert_eq!(
         program.declare(leak).map(|_| ()),

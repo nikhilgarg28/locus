@@ -33,8 +33,8 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
         programs.push((name, reference));
     };
     declare("increment_math", increment(true));
-    declare("preserve", preserve(false, true));
-    declare("preserve_math", preserve(true, true));
+    declare("preserve", preserve(theory, false, true));
+    declare("preserve_math", preserve(theory, true, true));
     declare("bounded_walk", bounded_walk(prelude, theory, true));
     declare("count", counting_loop(theory, false, None));
     declare("count_math", counting_loop(theory, true, None));
@@ -54,16 +54,16 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
     // The output reads like the source.
     for expected in [
         "pub fn increment(n: u8) -> (u8, Proved) {",
-        "let out = n.wrapping_add(1);",
+        "let out = n.wrapping_add(1_u8);",
         "(out, Proved)",
         "pub enum Classified {",
         "Zero(u8, Proved),",
-        "if n != 0 {",
+        "if n != 0_u8 {",
         "Classified::NonZero(n, Proved)",
         "match classify(m) {",
         "Classified::Zero(v, h) => {",
         "pub fn bounded_walk(limit: u8) -> (u8, Proved) {",
-        "let next = i.wrapping_add(1);",
+        "let next = i.wrapping_add(1_u8);",
         "let next_bound = Proved;",
         "break (i, bound)",
     ] {
@@ -77,7 +77,7 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
         for input in INPUTS {
             source.push_str(&format!("    println!(\"{{:?}}\", {name}({input}));\n"));
             let value = Interpreter::new(module, FUEL)
-                .call(*reference, vec![Value::U8(input)])
+                .call(*reference, vec![Value::u8(input)])
                 .unwrap();
             expected_output.push_str(&value.debug(module));
             expected_output.push('\n');

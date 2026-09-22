@@ -7,7 +7,7 @@ prop SmallPrime(n: u8) {
 
 math fn too_small(n: u8, h: @SmallPrime(n)) -> @(n <= 6) {
     match h {
-        SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2 <= 6)),
+        SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 6)),
         SmallPrime::Seven => _, //~ error: L0230 cannot show `n <= 6`
     }
 }

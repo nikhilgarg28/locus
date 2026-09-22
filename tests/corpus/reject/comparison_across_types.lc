@@ -1,0 +1,17 @@
+// A comparison is between two values of one type, in code and in claims;
+// the error says which cast makes them one.
+fn in_code(a: u8, b: u32) -> bool {
+    a < b //~ error: L0211 `a` is a `u8` and `b` is a `u32`
+}
+
+fn in_a_claim(a: u8, b: u32) -> @(a <= b) { //~ error: L0211 `a` is a `u8` and `b` is a `u32`
+    _
+}
+
+fn against_the_logic(a: u8, b: u32) -> @(a <= b as Int) { //~ error: L0211 `a` is a `u8` and `b as Int` is a `Int`
+    _
+}
+
+fn equality_too(a: i8, b: i16) -> bool {
+    a == b //~ error: L0211 `a` is a `i8` and `b` is a `i16`
+}

@@ -1,21 +1,22 @@
 //! The beginning of the kernel-level prelude: lemmas about the internal
-//! `Nat` and the `u8` model, about `Int`, and about every machine integer
-//! type over its model in `Int`, proved from the axioms and checked by the
-//! kernel like any other declaration. Nothing here is trusted. If a proof
-//! below were wrong, `declare` would fail.
+//! `Nat`, about `Int`, and about every machine integer type over its model
+//! in `Int`, proved from the axioms and checked by the kernel like any other
+//! declaration. Nothing here is trusted. If a proof below were wrong,
+//! `declare` would fail.
 //!
 //! These are written in the kernel's own term language because the source
-//! language cannot name `Nat`. The orderings on `u8` are defined through
-//! `to_nat`, so facts about them come from facts about `Nat`, by reasoning
-//! and induction, never by enumerating bytes. The lemmas about a machine
-//! type `T` are stated over the views, `int_le(view[T](a), view[T](b))`,
-//! and are one family declared once at each type; `Theory::lemma_names`
-//! lists them under the names the source language will call them by.
+//! language cannot name `Nat`. The lemmas about a machine type `T` are
+//! stated over the views, `int_le(view[T](a), view[T](b))`, and are one
+//! family declared once at each type, with three more at the unsigned types;
+//! facts about the ordering of machine values come from the axioms of `Int`
+//! and of the model, never by enumerating values. `Theory::lemma_names`
+//! lists them under the names the source language calls them by.
 
 use super::defs::{Definitions, Prelude};
 use super::derive::{Chain, fold_claim, symm_at, unfold_claim};
 use super::error::KernelError;
 use super::machine::MachineInt;
+use super::ops::Op;
 use super::term::{Axiom, CmpOp, FnId, Proof, Term, Type};
 
 /// Identities of the declared lemmas.
@@ -31,37 +32,18 @@ pub struct Theory {
     pub nat_zero_le: FnId,
     /// `nat_le(a, b) => nat_le(b, c) => nat_le(a, c)`, as proof parameters
     pub nat_le_trans: FnId,
-    /// `u8_le(a, a)`
-    pub u8_le_refl: FnId,
-    /// `u8_le(0, x)`
-    pub u8_zero_le: FnId,
-    /// `u8_le(a, b) => u8_le(b, c) => u8_le(a, c)`, as proof parameters
-    pub u8_le_trans: FnId,
     /// `succ(a) + b == succ(a + b)`
     pub nat_succ_add: FnId,
     /// `k == 0 || exists j { k == succ(j) }`
     pub nat_zero_or_succ: FnId,
     /// `nat_le(a, b) => nat_le(succ(a), succ(b))`
     pub nat_le_succ_succ: FnId,
-    /// `u8_le(i, limit) => (i == limit => False) => u8_lt(i, limit)`
-    pub u8_lt_of_le_of_ne: FnId,
-    /// `u8_lt(i, limit) => u8_le(i.wrapping_add(1), limit)`
-    pub u8_succ_le_of_lt: FnId,
     /// `a + b == b + a`
     pub nat_add_comm: FnId,
     /// `a + b == a + c => b == c`
     pub nat_add_cancel_left: FnId,
     /// `nat_lt(a, b) || nat_le(b, a)`
     pub nat_lt_or_le: FnId,
-    /// `u8_le(b, a) => to_nat(a.wrapping_sub(b)) + to_nat(b) == to_nat(a)`:
-    /// a difference that does not wrap
-    pub u8_sub_model: FnId,
-    /// `u8_le(b, a) => u8_le(a.wrapping_sub(b), a)`
-    pub u8_sub_le: FnId,
-    /// `u8_le(b, c) => u8_le(c, a) => u8_le(a.wrapping_sub(c), a.wrapping_sub(b))`
-    pub u8_sub_le_sub: FnId,
-    /// `a == b => b == a`, at `u8`
-    pub u8_eq_symm: FnId,
     // --- Int, and the machine types over their views. Below, `a < b` is
     // `int_lt(a, b)`, that is `a + 1 <= b`, and `!P` is `P => False`.
     /// `a < b => a <= b`
@@ -82,31 +64,57 @@ pub struct Theory {
 }
 
 /// Declares `MachineLemmas`, the lemmas about one machine type `T`, and
+/// `UnsignedLemmas`, the three more that hold at an unsigned type, with
 /// `MachineLemmas::names`, which names each at a type as `u16_le_trans`.
 /// The names are the source names: `<type>_<lemma>`.
 macro_rules! machine_lemmas {
-    ($($(#[$doc:meta])* $field:ident),* $(,)?) => {
+    (
+        $($(#[$doc:meta])* $field:ident),* $(,)?;
+        $($(#[$udoc:meta])* $ufield:ident),* $(,)?
+    ) => {
         /// The lemmas about one machine type `T`, over the views: `v(x)`
         /// stands for `view[T](x)`, `a < b` for `int_lt(a, b)`, `!P` for
-        /// `P => False`, and `le[T]`, `lt[T]`, `eq[T]` for the runtime
-        /// comparisons `Prim::Cmp`. Each premise is a proof parameter.
+        /// `P => False`, `le[T]`, `lt[T]`, `eq[T]` for the runtime
+        /// comparisons `Prim::Cmp`, and `succ(a)` for `wrapping_add[T](a, 1)`.
+        /// Each premise is a proof parameter.
         #[derive(Clone, Copy, Debug)]
         pub struct MachineLemmas {
             $($(#[$doc])* pub $field: FnId,)*
+            /// The lemmas that hold at an unsigned type only; `None` at a
+            /// signed one.
+            pub unsigned: Option<UnsignedLemmas>,
+        }
+
+        /// The lemmas about an unsigned machine type `T` that a signed type
+        /// does not have: with `min(T) == 0`, a difference under its minuend
+        /// stays in range, which fails at a signed type, as `127i8 - -128i8`
+        /// shows. The notation is that of `MachineLemmas`.
+        #[derive(Clone, Copy, Debug)]
+        pub struct UnsignedLemmas {
+            $($(#[$udoc])* pub $ufield: FnId,)*
         }
 
         impl MachineLemmas {
             /// The lemmas under their names at the given type.
             pub fn names(&self, ty: MachineInt) -> Vec<(&'static str, FnId)> {
+                macro_rules! at {
+                    ($prefix:literal) => {{
+                        let mut names = vec![$((concat!($prefix, stringify!($field)), self.$field),)*];
+                        if let Some(unsigned) = &self.unsigned {
+                            names.extend([$((concat!($prefix, stringify!($ufield)), unsigned.$ufield),)*]);
+                        }
+                        names
+                    }};
+                }
                 match ty {
-                    MachineInt::U8 => vec![$((concat!("u8_", stringify!($field)), self.$field),)*],
-                    MachineInt::U16 => vec![$((concat!("u16_", stringify!($field)), self.$field),)*],
-                    MachineInt::U32 => vec![$((concat!("u32_", stringify!($field)), self.$field),)*],
-                    MachineInt::U64 => vec![$((concat!("u64_", stringify!($field)), self.$field),)*],
-                    MachineInt::I8 => vec![$((concat!("i8_", stringify!($field)), self.$field),)*],
-                    MachineInt::I16 => vec![$((concat!("i16_", stringify!($field)), self.$field),)*],
-                    MachineInt::I32 => vec![$((concat!("i32_", stringify!($field)), self.$field),)*],
-                    MachineInt::I64 => vec![$((concat!("i64_", stringify!($field)), self.$field),)*],
+                    MachineInt::U8 => at!("u8_"),
+                    MachineInt::U16 => at!("u16_"),
+                    MachineInt::U32 => at!("u32_"),
+                    MachineInt::U64 => at!("u64_"),
+                    MachineInt::I8 => at!("i8_"),
+                    MachineInt::I16 => at!("i16_"),
+                    MachineInt::I32 => at!("i32_"),
+                    MachineInt::I64 => at!("i64_"),
                 }
             }
         }
@@ -146,6 +154,18 @@ machine_lemmas! {
     lt_of_not_le,
     /// `lt[T](a, b) == false => v(b) <= v(a)`
     le_of_not_lt,
+    /// `v(a) < v(b) => v(succ(a)) <= v(b)`: below another value, the
+    /// successor does not wrap
+    succ_le_of_lt,
+    /// `a ==[T] b => b ==[T] a`
+    eq_symm;
+    /// `v(0) <= v(a)`, stated about the literal `0` of `T` so that it is
+    /// the claim `0 <= a` reads as
+    zero_le,
+    /// `v(b) <= v(a) => v(wrapping_sub[T](a, b)) <= v(a)`
+    sub_le,
+    /// `v(b) <= v(c) => v(c) <= v(a) => v(wrapping_sub[T](a, c)) <= v(wrapping_sub[T](a, b))`
+    sub_le_sub,
 }
 
 impl Theory {
@@ -160,10 +180,8 @@ impl Theory {
 
     /// The lemmas about `Int` and about the machine types under the names
     /// the source language calls them by: `int_le_of_lt`, `u16_le_trans`.
-    /// The lemmas about the `u8` model over `Nat` are not here; the
-    /// elaborator names those itself until E5, when this table replaces
-    /// them. The names are distinct, and a test lists them so that a
-    /// rename is deliberate.
+    /// The elaborator exposes exactly this table to source. The names are
+    /// distinct, and a test lists them so that a rename is deliberate.
     pub fn lemma_names(&self) -> Vec<(&'static str, FnId)> {
         let mut names = vec![
             ("int_le_of_lt", self.int_le_of_lt),
@@ -360,64 +378,6 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
         },
     )?;
 
-    // The u8 orderings are the Nat orderings of the models.
-    let u8_le = move |a: &Term, b: &Term| prelude.u8_le_prop(a.clone(), b.clone());
-    let model = |x: &Term| Term::to_nat(x.clone());
-
-    let u8_le_refl = definitions.declare_fn(
-        &signature(Type::U8, 1, vec![], |p| u8_le(&p[0], &p[0])),
-        |p| {
-            let x = &p[0];
-            Term::proof(fold_claim(&u8_le(x, x), lemma(nat_le_refl, vec![model(x)])))
-        },
-    )?;
-
-    let u8_zero_le = definitions.declare_fn(
-        &signature(Type::U8, 1, vec![], |p| u8_le(&Term::U8(0), &p[0])),
-        |p| {
-            let x = &p[0];
-            // nat_le(0, to_nat(x)), with the 0 rewritten to to_nat(0u8).
-            let zero_byte = Term::U8(0);
-            let from_model = lemma(nat_zero_le, vec![model(x)]);
-            let literal = Proof::Literal(model(&zero_byte));
-            let model_x = model(x);
-            let rewritten = Proof::transport(
-                symm_at(&Type::Nat, &model(&zero_byte), literal),
-                |hole| le(&hole, &model_x),
-                from_model,
-            );
-            Term::proof(fold_claim(&u8_le(&zero_byte, x), rewritten))
-        },
-    )?;
-
-    let u8_le_trans = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            3,
-            vec![
-                Box::new(move |p| u8_le(&p[0], &p[1])),
-                Box::new(move |p| u8_le(&p[1], &p[2])),
-            ],
-            |p| u8_le(&p[0], &p[2]),
-        ),
-        |p| {
-            let (a, b, c) = (&p[0], &p[1], &p[2]);
-            let first = unfold_claim(&u8_le(a, b), Proof::OfTerm(p[3].clone()));
-            let second = unfold_claim(&u8_le(b, c), Proof::OfTerm(p[4].clone()));
-            let in_model = lemma(
-                nat_le_trans,
-                vec![
-                    model(a),
-                    model(b),
-                    model(c),
-                    Term::proof(first),
-                    Term::proof(second),
-                ],
-            );
-            Term::proof(fold_claim(&u8_le(a, c), in_model))
-        },
-    )?;
-
     // succ(a) + b == succ(a + b), by induction on b.
     let succ_add_claim =
         |a: &Term, b: &Term| nat_eq(add(&Term::succ(a.clone()), b), Term::succ(add(a, b)));
@@ -522,186 +482,6 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
     )?;
 
     let lt = move |a: &Term, b: &Term| prelude.nat_lt_prop(a.clone(), b.clone());
-    let u8_lt = move |a: &Term, b: &Term| prelude.u8_lt_prop(a.clone(), b.clone());
-
-    // i <= limit and i != limit give i < limit. The witness k of i <= limit
-    // is zero or a successor. Zero makes the models equal, hence the bytes,
-    // which is refuted. A successor succ(j) gives succ(to_nat(i)) + j.
-    let u8_lt_of_le_of_ne = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            2,
-            vec![
-                Box::new(move |p| u8_le(&p[0], &p[1])),
-                Box::new(move |p| {
-                    Term::implies(
-                        Term::eq(Type::U8, p[0].clone(), p[1].clone()),
-                        prelude.falsehood_prop(),
-                    )
-                }),
-            ],
-            |p| u8_lt(&p[0], &p[1]),
-        ),
-        |p| {
-            let (i, limit) = (p[0].clone(), p[1].clone());
-            let (ti, tl) = (model(&i), model(&limit));
-            let differs = Proof::OfTerm(p[3].clone());
-            let in_model = unfold_claim(&u8_le(&i, &limit), Proof::OfTerm(p[2].clone()));
-            let witnessed = unfold_claim(&le(&ti, &tl), in_model);
-            let goal = u8_lt(&i, &limit);
-            let inner_goal = goal.clone();
-            Term::proof(Proof::ExistsElim {
-                exists: Box::new(witnessed),
-                goal,
-                arm: Proof::arm(1, 1, |ks, facts| {
-                    let (k, sum) = (ks[0].clone(), facts[0].clone());
-                    let when_zero = |k_is_zero: Proof| {
-                        // ti + 0 == tl, so ti == tl, so i == limit.
-                        let at_zero = Proof::transport(
-                            k_is_zero,
-                            |hole| nat_eq(add(&ti, &hole), tl.clone()),
-                            sum.clone(),
-                        );
-                        let models_equal = Chain::new(Type::Nat, ti.clone())
-                            .step_rev(
-                                &add(&ti, &zero),
-                                Proof::Axiom(Axiom::NatAddZero(ti.clone())),
-                            )
-                            .step(at_zero)
-                            .finish();
-                        let bytes_equal = Chain::new(Type::U8, i.clone())
-                            .step_rev(
-                                &Term::of_nat(ti.clone()),
-                                Proof::Axiom(Axiom::OfToNat(i.clone())),
-                            )
-                            .rewrite(Term::of_nat, models_equal)
-                            .step(Proof::Axiom(Axiom::OfToNat(limit.clone())))
-                            .finish();
-                        Proof::CaseProof {
-                            scrutinee: Box::new(Proof::implies_elim(differs.clone(), bytes_equal)),
-                            goal: inner_goal.clone(),
-                            arms: vec![],
-                        }
-                    };
-                    let when_succ = |k_is_succ: Proof| Proof::ExistsElim {
-                        exists: Box::new(k_is_succ),
-                        goal: inner_goal.clone(),
-                        arm: Proof::arm(1, 1, |js, shape| {
-                            let (j, k_is_succ_j) = (js[0].clone(), shape[0].clone());
-                            let sti = Term::succ(ti.clone());
-                            let chain = Chain::new(Type::Nat, add(&sti, &j))
-                                .step(lemma(nat_succ_add, vec![ti.clone(), j.clone()]))
-                                .step_rev(
-                                    &add(&ti, &Term::succ(j.clone())),
-                                    Proof::Axiom(Axiom::NatAddSucc(ti.clone(), j.clone())),
-                                )
-                                .rewrite_rev(&Type::Nat, |hole| add(&ti, &hole), &k, k_is_succ_j)
-                                .step(sum.clone())
-                                .finish();
-                            let strict = fold_claim(&lt(&ti, &tl), le_intro(&sti, &tl, j, chain));
-                            fold_claim(&u8_lt(&i, &limit), strict)
-                        }),
-                    };
-                    Proof::CaseProof {
-                        scrutinee: Box::new(lemma(nat_zero_or_succ, vec![k.clone()])),
-                        goal: inner_goal.clone(),
-                        arms: vec![
-                            Proof::arm(1, 0, |payload, _| {
-                                when_zero(Proof::OfTerm(payload[0].clone()))
-                            }),
-                            Proof::arm(1, 0, |payload, _| {
-                                when_succ(Proof::OfTerm(payload[0].clone()))
-                            }),
-                        ],
-                    }
-                }),
-            })
-        },
-    )?;
-
-    // i < limit gives i.wrapping_add(1) <= limit. Below a byte, the
-    // successor does not wrap: to_nat(i.wrapping_add(1)) == succ(to_nat(i)).
-    let u8_succ_le_of_lt = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            2,
-            vec![Box::new(move |p| u8_lt(&p[0], &p[1]))],
-            |p| u8_le(&Term::wrapping_add(p[0].clone(), Term::U8(1)), &p[1]),
-        ),
-        |p| {
-            let (i, limit) = (p[0].clone(), p[1].clone());
-            let (ti, tl) = (model(&i), model(&limit));
-            let sti = Term::succ(ti.clone());
-            let one = Term::U8(1);
-            let next = Term::wrapping_add(i.clone(), one.clone());
-            let bound = Term::nat(256);
-
-            let strict = unfold_claim(&u8_lt(&i, &limit), Proof::OfTerm(p[2].clone()));
-            let succ_le_limit = unfold_claim(&lt(&ti, &tl), strict);
-
-            // succ(ti) < 256, from succ(ti) <= tl < 256.
-            let lifted = lemma(
-                nat_le_succ_succ,
-                vec![sti.clone(), tl.clone(), Term::proof(succ_le_limit.clone())],
-            );
-            let limit_fits = unfold_claim(
-                &lt(&tl, &bound),
-                Proof::Axiom(Axiom::ToNatBound(limit.clone())),
-            );
-            let fits = fold_claim(
-                &lt(&sti, &bound),
-                lemma(
-                    nat_le_trans,
-                    vec![
-                        Term::succ(sti.clone()),
-                        Term::succ(tl.clone()),
-                        bound,
-                        Term::proof(lifted),
-                        Term::proof(limit_fits),
-                    ],
-                ),
-            );
-
-            // to_nat(i + 1) == succ(ti), through the model of wrapping_add.
-            let wrap = |n: Term| Term::to_nat(Term::of_nat(n));
-            let model_of_next = Chain::new(Type::Nat, Term::to_nat(next.clone()))
-                .rewrite(
-                    Term::to_nat,
-                    Proof::Axiom(Axiom::WrappingAddModel(i.clone(), one.clone())),
-                )
-                .rewrite(
-                    |hole| wrap(add(&ti, &hole)),
-                    Proof::Literal(Term::to_nat(one)),
-                )
-                .rewrite_rev(
-                    &Type::Nat,
-                    |hole| wrap(add(&ti, &hole)),
-                    &Term::succ(zero.clone()),
-                    Proof::Literal(Term::succ(zero.clone())),
-                )
-                .rewrite(
-                    wrap,
-                    Proof::Axiom(Axiom::NatAddSucc(ti.clone(), zero.clone())),
-                )
-                .rewrite(
-                    |hole| wrap(Term::succ(hole)),
-                    Proof::Axiom(Axiom::NatAddZero(ti.clone())),
-                )
-                .step(Proof::implies_elim(
-                    Proof::Axiom(Axiom::ToOfNat(sti.clone())),
-                    fits,
-                ))
-                .finish();
-
-            let at_next = Proof::transport(
-                symm_at(&Type::Nat, &Term::to_nat(next.clone()), model_of_next),
-                |hole| le(&hole, &tl),
-                succ_le_limit,
-            );
-            Term::proof(fold_claim(&u8_le(&next, &limit), at_next))
-        },
-    )?;
-
     // --- Lemmas the explicit evidence of the examples is written with ------------
 
     // a + b == b + a, by induction on b.
@@ -895,377 +675,6 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
         },
     )?;
 
-    // With b <= a, the difference a.wrapping_sub(b) does not wrap:
-    // to_nat(a.wrapping_sub(b)) + to_nat(b) == to_nat(a). The model of the
-    // sum is either below 256, and then it is what of_nat gives back, or
-    // not, and then b <= a is contradicted.
-    let sub_model_claim = |a: &Term, b: &Term| {
-        nat_eq(
-            add(&model(&Term::wrapping_sub(a.clone(), b.clone())), &model(b)),
-            model(a),
-        )
-    };
-    let u8_sub_model = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            2,
-            vec![Box::new(move |p| u8_le(&p[1], &p[0]))],
-            |p| sub_model_claim(&p[0], &p[1]),
-        ),
-        |p| {
-            let (a, b) = (p[0].clone(), p[1].clone());
-            let d = Term::wrapping_sub(a.clone(), b.clone());
-            let (ta, tb, td) = (model(&a), model(&b), model(&d));
-            let sum = add(&td, &tb);
-            let bound = Term::nat(256);
-            let goal = nat_eq(sum.clone(), ta.clone());
-            // of_nat(td + tb) == a
-            let wrapped = Chain::new(Type::U8, Term::of_nat(sum.clone()))
-                .step_rev(
-                    &Term::wrapping_add(d.clone(), b.clone()),
-                    Proof::Axiom(Axiom::WrappingAddModel(d.clone(), b.clone())),
-                )
-                .step(Proof::Axiom(Axiom::WrappingSubModel(a.clone(), b.clone())))
-                .finish();
-            // The bound on a byte's model, as a witness: succ(to_nat(x)) + j == 256.
-            let bound_of = |x: &Term| {
-                unfold_claim(
-                    &le(&Term::succ(model(x)), &bound),
-                    unfold_claim(
-                        &lt(&model(x), &bound),
-                        Proof::Axiom(Axiom::ToNatBound(x.clone())),
-                    ),
-                )
-            };
-            let below = |strict: Proof| {
-                let back = Proof::implies_elim(Proof::Axiom(Axiom::ToOfNat(sum.clone())), strict);
-                Chain::new(Type::Nat, sum.clone())
-                    .step_rev(&Term::to_nat(Term::of_nat(sum.clone())), back)
-                    .rewrite(Term::to_nat, wrapped.clone())
-                    .finish()
-            };
-            let above = |at_least: Proof| {
-                let witnessed = unfold_claim(&le(&bound, &sum), at_least);
-                Proof::ExistsElim {
-                    exists: Box::new(witnessed),
-                    goal: goal.clone(),
-                    arm: Proof::arm(1, 1, |ms, facts| {
-                        // wrap: 256 + m == td + tb
-                        let (m, wrap) = (ms[0].clone(), facts[0].clone());
-                        let same_byte = Chain::new(Type::U8, Term::of_nat(m.clone()))
-                            .step_rev(
-                                &Term::of_nat(add(&m, &bound)),
-                                Proof::Axiom(Axiom::OfNatWrap(m.clone())),
-                            )
-                            .rewrite(
-                                Term::of_nat,
-                                lemma(nat_add_comm, vec![m.clone(), bound.clone()]),
-                            )
-                            .rewrite(Term::of_nat, wrap.clone())
-                            .step(wrapped.clone())
-                            .finish();
-                        let ordered = unfold_claim(
-                            &le(&tb, &ta),
-                            unfold_claim(&u8_le(&b, &a), Proof::OfTerm(p[2].clone())),
-                        );
-                        Proof::ExistsElim {
-                            exists: Box::new(bound_of(&d)),
-                            goal: goal.clone(),
-                            arm: Proof::arm(1, 1, |js, facts| {
-                                // d_fits: succ(td) + j == 256
-                                let (j, d_fits) = (js[0].clone(), facts[0].clone());
-                                let jm = add(&j, &m);
-                                // td + succ(j + m) == td + tb, so succ(j + m) == tb.
-                                let shifted =
-                                    Chain::new(Type::Nat, add(&td, &Term::succ(jm.clone())))
-                                        .step(Proof::Axiom(Axiom::NatAddSucc(
-                                            td.clone(),
-                                            jm.clone(),
-                                        )))
-                                        .step_rev(
-                                            &add(&Term::succ(td.clone()), &jm),
-                                            lemma(nat_succ_add, vec![td.clone(), jm.clone()]),
-                                        )
-                                        .step_rev(
-                                            &add(&add(&Term::succ(td.clone()), &j), &m),
-                                            lemma(
-                                                nat_add_assoc,
-                                                vec![Term::succ(td.clone()), j.clone(), m.clone()],
-                                            ),
-                                        )
-                                        .rewrite(|hole| add(&hole, &m), d_fits)
-                                        .step(wrap.clone())
-                                        .finish();
-                                let tb_is = lemma(
-                                    nat_add_cancel_left,
-                                    vec![
-                                        td.clone(),
-                                        Term::succ(jm.clone()),
-                                        tb.clone(),
-                                        Term::proof(shifted),
-                                    ],
-                                );
-                                Proof::ExistsElim {
-                                    exists: Box::new(bound_of(&b)),
-                                    goal: goal.clone(),
-                                    arm: Proof::arm(1, 1, |j2s, facts| {
-                                        // b_fits: succ(tb) + j2 == 256
-                                        let (j2, b_fits) = (j2s[0].clone(), facts[0].clone());
-                                        let sm = Term::succ(m.clone());
-                                        let sj = Term::succ(j.clone());
-                                        // succ m + succ j == succ tb
-                                        let two_up = Chain::new(Type::Nat, add(&sm, &sj))
-                                            .step(Proof::Axiom(Axiom::NatAddSucc(
-                                                sm.clone(),
-                                                j.clone(),
-                                            )))
-                                            .rewrite(
-                                                Term::succ,
-                                                lemma(nat_succ_add, vec![m.clone(), j.clone()]),
-                                            )
-                                            .rewrite(
-                                                |hole| Term::succ(Term::succ(hole)),
-                                                lemma(nat_add_comm, vec![m.clone(), j.clone()]),
-                                            )
-                                            .rewrite(Term::succ, tb_is.clone())
-                                            .finish();
-                                        // m < 256: succ m + (succ j + j2) == 256
-                                        let m_fits =
-                                            Chain::new(Type::Nat, add(&sm, &add(&sj, &j2)))
-                                                .step_rev(
-                                                    &add(&add(&sm, &sj), &j2),
-                                                    lemma(
-                                                        nat_add_assoc,
-                                                        vec![sm.clone(), sj.clone(), j2.clone()],
-                                                    ),
-                                                )
-                                                .rewrite(|hole| add(&hole, &j2), two_up)
-                                                .step(b_fits)
-                                                .finish();
-                                        let m_below = fold_claim(
-                                            &lt(&m, &bound),
-                                            le_intro(&sm, &bound, add(&sj, &j2), m_fits),
-                                        );
-                                        // ta == m
-                                        let through = Chain::new(
-                                            Type::Nat,
-                                            Term::to_nat(Term::of_nat(m.clone())),
-                                        )
-                                        .rewrite(Term::to_nat, same_byte.clone())
-                                        .finish();
-                                        let ta_is = Chain::new(Type::Nat, ta.clone())
-                                            .step_rev(
-                                                &Term::to_nat(Term::of_nat(m.clone())),
-                                                through,
-                                            )
-                                            .step(Proof::implies_elim(
-                                                Proof::Axiom(Axiom::ToOfNat(m.clone())),
-                                                m_below,
-                                            ))
-                                            .finish();
-                                        Proof::ExistsElim {
-                                            exists: Box::new(ordered),
-                                            goal: goal.clone(),
-                                            arm: Proof::arm(1, 1, |ks, facts| {
-                                                // below_a: tb + k == ta
-                                                let (k, below_a) =
-                                                    (ks[0].clone(), facts[0].clone());
-                                                let jk = add(&j, &k);
-                                                let turned = Chain::new(Type::Nat, add(&sm, &j))
-                                                    .step(lemma(
-                                                        nat_succ_add,
-                                                        vec![m.clone(), j.clone()],
-                                                    ))
-                                                    .rewrite(
-                                                        Term::succ,
-                                                        lemma(
-                                                            nat_add_comm,
-                                                            vec![m.clone(), j.clone()],
-                                                        ),
-                                                    )
-                                                    .finish();
-                                                // m + succ(j + k) == m + 0, so succ(j + k) == 0.
-                                                let stuck = Chain::new(
-                                                    Type::Nat,
-                                                    add(&m, &Term::succ(jk.clone())),
-                                                )
-                                                .step(Proof::Axiom(Axiom::NatAddSucc(
-                                                    m.clone(),
-                                                    jk.clone(),
-                                                )))
-                                                .step_rev(
-                                                    &add(&sm, &jk),
-                                                    lemma(
-                                                        nat_succ_add,
-                                                        vec![m.clone(), jk.clone()],
-                                                    ),
-                                                )
-                                                .step_rev(
-                                                    &add(&add(&sm, &j), &k),
-                                                    lemma(
-                                                        nat_add_assoc,
-                                                        vec![sm.clone(), j.clone(), k.clone()],
-                                                    ),
-                                                )
-                                                .rewrite(|hole| add(&hole, &k), turned)
-                                                .rewrite(|hole| add(&hole, &k), tb_is.clone())
-                                                .step(below_a)
-                                                .step(ta_is)
-                                                .step_rev(
-                                                    &add(&m, &zero),
-                                                    Proof::Axiom(Axiom::NatAddZero(m.clone())),
-                                                )
-                                                .finish();
-                                                let zero_is_succ = lemma(
-                                                    nat_add_cancel_left,
-                                                    vec![
-                                                        m.clone(),
-                                                        Term::succ(jk.clone()),
-                                                        zero.clone(),
-                                                        Term::proof(stuck),
-                                                    ],
-                                                );
-                                                Proof::CaseProof {
-                                                    scrutinee: Box::new(Proof::implies_elim(
-                                                        Proof::Axiom(Axiom::NatSuccNotZero(jk)),
-                                                        zero_is_succ,
-                                                    )),
-                                                    goal: goal.clone(),
-                                                    arms: vec![],
-                                                }
-                                            }),
-                                        }
-                                    }),
-                                }
-                            }),
-                        }
-                    }),
-                }
-            };
-            Term::proof(Proof::CaseProof {
-                scrutinee: Box::new(lemma(nat_lt_or_le, vec![sum.clone(), bound.clone()])),
-                goal: goal.clone(),
-                arms: vec![
-                    Proof::arm(1, 0, |payload, _| below(Proof::OfTerm(payload[0].clone()))),
-                    Proof::arm(1, 0, |payload, _| above(Proof::OfTerm(payload[0].clone()))),
-                ],
-            })
-        },
-    )?;
-
-    // b <= a gives a.wrapping_sub(b) <= a: the model of b is the witness.
-    let u8_sub_le = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            2,
-            vec![Box::new(move |p| u8_le(&p[1], &p[0]))],
-            |p| u8_le(&Term::wrapping_sub(p[0].clone(), p[1].clone()), &p[0]),
-        ),
-        |p| {
-            let (a, b) = (p[0].clone(), p[1].clone());
-            let d = Term::wrapping_sub(a.clone(), b.clone());
-            let sum_is = lemma(
-                u8_sub_model,
-                vec![
-                    a.clone(),
-                    b.clone(),
-                    Term::proof(Proof::OfTerm(p[2].clone())),
-                ],
-            );
-            Term::proof(fold_claim(
-                &u8_le(&d, &a),
-                le_intro(&model(&d), &model(&a), model(&b), sum_is),
-            ))
-        },
-    )?;
-
-    // b <= c <= a gives a.wrapping_sub(c) <= a.wrapping_sub(b): subtracting
-    // more leaves less. With tb + k == tc, the witness is k.
-    let u8_sub_le_sub = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            3,
-            vec![
-                Box::new(move |p| u8_le(&p[1], &p[2])),
-                Box::new(move |p| u8_le(&p[2], &p[0])),
-            ],
-            |p| {
-                u8_le(
-                    &Term::wrapping_sub(p[0].clone(), p[2].clone()),
-                    &Term::wrapping_sub(p[0].clone(), p[1].clone()),
-                )
-            },
-        ),
-        |p| {
-            let (a, b, c) = (p[0].clone(), p[1].clone(), p[2].clone());
-            let hbc = Term::proof(Proof::OfTerm(p[3].clone()));
-            let hca = Term::proof(Proof::OfTerm(p[4].clone()));
-            let db = Term::wrapping_sub(a.clone(), b.clone());
-            let dc = Term::wrapping_sub(a.clone(), c.clone());
-            let (tb, tc, tdb, tdc) = (model(&b), model(&c), model(&db), model(&dc));
-            let hba = lemma(
-                u8_le_trans,
-                vec![b.clone(), c.clone(), a.clone(), hbc.clone(), hca.clone()],
-            );
-            let via_b = lemma(u8_sub_model, vec![a.clone(), b.clone(), Term::proof(hba)]);
-            let via_c = lemma(u8_sub_model, vec![a.clone(), c.clone(), hca]);
-            let ordered = unfold_claim(
-                &le(&tb, &tc),
-                unfold_claim(&u8_le(&b, &c), Proof::OfTerm(p[3].clone())),
-            );
-            let goal = u8_le(&dc, &db);
-            Term::proof(Proof::ExistsElim {
-                exists: Box::new(ordered),
-                goal: goal.clone(),
-                arm: Proof::arm(1, 1, |ks, facts| {
-                    // gap: tb + k == tc
-                    let (k, gap) = (ks[0].clone(), facts[0].clone());
-                    // tb + tdb == tb + (tdc + k)
-                    let chain = Chain::new(Type::Nat, add(&tb, &tdb))
-                        .step(lemma(nat_add_comm, vec![tb.clone(), tdb.clone()]))
-                        .step(via_b)
-                        .step_rev(&add(&tdc, &tc), via_c)
-                        .rewrite(
-                            |hole| add(&tdc, &hole),
-                            symm_at(&Type::Nat, &add(&tb, &k), gap),
-                        )
-                        .step_rev(
-                            &add(&add(&tdc, &tb), &k),
-                            lemma(nat_add_assoc, vec![tdc.clone(), tb.clone(), k.clone()]),
-                        )
-                        .rewrite(
-                            |hole| add(&hole, &k),
-                            lemma(nat_add_comm, vec![tdc.clone(), tb.clone()]),
-                        )
-                        .step(lemma(
-                            nat_add_assoc,
-                            vec![tb.clone(), tdc.clone(), k.clone()],
-                        ))
-                        .finish();
-                    let diff = lemma(
-                        nat_add_cancel_left,
-                        vec![tb.clone(), tdb.clone(), add(&tdc, &k), Term::proof(chain)],
-                    );
-                    fold_claim(
-                        &goal,
-                        le_intro(&tdc, &tdb, k, symm_at(&Type::Nat, &tdb, diff)),
-                    )
-                }),
-            })
-        },
-    )?;
-
-    // a == b gives b == a.
-    let u8_eq_symm = definitions.declare_fn(
-        &signature(
-            Type::U8,
-            2,
-            vec![Box::new(|p| Term::eq(Type::U8, p[0].clone(), p[1].clone()))],
-            |p| Term::eq(Type::U8, p[1].clone(), p[0].clone()),
-        ),
-        |p| Term::proof(symm_at(&Type::U8, &p[0], Proof::OfTerm(p[2].clone()))),
-    )?;
-
     let (int_lemmas, machine) = declare_int_and_machine(definitions, &prelude)?;
     let [
         int_le_of_lt,
@@ -1282,21 +691,12 @@ pub fn declare(definitions: &mut Definitions, prelude: &Prelude) -> Result<Theor
         nat_le_refl,
         nat_zero_le,
         nat_le_trans,
-        u8_le_refl,
-        u8_zero_le,
-        u8_le_trans,
         nat_succ_add,
         nat_zero_or_succ,
         nat_le_succ_succ,
-        u8_lt_of_le_of_ne,
-        u8_succ_le_of_lt,
         nat_add_comm,
         nat_add_cancel_left,
         nat_lt_or_le,
-        u8_sub_model,
-        u8_sub_le,
-        u8_sub_le_sub,
-        u8_eq_symm,
         int_le_of_lt,
         int_lt_of_le_of_ne,
         int_le_add_left,
@@ -1772,6 +1172,164 @@ fn declare_int_and_machine(
             },
         )?;
 
+        // v(a) < v(b) gives v(succ(a)) <= v(b): the successor is
+        // wrapping_add[T](a, 1), whose model is wrap of v(a) + v(1); below
+        // v(b) that sum is in range, so its view is the sum itself, by
+        // view_wrap, and the literal step gives v(1) == 1.
+        let succ_le_of_lt = definitions.declare_fn(
+            &signature(
+                over.clone(),
+                2,
+                vec![Box::new(move |p| view_lt(p, 0, 1))],
+                |p| le(&v(&Term::successor(ty, p[0].clone())), &v(&p[1])),
+            ),
+            |p| {
+                let (a, b) = (&p[0], &p[1]);
+                let one = Term::machine_int(ty, 1);
+                let operands = [a.clone(), one.clone()];
+                let exact = add(&v(a), &v(&one));
+                let one_is = || Proof::Literal(v(&one));
+                let in_range = (
+                    Proof::linear(
+                        le(&Term::Int(ty.min()), &exact),
+                        1,
+                        vec![
+                            (Proof::Axiom(Axiom::ViewLower(ty, a.clone())), 1),
+                            (one_is(), -1),
+                        ],
+                    ),
+                    Proof::linear(
+                        le(&exact, &Term::Int(ty.max())),
+                        1,
+                        vec![
+                            (given(&p[2]), 1),
+                            (Proof::Axiom(Axiom::ViewUpper(ty, b.clone())), 1),
+                            (one_is(), 1),
+                        ],
+                    ),
+                );
+                let exact_view = view_of_row(ty, Op::WrappingAdd, &operands, in_range);
+                Term::proof(Proof::linear(
+                    le(&v(&Term::successor(ty, a.clone())), &v(b)),
+                    1,
+                    vec![(exact_view, 1), (given(&p[2]), 1), (one_is(), 1)],
+                ))
+            },
+        )?;
+
+        let eq_symm = definitions.declare_fn(
+            &signature(
+                over.clone(),
+                2,
+                vec![Box::new(move |p| same(&p[0], &p[1]))],
+                |p| same(&p[1], &p[0]),
+            ),
+            |p| Term::proof(symm_at(&over, &p[0], given(&p[2]))),
+        )?;
+
+        // At an unsigned type, min(T) is 0 and every view is non-negative,
+        // so a difference under its minuend stays in range and its view is
+        // the exact difference; each bound is a linear certificate from the
+        // premises and the range axioms of the operands.
+        let unsigned = if ty.signed() {
+            None
+        } else {
+            let sub = |a: &Term, b: &Term| Term::int_sub(a.clone(), b.clone());
+            let difference =
+                move |a: &Term, b: &Term| Term::op(Op::WrappingSub, ty, vec![a.clone(), b.clone()]);
+            // view_lower says 0 <= v(a) with the number 0; the literal
+            // step carries it to the view of the literal 0.
+            let zero_literal = Term::machine_int(ty, 0);
+            let zero_le = definitions.declare_fn(
+                &signature(over.clone(), 1, vec![], |p| {
+                    le(&v(&zero_literal), &v(&p[0]))
+                }),
+                |p| {
+                    let view_a = v(&p[0]);
+                    let zero_is = symm_at(
+                        &Type::Int,
+                        &v(&zero_literal),
+                        Proof::Literal(v(&zero_literal)),
+                    );
+                    Term::proof(Proof::transport(
+                        zero_is,
+                        |hole| le(&hole, &view_a),
+                        Proof::Axiom(Axiom::ViewLower(ty, p[0].clone())),
+                    ))
+                },
+            )?;
+            // The view of a - b, for b <= a, from proofs of the two bounds.
+            let exact_difference = move |a: &Term, b: &Term, below: Proof| {
+                let exact = sub(&v(a), &v(b));
+                let in_range = (
+                    Proof::linear(le(&Term::Int(ty.min()), &exact), 1, vec![(below, 1)]),
+                    Proof::linear(
+                        le(&exact, &Term::Int(ty.max())),
+                        1,
+                        vec![
+                            (Proof::Axiom(Axiom::ViewUpper(ty, a.clone())), 1),
+                            (Proof::Axiom(Axiom::ViewLower(ty, b.clone())), 1),
+                        ],
+                    ),
+                );
+                view_of_row(ty, Op::WrappingSub, &[a.clone(), b.clone()], in_range)
+            };
+            let sub_le = definitions.declare_fn(
+                &signature(
+                    over.clone(),
+                    2,
+                    vec![Box::new(move |p| view_le(p, 1, 0))],
+                    |p| le(&v(&difference(&p[0], &p[1])), &v(&p[0])),
+                ),
+                |p| {
+                    let (a, b) = (&p[0], &p[1]);
+                    Term::proof(Proof::linear(
+                        le(&v(&difference(a, b)), &v(a)),
+                        1,
+                        vec![
+                            (exact_difference(a, b, given(&p[2])), 1),
+                            (Proof::Axiom(Axiom::ViewLower(ty, b.clone())), 1),
+                        ],
+                    ))
+                },
+            )?;
+            let sub_le_sub = definitions.declare_fn(
+                &signature(
+                    over.clone(),
+                    3,
+                    vec![
+                        Box::new(move |p| view_le(p, 1, 2)),
+                        Box::new(move |p| view_le(p, 2, 0)),
+                    ],
+                    |p| le(&v(&difference(&p[0], &p[2])), &v(&difference(&p[0], &p[1]))),
+                ),
+                |p| {
+                    let (a, b, c) = (&p[0], &p[1], &p[2]);
+                    let (b_le_c, c_le_a) = (given(&p[3]), given(&p[4]));
+                    // b <= a, from b <= c <= a.
+                    let b_le_a = Proof::linear(
+                        le(&v(b), &v(a)),
+                        1,
+                        vec![(b_le_c.clone(), 1), (c_le_a.clone(), 1)],
+                    );
+                    Term::proof(Proof::linear(
+                        le(&v(&difference(a, c)), &v(&difference(a, b))),
+                        1,
+                        vec![
+                            (exact_difference(a, c, c_le_a), 1),
+                            (exact_difference(a, b, b_le_a), -1),
+                            (b_le_c, 1),
+                        ],
+                    ))
+                },
+            )?;
+            Some(UnsignedLemmas {
+                zero_le,
+                sub_le,
+                sub_le_sub,
+            })
+        };
+
         families.push(MachineLemmas {
             le_refl,
             le_trans,
@@ -1789,6 +1347,9 @@ fn declare_int_and_machine(
             cmp_of_eq,
             lt_of_not_le,
             le_of_not_lt,
+            succ_le_of_lt,
+            eq_symm,
+            unsigned,
         });
     }
     let machine: [MachineLemmas; 8] = families
@@ -1806,6 +1367,31 @@ fn declare_int_and_machine(
         ],
         machine,
     ))
+}
+
+/// `view[T](op[T](operands)) ==[Int] e`, for a row of the table and the
+/// exact result `e` of its operands' views, from proofs that `e` is in the
+/// range of `T`: the row is `wrap[T](e)` by `op_model`, and the view of
+/// that is `e` by `view_wrap` under the two bounds.
+fn view_of_row(ty: MachineInt, op: Op, operands: &[Term], in_range: (Proof, Proof)) -> Proof {
+    let row = op.row(ty).expect("the row exists at this type");
+    let exact = row.exact_term(operands);
+    let applied = row.applied(operands);
+    let view_of_wrapped = Proof::implies_elim(
+        Proof::implies_elim(Proof::Axiom(Axiom::ViewWrap(ty, exact.clone())), in_range.0),
+        in_range.1,
+    );
+    // wrap(e) == op(operands), to move the view from the one to the other.
+    let back = symm_at(
+        &Type::machine(ty),
+        &applied,
+        Proof::Axiom(Axiom::OpModel(op, ty, operands.to_vec())),
+    );
+    Proof::transport(
+        back,
+        |hole| Term::eq(Type::Int, Term::view(ty, hole), exact.clone()),
+        view_of_wrapped,
+    )
 }
 
 /// Case analysis on a natural through `nat_zero_or_succ`: `when_zero`

@@ -1,13 +1,15 @@
-//! Calls: of a function, a proposition, a method on `u8`, and the checking
-//! of arguments against a telescope of parameter types.
+//! Calls: of a function, a proposition, a wrapping method on a machine
+//! integer, and the checking of arguments against a telescope of parameter
+//! types.
 
 use crate::ast::{self, ExprKind};
-use crate::kernel::{Prim, Term, Type, VarId};
+use crate::kernel::{Op, Prim, Term, Type, VarId};
 use crate::source::Span;
 use crate::typed::{Expr, FnRef};
 
 use super::env::{Elab, Env, FnInfo, Global, PropInfo};
 use super::exprs::Value;
+use super::literals::untyped_literal;
 
 impl Env<'_> {
     /// Checks arguments against a telescope of parameter types, written over
@@ -53,7 +55,7 @@ impl Env<'_> {
     ) -> Elab<Value> {
         match &callee.kind {
             ExprKind::Path(path) => self.variant(path, arguments, expected, span),
-            ExprKind::Member { value, name } => self.method(value, name, arguments, span),
+            ExprKind::Member { value, name } => self.method(value, name, arguments, expected, span),
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
                 match self.globals.get(&name.text).cloned() {
                     Some(Global::Fn(info)) => self.call_fn(&info, arguments, span),
@@ -173,32 +175,86 @@ impl Env<'_> {
         Ok(Term::PropApp(info.id, terms))
     }
 
+    /// A wrapping method, a row of the table of primitive operations at the
+    /// receiver's type. A receiver that is a literal without a suffix takes
+    /// its type from the argument, as `3.wrapping_sub(n)` does.
     fn method(
         &mut self,
         receiver: &ast::Expr,
         name: &ast::Name,
         arguments: &[ast::Expr],
+        expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
-        let prim = match name.text.as_str() {
-            "wrapping_add" => Prim::WrappingAdd,
-            "wrapping_sub" => Prim::WrappingSub,
+        let op = match name.text.as_str() {
+            "wrapping_add" => Op::WrappingAdd,
+            "wrapping_sub" => Op::WrappingSub,
+            "wrapping_mul" => Op::WrappingMul,
+            "wrapping_neg" => Op::WrappingNeg,
             other => {
                 return self.fail("L0207", format!("unknown method `{other}`"), name.span);
             }
         };
-        let receiver = self.check(receiver, &Type::U8)?;
-        if arguments.len() != 1 {
-            return self.fail("L0208", format!("`{}` takes one argument", name.text), span);
+        let takes = op.arity() - 1;
+        if arguments.len() != takes {
+            let count = if takes == 1 {
+                "one argument"
+            } else {
+                "no argument"
+            };
+            return self.fail("L0208", format!("`{}` takes {count}", name.text), span);
         }
-        let argument = self.check(&arguments[0], &Type::U8)?;
+        let (receiver_value, argument_values) = if untyped_literal(receiver)
+            && takes == 1
+            && !untyped_literal(&arguments[0])
+        {
+            let argument = self.infer(&arguments[0])?;
+            let receiver = self.check(receiver, &argument.ty.clone())?;
+            (receiver, vec![argument])
+        } else {
+            let receiver = match expected {
+                Some(expected) if untyped_literal(receiver) => self.check(receiver, expected)?,
+                _ => self.infer(receiver)?,
+            };
+            let mut values = Vec::new();
+            for argument in arguments {
+                values.push(self.check(argument, &receiver.ty.clone())?);
+            }
+            (receiver, values)
+        };
+        let ty = receiver_value.ty.clone();
+        let Some(machine) = ty.as_machine() else {
+            let shown = self.show_type(&ty);
+            return self.fail(
+                "L0207",
+                format!(
+                    "`{}` is a method of the machine integer types, and this is `{shown}`",
+                    name.text
+                ),
+                name.span,
+            );
+        };
+        if op.row(machine).is_none() {
+            return self.fail(
+                "L0207",
+                format!(
+                    "`{}` exists at the signed types only, and this is `{}`",
+                    name.text,
+                    machine.name()
+                ),
+                name.span,
+            );
+        }
         Ok(Value::new(
             Expr::Method {
-                prim,
-                receiver: Box::new(receiver.expr),
-                arguments: vec![argument.expr],
+                prim: Prim::Op(op, machine),
+                receiver: Box::new(receiver_value.expr),
+                arguments: argument_values
+                    .into_iter()
+                    .map(|value| value.expr)
+                    .collect(),
             },
-            Type::U8,
+            ty,
         ))
     }
 }

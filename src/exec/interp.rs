@@ -14,8 +14,8 @@
 //! `Stop`, out through whatever loops and matches it stands in, and stops at
 //! the call of its own function, whose value it is.
 
-use crate::erased::{Outcome, RunError, Stop, Value, outcome};
-use crate::kernel::{ForLoop, Prim, Term, VarId, evaluate_primitive};
+use crate::erased::{Outcome, RunError, Stop, Value, outcome, term_value, value_term};
+use crate::kernel::{ForLoop, MachineInt, Prim, Term, VarId};
 use crate::typed::FnRef;
 
 use super::check::Program;
@@ -200,13 +200,11 @@ impl<'p> CheckInterpreter<'p> {
                     body,
                     ..
                 } = &**looped;
-                let (Value::U8(lo), Value::U8(hi)) = (self.term(lo)?, self.term(hi)?) else {
-                    return stuck("a for bound that is not a u8");
-                };
+                let (ty, lo, hi) = bounds(self.term(lo)?, self.term(hi)?)?;
                 let mut current = self.terms(init)?;
                 for i in lo..hi {
                     self.spend()?;
-                    let at = Some((*index, Value::U8(i)));
+                    let at = Some((*index, Value::Int(ty, i)));
                     match self.iteration(vars, current, at, body)? {
                         Flow::Continue(next) => current = next,
                         _ => return stuck("a for body that does not continue"),
@@ -276,10 +274,10 @@ impl<'p> CheckInterpreter<'p> {
                 }
             }
             Term::Bool(flag) => Value::Bool(*flag),
-            Term::U8(byte) => Value::U8(*byte),
-            Term::Machine(ty, _) => {
-                return stuck(format!("a {} value, which E5 brings here", ty.name()));
-            }
+            Term::U8(_) | Term::Machine(..) => match term.machine_value() {
+                Some((ty, value)) => Value::Int(ty, value.to_i128().expect("at most 64 bits")),
+                None => return stuck("a machine literal outside its range"),
+            },
             // Skipped, not evaluated.
             Term::Proof(_) => Value::Proved,
             Term::Nat(_)
@@ -338,16 +336,13 @@ impl<'p> CheckInterpreter<'p> {
     }
 
     fn for_term(&mut self, looped: &ForLoop) -> Result<Value, Stop> {
-        let (Value::U8(lo), Value::U8(hi)) = (self.term(&looped.lo)?, self.term(&looped.hi)?)
-        else {
-            return stuck("a for bound that is not a u8");
-        };
+        let (ty, lo, hi) = bounds(self.term(&looped.lo)?, self.term(&looped.hi)?)?;
         let mut state = self.term(&looped.init)?;
         for i in lo..hi {
             self.spend()?;
             // The body is under the index and then the state.
             let scope = self.bound.len();
-            self.bound.push(Value::U8(i));
+            self.bound.push(Value::Int(ty, i));
             self.bound.push(state);
             let next = self.term(&looped.body);
             self.bound.truncate(scope);
@@ -357,22 +352,19 @@ impl<'p> CheckInterpreter<'p> {
     }
 }
 
+/// The bounds of a `for`: two machine integers of one type.
+fn bounds(lo: Value, hi: Value) -> Result<(MachineInt, i128, i128), Stop> {
+    match (lo, hi) {
+        (Value::Int(ty, lo), Value::Int(hi_type, hi)) if ty == hi_type => Ok((ty, lo, hi)),
+        _ => stuck("for bounds that are not two machine integers of one type"),
+    }
+}
+
 /// A primitive with a runtime meaning is evaluated as the kernel evaluates
 /// it. One without, or one applied to a ghost, is ghost.
 fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
-    let terms: Option<Vec<Term>> = operands
-        .iter()
-        .map(|operand| match operand {
-            Value::U8(byte) => Some(Term::U8(*byte)),
-            Value::Bool(flag) => Some(Term::Bool(*flag)),
-            _ => None,
-        })
-        .collect();
-    Ok(
-        match terms.and_then(|terms| evaluate_primitive(prim, &terms)) {
-            Some(Term::U8(byte)) => Value::U8(byte),
-            Some(Term::Bool(flag)) => Value::Bool(flag),
-            _ => Value::Ghost,
-        },
-    )
+    let terms: Option<Vec<Term>> = operands.iter().map(value_term).collect();
+    Ok(terms
+        .and_then(|terms| term_value(Term::prim(prim, terms)))
+        .unwrap_or(Value::Ghost))
 }

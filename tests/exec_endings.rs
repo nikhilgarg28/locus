@@ -11,7 +11,9 @@ use locus::exec::{
     Stmt, Tail,
 };
 use locus::kernel::theory::{self, Theory};
-use locus::kernel::{Axiom, Definitions, HypId, KernelError, Prim, Proof, Term, Type, VarId};
+use locus::kernel::{
+    Axiom, CmpOp, Definitions, HypId, KernelError, MachineInt, Op, Proof, Term, Type, VarId,
+};
 use locus::typed::FnRef;
 
 const FUEL: u64 = 100_000;
@@ -105,7 +107,7 @@ fn run(program: &Program, id: ExecFnId, arguments: Vec<Value>) -> Outcome {
 }
 
 fn u8(value: u8) -> Outcome {
-    Outcome::Value(Value::U8(value))
+    Outcome::Value(Value::u8(value))
 }
 
 /// `(out: u8, @[out == n])`
@@ -129,15 +131,21 @@ fn preserved(n: &Term) -> Type {
 /// }
 /// With the fact of the arm, `evidence` proves `0 == n`; without it, it
 /// proves `0 == 0`, which is not what the result type asks of a return.
-fn early_return(use_the_fact: bool) -> ExecFn {
+fn early_return(theory: Theory, use_the_fact: bool) -> ExecFn {
     let (n_id, n) = var();
     let (m_id, m) = var();
-    let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+    let comparison = Term::cmp(CmpOp::Eq, MachineInt::U8, n.clone(), Term::U8(0));
     let when_true = HypId::fresh();
-    let n_is_zero = Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(comparison.clone(), true)),
+    // The fact reflects to an equality of the views, and the injectivity
+    // of the view makes it one of the bytes.
+    let views_equal = Proof::implies_elim(
+        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true)),
         Proof::hyp(when_true),
     );
+    let n_is_zero = Proof::OfTerm(Term::call(
+        Term::Fn(theory.machine(MachineInt::U8).view_injective),
+        vec![n.clone(), Term::U8(0), Term::proof(views_equal)],
+    ));
     let target = n.clone();
     let zero_is_n = Proof::transport(
         n_is_zero,
@@ -192,16 +200,16 @@ fn early_return(use_the_fact: bool) -> ExecFn {
 fn a_return_inside_a_branch_supplies_the_result_type_at_that_point() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
-    let early = program.declare(early_return(true)).unwrap();
+    let early = program.declare(early_return(world.theory, true)).unwrap();
     let with_evidence =
-        |byte: u8| Outcome::Value(Value::Tuple(vec![Value::U8(byte), Value::Proved]));
-    assert_eq!(run(&program, early, vec![Value::U8(0)]), with_evidence(0));
-    assert_eq!(run(&program, early, vec![Value::U8(9)]), with_evidence(9));
+        |byte: u8| Outcome::Value(Value::Tuple(vec![Value::u8(byte), Value::Proved]));
+    assert_eq!(run(&program, early, vec![Value::u8(0)]), with_evidence(0));
+    assert_eq!(run(&program, early, vec![Value::u8(9)]), with_evidence(9));
 
     // Evidence about the wrong value is rejected at the return: the rest of
     // the function is the same as above and was accepted.
     assert!(matches!(
-        program.declare(early_return(false)),
+        program.declare(early_return(world.theory, false)),
         Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
     ));
 }
@@ -254,15 +262,23 @@ fn a_return_inside_a_loop_inside_a_match_leaves_the_function() {
             body: block(
                 vec![],
                 Tail::Match {
-                    scrutinee: Term::prim(Prim::U8Eq, vec![i.clone(), n.clone()]),
+                    scrutinee: Term::cmp(CmpOp::Eq, MachineInt::U8, i.clone(), n.clone()),
                     arms: vec![
                         arm(block(
                             vec![],
-                            Tail::Continue(vec![Term::wrapping_add(i.clone(), Term::U8(1))]),
+                            Tail::Continue(vec![Term::op(
+                                Op::WrappingAdd,
+                                MachineInt::U8,
+                                vec![i.clone(), Term::U8(1)],
+                            )]),
                         )),
                         arm(block(
                             vec![],
-                            Tail::Return(Term::wrapping_add(i, Term::U8(100))),
+                            Tail::Return(Term::op(
+                                Op::WrappingAdd,
+                                MachineInt::U8,
+                                vec![i, Term::U8(100)],
+                            )),
                         )),
                     ],
                 },
@@ -276,16 +292,16 @@ fn a_return_inside_a_loop_inside_a_match_leaves_the_function() {
             vec![Stmt::Match {
                 var: r_id,
                 ty: Type::U8,
-                scrutinee: Term::prim(Prim::U8Eq, vec![n, Term::U8(0)]),
+                scrutinee: Term::cmp(CmpOp::Eq, MachineInt::U8, n, Term::U8(0)),
                 arms: vec![arm(searching), arm(block(vec![], Tail::Value(Term::U8(0))))],
             }],
             Tail::Value(r),
         ),
     );
     let find = program.declare(find).unwrap();
-    assert_eq!(run(&program, find, vec![Value::U8(0)]), u8(0));
+    assert_eq!(run(&program, find, vec![Value::u8(0)]), u8(0));
     // Three iterations, then the return.
-    assert_eq!(run(&program, find, vec![Value::U8(3)]), u8(103));
+    assert_eq!(run(&program, find, vec![Value::u8(3)]), u8(103));
 }
 
 #[test]
@@ -309,14 +325,24 @@ fn a_return_inside_a_bounded_for_leaves_the_function() {
                 upper: HypId::fresh(),
                 lo: Term::U8(0),
                 hi: n.clone(),
-                ordered: Proof::OfTerm(Term::call(Term::Fn(world.theory.u8_zero_le), vec![n])),
+                ordered: Proof::OfTerm(Term::call(
+                    Term::Fn(
+                        world
+                            .theory
+                            .machine(MachineInt::U8)
+                            .unsigned
+                            .unwrap()
+                            .zero_le,
+                    ),
+                    vec![n],
+                )),
                 state: Type::Fn(vec![Type::U8], Box::new(Type::Tuple(vec![]))),
                 vars: vec![],
                 init: vec![],
                 body: block(
                     vec![],
                     Tail::Match {
-                        scrutinee: Term::prim(Prim::U8Eq, vec![i, Term::U8(2)]),
+                        scrutinee: Term::cmp(CmpOp::Eq, MachineInt::U8, i, Term::U8(2)),
                         arms: vec![
                             arm(block(vec![], Tail::Continue(vec![]))),
                             arm(block(vec![], Tail::Return(Term::U8(99)))),
@@ -328,8 +354,8 @@ fn a_return_inside_a_bounded_for_leaves_the_function() {
         ),
     );
     let f = program.declare(f).unwrap();
-    assert_eq!(run(&program, f, vec![Value::U8(2)]), u8(0));
-    assert_eq!(run(&program, f, vec![Value::U8(5)]), u8(99));
+    assert_eq!(run(&program, f, vec![Value::u8(2)]), u8(0));
+    assert_eq!(run(&program, f, vec![Value::u8(5)]), u8(99));
 }
 
 #[test]
@@ -429,22 +455,27 @@ fn a_return_counts_as_not_falling_through_and_a_value_still_does() {
 /// fn guarded(n: u8, h: @[n == 0]) -> u8 {
 ///     match n == 0 { false => panic!("impossible"), true => 0 }
 /// }
-/// In the false arm the fact `(n == 0) == false` and the hypothesis `n == 0`
-/// contradict each other, which is where the proof of `False` comes from.
+/// In the false arm the fact `(n == 0) == false` and the hypothesis `n == 0`,
+/// stated over the views as reflection gives it, contradict each other,
+/// which is where the proof of `False` comes from.
 fn guarded(promises: Promises, unreachable: fn(Proof, Proof) -> Option<Proof>) -> ExecFn {
     let (n_id, n) = var();
     let (h_id, h) = var();
-    let comparison = Term::prim(Prim::U8Eq, vec![n.clone(), Term::U8(0)]);
+    let comparison = Term::cmp(CmpOp::Eq, MachineInt::U8, n.clone(), Term::U8(0));
     let when_false = HypId::fresh();
     let n_is_not_zero = Proof::implies_elim(
-        Proof::Axiom(Axiom::Reflect(comparison.clone(), false)),
+        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), false)),
         Proof::hyp(when_false),
     );
     ExecFn {
         promises,
         signature: Type::function(2, |params| match params {
             [] => Type::U8,
-            [n] => Type::proof(u8_eq(n.clone(), Term::U8(0))),
+            [n] => Type::proof(Term::eq(
+                Type::Int,
+                Term::view(MachineInt::U8, n.clone()),
+                Term::view(MachineInt::U8, Term::U8(0)),
+            )),
             _ => Type::U8,
         }),
         params: vec![n_id, h_id],
@@ -476,12 +507,12 @@ fn a_panic_inside_a_branch_demands_nothing_without_the_promise() {
         .declare(guarded(Promises::default(), |_, _| None))
         .unwrap();
     assert_eq!(
-        run(&program, guarded_id, vec![Value::U8(0), Value::Proved]),
+        run(&program, guarded_id, vec![Value::u8(0), Value::Proved]),
         u8(0)
     );
     // The interpreter does not look at the evidence.
     assert_eq!(
-        run(&program, guarded_id, vec![Value::U8(1), Value::Proved]),
+        run(&program, guarded_id, vec![Value::u8(1), Value::Proved]),
         Outcome::Panic("impossible".into())
     );
     assert_eq!(program.promises(guarded_id), Some(Promises::default()));
@@ -503,7 +534,7 @@ fn under_no_panic_a_panic_needs_a_proof_that_it_is_unreachable() {
         }))
         .unwrap();
     assert_eq!(program.promises(id), Some(no_panic));
-    assert_eq!(run(&program, id, vec![Value::U8(0), Value::Proved]), u8(0));
+    assert_eq!(run(&program, id, vec![Value::u8(0), Value::Proved]), u8(0));
     // A proof of something else is not a proof of False.
     assert!(matches!(
         program.declare(guarded(no_panic, |negation, _| Some(negation))),
@@ -643,7 +674,14 @@ fn terminates_forbids_a_loop_wherever_it_stands() {
                     lo: Term::U8(0),
                     hi: n.clone(),
                     ordered: Proof::OfTerm(Term::call(
-                        Term::Fn(world.theory.u8_zero_le),
+                        Term::Fn(
+                            world
+                                .theory
+                                .machine(MachineInt::U8)
+                                .unsigned
+                                .unwrap()
+                                .zero_le,
+                        ),
                         vec![n.clone()],
                     )),
                     state: Type::Fn(vec![Type::U8], Box::new(Type::Tuple(vec![]))),

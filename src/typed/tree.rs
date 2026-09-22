@@ -18,7 +18,9 @@
 //! `match`, and loop, which needs a name only if lowering has to name it.
 
 use crate::exec::ExecFnId;
-use crate::kernel::{EnumId, FnId, HypId, Prim, Proof, StructId, Term, Type, VarId};
+use crate::kernel::{
+    EnumId, FnId, HypId, Integer, MachineInt, Prim, Proof, StructId, Term, Type, VarId,
+};
 
 /// A binding occurrence: an identity, the spelling to print, and its type.
 #[derive(Clone, Debug)]
@@ -101,7 +103,11 @@ pub enum Expr {
         ty: Type,
     },
     Bool(bool),
-    U8(u8),
+    /// A literal of a machine integer type, within its range. An `i128`
+    /// holds every value of every type up to 64 bits.
+    Literal(MachineInt, i128),
+    /// A literal of `Int`, of any size. Logic-only, like every `Int`.
+    Int(Integer),
     /// `ty` is the tuple's kernel type, a telescope.
     Tuple {
         ty: Type,
@@ -126,17 +132,28 @@ pub enum Expr {
         name: Option<String>,
         ty: Type,
     },
-    /// `receiver.method(arguments)` for a primitive operation.
+    /// `receiver.method(arguments)` for a primitive operation: a row of
+    /// the table, `Prim::Op`, at the receiver's type.
     Method {
         prim: Prim,
         receiver: Box<Expr>,
         arguments: Vec<Expr>,
     },
-    /// A comparison of bytes, of type `bool`.
+    /// A comparison of two values of one type, `ty`, which is a machine
+    /// integer type or, for `==` and `!=`, `bool`. Of type `bool`.
     Compare {
         op: CompareOp,
+        ty: Type,
         left: Box<Expr>,
         right: Box<Expr>,
+    },
+    /// `expr as to`, for a value of type `from`. Between machine types it
+    /// wraps and has a runtime form. `as Int` is the view and `Int as T` the
+    /// wrap; both are logic-only, and stand only where nothing runs.
+    Cast {
+        expr: Box<Expr>,
+        from: Type,
+        to: Type,
     },
     CallMath {
         id: FnId,
@@ -246,6 +263,11 @@ impl Expr {
             ty: Type::Tuple(Vec::new()),
             fields: Vec::new(),
         }
+    }
+
+    /// A `u8` literal.
+    pub fn u8(value: u8) -> Self {
+        Self::Literal(MachineInt::U8, i128::from(value))
     }
 }
 

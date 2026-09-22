@@ -1,5 +1,6 @@
 //! Operators outside a formula: `!`, `&&` and `||`, which are an `if`, and
-//! the comparisons of `u8`. Whether `p || q` is a proposition instead is
+//! the comparisons, between two values of one machine integer type, or two
+//! `bool` for `==` and `!=`. Whether `p || q` is a proposition instead is
 //! decided here too.
 
 use crate::ast::{self, BinaryOp, ExprKind, Form};
@@ -110,19 +111,7 @@ impl Env<'_> {
             let term = self.formula(expr)?;
             return Ok(Value::new(Expr::Prop(term), Type::Prop));
         }
-        let (left_value, right_value) = self.operands(left, right)?;
-        if !same_type(&left_value.ty, &Type::U8) {
-            let shown = self.show_type(&left_value.ty);
-            self.diagnostics.push(
-                        Diagnostic::error(
-                            "L0211",
-                            format!("values of type `{shown}` cannot be compared at runtime in the core"),
-                            expr.span,
-                        )
-                        .note("runtime comparison is defined on `u8`; inside a formula, `==` states equality at any type"),
-                    );
-            return Err(());
-        }
+        let (left_value, right_value) = self.operands(left, right, false)?;
         let op = match operator {
             BinaryOp::Equal => CompareOp::Eq,
             BinaryOp::NotEqual => CompareOp::Ne,
@@ -131,9 +120,29 @@ impl Env<'_> {
             BinaryOp::Greater => CompareOp::Gt,
             _ => CompareOp::Ge,
         };
+        let ty = left_value.ty.clone();
+        let equality = matches!(op, CompareOp::Eq | CompareOp::Ne);
+        if ty.as_machine().is_none() && !(equality && same_type(&ty, &Type::Bool)) {
+            let shown = self.show_type(&ty);
+            let (message, note) = if same_type(&ty, &Type::Bool) {
+                (
+                    "`bool` has no ordering".to_string(),
+                    "`==` and `!=` compare two `bool`; the orderings compare two machine integers",
+                )
+            } else {
+                (
+                    format!("values of type `{shown}` cannot be compared at runtime in the core"),
+                    "runtime comparison is defined on the machine integer types, and `==` and `!=` on `bool`; inside a formula, `==` states equality at any type",
+                )
+            };
+            self.diagnostics
+                .push(Diagnostic::error("L0211", message, expr.span).note(note));
+            return Err(());
+        }
         Ok(Value::new(
             Expr::Compare {
                 op,
+                ty,
                 left: Box::new(left_value.expr),
                 right: Box::new(right_value.expr),
             },
@@ -142,8 +151,8 @@ impl Env<'_> {
     }
 
     /// The operators that parse and have no meaning yet: the arithmetic and
-    /// bit operators, unary minus, and `as`. Each names the commit that
-    /// gives it one.
+    /// bit operators, and unary minus on anything but a literal. Each names
+    /// the commit that gives it one.
     #[inline(never)]
     pub(super) fn operator_not_yet<T>(&mut self, expr: &ast::Expr) -> Elab<T> {
         let (what, span, note) = match &expr.kind {
@@ -174,11 +183,6 @@ impl Env<'_> {
                 *operator_span,
                 "it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions",
             ),
-            ExprKind::Cast { as_span, .. } => (
-                "`as`".to_owned(),
-                *as_span,
-                "it arrives with E5 (LOC-171): every machine integer type, and `as` between them",
-            ),
             _ => unreachable!("only an operator without a meaning is reported here"),
         };
         let mut diagnostic =
@@ -194,7 +198,7 @@ impl Env<'_> {
                 "wrapping_sub"
             };
             diagnostic = diagnostic.note(format!(
-                "until then, `u8` arithmetic says what happens on overflow: write `a.{method}(b)`"
+                "until then, machine arithmetic says what happens on overflow: write `a.{method}(b)`"
             ));
         }
         self.diagnostics.push(diagnostic);

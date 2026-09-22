@@ -1,0 +1,30 @@
+error[L0220]: expected `u8`, found `u16`
+ --> tests/corpus/reject/literal_misfit.lc:6:5
+  |
+6 |     1u16 //~ error: L0220 expected `u8`, found `u16`
+  |     ^^^^
+error[L0220]: expected `u8`, found `i8`
+  --> tests/corpus/reject/literal_misfit.lc:10:5
+   |
+10 |     0x7F_i8 //~ error: L0220 expected `u8`, found `i8`
+   |     ^^^^^^^
+error[L0205]: `256` does not fit in `u8`, whose range is 0 to 255
+  --> tests/corpus/reject/literal_misfit.lc:14:5
+   |
+14 |     0x100 //~ error: L0205 `256` does not fit in `u8`
+   |     ^^^^^
+error[L0205]: `256` does not fit in `u8`, whose range is 0 to 255
+  --> tests/corpus/reject/literal_misfit.lc:18:5
+   |
+18 |     256u8 //~ error: L0205 `256` does not fit in `u8`
+   |     ^^^^^
+error[L0205]: `340282366920938463463374607431768211456` does not fit in `u8`, whose range is 0 to 255
+  --> tests/corpus/reject/literal_misfit.lc:22:5
+   |
+22 |     340282366920938463463374607431768211456 //~ error: L0205 does not fit in `u8`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+error[L0290]: string literals are not in Locus yet
+  --> tests/corpus/reject/literal_misfit.lc:26:5
+   |
+26 |     "a\tmessage" //~ error: L0290 string literals are not in Locus yet
+   |     ^^^^^^^^^^^^

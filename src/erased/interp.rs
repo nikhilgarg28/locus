@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use crate::kernel::{EnumId, Prim, StructId, Term, VarId, evaluate_primitive};
+use crate::kernel::{CmpOp, EnumId, MachineInt, Prim, StructId, Term, VarId, evaluate_primitive};
 use crate::typed::{CompareOp, FnRef};
 
 use super::tree::{EBlock, EExpr, EPattern, EStmt, Module};
@@ -20,12 +20,22 @@ use super::tree::{EBlock, EExpr, EPattern, EStmt, Module};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
-    U8(u8),
+    /// A machine integer with its type. An `i128` holds every value of
+    /// every type up to 64 bits; the value is always within its type's
+    /// range, since every primitive that produces one wraps into it.
+    Int(MachineInt, i128),
     Proved,
     Ghost,
     Tuple(Vec<Value>),
     Struct(StructId, Vec<Value>),
     Variant(EnumId, usize, Vec<Value>),
+}
+
+impl Value {
+    /// A byte.
+    pub fn u8(byte: u8) -> Self {
+        Self::Int(MachineInt::U8, i128::from(byte))
+    }
 }
 
 /// How a call ended. Both interpreters answer with this type, so comparing
@@ -259,7 +269,7 @@ impl<'m> Interpreter<'m> {
                 None => return stuck(format!("{name} is not bound")),
             },
             EExpr::Bool(value) => Value::Bool(*value),
-            EExpr::U8(value) => Value::U8(*value),
+            EExpr::Literal(ty, value) => Value::Int(*ty, *value),
             EExpr::Proved => Value::Proved,
             EExpr::Ghost => Value::Ghost,
             EExpr::Trap => return Err(RunError::Trap.into()),
@@ -306,20 +316,18 @@ impl<'m> Interpreter<'m> {
             EExpr::Compare { op, left, right } => {
                 let left = value!(self.expr(left));
                 let right = value!(self.expr(right));
-                // The same reading as lowering gives these operators.
-                let (prim, operands, negate) = match op {
-                    CompareOp::Eq => (Prim::U8Eq, [left, right], false),
-                    CompareOp::Ne => (Prim::U8Eq, [left, right], true),
-                    CompareOp::Lt => (Prim::U8Lt, [left, right], false),
-                    CompareOp::Le => (Prim::U8Le, [left, right], false),
-                    CompareOp::Gt => (Prim::U8Lt, [right, left], false),
-                    CompareOp::Ge => (Prim::U8Le, [right, left], false),
-                };
-                match primitive(prim, &operands)? {
-                    Value::Bool(result) => Value::Bool(result != negate),
-                    _ => return stuck("a comparison that is not a bool"),
-                }
+                Value::Bool(compare(*op, left, right)?)
             }
+            EExpr::Cast { expr, to } => match value!(self.expr(expr)) {
+                Value::Int(from, value) => {
+                    let term = Term::cast(from, *to, Term::machine_int(from, value));
+                    match term_value(term) {
+                        Some(value) => value,
+                        None => return stuck("a cast that has no value"),
+                    }
+                }
+                _ => return stuck("a cast of something that is not a machine integer"),
+            },
             EExpr::Call {
                 callee, arguments, ..
             } => match self.all(arguments)? {
@@ -376,17 +384,21 @@ impl<'m> Interpreter<'m> {
                 state,
                 body,
             } => {
-                let (Value::U8(lo), Value::U8(hi)) = (value!(self.expr(lo)), value!(self.expr(hi)))
+                let (Value::Int(ty, lo), Value::Int(hi_type, hi)) =
+                    (value!(self.expr(lo)), value!(self.expr(hi)))
                 else {
-                    return stuck("a for bound that is not a u8");
+                    return stuck("a for bound that is not a machine integer");
                 };
+                if ty != hi_type {
+                    return stuck("for bounds of two types");
+                }
                 let mut current = match self.initial(state)? {
                     Ok(values) => values,
                     Err(flow) => return Ok(flow),
                 };
                 for i in lo..hi {
                     self.spend()?;
-                    let at = Some((index.0, Value::U8(i)));
+                    let at = Some((index.0, Value::Int(ty, i)));
                     match self.iteration(state, current, at, body)? {
                         Flow::Continue(next) => current = next,
                         _ => return stuck("a for body that does not continue"),
@@ -434,19 +446,69 @@ impl<'m> Interpreter<'m> {
     }
 }
 
+/// A runtime value as the kernel literal it is, when it is one.
+pub(crate) fn value_term(value: &Value) -> Option<Term> {
+    match value {
+        Value::Int(ty, value) => Some(Term::machine_int(*ty, *value)),
+        Value::Bool(flag) => Some(Term::Bool(*flag)),
+        _ => None,
+    }
+}
+
+/// The kernel's native evaluation of a closed primitive application, as a
+/// runtime value, when it has one.
+pub(crate) fn term_value(term: Term) -> Option<Value> {
+    let Term::Prim(prim, operands) = term else {
+        return None;
+    };
+    match evaluate_primitive(prim, &operands)? {
+        Term::Bool(flag) => Some(Value::Bool(flag)),
+        literal => literal
+            .machine_value()
+            .map(|(ty, value)| Value::Int(ty, value.to_i128().expect("at most 64 bits"))),
+    }
+}
+
 /// The kernel's native evaluation of a primitive, on interpreter values.
 fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
-    let terms: Option<Vec<Term>> = operands
-        .iter()
-        .map(|operand| match operand {
-            Value::U8(byte) => Some(Term::U8(*byte)),
-            Value::Bool(flag) => Some(Term::Bool(*flag)),
-            _ => None,
-        })
-        .collect();
-    match terms.and_then(|terms| evaluate_primitive(prim, &terms)) {
-        Some(Term::U8(byte)) => Ok(Value::U8(byte)),
-        Some(Term::Bool(flag)) => Ok(Value::Bool(flag)),
-        _ => stuck(format!("{} has no runtime meaning here", prim.name())),
+    let terms: Option<Vec<Term>> = operands.iter().map(value_term).collect();
+    match terms.and_then(|terms| term_value(Term::prim(prim, terms))) {
+        Some(value) => Ok(value),
+        None => stuck(format!("{} has no runtime meaning here", prim.name())),
     }
+}
+
+/// A comparison of two runtime values of one type, read as lowering reads
+/// the operator: at a machine type through the kernel's `eq[T]`, `lt[T]`,
+/// and `le[T]`, with `>` and `>=` as their flips and `!=` as the negation
+/// of `==`; at `bool`, `==` and `!=` only.
+pub(crate) fn compare(op: CompareOp, left: Value, right: Value) -> Result<bool, Stop> {
+    let (cmp, operands, negate) = match op {
+        CompareOp::Eq => (CmpOp::Eq, [left, right], false),
+        CompareOp::Ne => (CmpOp::Eq, [left, right], true),
+        CompareOp::Lt => (CmpOp::Lt, [left, right], false),
+        CompareOp::Le => (CmpOp::Le, [left, right], false),
+        CompareOp::Gt => (CmpOp::Lt, [right, left], false),
+        CompareOp::Ge => (CmpOp::Le, [right, left], false),
+    };
+    let result = match &operands {
+        [Value::Int(a_type, a), Value::Int(b_type, b)] => {
+            if a_type != b_type {
+                return stuck("a comparison of two machine types");
+            }
+            let comparison = Term::cmp(
+                cmp,
+                *a_type,
+                Term::machine_int(*a_type, *a),
+                Term::machine_int(*b_type, *b),
+            );
+            match term_value(comparison) {
+                Some(Value::Bool(result)) => result,
+                _ => return stuck("a comparison that is not a bool"),
+            }
+        }
+        [Value::Bool(a), Value::Bool(b)] if cmp == CmpOp::Eq => a == b,
+        _ => return stuck("a comparison of values that have none"),
+    };
+    Ok(result != negate)
 }
