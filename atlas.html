@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 102,
-  "savedAt": "2026-09-22T23:24:34.000Z",
+  "rev": 103,
+  "savedAt": "2026-09-22T23:44:20.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -1641,7 +1641,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Locus is a Rust-like language for the parts of a crate whose correctness matters most. Propositions and proofs compose with ordinary functions and data, and explicit proof evidence is checked, deterministically, by a small, auditable kernel. Locus is designed to verify systems implementations with precise arithmetic, ownership, and mutation semantics, then emit readable Rust without runtime proof machinery. Generated interfaces protect proven invariants at the boundary with safe Rust callers. A programmer or an AI supplies the implementation and evidence against a human-reviewed specification; proof construction can be automated, while acceptance rests on independent checking.",
     "",
-    "This is a statement of destination. What is true today: the kernel, the checking of evidence, a bounded search that fills holes, readable generated Rust, and proof-bearing interfaces between Locus functions, over `bool`, `u8`, structs, enums, and loops without mutation. Not yet true: ownership and mutation, arithmetic beyond a byte, and protected exports. Each release should say which systems features its guarantees cover.",
+    "This is a statement of destination. What is true after the core build of September 2026: the kernel, the checking of evidence, a bounded search that fills holes with a linear arithmetic procedure behind it, stored proofs and a check that never searches, readable generated Rust with a tested boundary that Rust callers cannot cross, every machine integer type, let mut, loops that carry evidence, &mut parameters, moves, and impl blocks. Not yet true: the logical and runtime type split of the Vision, named-arm propositions, logical data beyond Int, generics, and references beyond one call. Each release should say which systems features its guarantees cover.",
     "",
     "## The reasoning",
     "",
@@ -1697,14 +1697,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "For it to be pleasant: diagnostics as data, with the claim, the facts, the gap, and the failing case; a short reference and example corpus written for a model that has never seen the language; a cache of found proofs; and decision procedures that produce certificates once integers are wider than a byte, where evaluating every case stops being possible."
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-22T21:41:45.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "logical-core",
    "title": "Logical computation and erasure",
    "group": "Vision",
    "created": "2026-09-22T21:24:37.000Z",
-   "updated": "2026-09-22T22:01:09.000Z",
+   "updated": "2026-09-22T23:44:20.000Z",
    "body": [
     "# Locus: logical computation and erasure",
     "",
@@ -1731,7 +1731,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "**Models and snapshots.** A logical destination `M` may implement `Model\u003cT>` via `logic fn model(source: &T) -> Self`. Multiple models are permitted, with an unambiguous implementation per `(T, M)`. `x as M` selects that implementation and observes current state; it performs no runtime move, copy, allocation, or conversion. Access is checked like a short shared borrow, ending after observation. With an active mutable borrow, observe through the authorized reference, not the unavailable original binding. The result contains no live runtime references and survives subsequent mutation or destruction. Typed elaboration records binding and heap-state versions; unchanged pointers can observe changed contents. Models define interpretations; operation correctness still requires proofs relating before/after models. Interior mutation and concurrency require dedicated observation rules.",
     "",
-    "**Propositions and captures.** `prop!(e)` is Boolean-to-proposition sugar for `logic { holds(e) }`, where `holds: Bool -> Prop` maps true/false to the corresponding propositions. It is not a general quantifier syntax. For runtime `x: u8`, write `prop!((x as Int) > 3)`. The compiler retains a logical term over immutable captures, including memory-state versions; macros need not manipulate SSA identifiers. Stored/returned propositions retain these logical captures, not source-variable lifetimes. Constructing a claim establishes nothing; `@P` requires kernel-checked evidence for that specific proposition. Changed runtime state requires evidence about the new observation.",
+    "**Propositions and captures.** `prop!(P)` and `prove!(P)` take a proposition expression in which a logical `Bool` is lifted through `holds: Bool -> Prop` and a `Prop` stands as it is. It is not a general quantifier syntax. A machine value in a logical context is observed through its default model, `Int` for every machine integer type and `Bool` for `bool`, so for runtime `x: u8`, `prop!(x > 3)` means `prop!((x as Int) > 3)`; `as M` picks another model. `prop` and `logic` are reserved keywords. The compiler retains a logical term over immutable captures, including memory-state versions; macros need not manipulate SSA identifiers. Stored/returned propositions retain these logical captures, not source-variable lifetimes. Constructing a claim establishes nothing; `@P` requires kernel-checked evidence for that specific proposition. Changed runtime state requires evidence about the new observation.",
     "",
     "**Quantifiers through existing machinery.** Predicates are logical functions/closures `T -> Prop`. `Exists(P)` has a witness constructor requiring `value: T` and `@P(value)`. `ForAll(P)` has a constructor carrying `logic Fn(x: T) -> @P(x)`; proof elimination applies it to establish `P(x)`. Matching an existential may use its witness to prove another claim, but cannot extract arbitrary logical data from an irrelevant proof. More general projections must satisfy the kernel's elimination rules. These can be library propositions when the kernel supports inductive propositions and dependent proof-returning functions; dedicated quantifier keywords/nodes are unnecessary. The alternative `Not(Exists(x => Not(P(x))))` generally needs classical reasoning to recover `ForAll(P)`; decidable predicates also suffice.",
     "",
@@ -1758,7 +1758,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "What Locus adds to Rust, in full, so that the list can be kept short:",
     "",
     "- Tokens: none. Every token Locus uses is a token of Rust, which is what keeps a locus! { ... } macro possible. One case needs care there: Rust reads pair.0.1 as a name, a dot, and the number 0.1, and splits it while parsing.",
-    "- Words: prop introduces a proposition declaration; logic introduces a logical function or block. There is no math fn or logic let. Every keyword of Rust is reserved. Exists, ForAll, Int, Nat, Bool, Seq, Map, Prop, Logical, and Model are ordinary library or type names; quantifiers need no keywords. prove!, prop!, old!, and recurse! use the built-in form spelling. Writing prop as an attribute on an enum was considered and declined (LOC-148).",
+    "- Words: prop introduces a proposition declaration; logic introduces a logical function or block. Both are keywords of Locus, reserved outright and not contextual, so that logic { x } cannot be read as a struct literal of a type named logic (decided 22 September). There is no math fn or logic let. Every keyword of Rust is reserved. Exists, ForAll, Int, Nat, Bool, Seq, Map, Prop, Logical, and Model are ordinary library or type names; quantifiers need no keywords. prove!, prop!, old!, and recurse! use the built-in form spelling. Writing prop as an attribute on an enum was considered and declined (LOC-148).",
     "- Grammar, where Rust's tokens are used in a way Rust's parser would refuse: @P as a type; names on the fields of a tuple type, as in (out: u32, @((out as Int) == (n as Int))), with each name in scope in the fields after it; logical connectives in the proof language; declarations of propositions with named arms whose witness fields are followed by => and a logical body; a qualified proposition constructor followed by @ and its body evidence, in expressions and patterns; and a function signature without a body in a header. Everything inside prop!(...), prove!(...), and the other forms is, to Rust, the argument of a macro, where any tokens may stand. _ where a value is expected is parsed by Rust and then refused, so it is given a meaning Rust does not have and takes none away.",
     "- Attributes: the promises and derive. An attribute's contents are free-form in Rust.",
     "",
@@ -1769,9 +1769,9 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Prop is a logical type of claims; @P is the type of evidence of a particular claim. Constructing a proposition does not prove it. Predicate values are logical functions or closures T -> Prop. A prop declaration defines a named inductive predicate and its proof constructors; a logic fn returning Prop defines a logical calculation. Both are supported and have different proof rules.",
     "",
-    "prop!(e) is the Boolean-to-proposition literal: its meaning is logic { holds(e) }, with e: Bool. holds maps logical true and false to the corresponding primitive propositions. It need not evaluate a symbolic condition while checking the program. This form is not an additional grammar for quantifiers or arbitrary proposition syntax. Existing Prop values can be returned directly and combined through logical connectives without wrapping them in prop!. Its implementation may be a compiler built-in rather than a user macro; this choice changes neither capture nor checking.",
+    "prop!(P) takes a proposition expression: a logical Bool is lifted through holds, which maps logical true and false to the corresponding primitive propositions, and an expression that is already a Prop, such as a predicate application, a connective of propositions, or an equality on logical data whose equality is a Prop, stands as it is. prove!(P) takes the same kind of expression, so the two forms have one grammar (decided 22 September; the earlier statement that prop! took only a Bool was inconsistent with prove!). holds need not evaluate a symbolic condition while checking the program. Existing Prop values can be returned directly and combined through logical connectives without wrapping them in prop!. The connectives &&, ||, and ! mean three things by the type of their operands: short-circuit operations on runtime bool, total operations on logical Bool, and conjunction, disjunction, and negation on Prop; => is implication on Prop only. Its implementation may be a compiler built-in rather than a user macro; this choice changes neither capture nor checking.",
     "",
-    "For x: u8, write prop!((x as Int) > 3); for n: Int, write prop!(n > 3). There is no implicit choice of model. Proof types may name a proposition, apply a predicate, or use the existing Boolean-condition shorthand @(e), meaning @prop!(e). Brackets remain available for Rust arrays. prove!(P) requests evidence for a proposition, accepting the same Boolean-to-proposition shorthand for a logical condition. The precise connective spelling is independent of this literal rule.",
+    "Every machine integer type has Int as its default model and bool has Bool. In a logical context, which is a formula, a predicate arm, a logic fn or logic block, or a logical operand, a machine value is observed through its default model with no cast written: for x: u8, prop!(x > 3) means prop!((x as Int) > 3), and both spellings are valid and mean the same. as M with another logical M, such as as Nat, picks that model instead. This is a per-type Model resolution decided at the operator, not a mode change of the value, and it is the one fixed bridge the language has between machine values and the logic (decided 22 September, replacing \"there is no implicit choice of model\"). Nat and Int are both available to the programmer. Proof types may name a proposition, apply a predicate, or use the shorthand @(e), meaning @prop!(e). Brackets remain available for Rust arrays. The precise connective spelling is independent of this literal rule.",
     "",
     "Evidence is accepted only for the expected proposition, after the permitted computation steps: substituting immutable lets, projecting written tuples/structs, matching written constructors, and evaluating literal operations. These steps are fixed, not proof search. Function definitions unfold only when requested; prove!, rewrite!, unfold!, and fold! expose the other steps. Opening dependent patterns types each component over the newly bound names, so evidence returned with data refers to the value the caller received.",
     "",
@@ -1782,6 +1782,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "ForAll(P) has an Each arm carrying prove_each: logic Fn(x: T) -> @P(x). Its body can be the primitive True proposition, with the ordinary explicit @ evidence slot discharged trivially. Within proof elimination, the recovered proof-producing function can be applied at value to establish P(value). Any more general projection of that function must satisfy the kernel's proof-irrelevance rules; an unrestricted logical-data projection is not implied. A proof function is checked once for an arbitrary symbolic argument, not run once for every value. Logical predicate closures capture immutable logical values as other logical expressions do.",
     "",
     "No quantifier-specific kernel node or keyword is required if the kernel supports the necessary inductive propositions and dependent proof-returning functions. This does not remove the dependency in the function's result type. Primitive truth, falsity, and the general proof-construction/elimination rules still need an independent foundation. Defining ForAll(P) as Not(Exists(x => Not(P(x)))) is optional derived reasoning, not its definition: recovering P(x) needs double-negation elimination in general, or decidability of P(x). The existing classical foundation can supply that lemma explicitly.",
+    "",
+    "Until the library form exists, which needs generics and logical closures, the built spelling forall (x: T) { F } and exists (x: T) { F } stays, as keywords; whether the keywords remain as sugar for the library propositions is decided when those exist, on how a header reads (decided 22 September).",
     "",
     "Plan: revises the Vision for LOC-88, LOC-77, LOC-115, LOC-140, LOC-139, LOC-147. Existing implementations of formula keywords remain recorded under Now until migrated.",
     "",
@@ -1873,7 +1875,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "}",
     "~~~",
     "",
-    "These snippets illustrate the proposed forms; the match/destructuring snippets are inside logical contexts, and ellipses/comments stand for supplied evidence or subsequent reasoning. Matching a proof exposes that arm's witnesses and evidence for its body. A single-arm proof may be destructured by an irrefutable pattern. Proof matching belongs to logical reasoning and does not create a runtime discriminant or allow a program to inspect which proof was supplied.",
+    "These snippets illustrate the proposed forms; ellipses and comments stand for supplied evidence or subsequent reasoning. An irrefutable evidence pattern in a let may stand in ordinary code, as let (next, still) = step(...) does today, because it binds only logical values and erases entirely; a match on evidence is a logical expression, whose arms produce logical values, and may appear wherever a logical value is expected, in ordinary code included. logic { } is for logical computation, not for opening evidence (decided 22 September, provided the erasure rules hold: a runtime branch never depends on which arm matched). Matching a proof exposes that arm's witnesses and evidence for its body. A single-arm proof may be destructured by an irrefutable pattern. Proof matching belongs to logical reasoning and does not create a runtime discriminant or allow a program to inspect which proof was supplied.",
     "",
     "Different arms are alternatives. They may overlap, be mutually exclusive, or leave some inputs without a proof. They have no priority and are not tried as an automatic proof search. An arm requiring false is unusable without evidence of false; an arm requiring true makes its enclosing claim easy to establish. Neither declaration asserts its body's truth. Adding an arm changes the meaning of the predicate and the cases its consumers must handle.",
     "",
@@ -1951,7 +1953,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "Logical code is checked pure and total. It cannot call an ordinary fn, even one carrying runtime effect promises; mutate, consume, or drop runtime data; or transfer control out of an enclosing runtime computation. Runtime inputs are observed through the model and permission rules. Local logical mutation may be supported by translation to immutable state; recursion and loops require a justified terminating interpretation.",
     "",
-    "Logical if requires Bool; arbitrary Prop values do not become decidable conditions. Predicate arms describe alternative proof constructors, not runtime branches. Proof matching belongs inside logical code. The proof-matching snippets in this section assume that context; witness construction in ordinary code remains permitted under the surrounding-context argument-evaluation rule.",
+    "Logical if requires Bool; arbitrary Prop values do not become decidable conditions. Predicate arms describe alternative proof constructors, not runtime branches. Proof matching is a logical expression: an irrefutable evidence pattern in a let is allowed in ordinary code, and a match on evidence may appear wherever a logical value is expected; witness construction in ordinary code remains permitted under the surrounding-context argument-evaluation rule.",
     "",
     "A runtime operation may execute before a proposition is built. Its result and verified postcondition then supply observations and evidence; its body is not thereby callable in logic. Formulae involving machine values use explicit models, for example (n as Int) + 1. Ordinary wrapping_add is still a runtime method; a logical wrapping operation must be separately defined over logical integers.",
     "",
@@ -2134,7 +2136,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "- Items and fields are private unless marked pub, and pub is part of the core. The generated Rust at present makes everything public; shipping that and adding privacy later would change what programs mean. pub(crate) and the rest wait for modules.",
     "",
-    "- Every Rust keyword is reserved: the strict ones and the ones Rust reserves for later (abstract, become, box, do, final, gen, macro, override, priv, try, typeof, unsized, virtual, yield). Identifiers reach the generated Rust, so a variable named type or move would break it. Rust's weak keywords stay identifiers, as they do in Rust. Locus adds contextual prop and logic; quantifier names are ordinary library names.",
+    "- Every Rust keyword is reserved: the strict ones and the ones Rust reserves for later (abstract, become, box, do, final, gen, macro, override, priv, try, typeof, unsized, virtual, yield). Identifiers reach the generated Rust, so a variable named type or move would break it. Rust's weak keywords stay identifiers, as they do in Rust. Locus reserves prop and logic outright; forall and exists remain keywords until the library quantifiers exist (Quantifiers are library propositions); other quantifier names are ordinary library names.",
     "",
     "- Paths and namespaces follow Rust. A path has any number of segments, which u32::MAX, an associated function such as Lock::new, and modules all need. Types and values are looked up separately, so that a type and a function may share a name, as a struct and its constructor function do in Rust.",
     "",
@@ -2156,10 +2158,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Integers, in code and in propositions",
     "",
-    "Machine types remain runtime types. Int and Nat are logical types with no executable representation. Explicit Model implementations connect them: n as Int records an exact observation of the current machine value. A logical helper operates on that model, not on an executable u8 passed under another name.",
+    "Machine types remain runtime types. Int and Nat are logical types with no executable representation. Model implementations connect them: n as Int records an exact observation of the current machine value, and Int is the default model, so inside a logical context n alone means that observation and a cast is written only to pick another model (Propositions and evidence). Nat and Int are both available to the programmer. A logical helper operates on that model, not on an executable u8 passed under another name.",
     "",
     "- Runtime arithmetic has Rust's overflow, wrapping, division, and remainder behavior. Runtime #[no_panic] turns the relevant safety condition into an evidence obligation; it does not make the operation callable in logic.",
-    "- Write prop!((n as Int) + 1 \u003c= (u8::MAX as Int)) for a mathematical bound. Even non-panicking machine comparisons and wrapping methods remain runtime operations. Their verified specifications relate their results to logical model operations. A runtime branch on n > 3 can supply evidence of (n as Int) > 3 through that checked relation; the source predicate does not execute the machine comparison again.",
+    "- Write prop!(n + 1 \u003c= u8::MAX), or with the casts made explicit prop!((n as Int) + 1 \u003c= (u8::MAX as Int)), for a mathematical bound; inside prop! the operands are observed through their default model and + is the total addition of Int. Even non-panicking machine comparisons and wrapping methods remain runtime operations. Their verified specifications relate their results to logical model operations. A runtime branch on n > 3 can supply evidence of (n as Int) > 3 through that checked relation; the source predicate does not execute the machine comparison again.",
     "- Logical arithmetic and comparison are logic operations, returning logical types; comparisons produce Bool. Operator resolution identifies this mode. Nat + Nat interprets its literal operand as Nat; a logical result from an ordinary function does not change that function's mode.",
     "- The specified logical Int division/remainder remain total and truncate toward zero, with quotient 0 and remainder a when dividing a by 0. The equation a == (a / b) * b + a % b holds; magnitude and sign bounds apply when b != 0. These are logical conventions, not executable integer operations.",
     "- Runtime integer casts preserve Rust's meaning. An as cast whose target is a logical model invokes Model\u003cT, M> observationally and is erased; it is not a runtime arbitrary-precision conversion. Logical-to-runtime extraction is not a cast supplied by the language.",
@@ -2211,6 +2213,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Logical function calls/operators may appear directly in ordinary bodies. let count = items.len(); let next = count + 1; has logical Nat bindings without logic let. A runtime if still cannot branch on count's logical comparison result. A logical helper's own body cannot invoke an ordinary callback; callable signatures and generic bounds preserve function mode.",
     "",
     "Plan: revises LOC-14, LOC-73, LOC-39. Bodies and effect promises in the current implementation remain recorded under Now until migrated.",
+    "",
+    "This resolves the open decision LOC-193 recorded during the core build: a fully promised ordinary fn whose body holds an operator that may panic is not a term of the logic and does not enter it; a logic fn does, and it may not contain such an operator, since Int arithmetic is total.",
     "",
     "## Mutation and references",
     "",
@@ -2685,7 +2689,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Plan: LOC-25, LOC-71, LOC-77, LOC-78, LOC-79, LOC-80, LOC-81, LOC-82, LOC-83, LOC-84, LOC-85."
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-22T22:01:09.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "target-examples",
@@ -2820,10 +2824,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "To append under Findings in Target examples (Vision), as finding 7:",
     "",
-    "7. The counts of finding 3 are not the compiler's. `locus check --stats` classifies the obligations of the lock as 11: 1 exact, 2 computed, 2 by evaluation, 6 by arithmetic; the midpoint as 6: 1 by evaluation, 5 by arithmetic; and Percent as 3, all computed. Three things account for the difference from three exact, four computed, and seven arithmetic. `0 \u003c= 3` and `2 != 0` on literals are decided by evaluation, which the prediction folds into computed. An overflow row of the table has two premises, `min \u003c= e` and `e \u003c= max`, so each `+` and `-` under no_panic is two obligations where the prediction counts one, and the lower bound of a `u32` sum is a second arithmetic obligation at each of the four operators. And `ok = still` and `(next, bounded)` are typed assignments and values, checked by the kernel's comparison of types and never obligations, so the exact cases the prediction counted are no obligations at all: the one exact obligation is `fits` discharging the upper bound of `lock.failures + 1`. The counts are pinned by `the_proofs_are_the_ones_predicted` in tests/acceptance.rs."
+    "7. The counts of finding 3 are not the compiler's. `locus check --stats` classifies the obligations of the lock as 11: 1 exact, 2 computed, 2 by evaluation, 6 by arithmetic; the midpoint as 6: 1 by evaluation, 5 by arithmetic; and Percent as 3, all computed. Three things account for the difference from three exact, four computed, and seven arithmetic. `0 \u003c= 3` and `2 != 0` on literals are decided by evaluation, which the prediction folds into computed. An overflow row of the table has two premises, `min \u003c= e` and `e \u003c= max`, so each `+` and `-` under no_panic is two obligations where the prediction counts one, and the lower bound of a `u32` sum is a second arithmetic obligation at each of the four operators. And `ok = still` and `(next, bounded)` are typed assignments and values, checked by the kernel's comparison of types and never obligations, so the exact cases the prediction counted are no obligations at all: the one exact obligation is `fits` discharging the upper bound of `lock.failures + 1`. The counts are pinned by `the_proofs_are_the_ones_predicted` in tests/acceptance.rs.",
+    "",
+    "8. With the default model rule of 22 September, every as Int in these examples on a machine operand inside a logical context may be omitted: @within_limit(lock.failures) and prove!(left \u003c= 3) mean what the explicit spellings mean. The examples keep the explicit form so that both are exercised when they become the acceptance tests of the reconciliation."
    ],
    "created": "2026-09-21T21:22:55.000Z",
-   "updated": "2026-09-22T23:21:02.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "principles",
@@ -2845,7 +2851,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Logical classification belongs to types: Int, Nat, Bool, logical collections, Prop, and evidence erase; runtime types retain their representation. Checked logic fn and logical blocks are pure and total. Ordinary fn stays executable even when returning logical values. Model\u003cT> constructs a logical observation of legally readable runtime data. There is no math fn, logic let, or implicit mode change through generics.",
     "- Logical data is extensible through checked structs and inductive enums. Direct recursive logical types need no runtime indirection; Int, Seq, and finite maps can be library definitions. Native arithmetic support is an implementation choice with a specified correspondence. Box\u003cT> always remains runtime, including when T is logical, and runtime recursive structures are related to separate logical models.",
     "- Logical fields can occur in runtime aggregates, so two source values may share one runtime representation. Runtime equality, serialization, mutation, and foreign interfaces must respect that boundary. Model snapshots retain binding and heap-state versions; they cannot recover runtime data or storage permissions. Runtime branches cannot discriminate on logical contents.",
-    "- This milestone is a language for verified immutable computation. Ownership, aliasing, destruction, and mutation raise questions it cannot answer, above all which state a proof describes after another reference changes storage. Before promising broad Rust compatibility, test the extension with one narrow borrowing-and-mutation example.",
+    "- Ownership, aliasing, and mutation were tested with tier 0 of references in the core build (September 2026): let mut and assignment lowered to versions, tracked evidence carried by loops, &mut parameters as values in and new versions out, and a protected value that survives a panic. Which state a proof describes after another reference changes storage is answered for that tier by versions of bindings; heap-state versions, interior mutability, and references held in locals or fields are the questions the next tiers must answer before promising broad Rust compatibility.",
     "",
     "**Acceptance criteria for the proof-writing experience.** The hand-built proofs so far show that the rules compose, not that the `let`-based surface is pleasant. Removing normalization from the kernel moved work into elaboration: projection, substitution, unfolding, and equality transport still have to happen somewhere, and if users must repair them by hand, friendly syntax will not save the experience.",
     "",
@@ -2876,7 +2882,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Regardless of kernel, the translation of programs into kernel statements, erasure, and execution initially remain trusted compiler components. Proof acceptance alone does not establish that generated machine code preserves the source semantics."
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-22T22:01:09.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "open-questions",
@@ -2892,13 +2898,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "These are not decided. Each lists the current behavior of this document first. None needs to be settled before the kernel spike.",
     "",
     "1. Settled in the target language: prop!(e) lifts a logical Bool through holds; @P is evidence of a proposition. Quantifiers are library propositions with constructors, not literal keywords. Brackets remain available for arrays; a lighter literal spelling can be considered later.",
-    "2. Implication is spelled =>, which is also the match arm separator (section 13). The alternative is ==>.",
+    "2. Settled: implication is spelled =>, and no longer collides with the match arm separator, because it appears only inside prop!, prove!, @(...), and the braced body of a predicate arm.",
     "3. Settled in the target language: evidence must be of exactly the claim wanted, after computing. The bridging the elaborator does today is to be removed.",
     "4. Branch and arm evidence is anonymous. A naming form, such as if h: n != 0 { ... }, would let hand-written steps refer to it without a hole.",
     "5. A hole does not search the prelude (section 12.3). A mechanism for marking lemmas that a hole may apply, with its own step budget, would shorten proofs at some cost in predictability.",
     "6. The spelling of the chain form (section 8.4). One candidate is the bracketed form trans[a =(p) b =(q) c] used by the explicit refinement calculus.",
-    "7. Whether bounded iteration (section 10.6) should admit break, and whether a reversed range should be accepted as empty at the cost of a case distinction in the result type.",
-    "8. Whether a design rule should be adopted that Locus never gives valid Rust syntax a different meaning, so that a Rust superset remains reachable. Items 1 and 2 are the current violations; Appendix A of language.md tracks them.",
+    "7. Settled in the core build: the bounded for admits break, and a reversed or empty range runs no passes, with no proof of order asked.",
+    "8. Adopted, as The rule about Rust in the Target language; the earlier violations were removed in the core build.",
     "",
     "## Design concerns",
     "",
@@ -2906,7 +2912,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "1. **Library abstractions and generic models.** Fixed logical classification requires corresponding runtime/logical operations, including bool/Bool, comparison, and optional values. Test a generic verified collection over a user-defined runtime element T with a logical model M, rather than only over machine integers. Define how model selection, generic bounds, and related comparison laws are expressed. Different models can forget different information; equality of content models must not imply allocation identity, capacity equality, or full runtime equality. A finite-map library must state whether an operation/equality concerns representation or extensional contents. The source language needs general inductive data and logical functions, not a growing list of special collection primitives.",
     "",
-    "2. **Proof elimination within logic.** Preserve proof irrelevance when extending matching to logical functions, closures, and library quantifiers. Two proofs of Exists(n: Nat, True), built with witnesses 0 and 1, are interchangeable; a function that extracts the stored witness and reduces respectively to 0 and 1 would contradict that principle. Erasure of both values does not help. The existing restriction allowing the witness only inside a proof-producing elimination must carry forward. State exact rules for permitted proof projections, specialization of ForAll, and any proposed subsingleton exceptions. Include a rejected witness extractor returning Nat and an accepted proof using the witness internally. Arbitrary logical result types are not a sufficient check.",
+    "2. **Proof elimination within logic.** Preserve proof irrelevance when extending matching to logical functions, closures, and library quantifiers. Two proofs of Exists(n: Nat, True), built with witnesses 0 and 1, are interchangeable; a function that extracts the stored witness and reduces respectively to 0 and 1 would contradict that principle. Erasure of both values does not help. The existing restriction allowing the witness only inside a proof-producing elimination must carry forward. State exact rules for permitted proof projections, specialization of ForAll, and any proposed subsingleton exceptions. Include a rejected witness extractor returning Nat and an accepted proof using the witness internally. Arbitrary logical result types are not a sufficient check. The rule to preserve is the standard one and is already how the kernel works: evidence is eliminated only into a Prop or a proof type, never into data; a match on evidence yields a proof, and the witness of an existential is usable inside that proof and nowhere else.",
     "",
     "3. **Snapshots, heap state, and resources.** Specify which storage an observation depends on, how a mutation invalidates facts about current state, and how facts about disjoint unchanged storage are retained. Historical snapshots remain valid. Reborrowing, split slices, captured/stored references, and especially returning &mut require more than entry/return SSA versions: subsequent caller writes determine the owner's later state. The existing tier limits remain. Interior mutation, locks, atomics, and concurrency need dedicated permission and observation rules. Freely reusable snapshot evidence does not itself grant exclusive storage access; tracked resources with restricted duplication, or another ownership logic, may be needed. That is future design work, not an implicit extension of @P.",
     "",
@@ -2946,7 +2952,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "- Default cleanup of unused Erased bindings is decided under What is generated. A pre-cleanup diagnostic dump may be useful later; a public flag and its spelling are deferred, not required for clean generated Rust."
    ],
    "created": "2026-09-21T21:03:06.000Z",
-   "updated": "2026-09-22T22:01:09.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "build-plan",
@@ -3141,10 +3147,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Left out of the core on purpose",
     "",
-    "Recursion and decreases, shared references with lifetimes, generics and traits, Seq, Map, and Set, usize and slices, bit operators and shifts, match parity, floats, modules across files and packages, the header and implementation split, and the polish list. Each has its project in the Plan."
+    "Recursion and decreases, shared references with lifetimes, generics and traits, Seq, Map, and Set, usize and slices, bit operators and shifts, match parity, floats, modules across files and packages, the header and implementation split, and the polish list. Each has its project in the Plan.",
+    "",
+    "## After the core build: reconciling the code with the Vision",
+    "",
+    "Direction agreed 22 September, not yet planned into commits. Three tiers of cost, in order. First, reconcile the core, mostly in the elaborator: logic fn and logic blocks, with an ordinary fn never entering the logic; Bool with the default model rule; prop with named arms over the kernel's existing declared propositions, with proof patterns in ordinary code; Ghost\u003cT> and snapshot! replaced by model observations; the default cleanup of markers in the printer; and the stale paragraphs of Now rewritten. The three target examples in their new spelling are the acceptance test. Second, logical data: generics with Logical bounds, derive(Logical), recursive logical enums with positivity and induction, Seq, and the Model trait; this is where the kernel grows. Third, references beyond one call, heap-state versions, and the generic verified collection of the Design concerns. Implementation does not begin until the first tier is planned."
    ],
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T02:05:21.000Z"
+   "updated": "2026-09-22T23:44:20.000Z"
   },
   {
    "id": "working-notes",
@@ -6534,12 +6544,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t309",
    "n": 193,
    "title": "Decide how a fully promised function whose body is not a kernel term enters the logic",
-   "status": "todo",
+   "status": "done",
    "priority": 3,
    "project": "p89",
    "created": "2026-09-22T17:42:38.000Z",
-   "updated": "2026-09-22T17:42:38.000Z",
-   "notes": "Found by E6 on 22 September. A function promising terminates, no_panic, and no_io is lowered as a kernel function with a defining equation, which is what lets it appear in propositions and be unfolded. An operator that may panic is a statement of the check IR, not a term, so such a function cannot contain one (L0236), yet the target example midpoint is fully promised and uses - / +. Functions in propositions already says a function is known by its contract, and its equation is visible only where its body is expressible as a kernel term; Termination says a recursive function enters the logic as a function symbol known by its contract alone. What is missing is the kernel form for that: a declared function symbol with a signature and no body, or the same through a top-level variable of function type. Until decided, E7 checks such a function as an ordinary ExecFn with its promises and refuses its use in a proposition with a message that says why. To discuss with the vision edits."
+   "updated": "2026-09-22T23:44:20.000Z",
+   "notes": "Resolved 22 September by the Vision: an ordinary fn never enters the logic, whatever it promises; a logic fn does and is checked pure and total; the interim rule stays in the code until the reconciliation replaces it (Build plan, After the core build).\n\nFound by E6 on 22 September. A function promising terminates, no_panic, and no_io is lowered as a kernel function with a defining equation, which is what lets it appear in propositions and be unfolded. An operator that may panic is a statement of the check IR, not a term, so such a function cannot contain one (L0236), yet the target example midpoint is fully promised and uses - / +. Functions in propositions already says a function is known by its contract, and its equation is visible only where its body is expressible as a kernel term; Termination says a recursive function enters the logic as a function symbol known by its contract alone. What is missing is the kernel form for that: a declared function symbol with a signature and no body, or the same through a top-level variable of function type. Until decided, E7 checks such a function as an ordinary ExecFn with its promises and refuses its use in a proposition with a message that says why. To discuss with the vision edits."
   }
  ]
 }
