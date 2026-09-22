@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 64,
-  "savedAt": "2026-09-22T02:05:21.000Z",
+  "rev": 65,
+  "savedAt": "2026-09-22T02:05:40.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7152,12 +7152,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t274",
    "n": 158,
    "title": "S5 · Statements and expressions: let mut, assignment, return, Rust's loop forms, references, the never type",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: M2 (LOC-178).\nCovers: LOC-1, LOC-93, LOC-92, LOC-127.\n\nScope. Parse let mut, assignment to a variable or field path, return, loop, while, while let, for pattern in range, break with a value, continue, & and &mut in types and arguments, and ! as a type. Rust's rule against struct literals in condition position is kept. The state-passing loop still parses until M3 removes it.\n\nTests.\n- The three target examples are added verbatim under tests/corpus/target, marked parse-only. Later commits raise each file's marking to check and then to run; the marking is the visible progress of the whole plan.\n- Fuzz and stack-depth tests cover the new forms.\n\nDone when. Every program in Target examples parses. The syntax lane is done.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T02:05:21.000Z"
+   "updated": "2026-09-22T02:05:40.000Z"
   },
   {
    "id": "t275",
@@ -7295,12 +7295,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t287",
    "n": 171,
    "title": "E5 · Every machine integer type, literal typing, as, Int, and comparison within one type",
-   "status": "backlog",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 5.\nDepends on: K4 (LOC-162), S3 (LOC-156).\nUnblocks: E6 (LOC-172), E8 (LOC-174).\nCovers: LOC-2, LOC-3, LOC-9, LOC-94, LOC-99, LOC-96.\n\nScope. The typed tree, both interpreters, the erased check, and the printer learn u8 to u64 and i8 to i64. A literal takes the expected type, else i32, or its suffix, and is checked against the range. as between integer types wraps; as Int is exact and Int is logic-only. == != and the orderings need both sides of one type. u32::MAX and MIN resolve as associated constants.\n\nTests.\n- Literals one past each range are rejected.\n- as for every pair of types at the boundary set, compared with compiled Rust through the corpus runner.\n- A comparison across types is rejected and the message shows the cast to add.\n- lock.lc with u32 counts runs.\n- The u8 model over Nat (to_nat, of_nat, the wrapping models, reflect on u8, the Nat lemmas of theory.rs) is removed once the elaborator builds on the Int model; the contract then lists one schema. The ignored test of R1 (a byte typed by a literal alone as a receiver, E0689) passes: the printer suffixes literals or annotates the let.\n- Theory::lemma_names() (134 names from K8) is exposed to source; u8_le_refl, u8_le_trans, u8_lt_of_le_of_ne rebound from the Nat-model lemmas to the table.\n\nDone when. Programs are no longer limited to bytes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T00:04:53.000Z"
+   "updated": "2026-09-22T02:05:40.000Z"
   },
   {
    "id": "t288",
