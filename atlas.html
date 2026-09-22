@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 53,
-  "savedAt": "2026-09-22T00:04:53.000Z",
+  "rev": 54,
+  "savedAt": "2026-09-22T00:25:56.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7066,23 +7066,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t279",
    "n": 163,
    "title": "K5 · The table of primitive operations: result type, panic condition, logical meaning",
-   "status": "backlog",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Kernel. Wave 5.\nDepends on: K4 (LOC-162).\nUnblocks: E6 (LOC-172).\nCovers: LOC-121, LOC-12.\n\nScope. One trusted table with a row for each type and each of + - * / %, and for the wrapping methods. The panic condition and the meaning are terms over the model of K4.\n\nTests.\n- At 8 bits, every pair of operands for every row: the panic condition holds exactly when Rust's checked operation returns None, and otherwise the meaning equals Rust's result.\n- At wider types the boundary set crossed with itself, and random pairs.\n- MIN / -1 and MIN % -1 as named tests for each signed type.\n- Unary minus on the signed types: panics when the operand is MIN, wraps to MIN. In wrapping mode only the overflow of + - * and unary minus wraps; / and % by zero, MIN / -1, and MIN % -1 panic in every build, and the table says so row by row.\n\nDone when. The table is small enough to read and is tested against Rust row by row.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-22T00:25:56.000Z"
   },
   {
    "id": "t280",
    "n": 164,
    "title": "K6 · A kernel rule that checks a linear arithmetic certificate, with its whole boundary written first",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "The contract and one complete certificate are written: Target language, The linear certificate, in full. The four sums in it were checked by machine. Decided there: the goal is s \u003c= t or False, and an equation is two inequalities and int_le_antisymm; a conclusion is read as s \u003c= t, its negation, or an equation at Int; equations may take a coefficient of either sign; the coefficient of the negated goal is explicit; nothing is divided or rounded.\n\nLane: Kernel. Wave 3.\nDepends on: K2 (LOC-160).\nUnblocks: K7 (LOC-165).\nCovers: LOC-123.\n\nScope. A certificate is a goal, a list of pairs of a kernel proof and a non-negative literal coefficient, and nothing else. Every constraint enters as the conclusion of a proof the kernel checks in the ordinary way: a hypothesis from the context, a range fact as an instance of the axiom of K4, a quotient and remainder constraint as instances of the axioms of K3, the bridge from a comparison of machine values to a comparison of their views as an instance of K4 or K8. The rule itself does three things, all trusted: it reads each conclusion and the negated goal as a linear expression over Int, treating any term that is not +, -, a literal, or multiplication by a literal as an opaque atom compared by same; it tightens strict inequalities by discreteness; and it checks that the combination sums to a false statement about literals. The procedure states no constraint on its own authority. Before any code, one complete certificate is written into the Kernel contract for the last obligation of midpoint, showing the goal and hypotheses, their linear forms, the proof behind each range fact and each division constraint, and the final sum. The certificate is given a text form with a version in this commit, since E11 stores it.\n\nTests.\n- The written certificate, and certificates by hand for the other six arithmetic obligations of Target examples, are accepted.\n- A test-side recomputation of the combination in i128 decides whether a certificate is valid; over all changes of one coefficient, sign, or hypothesis, the kernel accepts exactly the valid ones. Some changes leave a certificate valid, and those must be accepted.\n- Fabricated constraints: a range fact with no proof, a range fact for the wrong type, a quotient constraint whose proof is for another divisor, a remainder bound taken without b != 0. Each is rejected, and rejected as a bad proof and not as bad arithmetic.\n- Goals that are false on a small bounded domain are never accepted under any of 100,000 random certificates.\n- Two atoms that differ are never merged; two that are same are.\n- Size limits as counts, with a test at the limit.\n\nDone when. The kernel can check arithmetic it did not find, and everything the check relies on is either a kernel proof or one of three trusted steps named in the contract.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:23:22.000Z"
+   "updated": "2026-09-22T00:25:56.000Z"
   },
   {
    "id": "t281",
