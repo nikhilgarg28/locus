@@ -1,10 +1,10 @@
 //! Building data and taking it apart: tuples, struct literals, enum
 //! variants, and the fields of a struct or a tuple.
 
-use crate::ast::{self, ExprKind};
+use crate::ast::{self, ExprKind, PatternKind};
 use crate::kernel::{Term, Type, VarId, telescope_entry};
 use crate::source::Span;
-use crate::typed::Expr;
+use crate::typed::{Binder, Expr};
 
 use super::env::{Elab, EnumInfo, Env, Global};
 use super::exprs::Value;
@@ -53,7 +53,7 @@ impl Env<'_> {
         fields: &[ast::ValueField],
         span: Span,
     ) -> Elab<Value> {
-        let Some(Global::Struct(info)) = self.globals.get(&name.text).cloned() else {
+        let Some(Global::Struct(info)) = self.types.get(&name.text).cloned() else {
             if self.failed.contains(&name.text) {
                 return Err(());
             }
@@ -63,40 +63,11 @@ impl Env<'_> {
                 name.span,
             );
         };
-        let mut given: Vec<(String, &ast::Expr, Span)> = Vec::new();
-        for field in fields {
-            let field_name = match (&field.name, &field.value.kind) {
-                (Some(name), _) => name.text.clone(),
-                (None, ExprKind::Name(name)) => name.text.clone(),
-                (None, _) => {
-                    return self.fail("L0224", "a field needs a name: `name: value`", field.span);
-                }
-            };
-            if given.iter().any(|(earlier, _, _)| *earlier == field_name) {
-                return self.fail(
-                    "L0224",
-                    format!("field `{field_name}` is given twice"),
-                    field.span,
-                );
-            }
-            if !info
-                .fields
-                .iter()
-                .any(|declared| declared.name == field_name)
-            {
-                let message = format!("`{}` has no field `{field_name}`", info.name);
-                return self.fail("L0224", message, field.span);
-            }
-            given.push((field_name, &field.value, field.span));
-        }
+        let what = format!("`{}`", info.name);
+        let values = self.values_by_name(&what, &info.fields, fields, span)?;
         let mut exprs = Vec::new();
         let mut tys: Vec<Type> = info.fields.iter().map(|field| field.ty.clone()).collect();
-        for (index, declared) in info.fields.iter().enumerate() {
-            let Some((_, value, _)) = given.iter().find(|(name, _, _)| *name == declared.name)
-            else {
-                let message = format!("missing field `{}` of `{}`", declared.name, info.name);
-                return self.fail("L0224", message, span);
-            };
+        for (index, (declared, value)) in info.fields.iter().zip(values).enumerate() {
             let value = self.check(value, &tys[index].clone())?;
             let term = self.term(&value, span)?;
             for later in tys[index + 1..].iter_mut() {
@@ -112,6 +83,184 @@ impl Env<'_> {
             },
             Type::Struct(info.id),
         ))
+    }
+
+    /// The values of `what { a: x, b }` by the declared fields' positions:
+    /// each declared field once, in any order, `b` short for `b: b`.
+    pub(super) fn values_by_name<'e>(
+        &mut self,
+        what: &str,
+        declared: &[Binder],
+        fields: &'e [ast::ValueField],
+        span: Span,
+    ) -> Elab<Vec<&'e ast::Expr>> {
+        let mut given: Vec<(&str, &'e ast::Expr)> = Vec::new();
+        for field in fields {
+            let name = match (&field.name, &field.value.kind) {
+                (Some(name), _) => name.text.as_str(),
+                (None, ExprKind::Name(name)) => name.text.as_str(),
+                (None, _) => {
+                    return self.fail("L0224", "a field needs a name: `name: value`", field.span);
+                }
+            };
+            self.declared_field(what, declared, name, &given, field.span)?;
+            given.push((name, &field.value));
+        }
+        declared
+            .iter()
+            .map(
+                |field| match given.iter().find(|(name, _)| *name == field.name) {
+                    Some((_, value)) => Ok(*value),
+                    None => {
+                        let message = format!("missing field `{}` of {what}", field.name);
+                        self.fail("L0224", message, span)
+                    }
+                },
+            )
+            .collect()
+    }
+
+    /// A field named where `what`'s fields are written or matched: one of
+    /// the declared ones, not yet given.
+    fn declared_field<T>(
+        &mut self,
+        what: &str,
+        declared: &[Binder],
+        name: &str,
+        given: &[(&str, T)],
+        span: Span,
+    ) -> Elab<()> {
+        if given.iter().any(|(earlier, _)| *earlier == name) {
+            return self.fail("L0224", format!("field `{name}` is given twice"), span);
+        }
+        if !declared.iter().any(|field| field.name == name) {
+            return self.fail("L0224", format!("{what} has no field `{name}`"), span);
+        }
+        Ok(())
+    }
+
+    /// A variant written the way it was declared: `V(..)` for a tuple
+    /// variant and `V { .. }` for one with named fields.
+    pub(super) fn variant_shape(
+        &mut self,
+        what: &str,
+        declared: &[Binder],
+        named: bool,
+        braces: bool,
+        span: Span,
+    ) -> Elab<()> {
+        if named == braces {
+            return Ok(());
+        }
+        let fields: Vec<String> = declared
+            .iter()
+            .map(|field| format!("{}: ..", field.name))
+            .collect();
+        let message = if named {
+            format!(
+                "{what} has named fields and is written `{} {{ {} }}`",
+                what.trim_matches('`'),
+                fields.join(", ")
+            )
+        } else if declared.is_empty() {
+            format!(
+                "{what} has no fields and is written `{}`",
+                what.trim_matches('`')
+            )
+        } else {
+            format!(
+                "{what} has no field names and is written `{}(..)`",
+                what.trim_matches('`')
+            )
+        };
+        self.fail("L0224", message, span)
+    }
+
+    /// The names an arm's pattern binds to a variant's fields, by position:
+    /// `None` for `_`, and for a field a `..` leaves out. `V(a, _)` for a
+    /// tuple variant, `V { a, b: x, .. }` for one with named fields, and `_`
+    /// for either.
+    pub(super) fn pattern_names<'p>(
+        &mut self,
+        pattern: &'p ast::Pattern,
+        what: &str,
+        declared: &[Binder],
+        named: bool,
+    ) -> Elab<Vec<Option<&'p ast::Name>>> {
+        match &pattern.kind {
+            PatternKind::Variant { arguments, path } => {
+                self.variant_shape(what, declared, named, false, path.span)?;
+                let given = arguments.as_deref().unwrap_or(&[]);
+                if given.len() != declared.len() {
+                    let message = format!(
+                        "{what} carries {} value(s), and the pattern names {}",
+                        declared.len(),
+                        given.len()
+                    );
+                    return self.fail("L0208", message, path.span);
+                }
+                given
+                    .iter()
+                    .map(|pattern| self.pattern_name(pattern))
+                    .collect()
+            }
+            PatternKind::Struct { path, fields, rest } => {
+                self.variant_shape(what, declared, named, true, path.span)?;
+                let mut given: Vec<(&str, Option<&'p ast::Name>)> = Vec::new();
+                for field in fields {
+                    let (name, bound) = match (&field.name, &field.pattern.kind) {
+                        (Some(name), _) => (name.text.as_str(), self.pattern_name(&field.pattern)?),
+                        (
+                            None,
+                            PatternKind::Name {
+                                name,
+                                mutable: false,
+                            },
+                        ) => (name.text.as_str(), Some(name)),
+                        (None, _) => {
+                            return self.fail(
+                                "L0224",
+                                "a field pattern is `name`, `name: other`, or `name: _`",
+                                field.span,
+                            );
+                        }
+                    };
+                    self.declared_field(what, declared, name, &given, field.span)?;
+                    given.push((name, bound));
+                }
+                declared
+                    .iter()
+                    .map(|field| match given.iter().find(|(name, _)| *name == field.name) {
+                        Some((_, bound)) => Ok(*bound),
+                        None if rest.is_some() => Ok(None),
+                        None => {
+                            let message = format!(
+                                "the pattern leaves out field `{}` of {what}; `..` leaves out the rest",
+                                field.name
+                            );
+                            self.fail("L0224", message, pattern.span)
+                        }
+                    })
+                    .collect()
+            }
+            _ => Ok(vec![None; declared.len()]),
+        }
+    }
+
+    /// A name or `_` inside a variant pattern.
+    fn pattern_name<'p>(&mut self, pattern: &'p ast::Pattern) -> Elab<Option<&'p ast::Name>> {
+        match &pattern.kind {
+            PatternKind::Name {
+                name,
+                mutable: false,
+            } => Ok(Some(name)),
+            PatternKind::Wildcard => Ok(None),
+            _ => self.fail(
+                "L0290",
+                "patterns inside a variant are names or `_` for now",
+                pattern.span,
+            ),
+        }
     }
 
     pub(super) fn member(
@@ -218,12 +367,17 @@ impl Env<'_> {
         path: &ast::Path,
     ) -> Elab<Option<(std::rc::Rc<EnumInfo>, usize)>> {
         let (prefix, name) = self.variant_path(path)?;
-        match self.globals.get(&prefix.text).cloned() {
+        let global = self
+            .types
+            .get(&prefix.text)
+            .or_else(|| self.values.get(&prefix.text))
+            .cloned();
+        match global {
             Some(Global::Enum(info)) => {
                 match info
                     .variants
                     .iter()
-                    .position(|(variant, _)| *variant == name.text)
+                    .position(|variant| variant.name == name.text)
                 {
                     Some(index) => Ok(Some((info, index))),
                     None => {
@@ -255,23 +409,66 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let Some((info, index)) = self.enum_variant(path)? else {
-            let Some(Global::Prop(info)) = self.globals.get(&path.segments[0].text).cloned() else {
+            let Some(Global::Prop(info)) = self.types.get(&path.segments[0].text).cloned() else {
                 unreachable!("`enum_variant` saw a proposition")
             };
-            return self.construct(&info, path, arguments, expected, span);
+            let arguments: Vec<&ast::Expr> = arguments.iter().collect();
+            return self.construct(&info, path, &arguments, false, expected, span);
         };
-        let payload = &info.variants[index].1;
-        let ids: Vec<VarId> = payload.iter().map(|binder| binder.id).collect();
-        let mut tys: Vec<Type> = payload.iter().map(|binder| binder.ty.clone()).collect();
-        let variant_name = path.last().text.clone();
-        let what = format!("`{}::{variant_name}`", info.name);
-        let payload = self.arguments(arguments, &ids, &mut tys, &what, span)?;
+        let variant = &info.variants[index];
+        let what = format!("`{}::{}`", info.name, variant.name);
+        self.variant_shape(&what, &variant.payload, variant.named, false, span)?;
+        let arguments: Vec<&ast::Expr> = arguments.iter().collect();
+        self.variant_value(&info, index, &arguments, span)
+    }
+
+    /// `E::V { a: x, b }`, a variant with named fields, or a proposition's.
+    pub(super) fn variant_literal(
+        &mut self,
+        path: &ast::Path,
+        fields: &[ast::ValueField],
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
+        let Some((info, index)) = self.enum_variant(path)? else {
+            let Some(Global::Prop(info)) = self.types.get(&path.segments[0].text).cloned() else {
+                unreachable!("`enum_variant` saw a proposition")
+            };
+            let variant = &info.variants[self.prop_variant(&info, path)?];
+            let what = format!("`{}::{}`", info.name, variant.name);
+            self.variant_shape(&what, &variant.payload, variant.named, true, span)?;
+            let values = self.values_by_name(&what, &variant.payload, fields, span)?;
+            return self.construct(&info, path, &values, true, expected, span);
+        };
+        let variant = &info.variants[index];
+        let what = format!("`{}::{}`", info.name, variant.name);
+        self.variant_shape(&what, &variant.payload, variant.named, true, span)?;
+        let values = self.values_by_name(&what, &variant.payload, fields, span)?;
+        self.variant_value(&info, index, &values, span)
+    }
+
+    fn variant_value(
+        &mut self,
+        info: &EnumInfo,
+        index: usize,
+        arguments: &[&ast::Expr],
+        span: Span,
+    ) -> Elab<Value> {
+        let variant = &info.variants[index];
+        let ids: Vec<VarId> = variant.payload.iter().map(|binder| binder.id).collect();
+        let mut tys: Vec<Type> = variant
+            .payload
+            .iter()
+            .map(|binder| binder.ty.clone())
+            .collect();
+        let what = format!("`{}::{}`", info.name, variant.name);
+        let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &what, span)?;
         Ok(Value::new(
             Expr::Variant {
                 id: info.id,
                 enum_name: info.name.clone(),
                 index,
-                variant_name,
+                variant_name: variant.name.clone(),
                 payload,
             },
             Type::Enum(info.id),

@@ -1,0 +1,86 @@
+// A constant with a runtime form is a Rust `const` item, computed by Rust
+// itself: a literal, a cast, a comparison, a primitive method, or a tuple,
+// struct, or variant of those, naming other constants. In the logic it is a
+// function of no parameters with a defining equation, and it is used by
+// name, without a call. A constant of a ghost type has no runtime form and
+// may mention any function that may appear in a proposition.
+
+const LIMIT: u8 = 3;
+const OPEN: bool = true;
+const WIDE: u32 = 300u16 as u32;
+const PAIR: (u8, bool) = (LIMIT, OPEN);
+const SUM: u8 = LIMIT.wrapping_add(4);
+const SMALL: bool = LIMIT < 10;
+
+struct Point {
+    x: u8,
+    y: u8,
+}
+
+const ORIGIN: Point = Point { x: 0, y: 0 };
+const CORNER: Point = Point { x: LIMIT, y: SUM };
+
+enum Mode {
+    Off,
+    On { level: u8 },
+}
+
+const DIM: Mode = Mode::On { level: LIMIT };
+
+// The defining equation of a constant is known, as a function's is.
+fn limit_is_small() -> @(LIMIT <= 9) {
+    _
+}
+
+fn within(n: u8, h: @(n <= LIMIT)) -> @(n <= 9) {
+    u8_le_trans(n, LIMIT, 9, h, limit_is_small())
+}
+
+fn add_limit(n: u8) -> u8 {
+    n.wrapping_add(LIMIT)
+}
+
+fn level(mode: Mode) -> u8 {
+    match mode {
+        Mode::Off => 0,
+        Mode::On { level } => level,
+    }
+}
+
+fn dim_level() -> u8 {
+    level(DIM)
+}
+
+fn corner_x() -> u8 {
+    CORNER.x
+}
+
+fn pair_first() -> u8 {
+    PAIR.0
+}
+
+// A constant of a ghost type mentions a call and has no runtime form.
+#[terminates] #[no_panic] #[no_io]
+fn double(n: u8) -> u8 {
+    n.wrapping_add(n)
+}
+
+const four_is_double: Prop = prop!(double(2) == 4);
+
+fn known() -> @four_is_double {
+    fold!(four_is_double, prove!(double(2) == 4))
+}
+
+//~ proofs: 2
+//~ run: add_limit(4) => 7
+//~ run: level(Mode::On { level: 7 }) => 7
+//~ run: dim_level() => 3
+//~ run: level(Mode::Off) => 0
+//~ run: corner_x() => 3
+//~ run: pair_first() => 3
+//~ rust: pub const LIMIT: u8 = 3_u8;
+//~ rust: pub const WIDE: u32 = (300_u16 as u32);
+//~ rust: pub const PAIR: (u8, bool) = (LIMIT, OPEN);
+//~ rust: pub const CORNER: Point = Point { x: LIMIT, y: SUM };
+//~ rust: pub const DIM: Mode = Mode::On { level: LIMIT };
+//~ rust: n.wrapping_add(LIMIT)

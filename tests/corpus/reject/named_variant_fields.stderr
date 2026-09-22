@@ -1,0 +1,45 @@
+error[L0224]: `Shape::Box` has named fields and is written `Shape::Box { width: .., height: .. }`
+ --> tests/corpus/reject/named_variant_fields.lc:9:5
+  |
+9 |     Shape::Box(1, 2) //~ error: L0224 `Shape::Box` has named fields and is written `Shape::Box { width: .., height: .. }`
+  |     ^^^^^^^^^^^^^^^^
+error[L0224]: `Shape::Line` has no field names and is written `Shape::Line(..)`
+  --> tests/corpus/reject/named_variant_fields.lc:13:5
+   |
+13 |     Shape::Line { length: 1 } //~ error: L0224 `Shape::Line` has no field names and is written `Shape::Line(..)`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+error[L0224]: `Shape::Box` has no field `depth`
+  --> tests/corpus/reject/named_variant_fields.lc:17:28
+   |
+17 |     Shape::Box { width: 1, depth: 2 } //~ error: L0224 `Shape::Box` has no field `depth`
+   |                            ^^^^^^^^
+error[L0224]: field `width` is given twice
+  --> tests/corpus/reject/named_variant_fields.lc:21:28
+   |
+21 |     Shape::Box { width: 1, width: 2 } //~ error: L0224 field `width` is given twice
+   |                            ^^^^^^^^
+error[L0224]: missing field `height` of `Shape::Box`
+  --> tests/corpus/reject/named_variant_fields.lc:25:5
+   |
+25 |     Shape::Box { width: 1 } //~ error: L0224 missing field `height` of `Shape::Box`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+error[L0224]: `Shape::Box` has named fields and is written `Shape::Box { width: .., height: .. }`
+  --> tests/corpus/reject/named_variant_fields.lc:31:9
+   |
+31 |         Shape::Box(width, _) => width, //~ error: L0224 `Shape::Box` has named fields
+   |         ^^^^^^^^^^
+error[L0224]: the pattern leaves out field `height` of `Shape::Box`; `..` leaves out the rest
+  --> tests/corpus/reject/named_variant_fields.lc:38:9
+   |
+38 |         Shape::Box { width } => width, //~ error: L0224 the pattern leaves out field `height` of `Shape::Box`; `..` leaves out the rest
+   |         ^^^^^^^^^^^^^^^^^^^^
+error[L0224]: `Shape::Box` has no field `depth`
+  --> tests/corpus/reject/named_variant_fields.lc:45:22
+   |
+45 |         Shape::Box { depth, .. } => depth, //~ error: L0224 `Shape::Box` has no field `depth`
+   |                      ^^^^^
+error[L0224]: `Small::Below` has named fields and is written `Small::Below { bound: .. }`
+  --> tests/corpus/reject/named_variant_fields.lc:55:5
+   |
+55 |     Small::Below(prove!(5u8 < 10)) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { bound: .. }`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

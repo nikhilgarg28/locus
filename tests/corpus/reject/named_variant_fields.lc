@@ -1,0 +1,56 @@
+// A variant with named fields is written and matched by those names, and a
+// tuple variant is not.
+enum Shape {
+    Line(u8),
+    Box { width: u8, height: u8 },
+}
+
+fn as_tuple() -> Shape {
+    Shape::Box(1, 2) //~ error: L0224 `Shape::Box` has named fields and is written `Shape::Box { width: .., height: .. }`
+}
+
+fn as_named() -> Shape {
+    Shape::Line { length: 1 } //~ error: L0224 `Shape::Line` has no field names and is written `Shape::Line(..)`
+}
+
+fn unknown() -> Shape {
+    Shape::Box { width: 1, depth: 2 } //~ error: L0224 `Shape::Box` has no field `depth`
+}
+
+fn twice() -> Shape {
+    Shape::Box { width: 1, width: 2 } //~ error: L0224 field `width` is given twice
+}
+
+fn missing() -> Shape {
+    Shape::Box { width: 1 } //~ error: L0224 missing field `height` of `Shape::Box`
+}
+
+fn matched_as_tuple(shape: Shape) -> u8 {
+    match shape {
+        Shape::Line(length) => length,
+        Shape::Box(width, _) => width, //~ error: L0224 `Shape::Box` has named fields
+    }
+}
+
+fn left_out(shape: Shape) -> u8 {
+    match shape {
+        Shape::Line(length) => length,
+        Shape::Box { width } => width, //~ error: L0224 the pattern leaves out field `height` of `Shape::Box`; `..` leaves out the rest
+    }
+}
+
+fn matched_unknown(shape: Shape) -> u8 {
+    match shape {
+        Shape::Line(length) => length,
+        Shape::Box { depth, .. } => depth, //~ error: L0224 `Shape::Box` has no field `depth`
+    }
+}
+
+prop Small(n: u8) {
+    Below { bound: @(n < 10) },
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn proved_as_tuple() -> @Small(5) {
+    Small::Below(prove!(5u8 < 10)) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { bound: .. }`
+}

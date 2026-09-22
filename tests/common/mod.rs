@@ -470,10 +470,12 @@ pub fn classified_enum(prelude: Prelude) -> EnumItem {
             VariantItem {
                 name: "Zero".into(),
                 payload: payload(|_, value| views_eq(value, Term::U8(0))),
+                named: false,
             },
             VariantItem {
                 name: "NonZero".into(),
                 payload: payload(|prelude, value| prelude.not_prop(views_eq(value, Term::U8(0)))),
+                named: false,
             },
         ],
     }

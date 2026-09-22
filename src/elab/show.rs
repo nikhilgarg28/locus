@@ -315,11 +315,26 @@ impl Env<'_> {
                 ),
             },
             Term::Variant(id, index, payload) => {
-                let name = self.enum_by_id(*id).map_or_else(
-                    || format!("enum::{index}"),
-                    |info| format!("{}::{}", info.name, info.variants[*index].0),
-                );
-                if payload.is_empty() {
+                let Some(info) = self.enum_by_id(*id) else {
+                    return format!("enum::{index}({})", self.list(payload, bound));
+                };
+                let variant = &info.variants[*index];
+                let name = format!("{}::{}", info.name, variant.name);
+                if variant.named {
+                    let fields: Vec<String> = variant
+                        .payload
+                        .iter()
+                        .zip(payload)
+                        .map(|(field, value)| {
+                            format!(
+                                "{}: {}",
+                                field.name,
+                                self.term_at(value, Level::Implies, bound)
+                            )
+                        })
+                        .collect();
+                    format!("{name} {{ {} }}", fields.join(", "))
+                } else if payload.is_empty() {
                     name
                 } else {
                     format!("{name}({})", self.list(payload, bound))

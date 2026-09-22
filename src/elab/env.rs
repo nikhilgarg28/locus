@@ -29,7 +29,18 @@ pub(super) struct StructInfo {
 pub(super) struct EnumInfo {
     pub id: EnumId,
     pub name: String,
-    pub variants: Vec<(String, Vec<Binder>)>,
+    pub variants: Vec<VariantInfo>,
+}
+
+#[derive(Debug)]
+pub(super) struct VariantInfo {
+    pub name: String,
+    /// A field's type may mention the binders of the fields before it; the
+    /// binders' names are the field names when `named`.
+    pub payload: Vec<Binder>,
+    /// Declared with braces, `V { a: T }`: written and matched by field
+    /// name, and printed so in Rust.
+    pub named: bool,
 }
 
 #[derive(Debug)]
@@ -46,6 +57,8 @@ pub(super) struct PropVariantInfo {
     /// Over the proposition's parameters when there is no conclusion, and
     /// over nothing but the earlier payload when there is one.
     pub payload: Vec<Binder>,
+    /// Declared with braces: written and matched by field name.
+    pub named: bool,
     /// The arguments at which this variant proves the proposition, over the
     /// payload. Absent when it proves it at the parameters themselves.
     pub conclusion: Option<Vec<Term>>,
@@ -177,7 +190,11 @@ pub(super) struct Env<'a> {
     pub session: Session,
     pub prelude: Prelude,
     pub theory: Theory,
-    pub globals: HashMap<String, Global>,
+    /// The two namespaces of Rust: a type and a value may share a name.
+    /// Structs, enums, and propositions are types; functions and constants
+    /// are values.
+    pub types: HashMap<String, Global>,
+    pub values: HashMap<String, Global>,
     /// Items that were rejected; a mention of one is not reported again.
     pub failed: HashSet<String>,
     /// `#![...]` at the top of the file: promised by every function in it.
@@ -383,29 +400,39 @@ impl Env<'_> {
         }
     }
 
+    /// Files a declared item under its namespace.
+    pub fn insert_global(&mut self, name: String, global: Global) {
+        match global {
+            Global::Struct(_) | Global::Enum(_) | Global::Prop(_) => {
+                self.types.insert(name, global)
+            }
+            Global::Fn(_) => self.values.insert(name, global),
+        };
+    }
+
     pub fn struct_by_id(&self, id: StructId) -> Option<Rc<StructInfo>> {
-        self.globals.values().find_map(|global| match global {
+        self.types.values().find_map(|global| match global {
             Global::Struct(info) if info.id == id => Some(Rc::clone(info)),
             _ => None,
         })
     }
 
     pub fn enum_by_id(&self, id: EnumId) -> Option<Rc<EnumInfo>> {
-        self.globals.values().find_map(|global| match global {
+        self.types.values().find_map(|global| match global {
             Global::Enum(info) if info.id == id => Some(Rc::clone(info)),
             _ => None,
         })
     }
 
     pub fn prop_by_id(&self, id: PropId) -> Option<Rc<PropInfo>> {
-        self.globals.values().find_map(|global| match global {
+        self.types.values().find_map(|global| match global {
             Global::Prop(info) if info.id == id => Some(Rc::clone(info)),
             _ => None,
         })
     }
 
     pub fn fn_by_id(&self, id: FnId) -> Option<Rc<FnInfo>> {
-        self.globals.values().find_map(|global| match global {
+        self.values.values().find_map(|global| match global {
             Global::Fn(info) if info.reference == FnRef::Math(id) => Some(Rc::clone(info)),
             _ => None,
         })

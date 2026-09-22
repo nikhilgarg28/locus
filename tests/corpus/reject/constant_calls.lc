@@ -1,0 +1,13 @@
+// A constant with a runtime form is computed by Rust itself, which does
+// not call a function; a value a function computes is a function.
+#[terminates] #[no_panic] #[no_io]
+fn double(n: u8) -> u8 {
+    n.wrapping_add(n)
+}
+
+const FOUR: u8 = double(2); //~ error: L0234 the value of `FOUR` calls `double`, and Rust computes a constant without calling a function
+
+const PAIR: (u8, u8) = (1, double(1)); //~ error: L0234 the value of `PAIR` calls `double`
+
+// A constant of a ghost type has no runtime form, and may.
+const four: Prop = prop!(double(2) == 4);

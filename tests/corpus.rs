@@ -726,6 +726,26 @@ impl<'a> Cursor<'a> {
         Ok(values)
     }
 
+    /// `{ field: value, ... }` in the declared order, as `{:?}` prints it.
+    fn fields(&mut self, fields: &[(&str, &EType)], module: &Module) -> Result<Vec<Value>, String> {
+        self.expect("{")?;
+        let mut values = Vec::new();
+        for (index, (field, ty)) in fields.iter().enumerate() {
+            if index > 0 {
+                self.expect(",")?;
+            }
+            let word = self.word();
+            if word != *field {
+                return Err(format!("expected field `{field}`, found `{word}`"));
+            }
+            self.expect(":")?;
+            values.push(self.value(ty, module)?);
+        }
+        self.eat(",");
+        self.expect("}")?;
+        Ok(values)
+    }
+
     /// A value of a known type, so that `Wrong` needs no `Event::`.
     fn value(&mut self, ty: &EType, module: &Module) -> Result<Value, String> {
         match ty {
@@ -775,22 +795,12 @@ impl<'a> Cursor<'a> {
                 if word != item.name {
                     return Err(format!("expected a `{}`, found `{word}`", item.name));
                 }
-                self.expect("{")?;
-                let mut values = Vec::new();
-                for (index, (field, ty)) in item.fields.iter().enumerate() {
-                    if index > 0 {
-                        self.expect(",")?;
-                    }
-                    let word = self.word();
-                    if word != field {
-                        return Err(format!("expected field `{field}`, found `{word}`"));
-                    }
-                    self.expect(":")?;
-                    values.push(self.value(ty, module)?);
-                }
-                self.eat(",");
-                self.expect("}")?;
-                Ok(Value::Struct(*id, values))
+                let fields: Vec<(&str, &EType)> = item
+                    .fields
+                    .iter()
+                    .map(|(field, ty)| (field.as_str(), ty))
+                    .collect();
+                Ok(Value::Struct(*id, self.fields(&fields, module)?))
             }
             EType::Enum(id) => {
                 let item = module
@@ -808,12 +818,19 @@ impl<'a> Cursor<'a> {
                 let Some(index) = item.variants.iter().position(|v| v.name == word) else {
                     return Err(format!("`{}` has no variant `{word}`", item.name));
                 };
-                let payload = &item.variants[index].payload;
-                let values = if payload.is_empty() {
+                let variant = &item.variants[index];
+                let values = if let Some(fields) = &variant.fields {
+                    let fields: Vec<(&str, &EType)> = fields
+                        .iter()
+                        .map(String::as_str)
+                        .zip(&variant.payload)
+                        .collect();
+                    self.fields(&fields, module)?
+                } else if variant.payload.is_empty() {
                     Vec::new()
                 } else {
                     self.expect("(")?;
-                    self.values(payload, module, ")")?
+                    self.values(&variant.payload, module, ")")?
                 };
                 Ok(Value::Variant(*id, index, values))
             }
@@ -880,11 +897,19 @@ fn rust_value(value: &Value, module: &Module, path: &str) -> String {
         Value::Variant(id, index, payload) => {
             let item = module.enums.iter().find(|item| item.id == *id);
             let item = item.expect("the value was parsed against this module");
-            let name = format!("{path}::{}::{}", item.name, item.variants[*index].name);
-            if payload.is_empty() {
-                name
-            } else {
-                format!("{name}({})", all(payload).join(", "))
+            let variant = &item.variants[*index];
+            let name = format!("{path}::{}::{}", item.name, variant.name);
+            match &variant.fields {
+                Some(fields) => {
+                    let fields: Vec<String> = fields
+                        .iter()
+                        .zip(all(payload))
+                        .map(|(field, value)| format!("{field}: {value}"))
+                        .collect();
+                    format!("{name} {{ {} }}", fields.join(", "))
+                }
+                None if payload.is_empty() => name,
+                None => format!("{name}({})", all(payload).join(", ")),
             }
         }
     }

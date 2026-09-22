@@ -183,7 +183,7 @@ impl Env<'_> {
                         *slot = Some(arm);
                     }
                 }
-                PatternKind::Variant { path, .. } => {
+                PatternKind::Variant { path, .. } | PatternKind::Struct { path, .. } => {
                     let (prefix, _) = self.variant_path(path)?;
                     if prefix.text != info.name {
                         let message = format!(
@@ -203,7 +203,7 @@ impl Env<'_> {
                 _ => {
                     return self.fail(
                         "L0290",
-                        "an arm's pattern is `Enum::Variant(names...)` or `_`; other patterns are not supported yet",
+                        "an arm's pattern is `Enum::Variant(names...)`, `Enum::Variant { fields... }`, or `_`; other patterns are not supported yet",
                         arm.pattern.span,
                     );
                 }
@@ -213,7 +213,7 @@ impl Env<'_> {
             .iter()
             .zip(&info.variants)
             .filter(|(arm, _)| arm.is_none())
-            .map(|(_, (name, _))| format!("`{}::{name}`", info.name))
+            .map(|(_, variant)| format!("`{}::{}`", info.name, variant.name))
             .collect();
         if !missing.is_empty() {
             return self.fail(
@@ -230,42 +230,13 @@ impl Env<'_> {
         let mut ends = Vec::new();
         for (index, arm) in chosen.iter().enumerate() {
             let arm = arm.expect("every variant has an arm");
-            let (variant_name, declared) = &info.variants[index];
+            let variant = &info.variants[index];
+            let variant_name = &variant.name;
             let mark = self.mark();
             let arm_result = (|| {
-                let names: Vec<Option<&ast::Name>> = match &arm.pattern.kind {
-                    PatternKind::Variant { arguments, path } => {
-                        let given = arguments.as_deref().unwrap_or(&[]);
-                        if given.len() != declared.len() {
-                            let message = format!(
-                                "`{}::{variant_name}` carries {} value(s), and the pattern names {}",
-                                info.name,
-                                declared.len(),
-                                given.len()
-                            );
-                            return self.fail("L0208", message, path.span);
-                        }
-                        let mut names = Vec::new();
-                        for pattern in given {
-                            match &pattern.kind {
-                                PatternKind::Name {
-                                    name,
-                                    mutable: false,
-                                } => names.push(Some(name)),
-                                PatternKind::Wildcard => names.push(None),
-                                _ => {
-                                    return self.fail(
-                                        "L0290",
-                                        "patterns inside a variant are names or `_` for now",
-                                        pattern.span,
-                                    );
-                                }
-                            }
-                        }
-                        names
-                    }
-                    _ => vec![None; declared.len()],
-                };
+                let what = format!("`{}::{variant_name}`", info.name);
+                let names =
+                    self.pattern_names(&arm.pattern, &what, &variant.payload, variant.named)?;
                 let mut payload: Vec<Binder> = Vec::new();
                 let telescope = Type::Tuple(payload_types[index].clone());
                 for (field, name) in names.iter().enumerate() {

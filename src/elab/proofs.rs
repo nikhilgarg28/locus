@@ -42,25 +42,38 @@ impl Env<'_> {
         }
     }
 
-    /// `Name::Variant(payload)`, which proves `Name(...)`.
+    /// The index of the variant `Name::Variant` names.
+    pub(super) fn prop_variant(&mut self, info: &PropInfo, path: &ast::Path) -> Elab<usize> {
+        let name = path.last();
+        match info
+            .variants
+            .iter()
+            .position(|variant| variant.name == name.text)
+        {
+            Some(index) => Ok(index),
+            None => {
+                let message = format!("`{}` has no variant `{}`", info.name, name.text);
+                self.fail("L0212", message, name.span)
+            }
+        }
+    }
+
+    /// `Name::Variant(payload)`, or `Name::Variant { field: payload }`
+    /// with the values already in the fields' order, which proves
+    /// `Name(...)`.
     pub fn construct(
         &mut self,
         info: &PropInfo,
         path: &ast::Path,
-        arguments: &[ast::Expr],
+        arguments: &[&ast::Expr],
+        braces: bool,
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
-        let name = path.last();
-        let Some(index) = info
-            .variants
-            .iter()
-            .position(|variant| variant.name == name.text)
-        else {
-            let message = format!("`{}` has no variant `{}`", info.name, name.text);
-            return self.fail("L0212", message, name.span);
-        };
+        let index = self.prop_variant(info, path)?;
         let variant = &info.variants[index];
+        let what = format!("`{}::{}`", info.name, variant.name);
+        self.variant_shape(&what, &variant.payload, variant.named, braces, span)?;
         let mut tys: Vec<Type> = variant
             .payload
             .iter()
@@ -94,8 +107,7 @@ impl Env<'_> {
             }
         }
         let ids: Vec<VarId> = variant.payload.iter().map(|binder| binder.id).collect();
-        let what = format!("`{}::{}`", info.name, variant.name);
-        let payload = self.arguments(arguments, &ids, &mut tys, &what, span)?;
+        let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &what, span)?;
         let mut terms = Vec::new();
         for expr in &payload {
             match value_term(expr) {
@@ -178,28 +190,22 @@ impl Env<'_> {
                         *slot = Some(arm);
                     }
                 }
-                PatternKind::Variant { path, .. }
+                PatternKind::Variant { path, .. } | PatternKind::Struct { path, .. }
                     if path
                         .pair()
                         .is_some_and(|(prefix, _)| prefix.text == info.name) =>
                 {
-                    let name = path.last();
-                    let Some(index) = info
-                        .variants
-                        .iter()
-                        .position(|variant| variant.name == name.text)
-                    else {
-                        let message = format!("`{}` has no variant `{}`", info.name, name.text);
-                        return self.fail("L0212", message, name.span);
-                    };
+                    let index = self.prop_variant(&info, path)?;
                     if chosen[index].is_some() {
                         return self.fail("L0214", "this arm is never reached", arm.pattern.span);
                     }
                     chosen[index] = Some(arm);
                 }
                 _ => {
-                    let message =
-                        format!("an arm here is `{}::Variant(names...)` or `_`", info.name);
+                    let message = format!(
+                        "an arm here is `{}::Variant(names...)`, `{}::Variant {{ fields... }}`, or `_`",
+                        info.name, info.name
+                    );
                     return self.fail("L0212", message, arm.pattern.span);
                 }
             }
@@ -221,40 +227,8 @@ impl Env<'_> {
         let mut proof_arms = Vec::new();
         for (variant, arm) in info.variants.iter().zip(chosen) {
             let arm = arm.expect("every variant has an arm");
-            let names: Vec<Option<&ast::Name>> = match &arm.pattern.kind {
-                PatternKind::Variant { arguments, path } => {
-                    let given = arguments.as_deref().unwrap_or(&[]);
-                    if given.len() != variant.payload.len() {
-                        let message = format!(
-                            "`{}::{}` carries {} value(s), and the pattern names {}",
-                            info.name,
-                            variant.name,
-                            variant.payload.len(),
-                            given.len()
-                        );
-                        return self.fail("L0208", message, path.span);
-                    }
-                    let mut names = Vec::new();
-                    for pattern in given {
-                        match &pattern.kind {
-                            PatternKind::Name {
-                                name,
-                                mutable: false,
-                            } => names.push(Some(name)),
-                            PatternKind::Wildcard => names.push(None),
-                            _ => {
-                                return self.fail(
-                                    "L0290",
-                                    "patterns inside a variant are names or `_` for now",
-                                    pattern.span,
-                                );
-                            }
-                        }
-                    }
-                    names
-                }
-                _ => vec![None; variant.payload.len()],
-            };
+            let what = format!("`{}::{}`", info.name, variant.name);
+            let names = self.pattern_names(&arm.pattern, &what, &variant.payload, variant.named)?;
             let mark = self.mark();
             let arm_result = (|| {
                 let mut binders: Vec<Binder> = Vec::new();
@@ -372,7 +346,7 @@ impl Env<'_> {
         // appear in a proposition, since the equation is one.
         let function = match &first.kind {
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
-                match self.globals.get(&name.text).cloned() {
+                match self.values.get(&name.text).cloned() {
                     Some(Global::Fn(info)) => {
                         self.admit_to_formula(&info, "a proposition", first.span)?;
                         match info.reference {

@@ -786,7 +786,7 @@ impl Parser<'_> {
                 "a constructor is as visible as its proposition, and `pub` is not written on it",
             )?;
             let name = self.name()?;
-            let (_, fields, mut end) = self.variant_fields(name.span)?;
+            let (shape, fields, mut end) = self.variant_fields(name.span)?;
             let target = if self.eat(K::Colon).is_some() {
                 let at = self.expect(K::At)?;
                 let target = self.unrestricted(|parser| parser.proof_target(at))?;
@@ -799,6 +799,7 @@ impl Parser<'_> {
                 span: name.span.through(end),
                 doc,
                 name,
+                shape,
                 fields,
                 target,
             });

@@ -209,11 +209,7 @@ impl Env<'_> {
             } => self.cast(inner, ty, *as_span),
             ExprKind::Struct { path, fields } => match path.single() {
                 Some(name) => self.struct_literal(name, fields, expr.span),
-                None => self.fail(
-                    "L0290",
-                    "a variant with named fields is not in Locus yet; E9 adds it",
-                    expr.span,
-                ),
+                None => self.variant_literal(path, fields, expected, expr.span),
             },
             ExprKind::Path(path) => match self.associated_constant(path) {
                 Some(constant) => constant,
@@ -340,7 +336,13 @@ impl Env<'_> {
                 ty,
             ));
         }
-        match self.globals.get(&name.text).cloned() {
+        // A name is a value; a type of the same name is another thing.
+        let global = self
+            .values
+            .get(&name.text)
+            .or_else(|| self.types.get(&name.text))
+            .cloned();
+        match global {
             Some(Global::Fn(info)) if info.constant => self.call_fn(&info, &[], name.span),
             // A function of the logic returning evidence is evidence of its general claim,
             // where evidence is expected or where nothing in particular is,

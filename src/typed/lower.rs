@@ -202,6 +202,23 @@ impl Session {
         Ok(reference)
     }
 
+    /// A constant: a function of no parameters in the logic and the
+    /// checker, and a `const` item in Rust, whose value Rust computes
+    /// itself (the elaborator has seen that it can).
+    pub fn declare_constant(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+    ) -> Result<FnRef, LowerError> {
+        let reference = self.declare_fn_promising(item, promises)?;
+        if let Some(function) = self.erased.fns.last_mut()
+            && function.reference == reference
+        {
+            function.constant = true;
+        }
+        Ok(reference)
+    }
+
     fn check_fn(&mut self, item: &FnItem, promises: exec::Promises) -> Result<FnRef, LowerError> {
         let params: Vec<(VarId, Type)> = item
             .params

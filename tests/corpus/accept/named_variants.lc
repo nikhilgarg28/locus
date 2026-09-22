@@ -1,0 +1,87 @@
+// Enum variants with named fields, as in Rust: declared with braces, built
+// as `E::V { a: x, b }` in any order with `b` short for `b: b`, and matched
+// as `E::V { a, b: other, .. }`. The fields are the payload by position in
+// the logic; the names are how the source and the generated Rust write them.
+
+enum Shape {
+    Dot,
+    Line(u8),
+    Box { width: u8, height: u8 },
+    Flag { up: bool, weight: u8 },
+}
+
+fn area(shape: Shape) -> u8 {
+    match shape {
+        Shape::Dot => 0,
+        Shape::Line(length) => length,
+        Shape::Box { width, height } => width.wrapping_mul(height),
+        Shape::Flag { weight, .. } => weight,
+    }
+}
+
+// Fields in either order, and the shorthand.
+fn square(side: u8) -> Shape {
+    let width = side;
+    Shape::Box { height: side, width }
+}
+
+fn heavy(weight: u8) -> Shape {
+    Shape::Flag { up: true, weight }
+}
+
+fn up(shape: Shape) -> bool {
+    match shape {
+        Shape::Flag { up: raised, weight: _ } => raised,
+        _ => false,
+    }
+}
+
+fn area_of_square(side: u8) -> u8 {
+    area(square(side))
+}
+
+// A field's type may depend on an earlier field's name, as in a tuple.
+enum Bounded {
+    Below { limit: u8, value: u8, fits: @(value <= limit) },
+}
+
+fn bounded(limit: u8, value: u8, fits: @(value <= limit)) -> Bounded {
+    Bounded::Below { limit, value, fits }
+}
+
+fn take(bounded: Bounded) -> u8 {
+    match bounded {
+        Bounded::Below { value, .. } => value,
+    }
+}
+
+// A proposition's constructor with named fields, built and taken apart.
+prop Small(n: u8) {
+    Zero: @Small(0),
+    Below { bound: @(n < 10) },
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
+    match small {
+        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0u8 < 10)),
+        Small::Below { bound } => bound,
+    }
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn five_is_small() -> @Small(5) {
+    Small::Below { bound: prove!(5u8 < 10) }
+}
+
+//~ proofs: 3
+//~ run: area(Shape::Dot) => 0
+//~ run: area(Shape::Line(7)) => 7
+//~ run: area(Shape::Box { width: 3, height: 4 }) => 12
+//~ run: area_of_square(5) => 25
+//~ run: square(6) => Box { width: 6, height: 6 }
+//~ run: heavy(9) => Flag { up: true, weight: 9 }
+//~ run: up(Shape::Flag { up: true, weight: 1 }) => true
+//~ run: up(Shape::Dot) => false
+//~ run: bounded(9, 3, Proved) => Below { limit: 9, value: 3, fits: Proved }
+//~ run: take(Bounded::Below { limit: 9, value: 3, fits: Proved }) => 3

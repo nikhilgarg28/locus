@@ -1,5 +1,5 @@
-error[L0212]: an arm here is `And::Variant(names...)` or `_`
+error[L0212]: an arm here is `And::Variant(names...)`, `And::Variant { fields... }`, or `_`
  --> tests/corpus/reject/evidence_arm_not_a_variant.lc:4:9
   |
-4 |         (hp, hq) => hp, //~ error: L0212 an arm here is `And::Variant(names...)` or `_`
+4 |         (hp, hq) => hp, //~ error: L0212 an arm here is `And::Variant(names...)`, `And::Variant { fields... }`, or `_`
   |         ^^^^^^^^

@@ -48,6 +48,9 @@ pub struct EnumItem {
 pub struct VariantItem {
     pub name: String,
     pub payload: Vec<Binder>,
+    /// Written with braces, `V { a: T, b: U }`: the payload's binders are
+    /// its field names, and Rust reads and writes them by name.
+    pub named: bool,
 }
 
 /// `fn` or `math fn`. The result type may mention the parameters.

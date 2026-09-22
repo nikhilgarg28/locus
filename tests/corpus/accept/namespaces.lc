@@ -1,0 +1,57 @@
+// Types and values are two namespaces, as in Rust: a struct, enum, or
+// proposition and a function or constant may share a name. Where a type is
+// read, the name is the type; where a value is read, the value; a call
+// `Name(..)` is the function of that name when there is one, and the
+// proposition applied otherwise. The values here are of the logic, so the
+// Rust has the types alone and no lint to raise about their names.
+
+struct Point {
+    x: u8,
+    y: u8,
+}
+
+// A claim about a point's coordinates, named as the type it is about.
+#[terminates] #[no_panic] #[no_io]
+fn Point(x: u8, y: u8) -> Prop {
+    prop!(x <= y)
+}
+
+enum Mode {
+    Off,
+    On,
+}
+
+const Mode: Prop = prop!(true);
+
+fn ordered(x: u8, y: u8, h: @(x <= y)) -> (out: Point, @Point(out.x, out.y)) {
+    let point = Point { x, y };
+    (point, fold!(Point, h))
+}
+
+fn lower(p: Point, h: @Point(p.x, p.y)) -> @(p.x <= p.y) {
+    unfold!(Point, h)
+}
+
+fn every_mode() -> @Mode {
+    fold!(Mode, True::Intro)
+}
+
+fn on() -> Mode {
+    Mode::On
+}
+
+fn on_is_on() -> bool {
+    is_on(on())
+}
+
+fn is_on(mode: Mode) -> bool {
+    match mode {
+        Mode::On => true,
+        Mode::Off => false,
+    }
+}
+
+//~ proofs: 0
+//~ run: ordered(1, 2, Proved) => (Point { x: 1, y: 2 }, Proved)
+//~ run: on_is_on() => true
+//~ run: is_on(Mode::Off) => false

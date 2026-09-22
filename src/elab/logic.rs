@@ -277,7 +277,7 @@ impl Env<'_> {
         if self.lookup(&name.text).is_some() {
             return None;
         }
-        match self.globals.get(&name.text) {
+        match self.types.get(&name.text) {
             Some(Global::Prop(info)) => Some(std::rc::Rc::clone(info)),
             _ => None,
         }

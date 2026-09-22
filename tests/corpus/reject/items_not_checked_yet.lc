@@ -1,7 +1,6 @@
-// S4 parses derive, impl blocks, and variants with named fields; what gives
-// them meaning comes later, and the elaborator says which commit. The
-// promises have theirs: `#![no_io]` and the two on `get` admit it to a
-// proposition.
+// S4 parses derive and impl blocks; what gives them meaning comes later,
+// and the elaborator says which commit. The promises have theirs:
+// `#![no_io]` and the two on `get` admit it to a proposition.
 #![no_io]
 #[derive(Clone, Copy)] //~ error: L0290 `#[derive(...)]` is parsed but not checked yet; O1
 pub struct Counter {
@@ -14,9 +13,4 @@ pub(crate) fn get(counter: Counter) -> u8 { counter.count }
 impl Counter { //~ error: L0290 `impl Counter` is parsed but not checked yet; O4
     pub fn new(count: u8) -> Self { Self { count } }
     fn read(&self) -> u8 { self.count }
-}
-
-enum Shape {
-    Point,
-    Box { width: u8, height: u8 }, //~ error: L0290 a variant with named fields is not in Locus yet; E9
 }

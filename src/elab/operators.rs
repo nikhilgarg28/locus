@@ -37,14 +37,13 @@ impl Env<'_> {
             },
             ExprKind::Name(name) => match self.lookup(&name.text) {
                 Some(local) => same_type(&local.ty, &Type::Prop),
-                None => matches!(self.globals.get(&name.text), Some(Global::Prop(_))),
+                None => matches!(self.types.get(&name.text), Some(Global::Prop(_))),
             },
             ExprKind::Call { callee, .. } => match &callee.kind {
                 ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
-                    match self.globals.get(&name.text) {
+                    match self.values.get(&name.text) {
                         Some(Global::Fn(info)) => same_type(&info.result, &Type::Prop),
-                        Some(Global::Prop(_)) => true,
-                        _ => false,
+                        _ => matches!(self.types.get(&name.text), Some(Global::Prop(_))),
                     }
                 }
                 _ => false,

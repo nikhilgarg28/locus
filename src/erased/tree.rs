@@ -50,12 +50,18 @@ pub struct EEnum {
 pub struct EVariant {
     pub name: String,
     pub payload: Vec<EType>,
+    /// The field names when the variant is written with braces, in the
+    /// order of `payload`; `None` for a tuple or unit variant.
+    pub fields: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct EFn {
     pub reference: FnRef,
     pub name: String,
+    /// Declared with `const`: printed as a Rust `const` item, whose body is
+    /// the tail of `body`, and named without a call.
+    pub constant: bool,
     pub params: Vec<(VarId, String, EType)>,
     pub result: EType,
     pub body: EBlock,

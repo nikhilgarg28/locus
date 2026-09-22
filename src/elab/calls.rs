@@ -23,6 +23,20 @@ impl Env<'_> {
         what: &str,
         span: Span,
     ) -> Elab<Vec<Expr>> {
+        let arguments: Vec<&ast::Expr> = arguments.iter().collect();
+        self.arguments_by_ref(&arguments, ids, tys, what, span)
+    }
+
+    /// `arguments`, over the values in any order they were found in: a
+    /// variant's fields, given by name.
+    pub fn arguments_by_ref(
+        &mut self,
+        arguments: &[&ast::Expr],
+        ids: &[VarId],
+        tys: &mut [Type],
+        what: &str,
+        span: Span,
+    ) -> Elab<Vec<Expr>> {
         if arguments.len() != ids.len() {
             let message = format!(
                 "{what} takes {} value{}, and {} {} given",
@@ -57,7 +71,13 @@ impl Env<'_> {
             ExprKind::Path(path) => self.variant(path, arguments, expected, span),
             ExprKind::Member { value, name } => self.method(value, name, arguments, expected, span),
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
-                match self.globals.get(&name.text).cloned() {
+                // A call names a function, or applies a proposition.
+                let global = self
+                    .values
+                    .get(&name.text)
+                    .or_else(|| self.types.get(&name.text))
+                    .cloned();
+                match global {
                     Some(Global::Fn(info)) => self.call_fn(&info, arguments, span),
                     Some(Global::Prop(info)) => {
                         let term = self.prop_application(&info, arguments, span)?;

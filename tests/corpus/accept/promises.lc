@@ -61,11 +61,12 @@ fn level_of_off() -> @(level(Mode::Off) == 0) {
 }
 
 // A constant is a value of the logic, and calls a function the way a
-// proposition does.
-const four_by_double: u8 = double(2);
+// proposition does; one with a runtime form is computed by Rust itself,
+// so it is a proposition that mentions a call, not a value.
+const four_by_double: Prop = prop!(double(2) == 4);
 
-fn four() -> (out: u8, @(out == four_by_double)) {
-    (four_by_double, _)
+fn four() -> (out: u8, @four_by_double) {
+    (4, fold!(four_by_double, prove!(double(2) == 4)))
 }
 
 //~ proofs: 3

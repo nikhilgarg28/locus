@@ -13,6 +13,7 @@ use crate::typed::{Binder, EnumItem, FnItem, FnRef, Session, StructItem, Variant
 
 use super::env::{
     Elab, EnumInfo, Env, FnInfo, Global, LOGICAL, PropInfo, PropVariantInfo, StructInfo,
+    VariantInfo,
 };
 use super::order::{declared_name, dependency_order};
 use super::types::tuple_over;
@@ -85,7 +86,8 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         session: Session::new(definitions),
         prelude,
         theory,
-        globals: HashMap::new(),
+        types: HashMap::new(),
+        values: HashMap::new(),
         failed: HashSet::new(),
         file_promises: Promises::default(),
         diagnostics: Vec::new(),
@@ -107,13 +109,20 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
     env.report_unchecked_syntax(program);
     env.file_promises = env.promises_of(&program.attributes, Promises::default());
 
-    let mut seen: HashMap<&str, Span> = HashMap::new();
+    // A name is declared once per namespace: a type and a value may share it.
+    let mut seen: HashMap<(bool, &str), Span> = HashMap::new();
     let mut duplicates = HashSet::new();
     for (index, declaration) in program.declarations.iter().enumerate() {
         let Some(name) = declared_name(declaration) else {
             continue;
         };
-        if let Some(first) = seen.get(name.text.as_str()) {
+        let is_type = matches!(
+            declaration.kind,
+            DeclarationKind::Struct { .. }
+                | DeclarationKind::Enum { .. }
+                | DeclarationKind::Prop { .. }
+        );
+        if let Some(first) = seen.get(&(is_type, name.text.as_str())) {
             env.diagnostics.push(
                 Diagnostic::error(
                     "L0202",
@@ -124,7 +133,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
             );
             duplicates.insert(index);
         } else {
-            seen.insert(&name.text, name.span);
+            seen.insert((is_type, &name.text), name.span);
         }
     }
 
@@ -157,7 +166,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
                 if let Global::Fn(info) = &global {
                     accepted.push((index, name.clone(), info.reference));
                 }
-                env.globals.insert(name, global);
+                env.insert_global(name, global);
             }
             // Either reported, or a consequence of a failure that was.
             Err(()) => {
@@ -313,21 +322,14 @@ impl Env<'_> {
             }
             DeclarationKind::Enum { name, variants } => {
                 self.refuse_promises(attributes, name, "an enum");
-                let mut items = Vec::new();
+                let mut items: Vec<VariantInfo> = Vec::new();
                 for variant in variants {
                     if items
                         .iter()
-                        .any(|(earlier, _): &(String, Vec<Binder>)| *earlier == variant.name.text)
+                        .any(|earlier| earlier.name == variant.name.text)
                     {
                         let message = format!("variant `{}` is declared twice", variant.name.text);
                         return self.fail("L0202", message, variant.name.span);
-                    }
-                    if variant.shape == ast::VariantShape::Struct {
-                        return self.fail(
-                            "L0290",
-                            "a variant with named fields is not in Locus yet; E9 adds it",
-                            variant.span,
-                        );
                     }
                     self.start_item(&name.text, true, LOGICAL);
                     let payload = self.telescope(
@@ -336,15 +338,20 @@ impl Env<'_> {
                             .iter()
                             .map(|field| (field.name.as_ref(), &field.ty, field.span)),
                     )?;
-                    items.push((variant.name.text.clone(), payload));
+                    items.push(VariantInfo {
+                        name: variant.name.text.clone(),
+                        payload,
+                        named: variant.shape == ast::VariantShape::Struct,
+                    });
                 }
                 let item = EnumItem {
                     name: name.text.clone(),
                     variants: items
                         .iter()
-                        .map(|(name, payload)| VariantItem {
-                            name: name.clone(),
-                            payload: payload.clone(),
+                        .map(|variant| VariantItem {
+                            name: variant.name.clone(),
+                            payload: variant.payload.clone(),
+                            named: variant.named,
                         })
                         .collect(),
                 };
@@ -441,10 +448,22 @@ impl Env<'_> {
         let block = match body {
             Body::Block(block) => self.block(block, Some(&result_ty))?.0,
             Body::Expr(value) => {
-                let value = self.check(value, &result_ty)?;
+                let checked = self.check(value, &result_ty)?;
+                // Rust computes a constant itself, and does not call to.
+                if let Some(callee) = self.called_by_constant(&checked.expr) {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "L0234",
+                            format!("the value of `{}` calls `{callee}`, and Rust computes a constant without calling a function", name.text),
+                            value.span,
+                        )
+                        .note("the value of a constant is a literal, a cast, a comparison, or a tuple, struct, or variant of those, and may name another constant; a value a function computes is a function of no parameters, `fn name() -> T { .. }`"),
+                    );
+                    return Err(());
+                }
                 crate::typed::Block {
                     stmts: Vec::new(),
-                    tail: Some(Box::new(value.expr)),
+                    tail: Some(Box::new(checked.expr)),
                 }
             }
         };
@@ -459,7 +478,12 @@ impl Env<'_> {
         let started = std::time::Instant::now();
         // The checker enforces the promises of an ordinary function; a
         // function of the logic keeps them by construction.
-        let reference = match self.session.declare_fn_promising(&item, promises) {
+        let declared = if constant {
+            self.session.declare_constant(&item, promises)
+        } else {
+            self.session.declare_fn_promising(&item, promises)
+        };
+        let reference = match declared {
             Ok(reference) => reference,
             Err(error) => return self.internal(error, name.span),
         };
@@ -530,6 +554,7 @@ impl Env<'_> {
                     infos.push(PropVariantInfo {
                         name: variant.name.text.clone(),
                         payload,
+                        named: variant.shape == ast::VariantShape::Struct,
                         conclusion: None,
                     });
                 }
@@ -567,6 +592,7 @@ impl Env<'_> {
                     infos.push(PropVariantInfo {
                         name: variant.name.text.clone(),
                         payload,
+                        named: variant.shape == ast::VariantShape::Struct,
                         conclusion: Some(conclusion),
                     });
                 }
@@ -631,7 +657,7 @@ impl Env<'_> {
                 params.push(Binder::new(&format!("x{index}"), ty));
             }
             let result = params.pop().expect("the result was pushed last").ty;
-            self.globals.insert(
+            self.values.insert(
                 name.to_string(),
                 Global::Fn(Rc::new(FnInfo {
                     reference: FnRef::Math(id),
@@ -652,6 +678,79 @@ impl Env<'_> {
         }
     }
 
+    /// The first function the value of a constant calls that is not another
+    /// constant, by name. Rust's `const` evaluator computes literals, casts,
+    /// comparisons, primitive methods, tuples, structs, variants, fields,
+    /// and conditionals of those, and does not call a function; the ghost
+    /// parts of the value, which are erased, do not count.
+    fn called_by_constant(&self, expr: &crate::typed::Expr) -> Option<String> {
+        use crate::typed::{Expr, Stmt};
+        let in_block = |block: &crate::typed::Block| {
+            block
+                .stmts
+                .iter()
+                .find_map(|stmt| match stmt {
+                    Stmt::Let { value, .. } | Stmt::Expr(value) => self.called_by_constant(value),
+                })
+                .or_else(|| {
+                    block
+                        .tail
+                        .as_deref()
+                        .and_then(|tail| self.called_by_constant(tail))
+                })
+        };
+        let first = |exprs: &[Expr]| exprs.iter().find_map(|expr| self.called_by_constant(expr));
+        match expr {
+            Expr::CallMath { id, name, ty, .. } => {
+                if matches!(ty, Type::Prop | Type::Proof(_)) {
+                    return None;
+                }
+                let constant = self.values.values().any(|global| match global {
+                    Global::Fn(info) => info.constant && info.reference == FnRef::Math(*id),
+                    _ => false,
+                });
+                (!constant).then(|| name.clone())
+            }
+            Expr::CallFn { name, .. } => Some(name.clone()),
+            Expr::Tuple { fields, .. }
+            | Expr::Variant {
+                payload: fields, ..
+            } => first(fields),
+            Expr::Struct { fields, .. } => fields
+                .iter()
+                .find_map(|(_, value)| self.called_by_constant(value)),
+            Expr::Field { target, .. } | Expr::Cast { expr: target, .. } => {
+                self.called_by_constant(target)
+            }
+            Expr::Method {
+                receiver,
+                arguments,
+                ..
+            } => self
+                .called_by_constant(receiver)
+                .or_else(|| first(arguments)),
+            Expr::Compare { left, right, .. } => self
+                .called_by_constant(left)
+                .or_else(|| self.called_by_constant(right)),
+            Expr::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => self
+                .called_by_constant(condition)
+                .or_else(|| in_block(then_block))
+                .or_else(|| in_block(else_block)),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => self
+                .called_by_constant(scrutinee)
+                .or_else(|| arms.iter().find_map(|arm| in_block(&arm.body))),
+            Expr::Block(block) => in_block(block),
+            _ => None,
+        }
+    }
+
     /// The propositions the language itself provides, under their source names.
     pub(super) fn declare_builtin_props(&mut self) {
         let prelude = self.prelude;
@@ -660,6 +759,7 @@ impl Env<'_> {
         let variant = |name: &str, payload: Vec<Binder>| PropVariantInfo {
             name: name.to_string(),
             payload,
+            named: false,
             conclusion: None,
         };
         let (p, q) = (prop("p"), prop("q"));
@@ -683,7 +783,7 @@ impl Env<'_> {
             ("Or", prelude.or, vec![p, q], or),
         ];
         for (name, id, params, variants) in builtins {
-            self.globals.insert(
+            self.types.insert(
                 name.to_string(),
                 Global::Prop(Rc::new(PropInfo {
                     id,

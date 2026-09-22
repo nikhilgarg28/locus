@@ -1074,7 +1074,7 @@ fn a_function_appears_in_a_proposition_exactly_when_it_promises_the_three() {
             fn known(n: u8) -> (out: u8, @(out == f(n))) {{ let out = f(n); (out, _) }}
             fn stated() -> @(f(3) == 4) {{ _ }}
             prop Next(n: u8) {{ Is(m: u8): @Next(f(m)) }}
-            const FIVE: u8 = f(4);"
+            const FIVE: Prop = prop!(f(4) == 5);"
         );
         let result = accepted(&text);
         assert_eq!(call(&result, "known", &[3]), "(4, Proved)");
@@ -1251,4 +1251,79 @@ fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
             }))
         );
     }
+}
+
+#[test]
+fn a_type_and_a_value_of_one_name_coexist_as_in_rust() {
+    // The smallest case the one-namespace elaborator rejected as declared
+    // twice: an enum and a function of its name. Where a type is read the
+    // name is the enum, where a value is read it is the function, and the
+    // Rust has both (rustc accepts it, with a lint about the case).
+    let result = accepted(
+        "enum Mode { Off, On }
+        fn Mode(on: bool) -> Mode { if on { Mode::On } else { Mode::Off } }
+        fn is_on(mode: Mode) -> bool { match mode { Mode::On => true, Mode::Off => false } }
+        fn check(on: bool) -> bool { is_on(Mode(on)) }
+        struct Point { x: u8 }
+        const Point: Point = Point { x: 3 };
+        fn x() -> u8 { Point.x }",
+    );
+    assert_eq!(call(&result, "x", &[]), "3");
+    let rust = print_module(result.session.erased());
+    assert!(rust.contains("pub enum Mode {"), "{rust}");
+    assert!(rust.contains("pub fn Mode(on: bool) -> Mode {"), "{rust}");
+    assert!(rust.contains("is_on(Mode(on))"), "{rust}");
+    assert!(
+        rust.contains("pub const Point: Point = Point { x: 3_u8 };"),
+        "{rust}"
+    );
+    assert!(rust.contains("Point.x"), "{rust}");
+    // Within a namespace a name is still declared once.
+    for text in [
+        "enum Mode { Off } struct Mode { x: u8 }",
+        "fn f() -> u8 { 1 } const f: u8 = 1;",
+        "prop P { Yes } enum P { No }",
+    ] {
+        let (codes, _) = rejected(text);
+        assert!(codes.contains(&"L0202"), "{text}: {codes:?}");
+    }
+    // A call `Name(..)` is the function when there is one, and the
+    // proposition otherwise.
+    accepted(
+        "prop Small(n: u8) { Below(bound: @(n < 10)) }
+        #[terminates] #[no_panic] #[no_io]
+        fn small(n: u8, bound: @(n < 10)) -> @Small(n) { Small::Below(bound) }",
+    );
+}
+
+#[test]
+fn a_variant_with_named_fields_is_a_tuple_variant_with_names_in_the_logic() {
+    // Positions in the kernel, names in the source: the claim about `width`
+    // holds by computing, and evidence fields are fields.
+    let result = accepted(
+        "enum Shape { Box { width: u8, height: u8 }, Bounded { limit: u8, value: u8, fits: @(value <= limit) } }
+        #[terminates] #[no_panic] #[no_io]
+        fn width(shape: Shape) -> u8 {
+            match shape { Shape::Box { width, .. } => width, Shape::Bounded { value, .. } => value }
+        }
+        fn square(side: u8) -> Shape { Shape::Box { height: side, width: side } }
+        fn width_of_box() -> @(width(Shape::Box { width: 3, height: 4 }) == 3) { _ }
+        fn bounded(limit: u8, value: u8, fits: @(value <= limit)) -> Shape { Shape::Bounded { limit, value, fits } }",
+    );
+    assert!(result.holes.iter().all(|hole| hole.solved));
+    let rust = print_module(result.session.erased());
+    assert!(rust.contains("Box { width: u8, height: u8 }"), "{rust}");
+    assert!(
+        rust.contains("Bounded { limit: u8, value: u8, fits: Proved }"),
+        "{rust}"
+    );
+    assert!(rust.contains("Shape::Box { width, .. } =>"), "{rust}");
+    assert!(
+        rust.contains("Shape::Box { width: side, height: side }"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("Shape::Bounded { limit, value, fits }"),
+        "{rust}"
+    );
 }

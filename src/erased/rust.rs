@@ -113,7 +113,19 @@ pub fn print_module(module: &Module) -> String {
         );
         for variant in &item.variants {
             let payload: Vec<String> = variant.payload.iter().map(|ty| printer.ty(ty)).collect();
-            if payload.is_empty() {
+            if let Some(fields) = &variant.fields {
+                let fields: Vec<String> = fields
+                    .iter()
+                    .zip(&payload)
+                    .map(|(name, ty)| format!("{name}: {ty}"))
+                    .collect();
+                let _ = writeln!(
+                    printer.out,
+                    "    {} {{ {} }},",
+                    variant.name,
+                    fields.join(", ")
+                );
+            } else if payload.is_empty() {
                 let _ = writeln!(printer.out, "    {},", variant.name);
             } else {
                 let _ = writeln!(printer.out, "    {}({}),", variant.name, payload.join(", "));
@@ -122,12 +134,27 @@ pub fn print_module(module: &Module) -> String {
         printer.out.push_str("}\n");
     }
     for function in &module.fns {
+        let result = printer.ty(&function.result);
+        // A constant is a `const` item: its body is one expression, which
+        // Rust computes at compile time (the elaborator saw that it can).
+        if function.constant
+            && function.params.is_empty()
+            && function.body.stmts.is_empty()
+            && let Some(value) = &function.body.tail
+        {
+            let value = printer.expr(value);
+            let _ = writeln!(
+                printer.out,
+                "\npub const {}: {result} = {value};",
+                function.name
+            );
+            continue;
+        }
         let params: Vec<String> = function
             .params
             .iter()
             .map(|(_, name, ty)| format!("{name}: {}", printer.ty(ty)))
             .collect();
-        let result = printer.ty(&function.result);
         let _ = write!(
             printer.out,
             "\npub fn {}({}) -> {result} ",
@@ -394,13 +421,26 @@ impl Printer<'_> {
                 payload,
                 ..
             } => {
-                if payload.is_empty() {
-                    format!("{enum_name}::{variant_name}")
-                } else {
-                    format!(
-                        "{enum_name}::{variant_name}({})",
-                        self.all(payload).join(", ")
-                    )
+                let name = format!("{enum_name}::{variant_name}");
+                let fields = self.module.variant_fields(enum_name, variant_name);
+                let payload = self.all(payload);
+                match fields {
+                    // `V { a, b: y }`: a field given its own name is written once.
+                    Some(fields) => {
+                        let fields: Vec<String> = fields
+                            .iter()
+                            .zip(payload)
+                            .map(|(field, value)| {
+                                if *field == value {
+                                    value
+                                } else {
+                                    format!("{field}: {value}")
+                                }
+                            })
+                            .collect();
+                        format!("{name} {{ {} }}", fields.join(", "))
+                    }
+                    None => variant_of(&name, None, &payload),
                 }
             }
             EExpr::Field {
@@ -442,8 +482,23 @@ impl Printer<'_> {
             }
             EExpr::Cast { expr, to } => format!("({} as {})", self.expr(expr), to.name()),
             EExpr::Call {
-                name, arguments, ..
-            } => format!("{name}({})", self.all(arguments).join(", ")),
+                callee,
+                name,
+                arguments,
+            } => {
+                // A constant is named, not called.
+                let constant = arguments.is_empty()
+                    && self
+                        .module
+                        .fns
+                        .iter()
+                        .any(|function| function.reference == *callee && function.constant);
+                if constant {
+                    name.clone()
+                } else {
+                    format!("{name}({})", self.all(arguments).join(", "))
+                }
+            }
             EExpr::If {
                 condition,
                 then_block,
@@ -461,13 +516,13 @@ impl Printer<'_> {
             } => {
                 let mut out = format!("match {} {{\n", self.expr(scrutinee));
                 for arm in arms {
-                    let payload: Vec<&str> =
-                        arm.payload.iter().map(|(_, name)| name.as_str()).collect();
-                    let pattern = if payload.is_empty() {
-                        format!("{enum_name}::{}", arm.variant_name)
-                    } else {
-                        format!("{enum_name}::{}({})", arm.variant_name, payload.join(", "))
-                    };
+                    let payload: Vec<String> =
+                        arm.payload.iter().map(|(_, name)| name.clone()).collect();
+                    let pattern = variant_pattern(
+                        &format!("{enum_name}::{}", arm.variant_name),
+                        self.module.variant_fields(enum_name, &arm.variant_name),
+                        &payload,
+                    );
                     let body = self.block(&arm.body);
                     let _ = writeln!(out, "{pattern} => {body}");
                 }
@@ -638,18 +693,78 @@ impl Value {
                 format!("{} {{ {} }}", item.name, fields.join(", "))
             }
             Self::Variant(id, index, payload) => {
-                let name = module
+                let variant = module
                     .enums
                     .iter()
                     .find(|item| item.id == *id)
-                    .and_then(|item| item.variants.get(*index))
-                    .map_or("UnknownVariant", |variant| variant.name.as_str());
-                if payload.is_empty() {
-                    name.to_string()
-                } else {
-                    format!("{name}({})", all(payload).join(", "))
-                }
+                    .and_then(|item| item.variants.get(*index));
+                let Some(variant) = variant else {
+                    return "UnknownVariant".into();
+                };
+                variant_of(&variant.name, variant.fields.as_deref(), &all(payload))
             }
         }
+    }
+}
+
+impl Module {
+    /// The field names of a variant written with braces, by the names of
+    /// the enum and the variant, which are unique in a module.
+    fn variant_fields(&self, enum_name: &str, variant_name: &str) -> Option<&[String]> {
+        self.enums
+            .iter()
+            .find(|item| item.name == enum_name)?
+            .variants
+            .iter()
+            .find(|variant| variant.name == variant_name)?
+            .fields
+            .as_deref()
+    }
+}
+
+/// A variant pattern as Rust writes it: `V`, `V(a, _)`, or, for a variant
+/// with named fields, `V { a, b: y, .. }`: a field bound to its own name is
+/// written once, as Rust's lint asks, and the fields bound to `_` are left
+/// to `..`.
+fn variant_pattern(name: &str, fields: Option<&[String]>, bound: &[String]) -> String {
+    let Some(fields) = fields else {
+        return variant_of(name, None, bound);
+    };
+    let mut written: Vec<String> = Vec::new();
+    for (field, name) in fields.iter().zip(bound) {
+        if name == "_" {
+            continue;
+        }
+        written.push(if name == field {
+            field.clone()
+        } else {
+            format!("{field}: {name}")
+        });
+    }
+    if written.len() < fields.len() {
+        written.push("..".into());
+    }
+    if written.is_empty() {
+        format!("{name} {{}}")
+    } else {
+        format!("{name} {{ {} }}", written.join(", "))
+    }
+}
+
+/// A variant with its payload as Rust writes it: `V`, `V(a, b)`, or, for a
+/// variant with named fields, `V { a: x, b: y }`, in a declaration, an
+/// expression, and a value alike.
+fn variant_of(name: &str, fields: Option<&[String]>, payload: &[String]) -> String {
+    match fields {
+        Some(fields) => {
+            let fields: Vec<String> = fields
+                .iter()
+                .zip(payload)
+                .map(|(field, value)| format!("{field}: {value}"))
+                .collect();
+            format!("{name} {{ {} }}", fields.join(", "))
+        }
+        None if payload.is_empty() => name.to_string(),
+        None => format!("{name}({})", payload.join(", ")),
     }
 }

@@ -324,6 +324,8 @@ pub enum VariantShape {
 pub struct PropVariant {
     pub doc: Vec<DocComment>,
     pub name: Name,
+    pub shape: VariantShape,
+    /// Every field has a name when the shape is `Struct`.
     pub fields: Vec<TypeField>,
     pub target: Option<Expr>,
     pub span: Span,

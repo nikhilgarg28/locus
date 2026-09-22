@@ -46,7 +46,7 @@ impl Env<'_> {
                     format!("the type `{wide}` is not in Locus yet"),
                     name.span,
                 ),
-                other => match self.globals.get(other) {
+                other => match self.types.get(other).or_else(|| self.values.get(other)) {
                     Some(Global::Struct(info)) => Ok(Type::Struct(info.id)),
                     Some(Global::Enum(info)) => Ok(Type::Enum(info.id)),
                     Some(Global::Prop(info)) => {

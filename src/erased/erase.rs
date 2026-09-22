@@ -65,6 +65,9 @@ pub fn erase_enum(id: crate::kernel::EnumId, item: &EnumItem) -> EEnum {
             .map(|variant| EVariant {
                 name: variant.name.clone(),
                 payload: variant.payload.iter().map(|b| erase_type(&b.ty)).collect(),
+                fields: variant
+                    .named
+                    .then(|| variant.payload.iter().map(|b| b.name.clone()).collect()),
             })
             .collect(),
     }
@@ -86,6 +89,7 @@ pub fn erase_fn(definitions: &Definitions, reference: FnRef, item: &FnItem) -> O
     Some(EFn {
         reference,
         name: item.name.clone(),
+        constant: false,
         params: item.params.iter().map(bound).collect(),
         result: erase_type(&item.result),
         body: eraser.block(&item.body),

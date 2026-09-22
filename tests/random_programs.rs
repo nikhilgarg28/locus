@@ -750,6 +750,7 @@ impl Generator {
                     payload: (0..fields)
                         .map(|field| Binder::new(&format!("p{field}"), self.random_type(1)))
                         .collect(),
+                    named: false,
                 }
             })
             .collect();
