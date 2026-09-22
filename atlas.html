@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 83,
-  "savedAt": "2026-09-22T17:55:28.000Z",
+  "rev": 84,
+  "savedAt": "2026-09-22T19:36:37.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7751,12 +7751,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t289",
    "n": 173,
    "title": "E7 · Arithmetic in holes and prove!",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 8.\nDepends on: K7 (LOC-165), E1 (LOC-167), E6 (LOC-172).\nUnblocks: R4 (LOC-189), E11 (LOC-192).\nCovers: LOC-72, LOC-15.\n\nScope. A hole is tried as exact, then computed, then arithmetic. When the procedure fails and finds values that satisfy the facts and break the goal, the diagnostic shows them.\n\nTests.\n- midpoint, and step and remaining from the 32-bit lock, check, run, and compile; their corpus files move from parse-only to run.\n- check --stats classifies the obligations as Target examples predicted: three exact, four computed, seven arithmetic. A difference is a finding to record, not a number to adjust.\n- midpoint without its ordered hypothesis is rejected with a counterexample.\n\nDone when. The second milestone: real 32-bit programs with overflow shown impossible.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. A hole is tried as exact, computed, evaluation, then arithmetic through K7 over the facts in both spellings; --holes prints the certificate size; the failure diagnostic shows the counterexample in source spelling or the budget hit. After a / k with a literal k the exact quotient is derived, nothing assumed. Milestone 2 reached: tests/corpus/target/midpoint.lc checks, runs, and compiles, with six obligations (1 evaluation, 5 arithmetic; the prediction of 3/4/7 for lock plus midpoint counted each operator once where a row has two premises, and folded evaluation into computed). lock32_step.lc holds step and remaining. The full target lock.lc waits on M4 (let mut ok) and O1 (derive). Interim rule for LOC-193 in place: a fully promised function with an operator is an ExecFn with its promises and is refused in propositions with the reason.\n\nLane: Elaborator. Wave 8.\nDepends on: K7 (LOC-165), E1 (LOC-167), E6 (LOC-172).\nUnblocks: R4 (LOC-189), E11 (LOC-192).\nCovers: LOC-72, LOC-15.\n\nScope. A hole is tried as exact, then computed, then arithmetic. When the procedure fails and finds values that satisfy the facts and break the goal, the diagnostic shows them.\n\nTests.\n- midpoint, and step and remaining from the 32-bit lock, check, run, and compile; their corpus files move from parse-only to run.\n- check --stats classifies the obligations as Target examples predicted: three exact, four computed, seven arithmetic. A difference is a finding to record, not a number to adjust.\n- midpoint without its ordered hypothesis is rejected with a counterexample.\n\nDone when. The second milestone: real 32-bit programs with overflow shown impossible.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T17:42:12.000Z"
+   "updated": "2026-09-22T19:36:37.000Z"
   },
   {
    "id": "t290",
@@ -7960,12 +7960,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t308",
    "n": 192,
    "title": "E11 · Found proofs are stored beside the source, and locus check --locked never searches",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:41:03.000Z",
-   "updated": "2026-09-21T22:41:03.000Z"
+   "updated": "2026-09-22T19:36:37.000Z"
   },
   {
    "id": "t309",
