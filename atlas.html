@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 84,
-  "savedAt": "2026-09-22T19:36:37.000Z",
+  "rev": 85,
+  "savedAt": "2026-09-22T19:37:12.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7828,12 +7828,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t296",
    "n": 180,
    "title": "M4 · Tracked evidence: let mut evidence, invalidated by assignment, refreshed explicitly",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179), E1 (LOC-167).\nUnblocks: O3 (LOC-184).\nCovers: LOC-16.\n\nScope. Assigning to a variable invalidates tracked evidence that mentions it; using it before a refresh is an error shaped like use after move. ok = _; or ok = proof; refreshes. Around a loop it must hold on entry and at every continue and at the end of the body, and is known after.\n\nTests.\n- The first four cases of M0 as named tests.\n- The flow analysis is tested as untrusted: typed trees built by hand that skip a refresh are rejected by the checker of the check IR, not by the elaborator.\n- run from the 32-bit lock checks, runs, and compiles; the lock file is complete.\n\nDone when. The third milestone: a loop that carries a proof, with no invariant construct.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T17:55:18.000Z"
+   "updated": "2026-09-22T19:37:12.000Z"
   },
   {
    "id": "t297",
@@ -7938,12 +7938,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t306",
    "n": 190,
    "title": "E10 · The forms that panic: panic!, assert!, unreachable!, todo!, debug_assert!",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: M1 (LOC-177), E2 (LOC-168), S2 (LOC-155).\nUnblocks: R4 (LOC-189).\nCovers: LOC-71, LOC-85, LOC-95.\n\nScope. The forms with their Rust meaning and string literal messages, lowered to the panic ending of M1. Their type is the never type where Rust's is. Under no_panic, assert!(c) needs evidence of c and unreachable!() needs evidence of false, as Target language states; panic! and todo! are rejected there.\n\nTests.\n- Each form three ways, message included.\n- After assert!(c), c is a fact; under no_panic without evidence it is an error at the assert.\n- Check IR built by hand with a panic ending and no evidence of false is rejected under no_panic by the checker.\n\nDone when. A half-written file checks with todo!(), and a runtime check can teach the logic a fact.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:27:28.000Z",
-   "updated": "2026-09-22T16:34:29.000Z"
+   "updated": "2026-09-22T19:37:12.000Z"
   },
   {
    "id": "t307",
@@ -7960,12 +7960,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t308",
    "n": 192,
    "title": "E11 · Found proofs are stored beside the source, and locus check --locked never searches",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:41:03.000Z",
-   "updated": "2026-09-22T19:36:37.000Z"
+   "updated": "2026-09-22T19:37:12.000Z"
   },
   {
    "id": "t309",
