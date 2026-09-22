@@ -203,9 +203,11 @@ impl Env<'_> {
                 "references (`&T`, `&mut T`) are not in Locus yet; O3 adds them",
                 ty.span,
             ),
+            // The result type of a function is read before `ty` is asked
+            // (`items.rs`); anywhere else `!` is not stable Rust either.
             ast::TypeKind::Never => self.fail(
                 "L0290",
-                "the never type `!` is not in Locus yet; M5 adds it with `return`",
+                "the never type `!` stands only as the result type of a function that never returns; anywhere else it is not in Locus, as it is not in stable Rust",
                 ty.span,
             ),
         }

@@ -327,6 +327,7 @@ pub fn is_pure(expr: &Expr) -> bool {
         | Expr::Continue
         | Expr::Operate { .. }
         | Expr::Panic { .. }
+        | Expr::Return { .. }
         | Expr::Assert { .. } => false,
         Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
@@ -361,16 +362,16 @@ fn stmt_is_pure(stmt: &Stmt) -> bool {
     }
 }
 
-/// Whether every path through the block ends in `break`, `continue`, or a
-/// panic: through the arms of an `if` or `match` in its tail, and a block
-/// in its tail. Such an arm of a branch never reaches the end of the
-/// branch, so lowering never builds the join's tuple from it
+/// Whether every path through the block ends in `break`, `continue`,
+/// `return`, or a panic: through the arms of an `if` or `match` in its
+/// tail, and a block in its tail. Such an arm of a branch never reaches the
+/// end of the branch, so lowering never builds the join's tuple from it
 /// (`lower_tail`), and what it assigns is not the branch's to join. The
 /// test is on the tree's shape, and says nothing of a loop that never
 /// breaks.
 pub fn block_leaves(block: &Block) -> bool {
     match block.tail.as_deref() {
-        Some(Expr::Break(_) | Expr::Continue | Expr::Panic { .. }) => true,
+        Some(Expr::Break(_) | Expr::Continue | Expr::Panic { .. } | Expr::Return { .. }) => true,
         Some(Expr::If {
             then_block,
             else_block,
@@ -605,6 +606,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         | Expr::Continue
         | Expr::Operate { .. }
         | Expr::Panic { .. }
+        | Expr::Return { .. }
         | Expr::Assert { .. } => {
             return Err(LowerError::ControlInExpression);
         }
@@ -1010,7 +1012,9 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } | Expr::Ghost(inner) => {
             each_expr(inner, on_expr)
         }
-        Expr::Break(value) => value.iter().for_each(|value| each_expr(value, on_expr)),
+        Expr::Break(value) | Expr::Return { value, .. } => {
+            value.iter().for_each(|value| each_expr(value, on_expr));
+        }
         Expr::Continue | Expr::Panic { .. } => {}
         Expr::Assert { condition, .. } => each_expr(condition, on_expr),
         Expr::Method {
@@ -1168,6 +1172,32 @@ fn panicking(form: PanicForm, argument: Option<&str>, unreachable: Option<Proof>
         message: form.message(argument),
         unreachable,
     }
+}
+
+/// An ending that is not the end of its block, a panic or a `return`: a
+/// match statement on `true` whose two arms both end in it. Every arm
+/// leaves, so the checker declares `result`, the value the ending never
+/// produces, at `ty`, the type expected of it, which is sound because
+/// nothing after the statement is reached; the ending itself is checked in
+/// each arm.
+fn leaving(out: &mut Vec<exec::Stmt>, result: VarId, ty: &Type, tail: exec::Tail) -> Term {
+    let arms = (0..2)
+        .map(|_| Arm {
+            payload: Vec::new(),
+            fact: HypId::fresh(),
+            body: exec::Block {
+                stmts: Vec::new(),
+                tail: tail.clone(),
+            },
+        })
+        .collect();
+    out.push(exec::Stmt::Match {
+        var: result,
+        ty: ty.clone(),
+        scrutinee: Term::Bool(true),
+        arms,
+    });
+    Term::var(result)
 }
 
 /// The bindings a loop carries: those declared outside it and assigned in
@@ -1565,24 +1595,22 @@ fn anf_form(
             unreachable,
             ty,
             result,
-        } => {
-            let arms = (0..2)
-                .map(|_| Arm {
-                    payload: Vec::new(),
-                    fact: HypId::fresh(),
-                    body: exec::Block {
-                        stmts: Vec::new(),
-                        tail: panicking(*form, argument.as_deref(), unreachable.clone()),
-                    },
-                })
-                .collect();
-            out.push(exec::Stmt::Match {
-                var: *result,
-                ty: ty.clone(),
-                scrutinee: Term::Bool(true),
-                arms,
-            });
-            Term::var(*result)
+        } => leaving(
+            out,
+            *result,
+            ty,
+            panicking(*form, argument.as_deref(), unreachable.clone()),
+        ),
+        // A `return` that is not the end of its block, the same way: the
+        // value first, then a match on `true` whose arms both return it,
+        // so that the checker checks it against the function's result type
+        // in the context of this point.
+        Expr::Return { value, ty, result } => {
+            let value = match value {
+                Some(value) => anf(value, out, env)?,
+                None => unit(),
+            };
+            leaving(out, *result, ty, exec::Tail::Return(value))
         }
         Expr::Assert {
             debug,
@@ -1807,9 +1835,9 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
             None => unit(),
         },
         Expr::Break(_) | Expr::Continue => return Err(LowerError::ControlInExpression),
-        // A panic's value is the one its statement declares and never
-        // produces; an assertion is a statement of type `()`.
-        Expr::Panic { result, .. } => Term::var(*result),
+        // A panic's or a return's value is the one its statement declares
+        // and never produces; an assertion is a statement of type `()`.
+        Expr::Panic { result, .. } | Expr::Return { result, .. } => Term::var(*result),
         Expr::Assert { .. } => unit(),
         Expr::Var { .. }
         | Expr::Bool(_)
@@ -1944,6 +1972,15 @@ fn lower_tail(
             unreachable,
             ..
         } => panicking(*form, argument.as_deref(), unreachable.clone()),
+        // The function's ending, whatever block it stands in: the value
+        // first, with whatever it assigns, at the versions current here.
+        Expr::Return { value, .. } => {
+            let value = match value {
+                Some(value) => anf(value, stmts, env)?,
+                None => unit(),
+            };
+            exec::Tail::Return(value)
+        }
         Expr::If {
             condition: tested,
             then_fact,

@@ -1,0 +1,114 @@
+// `return` ends the function from any depth, with the value it carries
+// checked against the result type where the `return` stands: what a
+// dependent result owes is owed at the return, in what is known there.
+
+// Three ways out: a guard in statement position, an arm of a branch, and
+// the tail.
+fn guarded(n: u8) -> u8 {
+    if n == 0 { return 1; } else { }
+    n
+}
+
+fn as_arm(n: u8) -> u8 {
+    if n == 0 { return 1 } else { n }
+}
+
+fn as_tail(n: u8) -> u8 {
+    return n.wrapping_add(1)
+}
+
+// `return` alone returns `()`.
+fn nothing(n: u8) -> () {
+    if n == 0 { return; } else { }
+}
+
+// From inside a loop, inside a branch: the loop is unwound, and the path
+// that leaves joins nothing.
+fn find(limit: u8) -> u8 {
+    let mut i: u8 = 0;
+    loop {
+        if i == limit { return i; } else { }
+        i = i.wrapping_add(1);
+    }
+}
+
+fn first_over(limit: u8) -> u8 {
+    for i in 0..limit {
+        if i.wrapping_mul(2) > limit { return i; } else { }
+    }
+    limit
+}
+
+fn counted(n: u8) -> u8 {
+    let mut seen: u8 = 0;
+    while seen < n {
+        if seen == 7 { return 100; } else { }
+        seen = seen.wrapping_add(1);
+    }
+    seen
+}
+
+// Evidence for a dependent result at an early return: `x <= 3` is the
+// fact of the branch.
+fn clamp(x: u8) -> (out: u8, @(out <= 3)) {
+    if x <= 3 { return (x, _); } else { }
+    (3, _)
+}
+
+enum Step {
+    More(u8),
+    Done,
+}
+
+fn advance(step: Step) -> u8 {
+    match step {
+        Step::More(n) => {
+            if n == 0 { return 9; } else { }
+            n
+        }
+        Step::Done => 0,
+    }
+}
+
+// The never type coerces to any type: a `let` takes it where its
+// annotation says, legal and pointless.
+fn pointless(n: u8) -> u8 {
+    let x: u8 = return n;
+    x
+}
+
+// A function declared `-> !` never returns, and a call to it stands where
+// any type is expected. In the logic its result is evidence of `False`,
+// which is what it prints as.
+fn spin() -> ! {
+    loop {}
+}
+
+fn stop_or(n: u8) -> u8 {
+    if n == 0 { spin() } else { n }
+}
+
+//~ proofs: 2
+//~ run: guarded(0) => 1
+//~ run: guarded(5) => 5
+//~ run: as_arm(0) => 1
+//~ run: as_arm(5) => 5
+//~ run: as_tail(5) => 6
+//~ run: nothing(0) => ()
+//~ run: nothing(1) => ()
+//~ run: find(4) => 4
+//~ run: first_over(5) => 3
+//~ run: first_over(0) => 0
+//~ run: counted(3) => 3
+//~ run: counted(9) => 100
+//~ run: clamp(2) => (2, Proved)
+//~ run: clamp(9) => (3, Proved)
+//~ run: advance(More(0)) => 9
+//~ run: advance(More(4)) => 4
+//~ run: advance(Done) => 0
+//~ run: pointless(7) => 7
+//~ run: stop_or(3) => 3
+//~ rust: return 1_u8
+//~ rust: return (x, Proved)
+//~ rust: let x: u8 = (return n);
+//~ rust: fn spin() -> Proved {

@@ -1,0 +1,6 @@
+// What a dependent result owes is owed where a `return` stands, in what is
+// known there: the diagnostic is at the `return`, and names the hole.
+fn clamp(x: u8) -> (out: u8, @(out <= 3)) {
+    if x <= 9 { return (x, _); } else { } //~ error: L0230 cannot show `x <= 3`
+    (3, _)
+}

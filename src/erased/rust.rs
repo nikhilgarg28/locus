@@ -480,9 +480,18 @@ impl Printer<'_> {
     /// `return` or a `break` needs no parentheses.
     fn standing_alone(&mut self, expr: &EExpr) -> String {
         match expr {
-            EExpr::Return(value) => format!("return {}", self.expr(value)),
+            EExpr::Return(value) => self.returning(value),
             EExpr::Break(Some(value)) => format!("break {}", self.expr(value)),
             other => self.expr(other),
+        }
+    }
+
+    /// `return value`, or `return` alone when the value is `()`, as it
+    /// was written.
+    fn returning(&mut self, value: &EExpr) -> String {
+        match value {
+            EExpr::Tuple(fields) if fields.is_empty() => "return".into(),
+            value => format!("return {}", self.expr(value)),
         }
     }
 
@@ -739,7 +748,7 @@ impl Printer<'_> {
             // Inside a larger expression: `return` and `break` would take
             // whatever follows them as part of their value.
             EExpr::Break(Some(value)) => format!("(break {})", self.expr(value)),
-            EExpr::Return(value) => format!("(return {})", self.expr(value)),
+            EExpr::Return(value) => format!("({})", self.returning(value)),
             EExpr::Continue => "continue".into(),
         }
     }

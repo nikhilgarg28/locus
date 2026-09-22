@@ -70,8 +70,9 @@ pub struct Elaborated {
 }
 
 impl Elaborated {
+    /// No error was reported; warnings do not count.
     pub fn is_success(&self) -> bool {
-        self.diagnostics.is_empty()
+        !self.diagnostics.iter().any(Diagnostic::is_error)
     }
 
     pub fn function(&self, name: &str) -> Option<FnRef> {
@@ -113,6 +114,8 @@ pub fn elaborate_with(
         names: Vec::new(),
         facts: Vec::new(),
         loops: Vec::new(),
+        returns: None,
+        never_fns: HashSet::new(),
         labels: HashMap::new(),
         total: false,
         item_name: String::new(),
@@ -794,6 +797,7 @@ impl Env<'_> {
         self.names.clear();
         self.facts.clear();
         self.loops.clear();
+        self.returns = None;
         self.total = total;
         self.item_name = name.to_string();
         self.promises = promises;
@@ -1006,6 +1010,11 @@ impl Env<'_> {
             Ok(reference) => reference,
             Err(error) => return self.internal(error, name.span),
         };
+        if let (FnRef::Exec(id), ast::TypeKind::Never) = (reference, &result.kind)
+            && !constant
+        {
+            self.never_fns.insert(id);
+        }
         self.items.push(ItemReport {
             name: name.text.clone(),
             elaborate_micros,
@@ -1056,9 +1065,56 @@ impl Env<'_> {
             self.declare(&binder, false, parameter.span)?;
             params.push(binder);
         }
-        let result_ty = self.ty(result)?;
+        // `-> !` is a function that never returns. In the logic its result
+        // is evidence of `False`, the empty type: a call to it is
+        // never-typed, and where a value of another type is wanted the
+        // evidence gives it by `match {}` (`exprs.rs`). Its body must end
+        // in a never-typed expression, and no `return` can stand in it.
+        let never = !constant && matches!(result.kind, ast::TypeKind::Never);
+        let result_ty = if never {
+            Type::proof(self.prelude.falsehood_prop())
+        } else {
+            self.ty(result)?
+        };
+        if !logical && !constant {
+            self.returns = Some(super::env::ReturnTarget {
+                result: result_ty.clone(),
+                never,
+            });
+        }
         let block = match body {
-            Body::Block(block) => self.block(block, Some(&result_ty))?.0,
+            Body::Block(block) => {
+                let end = block_end(block.span);
+                let before = self.diagnostics.len();
+                let elaborated = self.block(block, Some(&result_ty));
+                if never {
+                    // Evidence of `False` is how the logic spells `!`; a
+                    // path of the body that produces a value is told so.
+                    let shown = self.show_type(&result_ty);
+                    for diagnostic in &mut self.diagnostics[before..] {
+                        if diagnostic.code == "L0220" && diagnostic.message.contains(&shown) {
+                            diagnostic.message = format!(
+                                "`{}` is declared `-> !`, and its body can reach its end here",
+                                name.text
+                            );
+                        }
+                    }
+                }
+                let (block, _, ends_never) = elaborated?;
+                if never && !ends_never {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "L0220",
+                            format!("`{}` is declared `-> !`, and its body can reach its end", name.text),
+                            result.span,
+                        )
+                        .label(end, "the body ends here, and a function that never returns has no end to reach")
+                        .note("a function that never returns ends in a panic, a `loop` without `break`, or a call to a function declared `-> !`"),
+                    );
+                    return Err(());
+                }
+                block
+            }
             Body::Expr(value) => {
                 let checked = self.check(value, &result_ty)?;
                 // Rust computes a constant itself, and does not call to.
@@ -1383,6 +1439,11 @@ impl Env<'_> {
 enum Body<'a> {
     Block(&'a ast::Block),
     Expr(&'a ast::Expr),
+}
+
+/// The closing brace of a block, for a label at its end.
+fn block_end(span: Span) -> Span {
+    Span::new(span.file, span.end.saturating_sub(1), span.end)
 }
 
 /// What a `fn` or a `const` says about itself besides its signature.

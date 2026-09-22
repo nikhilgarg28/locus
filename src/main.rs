@@ -323,6 +323,9 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
             )?;
             return Ok(1);
         }
+        // Warnings, when the file is accepted with some.
+        output.flush()?;
+        emit_diagnostics(&sources, &elaborated.diagnostics)?;
         let module = elaborated.session.erased();
         match command {
             "check" => writeln!(

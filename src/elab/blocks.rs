@@ -11,7 +11,9 @@
 //! establishes a fact, and it stays.
 
 use crate::ast::{self, ExprKind, Form, StatementKind};
+use crate::diagnostic::Diagnostic;
 use crate::kernel::{Type, same_type};
+use crate::source::Span;
 use crate::typed::{self, Expr, Stmt};
 
 use super::env::{Elab, Env};
@@ -32,6 +34,13 @@ fn is_snapshot(expr: &ast::Expr) -> bool {
 
 impl Env<'_> {
     /// Elaborates a block. The caller opens and closes the scope.
+    ///
+    /// An expression statement that transfers control or panics, of the
+    /// never type, ends the block: it becomes the block's tail, since
+    /// lowering makes an ending of it, and what is written after it is
+    /// unreachable, reported as rustc reports it and not elaborated, as
+    /// nothing runs it. The third result is whether the block ends that
+    /// way.
     pub fn block(
         &mut self,
         block: &ast::Block,
@@ -39,8 +48,16 @@ impl Env<'_> {
     ) -> Elab<(typed::Block, Type, bool)> {
         let mut stmts = Vec::new();
         let mut failed = false;
-        let mut never = false;
+        // The never-typed expression statement that ends the block, and
+        // whether what follows it was reported, once.
+        let mut leaves: Option<Span> = None;
+        let mut warned = false;
         for statement in &block.statements {
+            if let Some(by) = leaves {
+                self.unreachable(by, statement.span, "statement");
+                warned = true;
+                break;
+            }
             match &statement.kind {
                 StatementKind::Error => failed = true,
                 // `let mut` is read off the pattern's name, where the parser
@@ -135,7 +152,9 @@ impl Env<'_> {
                 }
                 StatementKind::Expression(expr) => match self.infer(expr) {
                     Ok(value) => {
-                        never |= value.never;
+                        if value.never {
+                            leaves = Some(expr.span);
+                        }
                         stmts.push(Stmt::Expr(value.expr));
                     }
                     Err(()) => failed = true,
@@ -145,6 +164,28 @@ impl Env<'_> {
         if failed {
             // What follows may depend on a binding that was not made.
             return Err(());
+        }
+        if let Some(by) = leaves {
+            if let Some(tail) = block.tail.as_deref()
+                && !warned
+            {
+                self.unreachable(by, tail.span, "expression");
+            }
+            // The transfer of control is the block's tail, and supplies
+            // whatever value the block was to have (`never_as`).
+            let Some(Stmt::Expr(tail)) = stmts.pop() else {
+                unreachable!("the statement that leaves was pushed last")
+            };
+            let ty = expected.cloned().unwrap_or_else(unit_type);
+            let tail = Env::never_as(tail, &ty);
+            return Ok((
+                typed::Block {
+                    stmts,
+                    tail: Some(Box::new(tail)),
+                },
+                ty,
+                true,
+            ));
         }
         match block.tail.as_deref() {
             Some(tail) => {
@@ -158,29 +199,7 @@ impl Env<'_> {
                         tail: Some(Box::new(value.expr)),
                     },
                     value.ty,
-                    value.never || never,
-                ))
-            }
-            None if never => {
-                // `continue;` or `break;` written as a statement ends the block.
-                let tail = match stmts.pop() {
-                    Some(Stmt::Expr(expr)) => expr,
-                    other => {
-                        stmts.extend(other);
-                        return self.fail(
-                            "L0216",
-                            "statements follow a transfer of control",
-                            block.span,
-                        );
-                    }
-                };
-                Ok((
-                    typed::Block {
-                        stmts,
-                        tail: Some(Box::new(tail)),
-                    },
-                    unit_type(),
-                    true,
+                    value.never,
                 ))
             }
             None => {
@@ -198,5 +217,17 @@ impl Env<'_> {
                 Ok((typed::Block { stmts, tail: None }, ty, false))
             }
         }
+    }
+
+    /// `L0247`, a warning: a statement, or the tail, after an expression
+    /// statement that transfers control or panics, as rustc's
+    /// `unreachable_code` warns. It is reported once per block, on the
+    /// first thing that is unreachable, and what is unreachable is not
+    /// elaborated, since nothing runs it.
+    fn unreachable(&mut self, by: Span, at: Span, what: &str) {
+        let mut diagnostic = Diagnostic::warning("L0247", format!("unreachable {what}"), at)
+            .label(by, "any code following this expression is unreachable");
+        diagnostic.labels[0].message = format!("unreachable {what}");
+        self.diagnostics.push(diagnostic);
     }
 }

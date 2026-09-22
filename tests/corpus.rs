@@ -16,11 +16,15 @@
 //! //~^ error: L0204 unknown name         ... on the line above; `^^` is two
 //!                                        above. Text after the code must
 //!                                        appear in the message.
+//! //~ warning: L0247 unreachable         a warning reported on this line, as
+//!                                        `error` is; the file is accepted
 //! //~ parse-only                         the file is parsed and nothing more
 //! ~~~
 //!
 //! A file with an `error` directive must be rejected, with exactly the
-//! errors it lists, each on its line. A file in `tests/corpus/target` is
+//! errors it lists, each on its line. Every warning reported must be listed
+//! the same way, and a file with only warnings is accepted like any other.
+//! A file in `tests/corpus/target` is
 //! the target syntax: one ahead of the elaborator says `parse-only`, and
 //! only the parser's diagnostics are compared with its `error` lines; one
 //! the elaborator has caught up with drops the directive and is accepted
@@ -222,6 +226,12 @@ enum Directive {
         code: String,
         message: String,
     },
+    /// As `Error`, for a warning; the file is still accepted.
+    Warning {
+        line: usize,
+        code: String,
+        message: String,
+    },
     /// The file is only parsed.
     ParseOnly,
 }
@@ -246,8 +256,11 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
             continue;
         };
         let (key, value) = (key.trim(), value.trim());
-        if above > 0 && key != "error" {
-            found.push((number, Err(format!("`^` belongs to `error`, not `{key}`"))));
+        if above > 0 && key != "error" && key != "warning" {
+            found.push((
+                number,
+                Err(format!("`^` belongs to `error` or `warning`, not `{key}`")),
+            ));
             continue;
         }
         let directive = match key {
@@ -270,7 +283,7 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 None => Err("a run line reads `f(arguments) => value`".into()),
             },
             "rust" => Ok(Directive::Rust(value.into())),
-            "error" => {
+            "error" | "warning" => {
                 let (code, message) = value.split_once(' ').unwrap_or((value, ""));
                 let is_code = code.len() == 5
                     && code.starts_with('L')
@@ -280,15 +293,25 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 } else if above >= number {
                     Err("there is no line that far above".into())
                 } else {
-                    Ok(Directive::Error {
-                        line: number - above,
-                        code: code.into(),
-                        message: message.trim().into(),
+                    let (line, code, message) =
+                        (number - above, code.into(), message.trim().into());
+                    Ok(if key == "error" {
+                        Directive::Error {
+                            line,
+                            code,
+                            message,
+                        }
+                    } else {
+                        Directive::Warning {
+                            line,
+                            code,
+                            message,
+                        }
                     })
                 }
             }
             other => Err(format!(
-                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`"
+                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, `error`, `warning`, and `parse-only`"
             )),
         };
         found.push((number, directive));
@@ -476,7 +499,12 @@ fn examine_inner(name: &str, text: &str) -> Examined {
         fail(line, why);
     }
     for (at, directive) in &found {
-        if rejection && !matches!(directive, Directive::Error { .. } | Directive::ParseOnly) {
+        if rejection
+            && !matches!(
+                directive,
+                Directive::Error { .. } | Directive::Warning { .. } | Directive::ParseOnly
+            )
+        {
             fail(
                 *at,
                 "a file with an `error` directive is not run, so this expects nothing".into(),
@@ -644,7 +672,7 @@ fn examine_accepted(
                     ..run
                 });
             }
-            Directive::Error { .. } | Directive::ParseOnly => {}
+            Directive::Error { .. } | Directive::Warning { .. } | Directive::ParseOnly => {}
         }
     }
     Examined {
@@ -662,17 +690,23 @@ fn compare_errors(
 ) -> Vec<(usize, String)> {
     let mut failures = Vec::new();
     for (_, directive) in found {
-        let Directive::Error {
-            line,
-            code,
-            message,
-        } = directive
-        else {
-            continue;
+        let (line, code, message, is_error) = match directive {
+            Directive::Error {
+                line,
+                code,
+                message,
+            } => (line, code, message, true),
+            Directive::Warning {
+                line,
+                code,
+                message,
+            } => (line, code, message, false),
+            _ => continue,
         };
-        let position = reported
-            .iter()
-            .position(|(on, diagnostic)| on == line && diagnostic.code == code);
+        let kind = if is_error { "error" } else { "warning" };
+        let position = reported.iter().position(|(on, diagnostic)| {
+            on == line && diagnostic.code == code && diagnostic.is_error() == is_error
+        });
         match position {
             Some(position) => {
                 let (_, diagnostic) = reported.remove(position);
@@ -688,15 +722,20 @@ fn compare_errors(
             }
             None => failures.push((
                 *line,
-                format!("expected error {code} on this line, and it was not reported"),
+                format!("expected {kind} {code} on this line, and it was not reported"),
             )),
         }
     }
     for (line, diagnostic) in reported {
+        let kind = if diagnostic.is_error() {
+            "error"
+        } else {
+            "warning"
+        };
         failures.push((
             line,
             format!(
-                "unexpected error {}: {}",
+                "unexpected {kind} {}: {}",
                 diagnostic.code, diagnostic.message
             ),
         ));
@@ -1516,8 +1555,8 @@ fn every_failure_in_a_file_is_reported() {
     );
     let mut expected = vec![
         "10: a run line reads `f(arguments) => value`".to_string(),
-        "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`".to_string(),
-        "13: `^` belongs to `error`, not `run`".to_string(),
+        "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, `warning`, and `parse-only`".to_string(),
+        "13: `^` belongs to `error` or `warning`, not `run`".to_string(),
         "4: 1 proof(s) were found, expected 2".to_string(),
         "6: `increment(true)`: expected a `u8`, found `true`".to_string(),
         "7: `increment(1, 2)`: more than 1 value(s) before `)`".to_string(),

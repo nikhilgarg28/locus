@@ -1,0 +1,10 @@
+error[L0230]: cannot show `x <= 3`
+ --> tests/corpus/reject/evidence_owed_at_return.lc:4:17
+  |
+4 |     if x <= 9 { return (x, _); } else { } //~ error: L0230 cannot show `x <= 3`
+  |                 ^^^^^^     - the evidence owed here
+  |                 |
+  |                 at this early return
+  |
+  = note: known here: `x <= 9`
+  = note: it fails when x = 4, which the arithmetic facts known here allow

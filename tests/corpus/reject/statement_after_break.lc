@@ -1,7 +1,0 @@
-// A statement after a transfer of control.
-fn first(n: u8) -> u8 {
-    loop { //~ error: L0216 statements follow a transfer of control
-        break n;
-        let m = n;
-    }
-}

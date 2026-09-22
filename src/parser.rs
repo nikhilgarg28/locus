@@ -61,8 +61,9 @@ pub struct ParseStats {
 }
 
 impl Parsed {
+    /// No error was reported; warnings do not count.
     pub fn is_success(&self) -> bool {
-        self.diagnostics.is_empty()
+        !self.diagnostics.iter().any(Diagnostic::is_error)
     }
 }
 

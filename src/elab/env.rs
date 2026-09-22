@@ -218,6 +218,16 @@ pub(super) struct LoopTarget {
     pub head: Span,
 }
 
+/// The function a `return` leaves (`control.rs`).
+pub(super) struct ReturnTarget {
+    /// The declared result type, over the parameters' identities: what a
+    /// `return` supplies, checked where the `return` stands.
+    pub result: Type,
+    /// Declared `-> !`: the function never returns, so a `return` cannot
+    /// stand in it, and its body must end in a never-typed expression.
+    pub never: bool,
+}
+
 /// A point to return to at the end of a lexical scope.
 pub(super) struct Mark {
     ctx: crate::kernel::Checkpoint,
@@ -255,6 +265,12 @@ pub(super) struct Env<'a> {
     pub names: Vec<Local>,
     pub facts: Vec<Fact>,
     pub loops: Vec<LoopTarget>,
+    /// Where a `return` goes: the ordinary function whose body this is,
+    /// and nothing inside a constant or a function of the logic.
+    pub returns: Option<ReturnTarget>,
+    /// The functions declared `-> !`, which never return: a call to one is
+    /// never-typed (`exprs.rs`).
+    pub never_fns: HashSet<crate::exec::ExecFnId>,
     /// How to print each identity: a name, or the source text of the
     /// expression whose result it is.
     pub labels: HashMap<VarId, String>,

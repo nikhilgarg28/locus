@@ -450,6 +450,7 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         | Expr::Prop(_)
         | Expr::Absurd { .. }
         | Expr::Panic { .. }
+        | Expr::Return { .. }
         | Expr::Assert { .. } => true,
     }
 }
@@ -2834,6 +2835,10 @@ fn walk_expr(
                 .is_some_and(|value| walk_expr(value, ty.as_ref(), scope, visit))
         }
         Expr::Continue => false,
+        // The generator writes no `return`; its value would be the function's.
+        Expr::Return { value, .. } => value
+            .as_deref_mut()
+            .is_some_and(|value| walk_expr(value, None, scope, visit)),
         Expr::Assert { condition, .. } => walk_expr(condition, Some(&Type::Bool), scope, visit),
         Expr::Var { .. }
         | Expr::Bool(_)

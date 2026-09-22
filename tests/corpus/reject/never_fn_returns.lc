@@ -1,0 +1,16 @@
+// A function declared `-> !` never returns: its body ends in a panic, a
+// `loop` without `break`, or a call to such a function, and no `return`
+// stands in it. A `return` with no value returns `()`, in a function that
+// returns `()`.
+fn stops(n: u8) -> ! {
+    if n == 0 { return; } else { loop {} } //~ error: L0220 `return` in `stops`, which is declared `-> !`
+}
+
+fn leaks(n: u8) -> ! {
+    if n == 0 { panic!() } else { } //~ error: L0220 `leaks` is declared `-> !`, and its body can reach its end here
+}
+
+fn bare(n: u8) -> u8 {
+    if n == 0 { return; } else { } //~ error: L0220 this `return` carries no value, and `bare` returns `u8`
+    n
+}

@@ -5,7 +5,7 @@ mod common;
 
 use common::*;
 use locus::exec::ExecError;
-use locus::kernel::{HypId, KernelError, Proof, Term, Type, VarId};
+use locus::kernel::{HypId, KernelError, Op, Prim, Proof, Term, Type, VarId};
 use locus::typed::{Binder, Expr, FnItem, FnRef, LowerError};
 
 #[test]
@@ -1365,4 +1365,165 @@ fn a_join_carries_tracked_evidence_typed_over_the_joined_versions() {
         session.declare_fn(&joining_with_evidence(theory, false)),
         Err(LowerError::Exec(ExecError::Kernel(_)))
     ));
+}
+
+// --- return (M5): the function's ending at any depth -------------------------------
+
+/// `x.wrapping_add(k)` at `u8`.
+fn plus(value: Expr, k: u8) -> Expr {
+    Expr::Method {
+        prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
+        receiver: Box::new(value),
+        arguments: vec![Expr::u8(k)],
+    }
+}
+
+/// `x.wrapping_sub(1)` at `u8`.
+fn minus_one(value: Expr) -> Expr {
+    Expr::Method {
+        prim: Prim::Op(Op::WrappingSub, MachineInt::U8),
+        receiver: Box::new(value),
+        arguments: vec![Expr::u8(1)],
+    }
+}
+
+/// `return value`, in a block's tail, where its type and result are unused.
+fn return_(value: Expr) -> Expr {
+    Expr::Return {
+        value: Some(Box::new(value)),
+        ty: Type::Tuple(Vec::new()),
+        result: VarId::fresh(),
+    }
+}
+
+#[test]
+fn a_return_inside_a_branch_inside_a_loop_ends_the_arm_and_joins_nothing() {
+    // fn f(n: u8) -> u8 {
+    //     let mut x = n; let mut y = 0;
+    //     for i in 0..n {
+    //         if x == 2 { y = 1; return x.wrapping_add(100) } else { x = x.wrapping_sub(1) }
+    //     }
+    //     x
+    // }
+    // The arm that returns assigns `y` and leaves: the branch joins `x`
+    // only, and the loop carries both, since its body assigns both. The
+    // returned value mentions the version of `x` the body sees.
+    let (mut session, _, _) = setup();
+    let build = |name: &str, join_y: bool| {
+        looping(name, move |_, x, y| {
+            let (x_in, x_after) = versions(x);
+            let (y_in, y_after) = versions(y);
+            let (x1, y1) = (Binder::new("x", Type::U8), Binder::new("y", Type::U8));
+            let (x_join, y_join) = (Binder::new("x", Type::U8), Binder::new("y", Type::U8));
+            let leaving = block(
+                vec![assign(y, vec![], Expr::u8(1), &y1)],
+                return_(plus(Expr::var(&x_in), 100)),
+            );
+            let staying = unit_block(vec![assign(x, vec![], minus_one(Expr::var(&x_in)), &x1)]);
+            let mut joins = vec![(x, &x_join)];
+            if join_y {
+                joins.push((y, &y_join));
+            }
+            let branch = if_(
+                compare_u8(CompareOp::Eq, Expr::var(&x_in), Expr::u8(2)),
+                leaving,
+                staying,
+                Type::Tuple(Vec::new()),
+                Some(joined(joins)),
+            );
+            let body = unit_block(vec![Stmt::Expr(branch)]);
+            (
+                vec![x_in, y_in],
+                vec![(x.clone(), x_after), (y.clone(), y_after)],
+                body,
+            )
+        })
+    };
+    let (item, _) = build("early", false);
+    for (byte, expected) in [(0, 0), (1, 0), (2, 102), (3, 102), (5, 102)] {
+        assert_eq!(
+            agreed(&mut session.clone(), &item, byte),
+            Value::u8(expected),
+            "at {byte}"
+        );
+    }
+    // The shape: inside the `for`, a match statement whose result is the
+    // tuple of the joined `x` and the value, one arm of which ends in
+    // `return` and the other in that tuple.
+    let reference = session.declare_fn(&item).unwrap();
+    let function = session.program().function(exec_id(reference)).unwrap();
+    let for_body = function
+        .body
+        .stmts
+        .iter()
+        .find_map(|stmt| match stmt {
+            ExecStmt::For(for_stmt) => Some(&for_stmt.body),
+            _ => None,
+        })
+        .expect("a for statement");
+    let (ty, arms) = for_body
+        .stmts
+        .iter()
+        .find_map(|stmt| match stmt {
+            ExecStmt::Match { ty, arms, .. } => Some((ty, arms)),
+            _ => None,
+        })
+        .expect("a match statement in the body");
+    assert!(matches!(ty, Type::Tuple(fields) if fields.len() == 2));
+    let returns: Vec<&Tail> = arms
+        .iter()
+        .map(|arm| &arm.body.tail)
+        .filter(|tail| matches!(tail, Tail::Return(_)))
+        .collect();
+    assert_eq!(returns.len(), 1);
+    assert!(arms.iter().any(
+        |arm| matches!(&arm.body.tail, Tail::Value(Term::Tuple(_, fields)) if fields.len() == 2)
+    ));
+    // A tree that joins `y` too, assigned only on the path that returns,
+    // is rejected: that path contributes nothing to the join.
+    let (item, _) = build("too_many", true);
+    assert!(matches!(
+        session.declare_fn(&item),
+        Err(LowerError::JoinMismatch)
+    ));
+}
+
+#[test]
+fn a_return_that_is_not_the_end_of_its_block_is_a_match_whose_arms_both_return() {
+    // fn f(n: u8) -> u8 { let x: u8 = return n; x }
+    let (mut session, _, _) = setup();
+    let n = Binder::new("n", Type::U8);
+    let x = Binder::new("x", Type::U8);
+    let item = FnItem {
+        name: "pointless".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: Type::U8,
+        body: block(
+            vec![let_(
+                &x,
+                HypId::fresh(),
+                Expr::Return {
+                    value: Some(Box::new(Expr::var(&n))),
+                    ty: Type::U8,
+                    result: VarId::fresh(),
+                },
+            )],
+            Expr::var(&x),
+        ),
+    };
+    for byte in [0, 7, 255] {
+        assert_eq!(agreed(&mut session.clone(), &item, byte), Value::u8(byte));
+    }
+    let reference = session.declare_fn(&item).unwrap();
+    let function = session.program().function(exec_id(reference)).unwrap();
+    let ExecStmt::Match { ty, arms, .. } = &function.body.stmts[0] else {
+        panic!("a match statement first: {:?}", function.body.stmts[0]);
+    };
+    assert_eq!(*ty, Type::U8);
+    assert_eq!(arms.len(), 2);
+    assert!(
+        arms.iter()
+            .all(|arm| matches!(&arm.body.tail, Tail::Return(Term::Free(id)) if *id == n.id))
+    );
 }

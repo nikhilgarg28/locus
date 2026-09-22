@@ -1,8 +1,12 @@
 //! Branching: `if` and `match` on an enum. Each branch is elaborated under
-//! the fact that it was the one taken.
+//! the fact that it was the one taken. And `return`, which leaves every
+//! branch and loop at once.
 
 use crate::ast::{self, ExprKind, PatternKind};
-use crate::kernel::{HypId, Term, Type, VarId, case_variants, telescope_entry, variant_term};
+use crate::diagnostic::{Diagnostic, Label};
+use crate::kernel::{
+    HypId, Term, Type, VarId, case_variants, same_type, telescope_entry, variant_term,
+};
 use crate::source::Span;
 use crate::typed::{self, Binder, CompareOp, Expr, MatchArm, block_leaves, is_pure};
 
@@ -351,5 +355,110 @@ impl Env<'_> {
             self.declare_result(result, &ty, span)?;
         }
         Ok(Value { expr, ty, never })
+    }
+
+    // --- return -----------------------------------------------------------------------
+
+    /// `return`, or `return value`: the function ends here with the value,
+    /// which is checked against its declared result type in the context of
+    /// this point, exactly as the value of the body is, evidence owed
+    /// included. The expression is never-typed: it produces no value and
+    /// stands where any type is expected.
+    pub(super) fn return_(
+        &mut self,
+        expr: &ast::Expr,
+        value: Option<&ast::Expr>,
+        expected: Option<&Type>,
+    ) -> Elab<Value> {
+        let keyword = Span::new(
+            expr.span.file,
+            expr.span.start,
+            expr.span.start + "return".len(),
+        );
+        if let Some(place) = self.formula {
+            return self.fail(
+                "L0215",
+                format!("`return` cannot appear in {place}: nothing there runs"),
+                keyword,
+            );
+        }
+        // In the body of a function of the logic a `return` is not a kernel
+        // term: the function is elaborated again as an ordinary one
+        // (LOC-193, `items`).
+        if self.total {
+            self.not_a_term
+                .get_or_insert(("`return`".to_string(), keyword));
+            return Err(());
+        }
+        let Some(target) = &self.returns else {
+            return self.internal("`return` outside the body of a function", keyword);
+        };
+        let (result_ty, never_fn) = (target.result.clone(), target.never);
+        let item = self.item_name.clone();
+        if never_fn {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0220",
+                    format!("`return` in `{item}`, which is declared `-> !` and never returns"),
+                    keyword,
+                )
+                .note("a function that never returns ends in a panic, a `loop` without `break`, or a call to a function declared `-> !`; give it a result type if it returns"),
+            );
+            return Err(());
+        }
+        let value = match value {
+            Some(value) => {
+                let before = self.diagnostics.len();
+                match self.check(value, &result_ty) {
+                    Ok(value) => Some(Box::new(value.expr)),
+                    Err(()) => {
+                        self.owed_at_return(before, keyword);
+                        return Err(());
+                    }
+                }
+            }
+            None if !same_type(&result_ty, &unit_type()) => {
+                let shown = self.show_type(&result_ty);
+                return self.fail(
+                    "L0220",
+                    format!("this `return` carries no value, and `{item}` returns `{shown}`"),
+                    keyword,
+                );
+            }
+            None => None,
+        };
+        let ty = expected.cloned().unwrap_or_else(unit_type);
+        let result = VarId::fresh();
+        self.declare_result(result, &ty, expr.span)?;
+        Ok(Value {
+            expr: Expr::Return {
+                value,
+                ty: ty.clone(),
+                result,
+            },
+            ty,
+            never: true,
+        })
+    }
+
+    /// Evidence owed at an early return that could not be shown: the hole's
+    /// diagnostic, as usual, is reported at the `return`, and the hole is
+    /// where the evidence is owed.
+    fn owed_at_return(&mut self, before: usize, keyword: Span) {
+        for diagnostic in &mut self.diagnostics[before..] {
+            if diagnostic.code != "L0230" {
+                continue;
+            }
+            let Some(primary) = diagnostic.labels.iter_mut().find(|label| label.primary) else {
+                continue;
+            };
+            let hole = std::mem::replace(&mut primary.span, keyword);
+            primary.message = "at this early return".into();
+            diagnostic.labels.push(Label {
+                span: hole,
+                message: "the evidence owed here".into(),
+                primary: false,
+            });
+        }
     }
 }

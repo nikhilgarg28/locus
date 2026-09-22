@@ -387,6 +387,18 @@ pub enum Expr {
     /// `break`, or `break value` in a `loop`.
     Break(Option<Box<Expr>>),
     Continue,
+    /// `return`, or `return value`: the function ends with the value, `()`
+    /// when none is written, from any depth of loops and branches. Like
+    /// `break` it yields no value, so it stands where any type is expected;
+    /// `ty` is that type, and `result` the identity lowering gives the value
+    /// it never produces where it is not the end of a block, as for a
+    /// panic. The value is checked against the function's result type in
+    /// the context of the return.
+    Return {
+        value: Option<Box<Expr>>,
+        ty: Type,
+        result: VarId,
+    },
     /// Any proof expression: a hole that was filled, a lemma call, a proof
     /// constructor. It prints as `Proved`.
     Proof(Proof),
@@ -497,7 +509,8 @@ impl Expr {
             | Self::If { ty, .. }
             | Self::Match { ty, .. }
             | Self::Absurd { ty, .. }
-            | Self::Panic { ty, .. } => proof(ty),
+            | Self::Panic { ty, .. }
+            | Self::Return { ty, .. } => proof(ty),
             Self::Loop { ty, .. } => proof(ty),
             Self::Block(block) => block.tail.as_deref().is_some_and(Self::is_proof),
             _ => false,

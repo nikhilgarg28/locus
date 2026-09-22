@@ -1,0 +1,44 @@
+// Code after an expression statement that transfers control or panics is
+// unreachable, and reported as rustc's `unreachable_code` reports it: a
+// warning on the first statement or tail that follows, once per block. The
+// file is accepted, and what is unreachable is not elaborated or printed,
+// since nothing runs it.
+
+fn after_return(n: u8) -> u8 {
+    return n;
+    let m = n; //~ warning: L0247 unreachable statement
+    m
+}
+
+fn after_break(n: u8) -> u8 {
+    let mut i: u8 = 0;
+    loop {
+        i = i.wrapping_add(n);
+        break;
+        i = 0; //~ warning: L0247 unreachable statement
+    }
+    i
+}
+
+fn after_continue(n: u8) -> u8 {
+    let mut i: u8 = 0;
+    while i < n {
+        i = i.wrapping_add(1);
+        continue;
+        i = 0; //~ warning: L0247 unreachable statement
+    }
+    i
+}
+
+fn after_panic(n: u8) -> u8 {
+    if n == 0 { panic!("zero") } else { }
+    todo!();
+    n //~ warning: L0247 unreachable expression
+}
+
+//~ run: after_return(3) => 3
+//~ run: after_break(3) => 3
+//~ run: after_continue(3) => 3
+//~ run: after_panic(0) => panic: zero
+//~ run: after_panic(1) => panic: not yet implemented
+//~ rust: fn after_return(n: u8) -> u8 {

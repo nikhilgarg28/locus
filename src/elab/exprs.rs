@@ -8,7 +8,7 @@
 use crate::ast::{self, BinaryOp, ExprKind, PatternKind, UnaryOp};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
-use crate::typed::{Expr, FnRef, value_term};
+use crate::typed::{self, Expr, FnRef, value_term};
 
 use super::control::Branch;
 use super::env::{Elab, Env, Global};
@@ -72,6 +72,28 @@ impl Env<'_> {
         Err(())
     }
 
+    /// A never-typed value where `expected` is wanted. A transfer of control
+    /// and a panic carry the type expected of them already, or end the
+    /// block they stand in, and are left as they are. A call to a function
+    /// declared `-> !` yields evidence of `False` in the logic; where a
+    /// value of another type is wanted, the call runs and the evidence gives
+    /// the value by `match {}`, which nothing ever reaches.
+    pub(super) fn never_as(expr: Expr, expected: &Type) -> Expr {
+        match &expr {
+            Expr::CallFn { result, ty, .. } if !same_type(ty, expected) => {
+                let absurd = Expr::Absurd {
+                    proof: Proof::OfTerm(Term::var(*result)),
+                    ty: expected.clone(),
+                };
+                Expr::Block(typed::Block {
+                    stmts: vec![typed::Stmt::Expr(expr)],
+                    tail: Some(Box::new(absurd)),
+                })
+            }
+            _ => expr,
+        }
+    }
+
     /// The kernel term that stands for the value, as lowering will state it.
     pub fn term(&mut self, value: &Value, span: Span) -> Elab<Term> {
         match value_term(&value.expr) {
@@ -94,8 +116,19 @@ impl Env<'_> {
     /// lets a fact about `result.0` serve as a fact about the `next` it was
     /// bound to.
     pub fn coerce(&mut self, value: Value, expected: &Type, span: Span) -> Elab<Value> {
-        if value.never || same_type(&value.ty, expected) {
+        if same_type(&value.ty, expected) {
             return Ok(value);
+        }
+        // The never type coerces to any type. A `return`, `break`,
+        // `continue`, or panic produces no value, and lowering ends the
+        // block with it; a call to a function declared `-> !` produces
+        // evidence of `False`, from which the wanted value follows.
+        if value.never {
+            return Ok(Value {
+                expr: Env::never_as(value.expr, expected),
+                ty: expected.clone(),
+                never: true,
+            });
         }
         if let (Type::Proof(found), Type::Proof(wanted)) = (&value.ty, expected) {
             let mark = self.mark();
@@ -228,7 +261,14 @@ impl Env<'_> {
                 None => self.variant(path, &[], expected, expr.span),
             },
             ExprKind::Call { callee, arguments } => {
-                self.call(callee, arguments, expected, expr.span)
+                let mut value = self.call(callee, arguments, expected, expr.span)?;
+                // A call to a function declared `-> !` never returns.
+                if let Expr::CallFn { id, .. } = &value.expr
+                    && self.never_fns.contains(id)
+                {
+                    value.never = true;
+                }
+                Ok(value)
             }
             // A field of a local is copied or moved on its own (`moves.rs`).
             ExprKind::Member { value, name } => {
@@ -337,11 +377,7 @@ impl Env<'_> {
                 "a range is read only in the header of a `for` for now",
                 expr.span,
             ),
-            ExprKind::Return(_) => self.fail(
-                "L0290",
-                "`return` is not in Locus yet; M5 adds it with the never type",
-                expr.span,
-            ),
+            ExprKind::Return(value) => self.return_(expr, value.as_deref(), expected),
             ExprKind::Ref { .. } => self.fail(
                 "L0290",
                 "references (`&value`, `&mut value`) are not in Locus yet; O3 adds them",

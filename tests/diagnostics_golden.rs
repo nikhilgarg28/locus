@@ -4,7 +4,9 @@
 //! Every `tests/corpus/reject/NAME.lc` has a `NAME.stderr` beside it, holding
 //! exactly what `locus check tests/corpus/reject/NAME.lc` writes to stderr
 //! from the root of the repository, with colour off. The path in a golden is
-//! that relative one, so a golden is the same on every machine.
+//! that relative one, so a golden is the same on every machine. An accepted
+//! file, `tests/corpus/accept/NAME.lc`, may have a `NAME.stderr` too: the
+//! warnings `check` writes while accepting it.
 //!
 //! ~~~text
 //! LOCUS_BLESS=1 cargo test --test diagnostics_golden -- --nocapture
@@ -22,7 +24,8 @@
 //! stderr with that rendering, so the two cannot drift apart.
 //!
 //! The meta test lists the error codes the source can emit and fails for each
-//! one that no rejected file pins with an `//~ error:` directive. There is no
+//! one that no corpus file pins with an `//~ error:` directive, or an
+//! `//~ warning:` one for a warning. There is no
 //! list of codes excused from this. `UNREACHABLE` is for a code that no source
 //! text can reach, which is dead code to remove, and it stays as short as the
 //! truth allows.
@@ -40,6 +43,7 @@ use locus::parser::parse;
 use locus::source::SourceMap;
 
 const REJECT: &str = "tests/corpus/reject";
+const ACCEPT: &str = "tests/corpus/accept";
 
 /// Codes in the source that no source text reaches, each with the reason.
 /// Such a code is dead code in the compiler: the entry is a request to remove
@@ -67,19 +71,39 @@ fn rendered(name: &str, text: &str) -> String {
         .collect()
 }
 
-/// The files of `tests/corpus/reject` with this extension, in order, each as
-/// its path from the root of the repository.
-fn files_with(extension: &str) -> Vec<String> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(root().join(REJECT))
-        .unwrap_or_else(|error| panic!("{REJECT}: {error}"))
+/// The files of a directory of the corpus with this extension, in order,
+/// each as its path from the root of the repository.
+fn files_with(directory: &str, extension: &str) -> Vec<String> {
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(root().join(directory))
+        .unwrap_or_else(|error| panic!("{directory}: {error}"))
         .map(|entry| entry.unwrap().path())
         .filter(|path| path.extension().is_some_and(|found| found == extension))
         .collect();
     paths.sort();
     paths
         .iter()
-        .map(|path| format!("{REJECT}/{}", path.file_name().unwrap().to_string_lossy()))
+        .map(|path| {
+            format!(
+                "{directory}/{}",
+                path.file_name().unwrap().to_string_lossy()
+            )
+        })
         .collect()
+}
+
+/// The files that have a golden, each with whether it is rejected: every
+/// rejected file, and the accepted files that have a `.stderr` beside them.
+fn files_with_goldens() -> Vec<(String, bool)> {
+    let mut files: Vec<(String, bool)> = files_with(REJECT, "lc")
+        .into_iter()
+        .map(|name| (name, true))
+        .collect();
+    for name in files_with(ACCEPT, "lc") {
+        if root().join(golden_of(&name)).exists() {
+            files.push((name, false));
+        }
+    }
+    files
 }
 
 fn read(name: &str) -> String {
@@ -130,7 +154,10 @@ fn line_diff(golden: &str, rendering: &str) -> String {
 #[test]
 fn every_rejected_file_renders_as_its_golden() {
     let bless = std::env::var_os("LOCUS_BLESS").is_some_and(|value| value == "1");
-    let files = files_with("lc");
+    let files: Vec<String> = files_with_goldens()
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
     let mut failures = Vec::new();
     let mut blessed = Vec::new();
     for name in &files {
@@ -156,12 +183,14 @@ fn every_rejected_file_renders_as_its_golden() {
             }
         });
     }
-    for golden_name in files_with("stderr") {
-        let name = format!("{}.lc", golden_name.strip_suffix(".stderr").unwrap());
-        if !files.contains(&name) {
-            failures.push(format!(
-                "{golden_name}: there is no {name}; delete the golden"
-            ));
+    for directory in [REJECT, ACCEPT] {
+        for golden_name in files_with(directory, "stderr") {
+            let name = format!("{}.lc", golden_name.strip_suffix(".stderr").unwrap());
+            if !files.contains(&name) {
+                failures.push(format!(
+                    "{golden_name}: there is no {name}; delete the golden"
+                ));
+            }
         }
     }
     if bless {
@@ -181,7 +210,7 @@ fn every_rejected_file_renders_as_its_golden() {
 #[test]
 fn the_binary_writes_what_the_goldens_are_made_from() {
     let mut failures = Vec::new();
-    for name in files_with("lc") {
+    for (name, rejected) in files_with_goldens() {
         let output = Command::new(env!("CARGO_BIN_EXE_locus"))
             .args(["check", &name])
             .current_dir(root())
@@ -190,13 +219,18 @@ fn the_binary_writes_what_the_goldens_are_made_from() {
             .unwrap();
         let stderr = String::from_utf8(output.stderr).unwrap();
         let rendering = rendered(&name, &read(&name));
-        if output.status.code() != Some(1) {
+        let (expected_status, kind) = if rejected {
+            (1, "a rejected file")
+        } else {
+            (0, "an accepted file")
+        };
+        if output.status.code() != Some(expected_status) {
             failures.push(format!(
-                "{name}: `locus check` exited with {:?}, and a rejected file exits with 1",
+                "{name}: `locus check` exited with {:?}, and {kind} exits with {expected_status}",
                 output.status.code()
             ));
         }
-        if !output.stdout.is_empty() {
+        if rejected && !output.stdout.is_empty() {
             failures.push(format!("{name}: `locus check` wrote to stdout"));
         }
         if stderr != rendering {
@@ -239,10 +273,10 @@ fn codes_in(text: &str) -> BTreeSet<String> {
     codes
 }
 
-/// The codes of the `//~ error:` directives of a rejected file, read as
-/// `tests/corpus.rs` reads them: `^`s may follow `//~`, and the code is the
-/// first word after `error:`. That test rejects a malformed directive; this
-/// one only collects.
+/// The codes of the `//~ error:` and `//~ warning:` directives of a corpus
+/// file, read as `tests/corpus.rs` reads them: `^`s may follow `//~`, and
+/// the code is the first word after the key. That test rejects a malformed
+/// directive; this one only collects.
 fn codes_pinned_in(text: &str) -> BTreeSet<String> {
     let mut codes = BTreeSet::new();
     for line in text.lines() {
@@ -252,7 +286,7 @@ fn codes_pinned_in(text: &str) -> BTreeSet<String> {
         let Some((key, value)) = rest.trim_start_matches('^').split_once(':') else {
             continue;
         };
-        if key.trim() == "error" {
+        if matches!(key.trim(), "error" | "warning") {
             codes.extend(value.split_whitespace().next().map(str::to_string));
         }
     }
@@ -279,8 +313,10 @@ fn every_error_code_in_the_source_has_a_rejected_file() {
         emitted.extend(codes_in(&std::fs::read_to_string(path).unwrap()));
     }
     let mut pinned = BTreeSet::new();
-    for name in files_with("lc") {
-        pinned.extend(codes_pinned_in(&read(&name)));
+    for directory in [REJECT, ACCEPT] {
+        for name in files_with(directory, "lc") {
+            pinned.extend(codes_pinned_in(&read(&name)));
+        }
     }
     assert!(!emitted.is_empty(), "the scan of `src/` found no codes");
 
@@ -289,13 +325,13 @@ fn every_error_code_in_the_source_has_a_rejected_file() {
         match UNREACHABLE.iter().find(|(excused, _)| excused == code) {
             Some(_) => {}
             None => failures.push(format!(
-                "{code} is in the source, and no file in {REJECT} has `//~ error: {code}`"
+                "{code} is in the source, and no file in {REJECT} has `//~ error: {code}` (or, for a warning, no file in {ACCEPT} has `//~ warning: {code}`)"
             )),
         }
     }
     for code in pinned.difference(&emitted) {
         failures.push(format!(
-            "{code} is pinned by a rejected file, and the scan of `src/` did not find it"
+            "{code} is pinned by a corpus file, and the scan of `src/` did not find it"
         ));
     }
     for (code, why) in UNREACHABLE {

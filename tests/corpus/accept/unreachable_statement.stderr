@@ -1,0 +1,28 @@
+warning[L0247]: unreachable statement
+ --> tests/corpus/accept/unreachable_statement.lc:9:5
+  |
+8 |     return n;
+  |     -------- any code following this expression is unreachable
+9 |     let m = n; //~ warning: L0247 unreachable statement
+  |     ^^^^^^^^^^ unreachable statement
+warning[L0247]: unreachable statement
+  --> tests/corpus/accept/unreachable_statement.lc:18:9
+   |
+17 |         break;
+   |         ----- any code following this expression is unreachable
+18 |         i = 0; //~ warning: L0247 unreachable statement
+   |         ^^^^^^ unreachable statement
+warning[L0247]: unreachable statement
+  --> tests/corpus/accept/unreachable_statement.lc:28:9
+   |
+27 |         continue;
+   |         -------- any code following this expression is unreachable
+28 |         i = 0; //~ warning: L0247 unreachable statement
+   |         ^^^^^^ unreachable statement
+warning[L0247]: unreachable expression
+  --> tests/corpus/accept/unreachable_statement.lc:36:5
+   |
+35 |     todo!();
+   |     ------- any code following this expression is unreachable
+36 |     n //~ warning: L0247 unreachable expression
+   |     ^ unreachable expression

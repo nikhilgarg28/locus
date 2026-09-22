@@ -1,0 +1,17 @@
+error[L0220]: `return` in `stops`, which is declared `-> !` and never returns
+ --> tests/corpus/reject/never_fn_returns.lc:6:17
+  |
+6 |     if n == 0 { return; } else { loop {} } //~ error: L0220 `return` in `stops`, which is declared `-> !`
+  |                 ^^^^^^
+  |
+  = note: a function that never returns ends in a panic, a `loop` without `break`, or a call to a function declared `-> !`; give it a result type if it returns
+error[L0220]: `leaks` is declared `-> !`, and its body can reach its end here
+  --> tests/corpus/reject/never_fn_returns.lc:10:33
+   |
+10 |     if n == 0 { panic!() } else { } //~ error: L0220 `leaks` is declared `-> !`, and its body can reach its end here
+   |                                 ^^^
+error[L0220]: this `return` carries no value, and `bare` returns `u8`
+  --> tests/corpus/reject/never_fn_returns.lc:14:17
+   |
+14 |     if n == 0 { return; } else { } //~ error: L0220 this `return` carries no value, and `bare` returns `u8`
+   |                 ^^^^^^

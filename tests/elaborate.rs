@@ -1869,3 +1869,310 @@ fn a_ghost_value_is_named_only_where_nothing_runs() {
         assert!(full.starts_with(message), "{text}: {full}");
     }
 }
+
+// --- return and the never type (M5) ---------------------------------------------------
+
+fn unit() -> Outcome {
+    Outcome::Value(Value::Tuple(Vec::new()))
+}
+
+#[test]
+fn a_return_ends_the_function_from_any_depth() {
+    // Three ways out: a guard in statement position, an arm of a branch,
+    // and the tail; then from a loop inside a branch, in each loop form.
+    let result = accepted(
+        "fn guarded(n: u8) -> u8 { if n == 0 { return 1; } else { } n }
+        fn as_arm(n: u8) -> u8 { if n == 0 { return 1 } else { n } }
+        fn as_tail(n: u8) -> u8 { return n.wrapping_add(1) }
+        fn nothing(n: u8) -> () { if n == 0 { return; } else { } }
+        fn find(limit: u8) -> u8 {
+            let mut i: u8 = 0;
+            loop { if i == limit { return i; } else { } i = i.wrapping_add(1); }
+        }
+        fn first_over(limit: u8) -> u8 {
+            for i in 0..limit { if i.wrapping_mul(2) > limit { return i; } else { } }
+            limit
+        }
+        fn counted(n: u8) -> u8 {
+            let mut seen: u8 = 0;
+            while seen < n { if seen == 7 { return 100; } else { } seen = seen.wrapping_add(1); }
+            seen
+        }",
+    );
+    for (name, argument, expected) in [
+        ("guarded", 0, 1),
+        ("guarded", 5, 5),
+        ("as_arm", 0, 1),
+        ("as_arm", 5, 5),
+        ("as_tail", 5, 6),
+        ("find", 4, 4),
+        ("first_over", 5, 3),
+        ("first_over", 0, 0),
+        ("counted", 3, 3),
+        ("counted", 9, 100),
+    ] {
+        assert_eq!(
+            outcome(&result, name, vec![Value::u8(argument)]),
+            returned(expected),
+            "{name}({argument})"
+        );
+    }
+    assert_eq!(outcome(&result, "nothing", vec![Value::u8(0)]), unit());
+    assert_eq!(outcome(&result, "nothing", vec![Value::u8(1)]), unit());
+    // Printed as written: `return value`, and `return` alone for `()`.
+    let rust = print_module(result.session.erased());
+    for line in [
+        "return 1_u8",
+        "return i",
+        "return\n",
+        "return n.wrapping_add(1_u8)",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+}
+
+#[test]
+fn evidence_owed_at_an_early_return_is_reported_at_the_return() {
+    // The value of a `return` is checked against the result type where the
+    // `return` stands: the fact of the branch fills the hole.
+    let result = accepted(
+        "fn clamp(x: u8) -> (out: u8, @(out <= 3)) { if x <= 3 { return (x, _); } else { } (3, _) }",
+    );
+    assert_eq!(result.holes.len(), 2);
+    assert!(result.holes.iter().all(|hole| hole.solved));
+    assert!(matches!(
+        outcome(&result, "clamp", vec![Value::u8(2)]),
+        Outcome::Value(Value::Tuple(fields)) if matches!(fields.as_slice(), [Value::Int(_, 2), _])
+    ));
+    // Not shown: the usual diagnostic, at the `return`, and the hole is
+    // where the evidence is owed.
+    let text = "fn clamp(x: u8) -> (out: u8, @(out <= 3)) { if x <= 9 { return (x, _); } else { } (3, _) }";
+    let result = elaborated(text);
+    assert!(!result.is_success());
+    let diagnostic = &result.diagnostics[0];
+    assert_eq!(diagnostic.code, "L0230");
+    assert!(
+        diagnostic.message.contains("cannot show `x <= 3`"),
+        "{}",
+        diagnostic.message
+    );
+    let primary = diagnostic
+        .labels
+        .iter()
+        .find(|label| label.primary)
+        .expect("a primary label");
+    assert_eq!(&text[primary.span.range()], "return");
+    assert_eq!(primary.message, "at this early return");
+    let owed = diagnostic
+        .labels
+        .iter()
+        .find(|label| label.message == "the evidence owed here")
+        .expect("the hole is labelled");
+    assert_eq!(&text[owed.span.range()], "_");
+}
+
+#[test]
+fn the_never_type_coerces_to_any_type_in_each_position() {
+    // `return`, `break`, `continue`, the forms that panic, and a call to a
+    // function declared `-> !` produce no value, and stand where any type
+    // is expected: as a `let`'s value, as an arm, as a tail.
+    let result = accepted(
+        "fn as_value(n: u8) -> u8 { let x: u8 = return n; x }
+        fn as_arm(c: bool) -> u8 { if c { return 1 } else { 5 } }
+        fn as_tail(n: u8) -> (out: u8, @(out == n)) { return (n, _) }
+        fn spin() -> ! { loop {} }
+        fn never_as_arm(n: u8) -> u8 { if n == 0 { spin() } else { n } }
+        fn never_as_tail(n: u8) -> u8 { spin() }
+        fn never_as_never(n: u8) -> ! { spin() }
+        fn never_as_statement(n: u8) -> u8 { if n == 0 { spin(); } else { } n }
+        enum Step { More(u8), Done }
+        fn in_arm(step: Step) -> u8 { match step { Step::More(n) => return n, Step::Done => 0 } }
+        fn breaking(n: u8) -> u8 {
+            let mut i: u8 = 0;
+            loop { i = i.wrapping_add(1); let x: u8 = if i == n { break } else { i }; if x == 200 { continue } else { } }
+            i
+        }",
+    );
+    for (name, argument, expected) in [
+        ("as_value", 7, 7),
+        ("never_as_arm", 3, 3),
+        ("never_as_statement", 3, 3),
+        ("breaking", 4, 4),
+    ] {
+        assert_eq!(
+            outcome(&result, name, vec![Value::u8(argument)]),
+            returned(expected),
+            "{name}({argument})"
+        );
+    }
+    assert_eq!(
+        outcome(&result, "as_arm", vec![Value::Bool(true)]),
+        returned(1)
+    );
+    assert_eq!(
+        outcome(&result, "as_arm", vec![Value::Bool(false)]),
+        returned(5)
+    );
+    assert!(matches!(
+        outcome(&result, "as_tail", vec![Value::u8(4)]),
+        Outcome::Value(Value::Tuple(fields)) if matches!(fields.as_slice(), [Value::Int(_, 4), _])
+    ));
+    // In the logic a function that never returns yields evidence of
+    // `False`, and a call where a value is wanted is followed by the
+    // point the evidence shows unreachable.
+    let rust = print_module(result.session.erased());
+    for line in [
+        "let x: u8 = (return n);",
+        "fn spin() -> Proved {",
+        "spin();\n        unreachable!(\"shown never to be reached\")",
+        "fn never_as_tail(n: u8) -> u8 {\n    spin();\n    unreachable!(\"shown never to be reached\")",
+        "fn never_as_never(n: u8) -> Proved {\n    spin()\n}",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+}
+
+#[test]
+fn code_after_a_transfer_of_control_is_an_unreachable_warning() {
+    // As rustc warns: on the first statement or the tail after an
+    // expression statement of the never type, once per block. The file is
+    // accepted, and what is unreachable is not elaborated or printed.
+    let cases = [
+        (
+            "fn f(n: u8) -> u8 { return n; let m = n; m }",
+            "unreachable statement",
+            "let m = n;",
+        ),
+        (
+            "fn f(n: u8) -> u8 { return n; n }",
+            "unreachable expression",
+            "n }",
+        ),
+        (
+            "fn f(n: u8) -> u8 { loop { break; let m = n; } n }",
+            "unreachable statement",
+            "let m = n;",
+        ),
+        (
+            "fn f(n: u8) -> u8 { let mut i: u8 = 0; while i < n { i = i.wrapping_add(1); continue; i = 0; } i }",
+            "unreachable statement",
+            "i = 0;",
+        ),
+        (
+            "fn f(n: u8) -> u8 { todo!(); n }",
+            "unreachable expression",
+            "n }",
+        ),
+        (
+            "fn f(n: u8) -> u8 { panic!(\"x\"); n }",
+            "unreachable expression",
+            "n }",
+        ),
+        (
+            "fn spin() -> ! { loop {} } fn f(n: u8) -> u8 { spin(); n }",
+            "unreachable expression",
+            "n }",
+        ),
+    ];
+    for (text, message, at) in cases {
+        let result = elaborated(text);
+        assert!(result.is_success(), "{text}");
+        assert_eq!(result.diagnostics.len(), 1, "{text}");
+        let warning = &result.diagnostics[0];
+        assert!(!warning.is_error(), "{text}");
+        assert_eq!(warning.code, "L0247", "{text}");
+        assert_eq!(warning.message, message, "{text}");
+        let primary = warning
+            .labels
+            .iter()
+            .find(|label| label.primary)
+            .expect("a primary label");
+        assert!(text[primary.span.start..].starts_with(at), "{text}");
+        let context = warning
+            .labels
+            .iter()
+            .find(|label| !label.primary)
+            .expect("the expression that leaves is labelled");
+        assert_eq!(
+            context.message,
+            "any code following this expression is unreachable"
+        );
+        assert_eq!(check_module(result.session.erased()), Ok(()));
+    }
+    // The dead code is gone from the Rust, which begins with the transfer.
+    let result = elaborated("fn f(n: u8) -> u8 { return n; let m = n; m }");
+    let rust = print_module(result.session.erased());
+    assert!(
+        rust.contains("fn f(n: u8) -> u8 {\n    return n\n}"),
+        "{rust}"
+    );
+    // Nothing follows a transfer that is not a statement: `let x = return;`
+    // binds, as E10 chose for a `let` bound to a panic.
+    let result = elaborated("fn f(n: u8) -> u8 { let x: u8 = return n; x }");
+    assert!(result.diagnostics.is_empty());
+}
+
+#[test]
+fn a_function_declared_never_never_returns() {
+    // Its body ends in a panic, a `loop` without `break`, or a call to
+    // such a function; in the logic it yields evidence of `False`.
+    let result = accepted(
+        "fn spin() -> ! { loop {} }
+        fn stop() -> ! { panic!(\"stop\") }
+        fn either(c: bool) -> ! { if c { spin() } else { stop() } }
+        fn uses(n: u8) -> u8 { if n == 0 { stop() } else { n } }",
+    );
+    assert_eq!(
+        outcome(&result, "uses", vec![Value::u8(0)]),
+        panicked("stop")
+    );
+    assert_eq!(outcome(&result, "uses", vec![Value::u8(2)]), returned(2));
+    for (text, code, fragment) in [
+        (
+            "fn f(n: u8) -> ! { if n == 0 { panic!() } else { } }",
+            "L0220",
+            "`f` is declared `-> !`, and its body can reach its end",
+        ),
+        (
+            "fn f(n: u8) -> ! { n }",
+            "L0220",
+            "`f` is declared `-> !`, and its body can reach its end",
+        ),
+        (
+            "fn f(n: u8) -> ! { if n == 0 { return; } else { loop {} } }",
+            "L0220",
+            "`return` in `f`, which is declared `-> !`",
+        ),
+        (
+            "fn f(n: u8) -> u8 { let x: ! = panic!(); n }",
+            "L0290",
+            "the never type `!` stands only as the result type",
+        ),
+        (
+            "fn f(n: u8) -> u8 { if n == 0 { return; } else { } n }",
+            "L0220",
+            "this `return` carries no value, and `f` returns `u8`",
+        ),
+        (
+            "fn f(n: u8) -> Prop { prop!(return 1) }",
+            "L0215",
+            "`return` cannot appear in a proposition",
+        ),
+        (
+            "const C: u8 = return 1;",
+            "L0215",
+            "`return` cannot appear in the value of a constant",
+        ),
+    ] {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, [code], "{text}: {full}");
+        assert!(full.contains(fragment), "{text}: {full}");
+    }
+    // A function of the logic with a `return` in its body is not a kernel
+    // term: it is elaborated again as an ordinary function with its
+    // promises (LOC-193).
+    let result = accepted(
+        "#[terminates] #[no_panic] #[no_io] fn f(n: u8) -> u8 { if n == 0 { return 1 } else { n } }",
+    );
+    assert_eq!(outcome(&result, "f", vec![Value::u8(0)]), returned(1));
+}

@@ -212,6 +212,7 @@ impl Eraser<'_> {
                 | Expr::For { .. }
                 | Expr::Break(_)
                 | Expr::Continue
+                | Expr::Return { .. }
                 | Expr::Operate { .. }
                 | Expr::Panic { .. }
                 | Expr::Assert { .. } => true,
@@ -573,6 +574,12 @@ impl Eraser<'_> {
                 EExpr::Break(value.as_deref().map(|value| Box::new(self.expr(value))))
             }
             Expr::Continue => EExpr::Continue,
+            // `return` with no value returns `()`; the printer writes it
+            // bare again.
+            Expr::Return { value, .. } => EExpr::Return(Box::new(match value {
+                Some(value) => self.expr(value),
+                None => EExpr::Tuple(Vec::new()),
+            })),
             // The evidence that a panic is unreachable, or that a check
             // passes, is logical; the form stays as it was written.
             Expr::Panic { form, argument, .. } => EExpr::Panic {
