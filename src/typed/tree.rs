@@ -101,7 +101,44 @@ pub struct VariantItem {
     pub named: bool,
 }
 
+/// How a parameter is passed: by value, by value under `mut` so that the
+/// body may assign it, or lent by `&T` or `&mut T`. A lent parameter is a
+/// value in the logic: `&T` adds nothing to it, and `&mut T` is a value
+/// passed in and a new version passed out (`FnItem::exits`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Passing {
+    #[default]
+    Value,
+    /// `mut name: T`: the body may assign it, as a `let mut`.
+    MutValue,
+    /// `name: &T`: read by the body, never moved out of.
+    Ref,
+    /// `name: &mut T`: assigned by the body as a `let mut` is, and its
+    /// final version is passed back to the caller.
+    RefMut,
+}
+
+impl Passing {
+    /// Whether the body may assign the parameter: it is a mutable binding.
+    pub fn is_mutable(self) -> bool {
+        matches!(self, Self::MutValue | Self::RefMut)
+    }
+
+    /// Whether the parameter is a reference, which the body may not move
+    /// out of.
+    pub fn is_reference(self) -> bool {
+        matches!(self, Self::Ref | Self::RefMut)
+    }
+}
+
 /// `fn` or `math fn`. The result type may mention the parameters.
+///
+/// `passing` says how each parameter is passed, in the order of `params`;
+/// a shorter list means the rest are by value. For each `&mut` parameter,
+/// in order, `exits` holds the binder the result type speaks of it by: its
+/// value at return. In the logic the function returns the tuple of those
+/// exit values followed by `result` (`Session::exec_result`); the entry
+/// value is the parameter itself, which `old!(name)` names.
 #[derive(Clone, Debug)]
 pub struct FnItem {
     pub name: String,
@@ -109,6 +146,42 @@ pub struct FnItem {
     pub params: Vec<Binder>,
     pub result: Type,
     pub body: Block,
+    pub passing: Vec<Passing>,
+    pub exits: Vec<Binder>,
+}
+
+impl FnItem {
+    /// How the parameter at `index` is passed.
+    pub fn passing_of(&self, index: usize) -> Passing {
+        self.passing.get(index).copied().unwrap_or_default()
+    }
+
+    /// The identities of the parameters passed by `&mut`, in order: the
+    /// bindings whose final versions the function passes back.
+    pub fn lent_bindings(&self) -> Vec<VarId> {
+        self.params
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| self.passing_of(*index) == Passing::RefMut)
+            .map(|(_, param)| param.id)
+            .collect()
+    }
+
+    /// The result type in the logic: the exit values of the `&mut`
+    /// parameters followed by the declared result, as one tuple, or the
+    /// declared result alone when there is no `&mut` parameter.
+    pub fn exec_result(&self) -> Type {
+        if self.exits.is_empty() {
+            return self.result.clone();
+        }
+        let mut fields: Vec<(VarId, Type)> = self
+            .exits
+            .iter()
+            .map(|exit| (exit.id, exit.ty.clone()))
+            .collect();
+        fields.push((VarId::fresh(), self.result.clone()));
+        Type::tuple_over(&fields)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -137,6 +210,16 @@ pub enum Stmt {
         equation: HypId,
     },
     Expr(Expr),
+}
+
+/// A `&mut` argument of a call (`Expr::CallFn`): which argument it is, and
+/// the version its root binding has after the call, under `equation`, as
+/// `Stmt::Assign` gives one.
+#[derive(Clone, Debug)]
+pub struct Lend {
+    pub argument: usize,
+    pub version: Binder,
+    pub equation: HypId,
 }
 
 /// The left side of an assignment: the identity of the binding declared by
@@ -309,12 +392,33 @@ pub enum Expr {
         ty: Type,
     },
     /// A call to an ordinary function. `result` names what it returns.
+    ///
+    /// A call with `&mut` arguments is a call with values in and new
+    /// versions out: each such argument is an `Expr::Lend`, and `lends`
+    /// says, in argument order, the version its root binding gets when the
+    /// call returns. In the check IR the callee returns the tuple of the
+    /// new values followed by its result; `result` names that tuple,
+    /// lowering binds each new version as an assignment does, by a `let`
+    /// of the old version with the lent path replaced by the tuple's
+    /// field, and the call's value is the tuple's last field. `ty` is the
+    /// type of that value.
     CallFn {
         id: ExecFnId,
         name: String,
         arguments: Vec<Expr>,
         result: VarId,
         ty: Type,
+        lends: Vec<Lend>,
+    },
+    /// `&place` or `&mut place` as the argument of a call: the place read
+    /// as a value, which is what the logic and the interpreters pass, and
+    /// the place itself, which erasure keeps so that Rust lends it and the
+    /// interpreters write a `&mut` argument back. `place.binding` is the
+    /// binding of a mutable root, or the identity of an immutable one.
+    Lend {
+        mutable: bool,
+        place: Place,
+        value: Box<Expr>,
     },
     /// `then_fact` is `condition == true` and `else_fact` is
     /// `condition == false`, about the comparison the condition performs.
@@ -512,6 +616,7 @@ impl Expr {
             | Self::Panic { ty, .. }
             | Self::Return { ty, .. } => proof(ty),
             Self::Loop { ty, .. } => proof(ty),
+            Self::Lend { value, .. } => value.is_proof(),
             Self::Block(block) => block.tail.as_deref().is_some_and(Self::is_proof),
             _ => false,
         }

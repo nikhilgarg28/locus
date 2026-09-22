@@ -66,12 +66,28 @@
 //! body to a `continue`. `for` is the check IR's bounded `for` with the same
 //! state; nothing is asked about the order of its bounds, since an empty
 //! range runs no pass. No loop lowers to a kernel term.
+//!
+//! A reference parameter is a value. `&T` adds nothing to the logic: the
+//! parameter is the value lent. A `&mut T` parameter is a mutable binding
+//! of the body, a value passed in and a new version passed out: the
+//! function's result in the check IR is the tuple of the final versions of
+//! its `&mut` parameters followed by its declared result (`exec_result`),
+//! which the end of the body builds as the arm of a join does. A call with
+//! `&mut` arguments binds that tuple, then gives the root of each lent
+//! place a new version, a `let` of the old version with the path replaced
+//! by the tuple's field, rebuilt as an assignment is, in argument order;
+//! the call's value is the tuple's last field. Two arguments of one call
+//! may not overlap when either is `&mut`, since two values written back to
+//! one place would let the logic keep the wrong one: the check is here,
+//! and trusted. What the interpreter of the check IR needs to report the
+//! values of a function's `&mut` parameters at a panic is a side table
+//! (`Lending`) the checker never reads.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::erased::{self, Module};
-use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, OperateStmt, Program};
+use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, Lending, OperateStmt, Program};
 use crate::kernel::derive::symm_at;
 use crate::kernel::{
     CmpOp, Definitions, EnumId, FnId, HypId, KernelError, Op, Panic, Proof, PropId, PropVariant,
@@ -79,8 +95,8 @@ use crate::kernel::{
 };
 
 use super::tree::{
-    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, PanicForm,
-    Pattern, Step, Stmt, StructItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, Lend, MatchArm,
+    PanicForm, Pattern, Step, Stmt, StructItem,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,6 +128,12 @@ pub enum LowerError {
     /// An assignment where a term is wanted: in a `math fn`, or in a
     /// branch a proof stands in.
     AssignmentInTerm,
+    /// Two arguments of one call name overlapping places, and one of them
+    /// is lent by `&mut`: the write-backs would collide.
+    OverlappingArguments(String),
+    /// A `&mut` argument that is not a lent place, or a function whose
+    /// exits do not match its `&mut` parameters.
+    BadLend(String),
 }
 
 impl From<KernelError> for LowerError {
@@ -151,6 +173,11 @@ impl fmt::Display for LowerError {
             ),
             Self::BadPlace(name) => write!(f, "`{name}` has no such field to assign"),
             Self::AssignmentInTerm => f.write_str("an assignment where a term is wanted"),
+            Self::OverlappingArguments(name) => write!(
+                f,
+                "two arguments of one call overlap at `{name}`, and one is lent by `&mut`"
+            ),
+            Self::BadLend(name) => write!(f, "`{name}` is not a place lent to a call"),
         }
     }
 }
@@ -170,6 +197,10 @@ pub enum FnRef {
 pub struct Session {
     program: Program,
     erased: Module,
+    /// For each function with `&mut` parameters, what the interpreter of
+    /// the check IR needs to report their values at a panic. The checker
+    /// never reads it (`CheckInterpreter::with_lending`).
+    lending: HashMap<ExecFnId, Lending>,
 }
 
 impl Session {
@@ -177,11 +208,18 @@ impl Session {
         Self {
             program: Program::new(definitions),
             erased: Module::default(),
+            lending: HashMap::new(),
         }
     }
 
     pub fn program(&self) -> &Program {
         &self.program
+    }
+
+    /// The side table of every function with `&mut` parameters, for the
+    /// interpreter of the check IR.
+    pub fn lending(&self) -> &HashMap<ExecFnId, Lending> {
+        &self.lending
     }
 
     /// The erasure of every item accepted so far. An item is erased only
@@ -282,15 +320,135 @@ impl Session {
                 })?;
             Ok(FnRef::Math(id))
         } else {
+            let mut env = Versions::default();
+            for (index, param) in item.params.iter().enumerate() {
+                if item.passing_of(index).is_mutable() {
+                    env.declare(param);
+                }
+            }
+            let lent = item.lent_bindings();
+            if lent.len() != item.exits.len() {
+                return Err(LowerError::BadLend(item.name.clone()));
+            }
+            let result = item.exec_result();
+            let signature = Type::function_over(&params, &result);
+            // The end of the body supplies the tuple as the arm of a join
+            // does, and so does every `return` (`function_result`).
+            let body = if lent.is_empty() {
+                lower_block(&item.body, &mut env, End::Value)?
+            } else {
+                env.result = Some((lent.clone(), result.clone()));
+                lower_block(
+                    &item.body,
+                    &mut env,
+                    End::Join {
+                        bindings: &lent,
+                        ty: &result,
+                    },
+                )?
+            };
             let function = ExecFn {
                 promises,
                 signature,
                 params: item.params.iter().map(|param| param.id).collect(),
-                body: lower_block(&item.body, &mut Versions::default(), End::Value)?,
+                body,
             };
-            Ok(FnRef::Exec(self.program.declare(function)?))
+            let id = self.program.declare(function)?;
+            if !lent.is_empty() {
+                self.lending.insert(id, lending_of(item, &lent));
+            }
+            Ok(FnRef::Exec(id))
         }
     }
+}
+
+/// The value a `return` supplies, as the check IR wants it: for a function
+/// with `&mut` parameters, the tuple of their current versions followed by
+/// the value, as the end of the body supplies it; otherwise the value.
+fn function_result(value: Term, env: &Versions) -> Result<Term, LowerError> {
+    match &env.result {
+        Some((bindings, ty)) => {
+            let mut fields = env.versions(bindings)?;
+            fields.push(value);
+            Ok(Term::tuple(ty, fields))
+        }
+        None => Ok(value),
+    }
+}
+
+/// What the interpreter of the check IR needs of a function with `&mut`
+/// parameters: every version of each of them, so that the current value is
+/// known at a panic, and for each call that lends a path into one of them,
+/// where the callee's reported values go. Read from the tree, as erasure
+/// reads the versions; the checker ignores it, so a mistake here is a
+/// false alarm in the comparison of the interpreters and never a false
+/// proof.
+fn lending_of(item: &FnItem, lent: &[VarId]) -> Lending {
+    let mut versions: HashMap<VarId, VarId> = HashMap::new();
+    let mut calls = HashMap::new();
+    let mut on_expr = |expr: &Expr| match expr {
+        Expr::If { joined, .. } | Expr::Match { joined, .. } => {
+            for join in joined.iter().flat_map(|joined| &joined.joins) {
+                versions.insert(join.version.id, join.binding);
+            }
+        }
+        Expr::Loop { state, carried, .. }
+        | Expr::While { state, carried, .. }
+        | Expr::For { state, carried, .. } => {
+            for (inside, join) in state.iter().zip(&carried.joins) {
+                versions.insert(inside.id, join.binding);
+                versions.insert(join.version.id, join.binding);
+            }
+        }
+        Expr::CallFn {
+            arguments,
+            result,
+            lends,
+            ..
+        } => {
+            let mut into_params = Vec::new();
+            for (index, lend) in lends.iter().enumerate() {
+                let Some(Expr::Lend { place, .. }) = arguments.get(lend.argument) else {
+                    continue;
+                };
+                versions.insert(lend.version.id, place.binding);
+                if let Some(position) = lent.iter().position(|binding| *binding == place.binding) {
+                    let path = place.path.iter().map(|step| step.index).collect();
+                    into_params.push((position, path, index));
+                }
+            }
+            if !into_params.is_empty() {
+                calls.insert(*result, into_params);
+            }
+        }
+        _ => {}
+    };
+    each_expr_in_block(&item.body, &mut on_expr);
+    let mut on_stmt = |stmt: &Stmt| {
+        if let Stmt::Assign { place, version, .. } = stmt {
+            versions.insert(version.id, place.binding);
+        }
+    };
+    visit_block(&item.body, &mut on_stmt);
+    let params = lent
+        .iter()
+        .map(|binding| {
+            let index = item
+                .params
+                .iter()
+                .position(|param| param.id == *binding)
+                .expect("a lent binding is a parameter");
+            let mut of_binding = vec![*binding];
+            of_binding.extend(
+                versions
+                    .iter()
+                    .filter(|(_, of)| *of == binding)
+                    .map(|(version, _)| *version),
+            );
+            (index, of_binding)
+        })
+        .collect();
+    Lending { params, calls }
 }
 
 fn telescope(binders: &[Binder]) -> Type {
@@ -330,6 +488,7 @@ pub fn is_pure(expr: &Expr) -> bool {
         | Expr::Return { .. }
         | Expr::Assert { .. } => false,
         Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
+        Expr::Lend { value, .. } => is_pure(value),
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
         Expr::Struct { fields, .. } => fields.iter().all(|(_, field)| is_pure(field)),
         Expr::Variant { payload, .. } => payload.iter().all(is_pure),
@@ -534,6 +693,8 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
             id, index, payload, ..
         } => Term::Variant(*id, *index, pure_all(payload)?),
         Expr::Field { target, index, .. } => Term::proj(pure(target)?, *index),
+        // A lent place is the value lent.
+        Expr::Lend { value, .. } => pure(value)?,
         Expr::Method {
             prim,
             receiver,
@@ -789,6 +950,11 @@ struct Versions {
     order: Vec<VarId>,
     /// The loops around the position, innermost last.
     loops: Vec<Frame>,
+    /// For a function with `&mut` parameters: their bindings, in order, and
+    /// the result type of the check IR, the tuple of their final versions
+    /// followed by the value, which the end of the body and every `return`
+    /// supply (`function_result`).
+    result: Option<(Vec<VarId>, Type)>,
 }
 
 /// A loop around the position: the bindings it carries, the type of its
@@ -895,6 +1061,24 @@ impl Versions {
         for expr in exprs {
             visit_expr(expr, &mut on_stmt);
         }
+        // A place lent by `&mut` to a call is written back: a write to its
+        // root, as a write to a field is.
+        let mut on_expr = |expr: &Expr| {
+            if let Expr::Lend {
+                mutable: true,
+                place,
+                ..
+            } = expr
+            {
+                roots.insert(place.binding);
+            }
+        };
+        for block in blocks {
+            each_expr_in_block(block, &mut on_expr);
+        }
+        for expr in exprs {
+            each_expr(expr, &mut on_expr);
+        }
         self.order
             .iter()
             .copied()
@@ -927,6 +1111,20 @@ fn bound_ids(pattern: &Pattern, out: &mut HashSet<VarId>) {
         }
         Pattern::Wildcard => {}
         Pattern::Tuple(patterns) => patterns.iter().for_each(|pattern| bound_ids(pattern, out)),
+    }
+}
+
+/// Every expression under a block, in source order.
+fn each_expr_in_block(block: &Block, on_expr: &mut dyn FnMut(&Expr)) {
+    for stmt in &block.stmts {
+        match stmt {
+            Stmt::Let { value, .. } | Stmt::Expr(value) | Stmt::Assign { value, .. } => {
+                each_expr(value, on_expr);
+            }
+        }
+    }
+    if let Some(tail) = block.tail.as_deref() {
+        each_expr(tail, on_expr);
     }
 }
 
@@ -1009,9 +1207,10 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         Expr::Struct { fields, .. } => fields
             .iter()
             .for_each(|(_, field)| each_expr(field, on_expr)),
-        Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } | Expr::Ghost(inner) => {
-            each_expr(inner, on_expr)
-        }
+        Expr::Field { target: inner, .. }
+        | Expr::Cast { expr: inner, .. }
+        | Expr::Ghost(inner)
+        | Expr::Lend { value: inner, .. } => each_expr(inner, on_expr),
         Expr::Break(value) | Expr::Return { value, .. } => {
             value.iter().for_each(|value| each_expr(value, on_expr));
         }
@@ -1411,16 +1610,22 @@ fn anf_form(
             id,
             arguments,
             result,
+            lends,
             ..
         } => {
-            let arguments = each(arguments, out, env)?;
+            disjoint_arguments(arguments, env)?;
+            let terms = each(arguments, out, env)?;
             out.push(exec::Stmt::Call {
                 var: *result,
                 callee: *id,
-                arguments,
+                arguments: terms,
             });
-            Term::var(*result)
+            write_back(arguments, lends, *result, out, env)?;
+            call_value(*result, lends)
         }
+        // A lent place stands for its value; the call around it writes a
+        // `&mut` one back.
+        Expr::Lend { value, .. } => anf(value, out, env)?,
         Expr::If {
             condition: tested,
             then_fact,
@@ -1610,6 +1815,7 @@ fn anf_form(
                 Some(value) => anf(value, out, env)?,
                 None => unit(),
             };
+            let value = function_result(value, env)?;
             leaving(out, *result, ty, exec::Tail::Return(value))
         }
         Expr::Assert {
@@ -1673,6 +1879,117 @@ fn anf_form(
         | Expr::Prop(_)
         | Expr::Absurd { .. } => pure(expr)?,
     })
+}
+
+/// The value of a call: the result the tree named, or, for a call with
+/// `&mut` arguments, the last field of the tuple the callee returns.
+fn call_value(result: VarId, lends: &[Lend]) -> Term {
+    if lends.is_empty() {
+        Term::var(result)
+    } else {
+        Term::proj(Term::var(result), lends.len())
+    }
+}
+
+/// The place an argument names, when it is a lend or a plain read of a
+/// place rooted at a mutable binding: the binding, the path into it by
+/// position, whether it is lent by `&mut`, and the root's name.
+struct ArgumentPlace {
+    root: VarId,
+    path: Vec<usize>,
+    mutable: bool,
+    name: String,
+}
+
+fn argument_place(argument: &Expr, env: &Versions) -> Option<ArgumentPlace> {
+    match argument {
+        Expr::Lend { mutable, place, .. } => Some(ArgumentPlace {
+            root: place.binding,
+            path: place.path.iter().map(|step| step.index).collect(),
+            mutable: *mutable,
+            name: place.name.clone(),
+        }),
+        _ => {
+            let mut path = Vec::new();
+            let mut expr = argument;
+            loop {
+                match expr {
+                    Expr::Field { target, index, .. } => {
+                        path.push(*index);
+                        expr = target;
+                    }
+                    Expr::Var { id, name, .. } => {
+                        let root = *env.binding.get(id)?;
+                        path.reverse();
+                        return Some(ArgumentPlace {
+                            root,
+                            path,
+                            mutable: false,
+                            name: name.clone(),
+                        });
+                    }
+                    _ => return None,
+                }
+            }
+        }
+    }
+}
+
+/// Two arguments of one call may not overlap, one path a prefix of the
+/// other at the same root, when either is lent by `&mut`: the write-backs
+/// would collide, and the logic could keep the wrong one. Trusted.
+fn disjoint_arguments(arguments: &[Expr], env: &Versions) -> Result<(), LowerError> {
+    let places: Vec<Option<ArgumentPlace>> = arguments
+        .iter()
+        .map(|argument| argument_place(argument, env))
+        .collect();
+    for (i, first) in places.iter().enumerate() {
+        let Some(first) = first else {
+            continue;
+        };
+        for second in places.iter().skip(i + 1).flatten() {
+            let overlap = first.root == second.root
+                && first.path.iter().zip(&second.path).all(|(a, b)| a == b);
+            if overlap && (first.mutable || second.mutable) {
+                return Err(LowerError::OverlappingArguments(first.name.clone()));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// After a call with `&mut` arguments: each lent root gets a new version,
+/// the old version with the lent path replaced by the value the callee
+/// returned for it, in argument order.
+fn write_back(
+    arguments: &[Expr],
+    lends: &[Lend],
+    result: VarId,
+    out: &mut Vec<exec::Stmt>,
+    env: &mut Versions,
+) -> Result<(), LowerError> {
+    for (index, lend) in lends.iter().enumerate() {
+        let Some(Expr::Lend {
+            mutable: true,
+            place,
+            ..
+        }) = arguments.get(lend.argument)
+        else {
+            return Err(LowerError::BadLend(lend.version.name.clone()));
+        };
+        let current = env.current(place.binding, &place.name)?;
+        let ty = env.version_type(place.binding, &place.name)?;
+        let returned = Term::proj(Term::var(result), index);
+        let value = rebuilt(Term::var(current), &place.path, returned)?;
+        out.push(exec::Stmt::Let {
+            var: lend.version.id,
+            equation: lend.equation,
+            ty: Some(ty),
+            value,
+        });
+        env.assign(place.binding, lend.version.id, &place.name)?;
+    }
+    Ok(())
 }
 
 /// A branch in statement or value position: a match statement. When some
@@ -1824,8 +2141,9 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
         // An operator at a machine type is never read as a term: its value
         // is the result of its statement.
-        Expr::CallFn { result, .. }
-        | Expr::Operate { result, .. }
+        Expr::CallFn { result, lends, .. } => call_value(*result, lends),
+        Expr::Lend { value, .. } => return value_term(value),
+        Expr::Operate { result, .. }
         | Expr::If { result, .. }
         | Expr::Match { result, .. }
         | Expr::Loop { result, .. } => Term::var(*result),
@@ -1979,7 +2297,7 @@ fn lower_tail(
                 Some(value) => anf(value, stmts, env)?,
                 None => unit(),
             };
-            exec::Tail::Return(value)
+            exec::Tail::Return(function_result(value, env)?)
         }
         Expr::If {
             condition: tested,

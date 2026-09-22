@@ -128,7 +128,7 @@ impl Env<'_> {
 
         let never = then_never && else_never;
         let ty = match expected {
-            Some(expected) => expected.clone(),
+            Some(expected) => self.at_current_exit(expected).into_owned(),
             None if !then_never => then_ty.clone(),
             None => else_ty.clone(),
         };
@@ -253,7 +253,8 @@ impl Env<'_> {
         }
 
         let mut typed_arms = Vec::new();
-        let mut ty: Option<Type> = expected.cloned();
+        let mut ty: Option<Type> =
+            expected.map(|expected| self.at_current_exit(expected).into_owned());
         let mut never = true;
         let entry = self.mutable_entry();
         let moves_entry = self.moves_now();
@@ -298,8 +299,10 @@ impl Env<'_> {
                     variant_term(&scrutinee_value.ty, index, &ids, &payload_types[index]),
                 );
                 self.assume(fact, claim, arm.pattern.span)?;
+                // An arm is checked against the type as declared, whose
+                // exit binders stand for the versions current at its end.
                 let (body, body_ty, body_never) =
-                    self.branch(&Branch::Expr(&arm.body), ty.as_ref())?;
+                    self.branch(&Branch::Expr(&arm.body), expected.or(ty.as_ref()))?;
                 Ok((payload, fact, body, body_ty, body_never))
             })();
             let versions = self.versions_now(&entry);

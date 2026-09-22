@@ -1,0 +1,21 @@
+error[L0262]: cannot borrow `count` as mutable, as it is not declared as mutable (E0596)
+  --> tests/corpus/reject/borrow_immutable.lc:10:10
+   |
+10 |     bump(&mut count); //~ error: L0262 cannot borrow `count` as mutable, as it is not declared as mutable (E0596)
+   |          ^^^^^^^^^^
+   |
+   = note: a `&mut` argument is rooted at a binding the call may assign: declare it `let mut count`, or as a parameter `mut count: T` or `count: &mut T`
+error[L0262]: cannot borrow `n` as mutable, as it is not declared as mutable (E0596)
+  --> tests/corpus/reject/borrow_immutable.lc:15:10
+   |
+15 |     bump(&mut n); //~ error: L0262 cannot borrow `n` as mutable, as it is not declared as mutable (E0596)
+   |          ^^^^^^
+   |
+   = note: a `&mut` argument is rooted at a binding the call may assign: declare it `let mut n`, or as a parameter `mut n: T` or `n: &mut T`
+error[L0262]: cannot borrow `*n` as mutable, as it is behind a `&` reference (E0596)
+  --> tests/corpus/reject/borrow_immutable.lc:20:10
+   |
+20 |     bump(&mut n); //~ error: L0262 cannot borrow `*n` as mutable, as it is behind a `&` reference (E0596)
+   |          ^^^^^^
+   |
+   = note: `n` is a `&` parameter, read and never written; to write through it, take `n: &mut T`

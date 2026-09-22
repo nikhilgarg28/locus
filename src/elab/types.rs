@@ -198,11 +198,37 @@ impl Env<'_> {
                 self.close(mark);
                 signature
             }
-            ast::TypeKind::Ref { .. } => self.fail(
-                "L0290",
-                "references (`&T`, `&mut T`) are not in Locus yet; O3 adds them",
-                ty.span,
-            ),
+            // A reference is a parameter type, and nothing else, in this
+            // tier (`references.rs`).
+            ast::TypeKind::Ref { mutable, inner } => {
+                let (diagnostics, holes) = (self.diagnostics.len(), self.holes.len());
+                let shown = match self.ty(inner) {
+                    Ok(inner) => self.show_type(&inner),
+                    Err(()) => {
+                        // The inner type's own report stands: a reference
+                        // to a reference is reported once, at the inside.
+                        if self.diagnostics.len() > diagnostics {
+                            return Err(());
+                        }
+                        self.holes.truncate(holes);
+                        "T".into()
+                    }
+                };
+                let written = if *mutable {
+                    format!("&mut {shown}")
+                } else {
+                    format!("&{shown}")
+                };
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0260",
+                        format!("`{written}` is written on a parameter only"),
+                        ty.span,
+                    )
+                    .note("a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet"),
+                );
+                Err(())
+            }
             // The result type of a function is read before `ty` is asked
             // (`items.rs`); anywhere else `!` is not stable Rust either.
             ast::TypeKind::Never => self.fail(

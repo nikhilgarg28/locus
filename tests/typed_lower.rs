@@ -38,6 +38,8 @@ fn a_nested_call_is_named_by_the_tree_and_sequenced_by_lowering() {
             Proof::Refl(left.clone())
         };
         FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: "twice".into(),
             math: false,
             params: vec![n.clone()],
@@ -47,10 +49,12 @@ fn a_nested_call_is_named_by_the_tree_and_sequenced_by_lowering() {
                     &second,
                     HypId::fresh(),
                     Expr::CallFn {
+                        lends: Vec::new(),
                         id: increment_id,
                         name: "increment".into(),
                         arguments: vec![field(
                             Expr::CallFn {
+                                lends: Vec::new(),
                                 id: increment_id,
                                 name: "increment".into(),
                                 arguments: vec![Expr::var(&n)],
@@ -121,6 +125,8 @@ fn the_lets_of_a_math_function_become_substitution() {
         Proof::hyp(b_is),
     );
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "add_two".into(),
         math: true,
         params: vec![n.clone()],
@@ -145,6 +151,8 @@ fn a_math_function_must_be_pure() {
     let increment_id = exec_id(session.declare_fn(&increment(false)).unwrap());
     let n = Binder::new("n", Type::U8);
     let calls_out = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "calls_out".into(),
         math: true,
         params: vec![n.clone()],
@@ -153,6 +161,7 @@ fn a_math_function_must_be_pure() {
             vec![],
             field(
                 Expr::CallFn {
+                    lends: Vec::new(),
                     id: increment_id,
                     name: "increment".into(),
                     arguments: vec![Expr::var(&n)],
@@ -170,6 +179,8 @@ fn a_math_function_must_be_pure() {
     // A let whose annotation is not what the value proves is caught.
     let h = Binder::new("h", Type::proof(u8_eq(Term::U8(1), Term::U8(2))));
     let mislabelled = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "mislabelled".into(),
         math: false,
         params: vec![],
@@ -373,6 +384,8 @@ fn the_join_must_name_exactly_the_bindings_the_arms_assign() {
         Binder::new("b", Type::U8),
     );
     let program = |joined: Option<Joined>, tail: Expr| FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "joins".into(),
         math: false,
         params: vec![n.clone()],
@@ -430,6 +443,8 @@ fn the_assigned_set_is_over_binding_identities() {
     let x_then = Binder::new("x", Type::U8);
     // let mut x = n; if n == 0 { <then> } else {}; <tail>
     let program = |name: &str, then: Vec<Stmt>, joined: Option<Joined>, tail: Expr| FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: name.into(),
         math: false,
         params: vec![n.clone()],
@@ -521,6 +536,8 @@ fn a_field_write_counts_for_the_root_of_its_path() {
     let p = Binder::new("p", pair_type());
     let (p_then, p_join) = (Binder::new("p", pair_type()), Binder::new("p", pair_type()));
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "field".into(),
         math: false,
         params: vec![n.clone()],
@@ -575,6 +592,8 @@ fn an_assignment_to_a_binding_lowering_does_not_know_is_rejected() {
     let x = Binder::new("x", Type::U8);
     let x1 = Binder::new("x", Type::U8);
     let program = |first: Stmt| FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "unknown".into(),
         math: false,
         params: vec![n.clone()],
@@ -604,6 +623,8 @@ fn a_stale_mention_is_rejected() {
     let x = Binder::new("x", Type::U8);
     let x1 = Binder::new("x", Type::U8);
     let stale = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "stale".into(),
         math: false,
         params: vec![n.clone()],
@@ -661,6 +682,8 @@ fn looping(
         .find(|(binding, _)| binding.id == x.id)
         .map_or(x.clone(), |(_, after)| after.clone());
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: name.into(),
         math: false,
         params: vec![n.clone()],
@@ -739,6 +762,8 @@ fn a_field_write_in_the_body_carries_the_root() {
     let (p_in, p_after) = versions(&p);
     let p1 = Binder::new("p", pair_type());
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "field".into(),
         math: false,
         params: vec![n.clone()],
@@ -809,6 +834,8 @@ fn an_assignment_in_a_while_condition_is_carried() {
         compare_u8(CompareOp::Lt, Expr::var(&y1), Expr::u8(4)),
     ));
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "counted".into(),
         math: false,
         params: vec![n.clone()],
@@ -866,6 +893,8 @@ fn a_loop_must_carry_exactly_what_it_assigns() {
     let (x_in, x_after) = versions(&x);
     let x1 = Binder::new("x", Type::U8);
     let stale = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "stale".into(),
         math: false,
         params: vec![n.clone()],
@@ -925,6 +954,8 @@ fn a_field_that_evidence_depends_on_cannot_be_assigned_alone() {
         proof_fields: vec![false, true],
     };
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "set".into(),
         math: false,
         params: vec![p.clone()],
@@ -952,6 +983,8 @@ fn a_block_that_assigns_keeps_its_version_and_mut_is_printed_only_when_needed() 
     let x = Binder::new("x", Type::U8);
     let x1 = Binder::new("x", Type::U8);
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "blocked".into(),
         math: false,
         params: vec![n.clone()],
@@ -975,6 +1008,8 @@ fn a_block_that_assigns_keeps_its_version_and_mut_is_printed_only_when_needed() 
     assert!(rust.contains("x = 3_u8;"), "{rust}");
     // A `let mut` that is never assigned is printed without `mut`.
     let unassigned = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "unassigned".into(),
         math: false,
         params: vec![n.clone()],
@@ -1080,6 +1115,8 @@ fn stale_or_refreshed(theory: Theory, refresh: bool) -> FnItem {
         ok
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "stale_or_refreshed".into(),
         math: false,
         params: vec![n, small],
@@ -1159,6 +1196,8 @@ fn counting_with_evidence(theory: Theory, over_entry: bool, honest: bool) -> FnI
     };
     let i_is_zero = HypId::fresh();
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "counting_with_evidence".into(),
         math: false,
         params: vec![limit],
@@ -1247,6 +1286,8 @@ fn a_binding_of_proof_type_may_be_left_out_of_what_a_loop_carries() {
         };
         let carried = carried(joins);
         FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: if carry_ok { "carried" } else { "left_out" }.into(),
             math: false,
             params: vec![n.clone()],
@@ -1323,6 +1364,8 @@ fn joining_with_evidence(theory: Theory, refresh: bool) -> FnItem {
     }
     let value = data_with_evidence(|out| u8_le(out, Term::U8(3)));
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "joining_with_evidence".into(),
         math: false,
         params: vec![n.clone()],
@@ -1495,6 +1538,8 @@ fn a_return_that_is_not_the_end_of_its_block_is_a_match_whose_arms_both_return()
     let n = Binder::new("n", Type::U8);
     let x = Binder::new("x", Type::U8);
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "pointless".into(),
         math: false,
         params: vec![n.clone()],

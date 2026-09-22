@@ -47,6 +47,14 @@ fn consume_slot(s: Slot) -> u8 {
         Slot::Full(t) => t.id,
     }
 }
+
+fn peek(t: &Token) -> u8 {
+    t.id
+}
+
+fn relabel(t: &mut Token, id: u8) -> () {
+    t.id = id;
+}
 ";
 
 /// One program: its body after the prelude, the line (within the body,
@@ -186,6 +194,24 @@ const RUNTIME_REJECTIONS: &[Shape] = &[
         rejection: Some((3, "use of partially moved value: `p`")),
     },
     Shape {
+        name: "lend after a move",
+        body: "fn f(t: Token) -> u8 {
+    let kept = t;
+    peek(&t)
+}",
+        rejection: Some((3, "borrow of moved value: `t`")),
+    },
+    Shape {
+        name: "lend by mutable reference after a move",
+        body: "fn f(t: Token) -> u8 {
+    let mut kept = t;
+    let taken = kept;
+    relabel(&mut kept, 2);
+    0
+}",
+        rejection: Some((4, "borrow of moved value: `kept`")),
+    },
+    Shape {
         name: "assign to a field of a moved value",
         body: "fn f(t: Token) -> u8 {
     let mut kept = t;
@@ -301,6 +327,31 @@ fn f(n: u8, small: @(n <= 10)) -> u8 {
         Slot::Full(_) => 1,
     };
     kind.wrapping_add(consume_slot(s))
+}",
+        rejection: None,
+    },
+    Shape {
+        name: "lent then moved",
+        body: "fn f(t: Token) -> u8 {
+    let seen = peek(&t);
+    seen.wrapping_add(consume(t))
+}",
+        rejection: None,
+    },
+    Shape {
+        name: "lent by mutable reference then moved",
+        body: "fn f(t: Token) -> u8 {
+    let mut kept = t;
+    relabel(&mut kept, 2);
+    relabel(&mut kept, 3);
+    consume(kept)
+}",
+        rejection: None,
+    },
+    Shape {
+        name: "a field of a reference parameter read",
+        body: "fn f(p: &Pair) -> u8 {
+    peek(&p.left).wrapping_add(p.tag)
 }",
         rejection: None,
     },

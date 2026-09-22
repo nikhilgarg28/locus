@@ -130,6 +130,8 @@ pub fn increment(math: bool) -> FnItem {
     let n_term = n.term();
     let result = data_with_evidence(move |out| u8_eq(out, add_one(n_term.clone())));
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "increment".into(),
         math,
         params: vec![n.clone()],
@@ -183,6 +185,8 @@ pub fn preserve(theory: Theory, math: bool, use_the_fact: bool) -> FnItem {
         fields: vec![value, Expr::Proof(proof)],
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "preserve".into(),
         math,
         params: vec![n.clone()],
@@ -364,6 +368,8 @@ pub fn bounded_walk(theory: Theory, carry_the_invariant: bool) -> FnItem {
         })),
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "bounded_walk".into(),
         math: false,
         params: vec![limit.clone()],
@@ -391,6 +397,7 @@ pub fn counting_loop(math: bool, step: Option<locus::exec::ExecFnId>) -> FnItem 
             let r_type = data_with_evidence(move |out| u8_eq(out, add_one(acc_term.clone())));
             field(
                 Expr::CallFn {
+                    lends: Vec::new(),
                     id: increment_id,
                     name: "increment".into(),
                     arguments: vec![Expr::var(&inside)],
@@ -402,6 +409,8 @@ pub fn counting_loop(math: bool, step: Option<locus::exec::ExecFnId>) -> FnItem 
         }
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "count".into(),
         math,
         params: vec![n.clone()],
@@ -427,6 +436,8 @@ pub fn counting_loop(math: bool, step: Option<locus::exec::ExecFnId>) -> FnItem 
 pub fn spin(prelude: Prelude) -> FnItem {
     let falsehood = Type::proof(prelude.falsehood_prop());
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "spin".into(),
         math: false,
         params: vec![],
@@ -448,6 +459,8 @@ pub fn caller_of_spin(prelude: Prelude, spin: locus::exec::ExecFnId) -> FnItem {
     let falsehood = Type::proof(prelude.falsehood_prop());
     let impossible = Binder::new("impossible", falsehood.clone());
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "caller".into(),
         math: false,
         params: vec![],
@@ -457,6 +470,7 @@ pub fn caller_of_spin(prelude: Prelude, spin: locus::exec::ExecFnId) -> FnItem {
                 &impossible,
                 HypId::fresh(),
                 Expr::CallFn {
+                    lends: Vec::new(),
                     id: spin,
                     name: "spin".into(),
                     arguments: vec![],
@@ -518,6 +532,8 @@ pub fn classify(classified: EnumId) -> FnItem {
         payload: vec![Expr::var(&n), Expr::Proof(evidence)],
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "classify".into(),
         math: false,
         params: vec![n.clone()],
@@ -563,6 +579,8 @@ pub fn zero_or_self(
         }
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "zero_or_self".into(),
         math: false,
         params: vec![m.clone()],
@@ -571,6 +589,7 @@ pub fn zero_or_self(
             stmts: vec![],
             tail: Some(Box::new(Expr::Match {
                 scrutinee: Box::new(Expr::CallFn {
+                    lends: Vec::new(),
                     id: classify_id,
                     name: "classify".into(),
                     arguments: vec![Expr::var(&m)],
@@ -694,6 +713,8 @@ pub fn straight_line_mutation() -> FnItem {
     let x1 = Binder::new("x", Type::U8);
     let x2 = Binder::new("x", Type::U8);
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "straight".into(),
         math: false,
         params: vec![n.clone()],
@@ -745,6 +766,8 @@ pub fn branching_mutation() -> FnItem {
         Some(joined(vec![(&a, &a_join), (&b, &b_join)])),
     );
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "branching".into(),
         math: false,
         params: vec![n.clone()],
@@ -777,6 +800,8 @@ pub fn right_side_changes_the_place() -> FnItem {
         Expr::u8(3),
     ));
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "touch".into(),
         math: false,
         params: vec![n.clone()],
@@ -802,6 +827,8 @@ pub fn snapshot_note() -> FnItem {
     let n = Binder::new("n", Type::U8);
     let g = Binder::ghost("g", Type::U8);
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "note".into(),
         math: false,
         params: vec![n.clone()],

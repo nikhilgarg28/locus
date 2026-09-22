@@ -177,6 +177,27 @@ impl Scan {
                     scan.block(body);
                 });
             }
+            // A place lent by `&mut` is assigned by the call: a write to
+            // its root.
+            ExprKind::Ref {
+                mutable: true,
+                expr: inner,
+            } => {
+                let mut root = &**inner;
+                while let ExprKind::Member { value, .. }
+                | ExprKind::Index { value, .. }
+                | ExprKind::Group(value) = &root.kind
+                {
+                    root = value;
+                }
+                if let ExprKind::Name(name) = &root.kind
+                    && !self.declared(&name.text)
+                    && !self.found.contains(&name.text)
+                {
+                    self.found.push(name.text.clone());
+                }
+                self.expr(inner);
+            }
             ExprKind::Group(inner)
             | ExprKind::Not(inner)
             | ExprKind::Unary { expr: inner, .. }
@@ -326,6 +347,7 @@ impl Env<'_> {
                     dep: dep.clone(),
                     span: head,
                     by_loop: true,
+                    lent: false,
                 });
             }
         }
@@ -449,7 +471,9 @@ impl Env<'_> {
         let elaborated = self.in_loop(body, None, target, span, |env| env.loop_body(body))?;
         let never = elaborated.target.exits.is_empty();
         let (result, equation) = (VarId::fresh(), HypId::fresh());
-        let fallback = expected.cloned().unwrap_or_else(unit_type);
+        let fallback = expected.map_or_else(unit_type, |expected| {
+            self.at_current_exit(expected).into_owned()
+        });
         let (carried, ty) = self.leave_loop(
             &entry,
             &elaborated,

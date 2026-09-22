@@ -1,0 +1,22 @@
+// A `&mut` argument is rooted at a binding the call may assign: a
+// `let mut`, a `mut` parameter, or a `&mut` parameter. Rust refuses the
+// rest with E0596, and so does Locus.
+fn bump(counter: &mut u8) -> () {
+    counter = counter.wrapping_add(1);
+}
+
+fn immutable_local(n: u8) -> u8 {
+    let count = n;
+    bump(&mut count); //~ error: L0262 cannot borrow `count` as mutable, as it is not declared as mutable (E0596)
+    count
+}
+
+fn immutable_parameter(n: u8) -> u8 {
+    bump(&mut n); //~ error: L0262 cannot borrow `n` as mutable, as it is not declared as mutable (E0596)
+    n
+}
+
+fn behind_a_shared_reference(n: &u8) -> u8 {
+    bump(&mut n); //~ error: L0262 cannot borrow `*n` as mutable, as it is behind a `&` reference (E0596)
+    n
+}

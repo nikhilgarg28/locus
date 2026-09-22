@@ -1,0 +1,28 @@
+error[L0265]: cannot move out of `*t` which is behind a shared reference (E0507)
+  --> tests/corpus/reject/move_out_of_reference.lc:28:5
+   |
+28 |     t //~ error: L0265 cannot move out of `*t` which is behind a shared reference (E0507)
+   |     ^
+   |
+   = note: `t` is a reference parameter, `t: &Token`, and the value behind it belongs to the caller; a part that is `Copy` can be read, and the whole can be lent on with `&t`
+error[L0265]: cannot move out of `p.left` which is behind a shared reference (E0507)
+  --> tests/corpus/reject/move_out_of_reference.lc:32:5
+   |
+32 |     p.left //~ error: L0265 cannot move out of `p.left` which is behind a shared reference (E0507)
+   |     ^^^^^^
+   |
+   = note: `p` is a reference parameter, `p: &Pair`, and the value behind it belongs to the caller; a part that is `Copy` can be read, and the whole can be lent on with `&p`
+error[L0265]: cannot move out of `*t` which is behind a mutable reference (E0507)
+  --> tests/corpus/reject/move_out_of_reference.lc:36:13
+   |
+36 |     consume(t) //~ error: L0265 cannot move out of `*t` which is behind a mutable reference (E0507)
+   |             ^
+   |
+   = note: `t` is a reference parameter, `t: &mut Token`, and the value behind it belongs to the caller; a part that is `Copy` can be read, and the whole can be lent on with `&mut t`
+error[L0265]: cannot move out of `*s` which is behind a shared reference (E0507)
+  --> tests/corpus/reject/move_out_of_reference.lc:42:20
+   |
+42 |         Slot::Full(t) => consume(t), //~ error: L0265 cannot move out of `*s` which is behind a shared reference (E0507)
+   |                    ^
+   |
+   = note: `s` is a reference parameter, `s: &Slot`, and the value behind it belongs to the caller; a part that is `Copy` can be read, and the whole can be lent on with `&s`

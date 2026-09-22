@@ -124,6 +124,8 @@ fn arithmetic() -> FnItem {
         ],
     );
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "arithmetic".into(),
         math: false,
         params: vec![n],

@@ -1,11 +1,17 @@
 //! Calls: of a function, a proposition, a wrapping method on a machine
 //! integer, and the checking of arguments against a telescope of parameter
 //! types.
+//!
+//! A parameter passed by `&T` or `&mut T` takes a lent place, `&x` or
+//! `&mut x.f`, read as a value (`references.rs`). A call with `&mut`
+//! arguments returns, in the logic, the tuple of their new values and the
+//! declared result: the call binds that tuple, gives each lent root a new
+//! version as an assignment does, and its value is the tuple's last field.
 
 use crate::ast::{self, ExprKind};
 use crate::kernel::{Op, Prim, Term, Type, VarId};
 use crate::source::Span;
-use crate::typed::{Expr, FnRef};
+use crate::typed::{Expr, FnRef, Passing};
 
 use super::env::{Elab, Env, FnInfo, Global, PropInfo};
 use super::exprs::Value;
@@ -207,11 +213,26 @@ impl Env<'_> {
             FnRef::Exec(_) => false,
         };
         let mut exprs = Vec::new();
+        let mut places = Vec::new();
+        let mut lent = Vec::new();
         for (index, argument) in arguments.iter().enumerate() {
-            let value = if erased {
-                self.ghost(|env| env.check(argument, &tys[index].clone()))?
+            let expected = tys[index].clone();
+            let passing = info.passing.get(index).copied().unwrap_or_default();
+            let value = if passing.is_reference() {
+                let (value, place) = self.lend_argument(argument, passing, &expected, info)?;
+                if passing == Passing::RefMut {
+                    lent.push((index, place.slot, place.steps.clone()));
+                }
+                places.push(Some(place));
+                value
             } else {
-                self.argument(argument, &tys[index].clone(), ghosts[index])?
+                let value = if erased {
+                    self.ghost(|env| env.check(argument, &expected))?
+                } else {
+                    self.argument(argument, &expected, ghosts[index])?
+                };
+                places.push(self.argument_place(argument, &value));
+                value
             };
             let term = self.term(&value, argument.span)?;
             for later in tys[index + 1..].iter_mut() {
@@ -219,6 +240,7 @@ impl Env<'_> {
             }
             exprs.push(value.expr);
         }
+        self.disjoint_arguments(&places, &exprs)?;
         let ty = tys.pop().expect("the result type was pushed");
         match info.reference {
             FnRef::Math(id) => Ok(Value::new(
@@ -253,6 +275,9 @@ impl Env<'_> {
                 }
                 let result = VarId::fresh();
                 self.declare_result(result, &ty, span)?;
+                // A call with `&mut` arguments assigns their roots from the
+                // tuple it returns, and its value is the tuple's last field.
+                let (lends, ty) = self.lend_write_backs(result, &lent, &ty, span)?;
                 Ok(Value::new(
                     Expr::CallFn {
                         id,
@@ -260,6 +285,7 @@ impl Env<'_> {
                         arguments: exprs,
                         result,
                         ty: ty.clone(),
+                        lends,
                     },
                     ty,
                 ))

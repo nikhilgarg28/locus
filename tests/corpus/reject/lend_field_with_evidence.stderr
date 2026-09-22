@@ -1,0 +1,7 @@
+error[L0233]: lending `percent.value` alone would invalidate `percent.in_range`; lend the whole value
+  --> tests/corpus/reject/lend_field_with_evidence.lc:24:25
+   |
+24 |     helper(&mut percent.value); //~ error: L0233 lending `percent.value` alone would invalidate `percent.in_range`; lend the whole v...
+   |                         ^^^^^
+   |
+   = note: evidence in a field speaks of the fields before it, and a value must satisfy its evidence at every moment

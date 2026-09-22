@@ -1,0 +1,71 @@
+// The arguments of one call are evaluated left to right, and every lend
+// lasts until the call returns: two arguments may not name overlapping
+// places when either is lent by `&mut`, and a value lent by `&` is not
+// moved. Locus refuses each before rustc would, with rustc's code; lowering
+// checks the same rule again, since two values written back to one place
+// would let the logic keep the wrong one.
+#[derive(Clone, Copy, Debug)]
+struct Pair {
+    lo: u8,
+    hi: u8,
+}
+
+#[derive(Debug)]
+struct Token {
+    id: u8,
+}
+
+fn settle(a: &mut u8, b: &mut u8) -> () {
+    a = b;
+}
+
+fn mixed(a: &mut Pair, b: &u8) -> () {
+    a.lo = b;
+}
+
+fn mixed_back(a: &u8, b: &mut Pair) -> () {
+    b.lo = a;
+}
+
+fn use_after(a: &mut Pair, b: u8) -> () {
+    a.lo = b;
+}
+
+fn lend_then_move(a: &Token, b: Token) -> u8 {
+    a.id.wrapping_add(b.id)
+}
+
+fn twice_mutable(pair: Pair) -> Pair {
+    let mut copy = pair;
+    settle(&mut copy.lo, &mut copy.lo); //~ error: L0263 cannot borrow `copy.lo` as mutable more than once at a time (E0499)
+    copy
+}
+
+fn whole_and_field(pair: Pair) -> Pair {
+    let mut copy = pair;
+    mixed(&mut copy, &copy.hi); //~ error: L0263 cannot borrow `copy.hi` as immutable because it is also borrowed as mutable (E0502)
+    copy
+}
+
+fn field_then_whole(pair: Pair) -> Pair {
+    let mut copy = pair;
+    mixed_back(&copy.hi, &mut copy); //~ error: L0263 cannot borrow `copy` as mutable because it is also borrowed as immutable (E0502)
+    copy
+}
+
+fn read_while_lent(pair: Pair) -> Pair {
+    let mut copy = pair;
+    use_after(&mut copy, copy.lo); //~ error: L0263 cannot use `copy.lo` because it was mutably borrowed (E0503)
+    copy
+}
+
+fn mentioned_while_lent(pair: Pair) -> Pair {
+    let mut copy = pair;
+    use_after(&mut copy, copy.lo.wrapping_add(1)); //~ error: L0263 cannot use `copy` because it was mutably borrowed (E0503)
+    copy
+}
+
+fn moved_while_lent(n: u8) -> u8 {
+    let token = Token { id: n };
+    lend_then_move(&token, token) //~ error: L0263 cannot move out of `token` because it is borrowed (E0505)
+}

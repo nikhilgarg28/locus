@@ -924,7 +924,6 @@ fn the_forms_without_a_meaning_yet_say_which_task_brings_them() {
             "matches",
             "LOC-71",
         ),
-        ("fn f(n: u8) -> u8 { old!(n) }", "old", "O3"),
         ("fn f(n: u8) -> u8 { recurse!(n, n) }", "recurse", "LOC-53"),
         ("fn f(n: u8) -> u8 { vec!(1, 2) }", "vec", "Vec"),
     ] {
@@ -1209,6 +1208,8 @@ fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
     let (definitions, _) = Definitions::with_prelude();
     let mut session = Session::new(definitions);
     let callee = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "callee".into(),
         math: false,
         params: vec![],
@@ -1227,6 +1228,8 @@ fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
     let caller = |name: &str| {
         let out = Binder::new("out", Type::U8);
         FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: name.into(),
             math: false,
             params: vec![],
@@ -1239,6 +1242,7 @@ fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
                         mutable: false,
                     },
                     value: Expr::CallFn {
+                        lends: Vec::new(),
                         id: callee_id,
                         name: "callee".into(),
                         arguments: vec![],
@@ -1816,12 +1820,13 @@ fn a_runtime_call_returning_only_evidence_stays_and_its_panic_is_seen() {
     );
 }
 
+// A `&mut` parameter is assigned as a value in its body, `x = 0` (O3); the
+// spelling `*x = 0` waits for the `*` of `&mut self` (O4).
 #[test]
-#[ignore = "O3: `&mut` parameters are not in Locus yet; with them, a call with a logic-only result and a `&mut` parameter is kept"]
 fn a_call_with_a_logic_only_result_and_a_mut_parameter_is_kept() {
     let result = accepted(
         "#[terminates] #[no_panic] #[no_io]
-        fn clear(x: &mut u8) -> @(x == 0) { *x = 0; _ }
+        fn clear(x: &mut u8) -> @(x == 0) { x = 0; _ }
         fn use_clear(n: u8) -> u8 { let mut x = n; let h = clear(&mut x); x }",
     );
     let source = print_module(result.session.erased());

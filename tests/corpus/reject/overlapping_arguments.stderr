@@ -1,0 +1,52 @@
+error[L0263]: cannot borrow `copy.lo` as mutable more than once at a time (E0499)
+  --> tests/corpus/reject/overlapping_arguments.lc:40:26
+   |
+40 |     settle(&mut copy.lo, &mut copy.lo); //~ error: L0263 cannot borrow `copy.lo` as mutable more than once at a time (E0499)
+   |            ------------  ^^^^^^^^^^^^
+   |            |
+   |            `copy.lo` is lent here, for the whole call
+   |
+   = note: the arguments of one call are evaluated left to right, and a lend lasts until the call returns: two arguments may not name overlapping places when either is lent by `&mut`, and a value lent by `&` is not moved, as rustc rules
+error[L0263]: cannot borrow `copy.hi` as immutable because it is also borrowed as mutable (E0502)
+  --> tests/corpus/reject/overlapping_arguments.lc:46:22
+   |
+46 |     mixed(&mut copy, &copy.hi); //~ error: L0263 cannot borrow `copy.hi` as immutable because it is also borrowed as mutable (E0502)
+   |           ---------  ^^^^^^^^
+   |           |
+   |           `copy` is lent here, for the whole call
+   |
+   = note: the arguments of one call are evaluated left to right, and a lend lasts until the call returns: two arguments may not name overlapping places when either is lent by `&mut`, and a value lent by `&` is not moved, as rustc rules
+error[L0263]: cannot borrow `copy` as mutable because it is also borrowed as immutable (E0502)
+  --> tests/corpus/reject/overlapping_arguments.lc:52:26
+   |
+52 |     mixed_back(&copy.hi, &mut copy); //~ error: L0263 cannot borrow `copy` as mutable because it is also borrowed as immutable (E0502)
+   |                --------  ^^^^^^^^^
+   |                |
+   |                `copy.hi` is lent here, for the whole call
+   |
+   = note: the arguments of one call are evaluated left to right, and a lend lasts until the call returns: two arguments may not name overlapping places when either is lent by `&mut`, and a value lent by `&` is not moved, as rustc rules
+error[L0263]: cannot use `copy.lo` because it was mutably borrowed (E0503)
+  --> tests/corpus/reject/overlapping_arguments.lc:58:26
+   |
+58 |     use_after(&mut copy, copy.lo); //~ error: L0263 cannot use `copy.lo` because it was mutably borrowed (E0503)
+   |               ---------  ^^^^^^^
+   |               |
+   |               `copy` is lent here, for the whole call
+   |
+   = note: the arguments of one call are evaluated left to right, and a lend lasts until the call returns: two arguments may not name overlapping places when either is lent by `&mut`, and a value lent by `&` is not moved, as rustc rules
+error[L0263]: cannot use `copy` because it was mutably borrowed (E0503)
+  --> tests/corpus/reject/overlapping_arguments.lc:64:15
+   |
+64 |     use_after(&mut copy, copy.lo.wrapping_add(1)); //~ error: L0263 cannot use `copy` because it was mutably borrowed (E0503)
+   |               ^^^^^^^^^
+   |
+   = note: `copy` is lent by `&mut` for the whole call, and a later argument mentions it; read it into a `let` before the call, or lend it last
+error[L0263]: cannot move out of `token` because it is borrowed (E0505)
+  --> tests/corpus/reject/overlapping_arguments.lc:70:28
+   |
+70 |     lend_then_move(&token, token) //~ error: L0263 cannot move out of `token` because it is borrowed (E0505)
+   |                    ------  ^^^^^
+   |                    |
+   |                    `token` is lent here, for the whole call
+   |
+   = note: the arguments of one call are evaluated left to right, and a lend lasts until the call returns: two arguments may not name overlapping places when either is lent by `&mut`, and a value lent by `&` is not moved, as rustc rules

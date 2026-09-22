@@ -1,0 +1,42 @@
+error[L0261]: `bump` takes `&mut u8` here; write `&mut count`
+  --> tests/corpus/reject/reference_argument.lc:14:10
+   |
+14 |     bump(count); //~ error: L0261 `bump` takes `&mut u8` here; write `&mut count`
+   |          ^^^^^
+   |
+   = note: a reference parameter takes a lent place, `&x` or `&mut x.f`, which the call reads and, for `&mut`, writes
+error[L0261]: expected `&mut u8`, found `&u8`
+  --> tests/corpus/reject/reference_argument.lc:20:10
+   |
+20 |     bump(&count); //~ error: L0261 expected `&mut u8`, found `&u8`
+   |          ^^^^^^
+   |
+   = note: the parameter of `bump` is `&mut u8`, and a lend is written the way the parameter is
+error[L0261]: expected `&u8`, found `&mut u8`
+  --> tests/corpus/reject/reference_argument.lc:26:10
+   |
+26 |     read(&mut count) //~ error: L0261 expected `&u8`, found `&mut u8`
+   |          ^^^^^^^^^^
+   |
+   = note: the parameter of `read` is `&u8`, and a lend is written the way the parameter is
+error[L0261]: a reference argument is a path to a local: `&x` or `&mut x.f`
+  --> tests/corpus/reject/reference_argument.lc:30:11
+   |
+30 |     read(&n.wrapping_add(1)) //~ error: L0261 a reference argument is a path to a local
+   |           ^^^^^^^^^^^^^^^^^
+   |
+   = note: a reference lasts for one call, so what it points to is a place the caller holds
+error[L0261]: `&` is written on the argument of a call only
+  --> tests/corpus/reject/reference_argument.lc:34:13
+   |
+34 |     let r = &n; //~ error: L0261 `&` is written on the argument of a call only
+   |             ^^
+   |
+   = note: a reference lasts for one call: `f(&x)` or `f(&mut x.f)` lends a place to a function whose parameter is `&T` or `&mut T`; a reference in a `let`, a field, or a result is not in Locus yet
+error[L0261]: a reference argument is a path to a local: `&x` or `&mut x.f`
+  --> tests/corpus/reject/reference_argument.lc:39:15
+   |
+39 |     bump(&mut 3); //~ error: L0261 a reference argument is a path to a local
+   |               ^
+   |
+   = note: a reference lasts for one call, so what it points to is a place the caller holds

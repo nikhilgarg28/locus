@@ -1,0 +1,48 @@
+// Nothing is moved out of a reference parameter: the value behind it
+// belongs to the caller. A part that is `Copy` is read; matching through a
+// reference binds `Copy` parts only. Rust refuses each with E0507, and so
+// does Locus.
+#[derive(Debug)]
+struct Token {
+    id: u8,
+}
+
+#[derive(Debug)]
+struct Pair {
+    left: Token,
+    right: Token,
+    tag: u8,
+}
+
+#[derive(Debug)]
+enum Slot {
+    Empty,
+    Full(Token),
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn take_whole(t: &Token) -> Token {
+    t //~ error: L0265 cannot move out of `*t` which is behind a shared reference (E0507)
+}
+
+fn take_field(p: &Pair) -> Token {
+    p.left //~ error: L0265 cannot move out of `p.left` which is behind a shared reference (E0507)
+}
+
+fn take_from_mutable(t: &mut Token) -> u8 {
+    consume(t) //~ error: L0265 cannot move out of `*t` which is behind a mutable reference (E0507)
+}
+
+fn open(s: &Slot) -> u8 {
+    match s {
+        Slot::Empty => 0,
+        Slot::Full(t) => consume(t), //~ error: L0265 cannot move out of `*s` which is behind a shared reference (E0507)
+    }
+}
+
+fn tag_of(p: &Pair) -> u8 {
+    p.tag
+}

@@ -1,0 +1,246 @@
+// References as parameters (O3, tier 0 of references). A `&T` parameter is
+// the value lent, which the callee reads. A `&mut T` parameter is a value
+// passed in and a new version passed out: in the logic the callee returns
+// the exit value beside its result, and at the call the argument's root gets
+// a new version, exactly as an assignment gives one. In the parameter types
+// the name means the value at entry, in the result type the value at return,
+// and `old!(x)` names the entry value where the result needs both. Arguments
+// are paths, `&x` or `&mut x.f`, and two arguments of one call may not
+// overlap when either is `&mut`.
+
+#[derive(Clone, Copy, Debug)]
+struct Pair {
+    lo: u8,
+    hi: u8,
+}
+
+#[derive(Debug)]
+struct Token {
+    id: u8,
+}
+
+// A `&T` parameter is read: its fields, or the whole when it is `Copy`.
+fn sum(pair: &Pair) -> u8 {
+    pair.lo.wrapping_add(pair.hi)
+}
+
+fn whole(pair: &Pair) -> Pair {
+    pair
+}
+
+// A field that is `Copy` is read out of a lent value that is not.
+fn id_of(token: &Token) -> u8 {
+    token.id
+}
+
+fn lends_twice(n: u8) -> u8 {
+    let token = Token { id: n };
+    id_of(&token).wrapping_add(id_of(&token))
+}
+
+// A `&mut` parameter assigned by the callee: the caller sees the new value.
+fn bump(counter: &mut u8) -> () {
+    counter = counter.wrapping_add(1);
+}
+
+fn twice(n: u8) -> u8 {
+    let mut count = n;
+    bump(&mut count);
+    bump(&mut count);
+    count
+}
+
+// A field lent, and the whole lent on to another function.
+fn bump_lo(pair: &mut Pair) -> () {
+    bump(&mut pair.lo);
+}
+
+fn bumped(pair: Pair) -> Pair {
+    let mut copy = pair;
+    bump(&mut copy.hi);
+    bump_lo(&mut copy);
+    copy
+}
+
+// The sixth case of the mutation design: a call that changes two disjoint
+// fields, and returns evidence about both exit values.
+fn settle(a: &mut u8, b: &mut u8, le: @(a <= b)) -> @(a == b) {
+    a = b;
+    prove!(a == b)
+}
+
+fn settled(pair: Pair, le: @(pair.lo <= pair.hi)) -> (out: Pair, @(out.lo == out.hi)) {
+    let mut copy = pair;
+    let done = settle(&mut copy.lo, &mut copy.hi, le);
+    (copy, done)
+}
+
+// The ninth case in its `&mut` form: the right side runs first, with its
+// write-back, and the place is rebuilt from the version current then. Rust
+// leaves lo == 3 and hi == 7, and so do both interpreters.
+fn touch(pair: &mut Pair) -> u8 {
+    pair.hi = 7;
+    3
+}
+
+fn lo_from_touch(pair: Pair) -> Pair {
+    let mut copy = pair;
+    copy.lo = touch(&mut copy);
+    copy
+}
+
+fn both(a: u8, b: u8) -> (u8, u8) {
+    (a, b)
+}
+
+// The first argument reads `lo` before the call changes the pair; a read
+// before a `&mut` lend is a copy, as in Rust.
+fn read_before_touch(pair: Pair) -> (u8, u8) {
+    let mut copy = pair;
+    both(copy.lo, touch(&mut copy))
+}
+
+fn read_after_touch(pair: Pair) -> (u8, u8) {
+    let mut copy = pair;
+    both(touch(&mut copy), copy.hi)
+}
+
+// `old!(counter)` is the entry value; `counter` in the result type is the
+// exit value. Under `no_panic` the `+` carries its obligation, and the
+// exact sum is known afterwards.
+#[no_panic]
+fn bump_exact(counter: &mut u8, fits: @(counter as Int + 1 <= 255)) -> @(counter as Int == old!(counter) as Int + 1) {
+    counter = counter + 1;
+    _
+}
+
+fn exact_twice(n: u8, small: @(n <= 100)) -> (out: u8, @(out as Int == n as Int + 2)) {
+    let mut count = n;
+    let first = bump_exact(&mut count, _);
+    let second = bump_exact(&mut count, _);
+    (count, _)
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Event {
+    Wrong,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u8) -> Prop {
+    prop!(failures <= 3)
+}
+
+// The lock of examples/lock.lc with the transition taking the lock by
+// `&mut`: the evidence it takes speaks of the lock at entry, and the
+// evidence it returns of the lock at return.
+fn step(lock: &mut Lock, ok: @within_limit(lock.failures), event: Event) -> @within_limit(lock.failures) {
+    match event {
+        Event::Right => {
+            lock = Lock { failures: 0, open: true };
+            fold!(within_limit, prove!(0u8 <= 3))
+        }
+        Event::Wrong => {
+            if lock.failures < 3 {
+                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                lock = Lock { failures: lock.failures.wrapping_add(1), open: false };
+                fold!(within_limit, fits)
+            } else {
+                lock = Lock { failures: lock.failures, open: false };
+                ok
+            }
+        }
+    }
+}
+
+fn event_at(attempt: u8, correct: u8) -> Event {
+    if attempt == correct { Event::Right } else { Event::Wrong }
+}
+
+// Tracked evidence refreshed by a `&mut` call: `step(&mut lock, ok, ..)`
+// leaves `ok` stale, and the evidence it returns about the lock it handed
+// back establishes it again, in one statement. The `for` carries both.
+fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) {
+    let mut lock = Lock { failures: 0, open: false };
+    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(0u8 <= 3));
+    for attempt in 0..attempts {
+        ok = step(&mut lock, ok, event_at(attempt, correct));
+    }
+    (lock, ok)
+}
+
+// A struct with evidence about a field is lent whole, and replaced whole:
+// whoever holds a `Percent` can only make a valid one.
+#[derive(Debug)]
+struct Percent {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+fn set(percent: &mut Percent, v: u8, fits: @(v <= 100)) -> () {
+    percent = Percent { value: v, in_range: fits };
+}
+
+fn set_to(v: u8, fits: @(v <= 100)) -> u8 {
+    let mut percent = Percent { value: 0, in_range: prove!(0u8 <= 100) };
+    set(&mut percent, v, fits);
+    percent.value
+}
+
+// A `mut` parameter is assigned in the body, by value.
+fn count_up(mut n: u8, by: u8) -> u8 {
+    n = n.wrapping_add(by);
+    n
+}
+
+//~ proofs: 15
+//~ run: sum(&Pair { lo: 1, hi: 2 }) => 3
+//~ run: whole(&Pair { lo: 1, hi: 2 }) => Pair { lo: 1, hi: 2 }
+//~ run: id_of(&Token { id: 9 }) => 9
+//~ run: lends_twice(4) => 8
+//~ run: bump(&mut 3 -> 4) => ()
+//~ run: bump(&mut 255 -> 0) => ()
+//~ run: twice(5) => 7
+//~ run: bump_lo(&mut Pair { lo: 1, hi: 2 } -> Pair { lo: 2, hi: 2 }) => ()
+//~ run: bumped(Pair { lo: 1, hi: 2 }) => Pair { lo: 2, hi: 3 }
+//~ run: settle(&mut 1 -> 5, &mut 5 -> 5, Proved) => Proved
+//~ run: settled(Pair { lo: 1, hi: 5 }, Proved) => (Pair { lo: 5, hi: 5 }, Proved)
+//~ run: touch(&mut Pair { lo: 1, hi: 2 } -> Pair { lo: 1, hi: 7 }) => 3
+//~ run: lo_from_touch(Pair { lo: 1, hi: 2 }) => Pair { lo: 3, hi: 7 }
+//~ run: read_before_touch(Pair { lo: 1, hi: 2 }) => (1, 3)
+//~ run: read_after_touch(Pair { lo: 1, hi: 2 }) => (3, 7)
+//~ run: bump_exact(&mut 41 -> 42, Proved) => Proved
+//~ run: exact_twice(40, Proved) => (42, Proved)
+//~ run: step(&mut Lock { failures: 1, open: false } -> Lock { failures: 2, open: false }, Proved, Wrong) => Proved
+//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 3, open: false }, Proved, Wrong) => Proved
+//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 0, open: true }, Proved, Right) => Proved
+//~ run: run(5, 9) => (Lock { failures: 3, open: false }, Proved)
+//~ run: run(5, 2) => (Lock { failures: 2, open: false }, Proved)
+//~ run: set(&mut Percent { value: 0, in_range: Proved } -> Percent { value: 7, in_range: Proved }, 7, Proved) => ()
+//~ run: set_to(42, Proved) => 42
+//~ run: count_up(3, 4) => 7
+//~ rust: fn sum(pair: &Pair) -> u8 {
+//~ rust: pair.lo.wrapping_add(pair.hi)
+//~ rust: fn whole(pair: &Pair) -> Pair {
+//~ rust: *pair
+//~ rust: fn bump(counter: &mut u8) -> () {
+//~ rust: *counter = counter.wrapping_add(1_u8);
+//~ rust: bump(&mut count);
+//~ rust: bump(&mut pair.lo);
+//~ rust: bump_lo(&mut copy);
+//~ rust: fn settle(a: &mut u8, b: &mut u8, le: Proved) -> Proved {
+//~ rust: *a = *b;
+//~ rust: let done = settle(&mut copy.lo, &mut copy.hi, Proved);
+//~ rust: pair.hi = 7_u8;
+//~ rust: copy.lo = touch(&mut copy);
+//~ rust: *counter = *counter + 1_u8;
+//~ rust: let _ = step(&mut lock, ok, event_at(attempt, correct));
+//~ rust: *percent = Percent { value: v, in_range: fits };
+//~ rust: fn count_up(mut n: u8, by: u8) -> u8 {

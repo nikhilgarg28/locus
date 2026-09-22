@@ -47,13 +47,16 @@ impl Env<'_> {
                 Ok(Value::new(Expr::Proof(proof), Type::proof(claim)))
             }
             Form::Rewrite | Form::Unfold | Form::Fold => {
-                self.proof_form(form, arguments, expected, span)
+                let expected = expected.map(|expected| self.at_current_exit(expected).into_owned());
+                self.proof_form(form, arguments, expected.as_ref(), span)
             }
             Form::Panic | Form::Todo | Form::Unreachable => {
-                self.panic_form(form, arguments, expected, name_span, span)
+                let expected = expected.map(|expected| self.at_current_exit(expected).into_owned());
+                self.panic_form(form, arguments, expected.as_ref(), name_span, span)
             }
             Form::Assert | Form::DebugAssert => self.assert_form(form, arguments, name_span, span),
             Form::Snapshot => self.snapshot(arguments, expected, name_span, span),
+            Form::Old => self.old_form(arguments, name_span, span),
             _ => self.form_not_yet(form, name_span),
         }
     }
@@ -422,7 +425,6 @@ impl Env<'_> {
     #[inline(never)]
     fn form_not_yet<T>(&mut self, form: Form, span: Span) -> Elab<T> {
         let arrives = match form {
-            Form::Old => "references as parameters (O3, LOC-184)",
             Form::Recurse => "recursion (LOC-53)",
             Form::Matches => "the patterns it takes apart (LOC-71)",
             _ => "`Vec` (LOC-83)",

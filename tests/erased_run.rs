@@ -217,6 +217,8 @@ fn a_function_with_no_runtime_form_is_not_emitted() {
     let n = Binder::new("n", Type::U8);
     let claim = u8_eq(n.term(), n.term());
     let lemma_item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "self_equal".into(),
         math: true,
         params: vec![n.clone()],
@@ -234,6 +236,8 @@ fn a_function_with_no_runtime_form_is_not_emitted() {
         Type::proof(u8_eq(m_term.clone(), m_term.clone())),
     ]);
     let user = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "uses_lemma".into(),
         math: false,
         params: vec![m.clone()],

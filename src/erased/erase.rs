@@ -34,15 +34,19 @@
 //! The versions lowering gives a mutable binding have no runtime form
 //! either: an assignment stays an assignment, and every mention of a version
 //! becomes a mention of the binding, which the assignment updated in place.
-//! `mut` is printed on a binding only when the function assigns to it.
+//! `mut` is printed on a binding only when the function assigns to it, or
+//! lends it by `&mut`. A call with `&mut` arguments stays a call with
+//! `&mut` arguments: the versions its write-backs make are versions of the
+//! lent bindings, and the tuple the check IR returns is nowhere here; a
+//! `&mut` parameter is a parameter, assigned in place.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::exec::Program;
 use crate::kernel::{MachineInt, Type, VarId};
 use crate::typed::{
-    Binder, Block, Carried, EnumItem, Expr, FnItem, FnRef, Joined, Pattern, Stmt, StructItem,
-    each_expr, each_stmt, each_stmt_under,
+    Binder, Block, Carried, EnumItem, Expr, FnItem, FnRef, Joined, Passing, Pattern, Place, Stmt,
+    StructItem, each_expr, each_stmt, each_stmt_under,
 };
 
 use super::tree::{
@@ -138,11 +142,22 @@ pub fn erase_fn(program: &Program, reference: FnRef, item: &FnItem) -> Option<EF
             .map(|param| param.id)
             .collect(),
     };
+    // A `mut` parameter the body never assigns is printed without it.
+    let passing = item
+        .params
+        .iter()
+        .enumerate()
+        .map(|(index, param)| match item.passing_of(index) {
+            Passing::MutValue if !eraser.assigned.contains(&param.id) => Passing::Value,
+            passing => passing,
+        })
+        .collect();
     Some(EFn {
         reference,
         name: item.name.clone(),
         constant: false,
         params: item.params.iter().map(bound).collect(),
+        passing,
         result: erase_type(&item.result),
         body: eraser.block(&item.body),
     })
@@ -152,8 +167,8 @@ fn bound(binder: &Binder) -> (VarId, String, EType) {
     (binder.id, binder.name.clone(), binder_type(binder))
 }
 
-/// The bindings the body assigns to, whole or by a field: the ones whose
-/// `let mut` needs its `mut`.
+/// The bindings the body assigns to, whole or by a field, or lends by
+/// `&mut`: the ones whose `let mut` needs its `mut`.
 fn assigned_bindings(body: &Block) -> HashSet<VarId> {
     let mut assigned = HashSet::new();
     each_stmt(body, &mut |stmt| {
@@ -161,7 +176,40 @@ fn assigned_bindings(body: &Block) -> HashSet<VarId> {
             assigned.insert(place.binding);
         }
     });
+    let mut on_expr = |expr: &Expr| {
+        if let Expr::Lend {
+            mutable: true,
+            place,
+            ..
+        } = expr
+        {
+            assigned.insert(place.binding);
+        }
+    };
+    for stmt in &body.stmts {
+        match stmt {
+            Stmt::Let { value, .. } | Stmt::Expr(value) | Stmt::Assign { value, .. } => {
+                each_expr(value, &mut on_expr);
+            }
+        }
+    }
+    if let Some(tail) = body.tail.as_deref() {
+        each_expr(tail, &mut on_expr);
+    }
     assigned
+}
+
+/// The place of an assignment or a lend, its root at the binding.
+fn place(place: &Place) -> EPlace {
+    EPlace {
+        id: place.binding,
+        name: place.name.clone(),
+        path: place
+            .path
+            .iter()
+            .map(|step| (step.index, step.name.clone()))
+            .collect(),
+    }
 }
 
 struct Eraser<'p> {
@@ -318,15 +366,7 @@ impl Eraser<'_> {
                     });
                 }
                 EStmt::Assign {
-                    place: EPlace {
-                        id: place.binding,
-                        name: place.name.clone(),
-                        path: place
-                            .path
-                            .iter()
-                            .map(|step| (step.index, step.name.clone()))
-                            .collect(),
-                    },
+                    place: self::place(place),
                     value,
                 }
             }
@@ -473,8 +513,34 @@ impl Eraser<'_> {
                 name,
                 arguments,
                 ty,
+                lends,
                 ..
-            } => self.call(FnRef::Exec(*id), name, arguments, ty),
+            } => {
+                // A call with `&mut` arguments writes what its caller can
+                // see: it is never erased, whatever the callee promises and
+                // whatever its result. The versions the write-backs make
+                // are versions of the lent bindings, which the call assigns
+                // in place.
+                let erased = if lends.is_empty() {
+                    self.call(FnRef::Exec(*id), name, arguments, ty)
+                } else {
+                    EExpr::Call {
+                        callee: FnRef::Exec(*id),
+                        name: name.clone(),
+                        arguments: self.all(arguments),
+                    }
+                };
+                for lend in lends {
+                    if let Some(Expr::Lend { place, .. }) = arguments.get(lend.argument) {
+                        self.binding.insert(lend.version.id, place.binding);
+                    }
+                }
+                erased
+            }
+            Expr::Lend { mutable, place, .. } => EExpr::Lend {
+                mutable: *mutable,
+                place: self::place(place),
+            },
             Expr::If {
                 condition,
                 then_block,

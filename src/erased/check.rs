@@ -91,10 +91,12 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         targets: Vec::new(),
     };
     for function in &module.fns {
+        // A `mut` or `&mut` parameter may be assigned.
         checker.env = function
             .params
             .iter()
-            .map(|(id, _, ty)| (*id, ty.clone(), false))
+            .enumerate()
+            .map(|(index, (id, _, ty))| (*id, ty.clone(), function.passing_of(index).is_mutable()))
             .collect();
         checker.targets.clear();
         checker.result = function.result.clone();
@@ -147,7 +149,7 @@ impl Checker<'_> {
                 }
                 EStmt::Assign { place, value } => {
                     let found = self.expr(value)?;
-                    let expected = self.place(place)?;
+                    let expected = self.place(place, true)?;
                     expect(
                         &found,
                         &expected,
@@ -203,14 +205,15 @@ impl Checker<'_> {
         }
     }
 
-    /// The type of a place: the binding must be in scope and assignable, and
-    /// the path must step through products that have those fields.
-    fn place(&mut self, place: &EPlace) -> Result<EType, TypeError> {
+    /// The type of a place: the binding must be in scope and, when it is
+    /// written to, assigned to or lent by `&mut`, assignable; the path must
+    /// step through products that have those fields.
+    fn place(&mut self, place: &EPlace, written: bool) -> Result<EType, TypeError> {
         let Some((_, ty, mutable)) = self.env.iter().rev().find(|(var, _, _)| *var == place.id)
         else {
             return fail(format!("{} is not in scope", place.name));
         };
-        if !mutable {
+        if written && !mutable {
             return fail(format!("{} is assigned but not declared mut", place.name));
         }
         let mut ty = ty.clone();
@@ -411,6 +414,9 @@ impl Checker<'_> {
                 needed!(self.arguments(arguments, &params, &format!("the arguments of {name}"))?);
                 result
             }
+            // A lent place has the type of the place; a `&mut` one is
+            // written to.
+            EExpr::Lend { mutable, place } => self.place(place, *mutable)?,
             EExpr::If {
                 condition,
                 then_block,

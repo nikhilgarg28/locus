@@ -1,0 +1,69 @@
+// When a call panics, the writes it made through `&mut` before the panic
+// are real, and a Rust caller that catches the panic sees them: the
+// eleventh case of the mutation design, a replacement that completes and
+// then a panic, beside the eighth, a check before the write. The logic has
+// nothing to say of a call that does not return; both interpreters report
+// the panic together with the values of the `&mut` parameters at that
+// moment, and the compiled harness lends locals to each call under
+// `catch_unwind` and reads them afterwards.
+
+#[derive(Clone, Copy, Debug)]
+struct Pair {
+    lo: u8,
+    hi: u8,
+}
+
+// The write completes, then the panic: the caller finds the new value.
+fn write_then_fail(counter: &mut u8) -> u8 {
+    counter = 7;
+    panic!("after the write")
+}
+
+// Through a caller that lent a field of its own `&mut` parameter: the
+// write lands in the field, and the panic passes on with the whole.
+fn through(pair: &mut Pair) -> u8 {
+    write_then_fail(&mut pair.lo)
+}
+
+// A write before the lend, then the callee's write, then its panic.
+fn two_writes(pair: &mut Pair) -> u8 {
+    pair.lo = 1;
+    write_then_fail(&mut pair.hi)
+}
+
+// The check comes before the write: a panic leaves the old value.
+fn check_then_write(counter: &mut u8, v: u8) -> () {
+    assert!(v <= 100);
+    counter = v;
+}
+
+// An operator that panics in one build and wraps in the other leaves the
+// old value in the first and the wrapped one in the second.
+fn overflowing(counter: &mut u8) -> () {
+    counter = counter + 1;
+}
+
+// A panic in a loop, after some passes have written.
+fn count_to(counter: &mut u8, limit: u8) -> () {
+    for i in 0..limit {
+        if i == 3 {
+            panic!("three")
+        } else {
+            counter = counter.wrapping_add(1);
+        }
+    }
+}
+
+//~ proofs: 0
+//~ run: write_then_fail(&mut 3 -> 7) => panic: after the write
+//~ run: through(&mut Pair { lo: 1, hi: 2 } -> Pair { lo: 7, hi: 2 }) => panic: after the write
+//~ run: two_writes(&mut Pair { lo: 0, hi: 0 } -> Pair { lo: 1, hi: 7 }) => panic: after the write
+//~ run: check_then_write(&mut 3 -> 3, 200) => panic: assertion failed: v <= 100
+//~ run: check_then_write(&mut 3 -> 50, 50) => ()
+//~ run: overflowing(&mut 255 -> 255 | 0) => panic: attempt to add with overflow | ()
+//~ run: overflowing(&mut 41 -> 42) => ()
+//~ run: count_to(&mut 0 -> 2, 2) => ()
+//~ run: count_to(&mut 0 -> 3, 9) => panic: three
+//~ rust: fn write_then_fail(counter: &mut u8) -> u8 {
+//~ rust: *counter = 7_u8;
+//~ rust: write_then_fail(&mut pair.lo)

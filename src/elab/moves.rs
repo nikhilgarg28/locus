@@ -37,6 +37,13 @@
 //! language (the claim would speak of a value the code no longer has), with
 //! `snapshot!` named as the way to keep the value: evidence obtained before
 //! the move remains valid, being a value of its own.
+//!
+//! A lend, `&x` or `&mut x.f` as the argument of a call, reads the place
+//! too: it asks that the place be whole, and leaves it so, since the
+//! reference lasts for the call alone (O3). Nothing is moved out of a
+//! reference parameter, `x: &T` or `x: &mut T`, or out of a field of one
+//! that is not `Copy`, and a pattern over one binds only `Copy` parts:
+//! Rust refuses each with E0507, and so does Locus, before rustc would.
 
 use std::collections::HashSet;
 
@@ -71,6 +78,9 @@ pub(super) struct Moves {
     /// How many erased positions are open, besides formulas: the arguments
     /// of a call that erasure removes. A mention there is a reading.
     ghost: usize,
+    /// How many lends are open: the place of a `&x` or `&mut x` argument
+    /// is being elaborated. A mention there is a reading.
+    lend: usize,
     /// Moves reported at a back edge of a loop, each once.
     reported: HashSet<(usize, usize)>,
 }
@@ -81,6 +91,7 @@ impl Moves {
             checked,
             place_root: false,
             ghost: 0,
+            lend: 0,
             reported: HashSet::new(),
         }
     }
@@ -104,6 +115,7 @@ impl Moves {
     /// diagnostics dropped (`items.rs`).
     pub fn start_item(&mut self) {
         self.ghost = 0;
+        self.lend = 0;
         self.place_root = false;
         self.reported.clear();
     }
@@ -231,10 +243,82 @@ impl Env<'_> {
     // --- Places ---
 
     /// Whether a mention here reads a value rather than consuming it: in a
-    /// formula, or in an argument erasure removes. It is also where a
-    /// `Ghost<T>` value may be named (`exprs.rs`).
+    /// formula, in an argument erasure removes, or in a lent place. It is
+    /// also where a `Ghost<T>` value may be named (`exprs.rs`).
     pub(super) fn reading(&self) -> bool {
-        self.formula.is_some() || self.moves.ghost > 0
+        self.formula.is_some() || self.moves.ghost > 0 || self.moves.lend > 0
+    }
+
+    /// Elaborates `inside` as a lent place, the operand of `&` or `&mut`
+    /// in an argument: a local named there is read, not moved.
+    pub(super) fn lending<T>(&mut self, inside: impl FnOnce(&mut Self) -> T) -> T {
+        self.moves.lend += 1;
+        let result = inside(self);
+        self.moves.lend -= 1;
+        result
+    }
+
+    /// Whether the local is a reference parameter, or a version of one:
+    /// nothing is moved out of it.
+    fn behind_reference(&self, slot: usize) -> bool {
+        let local = &self.names[slot];
+        self.borrowed.contains(&local.binding.unwrap_or(local.id))
+    }
+
+    /// `L0265`: a move out of a reference parameter, or out of a field of
+    /// one, which Rust refuses with E0507. `path` is the moved part.
+    fn move_out_of_reference<T>(&mut self, slot: usize, path: &[usize], span: Span) -> Elab<T> {
+        let local = &self.names[slot];
+        let name = local.name.clone();
+        let mutable = local.binding.is_some();
+        let fields = self.field_names(slot, path);
+        let shown = if path.is_empty() {
+            format!("*{name}")
+        } else {
+            show_path(&name, path, &fields)
+        };
+        let kind = if mutable { "mutable" } else { "shared" };
+        let ty = self.show_type(&self.names[slot].ty.clone());
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0265",
+                format!("cannot move out of `{shown}` which is behind a {kind} reference (E0507)"),
+                span,
+            )
+            .note(format!(
+                "`{name}` is a reference parameter, `{name}: &{}{ty}`, and the value behind it belongs to the caller; a part that is `Copy` can be read, and the whole can be lent on with `&{}{name}`",
+                if mutable { "mut " } else { "" },
+                if mutable { "mut " } else { "" }
+            )),
+        );
+        Err(())
+    }
+
+    /// The names of the fields along a path into the local, for a message.
+    fn field_names(&self, slot: usize, path: &[usize]) -> Vec<Option<String>> {
+        let mut ty = self.names[slot].ty.clone();
+        let mut names = Vec::new();
+        for &index in path {
+            let name = match &ty {
+                Type::Struct(id) => self
+                    .struct_by_id(*id)
+                    .and_then(|info| info.fields.get(index).map(|field| field.name.clone())),
+                _ => None,
+            };
+            ty = match &ty {
+                Type::Struct(id) => self
+                    .struct_by_id(*id)
+                    .and_then(|info| info.fields.get(index).map(|field| field.ty.clone()))
+                    .unwrap_or(Type::Tuple(Vec::new())),
+                Type::Tuple(fields) => fields
+                    .get(index)
+                    .cloned()
+                    .unwrap_or(Type::Tuple(Vec::new())),
+                _ => Type::Tuple(Vec::new()),
+            };
+            names.push(name);
+        }
+        names
     }
 
     /// Elaborates `inside` as an erased position: the arguments of a call
@@ -265,7 +349,7 @@ impl Env<'_> {
 
     /// The local and path an elaborated place names, if it is one:
     /// `Field` over `Field` over a `Var` that is a local in scope.
-    fn place_of(&self, expr: &Expr) -> Option<PlacePath> {
+    pub(super) fn place_of(&self, expr: &Expr) -> Option<PlacePath> {
         let mut path = Vec::new();
         let mut expr = expr;
         loop {
@@ -339,6 +423,10 @@ impl Env<'_> {
         if !self.read_place(slot, &path, span) || self.is_copy(ty) {
             return;
         }
+        if self.behind_reference(slot) {
+            let _: Elab<()> = self.move_out_of_reference(slot, &path, span);
+            return;
+        }
         let partial = !path.is_empty();
         self.names[slot].moved.push(Moved {
             path,
@@ -360,6 +448,16 @@ impl Env<'_> {
             return true;
         };
         let name = self.names[slot].name.clone();
+        if self.moves.lend > 0 {
+            let mut diagnostic =
+                Diagnostic::error("L0240", format!("borrow of moved value: `{name}`"), span)
+                    .label(moved.at, "value moved here");
+            diagnostic.labels[0].message = "value borrowed here after move".into();
+            self.diagnostics.push(diagnostic.note(format!(
+                "a lend, `&{name}` or `&mut {name}`, reads the value, which the code no longer has; a `let mut` is whole again once assigned"
+            )));
+            return false;
+        }
         if self.reading() {
             let line = self
                 .source
@@ -425,6 +523,11 @@ impl Env<'_> {
             (PatternKind::Group(inner), _) => self.move_parts(slot, path, inner, typed, span),
             (PatternKind::Name { .. }, Pattern::Bind { binder, .. }) => {
                 if !self.is_copy(&binder.ty) {
+                    // Matching through a reference binds `Copy` parts only.
+                    if self.behind_reference(slot) {
+                        let _: Elab<()> = self.move_out_of_reference(slot, &path, span);
+                        return;
+                    }
                     let partial = !path.is_empty();
                     self.names[slot].moved.push(Moved {
                         path,
@@ -460,6 +563,10 @@ impl Env<'_> {
             if let Some(name) = name
                 && !self.is_copy(&binder.ty)
             {
+                if self.behind_reference(*slot) {
+                    let _: Elab<()> = self.move_out_of_reference(*slot, path, name.span);
+                    return;
+                }
                 self.names[*slot].moved.push(Moved {
                     path: path.clone(),
                     at: name.span,

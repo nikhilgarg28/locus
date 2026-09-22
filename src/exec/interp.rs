@@ -13,6 +13,21 @@
 //! call, and of every call around it. A `return` travels the same way, as a
 //! `Stop`, out through whatever loops and matches it stands in, and stops at
 //! the call of its own function, whose value it is.
+//!
+//! A function with `&mut` parameters returns, in the check IR, the tuple of
+//! their final versions followed by its value, and its caller binds the
+//! tuple and projects: nothing here writes anything back. A panic is the
+//! exception: it carries the values of the function's `&mut` parameters at
+//! that moment, as the other interpreter's does and as a Rust caller that
+//! catches the panic sees them. The check IR has no assignment, so which
+//! version is current at a panic is read off a side table lowering builds
+//! (`Lending`): every version of each `&mut` parameter, so that the value
+//! most recently bound to one of them is the current one, and for each call
+//! that lends a path into one of them, where the callee's reported values
+//! go. The checker never reads the table, so a mistake in it is a false
+//! alarm in the comparison and never a false proof.
+
+use std::collections::HashMap;
 
 use crate::erased::{
     Outcome, Overflow, RunError, Stop, Value, operate, outcome, term_value, value_term,
@@ -21,7 +36,29 @@ use crate::kernel::{ForLoop, MachineInt, Prim, Term, VarId};
 use crate::typed::FnRef;
 
 use super::check::Program;
-use super::ir::{Arm, Block, ForStmt, Stmt, Tail};
+use super::ir::{Arm, Block, ExecFnId, ForStmt, Stmt, Tail};
+
+/// What the interpreter needs of a function with `&mut` parameters; see the
+/// module comment. Built by lowering (`typed::Session::lending`).
+#[derive(Clone, Debug, Default)]
+pub struct Lending {
+    /// For each `&mut` parameter, in order: its position among the
+    /// parameters, and every version of it in the body, the parameter
+    /// itself included.
+    pub params: Vec<(usize, Vec<VarId>)>,
+    /// For each call that lends a path into a `&mut` parameter, by the
+    /// identity of the call's result: the parameter's position in `params`,
+    /// the path by field position, and the position of the lend among the
+    /// callee's `&mut` parameters.
+    pub calls: HashMap<VarId, Vec<(usize, Vec<usize>, usize)>>,
+}
+
+/// A call in progress of a function with `&mut` parameters: their current
+/// values, and which versions are theirs.
+struct Frame<'p> {
+    lending: &'p Lending,
+    lent: Vec<Value>,
+}
 
 enum Flow {
     Value(Value),
@@ -40,6 +77,11 @@ pub struct CheckInterpreter<'p> {
     free: Vec<(VarId, Value)>,
     /// Variables bound inside kernel terms, innermost last.
     bound: Vec<Value>,
+    /// The side tables of the functions with `&mut` parameters.
+    lending: Option<&'p HashMap<ExecFnId, Lending>>,
+    /// The calls in progress of functions with `&mut` parameters,
+    /// innermost last, with `None` for a call of any other function.
+    frames: Vec<Option<Frame<'p>>>,
 }
 
 fn stuck<T>(why: impl Into<String>) -> Result<T, Stop> {
@@ -55,6 +97,8 @@ impl<'p> CheckInterpreter<'p> {
             depth: 0,
             free: Vec::new(),
             bound: Vec::new(),
+            lending: None,
+            frames: Vec::new(),
         }
     }
 
@@ -65,8 +109,63 @@ impl<'p> CheckInterpreter<'p> {
         self
     }
 
+    /// The same interpreter with the side tables of the functions with
+    /// `&mut` parameters, without which a panic in one carries no values.
+    pub fn with_lending(mut self, lending: &'p HashMap<ExecFnId, Lending>) -> Self {
+        self.lending = Some(lending);
+        self
+    }
+
+    /// Calls a function. For one with `&mut` parameters the value is the
+    /// tuple of their final versions followed by the result, as the check
+    /// IR has it; `call_lending` takes it apart.
     pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
         outcome(self.enter(callee, arguments))
+    }
+
+    /// Calls a function, and returns beside the outcome the values of its
+    /// `&mut` parameters when it ended, on a return or at a panic, in
+    /// order: what a caller that lent them sees afterwards.
+    pub fn call_lending(
+        &mut self,
+        callee: FnRef,
+        arguments: Vec<Value>,
+    ) -> Result<(Outcome, Vec<Value>), RunError> {
+        let count = match callee {
+            FnRef::Exec(id) => self
+                .lending_of(id)
+                .map_or(0, |lending| lending.params.len()),
+            FnRef::Math(_) => 0,
+        };
+        match self.enter(callee, arguments) {
+            Ok(Value::Tuple(mut fields)) if count > 0 && fields.len() == count + 1 => {
+                let value = fields.pop().expect("the result is the last field");
+                Ok((Outcome::Value(value), fields))
+            }
+            Ok(_) if count > 0 => Err(RunError::Stuck(
+                "a function with &mut parameters returned something other than the tuple".into(),
+            )),
+            Err(Stop::Panic { message, lent }) => Ok((Outcome::Panic(message), lent)),
+            other => outcome(other).map(|outcome| (outcome, Vec::new())),
+        }
+    }
+
+    fn lending_of(&self, id: ExecFnId) -> Option<&'p Lending> {
+        self.lending.and_then(|lending| lending.get(&id))
+    }
+
+    /// A variable was bound: if it is a version of a `&mut` parameter of
+    /// the function in progress, the parameter's current value is this.
+    fn note_version(&mut self, var: VarId, value: &Value) {
+        if let Some(Some(frame)) = self.frames.last_mut()
+            && let Some(position) = frame
+                .lending
+                .params
+                .iter()
+                .position(|(_, versions)| versions.contains(&var))
+        {
+            frame.lent[position] = value.clone();
+        }
     }
 
     fn enter(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, Stop> {
@@ -98,13 +197,22 @@ impl<'p> CheckInterpreter<'p> {
         result
     }
 
-    fn call_exec(&mut self, id: super::ir::ExecFnId, arguments: Vec<Value>) -> Result<Value, Stop> {
+    fn call_exec(&mut self, id: ExecFnId, arguments: Vec<Value>) -> Result<Value, Stop> {
         let Some(function) = self.program.function(id) else {
             return stuck("a call to an undeclared function");
         };
         if function.params.len() != arguments.len() {
             return stuck("a function called with the wrong arity");
         }
+        let frame = self.lending_of(id).map(|lending| Frame {
+            lending,
+            lent: lending
+                .params
+                .iter()
+                .map(|(index, _)| arguments[*index].clone())
+                .collect(),
+        });
+        self.frames.push(frame);
         let saved_free = std::mem::replace(
             &mut self.free,
             function.params.iter().copied().zip(arguments).collect(),
@@ -113,11 +221,49 @@ impl<'p> CheckInterpreter<'p> {
         let result = self.block(&function.body);
         self.free = saved_free;
         self.bound = saved_bound;
+        let frame = self.frames.pop().expect("the frame was pushed");
         match result {
             Ok(Flow::Value(value)) | Err(Stop::Return(value)) => Ok(value),
             Ok(_) => stuck("a function body ended in break or continue"),
+            // A panic carries the values of the `&mut` parameters at that
+            // moment, which the writes before it have made.
+            Err(Stop::Panic { message, .. }) => Err(Stop::Panic {
+                message,
+                lent: frame.map_or_else(Vec::new, |frame| frame.lent),
+            }),
             Err(stop) => Err(stop),
         }
+    }
+
+    /// The callee of the call bound to `var` panicked with the values of its
+    /// `&mut` parameters: those lent from a `&mut` parameter of the function
+    /// in progress are written to it, along the lent path, since the panic
+    /// leaves this function too and a caller may read them.
+    fn writes_at_panic(&mut self, var: VarId, lent: &[Value]) -> Result<(), Stop> {
+        let Some(Some(frame)) = self.frames.last_mut() else {
+            return Ok(());
+        };
+        let Some(into_params) = frame.lending.calls.get(&var) else {
+            return Ok(());
+        };
+        for (position, path, index) in into_params {
+            let Some(value) = lent.get(*index) else {
+                return stuck("a callee reported fewer &mut values than it has");
+            };
+            let mut target = &mut frame.lent[*position];
+            for field in path {
+                target = match target {
+                    Value::Tuple(fields) | Value::Struct(_, fields) => match fields.get_mut(*field)
+                    {
+                        Some(field) => field,
+                        None => return stuck("a lent path into a field that is not there"),
+                    },
+                    _ => return stuck("a lent path into something that is not a product"),
+                };
+            }
+            *target = value.clone();
+        }
+        Ok(())
     }
 
     fn spend(&mut self) -> Result<(), Stop> {
@@ -150,7 +296,11 @@ impl<'p> CheckInterpreter<'p> {
             Tail::Match { scrutinee, arms } => self.arms(scrutinee, arms),
             Tail::Return(value) => Err(Stop::Return(self.term(value)?)),
             // The proof that the point is unreachable is a ghost: skipped.
-            Tail::Panic { message, .. } => Err(Stop::Panic(message.clone())),
+            // The call of this function fills in the values it carries.
+            Tail::Panic { message, .. } => Err(Stop::Panic {
+                message: message.clone(),
+                lent: Vec::new(),
+            }),
         }
     }
 
@@ -160,6 +310,7 @@ impl<'p> CheckInterpreter<'p> {
         match stmt {
             Stmt::Let { var, value, .. } => {
                 let value = self.term(value)?;
+                self.note_version(*var, &value);
                 self.free.push((*var, value));
             }
             // A proof made available as a hypothesis: nothing runs.
@@ -170,7 +321,17 @@ impl<'p> CheckInterpreter<'p> {
                 arguments,
             } => {
                 let arguments = self.terms(arguments)?;
-                let value = self.enter(FnRef::Exec(*callee), arguments)?;
+                let value = match self.enter(FnRef::Exec(*callee), arguments) {
+                    Ok(value) => value,
+                    Err(Stop::Panic { message, lent }) => {
+                        self.writes_at_panic(*var, &lent)?;
+                        return Err(Stop::Panic {
+                            message,
+                            lent: Vec::new(),
+                        });
+                    }
+                    Err(stop) => return Err(stop),
+                };
                 self.free.push((*var, value));
             }
             Stmt::Match {
@@ -254,7 +415,10 @@ impl<'p> CheckInterpreter<'p> {
         }
         let scope = self.free.len();
         self.free.extend(index);
-        self.free.extend(vars.iter().copied().zip(current));
+        for (var, value) in vars.iter().copied().zip(current) {
+            self.note_version(var, &value);
+            self.free.push((var, value));
+        }
         let result = self.block(body);
         self.free.truncate(scope);
         result

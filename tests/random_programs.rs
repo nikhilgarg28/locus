@@ -102,8 +102,8 @@ use locus::kernel::{
     EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId, same_type,
 };
 use locus::typed::{
-    Binder, Block, Carried, CompareOp, Derive, EnumItem, Expr, FnItem, FnRef, Join, Joined,
-    MatchArm, Pattern, Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
+    Binder, Block, Carried, CompareOp, Derive, EnumItem, Expr, FnItem, FnRef, Join, Joined, Lend,
+    MatchArm, Passing, Pattern, Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
 };
 use rng::{Rng, case_seed};
 
@@ -245,7 +245,11 @@ impl Program {
                     .item
                     .params
                     .iter()
-                    .all(|param| param.ty.as_machine().is_some())
+                    .enumerate()
+                    .all(|(index, param)| {
+                        param.ty.as_machine().is_some()
+                            && function.item.passing_of(index) == Passing::Value
+                    })
                     && module
                         .fns
                         .iter()
@@ -423,7 +427,9 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         Expr::Literal(..) | Expr::Int(_) => true,
         Expr::Var { id, .. } => locals.get(id).copied().unwrap_or(true),
         Expr::Tuple { fields, .. } => fields.iter().all(|field| determined(field, locals)),
-        Expr::Field { target, .. } | Expr::Ghost(target) => determined(target, locals),
+        Expr::Field { target, .. } | Expr::Ghost(target) | Expr::Lend { value: target, .. } => {
+            determined(target, locals)
+        }
         Expr::If {
             then_block,
             else_block,
@@ -603,6 +609,9 @@ enum StmtKind {
     LetMut,
     /// `v = value;` or `v.f.0 = value;`, to a mutable local in scope.
     Assign,
+    /// `{ let mut v = value; let _ = f(&mut v, ..); }`: a call with `&mut`
+    /// arguments, each a local declared for it.
+    LendCall,
 }
 
 const STMTS: &[(StmtKind, u32)] = &[
@@ -612,6 +621,7 @@ const STMTS: &[(StmtKind, u32)] = &[
     (StmtKind::Effect, 2),
     (StmtKind::LetMut, 3),
     (StmtKind::Assign, 5),
+    (StmtKind::LendCall, 3),
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -652,6 +662,10 @@ struct Generator {
     /// Every binding assigned so far, in order: a loop reads what its body
     /// assigned off the end of it.
     assigned: Vec<VarId>,
+    /// The bindings lent by `&mut` to the call whose arguments are being
+    /// made: a later argument may neither lend nor assign one, since the
+    /// lend lasts for the whole call (O3).
+    lent_now: Vec<VarId>,
     /// Whether each local's Rust type is determined; see `determined`.
     known: HashMap<VarId, bool>,
     /// How many times the current position runs per call, from the loops
@@ -680,6 +694,7 @@ impl Generator {
             bindings: Vec::new(),
             loop_depth: 0,
             assigned: Vec::new(),
+            lent_now: Vec::new(),
             known: HashMap::new(),
             multiplier: 1,
             cost: 0,
@@ -816,6 +831,7 @@ impl Generator {
         self.bindings.clear();
         self.loop_depth = 0;
         self.assigned.clear();
+        self.lent_now.clear();
         self.known.clear();
         self.multiplier = 1;
         self.cost = 0;
@@ -836,12 +852,37 @@ impl Generator {
                 self.fresh(ty)
             })
             .collect();
-        for param in &params {
-            self.bind(param.clone(), true);
+        // A parameter of a function that is not an entry may be `&mut`: a
+        // mutable binding of the body, whose final version is passed back
+        // (O3). An entry takes machine integers by value.
+        let passing: Vec<Passing> = params
+            .iter()
+            .map(|param| {
+                if !last && !self.math && param.ty.as_machine().is_some() && self.rng.chance(1, 3) {
+                    Passing::RefMut
+                } else {
+                    Passing::Value
+                }
+            })
+            .collect();
+        let exits: Vec<Binder> = params
+            .iter()
+            .zip(&passing)
+            .filter(|(_, passing)| **passing == Passing::RefMut)
+            .map(|(param, _)| Binder::new(&param.name, param.ty.clone()))
+            .collect();
+        for (param, passing) in params.iter().zip(&passing) {
+            if *passing == Passing::RefMut {
+                self.bind_mutable(param.clone(), true);
+            } else {
+                self.bind(param.clone(), true);
+            }
         }
         let result = self.random_type(1);
         let body = self.block(&result, MAX_DEPTH, false);
         let item = FnItem {
+            passing,
+            exits,
             name: format!("f{index}"),
             math: self.math,
             params,
@@ -1004,7 +1045,26 @@ impl Generator {
     /// depth, or carried by the loop around the position.
     fn assignable(&self) -> Vec<usize> {
         (0..self.locals.len())
-            .filter(|&slot| matches!(self.bindings[slot], Some((_, at)) if at == self.loop_depth))
+            .filter(|&slot| {
+                matches!(self.bindings[slot], Some((binding, at)) if at == self.loop_depth && !self.lent_now.contains(&binding))
+            })
+            .collect()
+    }
+
+    /// Whether the local at `slot` may be mentioned here: a local lent by
+    /// `&mut` to the call whose arguments are being made may not be, since
+    /// Rust refuses a use of a value while it is mutably borrowed (E0503),
+    /// and so does Locus.
+    fn usable(&self, slot: usize) -> bool {
+        !matches!(self.bindings[slot], Some((binding, _)) if self.lent_now.contains(&binding))
+    }
+
+    /// The mutable locals of the type that a `&mut` argument may lend here,
+    /// one per parameter, each once: what the call assigns.
+    fn lendable(&self, ty: &Type) -> Vec<usize> {
+        self.assignable()
+            .into_iter()
+            .filter(|&slot| same_type(&self.locals[slot].ty, ty))
             .collect()
     }
 
@@ -1170,6 +1230,7 @@ impl Generator {
             StmtKind::Bind => self.binding(depth),
             StmtKind::LetMut => self.let_mut(depth),
             StmtKind::Assign => self.assign(depth).unwrap_or_else(|| self.binding(depth)),
+            StmtKind::LendCall => self.lend_call(depth).unwrap_or_else(|| self.binding(depth)),
         }
     }
 
@@ -1217,10 +1278,11 @@ impl Generator {
         let is_bool = same_type(ty, &Type::Bool);
         match production {
             Production::Literal => !(determined && is_machine),
-            Production::Var => self
-                .locals
-                .iter()
-                .any(|local| same_type(&local.ty, ty) && (!determined || self.known[&local.id])),
+            Production::Var => self.locals.iter().enumerate().any(|(slot, local)| {
+                same_type(&local.ty, ty)
+                    && (!determined || self.known[&local.id])
+                    && self.usable(slot)
+            }),
             Production::Field | Production::Block => depth > 0,
             // The kernel has no case with a ghost result.
             Production::If => depth > 0 && !ty.is_ghost(),
@@ -1247,8 +1309,29 @@ impl Generator {
                 same_type(&function.item.result, ty)
                     && (!self.math || function.item.math)
                     && self.cost + self.multiplier * function.cost <= BUDGET
+                    && self.can_lend_to(&function.item)
             })
             .collect()
+    }
+
+    /// Whether every `&mut` parameter of the function has a distinct
+    /// mutable local of its type to lend here.
+    fn can_lend_to(&self, item: &FnItem) -> bool {
+        let mut taken: Vec<usize> = Vec::new();
+        for (index, param) in item.params.iter().enumerate() {
+            if item.passing_of(index) != Passing::RefMut {
+                continue;
+            }
+            let Some(slot) = self
+                .lendable(&param.ty)
+                .into_iter()
+                .find(|slot| !taken.contains(slot))
+            else {
+                return false;
+            };
+            taken.push(slot);
+        }
+        true
     }
 
     fn produce(
@@ -1265,10 +1348,13 @@ impl Generator {
                 let choices: Vec<Binder> = self
                     .locals
                     .iter()
-                    .filter(|local| {
-                        same_type(&local.ty, ty) && (!determined || self.known[&local.id])
+                    .enumerate()
+                    .filter(|(slot, local)| {
+                        same_type(&local.ty, ty)
+                            && (!determined || self.known[&local.id])
+                            && self.usable(*slot)
                     })
-                    .cloned()
+                    .map(|(_, local)| local.clone())
                     .collect();
                 Expr::var(self.rng.choose(&choices))
             }
@@ -1492,8 +1578,8 @@ impl Generator {
     /// generated tuple made to contain the type.
     fn field(&mut self, ty: &Type, depth: usize, determined: bool) -> Expr {
         let mut candidates: Vec<(Binder, usize, Option<String>)> = Vec::new();
-        for local in &self.locals {
-            if determined && !self.known[&local.id] {
+        for (slot, local) in self.locals.iter().enumerate() {
+            if (determined && !self.known[&local.id]) || !self.usable(slot) {
                 continue;
             }
             match &local.ty {
@@ -1587,28 +1673,141 @@ impl Generator {
         }
         let index = *self.rng.choose(&candidates);
         let function = self.program.fns[index].clone();
+        // A `&mut` parameter takes a mutable local of its type in scope,
+        // each parameter its own.
+        let mut slots = Vec::new();
+        for (position, param) in function.item.params.iter().enumerate() {
+            if function.item.passing_of(position) != Passing::RefMut {
+                continue;
+            }
+            let candidates: Vec<usize> = self
+                .lendable(&param.ty)
+                .into_iter()
+                .filter(|slot| !slots.contains(slot))
+                .collect();
+            slots.push(*self.rng.choose(&candidates));
+        }
+        Some(self.call_lending(&function, &slots, depth))
+    }
+
+    /// A call of the function, its `&mut` parameters taking the locals at
+    /// `slots`, in order, lent whole at their current versions. A local is
+    /// lent for the rest of the call, so no later argument lends or
+    /// assigns it, and it gets a new version once the arguments are made,
+    /// in argument order, as the elaborator gives it one.
+    fn call_lending(&mut self, function: &Function, slots: &[usize], depth: usize) -> Expr {
         self.cost += self.multiplier * function.cost;
-        let arguments = function
-            .item
-            .params
-            .iter()
-            .map(|param| self.expr(&param.ty, depth, false))
-            .collect();
-        Some(match function.reference {
+        let lent_before = self.lent_now.len();
+        let mut slots = slots.iter();
+        let mut lent: Vec<(usize, usize)> = Vec::new();
+        let mut arguments = Vec::new();
+        for (position, param) in function.item.params.iter().enumerate() {
+            if function.item.passing_of(position) != Passing::RefMut {
+                arguments.push(self.expr(&param.ty, depth, false));
+                continue;
+            }
+            let slot = *slots.next().expect("a local for each &mut parameter");
+            let (binding, _) = self.bindings[slot].expect("a lent local is mutable");
+            let local = self.locals[slot].clone();
+            self.lent_now.push(binding);
+            lent.push((position, slot));
+            arguments.push(Expr::Lend {
+                mutable: true,
+                place: Place {
+                    binding,
+                    name: local.name.clone(),
+                    path: Vec::new(),
+                },
+                value: Box::new(Expr::var(&local)),
+            });
+        }
+        self.lent_now.truncate(lent_before);
+        let mut lends = Vec::new();
+        for (position, slot) in lent {
+            let (binding, _) = self.bindings[slot].expect("a lent local is mutable");
+            let version = Binder {
+                id: VarId::fresh(),
+                name: self.locals[slot].name.clone(),
+                ty: self.locals[slot].ty.clone(),
+                ghost: false,
+            };
+            let determined = self.known[&self.locals[slot].id];
+            self.known.insert(version.id, determined);
+            self.locals[slot].id = version.id;
+            self.assigned.push(binding);
+            lends.push(Lend {
+                argument: position,
+                version,
+                equation: HypId::fresh(),
+            });
+        }
+        let ty = function.item.result.clone();
+        match function.reference {
             FnRef::Exec(id) => Expr::CallFn {
+                lends,
                 id,
-                name: function.item.name,
+                name: function.item.name.clone(),
                 arguments,
                 result: VarId::fresh(),
-                ty: ty.clone(),
+                ty,
             },
             FnRef::Math(id) => Expr::CallMath {
                 id,
-                name: function.item.name,
+                name: function.item.name.clone(),
                 arguments,
-                ty: ty.clone(),
+                ty,
             },
-        })
+        }
+    }
+
+    /// `{ let mut v = e; let _ = f(&mut v, ..); }`: a call of a function
+    /// with `&mut` parameters, each lent a local declared for it, as a
+    /// statement; the way such a function is called when no local of the
+    /// type is at hand. `None` when there is no such function to call.
+    fn lend_call(&mut self, depth: usize) -> Option<Stmt> {
+        if self.math {
+            return None;
+        }
+        let candidates: Vec<usize> = (0..self.program.fns.len())
+            .filter(|&index| {
+                let function = &self.program.fns[index];
+                function.item.passing.contains(&Passing::RefMut)
+                    && self.cost + self.multiplier * function.cost <= BUDGET
+            })
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let index = *self.rng.choose(&candidates);
+        let function = self.program.fns[index].clone();
+        let scope = self.locals.len();
+        let mut stmts = Vec::new();
+        let mut slots = Vec::new();
+        for (position, param) in function.item.params.iter().enumerate() {
+            if function.item.passing_of(position) != Passing::RefMut {
+                continue;
+            }
+            let value = self.expr(&param.ty, depth, false);
+            let determined = determined(&value, &self.known);
+            let binder = self.fresh(param.ty.clone());
+            self.bind_mutable(binder.clone(), determined);
+            slots.push(self.locals.len() - 1);
+            stmts.push(Stmt::Let {
+                pattern: Pattern::Bind {
+                    binder,
+                    equation: HypId::fresh(),
+                    mutable: true,
+                },
+                value,
+            });
+        }
+        let call = self.call_lending(&function, &slots, depth);
+        stmts.push(Stmt::Let {
+            pattern: Pattern::Wildcard,
+            value: call,
+        });
+        self.truncate(scope);
+        Some(Stmt::Expr(Expr::Block(Block { stmts, tail: None })))
     }
 
     // --- Loops: what a loop carries, as the elaborator finds it ---
@@ -2133,6 +2332,11 @@ struct Summary {
     arithmetic: usize,
     panicked: usize,
     build_dependent: usize,
+    /// Programs with a call that lends a local by `&mut`, and programs
+    /// with a function that takes one: what the chance of a `&mut`
+    /// parameter is set for.
+    lending: usize,
+    taking_mut: usize,
     rejected: Vec<Rejection>,
     /// Generation or checking panicked: the seed and the message.
     crashed: Vec<(u64, String)>,
@@ -2314,6 +2518,9 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
             summary.branching_assignment += usize::from(in_branches);
             summary.looping_assignment += usize::from(in_loops);
             summary.arithmetic += usize::from(has_operator(&prepared.program));
+            let (lends, takes) = lending_of(&prepared.program);
+            summary.lending += usize::from(lends);
+            summary.taking_mut += usize::from(takes);
             for case in &prepared.cases {
                 let [checked, wrapped] = &case.answers[1];
                 summary.panicked += usize::from(matches!(checked, Ok(Outcome::Panic(_))));
@@ -2336,6 +2543,22 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
             None
         }
     }
+}
+
+/// Whether the program calls a function with a `&mut` argument, and
+/// whether it declares a function with a `&mut` parameter.
+fn lending_of(program: &Program) -> (bool, bool) {
+    let mut counting = program.clone();
+    let mut lends = false;
+    counting.visit_exprs(&mut |expr, _, _| {
+        lends |= matches!(expr, Expr::CallFn { lends, .. } if !lends.is_empty());
+        false
+    });
+    let takes = program
+        .fns
+        .iter()
+        .any(|function| function.item.passing.contains(&Passing::RefMut));
+    (lends, takes)
 }
 
 /// Whether the program applies an operator that may panic.
@@ -2840,6 +3063,8 @@ fn walk_expr(
             .as_deref_mut()
             .is_some_and(|value| walk_expr(value, None, scope, visit)),
         Expr::Assert { condition, .. } => walk_expr(condition, Some(&Type::Bool), scope, visit),
+        // A lent place is a place, and stays one.
+        Expr::Lend { .. } => false,
         Expr::Var { .. }
         | Expr::Bool(_)
         | Expr::Literal(..)
@@ -2967,10 +3192,13 @@ fn hoistable(expr: &Expr, expected: Option<&Type>, tables: &Tables) -> Vec<Expr>
         let (Some(expected), Some(params)) = (expected, tables.params.get(&reference)) else {
             return Vec::new();
         };
+        // A lent place stands only where the parameter is a reference.
         arguments
             .iter()
             .zip(params)
-            .filter(|(_, param)| same_type(param, expected))
+            .filter(|(argument, param)| {
+                same_type(param, expected) && !matches!(argument, Expr::Lend { .. })
+            })
             .map(|(argument, _)| argument.clone())
             .collect()
     };
@@ -3232,12 +3460,14 @@ fn shortened(text: &str) -> String {
 
 fn print_summary(summary: &Summary, mode: &str) {
     let mut out = format!(
-        "random programs ({mode}): {} generated ({} assign, {} in a branch, {} in a loop, {} with an operator), {} rejected by the checker, {} crashed, {} cases ({} panic with overflow checks on, {} differ between the builds): {} agreed, {} inconclusive, {} disagreed\n",
+        "random programs ({mode}): {} generated ({} assign, {} in a branch, {} in a loop, {} with an operator, {} take &mut, {} call with &mut), {} rejected by the checker, {} crashed, {} cases ({} panic with overflow checks on, {} differ between the builds): {} agreed, {} inconclusive, {} disagreed\n",
         summary.generated,
         summary.assigning,
         summary.branching_assignment,
         summary.looping_assignment,
         summary.arithmetic,
+        summary.taking_mut,
+        summary.lending,
         summary.rejected.len(),
         summary.crashed.len(),
         summary.cases,
@@ -3349,6 +3579,8 @@ fn planted(base: &Session) -> (Program, Session) {
     let pair = Type::Tuple(vec![Type::U8, Type::U8]);
     let v3 = Binder::new("v3", pair.clone());
     let item = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "f0".into(),
         math: false,
         params: vec![v0.clone()],
@@ -3561,6 +3793,8 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
     let n = Binder::new("n", Type::U8);
     let k = Binder::new("k", Type::U8);
     let by_let = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "by_let".into(),
         math: false,
         params: vec![n.clone()],
@@ -3584,6 +3818,8 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
         Binder::new("acc", Type::U8),
     );
     let by_for = FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: "by_for".into(),
         math: false,
         params: vec![n.clone()],

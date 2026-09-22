@@ -1,7 +1,7 @@
 //! The erased tree. It mirrors `typed::tree` without its logical content.
 
 use crate::kernel::{EnumId, MachineInt, Op, Prim, StructId, VarId};
-use crate::typed::{CompareOp, Derive, FnRef, PanicForm};
+use crate::typed::{CompareOp, Derive, FnRef, PanicForm, Passing};
 
 /// A simple type: no propositions, no dependency.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,8 +67,29 @@ pub struct EFn {
     /// the tail of `body`, and named without a call.
     pub constant: bool,
     pub params: Vec<(VarId, String, EType)>,
+    /// How each parameter is passed, in the order of `params`; a shorter
+    /// list means the rest are by value. A `&T` or `&mut T` parameter has
+    /// the type lent as its `EType`: the printer writes the reference, and
+    /// the interpreter, which passes values, writes a `&mut` one back to
+    /// the place its caller lent. `MutValue` is kept only when the body
+    /// assigns the parameter, since Rust warns of a `mut` it never needs.
+    pub passing: Vec<Passing>,
     pub result: EType,
     pub body: EBlock,
+}
+
+impl EFn {
+    /// How the parameter at `index` is passed.
+    pub fn passing_of(&self, index: usize) -> Passing {
+        self.passing.get(index).copied().unwrap_or_default()
+    }
+
+    /// The positions of the parameters passed by `&mut`, in order.
+    pub fn lent(&self) -> Vec<usize> {
+        (0..self.params.len())
+            .filter(|&index| self.passing_of(index) == Passing::RefMut)
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -177,6 +198,15 @@ pub enum EExpr {
         callee: FnRef,
         name: String,
         arguments: Vec<EExpr>,
+    },
+    /// `&place` or `&mut place` as the argument of a call: printed as
+    /// written, with a `*` where the root is itself a reference parameter.
+    /// The interpreter passes the place's value, and after the call writes
+    /// the callee's final value of a `&mut` one back to the place, also
+    /// when the callee panics.
+    Lend {
+        mutable: bool,
+        place: EPlace,
     },
     If {
         condition: Box<EExpr>,

@@ -36,7 +36,9 @@ impl Env<'_> {
             tys.push(value.ty);
             fields.push(value.expr);
         }
+        // Over the versions current once the fields are made.
         let ty = telescope.unwrap_or(Type::Tuple(tys));
+        let ty = self.at_current_exit(&ty).into_owned();
         let _ = span;
         Ok(Value::new(
             Expr::Tuple {

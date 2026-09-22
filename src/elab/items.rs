@@ -123,6 +123,8 @@ pub fn elaborate_with(
         formula: None,
         not_a_term: None,
         moves: super::moves::Moves::new(check_moves),
+        exits: Vec::new(),
+        borrowed: Vec::new(),
     };
 
     env.declare_builtin_props();
@@ -803,6 +805,8 @@ impl Env<'_> {
         self.promises = promises;
         self.formula = None;
         self.moves.start_item();
+        self.exits.clear();
+        self.borrowed.clear();
     }
 
     fn declaration(&mut self, declaration: &ast::Declaration) -> Elab<Global> {
@@ -989,14 +993,25 @@ impl Env<'_> {
             elaborated =
                 self.function_body(name, parameters, result, body, logical, promises, constant);
         }
-        let (params, result_ty, block) = elaborated?;
+        let (header, block) = elaborated?;
+        let Header {
+            params,
+            passing,
+            exits,
+            result: result_ty,
+        } = header;
         let item = FnItem {
             name: name.text.clone(),
             math: logical,
             params: params.clone(),
-            result: result_ty.clone(),
+            result: result_ty,
             body: block,
+            passing: passing.clone(),
+            exits,
         };
+        // What a call sees: for a function with `&mut` parameters, the
+        // tuple of their exit values and the result.
+        let result_ty = item.exec_result();
         let elaborate_micros = started.elapsed().as_micros();
         let started = std::time::Instant::now();
         // The checker enforces the promises of an ordinary function; a
@@ -1028,6 +1043,7 @@ impl Env<'_> {
             constant,
             promises,
             takes_mut,
+            passing,
             not_a_term,
             visibility,
         })))
@@ -1045,12 +1061,13 @@ impl Env<'_> {
         logical: bool,
         promises: Promises,
         constant: bool,
-    ) -> Elab<(Vec<Binder>, Type, crate::typed::Block)> {
+    ) -> Elab<(Header, crate::typed::Block)> {
         self.start_item(&name.text, logical, promises);
         if constant {
             self.formula = Some("the value of a constant");
         }
         let mut params: Vec<Binder> = Vec::new();
+        let mut passing = Vec::new();
         for parameter in parameters {
             if params
                 .iter()
@@ -1059,22 +1076,27 @@ impl Env<'_> {
                 let message = format!("parameter `{}` is declared twice", parameter.name.text);
                 return self.fail("L0202", message, parameter.name.span);
             }
-            let written = self.written(&parameter.ty)?;
+            let (written, mode) = self.parameter_type(parameter)?;
             let mut binder = Binder::new(&parameter.name.text, written.ty);
             binder.ghost = written.ghost;
             self.declare(&binder, false, parameter.span)?;
+            self.declare_passing(binder.id, mode);
             params.push(binder);
+            passing.push(mode);
         }
         // `-> !` is a function that never returns. In the logic its result
         // is evidence of `False`, the empty type: a call to it is
         // never-typed, and where a value of another type is wanted the
         // evidence gives it by `match {}` (`exprs.rs`). Its body must end
         // in a never-typed expression, and no `return` can stand in it.
+        // Any other result type speaks of a `&mut` parameter's value at
+        // return (`references.rs`).
         let never = !constant && matches!(result.kind, ast::TypeKind::Never);
-        let result_ty = if never {
-            Type::proof(self.prelude.falsehood_prop())
+        let (exits, result_ty) = if never {
+            let exits = self.exit_binders(&params, &passing, result.span)?;
+            (exits, Type::proof(self.prelude.falsehood_prop()))
         } else {
-            self.ty(result)?
+            self.result_over_exits(result, &params, &passing)?
         };
         if !logical && !constant {
             self.returns = Some(super::env::ReturnTarget {
@@ -1135,7 +1157,15 @@ impl Env<'_> {
                 }
             }
         };
-        Ok((params, result_ty, block))
+        Ok((
+            Header {
+                params,
+                passing,
+                exits,
+                result: result_ty,
+            },
+            block,
+        ))
     }
 
     fn prop(
@@ -1308,6 +1338,7 @@ impl Env<'_> {
                         no_io: true,
                     },
                     takes_mut: false,
+                    passing: Vec::new(),
                     not_a_term: None,
                     visibility: None,
                 })),
@@ -1433,6 +1464,16 @@ impl Env<'_> {
             );
         }
     }
+}
+
+/// A function's signature as elaborated: its parameters, how each is
+/// passed, the exit binders of its `&mut` parameters, and its result type
+/// over them (`references.rs`).
+struct Header {
+    params: Vec<Binder>,
+    passing: Vec<crate::typed::Passing>,
+    exits: Vec<Binder>,
+    result: Type,
 }
 
 #[derive(Clone, Copy)]

@@ -1,0 +1,19 @@
+error[L0264]: `old!` stands in a proposition: a result type, a proof type, `prove!`, or `prop!`
+ --> tests/corpus/reject/old_outside_mut.lc:7:5
+  |
+7 |     old!(counter) //~ error: L0264 `old!` stands in a proposition
+  |     ^^^
+  |
+  = note: `old!(x)` names the value the `&mut` parameter `x` had when the function was entered; the code has only the value `x` has now
+error[L0264]: `n` is not a `&mut` parameter, so it has no entry value to name
+  --> tests/corpus/reject/old_outside_mut.lc:10:37
+   |
+10 | fn of_a_value(n: u8) -> @(n == old!(n)) { //~ error: L0264 `n` is not a `&mut` parameter
+   |                                     ^
+   |
+   = note: `old!(x)` speaks of a parameter `x: &mut T` as it was at entry; any other value is the same value throughout, and is named as it is
+error[L0264]: `old!` takes the name of a `&mut` parameter
+  --> tests/corpus/reject/old_outside_mut.lc:14:55
+   |
+14 | fn of_an_expression(counter: &mut u8) -> @(counter == old!(counter.wrapping_add(0))) { //~ error: L0264 `old!` takes the name of a `...
+   |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

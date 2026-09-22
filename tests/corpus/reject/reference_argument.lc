@@ -1,0 +1,41 @@
+// A reference is written on the argument of a call whose parameter is a
+// reference, as a path to a local: `&x` or `&mut x.f`, the way the
+// parameter is written.
+fn bump(counter: &mut u8) -> () {
+    counter = counter.wrapping_add(1);
+}
+
+fn read(n: &u8) -> u8 {
+    n
+}
+
+fn without_the_borrow(n: u8) -> u8 {
+    let mut count = n;
+    bump(count); //~ error: L0261 `bump` takes `&mut u8` here; write `&mut count`
+    count
+}
+
+fn shared_where_mutable(n: u8) -> u8 {
+    let mut count = n;
+    bump(&count); //~ error: L0261 expected `&mut u8`, found `&u8`
+    count
+}
+
+fn mutable_where_shared(n: u8) -> u8 {
+    let mut count = n;
+    read(&mut count) //~ error: L0261 expected `&u8`, found `&mut u8`
+}
+
+fn not_a_place(n: u8) -> u8 {
+    read(&n.wrapping_add(1)) //~ error: L0261 a reference argument is a path to a local
+}
+
+fn held(n: u8) -> u8 {
+    let r = &n; //~ error: L0261 `&` is written on the argument of a call only
+    n
+}
+
+fn by_value(n: u8) -> u8 {
+    bump(&mut 3); //~ error: L0261 a reference argument is a path to a local
+    n
+}

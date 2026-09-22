@@ -1,0 +1,25 @@
+// The eighth case of the mutation design: a protected value behind `&mut`
+// when a panic unwinds. A field that evidence in the same struct depends
+// on cannot be assigned alone, and for the same reason cannot be lent: the
+// callee would write to it before anything could be checked again, and a
+// panic in between would leave a broken value where a Rust caller can find
+// it. The whole value is lent, and replaced whole, as `set` does; the
+// value is then valid at every moment, whichever path a function leaves by.
+struct Percent {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+fn helper(v: &mut u8) -> () {
+    v = 200;
+}
+
+fn set(percent: &mut Percent, v: u8) -> () {
+    assert!(v <= 100);
+    percent = Percent { value: v, in_range: prove!(v <= 100) };
+}
+
+fn set_field(percent: &mut Percent, v: u8) -> () {
+    assert!(v <= 100);
+    helper(&mut percent.value); //~ error: L0233 lending `percent.value` alone would invalidate `percent.in_range`; lend the whole value
+}

@@ -8,7 +8,7 @@
 use crate::ast::{self, BinaryOp, ExprKind, PatternKind, UnaryOp};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
-use crate::typed::{self, Expr, FnRef, value_term};
+use crate::typed::{self, Block, Expr, FnRef, Pattern, Stmt, is_pure, value_term};
 
 use super::control::Branch;
 use super::env::{Elab, Env, Global};
@@ -116,6 +116,12 @@ impl Env<'_> {
     /// lets a fact about `result.0` serve as a fact about the `next` it was
     /// bound to.
     pub fn coerce(&mut self, value: Value, expected: &Type, span: Span) -> Elab<Value> {
+        // The result type of a function with `&mut` parameters speaks of
+        // their values at return, which are their versions current here:
+        // the substitution waits for the point where the value is checked,
+        // since a branch or a call on the way may have made a version
+        // (`references.rs`).
+        let expected = &*self.at_current_exit(expected);
         if same_type(&value.ty, expected) {
             return Ok(value);
         }
@@ -139,7 +145,23 @@ impl Env<'_> {
             ));
             let solved = self.solve(wanted, span, Some(found));
             self.close_names(mark);
-            return Ok(Value::new(Expr::Proof(solved?), expected.clone()));
+            let solved = solved?;
+            // The evidence found speaks of the value's term. A value with
+            // effects, a call for one, is kept for them and for the
+            // bindings its lowering makes, which the evidence mentions;
+            // a pure value is in the evidence already.
+            let expr = if is_pure(&value.expr) {
+                Expr::Proof(solved)
+            } else {
+                Expr::Block(Block {
+                    stmts: vec![Stmt::Let {
+                        pattern: Pattern::Wildcard,
+                        value: value.expr,
+                    }],
+                    tail: Some(Box::new(Expr::Proof(solved))),
+                })
+            };
+            return Ok(Value::new(expr, expected.clone()));
         }
         let (wanted, found) = (self.show_type(expected), self.show_type(&value.ty));
         self.fail(
@@ -149,7 +171,7 @@ impl Env<'_> {
         )
     }
 
-    fn expr(&mut self, expr: &ast::Expr, expected: Option<&Type>) -> Elab<Value> {
+    pub(super) fn expr(&mut self, expr: &ast::Expr, expected: Option<&Type>) -> Elab<Value> {
         match &expr.kind {
             ExprKind::Error => Err(()),
             ExprKind::Group(inner) => self.expr(inner, expected),
@@ -171,13 +193,16 @@ impl Env<'_> {
                 self.fail("L0290", "string literals are not in Locus yet", expr.span)
             }
             ExprKind::Name(name) => self.name(name, expected),
-            ExprKind::Hole => match expected {
-                Some(Type::Proof(claim)) => {
+            ExprKind::Hole => match expected.map(|expected| self.at_current_exit(expected)) {
+                Some(expected) if matches!(*expected, Type::Proof(_)) => {
+                    let Type::Proof(claim) = &*expected else {
+                        unreachable!("matched just above")
+                    };
                     let proof = self.solve(claim, expr.span, None)?;
                     Ok(Value::new(Expr::Proof(proof), Type::Proof(claim.clone())))
                 }
                 Some(other) => {
-                    let shown = self.show_type(other);
+                    let shown = self.show_type(&other);
                     self.fail(
                         "L0206",
                         format!("`_` asks for evidence, and a `{shown}` is needed here"),
@@ -378,11 +403,20 @@ impl Env<'_> {
                 expr.span,
             ),
             ExprKind::Return(value) => self.return_(expr, value.as_deref(), expected),
-            ExprKind::Ref { .. } => self.fail(
-                "L0290",
-                "references (`&value`, `&mut value`) are not in Locus yet; O3 adds them",
-                expr.span,
-            ),
+            // A reference is an argument of a call, and nothing else, in
+            // this tier (`references.rs`).
+            ExprKind::Ref { mutable, .. } => {
+                let written = if *mutable { "&mut" } else { "&" };
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0261",
+                        format!("`{written}` is written on the argument of a call only"),
+                        expr.span,
+                    )
+                    .note("a reference lasts for one call: `f(&x)` or `f(&mut x.f)` lends a place to a function whose parameter is `&T` or `&mut T`; a reference in a `let`, a field, or a result is not in Locus yet"),
+                );
+                Err(())
+            }
         }
     }
 

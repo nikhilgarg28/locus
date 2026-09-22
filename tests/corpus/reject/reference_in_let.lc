@@ -1,0 +1,23 @@
+// A reference lasts for one call, so it is written on a parameter and
+// nowhere else in this tier: not in a field, a `let`, a result type, or
+// inside another type.
+struct Holder {
+    inner: &u8, //~ error: L0260 `&u8` is written on a parameter only
+}
+
+fn longest(a: &u8, b: &u8) -> &u8 { //~ error: L0260 `&u8` is written on a parameter only
+    a
+}
+
+fn kept(n: u8) -> u8 {
+    let r: &u8 = n; //~ error: L0260 `&u8` is written on a parameter only
+    n
+}
+
+fn nested(n: &&mut u8) -> u8 { //~ error: L0260 `&mut u8` is written on a parameter only
+    n
+}
+
+fn rebound(mut n: &mut u8) -> u8 { //~ error: L0260 `mut n` is not written on a reference parameter
+    n
+}

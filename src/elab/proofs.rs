@@ -70,6 +70,8 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        let expected = expected.map(|expected| self.at_current_exit(expected).into_owned());
+        let expected = expected.as_ref();
         let index = self.prop_variant(info, path)?;
         let variant = &info.variants[index];
         let what = format!("`{}::{}`", info.name, variant.name);
@@ -144,6 +146,8 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        let expected = expected.map(|expected| self.at_current_exit(expected).into_owned());
+        let expected = expected.as_ref();
         let Type::Proof(claim) = scrutinee.ty.clone() else {
             unreachable!("the caller saw evidence")
         };

@@ -12,5 +12,5 @@ mod ir;
 
 pub use crate::erased::Overflow;
 pub use check::{ExecError, Program};
-pub use interp::CheckInterpreter;
+pub use interp::{CheckInterpreter, Lending};
 pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, OperateStmt, Promise, Promises, Stmt, Tail};

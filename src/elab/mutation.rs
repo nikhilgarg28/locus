@@ -35,6 +35,14 @@
 //! and a stale use is a version of another type than the one wanted, which
 //! the checker rejects. A snapshot, evidence bound with `let`, keeps its
 //! type as written.
+//!
+//! A call with a `&mut` argument assigns the argument's root: after the
+//! call the root gets a new version, the old one with the lent path
+//! replaced by the value the callee returned for it, through the same
+//! `write_back` an assignment uses, with the same effect on tracked
+//! evidence (`references.rs`). The right side of an assignment may be such
+//! a call, so the type the assigned place has is read again after the
+//! right side, from the version current then.
 
 use crate::ast::{self, ExprKind};
 use crate::diagnostic::Diagnostic;
@@ -58,12 +66,25 @@ pub(super) struct Tracked {
 }
 
 /// Why tracked evidence is not available: the binding it mentions that was
-/// changed, and the assignment, or the loop, that changed it.
+/// changed, and the assignment, the `&mut` call, or the loop that changed
+/// it.
 #[derive(Clone, Debug)]
 pub(super) struct Stale {
     pub dep: String,
     pub span: Span,
     pub by_loop: bool,
+    /// Lent by `&mut` to a call, which assigned it.
+    pub lent: bool,
+}
+
+/// How a place is reached: assigned, lent by `&mut`, or lent by `&`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Access {
+    Assign,
+    LendMut,
+    Lend,
+    /// Read by value, as a plain argument.
+    Read,
 }
 
 /// The value a join produces: its type when no path reaches the join, and
@@ -117,17 +138,19 @@ pub(super) struct ArmEnd {
     pub leaves: bool,
 }
 
-/// One field of the left side of an assignment, as written.
-enum Part<'a> {
+/// One field of a place, as written.
+pub(super) enum Part<'a> {
     Field(&'a ast::Name),
     Index(&'a str, Span),
 }
 
 /// The name at the root of a place and the fields after it, or `None` for
-/// anything else, which the parser already refused.
-fn place_path(expr: &ast::Expr) -> Option<(&ast::Name, Vec<Part<'_>>)> {
+/// anything else: the parser refuses it on the left of `=`, and a lend
+/// reports it (`references.rs`).
+pub(super) fn place_path(expr: &ast::Expr) -> Option<(&ast::Name, Vec<Part<'_>>)> {
     match &expr.kind {
         ExprKind::Name(name) => Some((name, Vec::new())),
+        ExprKind::Group(inner) => place_path(inner),
         ExprKind::Member { value, name } => {
             let (root, mut parts) = place_path(value)?;
             parts.push(Part::Field(name));
@@ -184,7 +207,7 @@ impl Env<'_> {
     }
 
     /// The current version of a mutable binding, by identity.
-    fn current_version(&self, binding: VarId) -> Option<VarId> {
+    pub(super) fn current_version(&self, binding: VarId) -> Option<VarId> {
         self.names
             .iter()
             .rev()
@@ -249,6 +272,11 @@ impl Env<'_> {
                 format!("which the loop at line {line} assigns"),
                 format!("this loop assigns `{}`", stale.dep),
             )
+        } else if stale.lent {
+            (
+                format!("which was lent by `&mut` at line {line}"),
+                format!("the call assigns `{}`", stale.dep),
+            )
         } else {
             (
                 format!("which was assigned at line {line}"),
@@ -296,14 +324,8 @@ impl Env<'_> {
         let Some((root, parts)) = place_path(place) else {
             return self.internal("an assignment to something that is not a place", place.span);
         };
-        let Some(slot) = self.names.iter().rposition(|local| local.name == root.text) else {
-            return self.fail("L0204", format!("unknown name `{}`", root.text), root.span);
-        };
-        let local = &self.names[slot];
-        if local.poisoned {
-            return Err(());
-        }
-        let Some(binding) = local.binding else {
+        let slot = self.place_slot(root)?;
+        let Some(binding) = self.names[slot].binding else {
             self.diagnostics.push(
                 Diagnostic::error(
                     "L0232",
@@ -311,17 +333,79 @@ impl Env<'_> {
                     root.span,
                 )
                 .note(format!(
-                    "a binding is assigned only when declared with `let mut {}`; a parameter cannot be assigned yet",
+                    "a binding is assigned only when declared with `let mut {0}`, or as a parameter `mut {0}: T` or `{0}: &mut T`",
                     root.text
                 )),
             );
             return Err(());
         };
-        let name = local.name.clone();
-        let declared = self.version_type(slot);
+        let name = self.names[slot].name.clone();
+        let (steps, ty) = self.place_steps(slot, &parts, Access::Assign)?;
+        // The right side, against the type the place has now. A right side
+        // that gives the root a new version, a `&mut` call, leaves the
+        // place to be read from the version current afterwards, so the
+        // value is accepted against the type it has then.
+        let checked = self.expr(value, Some(&ty))?;
+        let ty = self.place_type(slot, &steps, span)?;
+        let value = self.coerce(checked, &ty, value.span)?;
+        let value_term = self.term(&value, span)?;
+        let (version, equation) =
+            self.write_back(slot, &steps, value_term, Access::Assign, span)?;
+        Ok(Stmt::Assign {
+            place: Place {
+                binding,
+                name,
+                path: steps,
+            },
+            value: value.expr,
+            version,
+            equation,
+        })
+    }
+
+    /// The local a place is rooted at, by its name.
+    pub(super) fn place_slot(&mut self, root: &ast::Name) -> Elab<usize> {
+        let Some(slot) = self.names.iter().rposition(|local| local.name == root.text) else {
+            return self.fail("L0204", format!("unknown name `{}`", root.text), root.span);
+        };
+        if self.names[slot].poisoned {
+            return Err(());
+        }
+        Ok(slot)
+    }
+
+    /// The type of a place at the current version of its root: for the
+    /// root itself, its type here, which for tracked evidence is over the
+    /// current versions of what it mentions; for a field, the kernel's.
+    pub(super) fn place_type(&mut self, slot: usize, steps: &[Step], span: Span) -> Elab<Type> {
+        if steps.is_empty() {
+            return Ok(self.version_type(slot));
+        }
+        let target = steps
+            .iter()
+            .fold(Term::var(self.names[slot].id), |target, step| {
+                Term::proj(target, step.index)
+            });
+        self.type_of(&target, span)
+    }
+
+    /// Walks the path of a place from the local at `slot`, at its current
+    /// version: the steps, with what rebuilding the product around each
+    /// needs, and the type of the place. A field that evidence in the same
+    /// product depends on cannot be assigned or lent by `&mut` alone
+    /// (`L0233`): the rebuilt value would carry evidence about the old
+    /// field, and a callee would write the field before anything is
+    /// checked again.
+    pub(super) fn place_steps(
+        &mut self,
+        slot: usize,
+        parts: &[Part<'_>],
+        access: Access,
+    ) -> Elab<(Vec<Step>, Type)> {
+        let name = self.names[slot].name.clone();
         let local = &self.names[slot];
         let mut target = Term::var(local.id);
-        let mut ty = declared.clone();
+        let mut ty = self.version_type(slot);
         let mut steps = Vec::new();
         for part in parts {
             let (index, field_name, part_span) = match (&ty, &part) {
@@ -368,6 +452,9 @@ impl Env<'_> {
             // over as evidence about the old value.
             let assigned = Term::proj(target.clone(), index);
             for later in index + 1..proof_fields.len() {
+                if access == Access::Lend {
+                    break;
+                }
                 let later_ty = self.type_of(&Term::proj(target.clone(), later), part_span)?;
                 let Type::Proof(claim) = &later_ty else {
                     continue;
@@ -377,11 +464,15 @@ impl Env<'_> {
                         self.show_path(&name, &steps, &field_name, index),
                         self.show_path(&name, &steps, &self.field_name(&ty, later), later),
                     );
+                    let (doing, instead) = match access {
+                        Access::Assign => ("assigning", "replace the whole value"),
+                        _ => ("lending", "lend the whole value"),
+                    };
                     self.diagnostics.push(
                         Diagnostic::error(
                             "L0233",
                             format!(
-                                "assigning `{assigned}` alone would invalidate `{dependent}`; replace the whole value"
+                                "{doing} `{assigned}` alone would invalidate `{dependent}`; {instead}"
                             ),
                             part_span,
                         )
@@ -399,12 +490,30 @@ impl Env<'_> {
             target = assigned;
             ty = self.type_of(&target, part_span)?;
         }
-        let value = self.check(value, &ty)?;
-        let value_term = self.term(&value, span)?;
-        // The right side may have assigned the binding itself: the place is
-        // rebuilt from the version current after it.
+        Ok((steps, ty))
+    }
+
+    /// A new version of the binding at `slot`: the version current now with
+    /// the path replaced by `value`, rebuilt as lowering rebuilds it, under
+    /// a fresh identity and equation, which every later mention is. Tracked
+    /// evidence that speaks of the binding is stale from here; the binding
+    /// itself, if it is tracked evidence, has just been established over
+    /// the current versions. Returns the version's binder and equation.
+    pub(super) fn write_back(
+        &mut self,
+        slot: usize,
+        steps: &[Step],
+        value: Term,
+        access: Access,
+        span: Span,
+    ) -> Elab<(Binder, HypId)> {
+        let name = self.names[slot].name.clone();
+        let binding = self.names[slot]
+            .binding
+            .expect("a place written to is rooted at a mutable binding");
+        let declared = self.version_type(slot);
         let current = self.names[slot].id;
-        let whole = match rebuilt(Term::var(current), &steps, value_term) {
+        let whole = match rebuilt(Term::var(current), steps, value) {
             Ok(whole) => whole,
             Err(error) => return self.internal(error, span),
         };
@@ -427,35 +536,27 @@ impl Env<'_> {
         self.names[slot].id = version;
         self.labels.insert(version, name.clone());
         self.learn_from(&Term::var(version), &found);
-        // Evidence that speaks of this binding is stale from here; the
-        // binding itself, if it is tracked evidence, has just been
-        // established over the current versions.
         self.invalidate(
             binding,
             &Stale {
                 dep: name.clone(),
                 span,
                 by_loop: false,
+                lent: access == Access::LendMut,
             },
         );
         if let Some(tracked) = &mut self.names[slot].tracked {
             tracked.stale = None;
         }
-        Ok(Stmt::Assign {
-            place: Place {
-                binding,
-                name: name.clone(),
-                path: steps,
-            },
-            value: value.expr,
-            version: Binder {
+        Ok((
+            Binder {
                 id: version,
                 name,
                 ty: declared,
                 ghost: false,
             },
             equation,
-        })
+        ))
     }
 
     /// Which fields of a product type hold evidence; the length is its arity.

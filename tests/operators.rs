@@ -127,6 +127,8 @@ fn operator_fn(op: Op, ty: MachineInt) -> FnItem {
         Vec::new()
     };
     FnItem {
+        passing: Vec::new(),
+        exits: Vec::new(),
         name: format!("{}_{}", op.name(), ty.name()),
         math: false,
         params,
@@ -319,6 +321,8 @@ fn the_printer_writes_the_operators_with_rusts_precedence() {
     );
     session
         .declare_fn(&FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: "mixed".into(),
             math: false,
             params: vec![a.clone(), b.clone(), c.clone()],
@@ -341,6 +345,8 @@ fn the_printer_writes_the_operators_with_rusts_precedence() {
     for (name, body) in [("right_nested", right_nested), ("left_nested", left_nested)] {
         session
             .declare_fn(&FnItem {
+                passing: Vec::new(),
+                exits: Vec::new(),
                 name: name.into(),
                 math: false,
                 params: vec![a.clone(), b.clone(), c.clone()],
@@ -386,6 +392,8 @@ fn the_printer_writes_the_operators_with_rusts_precedence() {
     };
     session
         .declare_fn(&FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: "cast_then_compare".into(),
             math: false,
             params: vec![a.clone(), x.clone()],
@@ -398,6 +406,8 @@ fn the_printer_writes_the_operators_with_rusts_precedence() {
         .unwrap();
     session
         .declare_fn(&FnItem {
+            passing: Vec::new(),
+            exits: Vec::new(),
             name: "negated_sum".into(),
             math: false,
             params: vec![x.clone(), y.clone()],

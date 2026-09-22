@@ -1,0 +1,16 @@
+// `old!(x)` names the value the `&mut` parameter `x` had at entry, in a
+// proposition: a result type, a proof type, `prove!`, or `prop!`. The code
+// has only the value `x` has now, and a value that is not a `&mut`
+// parameter is the same value throughout.
+fn in_code(counter: &mut u8) -> u8 {
+    counter = counter.wrapping_add(1);
+    old!(counter) //~ error: L0264 `old!` stands in a proposition
+}
+
+fn of_a_value(n: u8) -> @(n == old!(n)) { //~ error: L0264 `n` is not a `&mut` parameter
+    prove!(n == n)
+}
+
+fn of_an_expression(counter: &mut u8) -> @(counter == old!(counter.wrapping_add(0))) { //~ error: L0264 `old!` takes the name of a `&mut` parameter
+    prove!(counter == counter)
+}

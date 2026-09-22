@@ -17,6 +17,15 @@
 //! `Wrap`, the overflow of `+`, `-`, `*`, and unary minus wraps instead, as
 //! a build without overflow checks does, and nothing else changes: `/` and
 //! `%` still panic on a zero divisor and on `min / -1`, in every build.
+//!
+//! A reference is a value here. A `&T` argument passes the value of the
+//! place lent, and a `&mut T` argument passes it in and, when the call
+//! ends, writes the callee's final value of the parameter back to the
+//! place, as Rust's caller finds it there: on a return, and on a panic too,
+//! which carries the values of the callee's `&mut` parameters at that
+//! moment, so that a write before a panic is neither lost nor half done.
+//! `call_lending` reports those values at the top for a Rust harness to be
+//! compared with.
 
 use std::fmt;
 
@@ -130,7 +139,13 @@ impl std::error::Error for RunError {}
 pub(crate) enum Stop {
     /// A `return` with its value, on its way to the call it ends.
     Return(Value),
-    Panic(String),
+    /// A panic with its message and, once it has left a call, the values of
+    /// that call's `&mut` parameters at the moment of the panic; the caller
+    /// writes them back and passes the panic on with its own.
+    Panic {
+        message: String,
+        lent: Vec<Value>,
+    },
     OutOfFuel,
     Error(RunError),
 }
@@ -146,7 +161,7 @@ impl From<RunError> for Stop {
 pub(crate) fn outcome(result: Result<Value, Stop>) -> Result<Outcome, RunError> {
     match result {
         Ok(value) => Ok(Outcome::Value(value)),
-        Err(Stop::Panic(message)) => Ok(Outcome::Panic(message)),
+        Err(Stop::Panic { message, .. }) => Ok(Outcome::Panic(message)),
         Err(Stop::OutOfFuel) => Ok(Outcome::OutOfFuel),
         Err(Stop::Error(error)) => Err(error),
         // Every call catches the returns of its own body.
@@ -209,10 +224,27 @@ impl<'m> Interpreter<'m> {
 
     /// Calls a function of the module.
     pub fn call(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Outcome, RunError> {
-        outcome(self.enter(callee, arguments))
+        outcome(self.enter(callee, arguments).map(|(value, _)| value))
     }
 
-    fn enter(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<Value, Stop> {
+    /// Calls a function, and returns beside the outcome the values of its
+    /// `&mut` parameters when it ended, on a return or at a panic, in
+    /// order: what a caller that lent them sees afterwards.
+    pub fn call_lending(
+        &mut self,
+        callee: FnRef,
+        arguments: Vec<Value>,
+    ) -> Result<(Outcome, Vec<Value>), RunError> {
+        match self.enter(callee, arguments) {
+            Ok((value, lent)) => Ok((Outcome::Value(value), lent)),
+            Err(Stop::Panic { message, lent }) => Ok((Outcome::Panic(message), lent)),
+            Err(other) => outcome(Err(other)).map(|outcome| (outcome, Vec::new())),
+        }
+    }
+
+    /// Runs a call: its value, with the final values of the callee's
+    /// `&mut` parameters, or the stop, which for a panic carries them too.
+    fn enter(&mut self, callee: FnRef, arguments: Vec<Value>) -> Result<(Value, Vec<Value>), Stop> {
         let Some(function) = self.module.fns.iter().find(|f| f.reference == callee) else {
             return stuck("a call to a function that was not emitted");
         };
@@ -233,12 +265,58 @@ impl<'m> Interpreter<'m> {
         self.depth += 1;
         let result = self.block(&function.body);
         self.depth -= 1;
+        // The parameters are the first entries of the body's scope, and an
+        // assignment to one replaced it there.
+        let lent: Vec<Value> = function
+            .lent()
+            .iter()
+            .map(|&index| self.env[index].1.clone())
+            .collect();
         self.env = saved;
         match result {
-            Ok(Flow::Value(value)) | Err(Stop::Return(value)) => Ok(value),
+            Ok(Flow::Value(value)) | Err(Stop::Return(value)) => Ok((value, lent)),
             Ok(_) => stuck(format!("{} ended in break or continue", function.name)),
+            Err(Stop::Panic { message, .. }) => Err(Stop::Panic { message, lent }),
             Err(stop) => Err(stop),
         }
+    }
+
+    /// The value of a place: the binding, or the field of it the path names.
+    fn read(&mut self, place: &EPlace) -> Result<Value, Stop> {
+        let Some((_, value)) = self.env.iter().rev().find(|(var, _)| *var == place.id) else {
+            return stuck(format!("{} is not bound", place.name));
+        };
+        let mut target = value;
+        for (index, _) in &place.path {
+            target = match target {
+                Value::Tuple(fields) | Value::Struct(_, fields) => match fields.get(*index) {
+                    Some(field) => field,
+                    None => return stuck("a lent field that is not there"),
+                },
+                _ => return stuck("a lend into something that is not a product"),
+            };
+        }
+        Ok(target.clone())
+    }
+
+    /// After a call, on a return or a panic: the callee's final values of
+    /// its `&mut` parameters, written back to the places lent, in order.
+    fn write_back(&mut self, arguments: &[EExpr], lent: Vec<Value>) -> Result<(), Stop> {
+        let places = arguments.iter().filter_map(|argument| match argument {
+            EExpr::Lend {
+                mutable: true,
+                place,
+            } => Some(place),
+            _ => None,
+        });
+        let mut lent = lent.into_iter();
+        for place in places {
+            let Some(value) = lent.next() else {
+                return stuck("a callee reported fewer &mut values than were lent");
+            };
+            self.assign(place, value)?;
+        }
+        Ok(())
     }
 
     fn spend(&mut self) -> Result<(), Stop> {
@@ -340,7 +418,10 @@ impl<'m> Interpreter<'m> {
             EExpr::Ghost => Value::Ghost,
             EExpr::Trap => return Err(RunError::Trap.into()),
             EExpr::Panic { form, argument } => {
-                return Err(Stop::Panic(form.message(argument.as_deref())));
+                return Err(Stop::Panic {
+                    message: form.message(argument.as_deref()),
+                    lent: Vec::new(),
+                });
             }
             // Checked in both modes: the builds the modes stand for differ
             // in overflow checks alone, and both have debug assertions on.
@@ -348,7 +429,12 @@ impl<'m> Interpreter<'m> {
                 condition, message, ..
             } => match value!(self.expr(condition)) {
                 Value::Bool(true) => Value::Tuple(Vec::new()),
-                Value::Bool(false) => return Err(Stop::Panic(message.clone())),
+                Value::Bool(false) => {
+                    return Err(Stop::Panic {
+                        message: message.clone(),
+                        lent: Vec::new(),
+                    });
+                }
                 _ => return stuck("an assertion of something that is not a bool"),
             },
             EExpr::Tuple(fields) => match self.all(fields)? {
@@ -409,12 +495,29 @@ impl<'m> Interpreter<'m> {
                 }
                 _ => return stuck("a cast of something that is not a machine integer"),
             },
+            // The arguments in order, a lend reading its place; then the
+            // call, and its `&mut` places written back, whether it returned
+            // or panicked.
             EExpr::Call {
                 callee, arguments, ..
             } => match self.all(arguments)? {
-                Ok(values) => self.enter(*callee, values)?,
+                Ok(values) => match self.enter(*callee, values) {
+                    Ok((value, lent)) => {
+                        self.write_back(arguments, lent)?;
+                        value
+                    }
+                    Err(Stop::Panic { message, lent }) => {
+                        self.write_back(arguments, lent)?;
+                        return Err(Stop::Panic {
+                            message,
+                            lent: Vec::new(),
+                        });
+                    }
+                    Err(stop) => return Err(stop),
+                },
                 Err(flow) => return Ok(flow),
             },
+            EExpr::Lend { place, .. } => self.read(place)?,
             EExpr::If {
                 condition,
                 then_block,
@@ -569,7 +672,10 @@ pub(crate) fn operate(
         ));
     }
     if !row.fits_at(&numbers) && (overflow == Overflow::Checks || !row.wraps_instead()) {
-        return Err(Stop::Panic(panic_message(op, &numbers).into()));
+        return Err(Stop::Panic {
+            message: panic_message(op, &numbers).into(),
+            lent: Vec::new(),
+        });
     }
     let value = row.compute(&numbers);
     Ok(Value::Int(ty, value.to_i128().expect("at most 64 bits")))

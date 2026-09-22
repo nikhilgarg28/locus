@@ -11,6 +11,13 @@
 //! //~ run: f(255) => panic | 0           a call whose outcome depends on the
 //!                                        build: with overflow checks on, then
 //!                                        `|`, then with them off
+//! //~ run: bump(&mut 3 -> 4) => ()       a `&mut` argument: the value lent,
+//!                                        and after `->` the value the place
+//!                                        holds when the call has ended, on
+//!                                        a return or at a panic; `| v` after
+//!                                        it is the value in a build without
+//!                                        overflow checks, when it differs
+//! //~ run: read(&7) => 7                 a `&` argument: the value lent
 //! //~ rust: fn run(n: u8) -> u8 {    text the generated Rust contains
 //! //~ error: L0204                       an error reported on this line
 //! //~^ error: L0204 unknown name         ... on the line above; `^^` is two
@@ -60,6 +67,13 @@
 //! and `\\` for a backslash. The operators panic since E6, and `=> panic`
 //! is also tested below on erased trees that were given a panic by hand.
 //!
+//! A `&mut` argument is a place the call writes: each interpreter reports
+//! the value the callee left in it, and the compiled harness lends a local
+//! and reads it after `catch_unwind`, so that what a write before a panic
+//! leaves is compared too. The harness answers such a run line with the
+//! values of the `&mut` arguments first, `&mut [4, 7] ` before the outcome,
+//! which no other answer begins with.
+//!
 //! `examine` takes a file's name and text and returns every failure in it,
 //! not the first, so the runner is tested on itself below with files whose
 //! expectations are wrong.
@@ -75,15 +89,17 @@ use std::time::Duration;
 
 use locus::diagnostic::Diagnostic;
 use locus::elab::elaborate;
+use std::collections::HashMap;
+
 use locus::erased::{
     self, EBlock, EExpr, EStmt, EType, Interpreter, Markers, Module, Outcome, RunError, Value,
     Visibilities, check_module, print_module_with,
 };
-use locus::exec::{CheckInterpreter, Program};
+use locus::exec::{CheckInterpreter, ExecFnId, Lending, Program};
 use locus::kernel::MachineInt;
 use locus::parser::parse;
 use locus::source::{SourceFile, SourceMap};
-use locus::typed::PanicForm;
+use locus::typed::{PanicForm, Passing};
 
 /// Steps an interpreter may take on one run line.
 const FUEL: u64 = 10_000_000;
@@ -130,6 +146,10 @@ impl fmt::Display for Expected {
     }
 }
 
+/// What a run line did, in an interpreter or in the compiled program, and
+/// what its `&mut` arguments held afterwards, as `Value::debug` prints them.
+type Seen = (Observed, Vec<String>);
+
 /// What a run line did, in an interpreter or in the compiled program.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Observed {
@@ -164,21 +184,41 @@ fn one_line(message: &str) -> String {
 }
 
 impl Observed {
-    fn of_interpreter(result: Result<Outcome, RunError>, module: &Module, fuel: u64) -> Self {
+    fn of_interpreter(
+        result: Result<(Outcome, Vec<Value>), RunError>,
+        module: &Module,
+        fuel: u64,
+    ) -> Seen {
         match result {
-            Ok(Outcome::Value(value)) => Self::Value(value.debug(module)),
-            Ok(Outcome::Panic(message)) => Self::Panic(one_line(&message)),
-            Ok(Outcome::OutOfFuel) => Self::NoAnswer(format!("out of fuel after {fuel} steps")),
-            Err(error) => Self::Failed(error.to_string()),
+            Ok((outcome, lent)) => {
+                let lent = lent.iter().map(|value| value.debug(module)).collect();
+                let observed = match outcome {
+                    Outcome::Value(value) => Self::Value(value.debug(module)),
+                    Outcome::Panic(message) => Self::Panic(one_line(&message)),
+                    Outcome::OutOfFuel => Self::NoAnswer(format!("out of fuel after {fuel} steps")),
+                };
+                (observed, lent)
+            }
+            Err(error) => (Self::Failed(error.to_string()), Vec::new()),
         }
     }
 
-    /// A line the compiled program printed. No value begins with `panic: `.
-    fn of_line(line: &str) -> Self {
-        match line.strip_prefix("panic: ") {
+    /// A line the compiled program printed. No value begins with `panic: `,
+    /// and only the answer to a run line with `&mut` arguments begins with
+    /// `&mut [`: their values, which hold no `]`, then the outcome.
+    fn of_line(line: &str) -> Seen {
+        let (lent, rest) = match line
+            .strip_prefix("&mut [")
+            .and_then(|rest| rest.split_once("] "))
+        {
+            Some((lent, rest)) => (split_values(lent), rest),
+            None => (Vec::new(), line),
+        };
+        let observed = match rest.strip_prefix("panic: ") {
             Some(message) => Self::Panic(message.into()),
-            None => Self::Value(line.into()),
-        }
+            None => Self::Value(rest.into()),
+        };
+        (observed, lent)
     }
 }
 
@@ -190,11 +230,42 @@ enum Verdict {
     Inconclusive(String),
 }
 
+/// The values of a list as `{:?}` prints them, `a, b`, split at the commas
+/// between them and not at those inside a struct or a tuple.
+fn split_values(list: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut depth = 0usize;
+    let mut current = String::new();
+    let mut chars = list.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                values.push(current.trim().to_string());
+                current.clear();
+                if chars.peek() == Some(&' ') {
+                    chars.next();
+                }
+                continue;
+            }
+            _ => {}
+        }
+        current.push(c);
+    }
+    if !current.trim().is_empty() {
+        values.push(current.trim().to_string());
+    }
+    values
+}
+
 /// An expectation against what was seen. Outcomes are compared as outcomes:
 /// a value with a value, a panic with a panic and then the messages. No
 /// answer is compared with nothing, so out of fuel can neither satisfy
-/// `=> panic` nor contradict `=> 7`.
-fn judge(expected: &Expected, observed: &Observed) -> Verdict {
+/// `=> panic` nor contradict `=> 7`. The values the `&mut` arguments hold
+/// afterwards are compared as text, after the outcome.
+fn judge(expected: &Expected, lent: &[String], seen: &Seen) -> Verdict {
+    let (observed, left) = seen;
     let holds = match (expected, observed) {
         (_, Observed::NoAnswer(_)) => return Verdict::Inconclusive(format!("gave {observed}")),
         (Expected::Value(expected), Observed::Value(value)) => expected == value,
@@ -202,10 +273,17 @@ fn judge(expected: &Expected, observed: &Observed) -> Verdict {
         (Expected::Panic(Some(expected)), Observed::Panic(message)) => expected == message,
         _ => false,
     };
-    if holds {
+    if !holds {
+        return Verdict::Fails(format!("is `{observed}`, expected `{expected}`"));
+    }
+    if matches!(observed, Observed::Failed(_)) || left == lent {
         Verdict::Holds
     } else {
-        Verdict::Fails(format!("is `{observed}`, expected `{expected}`"))
+        Verdict::Fails(format!(
+            "leaves its `&mut` arguments `[{}]`, expected `[{}]`",
+            left.join(", "),
+            lent.join(", ")
+        ))
     }
 }
 
@@ -355,11 +433,16 @@ struct Compiled {
 struct CompiledRun {
     line: usize,
     /// The call as a Rust expression, by the module's path, which resolves
-    /// from inside the module once it imports the crate's root.
+    /// from inside the module once it imports the crate's root; for a run
+    /// line with `&mut` arguments, a block that lends locals to the call
+    /// under `catch_unwind` and reads them afterwards.
     call: String,
     expected: Expected,
     /// The outcome in a build without overflow checks, when it differs.
     wrapping: Option<Expected>,
+    /// What each `&mut` argument holds afterwards, as text: with overflow
+    /// checks on, and without when it differs.
+    lent: Vec<(String, Option<String>)>,
 }
 
 /// How the compiled program treats arithmetic overflow. The harness is built
@@ -407,6 +490,24 @@ impl CompiledRun {
             _ => &self.expected,
         }
     }
+
+    /// What the run line expects each `&mut` argument to hold afterwards
+    /// in a build.
+    fn lent_in(&self, build: Overflow) -> Vec<String> {
+        self.lent
+            .iter()
+            .map(|(checked, wrapping)| match (build, wrapping) {
+                (Overflow::Wrapping, Some(wrapping)) => wrapping.clone(),
+                _ => checked.clone(),
+            })
+            .collect()
+    }
+
+    /// Whether the run line has `&mut` arguments, and the answer is the
+    /// values they hold followed by the outcome.
+    fn lends(&self) -> bool {
+        !self.lent.is_empty()
+    }
 }
 
 /// What came of comparing: what is wrong, and what could not be decided.
@@ -430,6 +531,8 @@ struct Subject<'a> {
     /// The check IR the erased tree is compared with. An erased tree that
     /// was built by hand has none, and runs in its own interpreter only.
     program: Option<&'a Program>,
+    /// What its interpreter needs of the functions with `&mut` parameters.
+    lending: Option<&'a HashMap<ExecFnId, Lending>>,
     proofs: usize,
     /// What the items are marked with, as the file wrote it: private by
     /// default, which is why the harness answers from inside each module.
@@ -535,6 +638,7 @@ fn examine_inner(name: &str, text: &str) -> Examined {
     let subject = Subject {
         module: elaborated.session.erased(),
         program: Some(elaborated.session.program()),
+        lending: Some(elaborated.session.lending()),
         proofs: elaborated.holes.len(),
         visibilities: elaborated.visibilities.clone(),
     };
@@ -551,6 +655,7 @@ fn examine_tree(name: &str, text: &str, module: &Module, fuel: u64) -> Examined 
     let subject = Subject {
         module,
         program: None,
+        lending: None,
         proofs: 0,
         visibilities: Visibilities::everything_public(),
     };
@@ -612,7 +717,7 @@ fn examine_accepted(
                 expected,
                 wrapping,
             } => {
-                let (function, arguments) = match parse_call(&call, module) {
+                let (function, arguments, lent) = match parse_call(&call, module) {
                     Ok(parsed) => parsed,
                     Err(why) => {
                         fail(at, format!("`{call}`: {why}"));
@@ -626,30 +731,42 @@ fn examine_accepted(
                     call: String::new(),
                     expected,
                     wrapping,
+                    lent: lent
+                        .iter()
+                        .map(|(after, wrapping)| {
+                            (
+                                after.debug(module),
+                                wrapping.as_ref().map(|value| value.debug(module)),
+                            )
+                        })
+                        .collect(),
                 };
                 // Each interpreter in each mode, against the expectation
                 // of the build the mode matches.
                 for build in Overflow::ALL {
                     let results = [
                         subject.program.map(|program| {
+                            let mut interpreter =
+                                CheckInterpreter::new(program, fuel).with_overflow(build.mode());
+                            if let Some(lending) = subject.lending {
+                                interpreter = interpreter.with_lending(lending);
+                            }
                             (
                                 "check-IR interpreter",
-                                CheckInterpreter::new(program, fuel)
-                                    .with_overflow(build.mode())
-                                    .call(reference, arguments.clone()),
+                                interpreter.call_lending(reference, arguments.clone()),
                             )
                         }),
                         Some((
                             "erased-tree interpreter",
                             Interpreter::new(module, fuel)
                                 .with_overflow(build.mode())
-                                .call(reference, arguments.clone()),
+                                .call_lending(reference, arguments.clone()),
                         )),
                     ];
                     for (interpreter, result) in results.into_iter().flatten() {
-                        let observed = Observed::of_interpreter(result, module, fuel);
+                        let seen = Observed::of_interpreter(result, module, fuel);
                         let where_ = format!("{interpreter}, {}: `{call}`", build.name());
-                        match judge(run.expected_in(build), &observed) {
+                        match judge(run.expected_in(build), &run.lent_in(build), &seen) {
                             Verdict::Holds => {}
                             Verdict::Fails(why) => fail(at, format!("{where_} {why}")),
                             Verdict::Inconclusive(why) => {
@@ -658,17 +775,13 @@ fn examine_accepted(
                         }
                     }
                 }
+                let function = &module.fns[function];
                 let arguments: Vec<String> = arguments
                     .iter()
                     .map(|value| rust_value(value, module, &compiled.module))
                     .collect();
                 compiled.runs.push(CompiledRun {
-                    call: format!(
-                        "{}::{}({})",
-                        compiled.module,
-                        module.fns[function].name,
-                        arguments.join(", ")
-                    ),
+                    call: compiled_call(&compiled.module, function, &arguments),
                     ..run
                 });
             }
@@ -941,8 +1054,13 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// `f(arguments)` as the function's index in the erased tree and the values.
-fn parse_call(call: &str, module: &Module) -> Result<(usize, Vec<Value>), String> {
+/// `f(arguments)` as the function's index in the erased tree, the values,
+/// and for each `&mut` argument what it is expected to hold afterwards:
+/// with overflow checks on, and without when the line gives a second
+/// value.
+type ParsedCall = (usize, Vec<Value>, Vec<(Value, Option<Value>)>);
+
+fn parse_call(call: &str, module: &Module) -> Result<ParsedCall, String> {
     let Some((name, arguments)) = call.split_once('(') else {
         return Err("a call reads `f(arguments)`".into());
     };
@@ -952,20 +1070,91 @@ fn parse_call(call: &str, module: &Module) -> Result<(usize, Vec<Value>), String
             "there is no `{name}` in the erased tree; a function that exists only in proofs cannot be run"
         ));
     };
-    let tys: Vec<EType> = module.fns[index]
-        .params
-        .iter()
-        .map(|(_, _, ty)| ty.clone())
-        .collect();
+    let function = &module.fns[index];
     let mut cursor = Cursor { rest: arguments };
-    let values = cursor.values(&tys, module, ")")?;
+    let mut values = Vec::new();
+    let mut lent = Vec::new();
+    for (position, (_, _, ty)) in function.params.iter().enumerate() {
+        if position > 0 {
+            cursor.expect(",")?;
+        }
+        match function.passing_of(position) {
+            Passing::Value | Passing::MutValue => values.push(cursor.value(ty, module)?),
+            Passing::Ref => {
+                cursor.expect("&")?;
+                values.push(cursor.value(ty, module)?);
+            }
+            Passing::RefMut => {
+                cursor.expect("&mut")?;
+                values.push(cursor.value(ty, module)?);
+                if !cursor.eat("->") {
+                    return Err(
+                        "a `&mut` argument reads `&mut value -> value after the call`".into(),
+                    );
+                }
+                let after = cursor.value(ty, module)?;
+                let wrapping = if cursor.eat("|") {
+                    Some(cursor.value(ty, module)?)
+                } else {
+                    None
+                };
+                lent.push((after, wrapping));
+            }
+        }
+    }
+    if cursor.eat(",") && !cursor.rest.trim_start().starts_with(')') {
+        return Err(format!(
+            "more than {} value(s) before `)`",
+            function.params.len()
+        ));
+    }
+    cursor.expect(")")?;
     if !cursor.rest.trim().is_empty() {
         return Err(format!(
             "unexpected `{}` after the call",
             cursor.rest.trim()
         ));
     }
-    Ok((index, values))
+    Ok((index, values, lent))
+}
+
+/// The call of a run line as the harness makes it: `m::f(a, b)`, or, when
+/// the function takes `&mut` or `&` arguments, a block that lends locals
+/// to the call under `catch_unwind` and yields the result with what the
+/// `&mut` locals hold afterwards, as text, for `answer_lending`.
+fn compiled_call(module: &str, function: &erased::EFn, arguments: &[String]) -> String {
+    if function.lent().is_empty() {
+        let arguments: Vec<String> = arguments
+            .iter()
+            .enumerate()
+            .map(|(index, argument)| match function.passing_of(index) {
+                Passing::Ref => format!("&({argument})"),
+                _ => argument.clone(),
+            })
+            .collect();
+        return format!("{module}::{}({})", function.name, arguments.join(", "));
+    }
+    let mut lets = Vec::new();
+    let mut passed = Vec::new();
+    let mut read = Vec::new();
+    for (index, argument) in arguments.iter().enumerate() {
+        match function.passing_of(index) {
+            Passing::Value | Passing::MutValue => passed.push(argument.clone()),
+            Passing::Ref => passed.push(format!("&({argument})")),
+            Passing::RefMut => {
+                lets.push(format!("let mut a{index} = {argument};"));
+                passed.push(format!("&mut a{index}"));
+                read.push(format!("format!(\"{{:?}}\", a{index})"));
+            }
+        }
+    }
+    format!(
+        "{{ {} let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {module}::{}({}))); (result, vec![{}]) }}",
+        lets.join(" "),
+        function.name,
+        passed.join(", "),
+        read.join(", ")
+    )
 }
 
 /// A value as a Rust expression, written from outside the file's module.
@@ -1022,14 +1211,13 @@ fn rust_value(value: &Value, module: &Module, path: &str) -> String {
 /// `one_line` writes it. Each answer is flushed, so that what was answered
 /// before the program is killed is not lost, and the program starts from the
 /// run line it is given, so that it can be started again past the one it was
-/// killed in.
+/// killed in. A run line with `&mut` arguments is answered by
+/// `answer_lending`, with what they hold afterwards before the outcome
+/// (`compiled_call`). `tests/common/compiled.rs` has `answer` alone: the
+/// programs it runs lend nothing at the top.
 const ANSWER: &str = r#"
-fn answer<T: std::fmt::Debug>(index: usize, from: usize, call: fn() -> T) {
-    use std::io::Write;
-    if index < from {
-        return;
-    }
-    let line = match std::panic::catch_unwind(call) {
+fn render<T: std::fmt::Debug>(result: std::thread::Result<T>) -> String {
+    match result {
         Ok(value) => format!("{value:?}"),
         Err(payload) => {
             let message = match (payload.downcast_ref::<&str>(), payload.downcast_ref::<String>()) {
@@ -1040,9 +1228,33 @@ fn answer<T: std::fmt::Debug>(index: usize, from: usize, call: fn() -> T) {
             let message = message.replace('\\', "\\\\").replace('\n', "\\n").replace('\r', "\\r");
             format!("panic: {message}")
         }
-    };
+    }
+}
+
+fn emit(line: String) {
+    use std::io::Write;
     let mut out = std::io::stdout().lock();
     writeln!(out, "{line}").and_then(|()| out.flush()).expect("stdout is open");
+}
+
+fn answer<T: std::fmt::Debug>(index: usize, from: usize, call: fn() -> T) {
+    if index < from {
+        return;
+    }
+    emit(render(std::panic::catch_unwind(call)));
+}
+
+#[allow(dead_code)]
+fn answer_lending<T: std::fmt::Debug>(
+    index: usize,
+    from: usize,
+    run: impl FnOnce() -> (std::thread::Result<T>, Vec<String>),
+) {
+    if index < from {
+        return;
+    }
+    let (result, lent) = run();
+    emit(format!("&mut [{}] {}", lent.join(", "), render(result)));
 }
 
 fn main() {
@@ -1071,8 +1283,13 @@ fn harness(compiled: &[Compiled]) -> String {
             source.push_str("\n#[allow(unused_imports)]\nuse crate::*;\n");
             source.push_str("\npub fn answers(from: usize) {\n");
             for run in &file.runs {
+                let answer = if run.lends() {
+                    "answer_lending"
+                } else {
+                    "answer"
+                };
                 source.push_str(&format!(
-                    "    crate::answer({index}, from, || {});\n",
+                    "    crate::{answer}({index}, from, || {});\n",
                     run.call
                 ));
                 index += 1;
@@ -1094,7 +1311,7 @@ fn harness(compiled: &[Compiled]) -> String {
 }
 
 /// What one build answered against every run line, in order.
-fn compare(compiled: &[Compiled], build: Overflow, observed: &[Observed]) -> Report {
+fn compare(compiled: &[Compiled], build: Overflow, observed: &[Seen]) -> Report {
     let mut report = Report::default();
     let mut observed = observed.iter();
     for file in compiled {
@@ -1108,7 +1325,7 @@ fn compare(compiled: &[Compiled], build: Overflow, observed: &[Observed]) -> Rep
                 report.failures.push(remark("was not answered".into()));
                 continue;
             };
-            match judge(run.expected_in(build), observed) {
+            match judge(run.expected_in(build), &run.lent_in(build), observed) {
                 Verdict::Holds => {}
                 Verdict::Fails(why) => report.failures.push(remark(why)),
                 Verdict::Inconclusive(why) => report.inconclusive.push(remark(why)),
@@ -1187,7 +1404,7 @@ fn run_from(binary: &Path, from: usize, timeout: Duration) -> (Vec<String>, Ende
 /// Every run line's answer from one build. When the program stops short, the
 /// run line it was in gets no answer, or an error if the program died, and
 /// the program is started again from the next.
-fn observe(binary: &Path, total: usize, timeout: Duration) -> Vec<Observed> {
+fn observe(binary: &Path, total: usize, timeout: Duration) -> Vec<Seen> {
     let mut observed = Vec::new();
     while observed.len() < total {
         let (lines, ended) = run_from(binary, observed.len(), timeout);
@@ -1195,7 +1412,7 @@ fn observe(binary: &Path, total: usize, timeout: Duration) -> Vec<Observed> {
         if observed.len() >= total {
             break;
         }
-        observed.push(match ended {
+        let failed = match ended {
             Ended::Killed => {
                 Observed::NoAnswer(format!("killed after {timeout:?} without an answer"))
             }
@@ -1203,7 +1420,8 @@ fn observe(binary: &Path, total: usize, timeout: Duration) -> Vec<Observed> {
                 Observed::Failed(format!("the program exited with {status}: {stderr}"))
             }
             Ended::Exited(..) => Observed::Failed("the program printed nothing for it".into()),
-        });
+        };
+        observed.push((failed, Vec::new()));
     }
     observed
 }
@@ -1475,7 +1693,7 @@ fn a_build_dependent_run_line_is_judged_per_build() {
     let checked_output = "panic: attempt to add with overflow\npanic: attempt to add with overflow\n255\npanic: attempt to add with overflow\npanic: attempt to add with overflow\npanic: attempt to add with overflow\n";
     let wrapping_output = "0\n0\n255\n0\n0\n0\n";
     let failures = |build: Overflow, output: &str| -> Vec<String> {
-        let observed: Vec<Observed> = output.lines().map(Observed::of_line).collect();
+        let observed: Vec<Seen> = output.lines().map(Observed::of_line).collect();
         let report = compare(&compiled, build, &observed);
         report.failures.iter().map(Failure::to_string).collect()
     };
@@ -1615,7 +1833,7 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     );
     let compiled = [examine("memory.lc", &text).compiled.unwrap()];
     let failures = |output: &str| -> Vec<String> {
-        let observed: Vec<Observed> = output.lines().map(Observed::of_line).collect();
+        let observed: Vec<Seen> = output.lines().map(Observed::of_line).collect();
         let report = compare(&compiled, Overflow::Checked, &observed);
         assert!(report.inconclusive.is_empty());
         report.failures.iter().map(Failure::to_string).collect()
@@ -1650,6 +1868,7 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     );
     assert!(source.contains("    crate::answer(1, from, || memory::increment(2));\n"));
     assert!(source.contains("std::panic::catch_unwind(call)"));
+    assert!(!source.contains("answer_lending("));
     // A batch with no run lines is a program all the same.
     assert!(harness(&[]).ends_with("fn main() {}\n"));
 }
@@ -1802,6 +2021,7 @@ fn plant(expr: &mut EExpr) {
         | EExpr::Proved
         | EExpr::Ghost
         | EExpr::Trap
+        | EExpr::Lend { .. }
         | EExpr::Panic { .. } => {}
         EExpr::Tuple(exprs)
         | EExpr::Variant { payload: exprs, .. }
@@ -2095,6 +2315,7 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
     let subject = Subject {
         module: elaborated.session.erased(),
         program: Some(elaborated.session.program()),
+        lending: Some(elaborated.session.lending()),
         proofs: 0,
         visibilities: elaborated.visibilities.clone(),
     };

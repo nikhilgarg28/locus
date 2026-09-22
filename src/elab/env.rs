@@ -12,7 +12,7 @@ use crate::kernel::{
     VarId, infer_term, telescope_entry,
 };
 use crate::source::{SourceFile, Span};
-use crate::typed::{Binder, Derive, FnRef, Session};
+use crate::typed::{Binder, Derive, FnRef, Passing, Session};
 
 use super::items::{HoleReport, ItemReport};
 use super::moves::{LoopMoves, Moved, Moves};
@@ -91,6 +91,11 @@ pub(super) struct FnInfo {
     pub promises: Promises,
     /// A parameter is `&mut`: the function writes what its caller can see.
     pub takes_mut: bool,
+    /// How each parameter is passed, in the order of `params`; a shorter
+    /// list means the rest are by value. For a function with `&mut`
+    /// parameters `result` is the tuple of their exit values followed by
+    /// the declared result (`FnItem::exec_result`).
+    pub passing: Vec<Passing>,
     /// The function makes every promise of the logic and its body is still
     /// not a kernel term: what it contains that is not one, and the line.
     /// It is checked as an ordinary function with its promises, and is
@@ -293,6 +298,15 @@ pub(super) struct Env<'a> {
     pub not_a_term: Option<(String, Span)>,
     /// The move analysis (`moves.rs`).
     pub moves: Moves,
+    /// The `&mut` parameters of the function being elaborated: for each,
+    /// the binder its result type speaks of it by, its value at return,
+    /// the parameter's identity, which is also its entry value, and its
+    /// name (`references.rs`).
+    pub exits: Vec<(VarId, VarId, String)>,
+    /// The reference parameters of the function being elaborated, by
+    /// identity: a `&T` parameter's own, a `&mut T` parameter's binding.
+    /// Nothing is moved out of one (`moves.rs`).
+    pub borrowed: Vec<VarId>,
 }
 
 impl Env<'_> {

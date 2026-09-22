@@ -7,8 +7,10 @@
 //! `ANSWER`, `run_from`, and `observe` are the same there and here, and
 //! `harness` and `compile` are its `harness` and the rustc call inside its
 //! `compile_and_compare`, with the corpus's run lines replaced by plain
-//! calls. The corpus should come to use this file; until then a change to
-//! one belongs in the other.
+//! calls. The corpus's `ANSWER` also has `answer_lending`, for a run line
+//! with `&mut` arguments (O3), which no call here has: a generated program
+//! lends nothing at its entries. The corpus should come to use this file;
+//! until then a change to one belongs in the other.
 //!
 //! This file is not part of `common/mod.rs`. A test includes it directly with
 //! `#[path = "common/compiled.rs"] mod compiled;`.

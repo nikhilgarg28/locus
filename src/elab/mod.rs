@@ -28,6 +28,7 @@ mod operators;
 mod order;
 mod patterns;
 mod proofs;
+mod references;
 mod show;
 mod solve;
 mod stored;
