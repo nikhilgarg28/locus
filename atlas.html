@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 87,
-  "savedAt": "2026-09-22T20:14:12.000Z",
+  "rev": 88,
+  "savedAt": "2026-09-22T20:22:59.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -2424,10 +2424,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Loops are lowered to state",
     "",
-    "Lowering treats a loop as it treats a branch that assigns. It computes over binding identities the set of bindings declared outside the loop that its body assigns, and for a while those its condition assigns too, in declaration order, and rejects a tree that names any other set. That tuple is the state of the check IR's loop or for. The entry supplies the versions current before the loop, the body sees the fresh versions the tree names for its state, every continue and the end of the body supply the versions current at that point, and a break supplies them followed by its value when the loop is a loop. The result is the tuple of the versions after the loop, plus the value, and after the loop each version and the value are bound by projection, so nothing is known of a carried binding afterwards but its type and what the value says. A while is a loop whose body evaluates the condition and matches on it, breaking on false and continuing after the body on true. The simplified bounded for rests on the state no longer depending on the index, which was the only thing the ordered proof served: an empty range runs no pass and the checker, both interpreters, and compiled Rust agree on that, so no order of the bounds is asked, the body gets lo \u003c= i and i \u003c hi, or i \u003c= hi for an inclusive range, afresh each pass over the views of any machine integer type, and break may leave the for with the state as its result. No loop lowers to a kernel term any more; the kernel's for term is unchanged and no longer produced."
+    "Lowering treats a loop as it treats a branch that assigns. It computes over binding identities the set of bindings declared outside the loop that its body assigns, and for a while those its condition assigns too, in declaration order, and rejects a tree that names any other set. That tuple is the state of the check IR's loop or for. The entry supplies the versions current before the loop, the body sees the fresh versions the tree names for its state, every continue and the end of the body supply the versions current at that point, and a break supplies them followed by its value when the loop is a loop. The result is the tuple of the versions after the loop, plus the value, and after the loop each version and the value are bound by projection, so nothing is known of a carried binding afterwards but its type and what the value says. A while is a loop whose body evaluates the condition and matches on it, breaking on false and continuing after the body on true. The simplified bounded for rests on the state no longer depending on the index, which was the only thing the ordered proof served: an empty range runs no pass and the checker, both interpreters, and compiled Rust agree on that, so no order of the bounds is asked, the body gets lo \u003c= i and i \u003c hi, or i \u003c= hi for an inclusive range, afresh each pass over the views of any machine integer type, and break may leave the for with the state as its result. No loop lowers to a kernel term any more; the kernel's for term is unchanged and no longer produced.",
+    "",
+    "## Tracked evidence",
+    "",
+    "Tracked evidence is a mutable binding like any other in lowering. Its declared type mentions the versions of other mutable bindings that were current where it was written, and the type of each of its versions, at an assignment, in the tuple of a join, and in the state of a loop, is that declared type over the versions current at that point. A refresh is an assignment whose value is checked against that type, and a use of a version whose type speaks of an old version of what it mentions, where the claim over the current one is wanted, is a mismatch the checker of the check IR already rejects, since it type-checks versions and nothing else. The elaborator's flow analysis, which decides when evidence must be refreshed, which evidence a loop carries and which a join keeps, is not trusted for this and only gives the early error. Two rules of lowering were sharpened for it: what an arm assigns joins nothing when the arm leaves by break, continue, or a panic, since no tuple is ever built from it, and a binding of proof type may be left out of a join or a loop's state, its earlier version remaining a true fact about the versions it names, while a binding of data may not."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T17:55:18.000Z"
+   "updated": "2026-09-22T20:22:59.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7828,23 +7832,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t296",
    "n": 180,
    "title": "M4 · Tracked evidence: let mut evidence, invalidated by assignment, refreshed explicitly",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179), E1 (LOC-167).\nUnblocks: O3 (LOC-184).\nCovers: LOC-16.\n\nScope. Assigning to a variable invalidates tracked evidence that mentions it; using it before a refresh is an error shaped like use after move. ok = _; or ok = proof; refreshes. Around a loop it must hold on entry and at every continue and at the end of the body, and is known after.\n\nTests.\n- The first four cases of M0 as named tests.\n- The flow analysis is tested as untrusted: typed trees built by hand that skip a refresh are rejected by the checker of the check IR, not by the elaborator.\n- run from the 32-bit lock checks, runs, and compiles; the lock file is complete.\n\nDone when. The third milestone: a loop that carries a proof, with no invariant construct.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. Milestone 3 reached: tests/corpus/target/lock.lc checks, runs, and compiles in full (11 proofs), with let mut ok: @within_limit(lock.failures) carried by the loop and refreshed each pass. A tracked binding is a let mut whose type mentions other mutable bindings; assigning a dependency makes it stale (L0245 on use, L0246 at a continue, break, body end, or while exit); a refresh is an assignment checked against the claim over the current versions. Lowering types every version at joins and loop state over the current versions, so the trusted checker rejects a stale use as a type mismatch and needs nothing new; tested with a hand-built tree. Two lowering rules sharpened: an arm that leaves contributes nothing to a join; a proof-typed binding may be left out of a join or loop state. The while exit fact remains unexported.\n\nLane: Mutation. Wave 9.\nDepends on: M3 (LOC-179), E1 (LOC-167).\nUnblocks: O3 (LOC-184).\nCovers: LOC-16.\n\nScope. Assigning to a variable invalidates tracked evidence that mentions it; using it before a refresh is an error shaped like use after move. ok = _; or ok = proof; refreshes. Around a loop it must hold on entry and at every continue and at the end of the body, and is known after.\n\nTests.\n- The first four cases of M0 as named tests.\n- The flow analysis is tested as untrusted: typed trees built by hand that skip a refresh are rejected by the checker of the check IR, not by the elaborator.\n- run from the 32-bit lock checks, runs, and compiles; the lock file is complete.\n\nDone when. The third milestone: a loop that carries a proof, with no invariant construct.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T19:37:12.000Z"
+   "updated": "2026-09-22T20:22:59.000Z"
   },
   {
    "id": "t297",
    "n": 181,
    "title": "M5 · return and the never type in the surface language",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179).\nUnblocks: R4 (LOC-189).\nCovers: LOC-93, LOC-92.\n\nScope. return lowers to the block ending of M1. ! is the type of return, break, continue, and the panicking forms, and coerces to any type.\n\nTests.\n- A return inside a loop inside a branch, three ways.\n- Evidence owed at an early return is reported at the return.\n- Code after a never-typed expression is reported as unreachable, as rustc would warn.\n\nDone when. Early exit works as in Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T17:55:18.000Z"
+   "updated": "2026-09-22T20:22:59.000Z"
   },
   {
    "id": "t298",
@@ -7872,12 +7876,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t300",
    "n": 184,
    "title": "O3 · References as parameters: &T and &mut T, path arguments, disjointness, old!",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n- A field that evidence in its struct depends on cannot be lent: &mut percent.value is rejected by lowering, and &mut percent is accepted.\n- A panic carries the values of the &mut parameters at that moment, in both interpreters and in the compiled harness, which reads the arguments after catch_unwind. A callee that writes and then panics, called directly and through a caller that lent a field of its own &mut parameter.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T19:45:50.000Z"
+   "updated": "2026-09-22T20:22:59.000Z"
   },
   {
    "id": "t301",
