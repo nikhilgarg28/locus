@@ -86,12 +86,63 @@ impl Env<'_> {
         }
     }
 
+    /// The rule that admits a function to a proposition, or to the value of
+    /// a constant: it promises `terminates`, `no_panic`, and `no_io`, and
+    /// takes no `&mut`. A `math fn` does by definition. `L0209` names what
+    /// is missing.
+    pub(super) fn admit_to_formula(&mut self, info: &FnInfo, place: &str, span: Span) -> Elab<()> {
+        let Some(gap) = info.logical_gap() else {
+            return Ok(());
+        };
+        self.diagnostics.push(
+            crate::diagnostic::Diagnostic::error(
+                "L0209",
+                format!("`{}` cannot appear in {place}: {gap}", info.name),
+                span,
+            )
+            .note("a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value; a `math fn` promises the three"),
+        );
+        Err(())
+    }
+
+    /// A call keeps the caller's promises only if the callee makes each of
+    /// them. `L0232` names the first it does not.
+    fn keep_promises(&mut self, info: &FnInfo, span: Span) -> Elab<()> {
+        let Some(promise) = super::env::first_broken(self.promises, info.promises) else {
+            return Ok(());
+        };
+        self.diagnostics.push(
+            crate::diagnostic::Diagnostic::error(
+                "L0232",
+                format!(
+                    "`{}` promises {} and calls `{}`, which does not",
+                    self.item_name,
+                    promise.name(),
+                    info.name
+                ),
+                span,
+            )
+            .note(format!(
+                "a promise is never inferred: `{}` keeps {} only if it says so, with `#[{}]` or `#![{}]` at the top of its file",
+                info.name,
+                promise.name(),
+                promise.name(),
+                promise.name()
+            )),
+        );
+        Err(())
+    }
+
     pub(super) fn call_fn(
         &mut self,
         info: &FnInfo,
         arguments: &[ast::Expr],
         span: Span,
     ) -> Elab<Value> {
+        match self.formula {
+            Some(place) => self.admit_to_formula(info, place, span)?,
+            None => self.keep_promises(info, span)?,
+        }
         let ids: Vec<VarId> = info.params.iter().map(|param| param.id).collect();
         let mut tys: Vec<Type> = info.params.iter().map(|param| param.ty.clone()).collect();
         tys.push(info.result.clone());
@@ -125,16 +176,16 @@ impl Env<'_> {
                 ty,
             )),
             FnRef::Exec(id) => {
+                // A formula admits only functions of the logic, and a
+                // function of the logic promises what admits its callees.
                 if self.total {
-                    self.diagnostics.push(
-                        crate::diagnostic::Diagnostic::error(
-                            "L0209",
-                            format!("`{}` is an ordinary `fn` and cannot be called here", info.name),
-                            span,
-                        )
-                        .note("an ordinary `fn` may fail to return, so a `math fn` and a proposition can only call a `math fn`"),
+                    return self.internal(
+                        format!(
+                            "`{}` is an ordinary `fn` called where nothing runs",
+                            info.name
+                        ),
+                        span,
                     );
-                    return Err(());
                 }
                 let result = VarId::fresh();
                 self.declare_result(result, &ty, span)?;

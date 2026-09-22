@@ -35,6 +35,43 @@ pub(super) fn unit_type() -> Type {
 }
 
 impl Env<'_> {
+    /// `L0215`, at the keyword of a `loop`, `while`, or `for` that cannot
+    /// stand where it does: in a function that promises `terminates`, or in
+    /// a formula. A bounded `for` counts as a loop; the promise is kept by
+    /// what a function calls, and loops that keep it come with recursion.
+    fn loop_refused<T>(&mut self, expr: &ast::Expr) -> Elab<T> {
+        let keyword = match &expr.kind {
+            ExprKind::Loop { .. } => "loop",
+            ExprKind::While { .. } => "while",
+            _ => "for",
+        };
+        let text = self.text(expr.span);
+        let at = text.find(keyword).unwrap_or(0);
+        let span = Span::new(
+            expr.span.file,
+            expr.span.start + at,
+            expr.span.start + at + keyword.len(),
+        );
+        let diagnostic = match self.formula {
+            Some(place) => crate::diagnostic::Diagnostic::error(
+                "L0215",
+                format!("`{keyword}` cannot appear in {place}: nothing there runs"),
+                span,
+            ),
+            None => crate::diagnostic::Diagnostic::error(
+                "L0215",
+                format!(
+                    "`{keyword}` cannot appear in `{}`, which promises terminates",
+                    self.item_name
+                ),
+                span,
+            )
+            .note("a function that promises terminates, as a `math fn` does, contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion"),
+        };
+        self.diagnostics.push(diagnostic);
+        Err(())
+    }
+
     /// The kernel term that stands for the value, as lowering will state it.
     pub fn term(&mut self, value: &Value, span: Span) -> Elab<Term> {
         match value_term(&value.expr) {
@@ -215,6 +252,14 @@ impl Env<'_> {
             ),
             ExprKind::Match { scrutinee, arms } => {
                 self.match_(scrutinee, arms, expected, expr.span)
+            }
+            // Every loop form, before any is elaborated or reported as not
+            // in Locus yet: under `terminates` there is no iteration, and a
+            // proposition runs nothing.
+            ExprKind::Loop { .. } | ExprKind::While { .. } | ExprKind::For { .. }
+                if self.promises.terminates || self.formula.is_some() =>
+            {
+                self.loop_refused(expr)
             }
             ExprKind::Loop {
                 state,

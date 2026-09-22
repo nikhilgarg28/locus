@@ -1,5 +1,7 @@
-error[L0229]: `unfold!` takes the name of a `math fn` first
+error[L0229]: `unfold!` takes the name of a function first
  --> tests/corpus/reject/unfold_without_math_fn.lc:5:13
   |
-5 |     unfold!(n, h) //~ error: L0229 `unfold!` takes the name of a `math fn` first
+5 |     unfold!(n, h) //~ error: L0229 `unfold!` takes the name of a function first
   |             ^
+  |
+  = note: the step uses the function's defining equation, so the function is one that may appear in a proposition

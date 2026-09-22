@@ -1,0 +1,12 @@
+// A promise is about what a function does when it runs; nothing runs a
+// struct, an enum, a proposition, or a constant.
+#[no_panic] //~ error: L0233 `#[no_panic]` is a promise about what a function does when it runs, and `Lock` is a struct
+struct Lock { failures: u8 }
+
+#[terminates] //~ error: L0233 `#[terminates]` is a promise about what a function does when it runs, and `Open` is a proposition
+prop Open(lock: Lock) {
+    Yes(@(lock.failures == 0)),
+}
+
+#[no_io] //~ error: L0233 `#[no_io]` is a promise about what a function does when it runs, and `LIMIT` is a constant
+const LIMIT: u8 = 3;

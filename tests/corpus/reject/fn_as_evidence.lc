@@ -1,6 +1,7 @@
-// An ordinary `fn` named where evidence is needed.
+// An ordinary `fn` named where evidence is needed: its claim would be a
+// proposition mentioning it, and it makes no promise that admits it there.
 fn self_equal(x: u8) -> @(x == x) { _ }
 
 math fn all_self_equal() -> @(forall (x: u8) { x == x }) {
-    self_equal //~ error: L0209 only a `math fn` is evidence
+    self_equal //~ error: L0209 `self_equal` cannot appear in a proposition: it does not promise terminates
 }

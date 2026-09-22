@@ -1,7 +1,7 @@
-error[L0209]: `first` is an ordinary `fn` and cannot be called here
- --> tests/corpus/reject/fn_called_from_math_fn.lc:5:5
+error[L0232]: `second` promises terminates and calls `first`, which does not
+ --> tests/corpus/reject/fn_called_from_math_fn.lc:6:5
   |
-5 |     first(n) //~ error: L0209 is an ordinary `fn` and cannot be called here
+6 |     first(n) //~ error: L0232 `second` promises terminates and calls `first`, which does not
   |     ^^^^^^^^
   |
-  = note: an ordinary `fn` may fail to return, so a `math fn` and a proposition can only call a `math fn`
+  = note: a promise is never inferred: `first` keeps terminates only if it says so, with `#[terminates]` or `#![terminates]` at the top of its file

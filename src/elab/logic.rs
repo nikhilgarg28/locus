@@ -23,8 +23,10 @@ use super::literals::untyped_literal;
 impl Env<'_> {
     pub fn formula(&mut self, expr: &ast::Expr) -> Elab<Term> {
         let was_total = std::mem::replace(&mut self.total, true);
+        let was_formula = self.formula.replace("a proposition");
         let result = self.formula_inner(expr);
         self.total = was_total;
+        self.formula = was_formula;
         result
     }
 

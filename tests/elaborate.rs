@@ -473,8 +473,8 @@ fn errors_name_the_problem() {
         ),
         (
             "fn f(n: u8) -> u8 { n } math fn g(n: u8) -> u8 { f(n) }",
-            "L0209",
-            "may fail to return",
+            "L0232",
+            "`g` promises terminates and calls `f`, which does not",
         ),
         (
             "enum E { A, B } fn f(e: E) -> u8 { match e { E::A => 0 } }",
@@ -489,7 +489,7 @@ fn errors_name_the_problem() {
         (
             "math fn f(n: u8) -> u8 { loop () -> u8 { break n } }",
             "L0215",
-            "may run forever",
+            "`loop` cannot appear in `f`, which promises terminates",
         ),
         (
             "fn f(n: u8) -> u8 { n.pow(2) }",
@@ -847,4 +847,347 @@ fn quantifier_words_are_names_outside_a_formula_and_formulas_nest() {
     );
     assert_eq!(call(&result, "exists", &[0]), "true");
     assert_eq!(call(&result, "f", &[7]), "7");
+}
+
+// --- Promises -----------------------------------------------------------------
+
+/// The four promises, in the order a missing one is named in.
+const PROMISES: [&str; 4] = ["terminates", "no_panic", "no_alloc", "no_io"];
+
+/// A subset of the promises as a bit set, written as outer attributes.
+fn outer(set: u8) -> String {
+    PROMISES
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| set & (1 << index) != 0)
+        .map(|(_, promise)| format!("#[{promise}] "))
+        .collect()
+}
+
+/// A subset of the promises as `#![...]` lines at the top of a file.
+fn inner(set: u8) -> String {
+    PROMISES
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| set & (1 << index) != 0)
+        .map(|(_, promise)| format!("#![{promise}]\n"))
+        .collect()
+}
+
+/// The first promise `caller` makes that `callee` does not.
+fn first_missing(caller: u8, callee: u8) -> Option<&'static str> {
+    (0..4)
+        .find(|index| caller & (1 << index) != 0 && callee & (1 << index) == 0)
+        .map(|index| PROMISES[index])
+}
+
+/// Every pair of a caller's promises and a callee's: accepted exactly when
+/// the callee makes every promise the caller does, and rejected naming the
+/// first promise missing, at the call, with nothing else reported.
+fn check_matrix(program: impl Fn(u8, u8) -> (String, u8), expected_accepted: usize) {
+    let mut accepted_pairs = 0;
+    for caller in 0..16u8 {
+        for callee in 0..16u8 {
+            let (text, effective_callee) = program(caller, callee);
+            match first_missing(caller, effective_callee) {
+                None => {
+                    let result = accepted(&text);
+                    assert_eq!(call(&result, "caller", &[3]), "3", "{text}");
+                    accepted_pairs += 1;
+                }
+                Some(promise) => {
+                    let result = elaborated(&text);
+                    let codes: Vec<&str> = result.diagnostics.iter().map(|d| d.code).collect();
+                    assert_eq!(codes, ["L0232"], "{text}");
+                    let diagnostic = &result.diagnostics[0];
+                    assert_eq!(
+                        diagnostic.message,
+                        format!("`caller` promises {promise} and calls `callee`, which does not"),
+                        "{text}"
+                    );
+                    let span = diagnostic.labels[0].span;
+                    assert_eq!(&text[span.range()], "callee(n)", "{text}");
+                }
+            }
+        }
+    }
+    assert_eq!(accepted_pairs, expected_accepted);
+}
+
+#[test]
+fn a_promise_is_kept_only_if_every_callee_makes_it() {
+    check_matrix(
+        |caller, callee| {
+            let text = format!(
+                "{}fn callee(n: u8) -> u8 {{ n }}\n{}fn caller(n: u8) -> u8 {{ callee(n) }}",
+                outer(callee),
+                outer(caller)
+            );
+            (text, callee)
+        },
+        // A pair is accepted when each promise is made by both, by the callee
+        // only, or by neither: three ways for each of four promises.
+        81,
+    );
+}
+
+#[test]
+fn a_file_default_is_made_by_every_function_and_an_attribute_adds_to_it() {
+    // The file makes the first promise the caller makes, so both functions
+    // make it; the rest of the caller's are written on the caller.
+    check_matrix(
+        |caller, callee| {
+            let file = caller & caller.wrapping_neg();
+            let text = format!(
+                "{}{}fn callee(n: u8) -> u8 {{ n }}\n{}fn caller(n: u8) -> u8 {{ callee(n) }}",
+                inner(file),
+                outer(callee & !file),
+                outer(caller & !file)
+            );
+            (text, callee | file)
+        },
+        // The file adds the caller's first promise to the callee, so one promise
+        // of every nonempty caller set is never missing: for a caller with k
+        // promises, 2^(5 - k) callee sets; 16 for the empty one.
+        146,
+    );
+    // The whole set at the top of the file, and nothing on the functions.
+    let result = accepted(
+        "#![terminates]
+        #![no_panic]
+        #![no_alloc]
+        #![no_io]
+        fn callee(n: u8) -> u8 { n }
+        fn caller(n: u8) -> u8 { callee(n) }
+        fn claim(n: u8) -> @(callee(n) == n) { fold!(callee, prove!(n == n)) }",
+    );
+    assert_eq!(call(&result, "caller", &[3]), "3");
+}
+
+#[test]
+fn a_function_appears_in_a_proposition_exactly_when_it_promises_the_three() {
+    let places = [
+        "fn g(n: u8) -> @(f(n) == n) { _ }",
+        "fn g(n: u8) -> Prop { prop!(f(n) == n) }",
+        "fn g(n: u8) -> @(n == n) { prove!(f(n) == n); _ }",
+        "fn g(n: u8, h: @(n == n)) -> @(n == n) { unfold!(f, h) }",
+        "fn g(n: u8, h: @(n == n)) -> @(n == n) { fold!(f, h) }",
+        "prop P(n: u8) { Is(m: u8): @P(f(m)) }",
+        "const C: u8 = f(1);",
+    ];
+    for (attributes, missing) in [
+        ("", "terminates"),
+        ("#[terminates]", "no_panic"),
+        ("#[terminates] #[no_panic]", "no_io"),
+        ("#[no_panic] #[no_io]", "terminates"),
+        ("#[terminates] #[no_alloc] #[no_io]", "no_panic"),
+    ] {
+        for place in places {
+            let text = format!("{attributes} fn f(n: u8) -> u8 {{ n }}\n{place}");
+            let (codes, full) = rejected(&text);
+            assert_eq!(codes, ["L0209"], "{text}: {full}");
+            let where_ = if place.starts_with("const") {
+                "the value of a constant"
+            } else {
+                "a proposition"
+            };
+            assert!(
+                full.starts_with(&format!(
+                    "`f` cannot appear in {where_}: it does not promise {missing}"
+                )),
+                "{text}: {full}"
+            );
+        }
+    }
+    // With the three it is admitted, its defining equation is known, and
+    // it still runs; `no_alloc` is not needed and may be added.
+    for attributes in [
+        "#[terminates] #[no_panic] #[no_io]",
+        "#[no_io] #[no_alloc] #[no_panic] #[terminates]",
+        "math",
+        "#[no_alloc] math",
+    ] {
+        let text = format!(
+            "{attributes} fn f(n: u8) -> u8 {{ n.wrapping_add(1) }}
+            fn back(n: u8, h: @(f(n) == 4)) -> @(n.wrapping_add(1) == 4) {{ unfold!(f, h) }}
+            fn forth(n: u8, h: @(n.wrapping_add(1) == 4)) -> @(f(n) == 4) {{ fold!(f, h) }}
+            fn known(n: u8) -> (out: u8, @(out == f(n))) {{ let out = f(n); (out, _) }}
+            fn stated() -> @(f(3) == 4) {{ _ }}
+            prop Next(n: u8) {{ Is(m: u8): @Next(f(m)) }}
+            const FIVE: u8 = f(4);"
+        );
+        let result = accepted(&text);
+        assert_eq!(call(&result, "known", &[3]), "(4, Proved)");
+        assert_eq!(call(&result, "f", &[9]), "10");
+    }
+}
+
+#[test]
+fn a_loop_of_any_form_is_refused_under_terminates_at_its_keyword() {
+    let bodies = [
+        ("loop () -> u8 { break n }", "loop"),
+        (
+            "let (a,) = for i in 0..n (a: u8 = 0) { continue(a) }; a",
+            "for",
+        ),
+        // The two forms M3 gives a meaning: the promise is what is reported.
+        ("loop { break }", "loop"),
+        ("while n < 3 { } n", "while"),
+    ];
+    for (body, keyword) in bodies {
+        for head in [
+            "#[terminates] fn",
+            "#[terminates] #[no_panic] fn",
+            "math fn",
+        ] {
+            let text = format!("{head} f(n: u8) -> u8 {{ {body} }}");
+            let result = elaborated(&text);
+            let codes: Vec<&str> = result.diagnostics.iter().map(|d| d.code).collect();
+            assert_eq!(codes, ["L0215"], "{text}");
+            let diagnostic = &result.diagnostics[0];
+            assert_eq!(
+                diagnostic.message,
+                format!("`{keyword}` cannot appear in `f`, which promises terminates"),
+                "{text}"
+            );
+            assert_eq!(&text[diagnostic.labels[0].span.range()], keyword, "{text}");
+        }
+        let text = format!("#![terminates]\nfn f(n: u8) -> u8 {{ {body} }}");
+        let (codes, _) = rejected(&text);
+        assert_eq!(codes, ["L0215"], "{text}");
+    }
+    // Without the promise the state-passing forms are accepted and the
+    // others are not in Locus yet.
+    accepted("fn f(n: u8) -> u8 { loop () -> u8 { break n } }");
+    for body in ["loop { break }", "while n < 3 { } n"] {
+        let (codes, full) = rejected(&format!("fn f(n: u8) -> u8 {{ {body} }}"));
+        assert_eq!(codes, ["L0290"]);
+        assert!(full.contains("M3"), "{full}");
+    }
+    // Nothing in a proposition runs.
+    let (codes, full) = rejected("fn f(n: u8) -> Prop { prop!(loop () -> u8 { break n } == n) }");
+    assert_eq!(codes, ["L0215"]);
+    assert!(
+        full.starts_with("`loop` cannot appear in a proposition"),
+        "{full}"
+    );
+}
+
+#[test]
+fn a_promise_goes_on_a_function_and_decreases_waits_for_recursion() {
+    for (text, what) in [
+        ("#[no_panic] struct S { n: u8 }", "`S` is a struct"),
+        ("#[terminates] enum E { A }", "`E` is an enum"),
+        ("#[no_io] prop P(n: u8) { Is }", "`P` is a proposition"),
+        ("#[no_alloc] const C: u8 = 1;", "`C` is a constant"),
+    ] {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, ["L0233"], "{text}");
+        assert!(full.contains(what), "{text}: {full}");
+    }
+    let (codes, full) = rejected("#[terminates(decreases = n)] fn f(n: u8) -> u8 { n }");
+    assert_eq!(codes, ["L0290"]);
+    assert!(full.contains("Recursion"), "{full}");
+    // It counts as the bare promise meanwhile.
+    let (codes, full) =
+        rejected("fn g(n: u8) -> u8 { n } #[terminates(decreases = n)] fn f(n: u8) -> u8 { g(n) }");
+    assert_eq!(codes, ["L0290", "L0232"]);
+    assert!(full.contains("Recursion"), "{full}");
+}
+
+/// The elaborator's check is the friendly one; the checker's word counts.
+/// A typed tree that claims a promise and calls a function without it is
+/// refused by the checker with the promise and the callee named.
+#[test]
+fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
+    use locus::exec::{ExecError, Promise, Promises};
+    use locus::kernel::{Definitions, HypId, Type, VarId};
+    use locus::typed::{Binder, Block, Expr, FnItem, FnRef, LowerError, Pattern, Session, Stmt};
+
+    let (definitions, _) = Definitions::with_prelude();
+    let mut session = Session::new(definitions);
+    let callee = FnItem {
+        name: "callee".into(),
+        math: false,
+        params: vec![],
+        result: Type::U8,
+        body: Block {
+            stmts: vec![],
+            tail: Some(Box::new(Expr::u8(1))),
+        },
+    };
+    let FnRef::Exec(callee_id) = session
+        .declare_fn_promising(&callee, Promises::default())
+        .expect("the callee is well formed")
+    else {
+        panic!("an ordinary function")
+    };
+    let caller = |name: &str| {
+        let out = Binder::new("out", Type::U8);
+        FnItem {
+            name: name.into(),
+            math: false,
+            params: vec![],
+            result: Type::U8,
+            body: Block {
+                stmts: vec![Stmt::Let {
+                    pattern: Pattern::Bind {
+                        binder: out.clone(),
+                        equation: HypId::fresh(),
+                    },
+                    value: Expr::CallFn {
+                        id: callee_id,
+                        name: "callee".into(),
+                        arguments: vec![],
+                        result: VarId::fresh(),
+                        ty: Type::U8,
+                    },
+                }],
+                tail: Some(Box::new(Expr::var(&out))),
+            },
+        }
+    };
+    // Without a claim the call is fine.
+    session
+        .declare_fn_promising(&caller("plain"), Promises::default())
+        .expect("a function without promises calls anything");
+    for (promise, claimed) in [
+        (
+            Promise::Terminates,
+            Promises {
+                terminates: true,
+                ..Promises::default()
+            },
+        ),
+        (
+            Promise::NoPanic,
+            Promises {
+                no_panic: true,
+                ..Promises::default()
+            },
+        ),
+        (
+            Promise::NoAlloc,
+            Promises {
+                no_alloc: true,
+                ..Promises::default()
+            },
+        ),
+        (
+            Promise::NoIo,
+            Promises {
+                no_io: true,
+                ..Promises::default()
+            },
+        ),
+    ] {
+        let refused = session.declare_fn_promising(&caller("claims"), claimed);
+        assert_eq!(
+            refused.err(),
+            Some(LowerError::Exec(ExecError::CalleeBreaksPromise {
+                promise,
+                callee: callee_id,
+            }))
+        );
+    }
 }

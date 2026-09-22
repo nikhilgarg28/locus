@@ -128,13 +128,25 @@ impl Session {
     }
 
     pub fn declare_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {
-        let reference = self.check_fn(item)?;
+        self.declare_fn_promising(item, exec::Promises::default())
+    }
+
+    /// `declare_fn` for a function that makes promises: the checker enforces
+    /// each one on the check IR of an ordinary function. A math function is
+    /// a kernel function, total and without effects by construction, so
+    /// nothing of its promises is recorded.
+    pub fn declare_fn_promising(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+    ) -> Result<FnRef, LowerError> {
+        let reference = self.check_fn(item, promises)?;
         let erased = erased::erase_fn(self.program.definitions(), reference, item);
         self.erased.fns.extend(erased);
         Ok(reference)
     }
 
-    fn check_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {
+    fn check_fn(&mut self, item: &FnItem, promises: exec::Promises) -> Result<FnRef, LowerError> {
         let params: Vec<(VarId, Type)> = item
             .params
             .iter()
@@ -160,8 +172,7 @@ impl Session {
             Ok(FnRef::Math(id))
         } else {
             let function = ExecFn {
-                // The surface has no syntax for promises yet.
-                promises: exec::Promises::default(),
+                promises,
                 signature,
                 params: item.params.iter().map(|param| param.id).collect(),
                 body: lower_block(&item.body)?,

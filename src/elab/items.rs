@@ -3,14 +3,17 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::ast::{self, DeclarationKind, FunctionMode};
+use crate::ast::{self, AttributeKind, DeclarationKind, FunctionMode};
 use crate::diagnostic::Diagnostic;
+use crate::exec::Promises;
 use crate::kernel::theory;
 use crate::kernel::{Context, Definitions, FnId, Proof, PropVariant, Term, Type};
 use crate::source::{SourceFile, Span};
 use crate::typed::{Binder, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
 
-use super::env::{Elab, EnumInfo, Env, FnInfo, Global, PropInfo, PropVariantInfo, StructInfo};
+use super::env::{
+    Elab, EnumInfo, Env, FnInfo, Global, LOGICAL, PropInfo, PropVariantInfo, StructInfo,
+};
 use super::order::{declared_name, dependency_order};
 use super::types::tuple_over;
 
@@ -84,6 +87,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         theory,
         globals: HashMap::new(),
         failed: HashSet::new(),
+        file_promises: Promises::default(),
         diagnostics: Vec::new(),
         holes: Vec::new(),
         items: Vec::new(),
@@ -93,11 +97,15 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         loops: Vec::new(),
         labels: HashMap::new(),
         total: false,
+        item_name: String::new(),
+        promises: Promises::default(),
+        formula: None,
     };
 
     env.declare_builtin_props();
     env.declare_builtin_lemmas();
     env.report_unchecked_syntax(program);
+    env.file_promises = env.promises_of(&program.attributes, Promises::default());
 
     let mut seen: HashMap<&str, Span> = HashMap::new();
     let mut duplicates = HashSet::new();
@@ -173,21 +181,16 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
 }
 
 impl Env<'_> {
-    /// What S4 parses and no commit has given a meaning yet: the promises
-    /// and `derive`, once per file each, and every `impl` block. Doc comments
-    /// and visibility need no report, since ignoring them changes nothing a
-    /// program says.
+    /// What S4 parses and no commit has given a meaning yet: `derive`, once
+    /// per file, and every `impl` block. Doc comments and visibility need no
+    /// report, since ignoring them changes nothing a program says.
     fn report_unchecked_syntax(&mut self, program: &ast::Program) {
-        let mut promise: Option<Span> = None;
         let mut derive: Option<Span> = None;
         let mut note = |attributes: &[ast::Attribute]| {
             for attribute in attributes {
-                let slot = if attribute.kind.is_promise() {
-                    &mut promise
-                } else {
-                    &mut derive
-                };
-                slot.get_or_insert(attribute.span);
+                if !attribute.kind.is_promise() {
+                    derive.get_or_insert(attribute.span);
+                }
             }
         };
         note(&program.attributes);
@@ -198,13 +201,6 @@ impl Env<'_> {
                     note(&method.attributes);
                 }
             }
-        }
-        if let Some(span) = promise {
-            self.diagnostics.push(Diagnostic::error(
-                "L0290",
-                "promises (`#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`) are parsed but not checked yet; E2 adds them",
-                span,
-            ));
         }
         if let Some(span) = derive {
             self.diagnostics.push(Diagnostic::error(
@@ -227,20 +223,75 @@ impl Env<'_> {
         }
     }
 
+    /// The promises a list of attributes makes, added to `defaults`: the
+    /// file's for a function, and none for the file itself. A promise is
+    /// never inferred, and nothing takes one away. `decreases` is accepted
+    /// as the bare promise until recursion arrives.
+    fn promises_of(&mut self, attributes: &[ast::Attribute], defaults: Promises) -> Promises {
+        let mut promises = defaults;
+        for attribute in attributes {
+            match &attribute.kind {
+                AttributeKind::Terminates { decreases } => {
+                    if let Some(measure) = decreases {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "L0290",
+                                "`decreases` is parsed but not checked yet; the Recursion project adds it with recursion",
+                                measure.span,
+                            )
+                            .note("until then a function that calls itself is rejected, and the attribute counts as the bare `#[terminates]`"),
+                        );
+                    }
+                    promises.terminates = true;
+                }
+                AttributeKind::NoPanic => promises.no_panic = true,
+                AttributeKind::NoAlloc => promises.no_alloc = true,
+                AttributeKind::NoIo => promises.no_io = true,
+                AttributeKind::Derive(_) => {}
+            }
+        }
+        promises
+    }
+
+    /// A promise on an item that is not a function: nothing runs it.
+    fn refuse_promises(&mut self, attributes: &[ast::Attribute], name: &ast::Name, what: &str) {
+        for attribute in attributes {
+            if attribute.kind.is_promise() {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "L0233",
+                        format!(
+                            "`#[{}]` is a promise about what a function does when it runs, and `{}` is {what}",
+                            attribute.kind.name(),
+                            name.text
+                        ),
+                        attribute.span,
+                    )
+                    .note("a promise goes before a `fn`, or at the top of the file as `#![...]` for every function in it"),
+                );
+            }
+        }
+    }
+
     /// A fresh function scope over the declarations accepted so far.
-    fn start_item(&mut self, total: bool) {
+    fn start_item(&mut self, name: &str, total: bool, promises: Promises) {
         let definitions = self.session.program().definitions().clone();
         self.ctx = Context::with_definitions(Rc::new(definitions));
         self.names.clear();
         self.facts.clear();
         self.loops.clear();
         self.total = total;
+        self.item_name = name.to_string();
+        self.promises = promises;
+        self.formula = None;
     }
 
     fn declaration(&mut self, declaration: &ast::Declaration) -> Elab<Global> {
+        let attributes = &declaration.attributes;
         match &declaration.kind {
             DeclarationKind::Struct { name, fields } => {
-                self.start_item(true);
+                self.refuse_promises(attributes, name, "a struct");
+                self.start_item(&name.text, true, LOGICAL);
                 let fields = self.telescope(
                     fields
                         .iter()
@@ -261,6 +312,7 @@ impl Env<'_> {
                 })))
             }
             DeclarationKind::Enum { name, variants } => {
+                self.refuse_promises(attributes, name, "an enum");
                 let mut items = Vec::new();
                 for variant in variants {
                     if items
@@ -277,7 +329,7 @@ impl Env<'_> {
                             variant.span,
                         );
                     }
-                    self.start_item(true);
+                    self.start_item(&name.text, true, LOGICAL);
                     let payload = self.telescope(
                         variant
                             .fields
@@ -314,17 +366,44 @@ impl Env<'_> {
                 body,
                 ..
             } => {
-                let math = *mode == FunctionMode::Math;
-                self.function(name, math, parameters, result, Body::Block(body), false)
+                // `math fn` is another spelling of the three promises that
+                // admit a function to a proposition; an attribute on one is
+                // redundant, or adds `no_alloc`.
+                let mut promises = self.promises_of(attributes, self.file_promises);
+                if *mode == FunctionMode::Math {
+                    promises.terminates = true;
+                    promises.no_panic = true;
+                    promises.no_io = true;
+                }
+                let takes_mut = parameters.iter().any(|parameter| {
+                    matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
+                });
+                let function = Function {
+                    promises,
+                    takes_mut,
+                    body: Body::Block(body),
+                    constant: false,
+                };
+                self.function(name, parameters, result, function)
             }
             DeclarationKind::Constant { name, ty, value } => {
-                self.function(name, true, &[], ty, Body::Expr(value), true)
+                self.refuse_promises(attributes, name, "a constant");
+                let function = Function {
+                    promises: LOGICAL,
+                    takes_mut: false,
+                    body: Body::Expr(value),
+                    constant: true,
+                };
+                self.function(name, &[], ty, function)
             }
             DeclarationKind::Prop {
                 name,
                 parameters,
                 variants,
-            } => self.prop(name, parameters, variants),
+            } => {
+                self.refuse_promises(attributes, name, "a proposition");
+                self.prop(name, parameters, variants)
+            }
             DeclarationKind::Impl { .. } => {
                 unreachable!("an impl block is reported before the declarations are elaborated")
             }
@@ -334,14 +413,25 @@ impl Env<'_> {
     fn function(
         &mut self,
         name: &ast::Name,
-        math: bool,
         parameters: &[ast::Parameter],
         result: &ast::Type,
-        body: Body<'_>,
-        constant: bool,
+        function: Function<'_>,
     ) -> Elab<Global> {
+        let Function {
+            promises,
+            takes_mut,
+            body,
+            constant,
+        } = function;
         let started = std::time::Instant::now();
-        self.start_item(math);
+        // A function that may appear in a proposition is a function of the
+        // logic: its body is a kernel term, total by construction, and
+        // nothing in it may fail to return.
+        let logical = super::env::first_broken(LOGICAL, promises).is_none() && !takes_mut;
+        self.start_item(&name.text, logical, promises);
+        if constant {
+            self.formula = Some("the value of a constant");
+        }
         let mut params: Vec<Binder> = Vec::new();
         for parameter in parameters {
             if params
@@ -369,14 +459,16 @@ impl Env<'_> {
         };
         let item = FnItem {
             name: name.text.clone(),
-            math,
+            math: logical,
             params: params.clone(),
             result: result_ty.clone(),
             body: block,
         };
         let elaborate_micros = started.elapsed().as_micros();
         let started = std::time::Instant::now();
-        let reference = match self.session.declare_fn(&item) {
+        // The checker enforces the promises of an ordinary function; a
+        // function of the logic keeps them by construction.
+        let reference = match self.session.declare_fn_promising(&item, promises) {
             Ok(reference) => reference,
             Err(error) => return self.internal(error, name.span),
         };
@@ -391,6 +483,8 @@ impl Env<'_> {
             params,
             result: result_ty,
             constant,
+            promises,
+            takes_mut,
         })))
     }
 
@@ -400,7 +494,10 @@ impl Env<'_> {
         parameters: &[ast::Parameter],
         variants: &[ast::PropVariant],
     ) -> Elab<Global> {
-        self.start_item(true);
+        // The whole declaration is a proposition: its parameters, its payloads,
+        // and the arguments each variant proves it at.
+        self.start_item(&name.text, true, LOGICAL);
+        self.formula = Some("a proposition");
         let mut params: Vec<Binder> = Vec::new();
         for parameter in parameters {
             let ty = self.ty(&parameter.ty)?;
@@ -423,7 +520,8 @@ impl Env<'_> {
                 let message = format!("variant `{}` is declared twice", variant.name.text);
                 return self.fail("L0202", message, variant.name.span);
             }
-            self.start_item(true);
+            self.start_item(&name.text, true, LOGICAL);
+            self.formula = Some("a proposition");
             let fields = variant
                 .fields
                 .iter()
@@ -550,6 +648,14 @@ impl Env<'_> {
                     params,
                     result,
                     constant: false,
+                    // A lemma is a function of the logic and does nothing.
+                    promises: Promises {
+                        terminates: true,
+                        no_panic: true,
+                        no_alloc: true,
+                        no_io: true,
+                    },
+                    takes_mut: false,
                 })),
             );
         }
@@ -602,4 +708,13 @@ impl Env<'_> {
 enum Body<'a> {
     Block(&'a ast::Block),
     Expr(&'a ast::Expr),
+}
+
+/// What a `fn` or a `const` says about itself besides its signature.
+struct Function<'a> {
+    promises: Promises,
+    takes_mut: bool,
+    body: Body<'a>,
+    /// Declared with `const`: used by name, without a call.
+    constant: bool,
 }

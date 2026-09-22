@@ -1,0 +1,21 @@
+error[L0233]: `#[no_panic]` is a promise about what a function does when it runs, and `Lock` is a struct
+ --> tests/corpus/reject/promise_on_a_struct.lc:3:1
+  |
+3 | #[no_panic] //~ error: L0233 `#[no_panic]` is a promise about what a function does when it runs, and `Lock` is a struct
+  | ^^^^^^^^^^^
+  |
+  = note: a promise goes before a `fn`, or at the top of the file as `#![...]` for every function in it
+error[L0233]: `#[terminates]` is a promise about what a function does when it runs, and `Open` is a proposition
+ --> tests/corpus/reject/promise_on_a_struct.lc:6:1
+  |
+6 | #[terminates] //~ error: L0233 `#[terminates]` is a promise about what a function does when it runs, and `Open` is a proposition
+  | ^^^^^^^^^^^^^
+  |
+  = note: a promise goes before a `fn`, or at the top of the file as `#![...]` for every function in it
+error[L0233]: `#[no_io]` is a promise about what a function does when it runs, and `LIMIT` is a constant
+  --> tests/corpus/reject/promise_on_a_struct.lc:11:1
+   |
+11 | #[no_io] //~ error: L0233 `#[no_io]` is a promise about what a function does when it runs, and `LIMIT` is a constant
+   | ^^^^^^^^
+   |
+   = note: a promise goes before a `fn`, or at the top of the file as `#![...]` for every function in it

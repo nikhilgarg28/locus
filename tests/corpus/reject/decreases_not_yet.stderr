@@ -1,0 +1,7 @@
+error[L0290]: `decreases` is parsed but not checked yet; the Recursion project adds it with recursion
+ --> tests/corpus/reject/decreases_not_yet.lc:3:26
+  |
+3 | #[terminates(decreases = n)] //~ error: L0290 `decreases` is parsed but not checked yet; the Recursion project adds it
+  |                          ^
+  |
+  = note: until then a function that calls itself is rejected, and the attribute counts as the bare `#[terminates]`

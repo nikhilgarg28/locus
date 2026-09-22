@@ -1,0 +1,14 @@
+error[L0232]: `careful` promises no_panic and calls `read`, which does not
+ --> tests/corpus/reject/promise_not_kept.lc:9:5
+  |
+9 |     read(n) //~ error: L0232 `careful` promises no_panic and calls `read`, which does not
+  |     ^^^^^^^
+  |
+  = note: a promise is never inferred: `read` keeps no_panic only if it says so, with `#[no_panic]` or `#![no_panic]` at the top of its file
+error[L0232]: `strict` promises no_panic and calls `quick`, which does not
+  --> tests/corpus/reject/promise_not_kept.lc:17:5
+   |
+17 |     quick(n) //~ error: L0232 `strict` promises no_panic and calls `quick`, which does not
+   |     ^^^^^^^^
+   |
+   = note: a promise is never inferred: `quick` keeps no_panic only if it says so, with `#[no_panic]` or `#![no_panic]` at the top of its file

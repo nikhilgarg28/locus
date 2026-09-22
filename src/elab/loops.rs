@@ -80,13 +80,6 @@ impl Env<'_> {
         body: &ast::Block,
         span: Span,
     ) -> Elab<Value> {
-        if self.total {
-            self.diagnostics.push(
-                crate::diagnostic::Diagnostic::error("L0215", "`loop` cannot appear here", span)
-                    .note("a `loop` may run forever, and a `math fn` must return; a bounded `for` always does"),
-            );
-            return Err(());
-        }
         let state = self.loop_state(state, None)?;
         let result_ty = self.ty(result)?;
         let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();

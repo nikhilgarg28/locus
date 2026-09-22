@@ -1,0 +1,4 @@
+// `#[terminates(decreases = e)]` parses, and the measure waits for
+// recursion; until then it counts as the bare promise.
+#[terminates(decreases = n)] //~ error: L0290 `decreases` is parsed but not checked yet; the Recursion project adds it
+fn down(n: u8) -> u8 { n }

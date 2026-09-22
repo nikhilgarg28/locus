@@ -1,0 +1,81 @@
+// Promises: `#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`. A
+// function keeps a promise only if everything it calls makes it, and a
+// promise is never inferred. `#![no_io]` at the top of the file is made by
+// every function in it, and an attribute on a function adds to it.
+#![no_io]
+
+// With `terminates`, `no_panic`, and `no_io`, `double` may appear in a
+// proposition: it always returns and does nothing observable, so mentioning
+// it runs nothing and denotes one value. Its defining equation is known.
+#[terminates] #[no_panic]
+fn double(n: u8) -> u8 {
+    n.wrapping_add(n)
+}
+
+fn doubled(n: u8) -> (out: u8, @(out == double(n))) {
+    let out = double(n);
+    (out, _)
+}
+
+fn back(n: u8, h: @(double(n) == 4)) -> @(n.wrapping_add(n) == 4) {
+    unfold!(double, h)
+}
+
+fn forth(n: u8, h: @(n.wrapping_add(n) == 4)) -> @(double(n) == 4) {
+    fold!(double, h)
+}
+
+// `no_panic` on `careful` adds to the file's `no_io`; `double` makes both.
+#[no_panic]
+fn careful(n: u8) -> u8 {
+    double(n)
+}
+
+// A function that promises nothing beyond the file's default calls anything.
+fn run(n: u8) -> u8 {
+    careful(n)
+}
+
+// A `math fn` promises the three; writing them on one is redundant.
+#[terminates] #[no_panic] #[no_io]
+math fn twice(n: u8) -> u8 {
+    double(n)
+}
+
+// A conditional and a `match` in a promised function.
+enum Mode {
+    Off,
+    On(u8),
+}
+
+#[terminates] #[no_panic]
+fn level(mode: Mode) -> u8 {
+    match mode {
+        Mode::Off => 0,
+        Mode::On(n) => if n < 10 { n } else { 10 },
+    }
+}
+
+fn level_of_off() -> @(level(Mode::Off) == 0) {
+    _
+}
+
+// A constant is a value of the logic, and calls a function the way a
+// proposition does.
+const four_by_double: u8 = double(2);
+
+fn four() -> (out: u8, @(out == four_by_double)) {
+    (four_by_double, _)
+}
+
+//~ proofs: 3
+//~ run: double(3) => 6
+//~ run: doubled(21) => (42, Proved)
+//~ run: careful(4) => 8
+//~ run: run(100) => 200
+//~ run: twice(200) => 144
+//~ run: level(Mode::Off) => 0
+//~ run: level(Mode::On(3)) => 3
+//~ run: level(Mode::On(30)) => 10
+//~ run: four() => (4, Proved)
+//~ rust: pub fn double(n: u8) -> u8 {

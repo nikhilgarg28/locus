@@ -1,0 +1,20 @@
+// A function appears in a proposition exactly when it promises terminates,
+// no_panic, and no_io: a proposition is never run, so mentioning it must
+// run nothing and denote one value. The first promise missing is named,
+// in a result type, in `prop!`, and as the function `unfold!` uses.
+fn run(n: u8) -> u8 { n }
+
+#[terminates] #[no_panic]
+fn quiet(n: u8) -> u8 { n }
+
+fn about_run(n: u8) -> @(run(n) == n) { //~ error: L0209 `run` cannot appear in a proposition: it does not promise terminates
+    _
+}
+
+fn about_quiet(n: u8) -> Prop {
+    prop!(quiet(n) == n) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
+}
+
+fn unfolded(n: u8, h: @(n == n)) -> @(n == n) {
+    unfold!(quiet, h) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
+}

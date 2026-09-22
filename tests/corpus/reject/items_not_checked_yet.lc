@@ -1,6 +1,8 @@
-// S4 parses promises, derive, impl blocks, and variants with named fields;
-// what gives them meaning comes later, and the elaborator says which commit.
-#![no_io] //~ error: L0290 promises (`#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`) are parsed but not checked yet; E2
+// S4 parses derive, impl blocks, and variants with named fields; what gives
+// them meaning comes later, and the elaborator says which commit. The
+// promises have theirs: `#![no_io]` and the two on `get` admit it to a
+// proposition.
+#![no_io]
 #[derive(Clone, Copy)] //~ error: L0290 `#[derive(...)]` is parsed but not checked yet; O1
 pub struct Counter {
     pub count: u8,

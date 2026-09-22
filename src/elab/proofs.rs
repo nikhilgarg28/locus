@@ -3,6 +3,7 @@
 //! or an implication. Each becomes an explicit kernel proof.
 
 use crate::ast::{self, ExprKind, Form, PatternKind};
+use crate::diagnostic::Diagnostic;
 use crate::kernel::derive;
 use crate::kernel::{HypId, KernelError, Proof, Term, Type, VarId, check_proof, infer_proof};
 use crate::source::Span;
@@ -367,24 +368,33 @@ impl Env<'_> {
                 ),
             };
         }
+        // The function whose defining equation the step uses: one that may
+        // appear in a proposition, since the equation is one.
         let function = match &first.kind {
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
-                match self.globals.get(&name.text) {
-                    Some(Global::Fn(info)) => match info.reference {
-                        FnRef::Math(id) => Some(id),
-                        FnRef::Exec(_) => None,
-                    },
+                match self.globals.get(&name.text).cloned() {
+                    Some(Global::Fn(info)) => {
+                        self.admit_to_formula(&info, "a proposition", first.span)?;
+                        match info.reference {
+                            FnRef::Math(id) => Some(id),
+                            FnRef::Exec(_) => None,
+                        }
+                    }
                     _ => None,
                 }
             }
             _ => None,
         };
         let Some(function) = function else {
-            return self.fail(
-                "L0229",
-                format!("`{}!` takes the name of a `math fn` first", form.name()),
-                first.span,
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0229",
+                    format!("`{}!` takes the name of a function first", form.name()),
+                    first.span,
+                )
+                .note("the step uses the function's defining equation, so the function is one that may appear in a proposition"),
             );
+            return Err(());
         };
         let target = evidence(self, second)?;
         let result = if form == Form::Unfold {
@@ -486,11 +496,12 @@ impl Env<'_> {
     /// A `math fn` that returns evidence, named as evidence itself: its
     /// parameters become quantifiers and premises, in order.
     pub fn function_as_evidence(&mut self, info: &FnInfo, span: Span) -> Elab<Value> {
+        // Its claim is a proposition that mentions it at every argument.
+        self.admit_to_formula(info, "a proposition", span)?;
         let FnRef::Math(id) = info.reference else {
-            return self.fail(
-                "L0209",
+            return self.internal(
                 format!(
-                    "`{}` is an ordinary `fn`; only a `math fn` is evidence",
+                    "`{}` may appear in a proposition and is not a kernel function",
                     info.name
                 ),
                 span,

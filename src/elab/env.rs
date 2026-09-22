@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::diagnostic::Diagnostic;
+use crate::exec::{Promise, Promises};
 use crate::kernel::theory::Theory;
 use crate::kernel::{
     Context, EnumId, FnId, HypId, KernelError, Mode, Prelude, Proof, PropId, StructId, Term, Type,
@@ -59,6 +60,41 @@ pub(super) struct FnInfo {
     pub result: Type,
     /// Declared with `const`: used by name, without a call.
     pub constant: bool,
+    /// What the function promises: its attributes, the file's defaults, and
+    /// `math`, which spells the three of `LOGICAL`.
+    pub promises: Promises,
+    /// A parameter is `&mut`: the function writes what its caller can see.
+    pub takes_mut: bool,
+}
+
+/// The promises that let a function appear in a proposition: it always
+/// returns, so `f(x)` denotes one value, and it does nothing observable, so
+/// a proposition, which is never run, changes nothing by mentioning it.
+pub(super) const LOGICAL: Promises = Promises {
+    terminates: true,
+    no_panic: true,
+    no_alloc: false,
+    no_io: true,
+};
+
+impl FnInfo {
+    /// Why the function may not appear in a proposition, or nothing: the
+    /// first of the three promises it does not make, or `&mut`.
+    pub fn logical_gap(&self) -> Option<String> {
+        Promise::ALL
+            .into_iter()
+            .find(|&promise| LOGICAL.makes(promise) && !self.promises.makes(promise))
+            .map(|promise| format!("it does not promise {}", promise.name()))
+            .or_else(|| self.takes_mut.then(|| "it takes `&mut`".to_string()))
+    }
+}
+
+/// The first promise `made` makes that `callee` does not, in the order the
+/// promises are listed in.
+pub(super) fn first_broken(made: Promises, callee: Promises) -> Option<Promise> {
+    Promise::ALL
+        .into_iter()
+        .find(|&promise| made.makes(promise) && !callee.makes(promise))
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +169,8 @@ pub(super) struct Env<'a> {
     pub globals: HashMap<String, Global>,
     /// Items that were rejected; a mention of one is not reported again.
     pub failed: HashSet<String>,
+    /// `#![...]` at the top of the file: promised by every function in it.
+    pub file_promises: Promises,
     pub diagnostics: Vec<Diagnostic>,
     pub holes: Vec<HoleReport>,
     pub items: Vec<ItemReport>,
@@ -148,6 +186,15 @@ pub(super) struct Env<'a> {
     /// Inside a `math fn`, a proposition, or a proof type, where nothing may
     /// fail to return.
     pub total: bool,
+    /// The name of the item being elaborated, for messages.
+    pub item_name: String,
+    /// What the function being elaborated promises. Every call is checked
+    /// against it, and a loop is refused under `terminates`.
+    pub promises: Promises,
+    /// Inside a formula, or the value of a constant: a place where only a
+    /// function that may appear in a proposition can be called. The text
+    /// names the place for a message.
+    pub formula: Option<&'static str>,
 }
 
 impl Env<'_> {

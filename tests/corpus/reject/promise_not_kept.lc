@@ -1,0 +1,18 @@
+// A promise is kept only if everything the function calls makes it, and a
+// promise is never inferred: `read` does nothing that could panic, and
+// still does not promise `no_panic` until it says so. The first promise
+// missing is named, in the order terminates, no_panic, no_alloc, no_io.
+fn read(n: u8) -> u8 { n }
+
+#[no_panic]
+fn careful(n: u8) -> u8 {
+    read(n) //~ error: L0232 `careful` promises no_panic and calls `read`, which does not
+}
+
+#[terminates] #[no_io]
+fn quick(n: u8) -> u8 { n }
+
+#[terminates] #[no_panic] #[no_io]
+fn strict(n: u8) -> u8 {
+    quick(n) //~ error: L0232 `strict` promises no_panic and calls `quick`, which does not
+}

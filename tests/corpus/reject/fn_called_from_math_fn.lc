@@ -1,6 +1,7 @@
-// A `math fn` that calls an ordinary `fn`.
+// A `math fn` promises terminates, no_panic, and no_io, and a promise is
+// kept only if everything the function calls makes it.
 fn first(n: u8) -> u8 { n }
 
 math fn second(n: u8) -> u8 {
-    first(n) //~ error: L0209 is an ordinary `fn` and cannot be called here
+    first(n) //~ error: L0232 `second` promises terminates and calls `first`, which does not
 }
