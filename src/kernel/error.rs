@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use super::linear::LinearError;
 use super::term::{HypId, Term, Type, VarId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,6 +106,15 @@ pub enum KernelError {
     MachineFormOfU8,
     /// A machine integer literal whose value is outside its type's range.
     OutOfRange(Term),
+    /// A linear certificate refused by the rule itself, not by the proof
+    /// of one of its pairs.
+    Linear(LinearError),
+}
+
+impl From<LinearError> for KernelError {
+    fn from(error: LinearError) -> Self {
+        Self::Linear(error)
+    }
 }
 
 impl fmt::Display for KernelError {
@@ -207,6 +217,7 @@ impl fmt::Display for KernelError {
             }
             Self::MachineFormOfU8 => f.write_str("u8 is written u8, not as a machine form"),
             Self::OutOfRange(term) => write!(f, "{term} is outside the range of its type"),
+            Self::Linear(error) => write!(f, "linear certificate: {error}"),
         }
     }
 }

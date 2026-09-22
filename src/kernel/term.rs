@@ -782,6 +782,15 @@ pub enum Proof {
         step: ProofArm,
         target: Term,
     },
+    /// A certificate of linear arithmetic over `Int`, checked by
+    /// `linear.rs`: the negated goal times `goal_coefficient`, plus the
+    /// conclusion of each pair's proof times its coefficient, add up to a
+    /// negative constant. Concludes `goal`.
+    Linear {
+        goal: Term,
+        goal_coefficient: Integer,
+        pairs: Vec<(Proof, Integer)>,
+    },
 }
 
 /// How many binders of each kind enclose the current position.
@@ -1666,6 +1675,7 @@ impl Proof {
             Self::Axiom(_) => "axiom",
             Self::NatInduction { .. } => "nat_induction",
             Self::IntInduction { .. } => "int_induction",
+            Self::Linear { .. } => "linear",
         }
     }
 
@@ -1741,6 +1751,19 @@ impl Proof {
                 step(vars[0].clone(), hyps[0].clone(), hyps[1].clone())
             }),
             target,
+        }
+    }
+
+    /// Builds a linear certificate for `goal` from pairs of a proof and
+    /// its coefficient. The goal's coefficient is `goal_coefficient`.
+    pub fn linear(goal: Term, goal_coefficient: i64, pairs: Vec<(Proof, i64)>) -> Self {
+        Self::Linear {
+            goal,
+            goal_coefficient: Integer::from(goal_coefficient),
+            pairs: pairs
+                .into_iter()
+                .map(|(proof, coefficient)| (proof, Integer::from(coefficient)))
+                .collect(),
         }
     }
 
@@ -1859,6 +1882,7 @@ impl Proof {
             Self::Axiom(..) => self.rebind_axiom(depth, op),
             Self::NatInduction { .. } => self.rebind_nat_induction(depth, op),
             Self::IntInduction { .. } => self.rebind_int_induction(depth, op),
+            Self::Linear { .. } => self.rebind_linear(depth, op),
         }
     }
 
@@ -2172,6 +2196,26 @@ impl Proof {
             base: Box::new(base.rebind(depth, op)),
             step: step.rebind(depth, op),
             target: target.rebind(depth, op),
+        }
+    }
+
+    #[inline(never)]
+    fn rebind_linear(&self, depth: Depth, op: Rebind<'_>) -> Proof {
+        let Self::Linear {
+            goal,
+            goal_coefficient,
+            pairs,
+        } = self
+        else {
+            unreachable!("dispatched on this variant")
+        };
+        Self::Linear {
+            goal: goal.rebind(depth, op),
+            goal_coefficient: goal_coefficient.clone(),
+            pairs: pairs
+                .iter()
+                .map(|(proof, coefficient)| (proof.rebind(depth, op), coefficient.clone()))
+                .collect(),
         }
     }
 }

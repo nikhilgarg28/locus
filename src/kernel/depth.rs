@@ -241,6 +241,10 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
                     out.push(arm(step));
                     out.push(Node::Term(target));
                 }
+                Proof::Linear { goal, pairs, .. } => {
+                    out.push(Node::Term(goal));
+                    out.extend(pairs.iter().map(|(proof, _)| Node::Proof(proof)));
+                }
             }
         }
     }

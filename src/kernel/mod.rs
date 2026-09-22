@@ -7,8 +7,9 @@
 //! in the kernel contract in `atlas.html`; the two must change together.
 //!
 //! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`,
-//! `Int`, the integers of the logic, by axioms and native evaluation, and the
-//! model of each machine integer type over `Int`.
+//! `Int`, the integers of the logic, by axioms and native evaluation, the
+//! model of each machine integer type over `Int`, and the rule that checks a
+//! certificate of linear arithmetic.
 
 mod check;
 mod classical;
@@ -19,6 +20,7 @@ pub mod derive;
 mod error;
 mod eval;
 mod int;
+mod linear;
 mod machine;
 mod nat;
 mod term;
@@ -36,6 +38,10 @@ pub use depth::MAX_DEPTH;
 pub use error::KernelError;
 pub use eval::MAX_EVAL_DEPTH;
 pub use int::Integer;
+pub use linear::{
+    CertificateText, LINEAR_TEXT_VERSION, LinearError, MAX_LINEAR_ATOMS, MAX_LINEAR_BITS,
+    MAX_LINEAR_PAIRS,
+};
 pub use machine::MachineInt;
 pub use nat::{Natural, ParseNumberError};
 pub use term::{

@@ -55,6 +55,9 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
         | Proof::IntInduction {
             base, step, target, ..
         } => sub(base) || sub(&step.body) || term(target),
+        Proof::Linear { goal, pairs, .. } => {
+            term(goal) || pairs.iter().any(|(proof, _)| sub(proof))
+        }
     }
 }
 

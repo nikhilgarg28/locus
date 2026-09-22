@@ -1575,6 +1575,7 @@ fn every_rule() -> Vec<Proof> {
         Proof::Axiom(Axiom::IntLeRefl(t())),
         Proof::nat_induction(|k| k, Proof::Omitted, |_, ih| ih, t()),
         Proof::int_induction(|k| k, Proof::Omitted, |_, _, ih| ih, t()),
+        Proof::linear(t(), 1, vec![(Proof::Omitted, 1)]),
     ]
 }
 
@@ -1590,7 +1591,7 @@ fn construct_rule() -> Proof {
     }
 }
 
-const RULES: usize = 26;
+const RULES: usize = 27;
 
 fn rule_index(proof: &Proof) -> usize {
     match proof {
@@ -1620,6 +1621,7 @@ fn rule_index(proof: &Proof) -> usize {
         Proof::Axiom(_) => 23,
         Proof::NatInduction { .. } => 24,
         Proof::IntInduction { .. } => 25,
+        Proof::Linear { .. } => 26,
     }
 }
 

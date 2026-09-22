@@ -7,6 +7,7 @@ use super::depth::check_depth;
 use super::error::KernelError;
 use super::eval::{Evaluator, is_plain_data};
 use super::int::Integer;
+use super::linear::claim_of_linear;
 use super::machine::MachineInt;
 use super::term::{Axiom, ForLoop, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
@@ -1015,6 +1016,7 @@ pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
         Proof::NatInduction { .. } => claim_of_nat_induction(ctx, proof),
         Proof::IntInduction { .. } => claim_of_int_induction(ctx, proof),
+        Proof::Linear { .. } => claim_of_linear(ctx, proof),
     }
 }
 

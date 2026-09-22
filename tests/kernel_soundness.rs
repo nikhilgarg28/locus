@@ -1406,6 +1406,7 @@ fn proof_children(proof: &Proof) -> Vec<(&Proof, u32, u32)> {
         Proof::NatInduction { base, step, .. } | Proof::IntInduction { base, step, .. } => {
             vec![(base, 0, 0), (&*step.body, step.vars, step.hyps)]
         }
+        Proof::Linear { pairs, .. } => pairs.iter().map(|(proof, _)| (proof, 0, 0)).collect(),
     }
 }
 
@@ -1512,6 +1513,18 @@ fn proof_with_children(proof: &Proof, children: Vec<Proof>) -> Proof {
             base: Box::new(take()),
             step: rearm(step, take()),
             target: target.clone(),
+        },
+        Proof::Linear {
+            goal,
+            goal_coefficient,
+            pairs,
+        } => Proof::Linear {
+            goal: goal.clone(),
+            goal_coefficient: goal_coefficient.clone(),
+            pairs: pairs
+                .iter()
+                .map(|(_, coefficient)| (take(), coefficient.clone()))
+                .collect(),
         },
         leaf => leaf.clone(),
     }
@@ -1841,6 +1854,15 @@ fn map_node_terms(node: &Proof, f: &dyn Fn(&Term) -> Term) -> Proof {
             base: base.clone(),
             step: step.clone(),
             target: f(target),
+        },
+        Proof::Linear {
+            goal,
+            goal_coefficient,
+            pairs,
+        } => Proof::Linear {
+            goal: f(goal),
+            goal_coefficient: goal_coefficient.clone(),
+            pairs: pairs.clone(),
         },
     }
 }
@@ -2321,6 +2343,41 @@ impl<'a> Material<'a> {
                     base: base.clone(),
                     step: step.clone(),
                     target,
+                }
+            }
+            Proof::Linear {
+                goal,
+                goal_coefficient,
+                pairs,
+            } => {
+                // One coefficient perturbed, a pair dropped, two pairs
+                // swapped, or the goal changed.
+                let (mut goal, mut goal_coefficient, mut pairs) =
+                    (goal.clone(), goal_coefficient.clone(), pairs.clone());
+                let nudge = |c: &Integer, rng: &mut Rng| match rng.below(3) {
+                    0 => c.add(&Integer::from(1i64)),
+                    1 => c.sub(&Integer::from(1i64)),
+                    _ => c.neg(),
+                };
+                match rng.below(4) {
+                    0 if !pairs.is_empty() => {
+                        let at = rng.below(pairs.len());
+                        pairs[at].1 = nudge(&pairs[at].1, rng);
+                    }
+                    0 => goal_coefficient = nudge(&goal_coefficient, rng),
+                    1 if !pairs.is_empty() => {
+                        pairs.remove(rng.below(pairs.len()));
+                    }
+                    2 if pairs.len() > 1 => {
+                        let (a, b) = (rng.below(pairs.len()), rng.below(pairs.len()));
+                        pairs.swap(a, b);
+                    }
+                    _ => goal = self.bend(&goal, rng),
+                }
+                Proof::Linear {
+                    goal,
+                    goal_coefficient,
+                    pairs,
                 }
             }
         })
@@ -3762,6 +3819,76 @@ fn hand_built(world: &World) -> Vec<Triple> {
             proof: Box::new(Proof::Evaluate(instance)),
         };
         add("exists_machine", scene, claim, proof);
+    }
+
+    // Linear certificates: each kind of constraint and goal once.
+    {
+        // The lock's `fits`: view(x) + 1 <= u32::MAX from view(x) < 3.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(U32));
+        let v = view(U32, x);
+        let small = scene.assume(Term::int_lt(v.clone(), ilit(3)));
+        let claim = ile(iadd(v, ilit(1)), max_of(U32));
+        let proof = Proof::linear(claim.clone(), 1, vec![(Proof::hyp(small), 1)]);
+        add("linear_lock_fits", scene, claim, proof);
+    }
+    {
+        // a / 2 <= a for 0 <= a, from the decomposition and the sign of the
+        // remainder: 2(q - a - 1) - (2q + r - a) + a + r = -2.
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::Int);
+        let nonneg = scene.assume(ile(ilit(0), a.clone()));
+        let claim = ile(idiv(a.clone(), ilit(2)), a.clone());
+        let sign = Proof::implies_elim(
+            ax(Axiom::IntRemNonneg(a.clone(), ilit(2))),
+            Proof::hyp(nonneg),
+        );
+        let proof = Proof::linear(
+            claim.clone(),
+            2,
+            vec![
+                (ax(Axiom::IntDivRem(a, ilit(2))), -1),
+                (Proof::hyp(nonneg), 1),
+                (sign, 1),
+            ],
+        );
+        add("linear_half_le", scene, claim, proof);
+    }
+    {
+        // !(3 <= x) from x <= 2: the hypothesis is introduced and the
+        // certificate proves False from the two.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::Int);
+        let upper = scene.assume(ile(x.clone(), ilit(2)));
+        let below = ile(ilit(3), x);
+        let claim = prelude.not_prop(below.clone());
+        let proof = Proof::implies_intro(below, |lower| {
+            Proof::linear(
+                prelude.falsehood_prop(),
+                1,
+                vec![(Proof::hyp(upper), 1), (lower, 1)],
+            )
+        });
+        add("linear_false", scene, claim, proof);
+    }
+    {
+        // y + 1 <= x from x == y + 1, the equation with a negative
+        // coefficient, and the negated inequality x < y + 1 as a hypothesis.
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let successor = iadd(y.clone(), ilit(1));
+        let equation = scene.assume(int_eq(x.clone(), successor.clone()));
+        let claim = ile(successor.clone(), x.clone());
+        let proof = Proof::linear(claim.clone(), 1, vec![(Proof::hyp(equation), -1)]);
+        add("linear_equation", scene, claim, proof);
+
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (scene.declare(Type::Int), scene.declare(Type::Int));
+        let successor = iadd(y.clone(), ilit(1));
+        let not_below = scene.assume(prelude.not_prop(ile(successor.clone(), x.clone())));
+        let claim = ile(x, successor);
+        let proof = Proof::linear(claim.clone(), 1, vec![(Proof::hyp(not_below), 1)]);
+        add("linear_negated_hypothesis", scene, claim, proof);
     }
     out
 }
