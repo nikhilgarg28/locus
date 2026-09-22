@@ -1,5 +1,7 @@
-error[L0207]: unknown method `pow`
+error[L0207]: no method named `pow` found for `u8` (E0599)
  --> tests/corpus/reject/unknown_method.lc:3:7
   |
-3 |     n.pow(2) //~ error: L0207 unknown method `pow`
+3 |     n.pow(2) //~ error: L0207 no method named `pow` found for `u8` (E0599)
   |       ^^^
+  |
+  = note: the methods of the machine integer types are `wrapping_add`, `wrapping_sub`, `wrapping_mul`, and, at the signed types, `wrapping_neg`

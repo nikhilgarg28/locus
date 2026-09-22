@@ -10,13 +10,15 @@ use crate::exec::Promises;
 use crate::kernel::theory;
 use crate::kernel::{Context, Definitions, FnId, Proof, PropVariant, Term, Type};
 use crate::source::{SourceFile, Span};
-use crate::typed::{Binder, Derive, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
+use crate::typed::{
+    Binder, Derive, EnumItem, FnItem, FnRef, Passing, Session, StructItem, VariantItem,
+};
 
 use super::env::{
     Elab, EnumInfo, Env, FnInfo, Global, LOGICAL, PropInfo, PropVariantInfo, StructInfo,
     VariantInfo,
 };
-use super::order::{declared_name, dependency_order};
+use super::order::{Unit, declared_name, dependency_order, unit_name, units};
 use super::types::tuple_over;
 
 /// One `_`, `prove!`, or conversion of evidence, an obligation of an
@@ -125,6 +127,7 @@ pub fn elaborate_with(
         moves: super::moves::Moves::new(check_moves),
         exits: Vec::new(),
         borrowed: Vec::new(),
+        owner: None,
     };
 
     env.declare_builtin_props();
@@ -132,59 +135,70 @@ pub fn elaborate_with(
     env.report_unchecked_syntax(program);
     env.file_promises = env.promises_of(&program.attributes, Promises::default());
 
-    // A name is declared once per namespace: a type and a value may share it.
+    let units = units(program);
+    let names: Vec<Option<String>> = units.iter().map(unit_name).collect();
+    let mut duplicates = env.refuse_bad_impls(program, &units);
+
+    // A name is declared once per namespace: a type and a value may share
+    // it. A function of an `impl` block is `Type::name`, which a variant
+    // of the same enum is too, in Rust's value namespace.
     let mut seen: HashMap<(bool, &str), Span> = HashMap::new();
-    let mut duplicates = HashSet::new();
-    for (index, declaration) in program.declarations.iter().enumerate() {
-        let Some(name) = declared_name(declaration) else {
+    for (index, (unit, qualified)) in units.iter().zip(&names).enumerate() {
+        let (Some(name), Some(qualified)) = (declared_name(unit.declaration), qualified) else {
             continue;
         };
         let is_type = matches!(
-            declaration.kind,
+            unit.declaration.kind,
             DeclarationKind::Struct { .. }
                 | DeclarationKind::Enum { .. }
                 | DeclarationKind::Prop { .. }
         );
-        if let Some(first) = seen.get(&(is_type, name.text.as_str())) {
+        let earlier = seen
+            .get(&(is_type, qualified.as_str()))
+            .copied()
+            .or_else(|| {
+                unit.owner
+                    .and_then(|owner| variant_named(program, owner, name))
+            });
+        if let Some(first) = earlier {
             env.diagnostics.push(
                 Diagnostic::error(
                     "L0202",
-                    format!("`{}` is declared twice", name.text),
+                    format!("`{qualified}` is declared twice"),
                     name.span,
                 )
-                .label(*first, "first declared here"),
+                .label(first, "first declared here"),
             );
             duplicates.insert(index);
         } else {
-            seen.insert((is_type, &name.text), name.span);
+            seen.insert((is_type, qualified), name.span);
         }
     }
 
-    let (order, cyclic) = dependency_order(program);
+    let (order, cyclic) = dependency_order(&units);
     for index in cyclic {
-        let name = declared_name(&program.declarations[index]).expect("an impl mentions nothing");
+        let name = declared_name(units[index].declaration).expect("a unit has a name");
+        let qualified = names[index].clone().expect("a unit has a name");
         env.diagnostics.push(
             Diagnostic::error(
                 "L0203",
-                format!("`{}` is defined in terms of itself", name.text),
+                format!("`{qualified}` is defined in terms of itself"),
                 name.span,
             )
             .note("recursion is not part of the core language; a bounded `for` repeats a step a known number of times"),
         );
-        env.failed.insert(name.text.clone());
+        env.failed.insert(qualified);
     }
     let mut accepted: Vec<(usize, String, FnRef)> = Vec::new();
     for index in order {
         if duplicates.contains(&index) {
             continue;
         }
-        let declaration = &program.declarations[index];
-        // An `impl` block was reported as not checked yet.
-        let Some(name) = declared_name(declaration) else {
+        let unit = &units[index];
+        let Some(name) = names[index].clone() else {
             continue;
         };
-        let name = name.text.clone();
-        match env.declaration(declaration) {
+        match env.unit(unit) {
             Ok(global) => {
                 if let Global::Fn(info) = &global {
                     accepted.push((index, name.clone(), info.reference));
@@ -198,7 +212,7 @@ pub fn elaborate_with(
         }
     }
     accepted.sort_by_key(|(index, _, _)| *index);
-    let visibilities = env.export_boundary(program);
+    let visibilities = env.export_boundary(&units);
     env.diagnostics
         .sort_by_key(|diagnostic| diagnostic.labels[0].span.start);
     Elaborated {
@@ -212,6 +226,37 @@ pub fn elaborate_with(
         items: env.items,
         visibilities,
     }
+}
+
+/// The name a declaration declares, by its kind.
+fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
+    match kind {
+        DeclarationKind::Function { name, .. }
+        | DeclarationKind::Struct { name, .. }
+        | DeclarationKind::Enum { name, .. }
+        | DeclarationKind::Prop { name, .. }
+        | DeclarationKind::Constant { name, .. } => Some(&name.text),
+        DeclarationKind::Impl { .. } => None,
+    }
+}
+
+/// The span of the variant `name` of the enum `owner`, when the file
+/// declares one: a function of `impl Enum` may not take a variant's name,
+/// since Rust files both under `Enum::name`.
+fn variant_named(program: &ast::Program, owner: &ast::Path, name: &ast::Name) -> Option<Span> {
+    program
+        .declarations
+        .iter()
+        .find_map(|declaration| match &declaration.kind {
+            DeclarationKind::Enum {
+                name: enum_name,
+                variants,
+            } if enum_name.text == owner.text() => variants
+                .iter()
+                .find(|variant| variant.name.text == name.text)
+                .map(|variant| variant.name.span),
+            _ => None,
+        })
 }
 
 /// A visibility as Rust spells it, and as the printer writes it: `pub`,
@@ -290,15 +335,20 @@ impl Env<'_> {
     /// Within one file everything is in scope, so a use of a private item
     /// is never an error here; and a proposition or a function of the logic
     /// has no runtime form and is emitted under no visibility at all.
-    fn export_boundary(&mut self, program: &ast::Program) -> Visibilities {
+    fn export_boundary(&mut self, units: &[Unit<'_>]) -> Visibilities {
         let mut visibilities = Visibilities::default();
-        for declaration in &program.declarations {
-            let Some(name) = declared_name(declaration) else {
+        for unit in units {
+            let declaration = unit.declaration;
+            let Some(qualified) = unit_name(unit) else {
                 continue;
             };
-            if self.failed.contains(&name.text) {
+            if self.failed.contains(&qualified) {
                 continue;
             }
+            let name = ast::Name {
+                text: qualified,
+                span: declared_name(declaration).expect("a unit has a name").span,
+            };
             match &declaration.kind {
                 DeclarationKind::Struct { fields, .. } => {
                     let Some(Global::Struct(info)) = self.types.get(&name.text) else {
@@ -349,7 +399,10 @@ impl Env<'_> {
         let Some(visibility) = &info.visibility else {
             return;
         };
-        for (parameter, binder) in parameters.iter().zip(&info.params) {
+        // The receiver of a method is the type itself, and is not written
+        // among the parameters.
+        let params = info.params.iter().skip(usize::from(info.receiver));
+        for (parameter, binder) in parameters.iter().zip(params) {
             let Some(forgery) = self.forgery(&binder.ty) else {
                 continue;
             };
@@ -566,10 +619,9 @@ impl Env<'_> {
 }
 
 impl Env<'_> {
-    /// What S4 parses and no commit has given a meaning yet: every `impl`
-    /// block. Doc comments and visibility need no report, since ignoring
-    /// them changes nothing a program says. A `derive` at the top of the
-    /// file or on a method is out of place.
+    /// What is parsed and has no meaning: a `derive` at the top of the
+    /// file or on a method is out of place. Doc comments need no report,
+    /// since ignoring them changes nothing a program says.
     fn report_unchecked_syntax(&mut self, program: &ast::Program) {
         self.refuse_derive(&program.attributes, "the file");
         for declaration in &program.declarations {
@@ -579,18 +631,73 @@ impl Env<'_> {
                 }
             }
         }
+    }
+
+    /// An `impl` block is for a struct or an enum the file declares, by
+    /// its plain name (O4); the parser sees to it that the block holds
+    /// functions. The units of a block that is not are reported once, at
+    /// the block, and skipped: their indices are returned, and their names
+    /// are filed as failed so that a mention of one is not reported again.
+    fn refuse_bad_impls(&mut self, program: &ast::Program, units: &[Unit<'_>]) -> HashSet<usize> {
+        let mut skipped = HashSet::new();
         for declaration in &program.declarations {
-            if let DeclarationKind::Impl { target, .. } = &declaration.kind {
-                self.diagnostics.push(Diagnostic::error(
-                    "L0290",
-                    format!(
-                        "`impl {}` is parsed but not checked yet; O4 adds impl blocks",
-                        target.text()
-                    ),
-                    target.span,
-                ));
+            let DeclarationKind::Impl { target, .. } = &declaration.kind else {
+                continue;
+            };
+            // The type, in the type namespace; failing that, whatever else
+            // the file declares under the name, for the message.
+            let of_name = |name: &ast::Name, wanted: fn(&DeclarationKind) -> bool| {
+                program
+                    .declarations
+                    .iter()
+                    .map(|declaration| &declaration.kind)
+                    .find(|kind| {
+                        wanted(kind)
+                            && declared_name_of(kind).is_some_and(|declared| declared == name.text)
+                    })
+            };
+            let reason = match target.single() {
+                None => Some(
+                    "paths through modules are not in Locus yet; modules are a later project"
+                        .to_string(),
+                ),
+                Some(name) => {
+                    let is_type = |kind: &DeclarationKind| {
+                        matches!(
+                            kind,
+                            DeclarationKind::Struct { .. } | DeclarationKind::Enum { .. }
+                        )
+                    };
+                    match (of_name(name, is_type), of_name(name, |_| true)) {
+                        (Some(_), _) => None,
+                        (None, Some(DeclarationKind::Prop { .. })) => Some(format!(
+                            "`{}` is a proposition, and an `impl` block is for a struct or an enum",
+                            name.text
+                        )),
+                        (None, Some(_)) => Some(format!(
+                            "`{}` is a function, and an `impl` block is for a struct or an enum",
+                            name.text
+                        )),
+                        (None, None) => Some(format!("unknown type `{}`", name.text)),
+                    }
+                }
+            };
+            if let Some(reason) = reason {
+                self.diagnostics.push(
+                    Diagnostic::error("L0200", reason, target.span)
+                        .note("an `impl` block is written for a struct or an enum declared in the same file, by its name"),
+                );
+                for (index, unit) in units.iter().enumerate() {
+                    if unit.owner.is_some_and(|owner| std::ptr::eq(owner, target)) {
+                        skipped.insert(index);
+                        if let Some(name) = unit_name(unit) {
+                            self.failed.insert(name);
+                        }
+                    }
+                }
             }
         }
+        skipped
     }
 
     /// The promises a list of attributes makes, added to `defaults`: the
@@ -809,7 +916,30 @@ impl Env<'_> {
         self.borrowed.clear();
     }
 
-    fn declaration(&mut self, declaration: &ast::Declaration) -> Elab<Global> {
+    /// A unit: a declaration of the file, or a function of an `impl` block
+    /// with `Self` and `self` standing for its type.
+    fn unit(&mut self, unit: &Unit<'_>) -> Elab<Global> {
+        let Some(owner) = unit.owner else {
+            return self.declaration(unit.declaration, None);
+        };
+        let owner_name = owner.text();
+        let owner_ty = match self.types.get(&owner_name) {
+            Some(Global::Struct(info)) => Type::Struct(info.id),
+            Some(Global::Enum(info)) => Type::Enum(info.id),
+            // Reported at the block, or the type itself failed.
+            _ => return Err(()),
+        };
+        self.owner = Some(owner_name.clone());
+        let result = self.declaration(unit.declaration, Some((owner_name, owner_ty)));
+        self.owner = None;
+        result
+    }
+
+    fn declaration(
+        &mut self,
+        declaration: &ast::Declaration,
+        owner: Option<(String, Type)>,
+    ) -> Elab<Global> {
         let attributes = &declaration.attributes;
         match &declaration.kind {
             DeclarationKind::Struct { name, fields } => {
@@ -906,22 +1036,40 @@ impl Env<'_> {
             }
             DeclarationKind::Function {
                 name,
+                self_param,
                 parameters,
                 result,
                 body,
-                ..
             } => {
                 self.refuse_derive(attributes, "a function");
                 let promises = self.promises_of(attributes, self.file_promises);
-                let takes_mut = parameters.iter().any(|parameter| {
-                    matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
-                });
+                let receiver = match (self_param, &owner) {
+                    (Some(param), Some((_, ty))) => Some(Receiver {
+                        passing: match param.kind {
+                            ast::SelfKind::Value => Passing::Value,
+                            ast::SelfKind::MutValue => Passing::MutValue,
+                            ast::SelfKind::Ref => Passing::Ref,
+                            ast::SelfKind::RefMut => Passing::RefMut,
+                        },
+                        ty: ty.clone(),
+                        span: param.span,
+                    }),
+                    _ => None,
+                };
+                let takes_mut = receiver
+                    .as_ref()
+                    .is_some_and(|receiver| receiver.passing == Passing::RefMut)
+                    || parameters.iter().any(|parameter| {
+                        matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
+                    });
                 let function = Function {
                     promises,
                     takes_mut,
                     body: Body::Block(body),
                     constant: false,
                     visibility: declaration.visibility.clone(),
+                    owner: owner.map(|(name, _)| name),
+                    receiver,
                 };
                 self.function(name, parameters, result, function)
             }
@@ -934,6 +1082,8 @@ impl Env<'_> {
                     body: Body::Expr(value),
                     constant: true,
                     visibility: declaration.visibility.clone(),
+                    owner: None,
+                    receiver: None,
                 };
                 self.function(name, &[], ty, function)
             }
@@ -947,7 +1097,7 @@ impl Env<'_> {
                 self.prop(name, parameters, variants)
             }
             DeclarationKind::Impl { .. } => {
-                unreachable!("an impl block is reported before the declarations are elaborated")
+                unreachable!("the functions of an impl block are units of their own")
             }
         }
     }
@@ -965,7 +1115,19 @@ impl Env<'_> {
             body,
             constant,
             visibility,
+            owner,
+            receiver,
         } = function;
+        // A function of an `impl` block is `Type::name` everywhere it is
+        // filed, named, or printed by the logic.
+        let qualified = match &owner {
+            Some(owner) => format!("{owner}::{}", name.text),
+            None => name.text.clone(),
+        };
+        let name = &ast::Name {
+            text: qualified,
+            span: name.span,
+        };
         let started = std::time::Instant::now();
         // A function that may appear in a proposition is a function of the
         // logic: its body is a kernel term, total by construction, and
@@ -973,8 +1135,13 @@ impl Env<'_> {
         let mut logical = super::env::first_broken(LOGICAL, promises).is_none() && !takes_mut;
         let (diagnostics, holes) = (self.diagnostics.len(), self.holes.len());
         self.not_a_term = None;
+        let signature = Signature {
+            receiver: receiver.as_ref(),
+            parameters,
+            result,
+        };
         let mut elaborated =
-            self.function_body(name, parameters, result, body, logical, promises, constant);
+            self.function_body(name, &signature, body, logical, promises, constant);
         // The interim rule of LOC-193: a function that makes every promise
         // of the logic and whose body is not a kernel term, because it has
         // an operator that may panic in it, is checked as an ordinary
@@ -990,8 +1157,7 @@ impl Env<'_> {
             let (line, _) = self.source.line_column(span.start).unwrap_or((0, 0));
             not_a_term = Some((what, line));
             logical = false;
-            elaborated =
-                self.function_body(name, parameters, result, body, logical, promises, constant);
+            elaborated = self.function_body(name, &signature, body, logical, promises, constant);
         }
         let (header, block) = elaborated?;
         let Header {
@@ -1016,10 +1182,12 @@ impl Env<'_> {
         let started = std::time::Instant::now();
         // The checker enforces the promises of an ordinary function; a
         // function of the logic keeps them by construction.
-        let declared = if constant {
-            self.session.declare_constant(&item, promises)
-        } else {
-            self.session.declare_fn_promising(&item, promises)
+        let declared = match &owner {
+            Some(owner) => self
+                .session
+                .declare_method(&item, promises, owner, receiver.is_some()),
+            None if constant => self.session.declare_constant(&item, promises),
+            None => self.session.declare_fn_promising(&item, promises),
         };
         let reference = match declared {
             Ok(reference) => reference,
@@ -1046,28 +1214,41 @@ impl Env<'_> {
             passing,
             not_a_term,
             visibility,
+            receiver: receiver.is_some(),
         })))
     }
 
     /// The signature and the body, elaborated in a fresh scope: as a term of
-    /// the logic when `logical`, as code otherwise.
-    #[allow(clippy::too_many_arguments)]
+    /// the logic when `logical`, as code otherwise. The receiver of a
+    /// method is a parameter named `self`, first, of the `impl` block's
+    /// type, passed as written: `self`, `mut self`, `&self`, or `&mut self`.
     fn function_body(
         &mut self,
         name: &ast::Name,
-        parameters: &[ast::Parameter],
-        result: &ast::Type,
+        signature: &Signature<'_>,
         body: Body<'_>,
         logical: bool,
         promises: Promises,
         constant: bool,
     ) -> Elab<(Header, crate::typed::Block)> {
+        let Signature {
+            receiver,
+            parameters,
+            result,
+        } = *signature;
         self.start_item(&name.text, logical, promises);
         if constant {
             self.formula = Some("the value of a constant");
         }
         let mut params: Vec<Binder> = Vec::new();
         let mut passing = Vec::new();
+        if let Some(receiver) = receiver {
+            let binder = Binder::new("self", receiver.ty.clone());
+            self.declare(&binder, false, receiver.span)?;
+            self.declare_passing(binder.id, receiver.passing);
+            params.push(binder);
+            passing.push(receiver.passing);
+        }
         for parameter in parameters {
             if params
                 .iter()
@@ -1341,6 +1522,7 @@ impl Env<'_> {
                     passing: Vec::new(),
                     not_a_term: None,
                     visibility: None,
+                    receiver: false,
                 })),
             );
         }
@@ -1466,6 +1648,23 @@ impl Env<'_> {
     }
 }
 
+/// A function's signature as written: the receiver of a method, the
+/// parameters, and the result type.
+#[derive(Clone, Copy)]
+struct Signature<'a> {
+    receiver: Option<&'a Receiver>,
+    parameters: &'a [ast::Parameter],
+    result: &'a ast::Type,
+}
+
+/// The `self` parameter of a method: how it is passed, the type of the
+/// `impl` block, and where it is written.
+struct Receiver {
+    passing: Passing,
+    ty: Type,
+    span: Span,
+}
+
 /// A function's signature as elaborated: its parameters, how each is
 /// passed, the exit binders of its `&mut` parameters, and its result type
 /// over them (`references.rs`).
@@ -1496,4 +1695,8 @@ struct Function<'a> {
     constant: bool,
     /// `pub` or a restricted form, as written; private without one.
     visibility: Option<ast::Visibility>,
+    /// Declared in an `impl` block: the type's name.
+    owner: Option<String>,
+    /// The `self` parameter of a method.
+    receiver: Option<Receiver>,
 }

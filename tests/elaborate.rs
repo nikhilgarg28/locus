@@ -607,7 +607,7 @@ fn errors_name_the_problem() {
         (
             "fn f(n: u8) -> u8 { n.pow(2) }",
             "L0207",
-            "unknown method `pow`",
+            "no method named `pow` found for `u8` (E0599)",
         ),
         (
             "fn f(n: u8) -> u8 { n } fn g() -> u8 { f(1, 2) }",

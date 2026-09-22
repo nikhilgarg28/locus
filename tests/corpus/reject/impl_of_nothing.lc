@@ -1,0 +1,18 @@
+// An `impl` block is for a struct or an enum the file declares. Its
+// functions are skipped, and a mention of one is not reported again.
+#[terminates] #[no_panic] #[no_io]
+fn small(n: u8) -> Prop {
+    prop!(n <= 3)
+}
+
+impl Missing { //~ error: L0200 unknown type `Missing`
+    fn get(&self) -> u8 { 1 }
+}
+
+impl small { //~ error: L0200 `small` is a function, and an `impl` block is for a struct or an enum
+    fn get(&self) -> u8 { 1 }
+}
+
+impl std::vec::Vec { //~ error: L0200 paths through modules are not in Locus yet
+    fn get(&self) -> u8 { 1 }
+}

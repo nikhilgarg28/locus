@@ -720,12 +720,17 @@ impl Form {
 pub enum UnaryOp {
     /// `-value`
     Neg,
+    /// `*self`, the value behind the reference receiver of a method (O4).
+    /// The parser reads `*` before `self` alone; `*` before anything else
+    /// is still a construct of Rust that Locus does not have.
+    Deref,
 }
 
 impl UnaryOp {
     pub fn spelling(self) -> &'static str {
         match self {
             Self::Neg => "-",
+            Self::Deref => "*",
         }
     }
 }

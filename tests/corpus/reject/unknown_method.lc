@@ -1,4 +1,4 @@
 // A method `u8` does not have.
 fn square(n: u8) -> u8 {
-    n.pow(2) //~ error: L0207 unknown method `pow`
+    n.pow(2) //~ error: L0207 no method named `pow` found for `u8` (E0599)
 }

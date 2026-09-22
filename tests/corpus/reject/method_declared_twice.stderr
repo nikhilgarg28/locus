@@ -1,0 +1,15 @@
+error[L0202]: `Slot::read` is declared twice
+  --> tests/corpus/reject/method_declared_twice.lc:13:8
+   |
+12 |     fn read(&self) -> u8 { 1 }
+   |        ---- first declared here
+13 |     fn read(&self) -> u8 { 2 } //~ error: L0202 `Slot::read` is declared twice
+   |        ^^^^
+error[L0202]: `Slot::Full` is declared twice
+  --> tests/corpus/reject/method_declared_twice.lc:14:8
+   |
+ 8 |     Full(u8),
+   |     ---- first declared here
+...
+14 |     fn Full(&self) -> u8 { 3 } //~ error: L0202 `Slot::Full` is declared twice
+   |        ^^^^

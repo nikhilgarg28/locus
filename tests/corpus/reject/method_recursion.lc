@@ -1,0 +1,16 @@
+// A method that calls itself, on `self` or on another receiver of its
+// type, is recursion, which the core does not have.
+#[derive(Clone, Copy, Debug)]
+struct Counter {
+    count: u8,
+}
+
+impl Counter {
+    fn spin(&self) -> u8 { //~ error: L0203 `Counter::spin` is defined in terms of itself
+        self.spin()
+    }
+
+    fn chase(&self, other: Counter) -> u8 {
+        other.chase(other) //~ error: L0203 `Counter::chase` is defined in terms of itself
+    }
+}

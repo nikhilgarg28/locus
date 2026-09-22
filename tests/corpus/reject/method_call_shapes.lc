@@ -1,0 +1,45 @@
+// A method call lends or moves its receiver as the method's `self` says,
+// under the rules of O3: `&mut self` needs a mutable place, a reference
+// receiver needs a place at all, and an associated function has no
+// receiver. A method is found by the receiver's type, and never as a free
+// function.
+#[derive(Clone, Copy, Debug)]
+struct Counter {
+    count: u8,
+}
+
+impl Counter {
+    fn fresh() -> Counter {
+        Counter { count: 0 }
+    }
+
+    fn get(&self) -> u8 {
+        self.count
+    }
+
+    fn bump(&mut self) -> () {
+        self.count = self.count.wrapping_add(1);
+    }
+}
+
+fn immutable_receiver() -> u8 {
+    let c = Counter::fresh();
+    c.bump(); //~ error: L0262 cannot borrow `c` as mutable, as it is not declared as mutable (E0596)
+    c.count
+}
+
+fn temporary_receiver() -> u8 {
+    Counter::fresh().get() //~ error: L0261 `Counter::get` takes `&self`, and the receiver is not a place the call could lend
+}
+
+fn associated_as_method(c: Counter) -> Counter {
+    c.fresh() //~ error: L0207 `Counter::fresh` takes no `self`, and is called as `Counter::fresh(..)`
+}
+
+fn unknown_method(c: Counter) -> u8 {
+    c.size() //~ error: L0207 no method named `size` found for `Counter` (E0599)
+}
+
+fn method_as_free_function(c: Counter) -> u8 {
+    get(c) //~ error: L0204 unknown function `get`
+}

@@ -1,5 +1,0 @@
-error[L0290]: `impl Counter` is parsed but not checked yet; O4 adds impl blocks
-  --> tests/corpus/reject/items_not_checked_yet.lc:14:6
-   |
-14 | impl Counter { //~ error: L0290 `impl Counter` is parsed but not checked yet; O4
-   |      ^^^^^^^

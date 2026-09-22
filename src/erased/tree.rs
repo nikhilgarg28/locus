@@ -76,9 +76,29 @@ pub struct EFn {
     pub passing: Vec<Passing>,
     pub result: EType,
     pub body: EBlock,
+    /// For a function declared in an `impl` block: the type's name. `name`
+    /// is then `Type::name`, and the printer writes the function inside
+    /// `impl Type { .. }` under its last segment.
+    pub owner: Option<String>,
+    /// The first parameter is `self`: a method, which the printer writes
+    /// with `self`, `mut self`, `&self`, or `&mut self` as `passing` says,
+    /// and a call of which it writes as `receiver.name(rest)`.
+    pub receiver: bool,
 }
 
 impl EFn {
+    /// The name inside its `impl` block: what follows `Type::`.
+    pub fn method_name(&self) -> &str {
+        match &self.owner {
+            Some(owner) => self
+                .name
+                .strip_prefix(owner.as_str())
+                .and_then(|rest| rest.strip_prefix("::"))
+                .unwrap_or(&self.name),
+            None => &self.name,
+        }
+    }
+
     /// How the parameter at `index` is passed.
     pub fn passing_of(&self, index: usize) -> Passing {
         self.passing.get(index).copied().unwrap_or_default()

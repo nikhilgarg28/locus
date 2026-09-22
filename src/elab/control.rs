@@ -214,7 +214,7 @@ impl Env<'_> {
                 }
                 PatternKind::Variant { path, .. } | PatternKind::Struct { path, .. } => {
                     let (prefix, _) = self.variant_path(path)?;
-                    if prefix.text != info.name {
+                    if self.type_text(prefix) != info.name {
                         let message = format!(
                             "this arm is for `{}`, and the value matched is a `{}`",
                             prefix.text, info.name

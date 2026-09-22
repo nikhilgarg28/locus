@@ -1,0 +1,14 @@
+error[L0203]: `Counter::spin` is defined in terms of itself
+ --> tests/corpus/reject/method_recursion.lc:9:8
+  |
+9 |     fn spin(&self) -> u8 { //~ error: L0203 `Counter::spin` is defined in terms of itself
+  |        ^^^^
+  |
+  = note: recursion is not part of the core language; a bounded `for` repeats a step a known number of times
+error[L0203]: `Counter::chase` is defined in terms of itself
+  --> tests/corpus/reject/method_recursion.lc:14:15
+   |
+14 |         other.chase(other) //~ error: L0203 `Counter::chase` is defined in terms of itself
+   |               ^^^^^
+   |
+   = note: recursion is not part of the core language; a bounded `for` repeats a step a known number of times

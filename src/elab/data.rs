@@ -55,9 +55,18 @@ impl Env<'_> {
         fields: &[ast::ValueField],
         span: Span,
     ) -> Elab<Value> {
-        let Some(Global::Struct(info)) = self.types.get(&name.text).cloned() else {
-            if self.failed.contains(&name.text) {
+        // `Self { .. }` inside an `impl` block is the block's type.
+        let key = self.type_text(name);
+        let Some(Global::Struct(info)) = self.types.get(&key).cloned() else {
+            if self.failed.contains(&key) {
                 return Err(());
+            }
+            if name.text == "Self" && self.types.contains_key(&key) {
+                return self.fail(
+                    "L0204",
+                    format!("`Self` is `{key}`, which is not a struct"),
+                    name.span,
+                );
             }
             return self.fail(
                 "L0204",
@@ -385,10 +394,12 @@ impl Env<'_> {
         path: &ast::Path,
     ) -> Elab<Option<(std::rc::Rc<EnumInfo>, usize)>> {
         let (prefix, name) = self.variant_path(path)?;
+        // `Self::V` inside an `impl` block is the block's type.
+        let key = self.type_text(prefix);
         let global = self
             .types
-            .get(&prefix.text)
-            .or_else(|| self.values.get(&prefix.text))
+            .get(&key)
+            .or_else(|| self.values.get(&key))
             .cloned();
         match global {
             Some(Global::Enum(info)) => {
@@ -410,7 +421,7 @@ impl Env<'_> {
                 format!("`{}` is not an enum or a proposition", prefix.text),
                 prefix.span,
             ),
-            None if self.failed.contains(&prefix.text) => Err(()),
+            None if self.failed.contains(&key) => Err(()),
             None => self.fail(
                 "L0204",
                 format!("unknown name `{}`", prefix.text),
@@ -427,7 +438,8 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let Some((info, index)) = self.enum_variant(path)? else {
-            let Some(Global::Prop(info)) = self.types.get(&path.segments[0].text).cloned() else {
+            let key = self.type_text(&path.segments[0]);
+            let Some(Global::Prop(info)) = self.types.get(&key).cloned() else {
                 unreachable!("`enum_variant` saw a proposition")
             };
             let arguments: Vec<&ast::Expr> = arguments.iter().collect();
@@ -449,7 +461,8 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let Some((info, index)) = self.enum_variant(path)? else {
-            let Some(Global::Prop(info)) = self.types.get(&path.segments[0].text).cloned() else {
+            let key = self.type_text(&path.segments[0]);
+            let Some(Global::Prop(info)) = self.types.get(&key).cloned() else {
                 unreachable!("`enum_variant` saw a proposition")
             };
             let variant = &info.variants[self.prop_variant(&info, path)?];

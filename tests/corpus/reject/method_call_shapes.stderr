@@ -1,0 +1,35 @@
+error[L0262]: cannot borrow `c` as mutable, as it is not declared as mutable (E0596)
+  --> tests/corpus/reject/method_call_shapes.lc:27:5
+   |
+27 |     c.bump(); //~ error: L0262 cannot borrow `c` as mutable, as it is not declared as mutable (E0596)
+   |     ^
+   |
+   = note: a `&mut` argument is rooted at a binding the call may assign: declare it `let mut c`, or as a parameter `mut c: T` or `c: &mut T`
+error[L0261]: `Counter::get` takes `&self`, and the receiver is not a place the call could lend
+  --> tests/corpus/reject/method_call_shapes.lc:32:5
+   |
+32 |     Counter::fresh().get() //~ error: L0261 `Counter::get` takes `&self`, and the receiver is not a place the call could lend
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: a reference lasts for one call and lends a place the caller holds, `x` or `x.f`; bind the value with `let` first
+error[L0207]: `Counter::fresh` takes no `self`, and is called as `Counter::fresh(..)`
+  --> tests/corpus/reject/method_call_shapes.lc:36:7
+   |
+36 |     c.fresh() //~ error: L0207 `Counter::fresh` takes no `self`, and is called as `Counter::fresh(..)`
+   |       ^^^^^
+   |
+   = note: a function of an `impl` block without a `self` parameter is an associated function, named by its type, as in Rust
+error[L0207]: no method named `size` found for `Counter` (E0599)
+  --> tests/corpus/reject/method_call_shapes.lc:40:7
+   |
+40 |     c.size() //~ error: L0207 no method named `size` found for `Counter` (E0599)
+   |       ^^^^
+   |
+   = note: a method is declared in `impl Counter { .. }` with `self`, `&self`, or `&mut self` as its first parameter
+error[L0204]: unknown function `get`
+  --> tests/corpus/reject/method_call_shapes.lc:44:5
+   |
+44 |     get(c) //~ error: L0204 unknown function `get`
+   |     ^^^
+   |
+   = note: `get` is declared in `impl Counter`: call it as `Counter::get(..)`, or as `x.get(..)` on an `x` of that type when it takes `self`

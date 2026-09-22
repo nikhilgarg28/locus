@@ -272,6 +272,11 @@ impl Env<'_> {
                 operator_span,
                 expr: inner,
             } => self.negate(expr, *operator_span, inner, expected),
+            ExprKind::Unary {
+                operator: UnaryOp::Deref,
+                expr: inner,
+                ..
+            } => self.deref(inner, expected, expr.span),
             ExprKind::Cast {
                 expr: inner,
                 as_span,
@@ -283,6 +288,11 @@ impl Env<'_> {
             },
             ExprKind::Path(path) => match self.associated_constant(path) {
                 Some(constant) => constant,
+                None if self.path_function(path).is_some() => self.fail(
+                    "L0290",
+                    "a function used as a value is not supported yet; call it",
+                    expr.span,
+                ),
                 None => self.variant(path, &[], expected, expr.span),
             },
             ExprKind::Call { callee, arguments } => {
@@ -418,6 +428,60 @@ impl Env<'_> {
                 Err(())
             }
         }
+    }
+
+    /// `*self`, read: the value behind the reference receiver of a method
+    /// (O4). `*` is written on `self` alone, and only where `self` is a
+    /// reference; a `&mut self` receiver is assigned through it as well
+    /// (`mutation.rs`).
+    fn deref(&mut self, inner: &ast::Expr, expected: Option<&Type>, span: Span) -> Elab<Value> {
+        let name = self.deref_target(inner, span)?;
+        self.name(name, expected)
+    }
+
+    /// The `self` a `*self` is written on, when it is a reference
+    /// receiver; `L0266` otherwise, in rustc's words where it has them.
+    pub(super) fn deref_target<'e>(
+        &mut self,
+        inner: &'e ast::Expr,
+        span: Span,
+    ) -> Elab<&'e ast::Name> {
+        let ExprKind::Name(name) = &inner.kind else {
+            let text = self.text(inner.span).to_string();
+            self.diagnostics.push(
+                crate::diagnostic::Diagnostic::error(
+                    "L0266",
+                    format!("`*` is written on `self` alone, and `*{text}` reads as `*({text})`"),
+                    span,
+                )
+                .note("a field of the receiver is read as `self.f` and written as `self.f = v`; `*self` is the whole value behind a `&self` or `&mut self` receiver"),
+            );
+            return Err(());
+        };
+        let Some(local) = self.lookup(&name.text) else {
+            return self.fail("L0204", format!("unknown name `{}`", name.text), name.span);
+        };
+        if local.poisoned {
+            return Err(());
+        }
+        let id = local.binding.unwrap_or(local.id);
+        let ty = local.ty.clone();
+        if !self.borrowed.contains(&id) {
+            let ty = self.show_type(&ty);
+            self.diagnostics.push(
+                crate::diagnostic::Diagnostic::error(
+                    "L0266",
+                    format!("type `{ty}` cannot be dereferenced (E0614)"),
+                    span,
+                )
+                .note(format!(
+                    "`{0}` is taken by value here, and is the value itself: write `{0}`; `*{0}` is the value behind a `&self` or `&mut self` receiver",
+                    name.text
+                )),
+            );
+            return Err(());
+        }
+        Ok(name)
     }
 
     fn name(&mut self, name: &ast::Name, expected: Option<&Type>) -> Elab<Value> {

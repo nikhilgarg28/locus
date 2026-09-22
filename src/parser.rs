@@ -658,12 +658,22 @@ impl Parser<'_> {
     fn function(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         self.no_generics()?;
-        let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
-        self.expect(K::Arrow)?;
-        let result = self.ty()?;
-        let saved = std::mem::replace(&mut self.in_method, self_param.is_some());
-        let body = self.block();
+        // `self` is a name in the signature and the body of a method: a
+        // parameter's type or the result type may speak of it (O4).
+        let method = self.in_impl && self.at(K::LParen) && self.self_param_follows();
+        let saved = std::mem::replace(&mut self.in_method, method);
+        let signature = (|| {
+            let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
+            self.expect(K::Arrow)?;
+            let result = self.ty()?;
+            Ok((self_param, parameters, result))
+        })();
+        let body = match &signature {
+            Ok(_) => self.block(),
+            Err(()) => Err(()),
+        };
         self.in_method = saved;
+        let (self_param, parameters, result) = signature?;
         let body = body?;
         let end = body.span;
         Ok((
@@ -959,6 +969,20 @@ impl Parser<'_> {
         }
         self.close(K::RParen, opening)?;
         Ok((self_param, parameters))
+    }
+
+    /// Whether a `self` parameter opens the parameter list at the `(`.
+    fn self_param_follows(&self) -> bool {
+        let mut at = 1;
+        if self.peek(at) == K::And {
+            at += 1;
+        }
+        if self.peek(at) == K::Mut {
+            at += 1;
+        }
+        self.tokens.get(self.position + at).is_some_and(|token| {
+            token.kind == K::Keyword && self.source.slice(token.span) == Some("self")
+        }) && self.peek(at + 1) != K::PathSep
     }
 
     /// `self`, `mut self`, `&self`, or `&mut self`, when not the start of
@@ -1939,6 +1963,7 @@ impl Parser<'_> {
             K::Name if self.at_quantifier() => self.quantifier(),
             K::Name | K::Keyword if self.at_named() => self.named(),
             K::Keyword if self.at_keyword("self") => self.self_expression(),
+            K::Star if self.in_method && self.at_star_self() => self.deref_self(),
             K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => self.atom(),
             K::OuterDoc | K::InnerDoc => self.misplaced_doc_comment(),
             K::Bang => self.not(),
@@ -2132,6 +2157,32 @@ impl Parser<'_> {
         Ok(Expr {
             span: start.span.through(value.span),
             kind: ExprKind::Not(Box::new(value)),
+        })
+    }
+
+    /// `*` directly before `self`, in a method.
+    fn at_star_self(&self) -> bool {
+        self.tokens.get(self.position + 1).is_some_and(|token| {
+            token.kind == K::Keyword && self.source.slice(token.span) == Some("self")
+        }) && self.peek(2) != K::PathSep
+    }
+
+    /// `*self`: the value behind the reference receiver of a method (O4).
+    /// The operand is read as an operand of a prefix operator, so that
+    /// `*self.f` is `*(self.f)` as it is in Rust, which the elaborator
+    /// then refuses. `*` before anything but `self` is still reported as
+    /// not in Locus yet.
+    #[inline(never)]
+    fn deref_self(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        let value = self.expression_bp(OPERAND)?;
+        Ok(Expr {
+            span: start.span.through(value.span),
+            kind: ExprKind::Unary {
+                operator: UnaryOp::Deref,
+                operator_span: start.span,
+                expr: Box::new(value),
+            },
         })
     }
 
@@ -2871,6 +2922,12 @@ impl Parser<'_> {
 fn is_place(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Name(_) => true,
+        // `*self`, whole: the elaborator decides whether it can be written.
+        ExprKind::Unary {
+            operator: UnaryOp::Deref,
+            expr: inner,
+            ..
+        } => matches!(inner.kind, ExprKind::Name(_)),
         ExprKind::Member { value, .. } | ExprKind::Index { value, .. } => is_place(value),
         _ => false,
     }

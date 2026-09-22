@@ -150,6 +150,15 @@ pub(super) enum Part<'a> {
 pub(super) fn place_path(expr: &ast::Expr) -> Option<(&ast::Name, Vec<Part<'_>>)> {
     match &expr.kind {
         ExprKind::Name(name) => Some((name, Vec::new())),
+        // `*self`: the place is the receiver itself (`deref_root`).
+        ExprKind::Unary {
+            operator: ast::UnaryOp::Deref,
+            expr: inner,
+            ..
+        } => match &inner.kind {
+            ExprKind::Name(name) => Some((name, Vec::new())),
+            _ => None,
+        },
         ExprKind::Group(inner) => place_path(inner),
         ExprKind::Member { value, name } => {
             let (root, mut parts) = place_path(value)?;
@@ -165,6 +174,22 @@ pub(super) fn place_path(expr: &ast::Expr) -> Option<(&ast::Name, Vec<Part<'_>>)
             parts.push(Part::Index(index, *index_span));
             Some((root, parts))
         }
+        _ => None,
+    }
+}
+
+/// The `self` a place written `*self` is on, at its root: `*self` itself,
+/// or `(*self).f`.
+pub(super) fn deref_root(expr: &ast::Expr) -> Option<&ast::Expr> {
+    match &expr.kind {
+        ExprKind::Unary {
+            operator: ast::UnaryOp::Deref,
+            expr: inner,
+            ..
+        } => Some(inner),
+        ExprKind::Group(inner)
+        | ExprKind::Member { value: inner, .. }
+        | ExprKind::Index { value: inner, .. } => deref_root(inner),
         _ => None,
     }
 }
@@ -324,19 +349,40 @@ impl Env<'_> {
         let Some((root, parts)) = place_path(place) else {
             return self.internal("an assignment to something that is not a place", place.span);
         };
+        // `*self = v`: `self` is a reference receiver (`exprs.rs`).
+        if let Some(inner) = deref_root(place) {
+            self.deref_target(inner, place.span)?;
+        }
         let slot = self.place_slot(root)?;
         let Some(binding) = self.names[slot].binding else {
-            self.diagnostics.push(
+            let name = root.text.clone();
+            let diagnostic = if self.borrowed.contains(&self.names[slot].id) {
+                let shown = self.spelled_place(place);
+                let ty = self.show_type(&self.names[slot].ty.clone());
+                Diagnostic::error(
+                    "L0266",
+                    format!("cannot assign to `{shown}`, which is behind a `&` reference (E0594)"),
+                    place.span,
+                )
+                .note(format!(
+                    "`{name}` is `&{ty}`, read and never written; to write through it, take `{}`",
+                    if name == "self" {
+                        "&mut self".to_string()
+                    } else {
+                        format!("{name}: &mut {ty}")
+                    }
+                ))
+            } else {
                 Diagnostic::error(
                     "L0232",
-                    format!("cannot assign twice to immutable variable `{}`", root.text),
+                    format!("cannot assign twice to immutable variable `{name}`"),
                     root.span,
                 )
                 .note(format!(
-                    "a binding is assigned only when declared with `let mut {0}`, or as a parameter `mut {0}: T` or `{0}: &mut T`",
-                    root.text
-                )),
-            );
+                    "a binding is assigned only when declared with `let mut {name}`, or as a parameter `mut {name}: T` or `{name}: &mut T`"
+                ))
+            };
+            self.diagnostics.push(diagnostic);
             return Err(());
         };
         let name = self.names[slot].name.clone();
@@ -361,6 +407,29 @@ impl Env<'_> {
             version,
             equation,
         })
+    }
+
+    /// A place as rustc names it in a message: `*self` for the whole of a
+    /// reference parameter, and the path as written otherwise, on one line.
+    fn spelled_place(&self, place: &ast::Expr) -> String {
+        let text = self
+            .text(place.span)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        match place_path(place) {
+            Some((root, parts)) if parts.is_empty() && !text.starts_with('*') => {
+                let local = self.lookup(&root.text);
+                if local
+                    .is_some_and(|local| self.borrowed.contains(&local.binding.unwrap_or(local.id)))
+                {
+                    format!("*{}", root.text)
+                } else {
+                    text
+                }
+            }
+            _ => text,
+        }
     }
 
     /// The local a place is rooted at, by its name.

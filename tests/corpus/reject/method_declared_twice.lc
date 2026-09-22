@@ -1,0 +1,19 @@
+// A function of an `impl` block is `Type::name`, declared once: twice in
+// the block, or once beside a variant of the same name, which Rust files
+// under `Type::name` too. A free function of the same name is another
+// thing, in its own right.
+#[derive(Clone, Copy, Debug)]
+enum Slot {
+    Empty,
+    Full(u8),
+}
+
+impl Slot {
+    fn read(&self) -> u8 { 1 }
+    fn read(&self) -> u8 { 2 } //~ error: L0202 `Slot::read` is declared twice
+    fn Full(&self) -> u8 { 3 } //~ error: L0202 `Slot::Full` is declared twice
+}
+
+fn read(slot: Slot) -> u8 {
+    slot.read()
+}

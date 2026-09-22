@@ -116,7 +116,17 @@ impl Env<'_> {
                     format!("the type `{wide}` is not in Locus yet"),
                     name.span,
                 ),
-                other => match self.types.get(other).or_else(|| self.values.get(other)) {
+                "Self" if self.owner.is_none() => self.fail(
+                    "L0200",
+                    "`Self` is the type of an `impl` block, and this is outside one",
+                    name.span,
+                ),
+                // `Self` inside an `impl` block is its type.
+                _ => match self
+                    .types
+                    .get(&self.type_text(name))
+                    .or_else(|| self.values.get(&name.text))
+                {
                     Some(Global::Struct(info)) => Ok(Type::Struct(info.id)),
                     Some(Global::Enum(info)) => Ok(Type::Enum(info.id)),
                     Some(Global::Prop(info)) => {
@@ -128,14 +138,18 @@ impl Env<'_> {
                     }
                     Some(Global::Fn(_)) => self.fail(
                         "L0200",
-                        format!("`{other}` is a function, not a type"),
+                        format!("`{}` is a function, not a type", name.text),
                         name.span,
                     ),
                     None => {
-                        if self.failed.contains(other) {
+                        if self.failed.contains(&self.type_text(name)) {
                             return Err(());
                         }
-                        self.fail("L0200", format!("unknown type `{other}`"), name.span)
+                        self.fail(
+                            "L0200",
+                            format!("unknown type `{}`", name.text),
+                            name.span,
+                        )
                     }
                 },
             },

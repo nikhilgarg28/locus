@@ -1,0 +1,25 @@
+// `*self` is the value behind a reference receiver: written whole through
+// `&mut self`, read through either. Anything else is refused with rustc's
+// code where rustc has one.
+#[derive(Clone, Copy, Debug)]
+struct Counter {
+    count: u8,
+}
+
+impl Counter {
+    fn set(&self, v: u8) -> () {
+        *self = Counter { count: v }; //~ error: L0266 cannot assign to `*self`, which is behind a `&` reference (E0594)
+    }
+
+    fn set_field(&self, v: u8) -> () {
+        self.count = v; //~ error: L0266 cannot assign to `self.count`, which is behind a `&` reference (E0594)
+    }
+
+    fn by_value(self) -> u8 {
+        (*self).count //~ error: L0266 type `Counter` cannot be dereferenced (E0614)
+    }
+
+    fn field(&self) -> u8 {
+        *self.count //~ error: L0266 `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+    }
+}

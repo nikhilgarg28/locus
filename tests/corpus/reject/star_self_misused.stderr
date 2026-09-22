@@ -1,0 +1,28 @@
+error[L0266]: cannot assign to `*self`, which is behind a `&` reference (E0594)
+  --> tests/corpus/reject/star_self_misused.lc:11:9
+   |
+11 |         *self = Counter { count: v }; //~ error: L0266 cannot assign to `*self`, which is behind a `&` reference (E0594)
+   |         ^^^^^
+   |
+   = note: `self` is `&Counter`, read and never written; to write through it, take `&mut self`
+error[L0266]: cannot assign to `self.count`, which is behind a `&` reference (E0594)
+  --> tests/corpus/reject/star_self_misused.lc:15:9
+   |
+15 |         self.count = v; //~ error: L0266 cannot assign to `self.count`, which is behind a `&` reference (E0594)
+   |         ^^^^^^^^^^
+   |
+   = note: `self` is `&Counter`, read and never written; to write through it, take `&mut self`
+error[L0266]: type `Counter` cannot be dereferenced (E0614)
+  --> tests/corpus/reject/star_self_misused.lc:19:10
+   |
+19 |         (*self).count //~ error: L0266 type `Counter` cannot be dereferenced (E0614)
+   |          ^^^^^
+   |
+   = note: `self` is taken by value here, and is the value itself: write `self`; `*self` is the value behind a `&self` or `&mut self` receiver
+error[L0266]: `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+  --> tests/corpus/reject/star_self_misused.lc:23:9
+   |
+23 |         *self.count //~ error: L0266 `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+   |         ^^^^^^^^^^^
+   |
+   = note: a field of the receiver is read as `self.f` and written as `self.f = v`; `*self` is the whole value behind a `&self` or `&mut self` receiver

@@ -1,0 +1,184 @@
+// Inherent `impl` blocks and `self` (O4). A function of `impl T { .. }` is
+// `T::name`: an associated function when it has no `self`, called by path,
+// and a method when its first parameter is `self`, `mut self`, `&self`, or
+// `&mut self`, which is a parameter named `self` of type `T`, passed as
+// written (O3's `Passing`). A method call `x.f(..)` resolves by the
+// receiver's type and lends or moves `x` as the receiver says: `&x` for
+// `&self`, `&mut x` for `&mut self`, which needs a `let mut x`, and `x`
+// itself for `self`, which moves it unless it is `Copy`. `Self` is `T`
+// inside the block; `*self` is the value behind a reference receiver, read
+// or, for `&mut self`, replaced whole. In the logic a method is a function
+// like any other, `T::name`, which `unfold!` and `fold!` take by path.
+
+#[derive(Clone, Copy, Debug)]
+struct Counter {
+    count: u8,
+}
+
+#[derive(Debug)]
+struct Token {
+    id: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Slot {
+    Empty,
+    Full(u8),
+}
+
+impl Counter {
+    // An associated function, and `Self` as the type and in a literal.
+    fn fresh() -> Self {
+        Self { count: 0 }
+    }
+
+    // `&self`: the receiver is lent, and a `Copy` field is read through it.
+    // With the three promises it is a function of the logic too, which
+    // `fold!` takes by path below.
+    #[terminates] #[no_panic] #[no_io]
+    fn get(&self) -> u8 {
+        self.count
+    }
+
+    // `*self` read: the whole value, which is `Copy` here.
+    fn copy(&self) -> Counter {
+        *self
+    }
+
+    // A method calling methods on `self`, which lends it on.
+    fn twice(&self) -> u8 {
+        self.get().wrapping_add(self.get())
+    }
+
+    // `&mut self`: a field assigned through the receiver.
+    fn bump(&mut self) -> () {
+        self.count = self.count.wrapping_add(1);
+    }
+
+    // `&mut self`: the whole value replaced, and the result speaks of
+    // `self` at return, as it does of any `&mut` parameter (O3).
+    #[no_io]
+    fn reset(&mut self) -> @(self.count == 0) {
+        *self = Counter { count: 0 };
+        prove!(self.count == 0)
+    }
+
+    // `old!(self)` names the value at entry.
+    #[no_io]
+    fn keep(&mut self) -> @(self.count == old!(self).count) {
+        prove!(self.count == old!(self).count)
+    }
+
+    // `mut self`: taken by value and assigned in the body.
+    fn grown(mut self) -> Counter {
+        self.count = self.count.wrapping_add(1);
+        self
+    }
+
+    // A method of the logic: it may appear in a proposition, as
+    // `Counter::small(&c)` or `c.small()`.
+    #[terminates] #[no_panic] #[no_io]
+    fn small(&self) -> Prop {
+        prop!(self.count <= 3)
+    }
+}
+
+impl Token {
+    // `self` by value: the receiver is moved.
+    fn consume(self) -> u8 {
+        self.id
+    }
+
+    fn id(&self) -> u8 {
+        self.id
+    }
+}
+
+impl Slot {
+    fn full(n: u8) -> Self {
+        Self::Full(n)
+    }
+
+    // `*self` matched, binding nothing that would move.
+    fn is_full(&self) -> bool {
+        match *self {
+            Self::Full(_) => true,
+            Slot::Empty => false,
+        }
+    }
+
+    // `self` by value matched, which is `Copy` here.
+    fn read(self) -> u8 {
+        match self {
+            Self::Full(n) => n,
+            Self::Empty => 0,
+        }
+    }
+}
+
+fn counting() -> u8 {
+    let mut c = Counter::fresh();
+    c.bump();
+    c.bump();
+    let _ = c.reset();
+    c.bump();
+    let grown = c.grown();
+    c.twice().wrapping_add(c.copy().count).wrapping_add(grown.get())
+}
+
+// A method call on a value that is not a place: `self` by value takes it.
+fn slots() -> u8 {
+    let s = Slot::full(3);
+    if s.is_full() { Slot::full(4).read().wrapping_add(s.read()) } else { 0 }
+}
+
+// A `self` method moves the receiver; a copy made before is still whole.
+fn tokens() -> u8 {
+    let t = Token { id: 5 };
+    let seen = t.id();
+    t.consume().wrapping_add(seen)
+}
+
+// Evidence about a method of the logic is opened and closed by path.
+fn folded(c: Counter, h: @(c.small())) -> (out: u8, @(out <= 3)) {
+    let small = unfold!(Counter::small, h);
+    let again: @(c.small()) = fold!(Counter::small, small);
+    let _ = again;
+    (c.get(), fold!(Counter::get, small))
+}
+
+fn known(c: Counter, h: @Counter::small(&c)) -> @(c.count <= 3) {
+    unfold!(Counter::small, h)
+}
+
+// The same method called by path, with the receiver written as a lend.
+fn by_path(c: Counter) -> u8 {
+    let mut d = c;
+    Counter::bump(&mut d);
+    Counter::get(&d)
+}
+
+//~ proofs: 2
+//~ run: counting() => 5
+//~ run: slots() => 7
+//~ run: tokens() => 10
+//~ run: folded(Counter { count: 2 }, Proved) => (2, Proved)
+//~ run: by_path(Counter { count: 2 }) => 3
+//~ run: Counter::fresh() => Counter { count: 0 }
+//~ run: Counter::bump(&mut Counter { count: 1 } -> Counter { count: 2 }) => ()
+//~ run: Counter::reset(&mut Counter { count: 9 } -> Counter { count: 0 }) => Proved
+//~ run: Counter::grown(Counter { count: 1 }) => Counter { count: 2 }
+//~ run: Slot::read(Full(4)) => 4
+//~ run: Token::consume(Token { id: 3 }) => 3
+//~ rust: impl Counter {
+//~ rust: fn fresh() -> Counter {
+//~ rust: fn get(&self) -> u8 {
+//~ rust: fn bump(&mut self) -> () {
+//~ rust: fn reset(&mut self) -> Proved {
+//~ rust: *self = Counter { count: 0_u8 };
+//~ rust: fn grown(mut self) -> Counter {
+//~ rust: fn consume(self) -> u8 {
+//~ rust: c.bump();
+//~ rust: self.get().wrapping_add(self.get())
+//~ rust: d.bump();
+//~ rust: Slot::full(4_u8).read().wrapping_add(s.read())

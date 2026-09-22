@@ -10,41 +10,113 @@
 //! a value of its name where it is in scope, as it does for the elaborator:
 //! a parameter, a pattern, a loop's state, or a quantifier's variable named
 //! like a function is that local, not a mention of the function.
+//!
+//! The functions of an `impl` block are units of their own (O4): each is
+//! named `Type::name` in the value namespace, depends on its type, and reads
+//! `Self` as that type. A method call `x.f(..)` names no type, so it is read
+//! as a mention of every `f` some `impl` block declares, except that
+//! `self.f(..)` names the block's own; the unit itself is left out, and the
+//! elaborator reports a method that calls itself through another receiver.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 
-/// Indices into `program.declarations`, dependencies first, and the
-/// declarations that are part of a cycle.
-pub(super) fn dependency_order(program: &Program) -> (Vec<usize>, Vec<usize>) {
-    let index_of: HashMap<(Namespace, &str), usize> = program
-        .declarations
+/// One item to elaborate: a declaration of the file, or one function of an
+/// `impl` block with the block's target beside it.
+#[derive(Clone, Copy)]
+pub(super) struct Unit<'a> {
+    pub declaration: &'a Declaration,
+    /// The type an `impl` block is for, when the declaration is one of its
+    /// functions.
+    pub owner: Option<&'a Path>,
+}
+
+/// The units of a program, in source order: the declarations, with the
+/// functions of each `impl` block in the block's place.
+pub(super) fn units(program: &Program) -> Vec<Unit<'_>> {
+    let mut units = Vec::new();
+    for declaration in &program.declarations {
+        match &declaration.kind {
+            DeclarationKind::Impl { target, methods } => {
+                units.extend(methods.iter().map(|method| Unit {
+                    declaration: method,
+                    owner: Some(target),
+                }));
+            }
+            _ => units.push(Unit {
+                declaration,
+                owner: None,
+            }),
+        }
+    }
+    units
+}
+
+/// The name a unit declares: the item's, or `Type::name` for a function of
+/// an `impl` block.
+pub(super) fn unit_name(unit: &Unit<'_>) -> Option<String> {
+    let name = declared_name(unit.declaration)?;
+    Some(match unit.owner {
+        Some(owner) => format!("{}::{}", owner.text(), name.text),
+        None => name.text.clone(),
+    })
+}
+
+/// Indices into `units`, dependencies first, and the units that are part
+/// of a cycle.
+pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
+    let names: Vec<Option<String>> = units.iter().map(unit_name).collect();
+    let index_of: HashMap<(Namespace, &str), usize> = units
         .iter()
+        .zip(&names)
         .enumerate()
-        .filter_map(|(index, declaration)| {
-            let namespace = declared_namespace(declaration)?;
-            declared_name(declaration).map(|name| ((namespace, name.text.as_str()), index))
+        .filter_map(|(index, (unit, name))| {
+            let namespace = declared_namespace(unit.declaration)?;
+            name.as_deref().map(|name| ((namespace, name), index))
         })
         .collect();
-    let edges: Vec<Vec<usize>> = program
-        .declarations
+    // Every `impl` function by its own name, for a method call.
+    let mut methods: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, unit) in units.iter().enumerate() {
+        if unit.owner.is_some()
+            && let Some(name) = declared_name(unit.declaration)
+        {
+            methods.entry(&name.text).or_default().push(index);
+        }
+    }
+    let edges: Vec<Vec<usize>> = units
         .iter()
-        .map(|declaration| {
+        .enumerate()
+        .map(|(index, unit)| {
             let mut names = HashSet::new();
             Mentions {
                 names: &mut names,
                 bound: Vec::new(),
+                owner: unit.owner.map(Path::text),
             }
-            .declaration(declaration);
+            .unit(unit);
             let mut edges: Vec<usize> = names
                 .iter()
-                .filter_map(|(namespace, name)| match namespace {
+                .flat_map(|(namespace, name)| match namespace {
                     Namespace::Applied => index_of
                         .get(&(Namespace::Value, name.as_str()))
                         .or_else(|| index_of.get(&(Namespace::Type, name.as_str())))
-                        .copied(),
-                    read => index_of.get(&(*read, name.as_str())).copied(),
+                        .copied()
+                        .into_iter()
+                        .collect::<Vec<usize>>(),
+                    Namespace::Method => methods
+                        .get(name.as_str())
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .filter(|found| *found != index)
+                        .collect(),
+                    read => index_of
+                        .get(&(*read, name.as_str()))
+                        .copied()
+                        .into_iter()
+                        .collect(),
                 })
                 .collect();
             edges.sort_unstable();
@@ -93,12 +165,14 @@ pub(super) fn dependency_order(program: &Program) -> (Vec<usize>, Vec<usize>) {
 }
 
 /// Which of Rust's two namespaces a name is read in; `Applied` is a call,
-/// `Name(..)`, which is the value when there is one and the type otherwise.
+/// `Name(..)`, which is the value when there is one and the type otherwise;
+/// `Method` is a call `x.f(..)`, which is every `f` an `impl` block has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Namespace {
     Type,
     Value,
     Applied,
+    Method,
 }
 
 /// The namespace an item declares its name in. An `impl` block declares
@@ -131,13 +205,58 @@ struct Mentions<'a> {
     names: &'a mut HashSet<(Namespace, String)>,
     /// The locals in scope, innermost last.
     bound: Vec<String>,
+    /// Inside an `impl` block: its target, which `Self` names.
+    owner: Option<String>,
 }
 
 impl Mentions<'_> {
+    /// A type's name as written, with `Self` read as the block's target.
+    fn type_text(&self, name: &Name) -> String {
+        match (&self.owner, name.text.as_str()) {
+            (Some(owner), "Self") => owner.clone(),
+            _ => name.text.clone(),
+        }
+    }
+
     /// A name where a type is read: a type, the prefix of a path, a struct
     /// literal or pattern. No local shadows a type.
     fn type_name(&mut self, name: &Name) {
-        self.names.insert((Namespace::Type, name.text.clone()));
+        let text = self.type_text(name);
+        self.names.insert((Namespace::Type, text));
+    }
+
+    /// `Prefix::name` where a value is read: the function of an `impl`
+    /// block of that name, when there is one, beside the type the prefix
+    /// names.
+    fn path(&mut self, path: &Path) {
+        self.type_name(&path.segments[0]);
+        if let Some((prefix, name)) = path.pair() {
+            let qualified = format!("{}::{}", self.type_text(prefix), name.text);
+            self.names.insert((Namespace::Value, qualified));
+        }
+    }
+
+    /// `receiver.name(..)`: the block's own method when the receiver is
+    /// `self`, and every method of that name otherwise.
+    fn method(&mut self, receiver: &Expr, name: &Name) {
+        match (&self.owner, &receiver.kind) {
+            (Some(owner), ExprKind::Name(written)) if written.text == "self" => {
+                let qualified = format!("{owner}::{}", name.text);
+                self.names.insert((Namespace::Value, qualified));
+            }
+            _ => {
+                self.names.insert((Namespace::Method, name.text.clone()));
+            }
+        }
+    }
+
+    /// A unit: its declaration, and for a function of an `impl` block the
+    /// block's type, which `self` has.
+    fn unit(&mut self, unit: &Unit<'_>) {
+        if let Some(owner) = unit.owner {
+            self.type_name(&owner.segments[0]);
+        }
+        self.declaration(unit.declaration);
     }
 
     /// A name where a value is read, unless a local of that name is in
@@ -251,7 +370,7 @@ impl Mentions<'_> {
                 self.ty(ty);
                 self.expr(value);
             }
-            // Not elaborated yet, so it depends on nothing.
+            // Its functions are units of their own.
             DeclarationKind::Impl { .. } => {}
         }
     }
@@ -366,7 +485,7 @@ impl Mentions<'_> {
     fn expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Name(name) => self.value_name(name),
-            ExprKind::Path(path) => self.type_name(&path.segments[0]),
+            ExprKind::Path(path) => self.path(path),
             ExprKind::Integer(_)
             | ExprKind::String(_)
             | ExprKind::Bool(_)
@@ -465,6 +584,11 @@ impl Mentions<'_> {
                 match &callee.kind {
                     // A function, or a proposition applied.
                     ExprKind::Name(name) => self.name(name),
+                    // A method, whose receiver is read as well.
+                    ExprKind::Member { value, name } => {
+                        self.method(value, name);
+                        self.expr(value);
+                    }
                     _ => self.expr(callee),
                 }
                 arguments.iter().for_each(|argument| self.expr(argument));

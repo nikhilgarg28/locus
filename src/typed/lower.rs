@@ -278,6 +278,28 @@ impl Session {
         Ok(reference)
     }
 
+    /// `declare_fn_promising` for a function declared in an `impl` block
+    /// (O4): `owner` is the type's name, and `receiver` says the first
+    /// parameter is `self`. The logic and the checker see a function like
+    /// any other, named `Type::name`; the erased tree records where it was
+    /// declared so that the printer writes it inside `impl Type { .. }`.
+    pub fn declare_method(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+        owner: &str,
+        receiver: bool,
+    ) -> Result<FnRef, LowerError> {
+        let reference = self.declare_fn_promising(item, promises)?;
+        if let Some(function) = self.erased.fns.last_mut()
+            && function.reference == reference
+        {
+            function.owner = Some(owner.to_string());
+            function.receiver = receiver;
+        }
+        Ok(reference)
+    }
+
     /// A constant: a function of no parameters in the logic and the
     /// checker, and a `const` item in Rust, whose value Rust computes
     /// itself (the elaborator has seen that it can).

@@ -137,13 +137,19 @@ pub(super) struct LoopMoves {
 /// A local and a path of fields into it, as an expression names them.
 type PlacePath = (usize, Vec<usize>);
 
-/// The root name of `x`, `x.f`, `x.0.g`, or `(x).f`, if it is a name.
+/// The root name of `x`, `x.f`, `x.0.g`, `(x).f`, or `*self`, if it is a
+/// name.
 fn place_root(expr: &ast::Expr) -> Option<&ast::Name> {
     match &expr.kind {
         ExprKind::Name(name) => Some(name),
         ExprKind::Group(inner)
         | ExprKind::Member { value: inner, .. }
-        | ExprKind::Index { value: inner, .. } => place_root(inner),
+        | ExprKind::Index { value: inner, .. }
+        | ExprKind::Unary {
+            operator: ast::UnaryOp::Deref,
+            expr: inner,
+            ..
+        } => place_root(inner),
         _ => None,
     }
 }

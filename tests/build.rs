@@ -10,6 +10,15 @@
 //!
 //! Each refusal is asserted on rustc's error code, so that the test says
 //! exactly which wall was hit.
+//!
+//! The protected type of Target examples, `Percent`, is the same boundary
+//! with an `impl` block (O4): `checked` is `pub` and answers with an enum
+//! of the file's own, `new` takes evidence and is `pub(crate)`, and the
+//! fields are private, so a Rust caller can hold a `Percent`, cannot make
+//! one, and can only change one through its methods. The panic test is
+//! case 11 of How mutation is checked: a method that completes one valid
+//! replacement through `&mut self` and then panics leaves the caller the
+//! new value, valid, and never a broken one.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -69,6 +78,9 @@ pub fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @
 }
 "#;
 
+/// The protected type, as `tests/corpus/target/percent.lc` has it.
+const PERCENT: &str = include_str!("corpus/target/percent.lc");
+
 fn workspace(name: &str) -> PathBuf {
     let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("build_{name}"));
     std::fs::create_dir_all(&directory).unwrap();
@@ -82,8 +94,13 @@ fn rustc() -> Command {
 /// Runs `locus build` on one Locus file, into `<workspace>/generated`, and
 /// returns the crate's directory.
 fn build_crate(name: &str, source: &str) -> PathBuf {
+    build_crate_from(name, "lock.lc", source)
+}
+
+/// `build_crate` with the Locus file's name, which names the module.
+fn build_crate_from(name: &str, file: &str, source: &str) -> PathBuf {
     let workspace = workspace(name);
-    let file = workspace.join("lock.lc");
+    let file = workspace.join(file);
     std::fs::write(&file, source).unwrap();
     let out = workspace.join("generated");
     let output = Command::new(env!("CARGO_BIN_EXE_locus"))
@@ -174,6 +191,26 @@ fn generated(name: &str) -> (PathBuf, PathBuf) {
     let directory = build_crate(name, LOCK);
     let rlib = compile_generated(&directory);
     (directory, rlib)
+}
+
+/// The generated crate of the protected type, and its rlib.
+fn generated_percent(name: &str) -> (PathBuf, PathBuf) {
+    let directory = build_crate_from(name, "percent.lc", PERCENT);
+    let rlib = compile_generated(&directory);
+    (directory, rlib)
+}
+
+/// Runs a compiled caller and returns what it printed, after asserting
+/// that it exited well.
+fn run(binary: PathBuf) -> String {
+    let output = Command::new(binary).output().unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
 }
 
 #[test]
@@ -353,4 +390,109 @@ fn the_generated_crate_has_the_plain_layout_and_is_the_same_twice() {
             "{path}"
         );
     }
+}
+
+#[test]
+fn checked_is_called_from_rust_and_answers_with_the_enum() {
+    let (directory, rlib) = generated_percent("percent_checked");
+    let binary = compile_caller(
+        &directory,
+        "calls_checked",
+        "use generated::percent::{Checked, Percent};\nfn main() {\n    for value in [42, 100, 101] {\n        match Percent::checked(value) {\n            Checked::Valid(percent) => println!(\"valid {}\", percent.value()),\n            Checked::Invalid => println!(\"invalid\"),\n        }\n    }\n}\n",
+        &rlib,
+    )
+    .unwrap_or_else(|stderr| panic!("rustc refused a call to `checked`:\n{stderr}"));
+    assert_eq!(run(binary), "valid 42\nvalid 100\ninvalid\n");
+}
+
+#[test]
+fn new_is_not_visible_from_rust() {
+    // `new` takes evidence and is `pub(crate)`: an associated function
+    // that is private to the generated crate, which rustc reports as
+    // E0624, the code for a private associated function, where a private
+    // free function gets E0603. The evidence argument is `todo!()`, so
+    // that the only wall hit is the one the test is about.
+    let (directory, rlib) = generated_percent("percent_new");
+    let stderr = compile_caller(
+        &directory,
+        "calls_new",
+        "fn main() {\n    let percent = generated::percent::Percent::new(5, todo!());\n    println!(\"{}\", percent.value());\n}\n",
+        &rlib,
+    )
+    .expect_err("a `pub(crate)` associated function is not reachable from another crate");
+    assert_eq!(error_codes(&stderr), ["E0624"], "{stderr}");
+    assert!(
+        stderr.contains("associated function `new` is private"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn percent_cannot_be_built_or_opened_from_rust() {
+    let (directory, rlib) = generated_percent("percent_fields");
+    // As a struct literal: both fields are private, and the marker's
+    // constant is private to the root besides.
+    let stderr = compile_caller(
+        &directory,
+        "builds_percent",
+        "fn main() {\n    let percent = generated::percent::Percent { value: 200, in_range: todo!() };\n    println!(\"{}\", percent.value());\n}\n",
+        &rlib,
+    )
+    .expect_err("a private field cannot be given");
+    assert_eq!(error_codes(&stderr), ["E0451"], "{stderr}");
+    // As a field read: the value is reached through `value()` alone.
+    let stderr = compile_caller(
+        &directory,
+        "reads_percent",
+        "fn main() {\n    if let generated::percent::Checked::Valid(percent) = generated::percent::Percent::checked(5) {\n        println!(\"{}\", percent.value);\n    }\n}\n",
+        &rlib,
+    )
+    .expect_err("a private field cannot be read");
+    assert_eq!(error_codes(&stderr), ["E0616"], "{stderr}");
+}
+
+#[test]
+fn a_panic_after_one_valid_replacement_leaves_the_new_valid_value() {
+    // Case 11: `set_twice(5, 200)` replaces the value with 5, then panics
+    // on 200. The caller catches the panic and reads the `Percent` it
+    // lent: it holds 5, which satisfies the invariant, and not 200 and
+    // not a half-written value. `set(200)` on the same value refuses and
+    // leaves it; `set(7)` replaces it.
+    let (directory, rlib) = generated_percent("percent_panic");
+    let binary = compile_caller(
+        &directory,
+        "catches_set_twice",
+        "use generated::percent::{Checked, Percent};\nfn main() {\n    std::panic::set_hook(Box::new(|_| {}));\n    let mut percent = match Percent::checked(3) {\n        Checked::Valid(percent) => percent,\n        Checked::Invalid => unreachable!(),\n    };\n    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| percent.set_twice(5, 200)));\n    println!(\"panicked {} value {}\", outcome.is_err(), percent.value());\n    assert!(percent.value() <= 100);\n    println!(\"set {} value {}\", percent.set(200), percent.value());\n    println!(\"set {} value {}\", percent.set(7), percent.value());\n}\n",
+        &rlib,
+    )
+    .unwrap_or_else(|stderr| panic!("rustc refused the caller:\n{stderr}"));
+    assert_eq!(
+        run(binary),
+        "panicked true value 5\nset false value 5\nset true value 7\n"
+    );
+}
+
+#[test]
+fn the_impl_block_is_printed_with_its_receivers_and_visibilities() {
+    let directory = build_crate_from("percent_layout", "percent.lc", PERCENT);
+    let module = std::fs::read_to_string(directory.join("src").join("percent.rs")).unwrap();
+    for expected in [
+        "\npub struct Percent {\n    value: u32,\n    in_range: Proved,\n}",
+        "\npub enum Checked {\n    Valid(Percent),\n    Invalid,\n}",
+        "\nimpl Percent {\n",
+        "\n    pub(crate) fn new(value: u32, in_range: Proved) -> Percent {",
+        "\n    pub fn checked(value: u32) -> Checked {",
+        "\n    pub fn value(&self) -> u32 {",
+        "\n    pub fn set(&mut self, value: u32) -> bool {",
+        "\n    pub fn set_twice(&mut self, a: u32, b: u32) -> () {",
+        "\n        *self = Percent { value: a, in_range: Proved };",
+        "Checked::Valid(Percent::new(value, Proved))",
+    ] {
+        assert!(
+            module.contains(expected),
+            "missing {expected:?} in:\n{module}"
+        );
+    }
+    let root = std::fs::read_to_string(directory.join("src").join("lib.rs")).unwrap();
+    assert!(root.contains("pub mod percent;"), "{root}");
 }

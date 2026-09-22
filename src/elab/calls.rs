@@ -17,6 +17,13 @@ use super::env::{Elab, Env, FnInfo, Global, PropInfo};
 use super::exprs::Value;
 use super::literals::untyped_literal;
 
+/// An argument of a call: as written, or elaborated already, which is how
+/// the receiver of a method reaches the call when it is not a place.
+pub(super) enum Argument<'a> {
+    Written(&'a ast::Expr),
+    Value(Box<Value>, Span),
+}
+
 /// What stands in a `Ghost<T>` position, as a `Ghost` value: wrapped once.
 pub(super) fn ghost_value(expr: Expr) -> Expr {
     match expr {
@@ -28,22 +35,9 @@ pub(super) fn ghost_value(expr: Expr) -> Expr {
 impl Env<'_> {
     /// Checks arguments against a telescope of parameter types, written over
     /// the identities `ids`: each argument's term replaces its parameter in
-    /// the types that follow. On return `tys` no longer mentions `ids`.
-    pub fn arguments(
-        &mut self,
-        arguments: &[ast::Expr],
-        ids: &[VarId],
-        tys: &mut [Type],
-        ghosts: &[bool],
-        what: &str,
-        span: Span,
-    ) -> Elab<Vec<Expr>> {
-        let arguments: Vec<&ast::Expr> = arguments.iter().collect();
-        self.arguments_by_ref(&arguments, ids, tys, ghosts, what, span)
-    }
-
-    /// `arguments`, over the values in any order they were found in: a
-    /// variant's fields, given by name. `ghosts` says which positions are
+    /// the types that follow. On return `tys` no longer mentions `ids`. The
+    /// values may be in any order they were found in: a variant's fields,
+    /// given by name. `ghosts` says which positions are
     /// declared `Ghost<T>`: what stands there is elaborated where nothing
     /// runs, and is a `Ghost` value.
     pub fn arguments_by_ref(
@@ -97,7 +91,11 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         match &callee.kind {
-            ExprKind::Path(path) => self.variant(path, arguments, expected, span),
+            // `Type::name(..)`: a function of an `impl` block, or a variant.
+            ExprKind::Path(path) => match self.path_function(path) {
+                Some(info) => self.call_fn(&info, arguments, span),
+                None => self.variant(path, arguments, expected, span),
+            },
             ExprKind::Member { value, name } => self.method(value, name, arguments, expected, span),
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
                 // A call names a function, or applies a proposition.
@@ -121,11 +119,29 @@ impl Env<'_> {
                     None if matches!(name.text.as_str(), "rewrite" | "unfold" | "fold") => {
                         self.retired_bare_form(name)
                     }
-                    None => self.fail(
-                        "L0204",
-                        format!("unknown function `{}`", name.text),
-                        name.span,
-                    ),
+                    None => {
+                        // A function of an `impl` block is named by its type.
+                        let suffix = format!("::{}", name.text);
+                        let mut owners: Vec<&str> = self
+                            .values
+                            .keys()
+                            .filter_map(|key| key.strip_suffix(suffix.as_str()))
+                            .collect();
+                        owners.sort_unstable();
+                        let mut diagnostic = crate::diagnostic::Diagnostic::error(
+                            "L0204",
+                            format!("unknown function `{}`", name.text),
+                            name.span,
+                        );
+                        if let Some(owner) = owners.first() {
+                            diagnostic = diagnostic.note(format!(
+                                "`{name}` is declared in `impl {owner}`: call it as `{owner}::{name}(..)`, or as `x.{name}(..)` on an `x` of that type when it takes `self`",
+                                name = name.text
+                            ));
+                        }
+                        self.diagnostics.push(diagnostic);
+                        Err(())
+                    }
                 }
             }
             _ => {
@@ -181,10 +197,145 @@ impl Env<'_> {
         Err(())
     }
 
+    /// A method of an `impl` block called on a receiver: resolved by the
+    /// receiver's type, and elaborated as a call with the receiver first.
+    /// A receiver that is a place, `x` or `x.f`, is lent for `&self` and
+    /// `&mut self`, as `&x` or `&mut x` would be, and read for `self`,
+    /// which moves it unless it is `Copy`; any other receiver is a value
+    /// of its own, which a method taking `self` consumes and one taking a
+    /// reference cannot lend in this tier.
+    fn user_method(
+        &mut self,
+        receiver: &ast::Expr,
+        name: &ast::Name,
+        arguments: &[ast::Expr],
+        span: Span,
+    ) -> Elab<Value> {
+        use super::mutation::{Access, place_path};
+        let is_place =
+            place_path(receiver).is_some_and(|(root, _)| self.lookup(&root.text).is_some());
+        let (ty, value) = if is_place {
+            let (root, parts) = place_path(receiver).expect("a place");
+            if let Some(inner) = super::mutation::deref_root(receiver) {
+                self.deref_target(inner, receiver.span)?;
+            }
+            let slot = self.place_slot(root)?;
+            let (_, ty) = self.place_steps(slot, &parts, Access::Lend)?;
+            (ty, None)
+        } else {
+            let value = self.infer(receiver)?;
+            (value.ty.clone(), Some(value))
+        };
+        let Some(info) = self.method_of(&ty, &name.text) else {
+            let shown = self.show_type(&ty);
+            let qualified = self
+                .type_name(&ty)
+                .map(|owner| format!("{owner}::{}", name.text));
+            if qualified.as_deref() == Some(self.item_name.as_str()) {
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0203",
+                        format!("`{}` is defined in terms of itself", self.item_name),
+                        name.span,
+                    )
+                    .note("recursion is not part of the core language; a bounded `for` repeats a step a known number of times"),
+                );
+                return Err(());
+            }
+            if qualified.is_some_and(|qualified| self.failed.contains(&qualified)) {
+                return Err(());
+            }
+            let mut diagnostic = crate::diagnostic::Diagnostic::error(
+                "L0207",
+                format!(
+                    "no method named `{}` found for `{shown}` (E0599)",
+                    name.text
+                ),
+                name.span,
+            );
+            if self.type_name(&ty).is_some() {
+                diagnostic = diagnostic.note(format!(
+                    "a method is declared in `impl {shown} {{ .. }}` with `self`, `&self`, or `&mut self` as its first parameter"
+                ));
+            } else if ty.as_machine().is_some() {
+                diagnostic = diagnostic.note(
+                    "the methods of the machine integer types are `wrapping_add`, `wrapping_sub`, `wrapping_mul`, and, at the signed types, `wrapping_neg`",
+                );
+            }
+            self.diagnostics.push(diagnostic);
+            return Err(());
+        };
+        if !info.receiver {
+            self.diagnostics.push(
+                crate::diagnostic::Diagnostic::error(
+                    "L0207",
+                    format!(
+                        "`{}` takes no `self`, and is called as `{}(..)`",
+                        info.name, info.name
+                    ),
+                    name.span,
+                )
+                .note("a function of an `impl` block without a `self` parameter is an associated function, named by its type, as in Rust"),
+            );
+            return Err(());
+        }
+        let passing = info.passing.first().copied().unwrap_or_default();
+        let receiver = match (value, passing.is_reference()) {
+            // A place: lent or read as the parameter is passed.
+            (None, true) => ast::Expr {
+                span: receiver.span,
+                kind: ExprKind::Ref {
+                    mutable: passing == Passing::RefMut,
+                    expr: Box::new(receiver.clone()),
+                },
+            },
+            (None, false) => receiver.clone(),
+            (Some(value), false) => {
+                let mut all = vec![Argument::Value(Box::new(value), receiver.span)];
+                all.extend(arguments.iter().map(Argument::Written));
+                return self.call_fn_with(&info, &all, span);
+            }
+            (Some(_), true) => {
+                let wanted = if passing == Passing::RefMut {
+                    "&mut self"
+                } else {
+                    "&self"
+                };
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0261",
+                        format!(
+                            "`{}` takes `{wanted}`, and the receiver is not a place the call could lend",
+                            info.name
+                        ),
+                        receiver.span,
+                    )
+                    .note("a reference lasts for one call and lends a place the caller holds, `x` or `x.f`; bind the value with `let` first"),
+                );
+                return Err(());
+            }
+        };
+        let mut all = vec![Argument::Written(&receiver)];
+        all.extend(arguments.iter().map(Argument::Written));
+        self.call_fn_with(&info, &all, span)
+    }
+
     pub(super) fn call_fn(
         &mut self,
         info: &FnInfo,
         arguments: &[ast::Expr],
+        span: Span,
+    ) -> Elab<Value> {
+        let arguments: Vec<Argument<'_>> = arguments.iter().map(Argument::Written).collect();
+        self.call_fn_with(info, &arguments, span)
+    }
+
+    /// `call_fn` over arguments some of which were elaborated already: the
+    /// receiver of a method that is not a place.
+    fn call_fn_with(
+        &mut self,
+        info: &FnInfo,
+        arguments: &[Argument<'_>],
         span: Span,
     ) -> Elab<Value> {
         match self.formula {
@@ -199,10 +350,15 @@ impl Env<'_> {
         // The result type rides along so that it is instantiated too.
         let count = ids.len();
         if arguments.len() != count {
-            let mut only_params = tys[..count].to_vec();
-            return self
-                .arguments(arguments, &ids, &mut only_params, &ghosts, &what, span)
-                .map(|_| unreachable!("the counts differ"));
+            let given = arguments.len();
+            let message = format!(
+                "{what} takes {} value{}, and {} {} given",
+                count,
+                if count == 1 { "" } else { "s" },
+                given,
+                if given == 1 { "was" } else { "were" },
+            );
+            return self.fail("L0208", message, span);
         }
         // The arguments of a call erasure removes are read, not moved
         // (`moves.rs`). They are not a logic-only context: a call in them
@@ -218,23 +374,36 @@ impl Env<'_> {
         for (index, argument) in arguments.iter().enumerate() {
             let expected = tys[index].clone();
             let passing = info.passing.get(index).copied().unwrap_or_default();
-            let value = if passing.is_reference() {
-                let (value, place) = self.lend_argument(argument, passing, &expected, info)?;
-                if passing == Passing::RefMut {
-                    lent.push((index, place.slot, place.steps.clone()));
+            let (value, argument_span) = match argument {
+                // A value elaborated already, which is no place.
+                Argument::Value(value, span) => {
+                    let value = self.coerce(
+                        Value::new(value.expr.clone(), value.ty.clone()),
+                        &expected,
+                        *span,
+                    )?;
+                    places.push(None);
+                    (value, *span)
                 }
-                places.push(Some(place));
-                value
-            } else {
-                let value = if erased {
-                    self.ghost(|env| env.check(argument, &expected))?
-                } else {
-                    self.argument(argument, &expected, ghosts[index])?
-                };
-                places.push(self.argument_place(argument, &value));
-                value
+                Argument::Written(argument) if passing.is_reference() => {
+                    let (value, place) = self.lend_argument(argument, passing, &expected, info)?;
+                    if passing == Passing::RefMut {
+                        lent.push((index, place.slot, place.steps.clone()));
+                    }
+                    places.push(Some(place));
+                    (value, argument.span)
+                }
+                Argument::Written(argument) => {
+                    let value = if erased {
+                        self.ghost(|env| env.check(argument, &expected))?
+                    } else {
+                        self.argument(argument, &expected, ghosts[index])?
+                    };
+                    places.push(self.argument_place(argument, &value));
+                    (value, argument.span)
+                }
             };
-            let term = self.term(&value, argument.span)?;
+            let term = self.term(&value, argument_span)?;
             for later in tys[index + 1..].iter_mut() {
                 *later = later.replace_var(ids[index], &term);
             }
@@ -325,9 +494,11 @@ impl Env<'_> {
         Ok(Term::PropApp(info.id, terms))
     }
 
-    /// A wrapping method, a row of the table of primitive operations at the
-    /// receiver's type. A receiver that is a literal without a suffix takes
-    /// its type from the argument, as `3.wrapping_sub(n)` does.
+    /// `receiver.name(arguments)`: a wrapping method, a row of the table of
+    /// primitive operations at the receiver's type, or a method of an
+    /// `impl` block (O4). A receiver of a wrapping method that is a literal
+    /// without a suffix takes its type from the argument, as
+    /// `3.wrapping_sub(n)` does.
     fn method(
         &mut self,
         receiver: &ast::Expr,
@@ -341,9 +512,7 @@ impl Env<'_> {
             "wrapping_sub" => Op::WrappingSub,
             "wrapping_mul" => Op::WrappingMul,
             "wrapping_neg" => Op::WrappingNeg,
-            other => {
-                return self.fail("L0207", format!("unknown method `{other}`"), name.span);
-            }
+            _ => return self.user_method(receiver, name, arguments, span),
         };
         let takes = op.arity() - 1;
         if arguments.len() != takes {

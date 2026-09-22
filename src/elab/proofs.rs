@@ -358,20 +358,26 @@ impl Env<'_> {
         }
         // The function whose defining equation the step uses: one that may
         // appear in a proposition, since the equation is one.
-        let function = match &first.kind {
+        let named = match &first.kind {
             ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
                 match self.values.get(&name.text).cloned() {
-                    Some(Global::Fn(info)) => {
-                        self.admit_to_formula(&info, "a proposition", first.span)?;
-                        match info.reference {
-                            FnRef::Math(id) => Some(id),
-                            FnRef::Exec(_) => None,
-                        }
-                    }
+                    Some(Global::Fn(info)) => Some(info),
                     _ => None,
                 }
             }
+            // A function of an `impl` block, `Type::name`.
+            ExprKind::Path(path) => self.path_function(path),
             _ => None,
+        };
+        let function = match named {
+            Some(info) => {
+                self.admit_to_formula(&info, "a proposition", first.span)?;
+                match info.reference {
+                    FnRef::Math(id) => Some(id),
+                    FnRef::Exec(_) => None,
+                }
+            }
+            None => None,
         };
         let Some(function) = function else {
             self.diagnostics.push(

@@ -160,6 +160,8 @@ pub fn erase_fn(program: &Program, reference: FnRef, item: &FnItem) -> Option<EF
         passing,
         result: erase_type(&item.result),
         body: eraser.block(&item.body),
+        owner: None,
+        receiver: false,
     })
 }
 

@@ -103,6 +103,10 @@ pub(super) struct FnInfo {
     pub not_a_term: Option<(String, usize)>,
     /// `pub` or a restricted form, as written; private without one.
     pub visibility: Option<ast::Visibility>,
+    /// The first parameter is `self`: a method of an `impl` block, whose
+    /// `name` is `Type::name`, called as `x.name(..)`, which lends or moves
+    /// `x` as `passing[0]` says.
+    pub receiver: bool,
 }
 
 /// The promises that let a function appear in a proposition: it always
@@ -307,6 +311,9 @@ pub(super) struct Env<'a> {
     /// identity: a `&T` parameter's own, a `&mut T` parameter's binding.
     /// Nothing is moved out of one (`moves.rs`).
     pub borrowed: Vec<VarId>,
+    /// The type of the `impl` block whose function is being elaborated,
+    /// which `Self` names (`items.rs`).
+    pub owner: Option<String>,
 }
 
 impl Env<'_> {
@@ -344,6 +351,44 @@ impl Env<'_> {
 
     pub fn text(&self, span: Span) -> &str {
         self.source.slice(span).unwrap_or("")
+    }
+
+    /// A type's name as written, with `Self` read as the type of the
+    /// `impl` block being elaborated.
+    pub fn type_text(&self, name: &ast::Name) -> String {
+        match (&self.owner, name.text.as_str()) {
+            (Some(owner), "Self") => owner.clone(),
+            _ => name.text.clone(),
+        }
+    }
+
+    /// The function `Prefix::name` names, with `Self` read as the type of
+    /// the `impl` block: a function of an `impl` block, or nothing.
+    pub fn path_function(&self, path: &ast::Path) -> Option<Rc<FnInfo>> {
+        let (prefix, name) = path.pair()?;
+        let qualified = format!("{}::{}", self.type_text(prefix), name.text);
+        match self.values.get(&qualified) {
+            Some(Global::Fn(info)) => Some(Rc::clone(info)),
+            _ => None,
+        }
+    }
+
+    /// The function `name` of the `impl` block of the type, if it has one.
+    pub fn method_of(&self, ty: &Type, name: &str) -> Option<Rc<FnInfo>> {
+        let owner = self.type_name(ty)?;
+        match self.values.get(&format!("{owner}::{name}")) {
+            Some(Global::Fn(info)) => Some(Rc::clone(info)),
+            _ => None,
+        }
+    }
+
+    /// The name of a struct or enum type, which an `impl` block can be for.
+    pub fn type_name(&self, ty: &Type) -> Option<String> {
+        match ty {
+            Type::Struct(id) => self.struct_by_id(*id).map(|info| info.name.clone()),
+            Type::Enum(id) => self.enum_by_id(*id).map(|info| info.name.clone()),
+            _ => None,
+        }
     }
 
     pub fn mark(&self) -> Mark {
