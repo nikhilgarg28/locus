@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 74,
-  "savedAt": "2026-09-22T15:38:15.000Z",
+  "rev": 75,
+  "savedAt": "2026-09-22T16:13:17.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2412,10 +2412,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Arithmetic is found outside the kernel",
     "",
-    "src/arith is the procedure that finds linear certificates: it collects facts that each carry a kernel proof, eliminates variables, and emits a Proof::Linear that the kernel checks; it also checks the proof itself before returning it. It is not trusted, and a wrong answer from it is a proof the kernel rejects or a certificate it refuses. When it fails it reports a counterexample it has verified against the facts it collected."
+    "src/arith is the procedure that finds linear certificates: it collects facts that each carry a kernel proof, eliminates variables, and emits a Proof::Linear that the kernel checks; it also checks the proof itself before returning it. It is not trusted, and a wrong answer from it is a proof the kernel rejects or a certificate it refuses. When it fails it reports a counterexample it has verified against the facts it collected.",
+    "",
+    "## Assignment is lowered to versions",
+    "",
+    "Assignment has no form in the check IR. A binding declared let mut has versions: itself, and one more for each assignment, which lowering emits as a let of the old version with the assigned path replaced, rebuilt product by product from the inside out, after the right side has been lowered in full. Lowering keeps the current version of every mutable binding, requires each mention the tree makes in an executable position to be that version, and rejects a stale one rather than repairing it. A branch some arm of which assigns a binding declared outside it lowers to a match whose result is a tuple of the new versions of the bindings assigned in any arm, in declaration order, followed by the value; each arm ends by building that tuple from its own versions, so an arm that leaves a binding alone passes the entry version through and an arm that transfers control contributes nothing, and after the match the versions and the value are bound by projection. Lowering computes the set of assigned bindings itself over binding identities and rejects a tree that records a different set; the tree supplies only the identities of the new versions so that proofs may mention them. Erasure maps every version back to its binding and keeps the assignment as written."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T02:05:21.000Z"
+   "updated": "2026-09-22T16:13:17.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7794,23 +7798,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t294",
    "n": 178,
    "title": "M2 · let mut and assignment, lowered to versions",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n- Case 9: the right side changes what the left side names; lo == 3 and hi == 7 three ways. The same for the two argument orders.\n- Case 10: both arms assign and refresh, and the condition reads the entry version.\n- The assigned set, on the check IR lowering produces and through both interpreters: an outer binding assigned in a nested block; a field write counting for its root; a local let mut inside a branch staying local; a shadowing binding assigned while the outer one is not, and the reverse.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. Stmt::Assign with a Place (binding plus field path) in the typed tree; lowering emits a let of the rebuilt value per assignment, verifies every executable mention is the current version, and lowers a branch that assigns an outer binding to a match whose result is the tuple of new versions then the value; the tree carries the version identities so proofs can mention them and lowering checks the join set against its own computation. Erasure maps versions back and prints let mut and x.f = e as written; mut only where assigned. Diagnostics: L0232 assign twice to immutable, L0233 a field that evidence depends on. Cases 9 and 10 in the corpus (case 9's &mut form waits for O3); the five assigned-set rules tested on the IR shape; the generator emits mutable locals and branching assignment, 10,000 programs agreed three ways. Deviation from the design, recorded: lowering verifies versions the tree supplies rather than inventing them, since proofs must name them; soundness is the same.\n\nLane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n- Case 9: the right side changes what the left side names; lo == 3 and hi == 7 three ways. The same for the two argument orders.\n- Case 10: both arms assign and refresh, and the condition reads the entry version.\n- The assigned set, on the check IR lowering produces and through both interpreters: an outer binding assigned in a nested block; a field write counting for its root; a local let mut inside a branch staying local; a shadowing binding assigned while the outer one is not, and the reverse.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T15:08:27.000Z"
+   "updated": "2026-09-22T16:13:17.000Z"
   },
   {
    "id": "t295",
    "n": 179,
    "title": "M3 · Rust's loops over let mut; the state-passing loop and the bounded for are removed",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n- The assigned set for loops: a let mut inside the body is not loop state; an assignment in a while condition is; a &mut call in the condition is, once O3 lands.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-22T16:13:17.000Z"
   },
   {
    "id": "t296",
@@ -7827,23 +7831,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t297",
    "n": 181,
    "title": "M5 · return and the never type in the surface language",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179).\nUnblocks: R4 (LOC-189).\nCovers: LOC-93, LOC-92.\n\nScope. return lowers to the block ending of M1. ! is the type of return, break, continue, and the panicking forms, and coerces to any type.\n\nTests.\n- A return inside a loop inside a branch, three ways.\n- Evidence owed at an early return is reported at the return.\n- Code after a never-typed expression is reported as unreachable, as rustc would warn.\n\nDone when. Early exit works as in Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T16:13:17.000Z"
   },
   {
    "id": "t298",
    "n": 182,
    "title": "O1 · Moves, and derive with a closed list",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 8.\nDepends on: M2 (LOC-178), S4 (LOC-157).\nUnblocks: O3 (LOC-184).\nCovers: LOC-89, LOC-25, LOC-141, LOC-99.\n\nScope. Values move by default. Copy, Clone, PartialEq, Eq, and Debug by derive only. Types with no runtime form are always Copy. Use after move is an error; assignment reinitialises. A proposition in a body cannot mention a moved local. PartialEq is derivable only for a type with no logic-only data at any depth.\n\nTests.\n- rustc as the oracle, for runtime uses only: each program rejected for using a moved runtime value, printed as Rust through a test hook that skips the move check, is also rejected by rustc with E0382. A program rejected only because a proposition or erased expression mentions a moved local has no counterpart in the generated Rust, where that use is gone; those are tested as Locus rejections alone.\n- Every accepted program compiles, which the runner already enforces.\n- The fifth case of M0.\n\nDone when. Locus is never more permissive than rustc about moves, and the generated Rust never surprises its compiler.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T16:13:17.000Z"
   },
   {
    "id": "t299",
