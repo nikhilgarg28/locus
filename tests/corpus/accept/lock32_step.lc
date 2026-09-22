@@ -1,0 +1,61 @@
+// The `step` and `remaining` of the lock with 32-bit counts, as Target
+// examples writes them (`tests/corpus/target/lock.lc`), with the types
+// they need: the operators `+` and `-` under `no_panic`, their obligations
+// and the claims after them discharged by the tiers, arithmetic among
+// them. The `run` of the target needs `let mut` of evidence, refreshed
+// as the lock changes (M4), and stays in the target file. `#[derive]` is
+// left off, since O1 has not given it a meaning.
+
+pub enum Event { Wrong, Right }
+
+pub struct Lock { failures: u32, open: bool }
+
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u32) -> Prop {
+    prop!(failures <= 3)
+}
+
+// Every promise of the logic, and a body with `+` in it: by the interim
+// rule of LOC-193 `step` is checked as an ordinary function with its
+// promises, so `+` carries its obligation, and it cannot appear in a
+// proposition.
+#[terminates] #[no_panic] #[no_io]
+pub fn step(
+    lock: Lock,
+    bounded: @within_limit(lock.failures),
+    event: Event,
+) -> (next: Lock, @within_limit(next.failures)) {
+    match event {
+        Event::Right => {
+            let next = Lock { failures: 0, open: true };
+            (next, fold!(within_limit, prove!(next.failures <= 3)))             // evaluation: 0 <= 3
+        }
+        Event::Wrong => {
+            if lock.failures < 3 {
+                let fits = prove!(lock.failures as Int + 1 <= u32::MAX as Int); // arithmetic, from lock.failures < 3
+                let next = Lock { failures: lock.failures + 1, open: false };   // the obligations of +: fits is exact, the lower bound arithmetic
+                (next, fold!(within_limit, prove!(next.failures <= 3)))         // arithmetic
+            } else {
+                (Lock { failures: lock.failures, open: false }, bounded)        // computed: the field is lock.failures
+            }
+        }
+    }
+}
+
+#[terminates] #[no_panic] #[no_io]
+pub fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
+    let small = unfold!(within_limit, bounded);                                 // failures <= 3
+    let left = 3 - failures;                                                    // the obligations of -: arithmetic, from small
+    (left, prove!(left <= 3))                                                   // arithmetic
+}
+
+//~ proofs: 9
+//~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
+//~ run: step(Lock { failures: 2, open: false }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
+//~ run: step(Lock { failures: 3, open: true }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
+//~ run: step(Lock { failures: 0, open: false }, Proved, Wrong) => (Lock { failures: 1, open: false }, Proved)
+//~ run: remaining(0, Proved) => (3, Proved)
+//~ run: remaining(3, Proved) => (0, Proved)
+//~ rust: pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {
+//~ rust: failures: lock.failures + 1_u32,
+//~ rust: let left = 3_u32 - failures;

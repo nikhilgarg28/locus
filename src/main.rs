@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -17,7 +18,8 @@ const HELP: &str = "Locus
 Usage: locus <command> <file.lc> [arguments]
 
   check   Check types and proofs; --holes lists every `_` and how it was filled,
-          --stats what each function cost to elaborate and to check
+          --stats what each function cost to elaborate and to check, and the
+          obligations counted by the tier that filled them
   run     Check, then interpret a function: locus run <file.lc> <function> [u8|true|false]...
   rust    Check, then print the generated Rust
   tokens  Print tokens and their original source spans
@@ -30,6 +32,24 @@ Usage: locus <command> <file.lc> [arguments]
 
 /// Steps the interpreter may take before it reports that it ran out.
 const FUEL: u64 = 10_000_000;
+
+/// The tiers in the order they are tried, for the counts of `--stats`; a
+/// tier not listed here, such as the lemma a `for` from `0` is filled by,
+/// follows them, and `unsolved` last.
+const TIERS: [&str; 4] = ["exact", "computed", "evaluation", "arithmetic"];
+
+/// The size of the certificate the arithmetic tier found, for a report:
+/// `, N pairs` after the tier, and nothing for any other tier.
+fn pairs_of(hole: &elab::HoleReport) -> String {
+    if hole.tier != "arithmetic" {
+        return String::new();
+    }
+    let pairs = hole
+        .found
+        .as_ref()
+        .map_or(0, |found| elab::certificate_pairs(&found.proof));
+    format!(", {pairs} pairs")
+}
 
 /// The exit status of a Rust program that panicked.
 const PANICKED: u8 = 101;
@@ -145,15 +165,44 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
                     .map(|item| item.check_micros)
                     .sum::<u128>(),
             )?;
+            // The obligations by tier: every `_`, `prove!`, conversion of
+            // evidence, and operator premise under `no_panic`, counted
+            // under the tier that filled it, then listed with their lines.
+            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+            for hole in &elaborated.holes {
+                *counts.entry(hole.tier).or_default() += 1;
+            }
+            let mut listed: Vec<String> = Vec::new();
+            for tier in TIERS {
+                if let Some(count) = counts.remove(tier) {
+                    listed.push(format!("{count} {tier}"));
+                }
+            }
+            for (tier, count) in counts {
+                listed.push(format!("{count} {tier}"));
+            }
+            writeln!(
+                output,
+                "obligations: {} ({})",
+                elaborated.holes.len(),
+                listed.join(", ")
+            )?;
+            let mut holes: Vec<&elab::HoleReport> = elaborated.holes.iter().collect();
+            holes.sort_by_key(|hole| hole.span.start);
+            for hole in holes {
+                let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
+                writeln!(output, "  {line}:{column} {}{}", hole.tier, pairs_of(hole))?;
+            }
         } else if command == "check" && arguments.len() == 3 {
             for hole in &elaborated.holes {
                 let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
                 writeln!(
                     output,
-                    "{}:{line}:{column}: {} ({}, {} proof nodes, {} us)",
+                    "{}:{line}:{column}: {} ({}{}, {} proof nodes, {} us)",
                     source.name,
                     if hole.solved { "filled" } else { "unsolved" },
                     hole.tier,
+                    pairs_of(hole),
                     hole.proof_size,
                     hole.micros
                 )?;

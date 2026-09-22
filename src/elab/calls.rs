@@ -195,6 +195,15 @@ impl Env<'_> {
                 ty,
             )),
             FnRef::Exec(id) => {
+                // In the body of a function of the logic, a call of a
+                // function that is known by its contract only is not a
+                // term either: the caller is elaborated again as an
+                // ordinary function (LOC-193, `items`).
+                if self.total && self.formula.is_none() && info.not_a_term.is_some() {
+                    self.not_a_term
+                        .get_or_insert((format!("a call of `{}`", info.name), span));
+                    return Err(());
+                }
                 // A formula admits only functions of the logic, and a
                 // function of the logic promises what admits its callees.
                 if self.total {

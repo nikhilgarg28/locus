@@ -1,6 +1,10 @@
 //~ parse-only
 // The lock with 32-bit counts, from Target examples, as written there. It
-// parses whole after S5; the elaborator's turn comes with M2 and M3.
+// parses whole after S5. `step`, `event_at`, and `remaining` check, run,
+// and compile since E7 (`step` and `remaining` in
+// `tests/corpus/accept/lock32_step.lc`); `run` still needs `let mut` of
+// evidence, refreshed as `lock` changes (M4), and `#[derive(Clone, Copy)]`
+// needs O1, so the whole file stays parse-only.
 #[derive(Clone, Copy)]
 pub enum Event { Wrong, Right }
 

@@ -5,4 +5,4 @@ error[L0230]: cannot show `n <= 6`
    |                              ^
    |
    = note: known here: `n == 7`, `h: SmallPrime(n)`
-   = note: it fails when `n` is 7, which the facts known here allow
+   = note: it fails when n = 7, which the arithmetic facts known here allow

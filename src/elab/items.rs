@@ -18,8 +18,9 @@ use super::env::{
 use super::order::{declared_name, dependency_order};
 use super::types::tuple_over;
 
-/// One `_`, `prove!`, or conversion of evidence, or the range of a `for`:
-/// whether it was filled, by which tier (`exact`, `computed`, `evaluation`,
+/// One `_`, `prove!`, or conversion of evidence, an obligation of an
+/// operator under `no_panic`, or the range of a `for`: whether it was
+/// filled, by which tier (`exact`, `computed`, `evaluation`, `arithmetic`,
 /// or the lemma `<T>_zero_le` for a range from `0`), and what that cost.
 #[derive(Clone, Debug)]
 pub struct HoleReport {
@@ -102,6 +103,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         item_name: String::new(),
         promises: Promises::default(),
         formula: None,
+        not_a_term: None,
     };
 
     env.declare_builtin_props();
@@ -425,7 +427,80 @@ impl Env<'_> {
         // A function that may appear in a proposition is a function of the
         // logic: its body is a kernel term, total by construction, and
         // nothing in it may fail to return.
-        let logical = super::env::first_broken(LOGICAL, promises).is_none() && !takes_mut;
+        let mut logical = super::env::first_broken(LOGICAL, promises).is_none() && !takes_mut;
+        let (diagnostics, holes) = (self.diagnostics.len(), self.holes.len());
+        self.not_a_term = None;
+        let mut elaborated =
+            self.function_body(name, parameters, result, body, logical, promises, constant);
+        // The interim rule of LOC-193: a function that makes every promise
+        // of the logic and whose body is not a kernel term, because it has
+        // an operator that may panic in it, is checked as an ordinary
+        // function with its promises, so that the checker enforces
+        // `no_panic` on the operator, and is known by its contract only.
+        let mut not_a_term = None;
+        if elaborated.is_err()
+            && logical
+            && let Some((what, span)) = self.not_a_term.take()
+        {
+            self.diagnostics.truncate(diagnostics);
+            self.holes.truncate(holes);
+            let (line, _) = self.source.line_column(span.start).unwrap_or((0, 0));
+            not_a_term = Some((what, line));
+            logical = false;
+            elaborated =
+                self.function_body(name, parameters, result, body, logical, promises, constant);
+        }
+        let (params, result_ty, block) = elaborated?;
+        let item = FnItem {
+            name: name.text.clone(),
+            math: logical,
+            params: params.clone(),
+            result: result_ty.clone(),
+            body: block,
+        };
+        let elaborate_micros = started.elapsed().as_micros();
+        let started = std::time::Instant::now();
+        // The checker enforces the promises of an ordinary function; a
+        // function of the logic keeps them by construction.
+        let declared = if constant {
+            self.session.declare_constant(&item, promises)
+        } else {
+            self.session.declare_fn_promising(&item, promises)
+        };
+        let reference = match declared {
+            Ok(reference) => reference,
+            Err(error) => return self.internal(error, name.span),
+        };
+        self.items.push(ItemReport {
+            name: name.text.clone(),
+            elaborate_micros,
+            check_micros: started.elapsed().as_micros(),
+        });
+        Ok(Global::Fn(Rc::new(FnInfo {
+            reference,
+            name: name.text.clone(),
+            params,
+            result: result_ty,
+            constant,
+            promises,
+            takes_mut,
+            not_a_term,
+        })))
+    }
+
+    /// The signature and the body, elaborated in a fresh scope: as a term of
+    /// the logic when `logical`, as code otherwise.
+    #[allow(clippy::too_many_arguments)]
+    fn function_body(
+        &mut self,
+        name: &ast::Name,
+        parameters: &[ast::Parameter],
+        result: &ast::Type,
+        body: Body<'_>,
+        logical: bool,
+        promises: Promises,
+        constant: bool,
+    ) -> Elab<(Vec<Binder>, Type, crate::typed::Block)> {
         self.start_item(&name.text, logical, promises);
         if constant {
             self.formula = Some("the value of a constant");
@@ -467,40 +542,7 @@ impl Env<'_> {
                 }
             }
         };
-        let item = FnItem {
-            name: name.text.clone(),
-            math: logical,
-            params: params.clone(),
-            result: result_ty.clone(),
-            body: block,
-        };
-        let elaborate_micros = started.elapsed().as_micros();
-        let started = std::time::Instant::now();
-        // The checker enforces the promises of an ordinary function; a
-        // function of the logic keeps them by construction.
-        let declared = if constant {
-            self.session.declare_constant(&item, promises)
-        } else {
-            self.session.declare_fn_promising(&item, promises)
-        };
-        let reference = match declared {
-            Ok(reference) => reference,
-            Err(error) => return self.internal(error, name.span),
-        };
-        self.items.push(ItemReport {
-            name: name.text.clone(),
-            elaborate_micros,
-            check_micros: started.elapsed().as_micros(),
-        });
-        Ok(Global::Fn(Rc::new(FnInfo {
-            reference,
-            name: name.text.clone(),
-            params,
-            result: result_ty,
-            constant,
-            promises,
-            takes_mut,
-        })))
+        Ok((params, result_ty, block))
     }
 
     fn prop(
@@ -673,6 +715,7 @@ impl Env<'_> {
                         no_io: true,
                     },
                     takes_mut: false,
+                    not_a_term: None,
                 })),
             );
         }
@@ -798,6 +841,7 @@ impl Env<'_> {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Body<'a> {
     Block(&'a ast::Block),
     Expr(&'a ast::Expr),

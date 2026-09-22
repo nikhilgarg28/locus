@@ -1,0 +1,36 @@
+// A function that makes every promise of the logic is a function of the
+// logic, with a defining equation the kernel knows, unless its body is not
+// a kernel term: an operator that may panic is a statement of the check
+// IR, with a place for its evidence, and no term. Such a function is
+// checked as an ordinary function with its promises, so `no_panic` holds
+// of its operators, and it is known by its contract only, which nothing
+// supports yet (open decision LOC-193): it cannot appear in a proposition,
+// be unfolded, or be called by a function of the logic.
+#[terminates] #[no_panic] #[no_io]
+fn gap(hi: u8, lo: u8, ordered: @(lo <= hi)) -> u8 {
+    hi - lo
+}
+
+fn about_gap(hi: u8, lo: u8, ordered: @(lo <= hi)) -> @(gap(hi, lo, ordered) <= hi) { //~ error: L0209 `gap` cannot appear in a proposition: its body is not a term of the logic (it contains `-` at line 11); it is known by its contract only, which is not supported yet (LOC-193)
+    _
+}
+
+// Evidence about `gap` cannot be stated either, so `unfold!` and `fold!`
+// have nothing to work on: the proposition in the parameter is refused
+// first, by the same rule.
+fn opened(hi: u8, lo: u8, ordered: @(lo <= hi), h: @(gap(hi, lo, ordered) == 0)) -> @(hi == lo) { //~ error: L0209 `gap` cannot appear in a proposition: its body is not a term of the logic (it contains `-` at line 11); it is known by its contract only, which is not supported yet (LOC-193)
+    unfold!(gap, h)
+}
+
+// A caller with the same promises and no operator of its own is not a
+// term either, for the call: it is checked as an ordinary function too,
+// and the same rule applies to it.
+#[terminates] #[no_panic] #[no_io]
+fn twice_the_gap(hi: u8, lo: u8, ordered: @(lo <= hi), room: @(hi as Int <= 100)) -> u8 {
+    let d = gap(hi, lo, ordered);
+    d
+}
+
+fn about_twice(hi: u8, lo: u8, ordered: @(lo <= hi), room: @(hi as Int <= 100)) -> Prop {
+    prop!(twice_the_gap(hi, lo, ordered, room) <= 200) //~ error: L0209 `twice_the_gap` cannot appear in a proposition: its body is not a term of the logic (it contains a call of `gap` at line 30); it is known by its contract only, which is not supported yet (LOC-193)
+}

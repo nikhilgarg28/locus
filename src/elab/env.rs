@@ -78,6 +78,11 @@ pub(super) struct FnInfo {
     pub promises: Promises,
     /// A parameter is `&mut`: the function writes what its caller can see.
     pub takes_mut: bool,
+    /// The function makes every promise of the logic and its body is still
+    /// not a kernel term: what it contains that is not one, and the line.
+    /// It is checked as an ordinary function with its promises, and is
+    /// known by its contract only, which nothing supports yet (LOC-193).
+    pub not_a_term: Option<(String, usize)>,
 }
 
 /// The promises that let a function appear in a proposition: it always
@@ -99,6 +104,13 @@ impl FnInfo {
             .find(|&promise| LOGICAL.makes(promise) && !self.promises.makes(promise))
             .map(|promise| format!("it does not promise {}", promise.name()))
             .or_else(|| self.takes_mut.then(|| "it takes `&mut`".to_string()))
+            .or_else(|| {
+                self.not_a_term.as_ref().map(|(what, line)| {
+                    format!(
+                        "its body is not a term of the logic (it contains {what} at line {line}); it is known by its contract only, which is not supported yet (LOC-193)"
+                    )
+                })
+            })
     }
 }
 
@@ -227,6 +239,11 @@ pub(super) struct Env<'a> {
     /// function that may appear in a proposition can be called. The text
     /// names the place for a message.
     pub formula: Option<&'static str>,
+    /// Set while the body of a function of the logic is elaborated and
+    /// something in it is not a kernel term, an operator that may panic or
+    /// a call of such a function: what it was and where. `items` then
+    /// elaborates the function again as an ordinary one (LOC-193).
+    pub not_a_term: Option<(String, Span)>,
 }
 
 impl Env<'_> {

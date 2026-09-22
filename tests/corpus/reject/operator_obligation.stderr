@@ -5,7 +5,7 @@ error[L0235]: `+` on `u32` may overflow, and `bump` promises no_panic
   |       ^
   |
   = note: the sum `n as Int + 1` must be at most 4294967295, and nothing known here shows it
-  = note: a counterexample: n = 4294967295
+  = note: it fails when n = 4294967295, which the arithmetic facts known here allow
   = note: a fact in scope stating `n as Int + 1 <= 4294967295`, or `prove!(n as Int + 1 <= 4294967295);` just before this, is what is needed
 error[L0235]: `-` on `i8` may overflow, and `shrink` promises no_panic
   --> tests/corpus/reject/operator_obligation.lc:11:7
@@ -14,7 +14,7 @@ error[L0235]: `-` on `i8` may overflow, and `shrink` promises no_panic
    |       ^
    |
    = note: the difference `a as Int - b as Int` must be at least -128, and nothing known here shows it
-   = note: a counterexample: a = -128, b = 1
+   = note: it fails when a = -128, b = 1, which the arithmetic facts known here allow
    = note: a fact in scope stating `-128 <= a as Int - b as Int`, or `prove!(-128 <= a as Int - b as Int);` just before this, is what is needed
 error[L0235]: `/` on `u8` may panic, and `halve` promises no_panic
   --> tests/corpus/reject/operator_obligation.lc:16:7
@@ -23,6 +23,7 @@ error[L0235]: `/` on `u8` may panic, and `halve` promises no_panic
    |       ^
    |
    = note: the divisor `b` must not be zero, and nothing known here shows it
+   = note: it fails when b = 0, which the arithmetic facts known here allow
    = note: a fact in scope stating `b as Int != 0`, or `prove!(b as Int != 0);` just before this, is what is needed
 error[L0235]: `/` on `i8` may panic, and `signed_halve` promises no_panic
   --> tests/corpus/reject/operator_obligation.lc:23:7
@@ -32,6 +33,7 @@ error[L0235]: `/` on `i8` may panic, and `signed_halve` promises no_panic
    |
    = note: the pair must not be `i8::MIN / -1`, and nothing known here shows it
    = note: known here: `b != 0i8`
+   = note: it fails when a = -128, b = -1, which the arithmetic facts known here allow
    = note: a fact in scope stating `a as Int == -128 => b as Int != -1`, or `prove!(a as Int == -128 => b as Int != -1);` just before this, is what is needed
 error[L0235]: `-` on `i16` may overflow, and `negate` promises no_panic
   --> tests/corpus/reject/operator_obligation.lc:28:5
@@ -40,7 +42,7 @@ error[L0235]: `-` on `i16` may overflow, and `negate` promises no_panic
    |     ^
    |
    = note: the negation `-(a as Int)` must be at most 32767, and nothing known here shows it
-   = note: a counterexample: a = -32768
+   = note: it fails when a = -32768, which the arithmetic facts known here allow
    = note: a fact in scope stating `-(a as Int) <= 32767`, or `prove!(-(a as Int) <= 32767);` just before this, is what is needed
 error[L0235]: `+` on `u8` may overflow, and `nearly` promises no_panic
   --> tests/corpus/reject/operator_obligation.lc:34:7
@@ -50,5 +52,5 @@ error[L0235]: `+` on `u8` may overflow, and `nearly` promises no_panic
    |
    = note: the sum `n as Int + 100` must be at most 255, and nothing known here shows it
    = note: known here: `n <= 200`
-   = note: a counterexample: n = 156
+   = note: it fails when n = 156, which the arithmetic facts known here allow
    = note: a fact in scope stating `n as Int + 100 <= 255`, or `prove!(n as Int + 100 <= 255);` just before this, is what is needed

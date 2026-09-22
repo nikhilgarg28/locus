@@ -1,0 +1,17 @@
+// The midpoint of Target examples without its hypothesis `ordered: @(lo <=
+// hi)`: the subtraction may go below zero, and the arithmetic procedure,
+// having no fact that orders `lo` and `hi`, shows the values that break it.
+#[terminates] #[no_panic] #[no_io]
+pub fn midpoint(lo: u32, hi: u32) -> (mid: u32, @(mid as Int == (lo as Int + hi as Int) / 2)) {
+    let half = (hi - lo) / 2; //~ error: L0235 `-` on `u32` may overflow, and `midpoint` promises no_panic
+    let mid = lo + half;
+    (mid, prove!(mid as Int == (lo as Int + hi as Int) / 2))
+}
+
+// The same claim as a hole, where the facts do not give it: the hole's
+// diagnostic shows the procedure's counterexample too.
+fn halfway(lo: u32, hi: u32, half: u32, mid: u32, sum: @(mid as Int == lo as Int + half as Int))
+    -> @(mid as Int == (lo as Int + hi as Int) / 2)
+{
+    prove!(mid as Int == (lo as Int + hi as Int) / 2) //~ error: L0230 cannot show `mid == (lo + hi) / 2`
+}

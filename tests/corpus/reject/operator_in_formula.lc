@@ -1,7 +1,9 @@
 // An operator on a machine type may panic, so it is not a proposition: the
 // same test that admits `a as Int + b as Int`, which is total, and
-// `a.wrapping_add(b)`, which never panics, rejects `a + b` wherever
-// nothing runs.
+// `a.wrapping_add(b)`, which never panics, rejects `a + b` in a formula.
+// In the body of a function that makes every promise of the logic it is
+// allowed, and makes the function one known by its contract only
+// (`not_a_term.lc`).
 fn in_prop(a: u8, b: u8) -> Prop {
     prop!(a + b <= 255) //~ error: L0236 `+` on `u8` may panic, on overflow, so it is not a proposition
 }
@@ -17,12 +19,6 @@ fn in_a_claim(a: i32, b: i32, h: @(a / b == 2)) -> i32 { //~ error: L0236 `/` on
 
 fn negated(a: i8) -> Prop {
     prop!(-a == 3) //~ error: L0236 `-` on `i8` may panic, on overflow, so it is not a proposition
-}
-
-// A function of the logic runs nothing either: its body is a term.
-#[terminates] #[no_panic] #[no_io]
-fn logical(a: u8, b: u8) -> u8 {
-    a - b //~ error: L0236 `-` on `u8` may panic, on overflow, and `logical` is a function of the logic, which runs nothing
 }
 
 // On `Int` the operators are total and stand anywhere; a value of `Int` is

@@ -32,3 +32,4 @@ mod solve;
 mod types;
 
 pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate};
+pub use solve::certificate_pairs;

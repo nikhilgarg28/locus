@@ -1,0 +1,21 @@
+error[L0209]: `gap` cannot appear in a proposition: its body is not a term of the logic (it contains `-` at line 11); it is known by its contract only, which is not supported yet (LOC-193)
+  --> tests/corpus/reject/not_a_term.lc:14:57
+   |
+14 | fn about_gap(hi: u8, lo: u8, ordered: @(lo <= hi)) -> @(gap(hi, lo, ordered) <= hi) { //~ error: L0209 `gap` cannot appear in a prop...
+   |                                                         ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `gap` cannot appear in a proposition: its body is not a term of the logic (it contains `-` at line 11); it is known by its contract only, which is not supported yet (LOC-193)
+  --> tests/corpus/reject/not_a_term.lc:21:54
+   |
+21 | fn opened(hi: u8, lo: u8, ordered: @(lo <= hi), h: @(gap(hi, lo, ordered) == 0)) -> @(hi == lo) { //~ error: L0209 `gap` cannot appe...
+   |                                                      ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `twice_the_gap` cannot appear in a proposition: its body is not a term of the logic (it contains a call of `gap` at line 30); it is known by its contract only, which is not supported yet (LOC-193)
+  --> tests/corpus/reject/not_a_term.lc:35:11
+   |
+35 |     prop!(twice_the_gap(hi, lo, ordered, room) <= 200) //~ error: L0209 `twice_the_gap` cannot appear in a proposition: its body is ...
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value

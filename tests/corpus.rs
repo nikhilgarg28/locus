@@ -20,9 +20,11 @@
 //! ~~~
 //!
 //! A file with an `error` directive must be rejected, with exactly the
-//! errors it lists, each on its line. A file in `tests/corpus/target` says
-//! `parse-only`: it is the target syntax, ahead of the elaborator, and only
-//! the parser's diagnostics are compared with its `error` lines. Any other
+//! errors it lists, each on its line. A file in `tests/corpus/target` is
+//! the target syntax: one ahead of the elaborator says `parse-only`, and
+//! only the parser's diagnostics are compared with its `error` lines; one
+//! the elaborator has caught up with drops the directive and is accepted
+//! like any other. Any other
 //! file must be accepted: it is parsed, elaborated, and checked, every run
 //! line is called in the check-IR interpreter and in the erased-tree
 //! interpreter, each in both of its modes, overflow checks on and off, and
@@ -1232,22 +1234,19 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
     let mut inconclusive = Vec::new();
     let mut compiled = Vec::new();
     let mut examples = Vec::new();
-    for (directory, rejects, parse_only) in [
+    for (directory, rejects, target) in [
         ("examples", false, false),
         ("tests/corpus/accept", false, false),
         ("tests/corpus/reject", true, false),
         ("tests/corpus/target", false, true),
     ] {
         for (name, text) in files_in(directory) {
-            if is_parse_only(&text) != parse_only {
+            let parse_only = is_parse_only(&text);
+            if parse_only && !target {
                 failures.push(Failure {
                     file: name.clone(),
                     line: 0,
-                    message: if parse_only {
-                        "a file in `target` needs a `parse-only` directive".into()
-                    } else {
-                        "a file with a `parse-only` directive belongs in `target`".into()
-                    },
+                    message: "a file with a `parse-only` directive belongs in `target`".into(),
                 });
             } else if !parse_only && expects_rejection(&text) != rejects {
                 failures.push(Failure {

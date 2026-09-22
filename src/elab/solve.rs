@@ -1,6 +1,7 @@
-//! Filling a `_`: evidence of exactly the stated claim, after computing.
+//! Filling a `_`: evidence of exactly the stated claim, after computing,
+//! or a certificate of linear arithmetic.
 //!
-//! A hole is filled in one of three ways, tried in order, and no other:
+//! A hole is filled in one of four ways, tried in order, and no other:
 //!
 //! 1. **exact**: a fact in scope is the claim;
 //! 2. **computed**: a fact in scope is the claim after *computing* both. A
@@ -13,13 +14,22 @@
 //!    `p && q` is evidence of each part. Every step is fixed by the claim
 //!    and the facts, so this is a procedure and not a search;
 //! 3. **evaluation**: a closed comparison is run by the kernel: one of
-//!    integers directly, one of machine values as the runtime test it is.
+//!    integers directly, one of machine values as the runtime test it is;
+//! 4. **arithmetic**: a comparison or equation over `Int`, or a comparison
+//!    of machine values, which is one over their views, is handed to the
+//!    arithmetic procedure of `src/arith` with the facts in scope, each
+//!    read as it stands and over the views (`arithmetic.rs`). What comes
+//!    back is a certificate of the kernel's rule `linear`, a sum of the
+//!    facts with coefficients, and nothing else: the procedure searches for
+//!    the coefficients, and the kernel checks the sum. An operator's
+//!    obligation under `no_panic` takes the same four tiers.
 //!
-//! Nothing else happens by itself: no fact is used to reach another, no
-//! function is unfolded unless `unfold!` or `fold!` asks, and no claim is
-//! decided by trying every byte. Those steps are written out, as a lemma
-//! call, a `prove!` stepping stone, or one of the proof forms; `explain`
-//! says which when a hole stays open.
+//! Nothing else happens by itself: no fact is used to reach another
+//! outside a linear sum, no function is unfolded unless `unfold!` or
+//! `fold!` asks, and no claim is decided by trying every byte. Those steps
+//! are written out, as a lemma call, a `prove!` stepping stone, or one of
+//! the proof forms; `explain` says which when a hole stays open, and shows
+//! the values the procedure found against the claim when it has them.
 //!
 //! Whatever is found is an explicit proof, which the kernel checks here
 //! before it is used and again when the function is declared.
@@ -138,13 +148,19 @@ impl Env<'_> {
             return Some((fact.proof.clone(), "exact"));
         }
         let known = self.knowledge();
-        let (normal, steps) = self.normalize(goal, &known.definitions);
+        let (normal, mut steps) = self.normalize(goal, &known.definitions);
         let found = self
             .computed_from(&normal, &known)
             .map(|proof| (proof, "computed"))
-            .or_else(|| self.evaluated(&normal).map(|proof| (proof, "evaluation")))?;
-        let (proof, tier) = found;
-        Some((self.back_to_stated(proof, steps)?, tier))
+            .or_else(|| self.evaluated(&normal).map(|proof| (proof, "evaluation")));
+        if let Some((proof, tier)) = found {
+            return Some((self.back_to_stated(proof, steps)?, tier));
+        }
+        // The arithmetic procedure reads a literal, not the view of one.
+        let (linear, more) = self.literal_views(&normal);
+        steps.extend(more);
+        let proof = self.by_arithmetic(&linear, &known).ok()?;
+        Some((self.back_to_stated(proof, steps)?, "arithmetic"))
     }
 
     /// A proof of the computed claim, carried back to the claim as stated.
@@ -619,6 +635,50 @@ fn computes(term: &Term) -> bool {
             matches!(**scrutinee, Term::Bool(_) | Term::Variant(..))
         }
         _ => false,
+    }
+}
+
+/// The pairs of the `linear` certificates a proof is built from, added up:
+/// the size of what the arithmetic tier found, for a report. An equation
+/// is two certificates, and a case split one per case. The proofs behind
+/// the pairs are the facts' own and are not counted, so a certificate that
+/// uses a fact proved by an earlier certificate counts the pair, not the
+/// earlier certificate.
+pub fn certificate_pairs(proof: &Proof) -> usize {
+    let arm = |arm: &crate::kernel::ProofArm| certificate_pairs(&arm.body);
+    match proof {
+        Proof::Linear { pairs, .. } => pairs.len(),
+        Proof::Transport { eq, proof, .. } => certificate_pairs(eq) + certificate_pairs(proof),
+        Proof::ImpliesIntro { body, .. } | Proof::ForallIntro { body, .. } => {
+            certificate_pairs(body)
+        }
+        Proof::ImpliesElim(left, right) => certificate_pairs(left) + certificate_pairs(right),
+        Proof::ForallElim(proof, _) | Proof::ExistsIntro { proof, .. } => certificate_pairs(proof),
+        Proof::CaseProof {
+            scrutinee, arms, ..
+        } => certificate_pairs(scrutinee) + arms.iter().map(arm).sum::<usize>(),
+        Proof::CaseData { arms, .. } => arms.iter().map(arm).sum(),
+        Proof::ExistsElim {
+            exists, arm: one, ..
+        } => certificate_pairs(exists) + arm(one),
+        Proof::ForStep { lower, upper, .. } => certificate_pairs(lower) + certificate_pairs(upper),
+        Proof::NatInduction { base, step, .. } | Proof::IntInduction { base, step, .. } => {
+            certificate_pairs(base) + arm(step)
+        }
+        Proof::Hyp(_)
+        | Proof::OfTerm(_)
+        | Proof::Refl(_)
+        | Proof::Projection(_)
+        | Proof::Literal(_)
+        | Proof::Definition(_)
+        | Proof::CaseStep(_)
+        | Proof::Construct { .. }
+        | Proof::ExcludedMiddle(_)
+        | Proof::ForEmpty(_)
+        | Proof::Omitted
+        | Proof::Evaluate(_)
+        | Proof::EvaluateAll(_)
+        | Proof::Axiom(_) => 0,
     }
 }
 

@@ -358,19 +358,20 @@ fn a_dependent_pattern_opens_over_its_own_names() {
         )
         .unwrap();
     assert_eq!(value.debug(module), "(10, Proved)");
-    // The type of `still` speaks of `next`, as a mismatch shows.
+    // The type of `still` speaks of `next`, as a mismatch shows. (`n <=
+    // 10` itself would be filled from `small` by the arithmetic tier.)
     let (codes, full) = rejected(
         "fn bump(n: u8, small: @(n < 10)) -> (out: u8, @(out <= 10)) {
             (n.wrapping_add(1), u8_succ_le_of_lt(n, 10, small))
         }
-        fn use_it(n: u8, small: @(n < 10)) -> @(n <= 10) {
+        fn use_it(n: u8, small: @(n < 10)) -> @(n <= 5) {
             let (next, still) = bump(n, small);
             still
         }",
     );
     assert_eq!(codes, ["L0230"]);
     assert!(
-        full.starts_with("this is evidence of `next <= 10`, and `n <= 10` is needed"),
+        full.starts_with("this is evidence of `next <= 10`, and `n <= 5` is needed"),
         "{full}"
     );
     // A later part may speak of two earlier names, and a name that is not
@@ -468,13 +469,15 @@ fn a_loop_supplies_its_value_and_evidence_at_the_break() {
     );
     assert_eq!(call(&result, "walk", &[9]), "(9, Proved)");
     // The evidence is checked against the versions current at the break,
-    // and nothing carried from earlier passes speaks of `i` there.
+    // and nothing carried from earlier passes speaks of `i` there. (The
+    // branch's `i == limit` would give `i <= limit` by arithmetic, so the
+    // claim is one the branch does not decide.)
     let (codes, full) = rejected(
-        "fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
+        "fn walk(limit: u8) -> (out: u8, @(out <= 5)) {
             let mut i: u8 = 0;
             loop {
                 if i == limit {
-                    break (i, prove!(i <= limit))
+                    break (i, prove!(i <= 5))
                 } else {
                     i = i.wrapping_add(1);
                 }
@@ -482,7 +485,7 @@ fn a_loop_supplies_its_value_and_evidence_at_the_break() {
         }",
     );
     assert_eq!(codes, ["L0230"]);
-    assert!(full.contains("cannot show `i <= limit`"), "{full}");
+    assert!(full.contains("cannot show `i <= 5`"), "{full}");
 }
 
 #[test]
@@ -676,13 +679,12 @@ fn matching_on_evidence_gives_each_arm_its_index_equations() {
             match h { SmallPrime::Two => _, SmallPrime::Seven => _ }
         }",
     );
-    // The first arm to fail ends the match; here that is `Two`.
+    // The `Two` arm is filled by arithmetic from its index equation `n ==
+    // 2`; the `Seven` arm is false, and its equation is the counterexample.
     assert_eq!(codes, ["L0230"]);
     assert!(full.contains("cannot show `n <= 6`"), "{full}");
-    assert!(
-        full.contains("this is `rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 6))`"),
-        "{full}"
-    );
+    assert!(full.contains("known here: `n == 7`"), "{full}");
+    assert!(full.contains("it fails when n = 7"), "{full}");
 }
 
 #[test]
@@ -864,7 +866,7 @@ fn a_failed_prove_is_reported_where_it_stands() {
     let (codes, full) = rejected("fn f(n: u8) -> u8 { prove!(n < 3); n }");
     assert_eq!(codes, ["L0230"]);
     assert!(full.contains("cannot show `n < 3`"), "{full}");
-    assert!(full.contains("it fails when `n` is 3"), "{full}");
+    assert!(full.contains("it fails when n = 3"), "{full}");
     let (codes, _) = rejected("fn f(n: u8) -> (out: u8, @(out < 3)) { (n, prove!(n < 3)) }");
     assert_eq!(codes, ["L0230"]);
     // Evidence of one claim where another is wanted is bridged as any

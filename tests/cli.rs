@@ -152,3 +152,71 @@ fn checking_is_deterministic() {
     }
     assert!(seen >= 5);
 }
+
+/// The lines of `--stats` that do not carry a timing: the counts of the
+/// obligations by tier, and the list of them.
+fn stats_without_timings(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .skip_while(|line| !line.starts_with("obligations:"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn stats_count_the_obligations_by_tier() {
+    // The target examples of the atlas predict, over the whole 32-bit lock
+    // and midpoint, three exact, four computed, and seven arithmetic
+    // obligations. What the tiers count differs, and the difference is
+    // recorded rather than adjusted: `0 <= 3` and `2 != 0` on literals are
+    // decided by evaluation, which the prediction folds into computed;
+    // and an overflow row of the table has two premises, `min <= e` and
+    // `e <= max`, where the prediction counts the operator once, so each
+    // of the four operators `+` and `-` adds an arithmetic obligation for
+    // the bound the ranges of the views give.
+    let corpus = |directory: &str, name: &str| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/corpus")
+            .join(directory)
+            .join(name)
+    };
+    let stats = |path: PathBuf| {
+        let output = Command::new(env!("CARGO_BIN_EXE_locus"))
+            .arg("check")
+            .arg(&path)
+            .arg("--stats")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", path.display());
+        stats_without_timings(&String::from_utf8(output.stdout).unwrap())
+    };
+    assert_eq!(
+        stats(corpus("target", "midpoint.lc")),
+        [
+            "obligations: 6 (1 evaluation, 5 arithmetic)",
+            "  12:20 arithmetic, 1 pairs",
+            "  12:20 arithmetic, 2 pairs",
+            "  12:26 evaluation",
+            "  13:18 arithmetic, 2 pairs",
+            "  13:18 arithmetic, 8 pairs",
+            "  14:11 arithmetic, 18 pairs",
+            "Checked 1 function(s); 6 proof(s) found and accepted by the kernel.",
+        ]
+    );
+    assert_eq!(
+        stats(corpus("accept", "lock32_step.lc")),
+        [
+            "obligations: 9 (1 exact, 1 computed, 1 evaluation, 6 arithmetic)",
+            "  31:40 evaluation",
+            "  35:28 arithmetic, 1 pairs",
+            "  36:59 arithmetic, 1 pairs",
+            "  36:59 exact",
+            "  37:44 arithmetic, 4 pairs",
+            "  39:65 computed",
+            "  48:18 arithmetic, 1 pairs",
+            "  48:18 arithmetic, 1 pairs",
+            "  49:12 arithmetic, 4 pairs",
+            "Checked 3 function(s); 9 proof(s) found and accepted by the kernel.",
+        ]
+    );
+}

@@ -7,10 +7,13 @@
 //! their result, by the rule of the Vision (Integers, in code and in
 //! propositions):
 //!
-//! - In a proposition, or anywhere else nothing runs, an operator on a
-//!   machine type is refused, because it may panic: the message offers
-//!   `a as Int + b as Int` for the exact sum and `a.wrapping_add(b)` for
-//!   the wrapped one.
+//! - In a proposition, an operator on a machine type is refused, because
+//!   it may panic: the message offers `a as Int + b as Int` for the exact
+//!   sum and `a.wrapping_add(b)` for the wrapped one. In the body of a
+//!   function that makes every promise of the logic, whose body would be a
+//!   kernel term with no place for the operator's evidence, the function
+//!   is elaborated again as an ordinary one with its promises and is then
+//!   known by its contract only (the interim rule of LOC-193; `items`).
 //! - In code, `let s = a + b` becomes a statement of the check IR,
 //!   `exec::OperateStmt`, whose result `s` is known by its equation to be
 //!   the wrapped result, `s == (a as Int + b as Int) as T`, which holds in
@@ -23,22 +26,31 @@
 //!   the divisor is known not to be zero, as `c` is known after
 //!   `assert!(c)`.
 //!
-//! The obligation is discharged by the solver's three tiers, exact,
-//! computed, and evaluation, with one adjustment for its shape: the
-//! premises speak of the views of the operands, so a view of a literal is
-//! computed on both sides, which lets `prove!(n as Int + 1 <= u32::MAX as
-//! Int)` on the line before serve as the fact it is. When the tiers fail,
-//! the arithmetic procedure of `src/arith` is asked, over the facts in
-//! scope, because the premises of an unsigned type include a lower bound
-//! that only the ranges of the views establish; E7 gives holes the same
-//! tier, and this is the same call. A proof from any tier is checked by
-//! the kernel before it is used. When every tier fails, the diagnostic
-//! writes the premise out and says that a fact in scope stating it, or a
-//! `prove!` of it just before, is what is needed.
+//! The obligation is discharged by the solver's four tiers, exact,
+//! computed, evaluation, and arithmetic, with one adjustment for its
+//! shape: the premises speak of the views of the operands, so a view of a
+//! literal is computed on both sides, which lets `prove!(n as Int + 1 <=
+//! u32::MAX as Int)` on the line before serve as the fact it is. The
+//! arithmetic tier, the procedure of `src/arith` over the facts in scope,
+//! lives here and is the same call a hole makes (`solve`): the facts are
+//! presented to the procedure in every spelling they have, as stated, with
+//! literal views computed, and bridged from a machine type to the views by
+//! the kernel's own steps. The premises of an unsigned type include a
+//! lower bound that only the ranges of the views establish, so even `+` on
+//! `u32` under a fact stating its sum fits takes this tier for that bound.
+//! A proof from any tier is checked by the kernel before it is used. When
+//! every tier fails, the diagnostic writes the premise out, shows the
+//! values the procedure found against it when they are a counterexample,
+//! and says that a fact in scope stating it, or a `prove!` of it just
+//! before, is what is needed.
+//!
+//! After a division by a literal the exact result is known too, `view(q)
+//! == view(a) / k`, derived from the model and `view_wrap` once the
+//! procedure has shown the quotient lies in the type's range.
 
 use std::time::Instant;
 
-use crate::arith::{self, Budget, Counterexample};
+use crate::arith::{self, Budget, Counterexample, GaveUp};
 use crate::ast::{self, BinaryOp};
 use crate::diagnostic::Diagnostic;
 use crate::kernel::derive::symm_at;
@@ -60,6 +72,23 @@ use super::solve::{Step, forward};
 struct Operand {
     value: Value,
     span: Span,
+}
+
+/// Why the arithmetic tier failed, as a note for a diagnostic.
+pub(super) enum ArithmeticFailure {
+    /// Values that satisfy the arithmetic facts and violate the goal, in
+    /// source spelling: nothing linear would fill this.
+    Counterexample(String),
+    /// A count ran out: the goal was not decided either way.
+    Budget(String),
+}
+
+impl ArithmeticFailure {
+    pub fn note(&self) -> &str {
+        match self {
+            Self::Counterexample(note) | Self::Budget(note) => note,
+        }
+    }
 }
 
 impl Env<'_> {
@@ -172,15 +201,23 @@ impl Env<'_> {
                 operator_span,
             );
         }
-        if self.formula.is_some() || self.total {
+        if self.formula.is_some() {
             return self.refuse_where_nothing_runs(op, machine, &operands, operator_span);
+        }
+        if self.total {
+            // The body of a function of the logic, which is a kernel term
+            // and has no place for the operator's evidence: `items`
+            // elaborates the function again as an ordinary one, with its
+            // promises, under the interim rule of LOC-193.
+            self.not_a_term
+                .get_or_insert((format!("`{}`", op.symbol()), operator_span));
+            return Err(());
         }
         self.operate_at_runtime(op, machine, operands, operator_span, span)
     }
 
-    /// `L0236`: an operator on a machine type where nothing runs, in a
-    /// proposition or in a function of the logic. The two things that can
-    /// be written instead are named.
+    /// `L0236`: an operator on a machine type in a formula, where nothing
+    /// runs. The two things that can be written instead are named.
     fn refuse_where_nothing_runs<T>(
         &mut self,
         op: Op,
@@ -208,13 +245,8 @@ impl Env<'_> {
             Panic::Division => "may panic, on a zero divisor",
             _ => "may panic, on overflow",
         };
-        let where_ = match self.formula {
-            Some(place) => format!("so it is not {place}"),
-            None => format!(
-                "and `{}` is a function of the logic, which runs nothing",
-                self.item_name
-            ),
-        };
+        let place = self.formula.expect("refused in a formula");
+        let where_ = format!("so it is not {place}");
         let what = match op.panic() {
             Panic::Division => "quotient",
             _ if op == Op::Neg => "negation",
@@ -272,6 +304,17 @@ impl Env<'_> {
             .join(" ");
         self.labels.insert(result, label);
         let machine_type = Type::machine(ty);
+        // The obligation speaks of the operands, and is discharged before
+        // anything about the result is a fact.
+        let premises = row.fits(&self.prelude, &terms);
+        let mut fits = None;
+        if self.promises.no_panic && row.panic() != Panic::Never {
+            let mut proofs = Vec::new();
+            for (index, premise) in premises.iter().enumerate() {
+                proofs.push(self.obligation(row, index, premise, &texts, result, operator_span)?);
+            }
+            fits = Some(proofs);
+        }
         self.facts.push(Fact::definition(
             Proof::hyp(equation),
             Term::eq(machine_type.clone(), Term::var(result), applied),
@@ -288,25 +331,18 @@ impl Env<'_> {
             template: Term::eq(machine_type.clone(), Term::Bound(0), meaning.clone()),
             proof: Box::new(Proof::Axiom(Axiom::OpModel(op, ty, terms.clone()))),
         };
-        self.know(wrapped, Term::eq(machine_type, Term::var(result), meaning));
-
-        let premises = row.fits(&self.prelude, &terms);
-        let mut fits = None;
+        self.know(
+            wrapped.clone(),
+            Term::eq(machine_type, Term::var(result), meaning),
+        );
         let mut learned = Vec::new();
-        if self.promises.no_panic && row.panic() != Panic::Never {
-            let mut proofs = Vec::new();
-            for (index, premise) in premises.iter().enumerate() {
-                proofs.push(self.obligation(row, index, premise, &texts, result, operator_span)?);
-            }
-            fits = Some(proofs);
-            if row.panic() == Panic::Overflow {
-                let claim = Term::eq(
-                    Type::Int,
-                    Term::view(ty, Term::var(result)),
-                    row.exact_term(&terms),
-                );
-                learned.push(self.learn(claim, span)?);
-            }
+        if fits.is_some() && row.panic() == Panic::Overflow {
+            let claim = Term::eq(
+                Type::Int,
+                Term::view(ty, Term::var(result)),
+                row.exact_term(&terms),
+            );
+            learned.push(self.learn(claim, span)?);
         }
         if row.panic() == Panic::Division {
             for (index, premise) in premises.into_iter().enumerate() {
@@ -316,6 +352,7 @@ impl Env<'_> {
                     self.divisor_is_not_zero(ty, &terms[1], hyp);
                 }
             }
+            self.exact_division(row, &terms, result, wrapped);
         }
         Ok(Value::new(
             Expr::Operate {
@@ -329,6 +366,45 @@ impl Env<'_> {
             },
             Type::machine(ty),
         ))
+    }
+
+    /// The exact result of a division, `view(q) == view(a) / view(b)`,
+    /// known after `a / b` or `a % b` when the quotient or remainder can be
+    /// shown to lie in the type's range, which the arithmetic procedure
+    /// does for a divisor that is a literal, from the division facts it
+    /// adds: the result is `wrap` of the exact value by the model, and
+    /// `view_wrap` reads the view of `wrap(n)` back as `n` within the
+    /// range. Nothing is assumed: the fact is a derivation the kernel
+    /// checks here and again wherever it is used. When the range cannot be
+    /// shown, nothing is known beyond the wrapped result.
+    fn exact_division(&mut self, row: Row, terms: &[Term], result: VarId, wrapped: Proof) {
+        let ty = row.ty;
+        let exact = row.exact_term(terms);
+        let lower = Term::int_le(Term::Int(ty.min()), exact.clone());
+        let upper = Term::int_le(exact.clone(), Term::Int(ty.max()));
+        let Some((lower, _)) = self.discharge(&lower) else {
+            return;
+        };
+        let Some((upper, _)) = self.discharge(&upper) else {
+            return;
+        };
+        // view(wrap(e)) == e, from the two bounds.
+        let of_wrap = Proof::implies_elim(
+            Proof::implies_elim(Proof::Axiom(Axiom::ViewWrap(ty, exact.clone())), lower),
+            upper,
+        );
+        // view(result) == view(wrap(e)), from result == wrap(e).
+        let views_equal = Self::views_of_equal(ty, &Term::var(result), wrapped);
+        let viewed = Term::view(ty, Term::var(result));
+        let proof = Proof::Transport {
+            eq: Box::new(of_wrap),
+            template: Term::eq(Type::Int, viewed.clone(), Term::Bound(0)),
+            proof: Box::new(views_equal),
+        };
+        let claim = Term::eq(Type::Int, viewed, exact);
+        if check_proof(&mut self.ctx, &proof, &claim).is_ok() {
+            self.know(proof, claim);
+        }
     }
 
     /// A hypothesis the checker will assume after the statement, under a
@@ -464,7 +540,7 @@ impl Env<'_> {
         if let Some((proof, tier)) = found {
             return Some((self.back_to_stated(proof, steps)?, tier));
         }
-        let proof = self.by_arithmetic(&normal, &known)?;
+        let proof = self.by_arithmetic(&normal, &known).ok()?;
         Some((self.back_to_stated(proof, steps)?, "arithmetic"))
     }
 
@@ -524,35 +600,80 @@ impl Env<'_> {
 
     /// The views of literals in the term computed, `view[T](3T)` to `3`,
     /// each step a computation axiom.
-    fn literal_views(&mut self, term: &Term) -> (Term, Vec<Step>) {
+    pub(super) fn literal_views(&mut self, term: &Term) -> (Term, Vec<Step>) {
         self.compute_where(term, &|candidate| {
             matches!(candidate, Term::Prim(Prim::View(_), operands)
                 if matches!(operands.as_slice(), [literal] if literal.machine_value().is_some()))
         })
     }
 
-    /// The arithmetic procedure over the facts in scope, on the goal with
-    /// its names replaced and its literal views computed. The procedure
-    /// reads the context, so the facts are assumed in a copy of it, each
-    /// as it stands and as computed, with names replaced and the views of
-    /// literals computed, so that `x <= 3` is read as the bound it is and
-    /// a fact about `d` serves a goal about what `d` stands for; the
-    /// certificate's hypotheses are then replaced by the facts' own
-    /// proofs. This is the call E7 makes for a hole.
-    fn by_arithmetic(&mut self, normal: &Term, known: &super::solve::Known) -> Option<Proof> {
+    // --- The arithmetic tier ------------------------------------------------------
+
+    /// The arithmetic procedure over the facts in scope, on a goal with its
+    /// names replaced and its literal views computed: the fourth tier of a
+    /// hole (`solve`) and of an operator's obligation, the same call.
+    ///
+    /// The procedure reads the context, so the facts are assumed in a copy
+    /// of it, each in every spelling it has (`assume_spellings`), and the
+    /// certificate's hypotheses are then replaced by the facts' own proofs,
+    /// so that the proof returned stands in the real context. A goal at a
+    /// machine type is bridged to the views first: `a ==[T] b` is proved as
+    /// `view(a) == view(b)` and closed by the injectivity of the view. An
+    /// implication, the premise of a division or a claim `a != b`, has each
+    /// antecedent assumed, in its spellings too, and the conclusion proved;
+    /// the proof is closed over them.
+    ///
+    /// On failure, the procedure's report, when the goal was one it could
+    /// read: the counterexample and the budget in it are what the
+    /// diagnostics show.
+    pub(super) fn by_arithmetic(
+        &mut self,
+        normal: &Term,
+        known: &super::solve::Known,
+    ) -> Result<Proof, Option<GaveUp>> {
         let (mut scratch, mut replacements) = self.arithmetic_context(known);
-        // The premise of a division is an implication, `view(b) == 0 =>
-        // False`, or two deep at a signed type: each antecedent is assumed
-        // and the conclusion proved, and the proof is closed over them.
         let mut antecedents = Vec::new();
         let mut goal = normal.clone();
         while let Term::Implies(premise, conclusion) = goal {
             let id = HypId::fresh();
-            scratch.assume_with(id, (*premise).clone()).ok()?;
+            scratch
+                .assume_with(id, (*premise).clone())
+                .map_err(|_| None)?;
+            self.assume_spellings(
+                &mut scratch,
+                &mut replacements,
+                Proof::hyp(id),
+                &premise,
+                false,
+            );
             antecedents.push((id, *premise));
             goal = *conclusion;
         }
-        let proof = arith::prove(&scratch, Some(self.prelude), &goal, &Budget::default()).ok()?;
+        // A machine equation is bridged to the views.
+        let (goal, close): (Term, Option<(MachineInt, Term, Term)>) = match &goal {
+            Term::Eq(ty, a, b) if ty.as_machine().is_some() => {
+                let ty = ty.as_machine().expect("checked");
+                (
+                    Term::eq(
+                        Type::Int,
+                        Term::view(ty, (**a).clone()),
+                        Term::view(ty, (**b).clone()),
+                    ),
+                    Some((ty, (**a).clone(), (**b).clone())),
+                )
+            }
+            other => (other.clone(), None),
+        };
+        let proof = arith::prove(&scratch, Some(self.prelude), &goal, &Budget::default()).map_err(
+            |gave_up| match gave_up.reason {
+                arith::Reason::NotLinear(_) | arith::Reason::NoPrelude => None,
+                _ => Some(gave_up),
+            },
+        )?;
+        let proof = match close {
+            Some((ty, a, b)) => self.equal_of_views(ty, &a, &b, proof),
+            None => proof,
+        };
         let mut proof = substitute(proof, &[], &replacements);
         for (id, premise) in antecedents.into_iter().rev() {
             let inner = proof;
@@ -560,11 +681,11 @@ impl Env<'_> {
                 Proof::implies_intro(premise, |assumed| substitute(inner, &[], &[(id, assumed)]));
         }
         replacements.clear();
-        Some(proof)
+        Ok(proof)
     }
 
-    /// A copy of the context with every fact in scope assumed in both
-    /// spellings, and the proof each assumption stands for.
+    /// A copy of the context with every fact in scope assumed in each of
+    /// its spellings, and the proof each assumption stands for.
     fn arithmetic_context(
         &mut self,
         known: &super::solve::Known,
@@ -579,17 +700,180 @@ impl Env<'_> {
             .collect();
         let computed: Vec<Fact> = known.facts.iter().map(|(_, fact)| fact.clone()).collect();
         for fact in stated.into_iter().chain(computed) {
-            let (claim, steps) = self.literal_views(&fact.claim);
-            if steps.is_empty() && matches!(fact.proof, Proof::Hyp(HypRef::Free(_))) {
-                // Already in the context as it stands.
-                continue;
-            }
-            let id = HypId::fresh();
-            if scratch.assume_with(id, claim).is_ok() {
-                replacements.push((id, forward(fact.proof, steps)));
-            }
+            self.assume_spellings(
+                &mut scratch,
+                &mut replacements,
+                fact.proof,
+                &fact.claim,
+                true,
+            );
         }
         (scratch, replacements)
+    }
+
+    /// Assumes a fact in the scratch context in every spelling the
+    /// procedure can read it in: as it stands, unless it is already a
+    /// hypothesis of the context; with the views of its literals computed,
+    /// since `x <= 3` between machine values is `int_le(view(x),
+    /// view(3T))` and the procedure reads `3`; and bridged to the views by
+    /// the kernel's own steps when it is a claim at a machine type, `a ==[T]
+    /// b` giving `view(a) == view(b)` by congruence, and the outcome of a
+    /// comparison the branch taken knows, `c == true` or `c == false`,
+    /// giving the proposition over the views by `cmp_reflect`, each again
+    /// with its literal views computed. With `as_stated` false the claim
+    /// itself is already assumed, and only the other spellings are added.
+    fn assume_spellings(
+        &mut self,
+        scratch: &mut crate::kernel::Context,
+        replacements: &mut Vec<(HypId, Proof)>,
+        proof: Proof,
+        claim: &Term,
+        as_stated: bool,
+    ) {
+        let mut spellings: Vec<(Proof, Term)> = Vec::new();
+        if as_stated {
+            spellings.push((proof.clone(), claim.clone()));
+        }
+        if let Some((bridged, over_views)) = self.bridged_to_views(&proof, claim) {
+            spellings.push((bridged, over_views));
+        }
+        for (proof, claim) in spellings {
+            let (computed, steps) = self.literal_views(&claim);
+            let mut forms = vec![(proof.clone(), claim)];
+            if !steps.is_empty() {
+                forms.push((forward(proof, steps), computed));
+            }
+            for (proof, claim) in forms {
+                let is_hypothesis = |binding: crate::kernel::Binding<'_>| matches!(binding, crate::kernel::Binding::Hyp { prop, .. } if same(prop, &claim));
+                if matches!(proof, Proof::Hyp(HypRef::Free(_)))
+                    && scratch.bindings().any(is_hypothesis)
+                {
+                    // Already in the context as it stands.
+                    continue;
+                }
+                let id = HypId::fresh();
+                if scratch.assume_with(id, claim).is_ok() {
+                    replacements.push((id, proof));
+                }
+            }
+        }
+    }
+
+    /// A fact at a machine type read over the views: `a ==[T] b` as
+    /// `view(a) == view(b)`, and `c == true` or `c == false` for a
+    /// comparison `c` as what `cmp_reflect` says of it.
+    fn bridged_to_views(&self, proof: &Proof, claim: &Term) -> Option<(Proof, Term)> {
+        match claim {
+            Term::Eq(ty, a, b) if ty.as_machine().is_some() => {
+                let ty = ty.as_machine()?;
+                let over_views = Term::eq(
+                    Type::Int,
+                    Term::view(ty, (**a).clone()),
+                    Term::view(ty, (**b).clone()),
+                );
+                Some((Self::views_of_equal(ty, a, proof.clone()), over_views))
+            }
+            Term::Eq(Type::Bool, test, outcome) => {
+                let Term::Bool(outcome) = **outcome else {
+                    return None;
+                };
+                let Term::Prim(Prim::Cmp(op, ty), operands) = &**test else {
+                    return None;
+                };
+                let [a, b] = operands.as_slice() else {
+                    return None;
+                };
+                let positive = op.claim(Term::view(*ty, a.clone()), Term::view(*ty, b.clone()));
+                let reflected = if outcome {
+                    positive
+                } else {
+                    self.prelude.not_prop(positive)
+                };
+                let bridged = Proof::implies_elim(
+                    Proof::Axiom(Axiom::CmpReflect((**test).clone(), outcome)),
+                    proof.clone(),
+                );
+                Some((bridged, reflected))
+            }
+            _ => None,
+        }
+    }
+
+    /// What the arithmetic procedure says of a goal it could not prove, for
+    /// a diagnostic: the values it found that satisfy the arithmetic facts
+    /// and violate the goal, or the budget that ran out; nothing when the
+    /// goal is not one it reads or it has neither.
+    pub(super) fn arithmetic_failure(
+        &mut self,
+        normal: &Term,
+        known: &super::solve::Known,
+    ) -> Option<ArithmeticFailure> {
+        let Err(Some(gave_up)) = self.by_arithmetic(normal, known) else {
+            return None;
+        };
+        if let Counterexample::Found(assignment) = gave_up.counterexample {
+            if assignment.is_empty() {
+                // A closed claim: false, unless it is `False` itself, which
+                // facts the procedure does not read may still prove.
+                if *normal == self.prelude.falsehood_prop() {
+                    return None;
+                }
+                return Some(ArithmeticFailure::Counterexample(
+                    "it is false as it stands".into(),
+                ));
+            }
+            // The point is a counterexample only when every atom is one
+            // the procedure models in full: a name, a variable or a field
+            // of one, or a quotient or remainder by a literal over names,
+            // `(lo + hi) / 2`, which the division facts pin down. An atom
+            // that stands for something the procedure cannot read, the
+            // view of a wrapped result or of a call, took any value in the
+            // point, and the point says nothing about the claim; then
+            // there is no counterexample to show. The names come first, in
+            // source spelling; the view of a literal is the literal and is
+            // not shown.
+            let is_literal_view = |atom: &Term| {
+                matches!(atom, Term::Prim(Prim::View(_), operands)
+                    if matches!(operands.as_slice(), [literal] if literal.machine_value().is_some()))
+            };
+            let atoms: Vec<&Term> = assignment
+                .iter()
+                .map(|(atom, _)| atom)
+                .filter(|atom| !is_literal_view(atom))
+                .collect();
+            if atoms.is_empty() || !atoms.iter().all(|atom| source_level(atom)) {
+                return None;
+            }
+            let mut parts: Vec<String> = Vec::new();
+            for names_first in [true, false] {
+                for (atom, value) in &assignment {
+                    if is_literal_view(atom) || is_name(atom) != names_first {
+                        continue;
+                    }
+                    // A name reads bare, `lo = 5`; anything longer is
+                    // quoted.
+                    let text = self.show(atom);
+                    let bare = text
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.');
+                    if bare {
+                        parts.push(format!("{text} = {value}"));
+                    } else {
+                        parts.push(format!("`{text}` = {value}"));
+                    }
+                }
+            }
+            return Some(ArithmeticFailure::Counterexample(format!(
+                "it fails when {}, which the arithmetic facts known here allow",
+                parts.join(", ")
+            )));
+        }
+        match gave_up.reason {
+            arith::Reason::Budget { name, limit } => Some(ArithmeticFailure::Budget(format!(
+                "the arithmetic procedure ran out of its `{name}` budget of {limit} before it could decide this"
+            ))),
+            _ => None,
+        }
     }
 
     /// `L0235`: the obligation was not discharged. The premise is written
@@ -703,41 +987,51 @@ impl Env<'_> {
         let known = self.knowledge();
         let (normal, _) = self.normalize(&goal, &known.definitions);
         let (normal, _) = self.literal_views(&normal);
-        if let Some(counterexample) = self.counterexample(&normal, &known) {
-            diagnostic = diagnostic.note(counterexample);
+        if let Some(failure) = self.arithmetic_failure(&normal, &known) {
+            diagnostic = diagnostic.note(failure.note());
         }
         diagnostic = diagnostic.note(format!(
             "a fact in scope stating `{stated}`, or `prove!({stated});` just before this, is what is needed"
         ));
         self.diagnostics.push(diagnostic);
     }
+}
 
-    /// What the arithmetic procedure found against the premise: values of
-    /// the operands that satisfy every fact and violate it, when it has
-    /// them.
-    fn counterexample(&mut self, goal: &Term, known: &super::solve::Known) -> Option<String> {
-        let (scratch, _) = self.arithmetic_context(known);
-        let gave_up = arith::prove(&scratch, Some(self.prelude), goal, &Budget::default()).err()?;
-        let Counterexample::Found(assignment) = gave_up.counterexample else {
-            return None;
-        };
-        if assignment.is_empty() {
-            return Some("it is false as it stands".into());
+/// A variable, or a field of one, as a term of `Int`: the view of one, or
+/// one of `Int` itself.
+fn is_name(atom: &Term) -> bool {
+    fn path(term: &Term) -> bool {
+        match term {
+            Term::Free(_) => true,
+            Term::Proj(target, _) => path(target),
+            _ => false,
         }
-        let is_literal_view = |atom: &Term| {
-            matches!(atom, Term::Prim(Prim::View(_), operands)
-                if matches!(operands.as_slice(), [literal] if literal.machine_value().is_some()))
-        };
-        let parts: Vec<String> = assignment
-            .into_iter()
-            .filter(|(atom, _)| !is_literal_view(atom))
-            .map(|(atom, value)| format!("{} = {value}", self.show(&atom)))
-            .collect();
-        if parts.is_empty() {
-            return None;
-        }
-        Some(format!("a counterexample: {}", parts.join(", ")))
     }
+    match atom {
+        Term::Prim(Prim::View(_), operands) => matches!(operands.as_slice(), [x] if path(x)),
+        other => path(other),
+    }
+}
+
+/// Whether an atom of the arithmetic procedure is one it models in full: a
+/// name, or a quotient or remainder by a literal of a linear form over
+/// names and literals.
+fn source_level(atom: &Term) -> bool {
+    fn linear(term: &Term) -> bool {
+        match term {
+            Term::Int(_) => true,
+            Term::Prim(Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntNeg, operands) => {
+                operands.iter().all(linear)
+            }
+            Term::Prim(Prim::IntDiv | Prim::IntRem, operands) => {
+                matches!(operands.as_slice(), [dividend, Term::Int(_)] if linear(dividend))
+            }
+            other => is_name(other),
+        }
+    }
+    is_name(atom)
+        || matches!(atom, Term::Prim(Prim::IntDiv | Prim::IntRem, operands)
+            if matches!(operands.as_slice(), [dividend, Term::Int(_)] if linear(dividend)))
 }
 
 /// What an operator computes, for a message.

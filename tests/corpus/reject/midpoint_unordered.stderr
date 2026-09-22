@@ -1,0 +1,17 @@
+error[L0235]: `-` on `u32` may overflow, and `midpoint` promises no_panic
+ --> tests/corpus/reject/midpoint_unordered.lc:6:20
+  |
+6 |     let half = (hi - lo) / 2; //~ error: L0235 `-` on `u32` may overflow, and `midpoint` promises no_panic
+  |                    ^
+  |
+  = note: the difference `hi as Int - lo as Int` must be at least 0, and nothing known here shows it
+  = note: it fails when hi = 0, lo = 1, which the arithmetic facts known here allow
+  = note: a fact in scope stating `0 <= hi as Int - lo as Int`, or `prove!(0 <= hi as Int - lo as Int);` just before this, is what is needed
+error[L0230]: cannot show `mid == (lo + hi) / 2`
+  --> tests/corpus/reject/midpoint_unordered.lc:16:5
+   |
+16 |     prove!(mid as Int == (lo as Int + hi as Int) / 2) //~ error: L0230 cannot show `mid == (lo + hi) / 2`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: known here: `sum: mid == lo + half`
+   = note: it fails when mid = 2, lo = 2, half = 0, hi = 0, `(lo + hi) / 2` = 1, `(lo + hi) % 2` = 0, which the arithmetic facts known here allow

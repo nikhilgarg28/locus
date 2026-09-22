@@ -23,6 +23,7 @@ use crate::kernel::{
 };
 use crate::source::Span;
 
+use super::arithmetic::ArithmeticFailure;
 use super::env::{Env, Fact};
 use super::solve::{Definition, Known, STEP_LIMIT, Step, Test, forward};
 
@@ -102,7 +103,16 @@ impl Env<'_> {
             diagnostic.note(format!("known here: {}", list.join(", ")))
         };
 
-        for note in self.bridge(&normal, &known) {
+        // What the arithmetic procedure says: values that break the claim,
+        // after which nothing linear would fill it, or a budget that ran
+        // out; then what the removed search would have done.
+        let (linear, _) = self.literal_views(&normal);
+        let failure = self.arithmetic_failure(&linear, &known);
+        if let Some(failure) = &failure {
+            diagnostic = diagnostic.note(failure.note());
+        }
+        let refuted = matches!(failure, Some(ArithmeticFailure::Counterexample(_)));
+        for note in self.bridge(&normal, &known, refuted) {
             diagnostic = diagnostic.note(note);
         }
         self.diagnostics.push(diagnostic);
@@ -127,14 +137,26 @@ impl Env<'_> {
 
     /// The notes about the removed tiers: the counterexample when there is
     /// one, otherwise the explicit form that is accepted, or the kind of
-    /// step that is missing.
-    fn bridge(&mut self, normal: &Term, known: &Known) -> Vec<String> {
+    /// step that is missing. With `refuted`, the arithmetic procedure has
+    /// already shown values that break the claim, and only a definition
+    /// left closed can still be what is missing.
+    fn bridge(&mut self, normal: &Term, known: &Known, refuted: bool) -> Vec<String> {
         let candidates = self.candidates(known);
         let (opened, _) = self.opened(normal, &known.definitions);
         let unfolds = self.program_calls(normal);
         let mut opened_candidates = Vec::new();
         for candidate in &candidates {
             opened_candidates.push(self.opened_candidate(candidate, &known.definitions));
+        }
+        let mut notes = Vec::new();
+
+        // Unfolding without being asked.
+        if let Some(form) = self.by_unfolding(normal, &opened, &opened_candidates) {
+            notes.push(form);
+            return notes;
+        }
+        if refuted {
+            return notes;
         }
         // A claim some byte refutes has no proof: the facts, definitions
         // opened, allow that byte.
@@ -144,13 +166,6 @@ impl Env<'_> {
             return vec![format!(
                 "it fails when `{unknown}` is {byte}, which the facts known here allow"
             )];
-        }
-        let mut notes = Vec::new();
-
-        // Unfolding without being asked.
-        if let Some(form) = self.by_unfolding(normal, &opened, &opened_candidates) {
-            notes.push(form);
-            return notes;
         }
         // Rewriting by an equation in scope.
         if let Some(form) = self.by_rewriting(normal, &candidates, &opened_candidates) {

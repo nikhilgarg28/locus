@@ -5,4 +5,4 @@ error[L0230]: cannot show `total <= 3`
    |                           ^^^^^^^^^^^^^^^^^^
    |
    = note: known here: `total == n`
-   = note: it fails when `total` is 4, which the facts known here allow
+   = note: it fails when total = 4, n = 4, which the arithmetic facts known here allow
