@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 81,
-  "savedAt": "2026-09-22T17:42:38.000Z",
+  "rev": 82,
+  "savedAt": "2026-09-22T17:55:18.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -2420,10 +2420,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Operations that may panic",
     "",
-    "A primitive operation that may panic is a statement of the check IR, not a term: let v = a + b at a machine type is checked by the trusted checker as a row of the kernel's table applied to executable arguments of the row's type, and v is defined by the equation v == add[T](a, b), whose meaning by op_model is the wrapped result, the one fact true in every build. The statement may carry evidence, one proof per premise of the row's panic condition as Row::fits states it over the views of the operands; the checker checks each proof against its premise and, for + - * and unary minus, then assumes the exact result view(v) == view(a) + view(b), justified by a derivation from op_exact and the two premises that the checker builds and checks like any other proof, so that nothing is assumed the kernel has not derived. A function that promises no_panic must give the evidence at every row that can panic, and the checker refuses the statement without it. After / and %, which panic in every build where their condition fails, the checker assumes the premises themselves whether or not evidence was given, because execution continues only past a divisor that was not zero; an overflow that only some builds check teaches nothing without evidence. Lowering never reads an operator on a machine type as a term and emits the statement after its operands in evaluation order; the printer writes the operator as written with Rust's precedence so the compiled program panics exactly where the interpreters do, and the interpreters have a mode for each build, panicking on every condition of the table by default and wrapping the overflow of + - * and unary minus in the other."
+    "A primitive operation that may panic is a statement of the check IR, not a term: let v = a + b at a machine type is checked by the trusted checker as a row of the kernel's table applied to executable arguments of the row's type, and v is defined by the equation v == add[T](a, b), whose meaning by op_model is the wrapped result, the one fact true in every build. The statement may carry evidence, one proof per premise of the row's panic condition as Row::fits states it over the views of the operands; the checker checks each proof against its premise and, for + - * and unary minus, then assumes the exact result view(v) == view(a) + view(b), justified by a derivation from op_exact and the two premises that the checker builds and checks like any other proof, so that nothing is assumed the kernel has not derived. A function that promises no_panic must give the evidence at every row that can panic, and the checker refuses the statement without it. After / and %, which panic in every build where their condition fails, the checker assumes the premises themselves whether or not evidence was given, because execution continues only past a divisor that was not zero; an overflow that only some builds check teaches nothing without evidence. Lowering never reads an operator on a machine type as a term and emits the statement after its operands in evaluation order; the printer writes the operator as written with Rust's precedence so the compiled program panics exactly where the interpreters do, and the interpreters have a mode for each build, panicking on every condition of the table by default and wrapping the overflow of + - * and unary minus in the other.",
+    "",
+    "## Loops are lowered to state",
+    "",
+    "Lowering treats a loop as it treats a branch that assigns. It computes over binding identities the set of bindings declared outside the loop that its body assigns, and for a while those its condition assigns too, in declaration order, and rejects a tree that names any other set. That tuple is the state of the check IR's loop or for. The entry supplies the versions current before the loop, the body sees the fresh versions the tree names for its state, every continue and the end of the body supply the versions current at that point, and a break supplies them followed by its value when the loop is a loop. The result is the tuple of the versions after the loop, plus the value, and after the loop each version and the value are bound by projection, so nothing is known of a carried binding afterwards but its type and what the value says. A while is a loop whose body evaluates the condition and matches on it, breaking on false and continuing after the body on true. The simplified bounded for rests on the state no longer depending on the index, which was the only thing the ordered proof served: an empty range runs no pass and the checker, both interpreters, and compiled Rust agree on that, so no order of the bounds is asked, the body gets lo \u003c= i and i \u003c hi, or i \u003c= hi for an inclusive range, afresh each pass over the views of any machine integer type, and break may leave the for with the state as its result. No loop lowers to a kernel term any more; the kernel's for term is unchanged and no longer produced."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T17:42:04.000Z"
+   "updated": "2026-09-22T17:55:18.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7813,23 +7817,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t295",
    "n": 179,
    "title": "M3 · Rust's loops over let mut; the state-passing loop and the bounded for are removed",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n- The assigned set for loops: a let mut inside the body is not loop state; an assignment in a while condition is; a &mut call in the condition is, once O3 lands.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September (rebased over E3, E9, E6). loop, while, for over a range of any machine type with ..=, break with a value from loop, continue; the old state-passing forms are reported with L0234 and the new spelling. The loop state is the tuple of outer bindings the body (or a while condition) assigns, computed by lowering; the bounded For of the check IR lost its ordered proof and index-dependent state, gained inclusive and break. No loop lowers to a kernel term any more. lock.lc keeps run by carrying (lock, evidence) as one let mut tuple, an M2-legal program; the tracked spelling is M4. The extended random run found a real lower-versus-erase disagreement (an effectful argument of a dropped lemma call), fixed in erase.rs. The while exit fact is not exported after the loop until M4.\n\nLane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n- The assigned set for loops: a let mut inside the body is not loop state; an assignment in a while condition is; a &mut call in the condition is, once O3 lands.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:13:31.000Z"
+   "updated": "2026-09-22T17:55:18.000Z"
   },
   {
    "id": "t296",
    "n": 180,
    "title": "M4 · Tracked evidence: let mut evidence, invalidated by assignment, refreshed explicitly",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179), E1 (LOC-167).\nUnblocks: O3 (LOC-184).\nCovers: LOC-16.\n\nScope. Assigning to a variable invalidates tracked evidence that mentions it; using it before a refresh is an error shaped like use after move. ok = _; or ok = proof; refreshes. Around a loop it must hold on entry and at every continue and at the end of the body, and is known after.\n\nTests.\n- The first four cases of M0 as named tests.\n- The flow analysis is tested as untrusted: typed trees built by hand that skip a refresh are rejected by the checker of the check IR, not by the elaborator.\n- run from the 32-bit lock checks, runs, and compiles; the lock file is complete.\n\nDone when. The third milestone: a loop that carries a proof, with no invariant construct.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T17:55:18.000Z"
   },
   {
    "id": "t297",
@@ -7840,7 +7844,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179).\nUnblocks: R4 (LOC-189).\nCovers: LOC-93, LOC-92.\n\nScope. return lowers to the block ending of M1. ! is the type of return, break, continue, and the panicking forms, and coerces to any type.\n\nTests.\n- A return inside a loop inside a branch, three ways.\n- Evidence owed at an early return is reported at the return.\n- Code after a never-typed expression is reported as unreachable, as rustc would warn.\n\nDone when. Early exit works as in Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:13:17.000Z"
+   "updated": "2026-09-22T17:55:18.000Z"
   },
   {
    "id": "t298",
@@ -7851,7 +7855,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Ownership. Wave 8.\nDepends on: M2 (LOC-178), S4 (LOC-157).\nUnblocks: O3 (LOC-184).\nCovers: LOC-89, LOC-25, LOC-141, LOC-99.\n\nScope. Values move by default. Copy, Clone, PartialEq, Eq, and Debug by derive only. Types with no runtime form are always Copy. Use after move is an error; assignment reinitialises. A proposition in a body cannot mention a moved local. PartialEq is derivable only for a type with no logic-only data at any depth.\n\nTests.\n- rustc as the oracle, for runtime uses only: each program rejected for using a moved runtime value, printed as Rust through a test hook that skips the move check, is also rejected by rustc with E0382. A program rejected only because a proposition or erased expression mentions a moved local has no counterpart in the generated Rust, where that use is gone; those are tested as Locus rejections alone.\n- Every accepted program compiles, which the runner already enforces.\n- The fifth case of M0.\n\nDone when. Locus is never more permissive than rustc about moves, and the generated Rust never surprises its compiler.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:34:29.000Z"
+   "updated": "2026-09-22T17:55:18.000Z"
   },
   {
    "id": "t299",
