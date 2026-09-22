@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 85,
-  "savedAt": "2026-09-22T19:37:12.000Z",
+  "rev": 86,
+  "savedAt": "2026-09-22T19:45:50.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7762,12 +7762,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t290",
    "n": 174,
    "title": "E8 · Logic-only types and the one erasure rule: Ghost\u003cT>, snapshot!, erased positions",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 7.\nDepends on: E5 (LOC-171), E2 (LOC-168).\nUnblocks: R4 (LOC-189).\nCovers: LOC-97, LOC-81, LOC-141.\n\nScope. Two rules that must not be confused. An erased result: a position is erased exactly when its type has no runtime form, so the evidence a call returns vanishes and the call stays. An erasable computation: a call is removed only if its result is logic-only, it promises terminates, no_panic, and no_io, and it takes no &mut to runtime storage. An expression in a logic-only context, such as the argument of snapshot!, the right side of a let of type Int, or a formula, must be an erasable computation throughout, and is rejected otherwise. Ghost\u003cT> is built by snapshot!(e). Seq\u003cT> is proposed to leave the core: no acceptance example needs it and it brings a theory of its own.\n\nTests.\n- A pure call in a logic-only context: accepted, and absent from the generated Rust.\n- A call that may panic in a logic-only context: rejected, naming the missing promise. The same for one that may not terminate, and one that does I/O.\n- An ordinary runtime call that returns only evidence and may panic or loop: accepted, kept in the generated Rust, its result erased; the three-way comparison sees its panic.\n- A call with a logic-only result and a &mut parameter to runtime storage: kept. This case is written now and enabled by O3.\n- The generated Rust of a file using Ghost and Int holds nothing of them but markers, by golden file, and the erased check rejects a hand-built erased tree that keeps a logic-only value.\n\nDone when. Specifications can carry values the program never computes.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:34:29.000Z"
+   "updated": "2026-09-22T19:45:50.000Z"
   },
   {
    "id": "t291",
@@ -7850,34 +7850,34 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t298",
    "n": 182,
    "title": "O1 · Moves, and derive with a closed list",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Ownership. Wave 8.\nDepends on: M2 (LOC-178), S4 (LOC-157).\nUnblocks: O3 (LOC-184).\nCovers: LOC-89, LOC-25, LOC-141, LOC-99.\n\nScope. Values move by default. Copy, Clone, PartialEq, Eq, and Debug by derive only. Types with no runtime form are always Copy. Use after move is an error; assignment reinitialises. A proposition in a body cannot mention a moved local. PartialEq is derivable only for a type with no logic-only data at any depth.\n\nTests.\n- rustc as the oracle, for runtime uses only: each program rejected for using a moved runtime value, printed as Rust through a test hook that skips the move check, is also rejected by rustc with E0382. A program rejected only because a proposition or erased expression mentions a moved local has no counterpart in the generated Rust, where that use is gone; those are tested as Locus rejections alone.\n- Every accepted program compiles, which the runner already enforces.\n- The fifth case of M0.\n\nDone when. Locus is never more permissive than rustc about moves, and the generated Rust never surprises its compiler.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. src/elab/moves.rs, interleaved with elaboration: values move by default, Copy types never; partial moves as rustc does them; branches join by union over live arms, loops report a move of an outer value at the back edge; assignment reinitialises. L0240 use of moved value (rustc wording), L0241 a proposition mentioning a moved local, L0242 and L0243 for the derive list and its field rules (PartialEq refused where logic-only data sits at any depth). The printer emits exactly the derives the source declares. rustc as oracle: 15 rejected shapes, all E0382 when printed with the analysis skipped. Cost of the rule: lock32_step's (next, prove!(next.failures \u003c= 3)) needed Copy on Lock, since the tuple moved next before the claim named it.\n\nLane: Ownership. Wave 8.\nDepends on: M2 (LOC-178), S4 (LOC-157).\nUnblocks: O3 (LOC-184).\nCovers: LOC-89, LOC-25, LOC-141, LOC-99.\n\nScope. Values move by default. Copy, Clone, PartialEq, Eq, and Debug by derive only. Types with no runtime form are always Copy. Use after move is an error; assignment reinitialises. A proposition in a body cannot mention a moved local. PartialEq is derivable only for a type with no logic-only data at any depth.\n\nTests.\n- rustc as the oracle, for runtime uses only: each program rejected for using a moved runtime value, printed as Rust through a test hook that skips the move check, is also rejected by rustc with E0382. A program rejected only because a proposition or erased expression mentions a moved local has no counterpart in the generated Rust, where that use is gone; those are tested as Locus rejections alone.\n- Every accepted program compiles, which the runner already enforces.\n- The fifth case of M0.\n\nDone when. Locus is never more permissive than rustc about moves, and the generated Rust never surprises its compiler.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T17:55:28.000Z"
+   "updated": "2026-09-22T19:45:50.000Z"
   },
   {
    "id": "t299",
    "n": 183,
    "title": "O2 · Visibility, the export boundary, and locus build",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:34:29.000Z"
+   "updated": "2026-09-22T19:45:50.000Z"
   },
   {
    "id": "t300",
    "n": 184,
    "title": "O3 · References as parameters: &T and &mut T, path arguments, disjointness, old!",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 10.\nDepends on: O1 (LOC-182), M4 (LOC-180).\nUnblocks: O4 (LOC-185).\nCovers: LOC-76, LOC-81.\n\nScope. A &mut parameter lowers to a value passed in and a new version passed out. Arguments are paths. Two arguments may not overlap. old!(x) names the entry value. Matching through & binds only Copy fields.\n\nTests.\n- rustc as the oracle for rejected aliasing of runtime values (E0499, E0502, E0506).\n- The sixth case of M0, and the eighth: whatever rule is decided for a panic that unwinds past a protected value behind &mut, a rejected file shows it.\n- The mutating-call case of E8 is enabled.\n- The generator of R1 emits calls with &mut.\n- A field that evidence in its struct depends on cannot be lent: &mut percent.value is rejected by lowering, and &mut percent is accepted.\n- A panic carries the values of the &mut parameters at that moment, in both interpreters and in the compiled harness, which reads the arguments after catch_unwind. A callee that writes and then panics, called directly and through a caller that lent a field of its own &mut parameter.\n\nDone when. Tier 0 of references is complete.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:13:31.000Z"
+   "updated": "2026-09-22T19:45:50.000Z"
   },
   {
    "id": "t301",
