@@ -6,6 +6,8 @@ use super::defs::Prelude;
 use super::depth::check_depth;
 use super::error::KernelError;
 use super::eval::{Evaluator, is_plain_data};
+use super::int::Integer;
+use super::machine::MachineInt;
 use super::term::{Axiom, ForLoop, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
 /// The kernel's only comparison of terms: equality up to renaming of bound
@@ -26,6 +28,7 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Nat(l), Term::Nat(r)) => l == r,
         // A number has one representation, so this is equality of numbers.
         (Term::Int(l), Term::Int(r)) => l == r,
+        (Term::Machine(lt, lv), Term::Machine(rt, rv)) => lt == rt && lv == rv,
         (Term::Prim(lp, la), Term::Prim(rp, ra)) => lp == rp && all(la, ra),
         (Term::Eq(lt, ll, lr), Term::Eq(rt, rl, rr)) => {
             same_type(lt, rt) && same(ll, rl) && same(lr, rr)
@@ -83,6 +86,7 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
         | (Type::Nat, Type::Nat)
         | (Type::Int, Type::Int)
         | (Type::Prop, Type::Prop) => true,
+        (Type::Machine(l), Type::Machine(r)) => l == r,
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
         (Type::Struct(l), Type::Struct(r)) => l == r,
@@ -100,6 +104,9 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
         Type::Bool | Type::U8 | Type::Nat | Type::Int | Type::Prop => Ok(()),
+        // `u8` is `Type::U8` and nothing else, so that a type has one form.
+        Type::Machine(MachineInt::U8) => Err(KernelError::MachineFormOfU8),
+        Type::Machine(_) => Ok(()),
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
         Type::Tuple(fields) => check_telescope(ctx, fields),
         Type::Struct(id) => ctx
@@ -146,6 +153,7 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
         Term::U8(_) => Ok(Type::U8),
         Term::Nat(_) => ghost_former(mode, &Type::Nat).map(|()| Type::Nat),
         Term::Int(_) => ghost_former(mode, &Type::Int).map(|()| Type::Int),
+        Term::Machine(..) => type_of_machine(term),
         Term::Prim(..) => type_of_prim(ctx, term, mode),
         Term::Eq(..) => type_of_eq(ctx, term, mode),
         Term::Implies(..) => type_of_implies(ctx, term, mode),
@@ -177,6 +185,23 @@ fn type_of_free(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
     Ok(ty.clone())
 }
 
+/// A machine integer literal is runtime data in either mode. It is a term
+/// only when its value lies in the range of its type, and only at a type
+/// other than `u8`, whose literals are `Term::U8`.
+#[inline(never)]
+fn type_of_machine(term: &Term) -> Result<Type, KernelError> {
+    let Term::Machine(ty, value) = term else {
+        unreachable!("dispatched on this variant")
+    };
+    if *ty == MachineInt::U8 {
+        return Err(KernelError::MachineFormOfU8);
+    }
+    if !ty.contains(value) {
+        return Err(KernelError::OutOfRange(term.clone()));
+    }
+    Ok(Type::Machine(*ty))
+}
+
 #[inline(never)]
 fn type_of_prim(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
     let Term::Prim(prim, arguments) = term else {
@@ -190,7 +215,7 @@ fn type_of_prim(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
         });
     }
     ghost_former(mode, &result)?;
-    for (argument, parameter) in arguments.iter().zip(parameters) {
+    for (argument, parameter) in arguments.iter().zip(&parameters) {
         expect_type(ctx, argument, parameter, mode)?;
     }
     Ok(result)
@@ -627,28 +652,42 @@ fn expect_arm_count(arms: &[ProofArm], variants: usize) -> Result<(), KernelErro
     }
 }
 
-fn prim_signature(prim: Prim) -> (&'static [Type], Type) {
+/// The parameter types and the result type of a primitive.
+fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
     match prim {
-        Prim::WrappingAdd | Prim::WrappingSub => (&[Type::U8, Type::U8], Type::U8),
-        Prim::U8Eq | Prim::U8Lt | Prim::U8Le => (&[Type::U8, Type::U8], Type::Bool),
-        Prim::ToNat => (&[Type::U8], Type::Nat),
-        Prim::OfNat => (&[Type::Nat], Type::U8),
-        Prim::Succ => (&[Type::Nat], Type::Nat),
-        Prim::NatAdd => (&[Type::Nat, Type::Nat], Type::Nat),
+        Prim::WrappingAdd | Prim::WrappingSub => (vec![Type::U8, Type::U8], Type::U8),
+        Prim::U8Eq | Prim::U8Lt | Prim::U8Le => (vec![Type::U8, Type::U8], Type::Bool),
+        Prim::ToNat => (vec![Type::U8], Type::Nat),
+        Prim::OfNat => (vec![Type::Nat], Type::U8),
+        Prim::Succ => (vec![Type::Nat], Type::Nat),
+        Prim::NatAdd => (vec![Type::Nat, Type::Nat], Type::Nat),
         Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntDiv | Prim::IntRem => {
-            (&[Type::Int, Type::Int], Type::Int)
+            (vec![Type::Int, Type::Int], Type::Int)
         }
-        Prim::IntNeg => (&[Type::Int], Type::Int),
-        Prim::IntLe => (&[Type::Int, Type::Int], Type::Prop),
+        Prim::IntNeg => (vec![Type::Int], Type::Int),
+        Prim::IntLe => (vec![Type::Int, Type::Int], Type::Prop),
+        Prim::View(ty) => (vec![Type::machine(ty)], Type::Int),
+        Prim::Wrap(ty) => (vec![Type::Int], Type::machine(ty)),
+        Prim::Cast(from, to) => (vec![Type::machine(from)], Type::machine(to)),
     }
 }
 
 /// Native evaluation of a primitive applied to literals. This is the
-/// implementation that must agree with the `u8` model, and with the integers
-/// as a model of the `Int` axioms. `int_le` is a proposition and has no
-/// value; `evaluate` decides it.
+/// implementation that must agree with the `u8` model, with the integers
+/// as a model of the `Int` axioms, and with the machine integers as a model
+/// of the axioms about `view`, `wrap`, and `cast`. `int_le` is a
+/// proposition and has no value; `evaluate` decides it.
 pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
+    // A machine literal of the type the primitive expects, as a number.
+    let machine = |ty: MachineInt, term: &Term| -> Option<Integer> {
+        term.machine_value()
+            .and_then(|(found, value)| (found == ty).then_some(value))
+    };
     Some(match (prim, arguments) {
+        (Prim::View(ty), [x]) => Term::Int(machine(ty, x)?),
+        (Prim::Wrap(ty), [Term::Int(n)]) => Term::machine(ty, ty.wrap(n)),
+        // `x as T` is `wrap(T)` of the value of `x`, by `cast_def`.
+        (Prim::Cast(from, to), [x]) => Term::machine(to, to.wrap(&machine(from, x)?)),
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
         (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
         (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
@@ -706,7 +745,13 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::IntRemLowerNeg(..)
         | Axiom::IntRemUpperNeg(..)
         | Axiom::IntRemNonneg(..)
-        | Axiom::IntRemNonpos(..) => Some(Type::Int),
+        | Axiom::IntRemNonpos(..)
+        | Axiom::ViewWrap(..)
+        | Axiom::WrapPeriod(..) => Some(Type::Int),
+        Axiom::ViewLower(ty, _)
+        | Axiom::ViewUpper(ty, _)
+        | Axiom::WrapView(ty, _)
+        | Axiom::CastDef(ty, _, _) => Some(Type::machine(*ty)),
         Axiom::Reflect(..) => None,
     };
     if let Some(expected) = &expected {
@@ -830,6 +875,32 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         Axiom::IntRemNonpos(a, b) => {
             Term::implies(le(a.clone(), Term::int(0)), le(rem(a, b), Term::int(0)))
         }
+        // The model of a machine type T over Int. The two round trips and
+        // the period say wrap is reduction modulo 2^bits into [min, max].
+        Axiom::ViewLower(ty, x) => le(Term::Int(ty.min()), Term::view(ty, x)),
+        Axiom::ViewUpper(ty, x) => le(Term::view(ty, x), Term::Int(ty.max())),
+        Axiom::WrapView(ty, x) => Term::eq(
+            Type::machine(ty),
+            Term::wrap(ty, Term::view(ty, x.clone())),
+            x,
+        ),
+        Axiom::ViewWrap(ty, n) => Term::implies(
+            le(Term::Int(ty.min()), n.clone()),
+            Term::implies(
+                le(n.clone(), Term::Int(ty.max())),
+                int_eq(Term::view(ty, Term::wrap(ty, n.clone())), n),
+            ),
+        ),
+        Axiom::WrapPeriod(ty, n) => Term::eq(
+            Type::machine(ty),
+            Term::wrap(ty, add(n.clone(), Term::Int(ty.modulus()))),
+            Term::wrap(ty, n),
+        ),
+        Axiom::CastDef(from, to, x) => Term::eq(
+            Type::machine(to),
+            Term::cast(from, to, x.clone()),
+            Term::wrap(to, Term::view(from, x)),
+        ),
     })
 }
 

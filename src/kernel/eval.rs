@@ -65,9 +65,12 @@ impl<'d> Evaluator<'d> {
 
     fn eval_form(&mut self, term: &Term) -> Result<Term, KernelError> {
         match term {
-            Term::Bool(_) | Term::U8(_) | Term::Nat(_) | Term::Int(_) | Term::Fn(_) => {
-                Ok(term.clone())
-            }
+            Term::Bool(_)
+            | Term::U8(_)
+            | Term::Nat(_)
+            | Term::Int(_)
+            | Term::Machine(..)
+            | Term::Fn(_) => Ok(term.clone()),
             // A proof is never inspected, so its contents are dropped. Keeping
             // them would let a loop's state grow with every iteration, since
             // each state's proofs mention the state before it.
@@ -214,7 +217,7 @@ fn stuck(term: &Term) -> KernelError {
 pub(super) fn is_plain_data(definitions: &Definitions, ty: &Type) -> bool {
     let all = |fields: &[Type]| fields.iter().all(|field| is_plain_data(definitions, field));
     match ty {
-        Type::Bool | Type::U8 | Type::Nat | Type::Int => true,
+        Type::Bool | Type::U8 | Type::Nat | Type::Int | Type::Machine(_) => true,
         Type::Prop | Type::Proof(_) | Type::Fn(..) => false,
         Type::Tuple(fields) => all(fields),
         Type::Struct(id) => definitions.struct_fields(*id).is_some_and(all),

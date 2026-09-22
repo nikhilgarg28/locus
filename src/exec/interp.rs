@@ -277,6 +277,9 @@ impl<'p> CheckInterpreter<'p> {
             }
             Term::Bool(flag) => Value::Bool(*flag),
             Term::U8(byte) => Value::U8(*byte),
+            Term::Machine(ty, _) => {
+                return stuck(format!("a {} value, which E5 brings here", ty.name()));
+            }
             // Skipped, not evaluated.
             Term::Proof(_) => Value::Proved,
             Term::Nat(_)

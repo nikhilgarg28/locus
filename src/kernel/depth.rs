@@ -67,6 +67,7 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             | Type::U8
             | Type::Nat
             | Type::Int
+            | Type::Machine(_)
             | Type::Prop
             | Type::Struct(_)
             | Type::Enum(_) => {}
@@ -84,6 +85,7 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             | Term::U8(_)
             | Term::Nat(_)
             | Term::Int(_)
+            | Term::Machine(..)
             | Term::Fn(_) => {}
             Term::Prim(_, terms) | Term::Struct(_, terms) | Term::Variant(_, _, terms) => {
                 out.extend(terms.iter().map(Node::Term));

@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 use locus::kernel::derive::{Chain, symm_at};
 use locus::kernel::{
-    Axiom, Context, Definitions, HypRef, Integer, KernelError, MAX_DEPTH, MAX_EVAL_DEPTH, Mode,
-    Prelude, Prim, Proof, Term, Type, check_proof, infer_proof, infer_term,
+    Axiom, Context, Definitions, HypRef, Integer, KernelError, MAX_DEPTH, MAX_EVAL_DEPTH,
+    MachineInt, Mode, Prelude, Prim, Proof, Term, Type, check_proof, infer_proof, infer_term,
 };
 
 #[path = "common/rng.rs"]
@@ -1467,10 +1467,16 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::IntRemUpperNeg(t(), t()),
         Axiom::IntRemNonneg(t(), t()),
         Axiom::IntRemNonpos(t(), t()),
+        Axiom::ViewLower(MachineInt::U8, t()),
+        Axiom::ViewUpper(MachineInt::U8, t()),
+        Axiom::WrapView(MachineInt::U8, t()),
+        Axiom::ViewWrap(MachineInt::U8, t()),
+        Axiom::WrapPeriod(MachineInt::U8, t()),
+        Axiom::CastDef(MachineInt::U8, MachineInt::U8, t()),
     ]
 }
 
-const AXIOMS: usize = 35;
+const AXIOMS: usize = 41;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1509,6 +1515,12 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::IntRemUpperNeg(..) => 32,
         Axiom::IntRemNonneg(..) => 33,
         Axiom::IntRemNonpos(..) => 34,
+        Axiom::ViewLower(..) => 35,
+        Axiom::ViewUpper(..) => 36,
+        Axiom::WrapView(..) => 37,
+        Axiom::ViewWrap(..) => 38,
+        Axiom::WrapPeriod(..) => 39,
+        Axiom::CastDef(..) => 40,
     }
 }
 
@@ -1611,7 +1623,7 @@ fn rule_index(proof: &Proof) -> usize {
     }
 }
 
-const PRIMS: [Prim; 16] = [
+const PRIMS: [Prim; 19] = [
     Prim::WrappingAdd,
     Prim::WrappingSub,
     Prim::U8Eq,
@@ -1628,6 +1640,9 @@ const PRIMS: [Prim; 16] = [
     Prim::IntLe,
     Prim::IntDiv,
     Prim::IntRem,
+    Prim::View(MachineInt::U8),
+    Prim::Wrap(MachineInt::U8),
+    Prim::Cast(MachineInt::U8, MachineInt::U8),
 ];
 
 fn prim_index(prim: Prim) -> usize {
@@ -1648,6 +1663,9 @@ fn prim_index(prim: Prim) -> usize {
         Prim::IntLe => 13,
         Prim::IntDiv => 14,
         Prim::IntRem => 15,
+        Prim::View(_) => 16,
+        Prim::Wrap(_) => 17,
+        Prim::Cast(..) => 18,
     }
 }
 

@@ -7,7 +7,8 @@
 //! in the kernel contract in `atlas.html`; the two must change together.
 //!
 //! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`,
-//! and `Int`, the integers of the logic, by axioms and native evaluation.
+//! `Int`, the integers of the logic, by axioms and native evaluation, and the
+//! model of each machine integer type over `Int`.
 
 mod check;
 mod classical;
@@ -18,6 +19,7 @@ pub mod derive;
 mod error;
 mod eval;
 mod int;
+mod machine;
 mod nat;
 mod term;
 pub mod theory;
@@ -34,6 +36,7 @@ pub use depth::MAX_DEPTH;
 pub use error::KernelError;
 pub use eval::MAX_EVAL_DEPTH;
 pub use int::Integer;
+pub use machine::MachineInt;
 pub use nat::{Natural, ParseNumberError};
 pub use term::{
     ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,

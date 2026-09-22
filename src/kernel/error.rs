@@ -100,6 +100,11 @@ pub enum KernelError {
     NotAnEquality(Term),
     NotAnImplication(Term),
     NotUniversal(Term),
+    /// `u8` has one spelling, `Type::U8` and `Term::U8`; the machine forms
+    /// at `MachineInt::U8` are not terms.
+    MachineFormOfU8,
+    /// A machine integer literal whose value is outside its type's range.
+    OutOfRange(Term),
 }
 
 impl fmt::Display for KernelError {
@@ -200,6 +205,8 @@ impl fmt::Display for KernelError {
             Self::NotUniversal(prop) => {
                 write!(f, "expected a proof of a universal claim, found {prop}")
             }
+            Self::MachineFormOfU8 => f.write_str("u8 is written u8, not as a machine form"),
+            Self::OutOfRange(term) => write!(f, "{term} is outside the range of its type"),
         }
     }
 }

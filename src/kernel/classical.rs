@@ -73,7 +73,8 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
         | Term::Bool(_)
         | Term::U8(_)
         | Term::Nat(_)
-        | Term::Int(_) => false,
+        | Term::Int(_)
+        | Term::Machine(..) => false,
         Term::Prim(_, terms)
         | Term::Tuple(_, terms)
         | Term::Struct(_, terms)

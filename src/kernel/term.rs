@@ -16,6 +16,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::int::Integer;
+use super::machine::MachineInt;
 use super::nat::Natural;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -72,6 +73,9 @@ pub enum Type {
     /// The integers of the logic. Like `Nat`, the type has no runtime
     /// representation, so it is ghost.
     Int,
+    /// A machine integer type other than `u8`, which is `Type::U8`; the
+    /// checker rejects `Machine(MachineInt::U8)`. Runtime data, like `u8`.
+    Machine(MachineInt),
     /// The type of propositions. Every value of this type is ghost.
     Prop,
     /// `@P`: the type of proofs of the proposition `P`. Ghost.
@@ -97,7 +101,30 @@ impl Type {
             Self::Prop | Self::Proof(_) | Self::Nat | Self::Int => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
-            Self::Bool | Self::U8 | Self::Tuple(_) | Self::Struct(_) | Self::Enum(_) => false,
+            Self::Bool
+            | Self::U8
+            | Self::Machine(_)
+            | Self::Tuple(_)
+            | Self::Struct(_)
+            | Self::Enum(_) => false,
+        }
+    }
+
+    /// The kernel type of a machine integer type: `Type::U8` for `u8`, and
+    /// `Type::Machine` for the other seven.
+    pub fn machine(ty: MachineInt) -> Self {
+        match ty {
+            MachineInt::U8 => Self::U8,
+            other => Self::Machine(other),
+        }
+    }
+
+    /// Which machine integer type this is, if any.
+    pub fn as_machine(&self) -> Option<MachineInt> {
+        match self {
+            Self::U8 => Some(MachineInt::U8),
+            Self::Machine(ty) => Some(*ty),
+            _ => None,
         }
     }
 
@@ -192,6 +219,7 @@ impl Type {
             | Self::U8
             | Self::Nat
             | Self::Int
+            | Self::Machine(_)
             | Self::Prop
             | Self::Struct(_)
             | Self::Enum(_) => self.clone(),
@@ -246,9 +274,18 @@ pub enum Prim {
     /// not a runtime comparison, and the only primitive order on `Int`:
     /// `a < b` is written `a + 1 <= b`.
     IntLe,
+    /// `T -> Int`: the mathematical value of a machine integer of type `T`.
+    View(MachineInt),
+    /// `Int -> T`: reduction into the range of `T`, modulo `2^bits`.
+    Wrap(MachineInt),
+    /// `S -> T`: what `as` between machine types compiles to; by axiom it
+    /// is `wrap(T)` of `view(S)`.
+    Cast(MachineInt, MachineInt),
 }
 
 impl Prim {
+    /// The name the kernel contract uses. A primitive that is instantiated
+    /// at a machine type is named without it; `Display` adds the type.
     pub fn name(self) -> &'static str {
         match self {
             Self::WrappingAdd => "wrapping_add",
@@ -267,6 +304,20 @@ impl Prim {
             Self::IntRem => "int_rem",
             Self::IntNeg => "int_neg",
             Self::IntLe => "int_le",
+            Self::View(_) => "view",
+            Self::Wrap(_) => "wrap",
+            Self::Cast(..) => "cast",
+        }
+    }
+}
+
+impl fmt::Display for Prim {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())?;
+        match self {
+            Self::View(ty) | Self::Wrap(ty) => write!(f, "[{}]", ty.name()),
+            Self::Cast(from, to) => write!(f, "[{}, {}]", from.name(), to.name()),
+            _ => Ok(()),
         }
     }
 }
@@ -354,6 +405,21 @@ pub enum Axiom {
     IntRemNonneg(Term, Term),
     /// `a <= 0 => a % b <= 0`
     IntRemNonpos(Term, Term),
+    // The model of each machine integer type `T` over `Int`: one schema,
+    // instantiated at the type the axiom carries. `view`, `wrap`, and `cast`
+    // stand for `view(T)`, `wrap(T)`, and `cast(S, T)`.
+    /// `min(T) <= view(x)`, for `x : T`
+    ViewLower(MachineInt, Term),
+    /// `view(x) <= max(T)`, for `x : T`
+    ViewUpper(MachineInt, Term),
+    /// `wrap(view(x)) ==[T] x`, for `x : T`
+    WrapView(MachineInt, Term),
+    /// `min(T) <= n => (n <= max(T) => view(wrap(n)) == n)`, for `n : Int`
+    ViewWrap(MachineInt, Term),
+    /// `wrap(n + 2^bits) ==[T] wrap(n)`, for `n : Int`
+    WrapPeriod(MachineInt, Term),
+    /// `cast(S, T)(x) ==[T] wrap(T)(view(S)(x))`, for `x : S`
+    CastDef(MachineInt, MachineInt, Term),
 }
 
 impl Axiom {
@@ -395,6 +461,12 @@ impl Axiom {
             Self::IntRemUpperNeg(..) => "int_rem_upper_neg",
             Self::IntRemNonneg(..) => "int_rem_nonneg",
             Self::IntRemNonpos(..) => "int_rem_nonpos",
+            Self::ViewLower(..) => "view_lower",
+            Self::ViewUpper(..) => "view_upper",
+            Self::WrapView(..) => "wrap_view",
+            Self::ViewWrap(..) => "view_wrap",
+            Self::WrapPeriod(..) => "wrap_period",
+            Self::CastDef(..) => "cast_def",
         }
     }
 
@@ -435,6 +507,12 @@ impl Axiom {
             Self::IntRemUpperNeg(a, b) => Self::IntRemUpperNeg(f(a), f(b)),
             Self::IntRemNonneg(a, b) => Self::IntRemNonneg(f(a), f(b)),
             Self::IntRemNonpos(a, b) => Self::IntRemNonpos(f(a), f(b)),
+            Self::ViewLower(ty, x) => Self::ViewLower(*ty, f(x)),
+            Self::ViewUpper(ty, x) => Self::ViewUpper(*ty, f(x)),
+            Self::WrapView(ty, x) => Self::WrapView(*ty, f(x)),
+            Self::ViewWrap(ty, n) => Self::ViewWrap(*ty, f(n)),
+            Self::WrapPeriod(ty, n) => Self::WrapPeriod(*ty, f(n)),
+            Self::CastDef(from, to, x) => Self::CastDef(*from, *to, f(x)),
         }
     }
 
@@ -453,7 +531,13 @@ impl Axiom {
             | Self::IntMulOne(a)
             | Self::IntLeRefl(a)
             | Self::IntLtIrrefl(a)
-            | Self::IntDivZero(a) => vec![a],
+            | Self::IntDivZero(a)
+            | Self::ViewLower(_, a)
+            | Self::ViewUpper(_, a)
+            | Self::WrapView(_, a)
+            | Self::ViewWrap(_, a)
+            | Self::WrapPeriod(_, a)
+            | Self::CastDef(_, _, a) => vec![a],
             Self::NatAddSucc(a, b)
             | Self::NatSuccInjective(a, b)
             | Self::WrappingAddModel(a, b)
@@ -491,6 +575,10 @@ pub enum Term {
     Nat(Natural),
     /// An `Int` literal, of arbitrary size and either sign.
     Int(Integer),
+    /// A literal of a machine integer type other than `u8`, whose literals
+    /// are `U8`. The value must lie in the range of the type: `Term::machine`
+    /// builds only such literals, and the checker rejects any other.
+    Machine(MachineInt, Integer),
     Prim(Prim, Vec<Term>),
     /// `a == b` at the given type.
     Eq(Type, Box<Term>, Box<Term>),
@@ -853,6 +941,51 @@ impl Term {
         Self::int_le(Self::int_add(left, Self::int(1)), right)
     }
 
+    /// The literal of a machine integer type: `U8` for `u8`, `Machine` for
+    /// the others. The value must be in the range of the type.
+    pub fn machine(ty: MachineInt, value: Integer) -> Self {
+        assert!(
+            ty.contains(&value),
+            "Term::machine: {value} is not a value of {}",
+            ty.name()
+        );
+        match ty {
+            MachineInt::U8 => {
+                let byte = value.to_i128().and_then(|v| u8::try_from(v).ok());
+                Self::U8(byte.expect("a value of u8 is a byte"))
+            }
+            other => Self::Machine(other, value),
+        }
+    }
+
+    /// The type and value of a well-formed machine integer literal, `U8`
+    /// included. A `Machine` literal out of range, or at `MachineInt::U8`,
+    /// is not a term and has no value.
+    pub fn machine_value(&self) -> Option<(MachineInt, Integer)> {
+        match self {
+            Self::U8(byte) => Some((MachineInt::U8, Integer::from(i128::from(*byte)))),
+            Self::Machine(ty, value) if *ty != MachineInt::U8 && ty.contains(value) => {
+                Some((*ty, value.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// `view(T)(x)`: the value of a machine integer as an `Int`.
+    pub fn view(ty: MachineInt, value: Term) -> Self {
+        Self::Prim(Prim::View(ty), vec![value])
+    }
+
+    /// `wrap(T)(n)`: an `Int` reduced into the range of `T`.
+    pub fn wrap(ty: MachineInt, number: Term) -> Self {
+        Self::Prim(Prim::Wrap(ty), vec![number])
+    }
+
+    /// `cast(S, T)(x)`: `x as T` for `x : S`.
+    pub fn cast(from: MachineInt, to: MachineInt, value: Term) -> Self {
+        Self::Prim(Prim::Cast(from, to), vec![value])
+    }
+
     /// A tuple value of the given tuple type.
     pub fn tuple(ty: &Type, values: Vec<Term>) -> Self {
         match ty {
@@ -1098,6 +1231,7 @@ impl Term {
             | Self::U8(_)
             | Self::Nat(_)
             | Self::Int(_)
+            | Self::Machine(..)
             | Self::Proof(_)
             | Self::Fn(_) => true,
             Self::Prim(_, arguments) => all(arguments),
@@ -1146,6 +1280,7 @@ impl Term {
             | Self::U8(_)
             | Self::Nat(_)
             | Self::Int(_)
+            | Self::Machine(..)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => None,
@@ -1203,6 +1338,7 @@ impl Term {
             | Self::U8(_)
             | Self::Nat(_)
             | Self::Int(_)
+            | Self::Machine(..)
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => self.clone(),
@@ -1267,7 +1403,9 @@ impl Term {
         match self {
             Self::Free(..) => self.rebind_free(depth, op),
             Self::Bound(..) => self.rebind_bound(depth, op),
-            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) => self.clone(),
+            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) | Self::Machine(..) => {
+                self.clone()
+            }
             Self::Prim(..) => self.rebind_prim(depth, op),
             Self::Eq(..) => self.rebind_eq(depth, op),
             Self::Implies(..) => self.rebind_implies(depth, op),
@@ -2058,6 +2196,7 @@ impl fmt::Display for Type {
             Self::U8 => f.write_str("u8"),
             Self::Nat => f.write_str("Nat"),
             Self::Int => f.write_str("Int"),
+            Self::Machine(ty) => f.write_str(ty.name()),
             Self::Prop => f.write_str("Prop"),
             Self::Proof(prop) => write!(f, "@{prop}"),
             Self::Tuple(fields) => {
@@ -2099,8 +2238,9 @@ impl fmt::Display for Term {
             Self::U8(value) => write!(f, "{value}"),
             Self::Nat(value) => write!(f, "{value}n"),
             Self::Int(value) => write!(f, "{value}i"),
+            Self::Machine(ty, value) => write!(f, "{value}{}", ty.name()),
             Self::Prim(prim, arguments) => {
-                write!(f, "{}(", prim.name())?;
+                write!(f, "{prim}(")?;
                 write_list(f, arguments)?;
                 f.write_str(")")
             }
