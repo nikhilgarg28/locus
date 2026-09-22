@@ -68,7 +68,7 @@ impl Env<'_> {
         let mut exprs = Vec::new();
         let mut tys: Vec<Type> = info.fields.iter().map(|field| field.ty.clone()).collect();
         for (index, (declared, value)) in info.fields.iter().zip(values).enumerate() {
-            let value = self.check(value, &tys[index].clone())?;
+            let value = self.argument(value, &tys[index].clone(), declared.ghost)?;
             let term = self.term(&value, span)?;
             for later in tys[index + 1..].iter_mut() {
                 *later = later.replace_var(declared.id, &term);
@@ -289,6 +289,22 @@ impl Env<'_> {
             let message = format!("`{}` has no field `{}`", info.name, name.text);
             return self.fail("L0210", message, name.span);
         };
+        // A `Ghost<T>` field is read only where nothing runs.
+        if info.fields[index].ghost && !self.reading() {
+            let shown = self.show_type(&info.fields[index].ty);
+            self.diagnostics.push(
+                crate::diagnostic::Diagnostic::error(
+                    "L0201",
+                    format!(
+                        "`{}` is a `Ghost<{shown}>`, which has no runtime form",
+                        self.text(expr.span)
+                    ),
+                    expr.span,
+                )
+                .note("a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field"),
+            );
+            return Err(());
+        }
         self.field(target, index, Some(name.text.clone()), expr.span)
     }
 
@@ -461,8 +477,9 @@ impl Env<'_> {
             .iter()
             .map(|binder| binder.ty.clone())
             .collect();
+        let ghosts: Vec<bool> = variant.payload.iter().map(|binder| binder.ghost).collect();
         let what = format!("`{}::{}`", info.name, variant.name);
-        let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &what, span)?;
+        let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &ghosts, &what, span)?;
         Ok(Value::new(
             Expr::Variant {
                 id: info.id,

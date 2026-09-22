@@ -1,0 +1,88 @@
+// A logic-only context never runs: the argument of `snapshot!`, the value
+// of a `let` of type `Ghost<T>` or `Int`, and a proposition. Every call in
+// one must be a function a proposition admits, and the error names the
+// promise it lacks. A `Ghost<T>` value, in turn, has no runtime form, and
+// is refused wherever something runs.
+
+fn may_loop(n: u8) -> u8 { n }
+
+#[terminates]
+fn may_panic(n: u8) -> u8 { n }
+
+#[terminates] #[no_panic]
+fn may_read(n: u8) -> u8 { n }
+
+fn in_snapshot(n: u8) -> u8 {
+    let g = snapshot!(may_loop(n)); //~ error: L0209 `may_loop` cannot appear in the argument of `snapshot!`: it does not promise terminates
+    n
+}
+
+fn in_ghost_let(n: u8) -> u8 {
+    let g: Ghost<u8> = may_panic(n); //~ error: L0209 `may_panic` cannot appear in the value of a `let` with no runtime form: it does not promise no_panic
+    n
+}
+
+fn in_int_let(n: u8) -> u8 {
+    let wide: Int = may_read(n) as Int; //~ error: L0209 `may_read` cannot appear in the value of a `let` with no runtime form: it does not promise no_io
+    n
+}
+
+fn in_formula(n: u8) -> Prop {
+    prop!(may_read(n) == n) //~ error: L0209 `may_read` cannot appear in a proposition: it does not promise no_io
+}
+
+fn takes_ghost(n: u8, cap: Ghost<u8>) -> u8 {
+    n
+}
+
+fn in_ghost_argument(n: u8) -> u8 {
+    takes_ghost(n, may_loop(n)) //~ error: L0209 `may_loop` cannot appear in a `Ghost<T>` argument: it does not promise terminates
+}
+
+// An operator that may panic is refused there as in a proposition.
+fn operator_in_snapshot(n: u8) -> u8 {
+    let g = snapshot!(n + 1); //~ error: L0236 `+` on `u8` may panic, on overflow, so it is not the argument of `snapshot!`
+    n
+}
+
+// A `Ghost<T>` value where something runs.
+fn named_at_runtime(n: u8) -> u8 {
+    let g: Ghost<u8> = snapshot!(n);
+    g //~ error: L0201 `g` is a `Ghost<u8>`, which has no runtime form
+}
+
+fn snapshot_at_runtime(n: u8) -> u8 {
+    snapshot!(n) //~ error: L0201 `snapshot!` builds a `Ghost<T>`, which has no runtime form
+}
+
+struct Historical {
+    value: Ghost<u8>,
+}
+
+fn field_at_runtime(h: Historical) -> u8 {
+    h.value //~ error: L0201 `h.value` is a `Ghost<u8>`, which has no runtime form
+}
+
+fn parameter_at_runtime(n: u8, cap: Ghost<u8>) -> u8 {
+    cap //~ error: L0201 `cap` is a `Ghost<u8>`, which has no runtime form
+}
+
+// Where `Ghost<T>` may not be written.
+fn as_result(n: u8) -> Ghost<u8> { //~ error: L0290 `Ghost<T>` cannot stand here
+    snapshot!(n)
+}
+
+fn in_tuple_type(n: u8) -> u8 {
+    let pair: (Ghost<u8>, u8) = (snapshot!(n), n); //~ error: L0290 `Ghost<T>` cannot stand here
+    n
+}
+
+fn two_arguments(n: u8) -> u8 {
+    let g: Ghost<u8, u8> = snapshot!(n); //~ error: L0200 `Ghost` takes one type argument
+    n
+}
+
+fn mutable(n: u8) -> u8 {
+    let mut g = snapshot!(n); //~ error: L0290 `let mut` of a `Ghost<T>` is not in Locus yet
+    n
+}

@@ -790,3 +790,32 @@ pub fn right_side_changes_the_place() -> FnItem {
         ),
     }
 }
+
+/// fn note(n: u8) -> u8 {
+///     let g: Ghost<u8> = snapshot!(n);
+///     n
+/// }
+///
+/// A `Ghost<T>` binding: `ghost` on its binder, its value a `Ghost` node,
+/// and the kernel type `u8`. Erasure leaves the `let` out.
+pub fn snapshot_note() -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let g = Binder::ghost("g", Type::U8);
+    FnItem {
+        name: "note".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: Type::U8,
+        body: block(
+            vec![Stmt::Let {
+                pattern: Pattern::Bind {
+                    binder: g,
+                    equation: HypId::fresh(),
+                    mutable: false,
+                },
+                value: Expr::Ghost(Box::new(Expr::var(&n))),
+            }],
+            Expr::var(&n),
+        ),
+    }
+}

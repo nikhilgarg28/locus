@@ -1,0 +1,94 @@
+error[L0209]: `may_loop` cannot appear in the argument of `snapshot!`: it does not promise terminates
+  --> tests/corpus/reject/ghost_contexts.lc:16:23
+   |
+16 |     let g = snapshot!(may_loop(n)); //~ error: L0209 `may_loop` cannot appear in the argument of `snapshot!`: it does not promise te...
+   |                       ^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `may_panic` cannot appear in the value of a `let` with no runtime form: it does not promise no_panic
+  --> tests/corpus/reject/ghost_contexts.lc:21:24
+   |
+21 |     let g: Ghost<u8> = may_panic(n); //~ error: L0209 `may_panic` cannot appear in the value of a `let` with no runtime form: it doe...
+   |                        ^^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `may_read` cannot appear in the value of a `let` with no runtime form: it does not promise no_io
+  --> tests/corpus/reject/ghost_contexts.lc:26:21
+   |
+26 |     let wide: Int = may_read(n) as Int; //~ error: L0209 `may_read` cannot appear in the value of a `let` with no runtime form: it d...
+   |                     ^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `may_read` cannot appear in a proposition: it does not promise no_io
+  --> tests/corpus/reject/ghost_contexts.lc:31:11
+   |
+31 |     prop!(may_read(n) == n) //~ error: L0209 `may_read` cannot appear in a proposition: it does not promise no_io
+   |           ^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0209]: `may_loop` cannot appear in a `Ghost<T>` argument: it does not promise terminates
+  --> tests/corpus/reject/ghost_contexts.lc:39:20
+   |
+39 |     takes_ghost(n, may_loop(n)) //~ error: L0209 `may_loop` cannot appear in a `Ghost<T>` argument: it does not promise terminates
+   |                    ^^^^^^^^^^^
+   |
+   = note: a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value
+error[L0236]: `+` on `u8` may panic, on overflow, so it is not the argument of `snapshot!`
+  --> tests/corpus/reject/ghost_contexts.lc:44:25
+   |
+44 |     let g = snapshot!(n + 1); //~ error: L0236 `+` on `u8` may panic, on overflow, so it is not the argument of `snapshot!`
+   |                         ^
+   |
+   = note: write `n as Int + 1 as Int` for the exact sum, or `n.wrapping_add(1)` for the wrapped one
+error[L0201]: `g` is a `Ghost<u8>`, which has no runtime form
+  --> tests/corpus/reject/ghost_contexts.lc:51:5
+   |
+51 |     g //~ error: L0201 `g` is a `Ghost<u8>`, which has no runtime form
+   |     ^
+   |
+   = note: a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field
+error[L0201]: `snapshot!` builds a `Ghost<T>`, which has no runtime form
+  --> tests/corpus/reject/ghost_contexts.lc:55:5
+   |
+55 |     snapshot!(n) //~ error: L0201 `snapshot!` builds a `Ghost<T>`, which has no runtime form
+   |     ^^^^^^^^
+   |
+   = note: write it where nothing runs: `let g: Ghost<T> = snapshot!(x);` or `let g = snapshot!(x);`, in a `Ghost<T>` parameter or field, or in a proposition
+error[L0201]: `h.value` is a `Ghost<u8>`, which has no runtime form
+  --> tests/corpus/reject/ghost_contexts.lc:63:5
+   |
+63 |     h.value //~ error: L0201 `h.value` is a `Ghost<u8>`, which has no runtime form
+   |     ^^^^^^^
+   |
+   = note: a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field
+error[L0201]: `cap` is a `Ghost<u8>`, which has no runtime form
+  --> tests/corpus/reject/ghost_contexts.lc:67:5
+   |
+67 |     cap //~ error: L0201 `cap` is a `Ghost<u8>`, which has no runtime form
+   |     ^^^
+   |
+   = note: a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field
+error[L0290]: `Ghost<T>` cannot stand here; as a result type, or inside another type, it is not in Locus yet
+  --> tests/corpus/reject/ghost_contexts.lc:71:24
+   |
+71 | fn as_result(n: u8) -> Ghost<u8> { //~ error: L0290 `Ghost<T>` cannot stand here
+   |                        ^^^^^^^^^
+   |
+   = note: `Ghost<T>` is the type of a `let`, a parameter, or a field: a logical value of type `T` that the program never computes
+error[L0290]: `Ghost<T>` cannot stand here; as a result type, or inside another type, it is not in Locus yet
+  --> tests/corpus/reject/ghost_contexts.lc:76:16
+   |
+76 |     let pair: (Ghost<u8>, u8) = (snapshot!(n), n); //~ error: L0290 `Ghost<T>` cannot stand here
+   |                ^^^^^^^^^
+   |
+   = note: `Ghost<T>` is the type of a `let`, a parameter, or a field: a logical value of type `T` that the program never computes
+error[L0200]: `Ghost` takes one type argument, `Ghost<T>`
+  --> tests/corpus/reject/ghost_contexts.lc:81:12
+   |
+81 |     let g: Ghost<u8, u8> = snapshot!(n); //~ error: L0200 `Ghost` takes one type argument
+   |            ^^^^^^^^^^^^^
+error[L0290]: `let mut` of a `Ghost<T>` is not in Locus yet; a snapshot is taken once, and a later one is another `let`
+  --> tests/corpus/reject/ghost_contexts.lc:86:9
+   |
+86 |     let mut g = snapshot!(n); //~ error: L0290 `let mut` of a `Ghost<T>` is not in Locus yet
+   |         ^^^^^

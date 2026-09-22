@@ -126,11 +126,14 @@ impl Env<'_> {
     ) -> Elab<(Vec<Binder>, Term)> {
         let mut binders = Vec::new();
         for parameter in parameters {
-            let ty = self.ty(&parameter.ty)?;
+            // A quantified variable exists only in the logic, where
+            // `Ghost<T>` is `T`.
+            let written = self.written(&parameter.ty)?;
             let binder = Binder {
                 id: VarId::fresh(),
                 name: parameter.name.text.clone(),
-                ty,
+                ty: written.ty,
+                ghost: written.ghost,
             };
             // A quantified variable exists only in the logic.
             self.declare(&binder, true, parameter.span)?;

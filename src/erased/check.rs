@@ -2,6 +2,13 @@
 //! `erase` emits must be well typed here, with no propositions and no
 //! dependency. A dangling reference to something that was not emitted, a
 //! marker where data belongs, or a mistake in a loop's state fails here.
+//!
+//! It is a second judge of erasure's rule for values with no runtime form:
+//! a `let` may not bind a name to a value of type `Ghost`, the erasure of
+//! a proposition, an `Int`, or a `Ghost<T>`, since `erase` leaves such a
+//! binding out and replaces every mention of it by the marker. A parameter
+//! or a field of that type is a position and is allowed; evidence, of type
+//! `Proved`, is bound as any value is.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -172,6 +179,11 @@ impl Checker<'_> {
                 ty,
                 mutable,
             } => {
+                if *ty == EType::Ghost {
+                    return fail(format!(
+                        "{name} is bound to a value with no runtime form, which erasure leaves out"
+                    ));
+                }
                 if found.is_some_and(|found| found != ty) {
                     return fail(format!("{name} is bound as {ty:?} to {found:?}"));
                 }

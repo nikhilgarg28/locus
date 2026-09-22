@@ -423,7 +423,7 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         Expr::Literal(..) | Expr::Int(_) => true,
         Expr::Var { id, .. } => locals.get(id).copied().unwrap_or(true),
         Expr::Tuple { fields, .. } => fields.iter().all(|field| determined(field, locals)),
-        Expr::Field { target, .. } => determined(target, locals),
+        Expr::Field { target, .. } | Expr::Ghost(target) => determined(target, locals),
         Expr::If {
             then_block,
             else_block,
@@ -939,6 +939,7 @@ impl Generator {
                     id: VarId::fresh(),
                     name: self.locals[slot].name.clone(),
                     ty: self.locals[slot].ty.clone(),
+                    ghost: false,
                 };
                 let determined = self.known[&self.locals[slot].id];
                 self.known.insert(version.id, determined);
@@ -1072,6 +1073,7 @@ impl Generator {
             id: VarId::fresh(),
             name: root.name.clone(),
             ty: root.ty.clone(),
+            ghost: false,
         };
         let determined = self.known[&self.locals[slot].id];
         self.known.insert(version.id, determined);
@@ -1629,6 +1631,7 @@ impl Generator {
                 id: VarId::fresh(),
                 name: self.locals[slot].name.clone(),
                 ty: self.locals[slot].ty.clone(),
+                ghost: false,
             };
             let determined = self.known[&self.locals[slot].id];
             self.known.insert(inside.id, determined);
@@ -1679,6 +1682,7 @@ impl Generator {
                 id: VarId::fresh(),
                 name: inside.name.clone(),
                 ty: inside.ty.clone(),
+                ghost: false,
             };
             let determined = self.known[&inside.id];
             self.known.insert(after.id, determined);
@@ -1723,6 +1727,7 @@ impl Generator {
             id: VarId::fresh(),
             name: current.name.clone(),
             ty: Type::U8,
+            ghost: false,
         };
         self.known.insert(version.id, true);
         self.locals[slot].id = version.id;
@@ -2742,6 +2747,7 @@ fn walk_expr(
             ty, left, right, ..
         } => walk_expr(left, Some(ty), scope, visit) || walk_expr(right, Some(ty), scope, visit),
         Expr::Cast { expr, from, .. } => walk_expr(expr, Some(from), scope, visit),
+        Expr::Ghost(inner) => walk_expr(inner, expected, scope, visit),
         Expr::Operate { ty, operands, .. } => {
             let types = vec![Type::machine(*ty); operands.len()];
             walk_all(operands, &types, scope, visit)

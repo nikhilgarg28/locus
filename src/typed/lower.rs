@@ -235,7 +235,7 @@ impl Session {
         promises: exec::Promises,
     ) -> Result<FnRef, LowerError> {
         let reference = self.check_fn(item, promises)?;
-        let erased = erased::erase_fn(self.program.definitions(), reference, item);
+        let erased = erased::erase_fn(&self.program, reference, item);
         self.erased.fns.extend(erased);
         Ok(reference)
     }
@@ -339,7 +339,7 @@ pub fn is_pure(expr: &Expr) -> bool {
             ..
         } => is_pure(receiver) && arguments.iter().all(is_pure),
         Expr::Compare { left, right, .. } => is_pure(left) && is_pure(right),
-        Expr::Cast { expr, .. } => is_pure(expr),
+        Expr::Cast { expr, .. } | Expr::Ghost(expr) => is_pure(expr),
         Expr::CallMath { arguments, .. } => arguments.iter().all(is_pure),
         Expr::If {
             condition,
@@ -549,6 +549,9 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
             right,
         } => compare(*op, ty, pure(left)?, pure(right)?)?,
         Expr::Cast { expr, from, to } => cast(from, to, pure(expr)?)?,
+        // A ghost value is its logical value; the kernel has no ghost
+        // types, only ghost bindings.
+        Expr::Ghost(expr) => pure(expr)?,
         Expr::IntArith { op, operands } => int_arith(*op, pure_all(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), pure_all(arguments)?),
         Expr::Proof(proof) => Term::proof(proof.clone()),
@@ -1004,7 +1007,7 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         Expr::Struct { fields, .. } => fields
             .iter()
             .for_each(|(_, field)| each_expr(field, on_expr)),
-        Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } => {
+        Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } | Expr::Ghost(inner) => {
             each_expr(inner, on_expr)
         }
         Expr::Break(value) => value.iter().for_each(|value| each_expr(value, on_expr)),
@@ -1276,6 +1279,7 @@ fn bind_joined(
                 id: result,
                 name: String::new(),
                 ty: ty.clone(),
+                ghost: false,
             },
             equation,
             mutable: false,
@@ -1325,6 +1329,7 @@ fn anf_form(
             id, index, payload, ..
         } => Term::Variant(*id, *index, each(payload, out, env)?),
         Expr::Field { target, index, .. } => Term::proj(anf(target, out, env)?, *index),
+        Expr::Ghost(inner) => anf(inner, out, env)?,
         Expr::Method {
             prim,
             receiver,
@@ -1786,6 +1791,7 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
             right,
         } => compare(*op, ty, value_term(left)?, value_term(right)?)?,
         Expr::Cast { expr, from, to } => cast(from, to, value_term(expr)?)?,
+        Expr::Ghost(inner) => return value_term(inner),
         Expr::IntArith { op, operands } => int_arith(*op, each(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
         // An operator at a machine type is never read as a term: its value

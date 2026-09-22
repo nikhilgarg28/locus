@@ -369,7 +369,24 @@ impl Env<'_> {
             {
                 return self.stale_error(slot, &stale, "L0245", "before using it", name.span);
             }
+            let ghost = local.ghost;
             let (id, ty) = (local.id, self.version_type(slot));
+            // A `Ghost<T>` value is named only where nothing runs.
+            if ghost && !self.reading() {
+                let shown = self.show_type(&ty);
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0201",
+                        format!(
+                            "`{}` is a `Ghost<{shown}>`, which has no runtime form",
+                            name.text
+                        ),
+                        name.span,
+                    )
+                    .note("a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field"),
+                );
+                return Err(());
+            }
             return Ok(Value::new(
                 Expr::Var {
                     id,

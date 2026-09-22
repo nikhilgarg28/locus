@@ -11,6 +11,14 @@ use super::env::{Elab, Env, FnInfo, Global, PropInfo};
 use super::exprs::Value;
 use super::literals::untyped_literal;
 
+/// What stands in a `Ghost<T>` position, as a `Ghost` value: wrapped once.
+pub(super) fn ghost_value(expr: Expr) -> Expr {
+    match expr {
+        ghost @ Expr::Ghost(_) => ghost,
+        other => Expr::Ghost(Box::new(other)),
+    }
+}
+
 impl Env<'_> {
     /// Checks arguments against a telescope of parameter types, written over
     /// the identities `ids`: each argument's term replaces its parameter in
@@ -20,20 +28,24 @@ impl Env<'_> {
         arguments: &[ast::Expr],
         ids: &[VarId],
         tys: &mut [Type],
+        ghosts: &[bool],
         what: &str,
         span: Span,
     ) -> Elab<Vec<Expr>> {
         let arguments: Vec<&ast::Expr> = arguments.iter().collect();
-        self.arguments_by_ref(&arguments, ids, tys, what, span)
+        self.arguments_by_ref(&arguments, ids, tys, ghosts, what, span)
     }
 
     /// `arguments`, over the values in any order they were found in: a
-    /// variant's fields, given by name.
+    /// variant's fields, given by name. `ghosts` says which positions are
+    /// declared `Ghost<T>`: what stands there is elaborated where nothing
+    /// runs, and is a `Ghost` value.
     pub fn arguments_by_ref(
         &mut self,
         arguments: &[&ast::Expr],
         ids: &[VarId],
         tys: &mut [Type],
+        ghosts: &[bool],
         what: &str,
         span: Span,
     ) -> Elab<Vec<Expr>> {
@@ -49,7 +61,8 @@ impl Env<'_> {
         }
         let mut exprs = Vec::new();
         for (index, argument) in arguments.iter().enumerate() {
-            let value = self.check(argument, &tys[index].clone())?;
+            let ghost = ghosts.get(index).copied().unwrap_or(false);
+            let value = self.argument(argument, &tys[index].clone(), ghost)?;
             let term = self.term(&value, argument.span)?;
             for later in tys[index + 1..].iter_mut() {
                 *later = later.replace_var(ids[index], &term);
@@ -58,6 +71,16 @@ impl Env<'_> {
             exprs.push(value.expr);
         }
         Ok(exprs)
+    }
+
+    /// A value for a position of type `ty`. A `Ghost<T>` position is a
+    /// logic-only context, and what stands in it is a `Ghost` value.
+    pub(super) fn argument(&mut self, argument: &ast::Expr, ty: &Type, ghost: bool) -> Elab<Value> {
+        if !ghost {
+            return self.check(argument, ty);
+        }
+        let value = self.logical("a `Ghost<T>` argument", |env| env.check(argument, ty))?;
+        Ok(Value::new(ghost_value(value.expr), value.ty))
     }
 
     pub(super) fn call(
@@ -164,6 +187,7 @@ impl Env<'_> {
         }
         let ids: Vec<VarId> = info.params.iter().map(|param| param.id).collect();
         let mut tys: Vec<Type> = info.params.iter().map(|param| param.ty.clone()).collect();
+        let ghosts: Vec<bool> = info.params.iter().map(|param| param.ghost).collect();
         tys.push(info.result.clone());
         let what = format!("`{}`", info.name);
         // The result type rides along so that it is instantiated too.
@@ -171,11 +195,13 @@ impl Env<'_> {
         if arguments.len() != count {
             let mut only_params = tys[..count].to_vec();
             return self
-                .arguments(arguments, &ids, &mut only_params, &what, span)
+                .arguments(arguments, &ids, &mut only_params, &ghosts, &what, span)
                 .map(|_| unreachable!("the counts differ"));
         }
         // The arguments of a call erasure removes are read, not moved
-        // (`moves.rs`).
+        // (`moves.rs`). They are not a logic-only context: a call in them
+        // stays, as `let _ = argument;` before the marker, since removing
+        // the callee removes nothing an argument does (`erase.rs`).
         let erased = match info.reference {
             FnRef::Math(id) => !self.session.program().definitions().is_executable(id),
             FnRef::Exec(_) => false,
@@ -185,7 +211,7 @@ impl Env<'_> {
             let value = if erased {
                 self.ghost(|env| env.check(argument, &tys[index].clone()))?
             } else {
-                self.check(argument, &tys[index].clone())?
+                self.argument(argument, &tys[index].clone(), ghosts[index])?
             };
             let term = self.term(&value, argument.span)?;
             for later in tys[index + 1..].iter_mut() {
@@ -258,8 +284,16 @@ impl Env<'_> {
         }
         let mut terms = Vec::new();
         for (argument, param) in arguments.iter().zip(&info.params) {
-            // A proposition's arguments are read, not moved (`moves.rs`).
-            let value = self.ghost(|env| env.check(argument, &param.ty))?;
+            // A proposition's arguments are a logic-only context, in a
+            // formula or out of one: nothing in them runs, and a name in
+            // them is read, not moved (`moves.rs`).
+            let value = if self.formula.is_some() {
+                self.ghost(|env| env.check(argument, &param.ty))?
+            } else {
+                self.logical("the arguments of a proposition", |env| {
+                    env.check(argument, &param.ty)
+                })?
+            };
             terms.push(self.term(&value, argument.span)?);
         }
         Ok(Term::PropApp(info.id, terms))

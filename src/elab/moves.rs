@@ -231,8 +231,9 @@ impl Env<'_> {
     // --- Places ---
 
     /// Whether a mention here reads a value rather than consuming it: in a
-    /// formula, or in an argument erasure removes.
-    fn reading(&self) -> bool {
+    /// formula, or in an argument erasure removes. It is also where a
+    /// `Ghost<T>` value may be named (`exprs.rs`).
+    pub(super) fn reading(&self) -> bool {
         self.formula.is_some() || self.moves.ghost > 0
     }
 

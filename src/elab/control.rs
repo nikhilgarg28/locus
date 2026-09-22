@@ -274,11 +274,14 @@ impl Env<'_> {
                         id: VarId::fresh(),
                         name: name.map_or_else(|| "_".to_string(), |name| name.text.clone()),
                         ty: field_ty,
+                        ghost: variant.payload[field].ghost,
                     };
-                    let declared = self.ctx.declare_with(binder.id, binder.ty.clone(), false);
+                    let declared =
+                        self.ctx
+                            .declare_with(binder.id, binder.ty.clone(), binder.ghost);
                     self.kernel(declared, arm.pattern.span)?;
                     if name.is_some() {
-                        self.bind(&binder.name, binder.id, &binder.ty);
+                        self.bind(&binder.name, binder.id, &binder.ty, binder.ghost);
                     }
                     payload.push(binder);
                 }

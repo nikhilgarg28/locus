@@ -8,6 +8,7 @@
 
 use crate::ast::{self, PatternKind};
 use crate::kernel::{HypId, Proof, Term, Type, VarId};
+use crate::source::Span;
 use crate::typed::{Binder, Named, Pattern, opened_part, opened_type};
 
 use super::env::{Elab, Env, Fact};
@@ -15,27 +16,41 @@ use super::env::{Elab, Env, Fact};
 impl Env<'_> {
     /// Binds a `let` pattern to a value, as the checker will: a name is
     /// declared with the equation `name == value`, and a tuple pattern binds
-    /// each part to a projection, stated over the parts before it.
-    pub(super) fn bind_pattern(&mut self, pattern: &ast::Pattern, value: Term) -> Elab<Pattern> {
-        self.bind_pattern_in(pattern, value, &mut Vec::new())
+    /// each part to a projection, stated over the parts before it. With
+    /// `ghost`, the names are `Ghost<T>` bindings: ghost in the kernel, and
+    /// named only where nothing runs.
+    pub(super) fn bind_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        value: Term,
+        ghost: bool,
+    ) -> Elab<Pattern> {
+        self.bind_pattern_in(pattern, value, ghost, &mut Vec::new())
     }
 
     fn bind_pattern_in(
         &mut self,
         pattern: &ast::Pattern,
         value: Term,
+        ghost: bool,
         earlier: &mut Vec<Named>,
     ) -> Elab<Pattern> {
         match &pattern.kind {
             PatternKind::Wildcard => Ok(Pattern::Wildcard),
-            PatternKind::Group(inner) => self.bind_pattern_in(inner, value, earlier),
+            PatternKind::Group(inner) => self.bind_pattern_in(inner, value, ghost, earlier),
             PatternKind::Name { name, mutable } => {
                 let (id, equation) = (VarId::fresh(), HypId::fresh());
                 let over_projections = self.type_of(&value, pattern.span)?;
                 let opened = opened_type(&over_projections, earlier);
                 let value = opened_part(&value, &opened, earlier);
-                let defined = self.ctx.define_with(id, equation, &value);
-                let ty = self.kernel(defined, pattern.span)?;
+                let ty = self.define(id, equation, &value, ghost, pattern.span)?;
+                if *mutable && ghost {
+                    return self.fail(
+                        "L0290",
+                        "`let mut` of a `Ghost<T>` is not in Locus yet; a snapshot is taken once, and a later one is another `let`",
+                        pattern.span,
+                    );
+                }
                 if !matches!(ty, Type::Proof(_)) {
                     self.facts.push(Fact::definition(
                         Proof::hyp(equation),
@@ -48,7 +63,7 @@ impl Env<'_> {
                         value,
                     });
                 }
-                self.bind(&name.text, id, &ty);
+                self.bind(&name.text, id, &ty, ghost);
                 if *mutable {
                     self.make_mutable(id);
                 }
@@ -57,6 +72,7 @@ impl Env<'_> {
                         id,
                         name: name.text.clone(),
                         ty,
+                        ghost,
                     },
                     equation,
                     mutable: *mutable,
@@ -79,7 +95,7 @@ impl Env<'_> {
                 let mut parts = Vec::new();
                 for (index, part) in patterns.iter().enumerate() {
                     let projection = Term::proj(value.clone(), index);
-                    parts.push(self.bind_pattern_in(part, projection, earlier)?);
+                    parts.push(self.bind_pattern_in(part, projection, ghost, earlier)?);
                 }
                 Ok(Pattern::Tuple(parts))
             }
@@ -89,5 +105,33 @@ impl Env<'_> {
                 pattern.span,
             ),
         }
+    }
+
+    /// Declares `id` with the equation `id == value` as `equation`, as the
+    /// kernel's `define_with` does, and returns the type. A `Ghost<T>`
+    /// binding is declared ghost, as a binding of a ghost type is; the
+    /// kernel would otherwise take it for executable, since its value is.
+    fn define(
+        &mut self,
+        id: VarId,
+        equation: HypId,
+        value: &Term,
+        ghost: bool,
+        span: Span,
+    ) -> Elab<Type> {
+        if !ghost {
+            let defined = self.ctx.define_with(id, equation, value);
+            return self.kernel(defined, span);
+        }
+        let ty = self.type_of(value, span)?;
+        let declared = self.ctx.declare_with(id, ty.clone(), true);
+        self.kernel(declared, span)?;
+        // A proof has no defining equation, as in the kernel.
+        if !matches!(ty, Type::Proof(_)) {
+            let claim = Term::eq(ty.clone(), Term::var(id), value.clone());
+            let assumed = self.ctx.assume_with(equation, claim);
+            self.kernel(assumed, span)?;
+        }
+        Ok(ty)
     }
 }

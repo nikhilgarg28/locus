@@ -1,12 +1,82 @@
 //! Surface types to kernel types.
+//!
+//! `Ghost<T>` is the one type constructor of the core: a value of it is a
+//! logical value of type `T`, with no runtime form. The kernel has no
+//! runtime/ghost distinction beyond its modes, so `Ghost<T>` elaborates to
+//! the kernel type `T`, and what is `Ghost` is the binding: `written` says
+//! so for the type of a parameter, a field, or a `let`, which is where
+//! `Ghost<T>` stands, and the binder carries it (`typed::Binder::ghost`).
+//! Such a binding is named only where nothing runs (`exprs.rs`), and
+//! erasure makes it a marker, as evidence is.
 
 use crate::ast;
+use crate::diagnostic::Diagnostic;
 use crate::kernel::{MachineInt, Type, VarId};
 use crate::typed::Binder;
 
 use super::env::{Elab, Env, Global};
 
+/// A type as written where a binding is declared: its kernel type, and
+/// whether the binding is `Ghost<T>`, for `ty` the kernel type `T`.
+pub(super) struct Written {
+    pub ty: Type,
+    pub ghost: bool,
+}
+
+/// Whether a value of the type is logical data with no runtime form: a
+/// proposition or an integer of the logic. Evidence is logic-only too, but
+/// a call that returns it is the ordinary way of establishing a fact, and
+/// is not elaborated where nothing runs.
+pub(super) fn logical_data(ty: &Type) -> bool {
+    matches!(ty, Type::Prop | Type::Int | Type::Nat)
+}
+
 impl Env<'_> {
+    /// A type in a position that declares a binding, where `Ghost<T>` may
+    /// stand: a parameter, a field, or a `let`.
+    pub fn written(&mut self, ty: &ast::Type) -> Elab<Written> {
+        match &ty.kind {
+            ast::TypeKind::Group(inner) => self.written(inner),
+            ast::TypeKind::Path { path, arguments }
+                if path.single().is_some_and(|name| name.text == "Ghost") =>
+            {
+                if arguments.len() != 1 {
+                    return self.fail(
+                        "L0200",
+                        "`Ghost` takes one type argument, `Ghost<T>`",
+                        ty.span,
+                    );
+                }
+                // `T` is the type of a logical value, so `Int` is fine in
+                // it, and `Ghost<Ghost<T>>` is `Ghost<T>`.
+                let was_total = std::mem::replace(&mut self.total, true);
+                let inner = self.written(&arguments[0]);
+                self.total = was_total;
+                Ok(Written {
+                    ty: inner?.ty,
+                    ghost: true,
+                })
+            }
+            _ => Ok(Written {
+                ty: self.ty(ty)?,
+                ghost: false,
+            }),
+        }
+    }
+
+    /// The annotation of a `let`: as `written`, and `Int` may stand there
+    /// in any function, since a `let` of type `Int` never runs.
+    pub fn let_annotation(&mut self, ty: &ast::Type) -> Elab<Written> {
+        match &ty.kind {
+            ast::TypeKind::Named(name) if name.text == "Int" => Ok(Written {
+                ty: Type::Int,
+                ghost: false,
+            }),
+            _ => self.written(ty),
+        }
+    }
+
+    /// A type in any other position, where `Ghost<T>` may not stand.
     pub fn ty(&mut self, ty: &ast::Type) -> Elab<Type> {
         match &ty.kind {
             ast::TypeKind::Named(name) => match name.text.as_str() {
@@ -69,9 +139,22 @@ impl Env<'_> {
                     }
                 },
             },
+            ast::TypeKind::Path { path, .. }
+                if path.single().is_some_and(|name| name.text == "Ghost") =>
+            {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "L0290",
+                        "`Ghost<T>` cannot stand here; as a result type, or inside another type, it is not in Locus yet",
+                        ty.span,
+                    )
+                    .note("`Ghost<T>` is the type of a `let`, a parameter, or a field: a logical value of type `T` that the program never computes"),
+                );
+                Err(())
+            }
             ast::TypeKind::Path { path, .. } if path.single().is_some() => self.fail(
                 "L0290",
-                "type arguments are not in Locus yet; E8 adds `Ghost<T>`",
+                "type arguments are written only on `Ghost<T>` in the core; `Option<T>`, `Vec<T>`, and the rest are not in Locus yet",
                 ty.span,
             ),
             ast::TypeKind::Path { .. } => self.fail(
@@ -87,6 +170,7 @@ impl Env<'_> {
                     fields
                         .iter()
                         .map(|field| (field.name.as_ref(), &field.ty, field.span)),
+                    false,
                 );
                 self.close(mark);
                 Ok(tuple_over(&binders?))
@@ -106,6 +190,7 @@ impl Env<'_> {
                         parameters
                             .iter()
                             .map(|field| (field.name.as_ref(), &field.ty, field.span)),
+                        false,
                     )?;
                     let result = self.ty(result)?;
                     Ok(Type::function_over(&pairs(&binders), &result))
@@ -127,18 +212,29 @@ impl Env<'_> {
     }
 
     /// Elaborates fields in order, bringing each named one into scope for the
-    /// fields after it. The caller decides when that scope ends.
+    /// fields after it. The caller decides when that scope ends. `ghosts`
+    /// is whether a field may be declared `Ghost<T>`: the fields of a
+    /// struct or a variant may, the fields of a tuple type may not.
     pub fn telescope<'t>(
         &mut self,
         fields: impl Iterator<Item = (Option<&'t ast::Name>, &'t ast::Type, crate::source::Span)>,
+        ghosts: bool,
     ) -> Elab<Vec<Binder>> {
         let mut binders = Vec::new();
         for (name, ty, span) in fields {
-            let ty = self.ty(ty)?;
+            let written = if ghosts {
+                self.written(ty)?
+            } else {
+                Written {
+                    ty: self.ty(ty)?,
+                    ghost: false,
+                }
+            };
             let binder = Binder {
                 id: VarId::fresh(),
                 name: name.map_or_else(|| "_".to_string(), |name| name.text.clone()),
-                ty,
+                ty: written.ty,
+                ghost: written.ghost,
             };
             if let Some(name) = name
                 && binders
@@ -151,10 +247,12 @@ impl Env<'_> {
                     name.span,
                 );
             }
-            let result = self.ctx.declare_with(binder.id, binder.ty.clone(), false);
+            let result = self
+                .ctx
+                .declare_with(binder.id, binder.ty.clone(), binder.ghost);
             self.kernel(result, span)?;
             if name.is_some() {
-                self.bind(&binder.name, binder.id, &binder.ty);
+                self.bind(&binder.name, binder.id, &binder.ty, binder.ghost);
             }
             binders.push(binder);
         }

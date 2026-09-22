@@ -107,10 +107,12 @@ impl Env<'_> {
             }
         }
         let ids: Vec<VarId> = variant.payload.iter().map(|binder| binder.id).collect();
-        // Evidence is erased with what it holds: its values are read, not
-        // moved (`moves.rs`).
-        let payload =
-            self.ghost(|env| env.arguments_by_ref(arguments, &ids, &mut tys, &what, span))?;
+        // Evidence is erased with what it holds: nothing in it runs, and
+        // its values are read, not moved (`moves.rs`).
+        let ghosts = vec![false; ids.len()];
+        let payload = self.logical("evidence", |env| {
+            env.arguments_by_ref(arguments, &ids, &mut tys, &ghosts, &what, span)
+        })?;
         let mut terms = Vec::new();
         for expr in &payload {
             match value_term(expr) {
@@ -252,11 +254,12 @@ impl Env<'_> {
                         id: VarId::fresh(),
                         name: name.map_or_else(|| "_".to_string(), |name| name.text.clone()),
                         ty,
+                        ghost: false,
                     };
                     let declared = self.ctx.declare_with(binder.id, binder.ty.clone(), true);
                     self.kernel(declared, arm.pattern.span)?;
                     if name.is_some() {
-                        self.bind(&binder.name, binder.id, &binder.ty);
+                        self.bind(&binder.name, binder.id, &binder.ty, binder.ghost);
                     }
                     binders.push(binder);
                 }

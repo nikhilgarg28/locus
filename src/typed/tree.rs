@@ -23,11 +23,17 @@ use crate::kernel::{
 };
 
 /// A binding occurrence: an identity, the spelling to print, and its type.
+///
+/// `ghost` is a binding declared `Ghost<T>`: a logical value of the type
+/// `ty`, which is `T`, with no runtime form. The kernel sees `T`, since it
+/// has no runtime/ghost distinction beyond modes; erasure sees a marker,
+/// as for evidence, and leaves a `let` of it out.
 #[derive(Clone, Debug)]
 pub struct Binder {
     pub id: VarId,
     pub name: String,
     pub ty: Type,
+    pub ghost: bool,
 }
 
 /// A trait a struct or an enum derives, from the closed list of
@@ -423,6 +429,13 @@ pub enum Expr {
         unreachable: Option<Proof>,
         result: VarId,
     },
+    /// A value of type `Ghost<T>`: the logical value of `expr`, of type
+    /// `T`, which has no runtime form. `snapshot!(expr)` builds one, and a
+    /// `Ghost<T>` position wraps what stands in it. The expression inside
+    /// is elaborated where nothing runs, so it is a term of the logic;
+    /// lowering reads through the node, and erasure replaces it by the
+    /// marker, keeping whatever inside it would still run.
+    Ghost(Box<Expr>),
 }
 
 /// Which of the three forms a panic was written as. Each has the message
@@ -518,6 +531,15 @@ impl Binder {
             id: VarId::fresh(),
             name: name.to_string(),
             ty,
+            ghost: false,
+        }
+    }
+
+    /// A binder declared `Ghost<T>`, for `ty` the kernel type `T`.
+    pub fn ghost(name: &str, ty: Type) -> Self {
+        Self {
+            ghost: true,
+            ..Self::new(name, ty)
         }
     }
 

@@ -275,6 +275,7 @@ impl Env<'_> {
                 id: VarId::fresh(),
                 name: self.names[slot].name.clone(),
                 ty: self.version_type(slot),
+                ghost: false,
             };
             let declared = self.ctx.declare_with(inside.id, inside.ty.clone(), false);
             self.kernel(declared, span)?;
@@ -570,6 +571,7 @@ impl Env<'_> {
             id: VarId::fresh(),
             name: index.text.clone(),
             ty: Type::machine(ty),
+            ghost: false,
         };
         let (lower_fact, upper_fact) = (HypId::fresh(), HypId::fresh());
         let inclusive = kind == RangeKind::Inclusive;

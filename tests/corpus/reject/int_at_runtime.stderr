@@ -1,28 +1,21 @@
 error[L0201]: `Int` has no runtime form
- --> tests/corpus/reject/int_at_runtime.lc:3:17
+ --> tests/corpus/reject/int_at_runtime.lc:5:17
   |
-3 | fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
+5 | fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
   |                 ^^^
   |
   = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
 error[L0201]: `Int` has no runtime form
- --> tests/corpus/reject/int_at_runtime.lc:8:15
+ --> tests/corpus/reject/int_at_runtime.lc:9:21
   |
-8 |     let wide: Int = n as Int; //~ error: L0201 `Int` has no runtime form
-  |               ^^^
+9 | fn result(n: u8) -> Int { //~ error: L0201 `Int` has no runtime form
+  |                     ^^^
   |
   = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
 error[L0201]: `Int` has no runtime form
-  --> tests/corpus/reject/int_at_runtime.lc:12:21
+  --> tests/corpus/reject/int_at_runtime.lc:16:11
    |
-12 | fn result(n: u8) -> Int { //~ error: L0201 `Int` has no runtime form
-   |                     ^^^
-   |
-   = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
-error[L0201]: `Int` has no runtime form
-  --> tests/corpus/reject/int_at_runtime.lc:19:11
-   |
-19 |     (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
+16 |     (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
    |           ^^^
    |
    = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim

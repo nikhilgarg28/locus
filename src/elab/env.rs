@@ -153,6 +153,9 @@ pub(super) struct Local {
     /// The binding failed to elaborate. A use of it is a consequence of an
     /// error already reported, and is not reported again.
     pub poisoned: bool,
+    /// Declared `Ghost<T>`: a logical value of `ty`, which is `T`, with no
+    /// runtime form. It is named only where nothing runs (`types.rs`).
+    pub ghost: bool,
     /// For a binding declared `let mut`: its identity, which every version
     /// of it refers to. `id` is then the current version (`mutation.rs`).
     pub binding: Option<VarId>,
@@ -347,19 +350,38 @@ impl Env<'_> {
     }
 
     /// Makes `name` refer to an identity the context already holds, and
-    /// records what its type lets one conclude.
-    pub fn bind(&mut self, name: &str, id: VarId, ty: &Type) {
+    /// records what its type lets one conclude. `ghost` is a binding
+    /// declared `Ghost<T>`.
+    pub fn bind(&mut self, name: &str, id: VarId, ty: &Type, ghost: bool) {
         self.labels.insert(id, name.to_string());
         self.names.push(Local {
             name: name.to_string(),
             id,
             ty: ty.clone(),
             poisoned: false,
+            ghost,
             binding: None,
             moved: Vec::new(),
             tracked: None,
         });
         self.learn_from(&Term::var(id), ty);
+    }
+
+    /// Elaborates `inside` as a logic-only context, where nothing runs: the
+    /// argument of `snapshot!`, the value of a `let` of a logic-only type,
+    /// what stands in a `Ghost<T>` parameter or field, the arguments of a
+    /// proposition, of an evidence constructor, or of a call erasure
+    /// removes. A formula is one too (`logic.rs`). Every call in it must be
+    /// one a proposition admits (`L0209`), an operator that may panic is
+    /// refused (`L0236`), no loop stands there (`L0215`), and a local named
+    /// there is read, not moved (`moves.rs`).
+    pub fn logical<T>(&mut self, place: &'static str, inside: impl FnOnce(&mut Self) -> T) -> T {
+        let was_total = std::mem::replace(&mut self.total, true);
+        let was_formula = self.formula.replace(place);
+        let result = self.ghost(inside);
+        self.total = was_total;
+        self.formula = was_formula;
+        result
     }
 
     /// Brings the names of a pattern into scope after its `let` failed.
@@ -371,6 +393,7 @@ impl Env<'_> {
                 id: VarId::fresh(),
                 ty: Type::Tuple(Vec::new()),
                 poisoned: true,
+                ghost: false,
                 binding: None,
                 moved: Vec::new(),
                 tracked: None,
@@ -391,10 +414,14 @@ impl Env<'_> {
     }
 
     /// Declares a variable in the mirrored context and brings it into scope.
+    /// It is ghost in the kernel when asked to be, or when declared
+    /// `Ghost<T>`.
     pub fn declare(&mut self, binder: &Binder, ghost: bool, span: Span) -> Elab<()> {
-        let result = self.ctx.declare_with(binder.id, binder.ty.clone(), ghost);
+        let result = self
+            .ctx
+            .declare_with(binder.id, binder.ty.clone(), ghost || binder.ghost);
         self.kernel(result, span)?;
-        self.bind(&binder.name, binder.id, &binder.ty);
+        self.bind(&binder.name, binder.id, &binder.ty, binder.ghost);
         Ok(())
     }
 

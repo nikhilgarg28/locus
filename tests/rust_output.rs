@@ -42,14 +42,19 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
         "zero_or_self",
         zero_or_self(prelude, classified, exec_id(classify_ref)),
     );
+    declare("note", snapshot_note());
 
     let module = session.erased();
     assert_eq!(check_module(module), Ok(()));
     let mut source = print_module(module);
 
+    // A `Ghost<T>` binding leaves nothing behind.
+    assert!(!source.contains("let g"), "{source}");
+
     // The output reads like the source.
     for expected in [
         "pub fn increment(n: u8) -> (u8, Proved) {",
+        "pub fn note(n: u8) -> u8 {",
         "let out = n.wrapping_add(1_u8);",
         "(out, Proved)",
         "pub enum Classified {",

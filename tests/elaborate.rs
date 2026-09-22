@@ -925,7 +925,6 @@ fn the_forms_without_a_meaning_yet_say_which_task_brings_them() {
             "LOC-71",
         ),
         ("fn f(n: u8) -> u8 { old!(n) }", "old", "O3"),
-        ("fn f(n: u8) -> u8 { snapshot!(n) }", "snapshot", "E8"),
         ("fn f(n: u8) -> u8 { recurse!(n, n) }", "recurse", "LOC-53"),
         ("fn f(n: u8) -> u8 { vec!(1, 2) }", "vec", "Vec"),
     ] {
@@ -1725,4 +1724,148 @@ fn a_message_is_a_string_literal_and_the_forms_stand_nowhere_that_nothing_runs()
     );
     assert_eq!(codes, ["L0209"], "{full}");
     assert!(full.contains("`assert!`"), "{full}");
+}
+
+// --- Logic-only types and the one erasure rule (E8) ------------------------------
+
+#[test]
+fn a_pure_call_in_a_logic_only_context_is_absent_from_the_generated_rust() {
+    // A function of the logic in the value of a `Ghost<T>` let, and an
+    // ordinary function with the three promises (the interim rule of
+    // LOC-193) whose call returns only evidence: neither call is in the
+    // Rust, only the definitions and the runtime call of `double`.
+    let result = accepted(
+        "#[terminates] #[no_panic] #[no_io]
+        fn double(n: u8) -> u8 { n.wrapping_add(n) }
+        #[terminates] #[no_panic] #[no_io]
+        fn bounded_by(n: u8, h: @(n <= 200)) -> @(n as Int + 50 <= 255) { let s = n + 50; _ }
+        fn noted(n: u8, h: @(n <= 200)) -> (out: u8, @(out == double(n))) {
+            let noted: Ghost<u8> = double(n);
+            let room = bounded_by(n, h);
+            let out = double(n);
+            (out, prove!(out == noted))
+        }",
+    );
+    let source = print_module(result.session.erased());
+    assert_eq!(source.matches("double(").count(), 2, "{source}");
+    assert_eq!(source.matches("bounded_by(").count(), 1, "{source}");
+    assert!(source.contains("let room = Proved;"), "{source}");
+    assert!(!source.contains("let noted"), "{source}");
+    assert!(!source.contains("Ghost<"), "{source}");
+}
+
+#[test]
+fn a_call_in_a_logic_only_context_must_be_one_a_proposition_admits() {
+    // The three promises, each missing in turn, in each logic-only context:
+    // the error names the context and the promise.
+    for (attributes, missing) in [
+        ("", "terminates"),
+        ("#[terminates]", "no_panic"),
+        ("#[terminates] #[no_panic]", "no_io"),
+    ] {
+        for (statement, place) in [
+            ("let g = snapshot!(f(n));", "the argument of `snapshot!`"),
+            (
+                "let g: Ghost<u8> = f(n);",
+                "the value of a `let` with no runtime form",
+            ),
+            (
+                "let g: Int = f(n) as Int;",
+                "the value of a `let` with no runtime form",
+            ),
+            ("let g: Prop = prop!(f(n) == n);", "a proposition"),
+            ("let g = takes(n, f(n));", "a `Ghost<T>` argument"),
+        ] {
+            let text = format!(
+                "{attributes} fn f(n: u8) -> u8 {{ n }}
+                fn takes(n: u8, cap: Ghost<u8>) -> u8 {{ n }}
+                fn g(n: u8) -> u8 {{ {statement} n }}"
+            );
+            let (codes, full) = rejected(&text);
+            assert_eq!(codes, ["L0209"], "{text}: {full}");
+            assert!(
+                full.starts_with(&format!(
+                    "`f` cannot appear in {place}: it does not promise {missing}"
+                )),
+                "{text}: {full}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_runtime_call_returning_only_evidence_stays_and_its_panic_is_seen() {
+    // An erased result is not an erasable computation: `checked` returns
+    // only evidence and may panic, so the call stays in the Rust and the
+    // interpreter sees the panic through it.
+    let result = accepted(
+        "fn checked(x: u8) -> @(x <= 255) { let _ = 255u8 + x; _ }
+        fn use_checked(x: u8) -> u8 { let h = checked(x); x }",
+    );
+    let source = print_module(result.session.erased());
+    assert!(source.contains("let h = checked(x);"), "{source}");
+    assert_eq!(call(&result, "use_checked", &[0]), "0");
+    let module = result.session.erased();
+    let function = result.function("use_checked").unwrap();
+    let outcome = Interpreter::new(module, FUEL)
+        .call(function, vec![Value::u8(200)])
+        .unwrap();
+    assert!(
+        matches!(outcome, locus::erased::Outcome::Panic(_)),
+        "{outcome:?}"
+    );
+}
+
+#[test]
+#[ignore = "O3: `&mut` parameters are not in Locus yet; with them, a call with a logic-only result and a `&mut` parameter is kept"]
+fn a_call_with_a_logic_only_result_and_a_mut_parameter_is_kept() {
+    let result = accepted(
+        "#[terminates] #[no_panic] #[no_io]
+        fn clear(x: &mut u8) -> @(x == 0) { *x = 0; _ }
+        fn use_clear(n: u8) -> u8 { let mut x = n; let h = clear(&mut x); x }",
+    );
+    let source = print_module(result.session.erased());
+    assert!(source.contains("let h = clear(&mut x);"), "{source}");
+    assert_eq!(call(&result, "use_clear", &[7]), "0");
+}
+
+#[test]
+fn a_ghost_value_is_named_only_where_nothing_runs() {
+    // In a proposition a `Ghost<T>` reads as its `T` value, and `snapshot!`
+    // of a value that would move is a reading of it.
+    accepted(
+        "struct Token { id: u8 }
+        fn consume(t: Token) -> u8 { t.id }
+        fn keep(n: u8) -> (out: u8, @(out == n)) {
+            let t = Token { id: n };
+            let before: Ghost<u8> = t.id;
+            let was = snapshot!(t);
+            let consumed = consume(t);
+            prove!(before == n);
+            prove!(was.id == n);
+            (n, _)
+        }",
+    );
+    for (text, message) in [
+        (
+            "fn f(n: u8) -> u8 { let g = snapshot!(n); g }",
+            "`g` is a `Ghost<u8>`, which has no runtime form",
+        ),
+        (
+            "fn f(n: u8) -> u8 { snapshot!(n) }",
+            "`snapshot!` builds a `Ghost<T>`, which has no runtime form",
+        ),
+        (
+            "struct H { value: Ghost<u8> } fn f(h: H) -> u8 { h.value }",
+            "`h.value` is a `Ghost<u8>`, which has no runtime form",
+        ),
+        (
+            "fn f(n: u8, cap: Ghost<u8>) -> u8 { let y: u8 = cap; y }",
+            "`cap` is a `Ghost<u8>`, which has no runtime form",
+        ),
+    ] {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, ["L0201"], "{text}: {full}");
+        assert!(full.starts_with(message), "{text}: {full}");
+    }
 }

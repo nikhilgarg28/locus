@@ -1,7 +1,8 @@
 //! The built-in forms, `name!(...)`: `prop!` states a proposition, `prove!`
 //! states a claim where it stands and finds its evidence, `rewrite!`,
-//! `unfold!` and `fold!` are the explicit equality steps, and the rest are
-//! not in Locus yet and say which task brings them.
+//! `unfold!` and `fold!` are the explicit equality steps, `snapshot!`
+//! builds a `Ghost<T>` (E8), and the rest are not in Locus yet and say
+//! which task brings them.
 //!
 //! The forms that mean what they mean in Rust and panic: `panic!`, `todo!`,
 //! and `unreachable!` yield no value and stand where any type is expected;
@@ -52,6 +53,7 @@ impl Env<'_> {
                 self.panic_form(form, arguments, expected, name_span, span)
             }
             Form::Assert | Form::DebugAssert => self.assert_form(form, arguments, name_span, span),
+            Form::Snapshot => self.snapshot(arguments, expected, name_span, span),
             _ => self.form_not_yet(form, name_span),
         }
     }
@@ -367,6 +369,38 @@ impl Env<'_> {
             .join(" ")
     }
 
+    /// `snapshot!(e)`: a `Ghost<T>` holding the logical value of `e: T`.
+    /// It stands only where nothing runs, which is where a `Ghost<T>` value
+    /// may be named, and `e` is elaborated as a logic-only context: every
+    /// call in it is one a proposition admits, and every name is read.
+    fn snapshot(
+        &mut self,
+        arguments: &[ast::Expr],
+        expected: Option<&Type>,
+        name_span: Span,
+        span: Span,
+    ) -> Elab<Value> {
+        let [argument] = arguments else {
+            return self.fail("L0208", "`snapshot!` takes one value", span);
+        };
+        if !self.reading() {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0201",
+                    "`snapshot!` builds a `Ghost<T>`, which has no runtime form",
+                    name_span,
+                )
+                .note("write it where nothing runs: `let g: Ghost<T> = snapshot!(x);` or `let g = snapshot!(x);`, in a `Ghost<T>` parameter or field, or in a proposition"),
+            );
+            return Err(());
+        }
+        let value = self.logical("the argument of `snapshot!`", |env| match expected {
+            Some(expected) => env.check(argument, expected),
+            None => env.infer(argument),
+        })?;
+        Ok(Value::new(Expr::Ghost(Box::new(value.expr)), value.ty))
+    }
+
     /// `prove!(claim)`: the claim as a proposition, and evidence of it found
     /// as a `_` would find it. A failure is reported here.
     fn prove_claim(&mut self, formula: &ast::Expr, span: Span) -> Elab<(Proof, Term)> {
@@ -389,7 +423,6 @@ impl Env<'_> {
     fn form_not_yet<T>(&mut self, form: Form, span: Span) -> Elab<T> {
         let arrives = match form {
             Form::Old => "references as parameters (O3, LOC-184)",
-            Form::Snapshot => "logic-only types (E8, LOC-174)",
             Form::Recurse => "recursion (LOC-53)",
             Form::Matches => "the patterns it takes apart (LOC-71)",
             _ => "`Vec` (LOC-83)",

@@ -13,8 +13,8 @@ error[L0290]: paths through modules are not in Locus yet; modules are a later pr
   |
 8 | fn third(x: outer::Lock) -> u8 { 1 } //~ error: L0290 paths through modules are not in Locus yet
   |             ^^^^^^^^^^^
-error[L0290]: type arguments are not in Locus yet; E8 adds `Ghost<T>`
+error[L0290]: type arguments are written only on `Ghost<T>` in the core; `Option<T>`, `Vec<T>`, and the rest are not in Locus yet
   --> tests/corpus/reject/module_paths_not_yet.lc:10:14
    |
-10 | fn fourth(x: Option<u8>) -> u8 { 1 } //~ error: L0290 type arguments are not in Locus yet; E8
+10 | fn fourth(x: Option<u8>) -> u8 { 1 } //~ error: L0290 type arguments are written only on `Ghost<T>` in the core
    |              ^^^^^^^^^^

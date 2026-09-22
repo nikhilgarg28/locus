@@ -535,3 +535,45 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
         Ok(Outcome::Panic("never".into()))
     );
 }
+
+// --- Values with no runtime form (E8) --------------------------------------------
+
+#[test]
+fn a_ghost_binding_erases_to_nothing_and_the_check_refuses_one_that_stays() {
+    // fn note(n: u8) -> u8 { let g: Ghost<u8> = snapshot!(n); n }
+    let (mut session, _, _) = setup();
+    let note = session.declare_fn(&snapshot_note()).unwrap();
+    let module = session.erased();
+    assert_eq!(check_module(module), Ok(()));
+    let function = &module.fns[0];
+    assert_eq!(function.params.len(), 1);
+    assert!(function.body.stmts.is_empty(), "{:?}", function.body);
+    assert_eq!(
+        run(module, note, vec![Value::u8(5)]),
+        Ok(Outcome::Value(Value::u8(5)))
+    );
+
+    // The erased check is a second judge of the rule: a `let` that binds a
+    // name to a value with no runtime form is refused, however it was
+    // built. A parameter of that type is a position, and is allowed.
+    let mut kept = module.clone();
+    let (pattern, _) = bind("g", EType::Ghost);
+    kept.fns[0].body.stmts.push(EStmt::Let {
+        pattern,
+        value: EExpr::Ghost,
+    });
+    let Err(TypeError(message)) = check_module(&kept) else {
+        panic!("a binding of a ghost value was accepted")
+    };
+    assert!(message.contains("no runtime form"), "{message}");
+
+    let mut with_parameter = module.clone();
+    with_parameter.fns[0]
+        .params
+        .push((VarId::fresh(), "cap".into(), EType::Ghost));
+    assert_eq!(check_module(&with_parameter), Ok(()));
+    assert_eq!(
+        run(&with_parameter, note, vec![Value::u8(5), Value::Ghost]),
+        Ok(Outcome::Value(Value::u8(5)))
+    );
+}

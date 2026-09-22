@@ -2,10 +2,34 @@
 //!
 //! It is a projection that preserves shape (specification section 11). A
 //! type becomes its erased type. An expression with no runtime form, which
-//! is a proof, a proposition, or a call to a function that was not emitted,
-//! becomes its marker. Everything else is erased by recursion, in place: a proof-typed variable stays a variable, and a call
-//! to an ordinary function that returns a proof stays a call, because at
-//! runtime it returns `Proved`.
+//! is a proof, a proposition, a `Ghost<T>` value, or a call erasure
+//! removes, becomes its marker. Everything else is erased by recursion, in
+//! place: a proof-typed variable stays a variable, and a call to an
+//! ordinary function that returns a proof stays a call, because at runtime
+//! it returns `Proved`.
+//!
+//! Two rules, which must not be confused (`Eraser::call`):
+//!
+//! - An erased result. A position is erased exactly when its type has no
+//!   runtime form. The evidence, proposition, `Int`, or `Ghost<T>` a call
+//!   returns vanishes, and the call stays: it may panic, loop, or do I/O,
+//!   and the generated Rust must do the same.
+//! - An erasable computation. A call is removed only when its result has
+//!   no runtime form and the callee promises `terminates`, `no_panic`, and
+//!   `no_io`, and takes no `&mut` to runtime storage: nothing it does is
+//!   observable, so leaving it out changes nothing. A kernel function is
+//!   such a callee by construction, whether or not it was emitted; an
+//!   ordinary function is one by its checked promises. An argument of a
+//!   removed call that still does something, an assignment, a call that
+//!   is not erasable, an operator that may panic, or a loop, is kept as a
+//!   `let _ = argument;` before the marker.
+//!
+//! A binding with no runtime form, declared `Ghost<T>` or of type `Prop`
+//! or `Int`, is not bound: a mention of it is the marker, and its `let`
+//! is left out, or kept as `let _ = value;` when the value still does
+//! something. A parameter or a field of such a type is the marker, as
+//! evidence is. The erased check refuses a `let` of a marker-typed value,
+//! so that this rule is judged twice (`check.rs`).
 //!
 //! The versions lowering gives a mutable binding have no runtime form
 //! either: an assignment stays an assignment, and every mention of a version
@@ -14,7 +38,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::kernel::{Definitions, MachineInt, Type, VarId};
+use crate::exec::Program;
+use crate::kernel::{MachineInt, Type, VarId};
 use crate::typed::{
     Binder, Block, Carried, EnumItem, Expr, FnItem, FnRef, Joined, Pattern, Stmt, StructItem,
     each_expr, each_stmt, each_stmt_under,
@@ -44,6 +69,23 @@ pub fn erase_type(ty: &Type) -> EType {
     }
 }
 
+/// The erased type of a binder: the marker for one declared `Ghost<T>`,
+/// and its type's erasure otherwise.
+fn binder_type(binder: &Binder) -> EType {
+    if binder.ghost {
+        EType::Ghost
+    } else {
+        erase_type(&binder.ty)
+    }
+}
+
+/// Whether a binding has no runtime form: declared `Ghost<T>`, or of a
+/// type whose erasure is the `Ghost` marker, `Prop` or `Int`. Evidence is
+/// not among them: a proof-typed variable stays a variable of `Proved`.
+fn vanishes(binder: &Binder) -> bool {
+    binder_type(binder) == EType::Ghost
+}
+
 pub fn erase_struct(id: crate::kernel::StructId, item: &StructItem) -> EStruct {
     EStruct {
         id,
@@ -51,7 +93,7 @@ pub fn erase_struct(id: crate::kernel::StructId, item: &StructItem) -> EStruct {
         fields: item
             .fields
             .iter()
-            .map(|field| (field.name.clone(), erase_type(&field.ty)))
+            .map(|field| (field.name.clone(), binder_type(field)))
             .collect(),
         derives: item.derives.clone(),
     }
@@ -66,7 +108,7 @@ pub fn erase_enum(id: crate::kernel::EnumId, item: &EnumItem) -> EEnum {
             .iter()
             .map(|variant| EVariant {
                 name: variant.name.clone(),
-                payload: variant.payload.iter().map(|b| erase_type(&b.ty)).collect(),
+                payload: variant.payload.iter().map(binder_type).collect(),
                 fields: variant
                     .named
                     .then(|| variant.payload.iter().map(|b| b.name.clone()).collect()),
@@ -77,17 +119,24 @@ pub fn erase_enum(id: crate::kernel::EnumId, item: &EnumItem) -> EEnum {
 }
 
 /// A function's erasure, or `None` when it has no runtime form: a math
-/// function that is logical-only, such as a lemma or a predicate.
-pub fn erase_fn(definitions: &Definitions, reference: FnRef, item: &FnItem) -> Option<EFn> {
+/// function that is logical-only, such as a lemma or a predicate. The
+/// program is where the promises of the functions it calls are read.
+pub fn erase_fn(program: &Program, reference: FnRef, item: &FnItem) -> Option<EFn> {
     if let FnRef::Math(id) = reference
-        && !definitions.is_executable(id)
+        && !program.definitions().is_executable(id)
     {
         return None;
     }
     let mut eraser = Eraser {
-        definitions,
+        program,
         binding: HashMap::new(),
         assigned: assigned_bindings(&item.body),
+        ghost: item
+            .params
+            .iter()
+            .filter(|param| vanishes(param))
+            .map(|param| param.id)
+            .collect(),
     };
     Some(EFn {
         reference,
@@ -100,7 +149,7 @@ pub fn erase_fn(definitions: &Definitions, reference: FnRef, item: &FnItem) -> O
 }
 
 fn bound(binder: &Binder) -> (VarId, String, EType) {
-    (binder.id, binder.name.clone(), erase_type(&binder.ty))
+    (binder.id, binder.name.clone(), binder_type(binder))
 }
 
 /// The bindings the body assigns to, whole or by a field: the ones whose
@@ -115,18 +164,109 @@ fn assigned_bindings(body: &Block) -> HashSet<VarId> {
     assigned
 }
 
-struct Eraser<'d> {
-    definitions: &'d Definitions,
+struct Eraser<'p> {
+    program: &'p Program,
     /// The binding each version of a mutable binding belongs to, filled as
     /// the versions are met, which is before any mention of them.
     binding: HashMap<VarId, VarId>,
     assigned: HashSet<VarId>,
+    /// The bindings with no runtime form (`vanishes`), filled as they are
+    /// met: a mention of one is the marker, and nothing binds it.
+    ghost: HashSet<VarId>,
 }
 
 impl Eraser<'_> {
     /// The binding a mention refers to: itself, unless it is a version.
     fn root(&self, id: VarId) -> VarId {
         self.binding.get(&id).copied().unwrap_or(id)
+    }
+
+    /// The erasable-computation rule: whether a call of `callee` may be
+    /// removed once its result is not needed. A kernel function is total
+    /// and without effects by construction. An ordinary function is
+    /// erasable by its promises, which the exec checker enforced:
+    /// `terminates`, `no_panic`, and `no_io`. It must also take no `&mut`
+    /// to runtime storage; no function takes `&mut` yet (O3), and when
+    /// one can, its signature is read here too.
+    fn erasable(&self, callee: FnRef) -> bool {
+        match callee {
+            FnRef::Math(_) => true,
+            FnRef::Exec(id) => self
+                .program
+                .promises(id)
+                .is_some_and(|promises| promises.terminates && promises.no_panic && promises.no_io),
+        }
+    }
+
+    /// Whether evaluating the expression does something that must still
+    /// happen when its value is not needed: an assignment, a call that is
+    /// not an erasable computation, an operator that may panic, a loop, a
+    /// transfer of control, or a form that panics anywhere inside it.
+    fn has_effects(&self, expr: &Expr) -> bool {
+        let mut found = false;
+        each_expr(expr, &mut |expr| {
+            found |= match expr {
+                Expr::CallFn { id, .. } => !self.erasable(FnRef::Exec(*id)),
+                Expr::Loop { .. }
+                | Expr::While { .. }
+                | Expr::For { .. }
+                | Expr::Break(_)
+                | Expr::Continue
+                | Expr::Operate { .. }
+                | Expr::Panic { .. }
+                | Expr::Assert { .. } => true,
+                _ => false,
+            };
+        });
+        each_stmt_under(expr, &mut |stmt| {
+            found |= matches!(stmt, Stmt::Assign { .. })
+        });
+        found
+    }
+
+    /// The marker in place of values that are not needed, after whatever
+    /// the expressions still do, in order.
+    fn effects_then(&mut self, exprs: &[Expr], marker: EExpr) -> EExpr {
+        let effectful: Vec<&Expr> = exprs.iter().filter(|expr| self.has_effects(expr)).collect();
+        let effects: Vec<EStmt> = effectful
+            .into_iter()
+            .map(|expr| EStmt::Let {
+                pattern: EPattern::Wildcard,
+                value: self.expr(expr),
+            })
+            .collect();
+        if effects.is_empty() {
+            marker
+        } else {
+            EExpr::Block(EBlock {
+                stmts: effects,
+                tail: Some(Box::new(marker)),
+            })
+        }
+    }
+
+    /// A call, by the two rules. Removed, with its arguments' effects kept,
+    /// when its result has no runtime form and the callee is an erasable
+    /// computation, and when the callee was not emitted, which is a kernel
+    /// function that is logical-only. Kept otherwise, and its result, when
+    /// it has no runtime form, is the marker the callee returns.
+    fn call(&mut self, callee: FnRef, name: &str, arguments: &[Expr], ty: &Type) -> EExpr {
+        let emitted = match callee {
+            FnRef::Math(id) => self.program.definitions().is_executable(id),
+            FnRef::Exec(_) => true,
+        };
+        let result = marker(ty);
+        if !emitted || (result.is_some() && self.erasable(callee)) {
+            // A function that was not emitted has a ghost result, so the
+            // trap stands only for a call the checker never accepts.
+            let marker = result.unwrap_or(EExpr::Trap);
+            return self.effects_then(arguments, marker);
+        }
+        EExpr::Call {
+            callee,
+            name: name.to_string(),
+            arguments: self.all(arguments),
+        }
     }
 
     fn joined(&mut self, joined: Option<&Joined>) {
@@ -137,17 +277,28 @@ impl Eraser<'_> {
 
     fn block(&mut self, block: &Block) -> EBlock {
         EBlock {
-            stmts: block.stmts.iter().map(|stmt| self.stmt(stmt)).collect(),
+            stmts: block
+                .stmts
+                .iter()
+                .filter_map(|stmt| self.stmt(stmt))
+                .collect(),
             tail: block.tail.as_deref().map(|tail| Box::new(self.expr(tail))),
         }
     }
 
-    fn stmt(&mut self, stmt: &Stmt) -> EStmt {
-        match stmt {
-            Stmt::Let { pattern, value } => EStmt::Let {
-                pattern: self.pattern(pattern),
-                value: self.expr(value),
-            },
+    /// A statement, or `None` for one that erases to nothing: a `let` that
+    /// binds nothing with a runtime form to a bare marker, or an assignment
+    /// of a bare marker to a binding that has no runtime form.
+    fn stmt(&mut self, stmt: &Stmt) -> Option<EStmt> {
+        Some(match stmt {
+            Stmt::Let { pattern, value } => {
+                let value = self.expr(value);
+                let pattern = self.pattern(pattern);
+                if matches!(pattern, EPattern::Wildcard) && is_marker(&value) {
+                    return None;
+                }
+                EStmt::Let { pattern, value }
+            }
             Stmt::Assign {
                 place,
                 value,
@@ -156,6 +307,15 @@ impl Eraser<'_> {
             } => {
                 let value = self.expr(value);
                 self.binding.insert(version.id, place.binding);
+                if self.ghost.contains(&place.binding) {
+                    if is_marker(&value) {
+                        return None;
+                    }
+                    return Some(EStmt::Let {
+                        pattern: EPattern::Wildcard,
+                        value,
+                    });
+                }
                 EStmt::Assign {
                     place: EPlace {
                         id: place.binding,
@@ -170,11 +330,18 @@ impl Eraser<'_> {
                 }
             }
             Stmt::Expr(expr) => EStmt::Expr(self.expr(expr)),
-        }
+        })
     }
 
-    fn pattern(&self, pattern: &Pattern) -> EPattern {
+    /// A `let` pattern. A name with no runtime form binds nothing: it is
+    /// recorded, so that a mention of it is the marker, and it stands as
+    /// `_` here.
+    fn pattern(&mut self, pattern: &Pattern) -> EPattern {
         match pattern {
+            Pattern::Bind { binder, .. } if vanishes(binder) => {
+                self.ghost.insert(binder.id);
+                EPattern::Wildcard
+            }
             Pattern::Bind {
                 binder, mutable, ..
             } => EPattern::Bind {
@@ -219,35 +386,21 @@ impl Eraser<'_> {
             // The empty match: a marker when it stands for a ghost, a trap
             // when it stands for a value.
             Expr::Absurd { ty, .. } => marker(ty).unwrap_or(EExpr::Trap),
-            // A function with no runtime form was not emitted, so a call to
-            // it has nothing to call. It is total, so nothing of it is lost;
-            // an argument that assigns, calls, or loops still runs, in
-            // order, before the marker stands for the call.
-            Expr::CallMath {
-                id, arguments, ty, ..
-            } if !self.definitions.is_executable(*id) => {
-                let marker = marker(ty).unwrap_or(EExpr::Trap);
-                let effects: Vec<EStmt> = arguments
-                    .iter()
-                    .filter(|argument| has_effects(argument))
-                    .map(|argument| EStmt::Let {
-                        pattern: EPattern::Wildcard,
-                        value: self.expr(argument),
-                    })
-                    .collect();
-                if effects.is_empty() {
-                    marker
+            // A `Ghost<T>` value is the marker. What stands inside it was
+            // elaborated where nothing runs, so it does nothing; should it
+            // still, that is kept, as for the arguments of a removed call.
+            Expr::Ghost(inner) => self.effects_then(std::slice::from_ref(inner), EExpr::Ghost),
+            Expr::Var { id, name, .. } => {
+                let id = self.root(*id);
+                if self.ghost.contains(&id) {
+                    EExpr::Ghost
                 } else {
-                    EExpr::Block(EBlock {
-                        stmts: effects,
-                        tail: Some(Box::new(marker)),
-                    })
+                    EExpr::Var {
+                        id,
+                        name: name.clone(),
+                    }
                 }
             }
-            Expr::Var { id, name, .. } => EExpr::Var {
-                id: self.root(*id),
-                name: name.clone(),
-            },
             Expr::Bool(value) => EExpr::Bool(*value),
             Expr::Literal(ty, value) => EExpr::Literal(*ty, *value),
             Expr::Tuple { fields, .. } => EExpr::Tuple(self.all(fields)),
@@ -312,22 +465,15 @@ impl Eraser<'_> {
                 id,
                 name,
                 arguments,
-                ..
-            } => EExpr::Call {
-                callee: FnRef::Math(*id),
-                name: name.clone(),
-                arguments: self.all(arguments),
-            },
+                ty,
+            } => self.call(FnRef::Math(*id), name, arguments, ty),
             Expr::CallFn {
                 id,
                 name,
                 arguments,
+                ty,
                 ..
-            } => EExpr::Call {
-                callee: FnRef::Exec(*id),
-                name: name.clone(),
-                arguments: self.all(arguments),
-            },
+            } => self.call(FnRef::Exec(*id), name, arguments, ty),
             Expr::If {
                 condition,
                 then_block,
@@ -350,21 +496,28 @@ impl Eraser<'_> {
                 joined,
                 ..
             } => {
+                let scrutinee = Box::new(self.expr(scrutinee));
+                let mut erased_arms = Vec::new();
+                for arm in arms {
+                    // A payload with no runtime form is bound to the marker
+                    // the variant holds; a mention of it is the marker.
+                    for binder in arm.payload.iter().filter(|binder| vanishes(binder)) {
+                        self.ghost.insert(binder.id);
+                    }
+                    erased_arms.push(EArm {
+                        variant_name: arm.variant_name.clone(),
+                        payload: arm
+                            .payload
+                            .iter()
+                            .map(|binder| (binder.id, binder.name.clone()))
+                            .collect(),
+                        body: self.block(&arm.body),
+                    });
+                }
                 let erased = EExpr::Match {
-                    scrutinee: Box::new(self.expr(scrutinee)),
+                    scrutinee,
                     enum_name: enum_name.clone(),
-                    arms: arms
-                        .iter()
-                        .map(|arm| EArm {
-                            variant_name: arm.variant_name.clone(),
-                            payload: arm
-                                .payload
-                                .iter()
-                                .map(|binder| (binder.id, binder.name.clone()))
-                                .collect(),
-                            body: self.block(&arm.body),
-                        })
-                        .collect(),
+                    arms: erased_arms,
                 };
                 self.joined(joined.as_ref());
                 erased
@@ -440,30 +593,9 @@ impl Eraser<'_> {
     }
 }
 
-/// Whether evaluating the expression does something that must still
-/// happen when its value is not needed: an assignment, a call to an
-/// ordinary function, an operator that may panic, a loop, a transfer of
-/// control, or a form that panics anywhere inside it.
-fn has_effects(expr: &Expr) -> bool {
-    let mut found = false;
-    each_expr(expr, &mut |expr| {
-        found |= matches!(
-            expr,
-            Expr::CallFn { .. }
-                | Expr::Loop { .. }
-                | Expr::While { .. }
-                | Expr::For { .. }
-                | Expr::Break(_)
-                | Expr::Continue
-                | Expr::Operate { .. }
-                | Expr::Panic { .. }
-                | Expr::Assert { .. }
-        );
-    });
-    each_stmt_under(expr, &mut |stmt| {
-        found |= matches!(stmt, Stmt::Assign { .. })
-    });
-    found
+/// A bare marker: nothing of it runs.
+fn is_marker(expr: &EExpr) -> bool {
+    matches!(expr, EExpr::Proved | EExpr::Ghost)
 }
 
 /// The marker for a ghost type, or `None` for a type with a runtime form.

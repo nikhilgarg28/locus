@@ -452,6 +452,7 @@ impl Env<'_> {
                 id: version,
                 name,
                 ty: declared,
+                ghost: false,
             },
             equation,
         })
@@ -700,6 +701,7 @@ impl Env<'_> {
                     id: VarId::fresh(),
                     name: self.names[slot].name.clone(),
                     ty: self.version_type(slot),
+                    ghost: false,
                 },
                 equation: HypId::fresh(),
             };

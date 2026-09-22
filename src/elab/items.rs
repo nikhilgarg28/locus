@@ -815,6 +815,7 @@ impl Env<'_> {
                     fields
                         .iter()
                         .map(|field| (Some(&field.name), &field.ty, field.span)),
+                    true,
                 )?;
                 let derives =
                     self.derives(attributes, &name.text, &[(name.text.clone(), &fields)])?;
@@ -853,6 +854,7 @@ impl Env<'_> {
                             .fields
                             .iter()
                             .map(|field| (field.name.as_ref(), &field.ty, field.span)),
+                        true,
                     )?;
                     items.push(VariantInfo {
                         name: variant.name.text.clone(),
@@ -1048,8 +1050,9 @@ impl Env<'_> {
                 let message = format!("parameter `{}` is declared twice", parameter.name.text);
                 return self.fail("L0202", message, parameter.name.span);
             }
-            let ty = self.ty(&parameter.ty)?;
-            let binder = Binder::new(&parameter.name.text, ty);
+            let written = self.written(&parameter.ty)?;
+            let mut binder = Binder::new(&parameter.name.text, written.ty);
+            binder.ghost = written.ghost;
             self.declare(&binder, false, parameter.span)?;
             params.push(binder);
         }
@@ -1123,7 +1126,7 @@ impl Env<'_> {
                     for param in &params {
                         self.declare(param, true, variant.span)?;
                     }
-                    let payload = self.telescope(fields)?;
+                    let payload = self.telescope(fields, true)?;
                     let mut telescope = params.clone();
                     telescope.extend(payload.iter().cloned());
                     kernel_variants.push(PropVariant::Params(tuple_over(&telescope)));
@@ -1135,7 +1138,7 @@ impl Env<'_> {
                     });
                 }
                 Some(target) => {
-                    let payload = self.telescope(fields)?;
+                    let payload = self.telescope(fields, true)?;
                     let arguments = self.stated_conclusion(name, target)?;
                     let mut conclusion = Vec::new();
                     if arguments.len() != params.len() {
