@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 50,
-  "savedAt": "2026-09-22T00:01:37.000Z",
+  "rev": 51,
+  "savedAt": "2026-09-22T00:01:55.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -6935,12 +6935,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t272",
    "n": 156,
    "title": "S3 · Rust's operator precedence exactly, with as, unary minus, and + - * / % parsed",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 4.\nDepends on: S2 (LOC-155).\nUnblocks: S4 (LOC-157), E5 (LOC-171).\nCovers: LOC-98, LOC-99, LOC-9.\n\nScope. Replace the binding-power table with Rust's. Comparisons do not chain. The arithmetic operators and as parse into the AST; until E6 the elaborator answers that they are not checked yet.\n\nTests.\n- A table of about eighty expressions, taken from the Rust Reference, each compared with its fully parenthesized rendering.\n- a == b == c and a \u003c b \u003c c are rejected as in Rust.\n- The deep-nesting stack test covers the new operators.\n\nDone when. An expression valid in both languages groups the same way in both.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T00:01:37.000Z"
+   "updated": "2026-09-22T00:01:55.000Z"
   },
   {
    "id": "t273",
@@ -7056,12 +7056,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t283",
    "n": 167,
    "title": "E1 · Evidence must match exactly after computing; dependent patterns open over their own names",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 4.\nDepends on: S2 (LOC-155), H3 (LOC-153).\nUnblocks: E7 (LOC-173), M4 (LOC-180).\nCovers: LOC-140, LOC-139, LOC-17.\n\nScope. Remove from the solver everything that bridges one claim to another: rewriting by facts in scope, unfolding without being asked, the structural search, and the proof by all 256 cases. Keep computing: let names replaced, projections and matches of written values, arithmetic on literals, and closed evaluation. let (next, still) = step(...) types still over next. lock.lc is rewritten with the evidence it now has to state.\n\nTests.\n- For each removed tier, a rejected file whose diagnostic shows the claim, the computed claim, the nearest fact, and the explicit form that would be accepted.\n- The pattern-opening test from finding 2 of Target examples.\n- Proof sizes for lock.lc are asserted, so growth is visible.\n\nDone when. Checking is deterministic and explainable: a hole is filled by a fact that matches or it is not filled.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T00:01:37.000Z"
+   "updated": "2026-09-22T00:01:55.000Z"
   },
   {
    "id": "t284",
