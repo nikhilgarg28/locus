@@ -237,7 +237,7 @@ impl Env<'_> {
     pub fn poison(&mut self, pattern: &crate::ast::Pattern) {
         use crate::ast::PatternKind;
         match &pattern.kind {
-            PatternKind::Name(name) => self.names.push(Local {
+            PatternKind::Name { name, .. } => self.names.push(Local {
                 name: name.text.clone(),
                 id: VarId::fresh(),
                 ty: Type::Tuple(Vec::new()),

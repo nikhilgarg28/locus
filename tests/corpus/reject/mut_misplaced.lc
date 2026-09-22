@@ -1,0 +1,14 @@
+// `mut` goes before the name of a binding or of a function's parameter, in
+// Rust's words where Rust has them.
+fn f(pair: (u8, u8)) -> u8 {
+    let mut (a, b) = pair; //~ error: L0125 `mut` must be attached to each individual binding
+    let mut mut c = a; //~ error: L0125 `mut` on a binding may not be repeated
+    let (mut d, e) = pair;
+    d
+}
+
+prop Small(mut n: u8) { //~ error: L0125 a parameter of a quantifier or a proposition never changes
+    Any: @(true),
+}
+
+const c: Prop = prop!(forall (mut n: u8) { n == n }); //~ error: L0125 a parameter of a quantifier or a proposition never changes

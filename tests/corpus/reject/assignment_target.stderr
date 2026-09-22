@@ -1,0 +1,27 @@
+error[L0123]: invalid left-hand side of assignment
+ --> tests/corpus/reject/assignment_target.lc:8:10
+  |
+8 |     f(x) = 1; //~ error: L0123 invalid left-hand side of assignment
+  |     ---- ^
+  |     |
+  |     cannot assign to this expression
+  |
+  = note: the left-hand side of an assignment is a variable or a field of one, as in `total = e` or `lock.failures = e`
+error[L0123]: invalid left-hand side of assignment
+ --> tests/corpus/reject/assignment_target.lc:9:11
+  |
+9 |     x + 1 = 2; //~ error: L0123 invalid left-hand side of assignment
+  |     ----- ^
+  |     |
+  |     cannot assign to this expression
+  |
+  = note: the left-hand side of an assignment is a variable or a field of one, as in `total = e` or `lock.failures = e`
+error[L0123]: invalid left-hand side of assignment
+  --> tests/corpus/reject/assignment_target.lc:10:13
+   |
+10 |     (total) = 4; //~ error: L0123 invalid left-hand side of assignment
+   |     ------- ^
+   |     |
+   |     cannot assign to this expression
+   |
+   = note: the left-hand side of an assignment is a variable or a field of one, as in `total = e` or `lock.failures = e`

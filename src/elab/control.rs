@@ -210,7 +210,10 @@ impl Env<'_> {
                         let mut names = Vec::new();
                         for pattern in given {
                             match &pattern.kind {
-                                PatternKind::Name(name) => names.push(Some(name)),
+                                PatternKind::Name {
+                                    name,
+                                    mutable: false,
+                                } => names.push(Some(name)),
                                 PatternKind::Wildcard => names.push(None),
                                 _ => {
                                     return self.fail(

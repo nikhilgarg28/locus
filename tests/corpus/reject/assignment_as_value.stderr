@@ -1,0 +1,21 @@
+error[L0124]: assignment is a statement and has no value
+ --> tests/corpus/reject/assignment_as_value.lc:6:19
+  |
+6 |     let z = total = y; //~ error: L0124 assignment is a statement and has no value
+  |                   ^
+  |
+  = note: write the assignment on a line of its own, `place = value;`; to compare two values, write `==`
+error[L0124]: assignment is a statement and has no value
+ --> tests/corpus/reject/assignment_as_value.lc:7:14
+  |
+7 |     if total = 3 { 1 } else { 2 }; //~ error: L0124 assignment is a statement and has no value
+  |              ^
+  |
+  = note: write the assignment on a line of its own, `place = value;`; to compare two values, write `==`
+error[L0124]: assignment is a statement and has no value
+ --> tests/corpus/reject/assignment_as_value.lc:8:13
+  |
+8 |     g(total = 5); //~ error: L0124 assignment is a statement and has no value
+  |             ^
+  |
+  = note: write the assignment on a line of its own, `place = value;`; to compare two values, write `==`

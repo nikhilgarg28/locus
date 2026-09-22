@@ -27,7 +27,12 @@ impl Env<'_> {
         match &pattern.kind {
             PatternKind::Wildcard => Ok(Pattern::Wildcard),
             PatternKind::Group(inner) => self.bind_pattern_in(inner, value, earlier),
-            PatternKind::Name(name) => {
+            PatternKind::Name { mutable: true, .. } => self.fail(
+                "L0290",
+                "`mut` bindings are not in Locus yet; M2 adds them",
+                pattern.span,
+            ),
+            PatternKind::Name { name, .. } => {
                 let (id, equation) = (VarId::fresh(), HypId::fresh());
                 let over_projections = self.type_of(&value, pattern.span)?;
                 let opened = opened_type(&over_projections, earlier);

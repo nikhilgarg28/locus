@@ -37,6 +37,9 @@ pub enum TokenKind {
     In,
     Break,
     Continue,
+    While,
+    Return,
+    Mut,
     True,
     False,
     As,
@@ -120,6 +123,9 @@ impl TokenKind {
             Self::In => "`in`",
             Self::Break => "`break`",
             Self::Continue => "`continue`",
+            Self::While => "`while`",
+            Self::Return => "`return`",
+            Self::Mut => "`mut`",
             Self::True => "`true`",
             Self::False => "`false`",
             Self::As => "`as`",
@@ -199,6 +205,9 @@ impl TokenKind {
                 | Self::In
                 | Self::Break
                 | Self::Continue
+                | Self::While
+                | Self::Return
+                | Self::Mut
                 | Self::True
                 | Self::False
                 | Self::As
@@ -707,6 +716,9 @@ impl<'a> Lexer<'a> {
             "in" => TokenKind::In,
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
+            "while" => TokenKind::While,
+            "return" => TokenKind::Return,
+            "mut" => TokenKind::Mut,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "_" => TokenKind::Underscore,
@@ -714,9 +726,9 @@ impl<'a> Lexer<'a> {
             // The other strict keywords of Rust 2024, then the reserved ones.
             // The weak keywords (`union`, `macro_rules`, `raw`, `safe`) are
             // names, as they are in Rust.
-            "async" | "await" | "crate" | "dyn" | "extern" | "impl" | "mod" | "move" | "mut"
-            | "pub" | "ref" | "return" | "self" | "Self" | "static" | "super" | "trait"
-            | "type" | "unsafe" | "use" | "where" | "while" => TokenKind::Keyword,
+            "async" | "await" | "crate" | "dyn" | "extern" | "impl" | "mod" | "move" | "pub"
+            | "ref" | "self" | "Self" | "static" | "super" | "trait" | "type" | "unsafe"
+            | "use" | "where" => TokenKind::Keyword,
             "abstract" | "become" | "box" | "do" | "final" | "gen" | "macro" | "override"
             | "priv" | "try" | "typeof" | "unsized" | "virtual" | "yield" => TokenKind::Keyword,
             _ => TokenKind::Name,

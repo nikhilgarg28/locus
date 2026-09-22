@@ -5,7 +5,7 @@
 //! type expected of it when there is one, which is how a `_` learns what to
 //! prove and how a tuple learns that its second field speaks of its first.
 
-use crate::ast::{self, BinaryOp, ExprKind};
+use crate::ast::{self, BinaryOp, ExprKind, PatternKind, RangeKind};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
 use crate::typed::{Expr, FnRef, value_term};
@@ -220,18 +220,58 @@ impl Env<'_> {
             }
             ExprKind::Loop {
                 state,
-                result,
+                result: Some(result),
                 body,
             } => self.loop_(state, result, body, expr.span),
             ExprKind::For {
-                index,
-                lower,
-                upper,
+                pattern,
+                iterable,
                 state,
                 body,
-            } => self.for_(index, lower, upper, state, body, expr.span),
-            ExprKind::Break(value) => self.break_(expr, value),
-            ExprKind::Continue(arguments) => self.continue_(expr, arguments),
+            } => match (&pattern.kind, &iterable.kind) {
+                (
+                    PatternKind::Name {
+                        name,
+                        mutable: false,
+                    },
+                    ExprKind::Range {
+                        kind: RangeKind::Exclusive,
+                        lower,
+                        upper,
+                    },
+                ) => self.for_(name, lower, upper, state, body, expr.span),
+                _ => self.fail(
+                    "L0290",
+                    "a `for` over anything but a range `lo..hi` with a name for its index is not in Locus yet; M3 adds Rust's loop forms",
+                    expr.span,
+                ),
+            },
+            ExprKind::Break(Some(value)) => self.break_(expr, value),
+            ExprKind::Continue(Some(arguments)) => self.continue_(expr, arguments),
+            // The forms of S5 that later commits give a meaning.
+            ExprKind::Loop { result: None, .. }
+            | ExprKind::While { .. }
+            | ExprKind::Break(None)
+            | ExprKind::Continue(None) => self.fail(
+                "L0290",
+                "`loop` without a state list, `while`, and `break` and `continue` without a value are not in Locus yet; M3 adds Rust's loop forms",
+                expr.span,
+            ),
+            ExprKind::Range { .. } => self.fail(
+                "L0290",
+                "a range is read only in the header of a `for` for now",
+                expr.span,
+            ),
+            ExprKind::Return(_) => self.fail(
+                "L0290",
+                "`return` is not in Locus yet; M5 adds it with the never type",
+                expr.span,
+            ),
+            ExprKind::Ref { .. } => self.fail(
+                "L0290",
+                "references (`&value`, `&mut value`) are not in Locus yet; O3 adds them",
+                expr.span,
+            ),
         }
     }
 

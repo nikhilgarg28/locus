@@ -161,12 +161,14 @@ impl Mentions<'_> {
                 parameters.iter().for_each(|field| self.ty(&field.ty));
                 self.ty(result);
             }
+            TypeKind::Ref { inner, .. } => self.ty(inner),
+            TypeKind::Never => {}
         }
     }
 
     fn pattern(&mut self, pattern: &Pattern) {
         match &pattern.kind {
-            PatternKind::Name(_)
+            PatternKind::Name { .. }
             | PatternKind::Wildcard
             | PatternKind::Unit
             | PatternKind::Bool(_)
@@ -193,9 +195,14 @@ impl Mentions<'_> {
                     pattern,
                     annotation,
                     value,
+                    ..
                 } => {
                     self.pattern(pattern);
                     annotation.iter().for_each(|ty| self.ty(ty));
+                    self.expr(value);
+                }
+                StatementKind::Assign { place, value } => {
+                    self.expr(place);
                     self.expr(value);
                 }
                 StatementKind::Expression(expr) => self.expr(expr),
@@ -225,15 +232,23 @@ impl Mentions<'_> {
             ExprKind::Group(inner)
             | ExprKind::Not(inner)
             | ExprKind::Unary { expr: inner, .. }
-            | ExprKind::Break(inner) => self.expr(inner),
+            | ExprKind::Ref { expr: inner, .. } => self.expr(inner),
+            ExprKind::Break(inner) | ExprKind::Return(inner) => {
+                inner.iter().for_each(|inner| self.expr(inner));
+            }
             ExprKind::Cast {
                 expr: inner, ty, ..
             } => {
                 self.expr(inner);
                 self.ty(ty);
             }
-            ExprKind::Tuple(items) | ExprKind::Continue(items) => {
-                items.iter().for_each(|item| self.expr(item));
+            ExprKind::Tuple(items) => items.iter().for_each(|item| self.expr(item)),
+            ExprKind::Continue(items) => {
+                items.iter().flatten().for_each(|item| self.expr(item));
+            }
+            ExprKind::Range { lower, upper, .. } => {
+                self.expr(lower);
+                self.expr(upper);
             }
             ExprKind::Form { arguments, .. } => {
                 arguments.iter().for_each(|argument| self.expr(argument));
@@ -265,18 +280,26 @@ impl Mentions<'_> {
                 body,
             } => {
                 self.state(state);
-                self.ty(result);
+                result.iter().for_each(|result| self.ty(result));
+                self.block(body);
+            }
+            ExprKind::While {
+                pattern,
+                condition,
+                body,
+            } => {
+                pattern.iter().for_each(|pattern| self.pattern(pattern));
+                self.expr(condition);
                 self.block(body);
             }
             ExprKind::For {
-                lower,
-                upper,
+                pattern,
+                iterable,
                 state,
                 body,
-                ..
             } => {
-                self.expr(lower);
-                self.expr(upper);
+                self.pattern(pattern);
+                self.expr(iterable);
                 self.state(state);
                 self.block(body);
             }

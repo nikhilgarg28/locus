@@ -21,9 +21,31 @@ impl Env<'_> {
             match &statement.kind {
                 StatementKind::Error => failed = true,
                 StatementKind::Let {
+                    mutable: true,
+                    pattern,
+                    ..
+                } => {
+                    self.error(
+                        "L0290",
+                        "`let mut` is not in Locus yet; M2 adds it with assignment",
+                        statement.span,
+                    );
+                    self.poison(pattern);
+                    failed = true;
+                }
+                StatementKind::Assign { .. } => {
+                    self.error(
+                        "L0290",
+                        "assignment is not in Locus yet; M2 adds it with `let mut`",
+                        statement.span,
+                    );
+                    failed = true;
+                }
+                StatementKind::Let {
                     pattern,
                     annotation,
                     value,
+                    ..
                 } => {
                     let result = (|| {
                         let value = match annotation {

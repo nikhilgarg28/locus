@@ -1,0 +1,28 @@
+error[L0125]: `mut` must be attached to each individual binding
+ --> tests/corpus/reject/mut_misplaced.lc:4:9
+  |
+4 |     let mut (a, b) = pair; //~ error: L0125 `mut` must be attached to each individual binding
+  |         ^^^
+  |
+  = note: `mut` goes before the name of a binding or of a parameter, as in `let (mut a, b) = pair;` or `fn f(mut n: u8)`
+error[L0125]: `mut` on a binding may not be repeated
+ --> tests/corpus/reject/mut_misplaced.lc:5:9
+  |
+5 |     let mut mut c = a; //~ error: L0125 `mut` on a binding may not be repeated
+  |         ^^^
+  |
+  = note: `mut` goes before the name of a binding or of a parameter, as in `let (mut a, b) = pair;` or `fn f(mut n: u8)`
+error[L0125]: a parameter of a quantifier or a proposition never changes, and `mut` is not written on it
+  --> tests/corpus/reject/mut_misplaced.lc:10:12
+   |
+10 | prop Small(mut n: u8) { //~ error: L0125 a parameter of a quantifier or a proposition never changes
+   |            ^^^
+   |
+   = note: `mut` goes before the name of a binding or of a parameter, as in `let (mut a, b) = pair;` or `fn f(mut n: u8)`
+error[L0125]: a parameter of a quantifier or a proposition never changes, and `mut` is not written on it
+  --> tests/corpus/reject/mut_misplaced.lc:14:31
+   |
+14 | const c: Prop = prop!(forall (mut n: u8) { n == n }); //~ error: L0125 a parameter of a quantifier or a proposition never changes
+   |                               ^^^
+   |
+   = note: `mut` goes before the name of a binding or of a parameter, as in `let (mut a, b) = pair;` or `fn f(mut n: u8)`

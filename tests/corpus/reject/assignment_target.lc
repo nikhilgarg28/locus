@@ -1,0 +1,12 @@
+// The left-hand side of an assignment is a variable or a field path; what
+// rustc says of anything else, Locus says too, and the rest is still read.
+fn f(x: u8, pair: (u8, u8), lock: Lock) -> u8 {
+    let mut total = x;
+    total = 1;
+    lock.failures = 2;
+    pair.0 = 3;
+    f(x) = 1; //~ error: L0123 invalid left-hand side of assignment
+    x + 1 = 2; //~ error: L0123 invalid left-hand side of assignment
+    (total) = 4; //~ error: L0123 invalid left-hand side of assignment
+    total
+}

@@ -98,6 +98,16 @@ impl Env<'_> {
                 "values of `fn` type are not supported yet; a `math fn` type is",
                 ty.span,
             ),
+            ast::TypeKind::Ref { .. } => self.fail(
+                "L0290",
+                "references (`&T`, `&mut T`) are not in Locus yet; O3 adds them",
+                ty.span,
+            ),
+            ast::TypeKind::Never => self.fail(
+                "L0290",
+                "the never type `!` is not in Locus yet; M5 adds it with `return`",
+                ty.span,
+            ),
         }
     }
 

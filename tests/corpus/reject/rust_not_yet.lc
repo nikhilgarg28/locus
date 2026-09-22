@@ -16,17 +16,20 @@ impl Counter {
 impl fmt::Debug for Counter { } //~ error: L0116 traits (`impl Trait for Type`)
 
 fn assigned(n: u8) -> u8 {
-    let mut total = n; //~ error: L0116 `mut` is not in Locus yet
+    let mut total = n;
     total += 1; //~ error: L0116 compound assignment (`+=`)
-    total = 2; //~ error: L0116 assignment (`=`)
+    total = 2;
     total
 }
 
-fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
+fn borrowed(n: &u8) -> u8 { *n } //~ error: L0116 dereferences and raw pointers (`*`)
+
+fn raw(n: *mut u8) -> u8 { 1 } //~ error: L0116 dereferences and raw pointers (`*`)
 
 fn looped(n: u8) -> u8 {
-    while n < 3 { }; //~ error: L0116 `while` loops
-    return n; //~ error: L0116 `return`
+    while n < 3 { };
+    let r = 0..=n; //~ error: L0116 inclusive ranges (`..=`) are not in Locus yet, except in the header of a `for`
+    return n;
 }
 
 fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters

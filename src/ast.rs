@@ -283,10 +283,14 @@ pub enum FunctionMode {
     Math,
 }
 
+/// `name: Type`, or `mut name: Type` for a parameter the body may assign
+/// (polish: it parses and is stored, and the elaborator does not read it yet).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parameter {
+    pub mutable: bool,
     pub name: Name,
     pub ty: Type,
+    /// From the name, or the `mut` before it, to the end of the type.
     pub span: Span,
 }
 
@@ -359,6 +363,13 @@ pub enum TypeKind {
         parameters: Vec<TypeField>,
         result: Box<Type>,
     },
+    /// `&T` or `&mut T`.
+    Ref {
+        mutable: bool,
+        inner: Box<Type>,
+    },
+    /// `!`, the type of an expression that never produces a value.
+    Never,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -376,7 +387,11 @@ pub struct Pattern {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatternKind {
-    Name(Name),
+    /// A binding, `name` or `mut name`.
+    Name {
+        name: Name,
+        mutable: bool,
+    },
     Wildcard,
     Unit,
     Bool(bool),
@@ -420,11 +435,26 @@ pub struct Statement {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StatementKind {
+    /// `let pattern = value;`, with `: Type` after the pattern when the
+    /// binding is annotated. `mutable` is set for `let mut name`, which is
+    /// also recorded on the pattern's name: the one `mut` is read either way.
     Let {
+        mutable: bool,
         pattern: Pattern,
         annotation: Option<Type>,
         value: Expr,
     },
+    /// `place = value;`, where `place` is a name or a field path such as
+    /// `a.b.c` or `a.0.b`; the parser rejects any other left-hand side.
+    /// Assignment is a statement, not an expression as in Rust, so it has
+    /// no value and cannot stand where a value is needed.
+    Assign {
+        place: Expr,
+        value: Expr,
+    },
+    /// An expression followed by `;`, or one that ends in a block (`if`,
+    /// `match`, `loop`, `for`, `while`, or a block itself), which ends its
+    /// statement without a `;` as it does in Rust.
     Expression(Expr),
     Error,
 }
@@ -433,6 +463,23 @@ pub enum StatementKind {
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
+}
+
+impl Expr {
+    /// Whether the expression ends in a block: a block, `if`, `match`,
+    /// `loop`, `for`, or `while`. In statement position such an expression
+    /// is a whole statement without a `;`, and what follows begins the next.
+    pub fn is_block_like(&self) -> bool {
+        matches!(
+            self.kind,
+            ExprKind::Block(_)
+                | ExprKind::If { .. }
+                | ExprKind::Match { .. }
+                | ExprKind::Loop { .. }
+                | ExprKind::For { .. }
+                | ExprKind::While { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -471,20 +518,49 @@ pub enum ExprKind {
         scrutinee: Box<Expr>,
         arms: Vec<MatchArm>,
     },
+    /// `loop { body }`, or the state-passing `loop (state) -> R { body }`,
+    /// told apart by `result`: a loop without a state list has none.
     Loop {
         state: Vec<StateParameter>,
-        result: Box<Type>,
+        result: Option<Box<Type>>,
         body: Block,
     },
+    /// `while condition { body }`, or `while let pattern = condition { body }`
+    /// when `pattern` is present, in which case `condition` is the scrutinee.
+    While {
+        pattern: Option<Box<Pattern>>,
+        condition: Box<Expr>,
+        body: Block,
+    },
+    /// `for pattern in iterable { body }`. The iterable of a bounded loop is
+    /// a `Range`; any other expression is an iterator, which comes later.
+    /// The state list of the state-passing form follows the iterable, and is
+    /// empty otherwise.
     For {
-        index: Name,
-        lower: Box<Expr>,
-        upper: Box<Expr>,
+        pattern: Box<Pattern>,
+        iterable: Box<Expr>,
         state: Vec<StateParameter>,
         body: Block,
     },
-    Break(Box<Expr>),
-    Continue(Vec<Expr>),
+    /// `lower..upper` or `lower..=upper`. Only the header of a `for` reads a
+    /// range; elsewhere `..` is not an operator yet.
+    Range {
+        kind: RangeKind,
+        lower: Box<Expr>,
+        upper: Box<Expr>,
+    },
+    /// `break`, or `break value`.
+    Break(Option<Box<Expr>>),
+    /// Plain `continue`, or the state-passing `continue(next, ...)`, which
+    /// has the list, empty for `continue()`.
+    Continue(Option<Vec<Expr>>),
+    /// `return`, or `return value`.
+    Return(Option<Box<Expr>>),
+    /// `&value` or `&mut value`.
+    Ref {
+        mutable: bool,
+        expr: Box<Expr>,
+    },
     Forall {
         parameters: Vec<Parameter>,
         body: Block,
@@ -543,6 +619,22 @@ pub struct MatchArm {
     pub pattern: Pattern,
     pub body: Expr,
     pub span: Span,
+}
+
+/// Whether a range includes its upper bound: `..` or `..=`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RangeKind {
+    Exclusive,
+    Inclusive,
+}
+
+impl RangeKind {
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Self::Exclusive => "..",
+            Self::Inclusive => "..=",
+        }
+    }
 }
 
 /// `name: Type = initial` in a `loop` or `for` header.

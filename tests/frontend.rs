@@ -1,6 +1,6 @@
 use locus::ast::{
     BinaryOp, Block, DeclarationKind, Expr, ExprKind, Form, FunctionMode, IntegerLiteral,
-    IntegerSuffix, PatternKind, StatementKind, Type, TypeKind,
+    IntegerSuffix, PatternKind, RangeKind, StatementKind, Type, TypeKind,
 };
 use locus::diagnostic::Applicability;
 use locus::kernel::Natural;
@@ -233,6 +233,28 @@ fn grouped(expr: &Expr) -> String {
         }
         ExprKind::Member { value, name } => format!("{}.{}", grouped(value), name.text),
         ExprKind::Index { value, index, .. } => format!("{}.{index}", grouped(value)),
+        ExprKind::Ref { mutable, expr } => {
+            format!("(&{}{})", if *mutable { "mut " } else { "" }, grouped(expr))
+        }
+        ExprKind::Range { kind, lower, upper } => {
+            format!("({}{}{})", grouped(lower), kind.spelling(), grouped(upper))
+        }
+        ExprKind::Return(None) => "return".into(),
+        ExprKind::Return(Some(value)) => format!("(return {})", grouped(value)),
+        ExprKind::Break(None) => "break".into(),
+        ExprKind::Break(Some(value)) => format!("(break {})", grouped(value)),
+        ExprKind::Continue(None) => "continue".into(),
+        ExprKind::Continue(Some(next)) => format!("continue({})", list(next)),
+        // The forms that end in a block, by name: their insides are
+        // rendered by `rendered_statements`.
+        ExprKind::Block(_) => "<block>".into(),
+        ExprKind::If { .. } => "<if>".into(),
+        ExprKind::Match { .. } => "<match>".into(),
+        ExprKind::Loop { result: None, .. } => "<loop>".into(),
+        ExprKind::Loop { .. } => "<loop (state)>".into(),
+        ExprKind::While { pattern: None, .. } => "<while>".into(),
+        ExprKind::While { .. } => "<while let>".into(),
+        ExprKind::For { .. } => "<for>".into(),
         other => panic!("the table has no expression like {other:?}"),
     }
 }
@@ -251,6 +273,14 @@ fn grouped_ty(ty: &Type) -> String {
                 .join(", ")
         ),
         TypeKind::Proof(claim) => format!("@({})", grouped(claim)),
+        TypeKind::Ref { mutable, inner } => {
+            format!(
+                "&{}{}",
+                if *mutable { "mut " } else { "" },
+                grouped_ty(inner)
+            )
+        }
+        TypeKind::Never => "!".into(),
         TypeKind::Unit => "()".into(),
         TypeKind::Group(inner) => format!("({})", grouped_ty(inner)),
         TypeKind::Tuple(fields) => format!(
@@ -328,11 +358,14 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 .iter()
                 .map(|param| param.kind.spelling().to_string())
                 .collect();
-            params.extend(
-                parameters
-                    .iter()
-                    .map(|param| format!("{}: {}", param.name.text, grouped_ty(&param.ty))),
-            );
+            params.extend(parameters.iter().map(|param| {
+                format!(
+                    "{}{}: {}",
+                    if param.mutable { "mut " } else { "" },
+                    param.name.text,
+                    grouped_ty(&param.ty)
+                )
+            }));
             out.push_str(&format!(
                 "{}fn {}({}) -> {} {{ {} statement(s) }}",
                 if *mode == FunctionMode::Math {
@@ -980,9 +1013,15 @@ fn diagnostic_rendering_contains_source_location_and_help() {
 
 #[test]
 fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
-    // Half the default thread stack, so the limit keeps a margin.
+    // Half the default thread stack, so the limit keeps a margin. To measure
+    // the margin, `LOCUS_NESTING_STACK_KB=<n>` runs the test on a stack of
+    // that size; the smallest that passes is the stack the parser needs.
+    let stack_kb = std::env::var("LOCUS_NESTING_STACK_KB")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1024usize);
     std::thread::Builder::new()
-        .stack_size(1024 * 1024)
+        .stack_size(stack_kb * 1024)
         .spawn(|| {
             let limit_reported = |text: String, form: &str| {
                 assert!(
@@ -1019,6 +1058,36 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("continue(", ")"),
                 ("prop!(forall (n: u8) { ", " })"),
                 ("prop!(exists (n: u8) { ", " })"),
+                // S5: Rust's loop forms, `return`, references, assignment,
+                // and `let mut`, each nesting through its parts.
+                ("while ", " { }"),
+                ("while c { ", " }"),
+                ("while let x = ", " { }"),
+                ("while let Some(x) = ", " { }"),
+                ("while let x = c { ", " }"),
+                ("loop { ", " }"),
+                ("loop { break ", " }"),
+                ("loop { break; ", " }"),
+                ("for x in ", " { }"),
+                ("for x in 0..", " { }"),
+                ("for x in 0..=", " { }"),
+                ("for x in ", "..1 { }"),
+                ("for x in xs { ", " }"),
+                ("return ", ""),
+                ("return (", ")"),
+                ("&", ""),
+                ("&mut ", ""),
+                ("&(", ")"),
+                ("&mut (", ")"),
+                ("&&", ""),
+                ("{ x = ", "; 1 }"),
+                ("{ x.y = ", "; 1 }"),
+                ("{ let mut x = ", "; 1 }"),
+                ("{ let (mut a, b) = ", "; 1 }"),
+                ("{ let mut x: u8 = ", "; 1 }"),
+                ("{ if c { } else { } ", " }"),
+                ("{ while c { } ", " }"),
+                ("if c { 1 } else { 2 }.f(", ")"),
                 // The operators of S3: prefix chains, `as` chains, and
                 // binary nesting to either side through parentheses.
                 ("-", ""),
@@ -1083,6 +1152,13 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("fn() -> ", ""),
                 ("math fn(x: ", ") -> u8"),
                 ("@(forall (h: ", ") { true })"),
+                // S5: references in types.
+                ("&", ""),
+                ("&mut ", ""),
+                ("&&", ""),
+                ("&(", ")"),
+                ("&mut (", ",)"),
+                ("fn(&mut ", ") -> !"),
             ] {
                 limit_reported(
                     format!(
@@ -1103,6 +1179,9 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("E::V { a: ", " }"),
                 ("E::V { a: _, b: ", ", .. }"),
                 ("crate::a::E::V { a: ", " }"),
+                // S5: a variant by one name, and `mut` on the innermost name.
+                ("Some(", ")"),
+                ("(mut a, ", ")"),
             ] {
                 let (open, close) = (open.repeat(512), close.repeat(512));
                 limit_reported(
@@ -1111,6 +1190,15 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 );
                 limit_reported(
                     format!("fn f() -> u8 {{ match y {{ {open}x{close} => 1 }} }}"),
+                    &open,
+                );
+                // S5: the patterns of `while let` and `for`.
+                limit_reported(
+                    format!("fn f() -> u8 {{ while let {open}x{close} = 1 {{ }} 1 }}"),
+                    &open,
+                );
+                limit_reported(
+                    format!("fn f() -> u8 {{ for {open}x{close} in xs {{ }} 1 }}"),
                     &open,
                 );
             }
@@ -1771,7 +1859,7 @@ fn match_arms_take_every_pattern_form() {
     assert_eq!(path.single().unwrap().text, "Lock");
     assert!(rest.is_none());
     assert!(fields[0].name.is_none());
-    assert!(matches!(fields[0].pattern.kind, PatternKind::Name(_)));
+    assert!(matches!(fields[0].pattern.kind, PatternKind::Name { .. }));
     assert_eq!(fields[1].name.as_ref().unwrap().text, "open");
     assert!(matches!(fields[1].pattern.kind, PatternKind::Bool(true)));
     let PatternKind::Tuple(literals) = &arms[4].pattern.kind else {
@@ -1889,7 +1977,7 @@ fn loops_list_their_state_and_result() {
     assert_eq!(state[1].name.text, "bound");
     assert!(matches!(state[1].ty.kind, TypeKind::Proof(_)));
     assert!(matches!(state[1].initial.kind, ExprKind::Hole));
-    assert!(matches!(result.kind, TypeKind::Tuple(_)));
+    assert!(matches!(result.unwrap().kind, TypeKind::Tuple(_)));
     let ExprKind::If {
         then_branch,
         else_branch,
@@ -1900,37 +1988,56 @@ fn loops_list_their_state_and_result() {
     };
     assert!(matches!(
         then_branch.tail.unwrap().kind,
-        ExprKind::Break(value) if matches!(value.kind, ExprKind::Tuple(_))
+        ExprKind::Break(Some(value)) if matches!(value.kind, ExprKind::Tuple(_))
     ));
     let ExprKind::Block(else_block) = else_branch.kind else {
         panic!()
     };
     assert!(matches!(
         else_block.tail.unwrap().kind,
-        ExprKind::Continue(arguments) if arguments.len() == 2
+        ExprKind::Continue(Some(arguments)) if arguments.len() == 2
     ));
-    for text in [
-        "loop { break 1 }",
-        "loop () -> u8 { break }",
-        "loop () -> u8 { continue }",
-    ] {
-        assert!(
-            !parse_text(&format!("fn f() -> u8 {{ {text} }}")).is_success(),
-            "{text}"
-        );
-    }
+    // The state-passing form and Rust's are told apart by the result type,
+    // and `break` and `continue` by whether they carry anything.
     assert!(matches!(
         expression("loop () -> u8 { continue() }").kind,
-        ExprKind::Loop { state, .. } if state.is_empty()
+        ExprKind::Loop { state, result: Some(_), .. } if state.is_empty()
     ));
+    assert!(matches!(
+        expression("loop { break 1 }").kind,
+        ExprKind::Loop { state, result: None, .. } if state.is_empty()
+    ));
+    for (text, alone) in [
+        ("loop () -> u8 { break }", ExprKind::Break(None)),
+        ("loop () -> u8 { continue }", ExprKind::Continue(None)),
+    ] {
+        let ExprKind::Loop { body, .. } = expression(text).kind else {
+            panic!("{text}")
+        };
+        assert_eq!(body.tail.unwrap().kind, alone, "{text}");
+    }
+}
+
+/// The bounds and kind of the range a `for` runs over.
+fn range(iterable: &Expr) -> (&Expr, &Expr, RangeKind) {
+    let ExprKind::Range { kind, lower, upper } = &iterable.kind else {
+        panic!("not a range: {iterable:?}")
+    };
+    (lower, upper, *kind)
+}
+
+fn bound_name(pattern: &locus::ast::Pattern) -> (&str, bool) {
+    let PatternKind::Name { name, mutable } = &pattern.kind else {
+        panic!("not a name: {pattern:?}")
+    };
+    (&name.text, *mutable)
 }
 
 #[test]
 fn a_for_header_separates_the_upper_bound_from_the_state_list() {
     let ExprKind::For {
-        index,
-        lower,
-        upper,
+        pattern,
+        iterable,
         state,
         body,
     } = expression("for i in 0..n (acc: u8 = 0, same: @(acc == i) = _) { continue(acc, same) }")
@@ -1938,33 +2045,659 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
     else {
         panic!()
     };
-    assert_eq!(index.text, "i");
+    assert_eq!(bound_name(&pattern), ("i", false));
+    let (lower, upper, kind) = range(&iterable);
+    assert_eq!(kind, RangeKind::Exclusive);
     assert!(matches!(&lower.kind, ExprKind::Integer(literal) if literal.value == Natural::zero()));
     assert!(matches!(&upper.kind, ExprKind::Name(name) if name.text == "n"));
     assert_eq!(state.len(), 2);
     assert!(matches!(body.tail.unwrap().kind, ExprKind::Continue(_)));
 
-    // Only the group directly before the body is the state list.
+    // Only the group directly before the body is the state list, and only
+    // when it is empty or begins `name:`; `(a) {` closes a call.
     let ExprKind::For {
-        lower,
-        upper,
-        state,
-        ..
+        iterable, state, ..
     } = expression("for i in start(a)..limit(a, b) () { continue() }").kind
     else {
         panic!()
     };
+    let (lower, upper, _) = range(&iterable);
     assert!(matches!(lower.kind, ExprKind::Call { .. }));
     assert!(matches!(&upper.kind, ExprKind::Call { arguments, .. } if arguments.len() == 2));
     assert!(state.is_empty());
+    let ExprKind::For {
+        iterable, state, ..
+    } = expression("for i in 0..limit(a) { continue }").kind
+    else {
+        panic!()
+    };
+    assert!(
+        matches!(&range(&iterable).1.kind, ExprKind::Call { arguments, .. } if arguments.len() == 1)
+    );
+    assert!(state.is_empty());
 
-    // Rust's form, without a state list, parses with no state; S5 gives
-    // it its meaning.
-    let ExprKind::For { state, upper, .. } = expression("for i in 0..n { continue() }").kind else {
+    // Rust's form, without a state list, parses with no state.
+    let ExprKind::For {
+        state, iterable, ..
+    } = expression("for i in 0..n { continue() }").kind
+    else {
         panic!()
     };
     assert!(state.is_empty());
-    assert!(matches!(&upper.kind, ExprKind::Name(name) if name.text == "n"));
+    assert!(matches!(&range(&iterable).1.kind, ExprKind::Name(name) if name.text == "n"));
+}
+
+// S5: `let mut`, assignment, `return`, Rust's loop forms, references, and
+// the never type.
+
+/// A pattern on one line: names with their `mut`, `_`, and tuples of those.
+fn rendered_pattern(pattern: &locus::ast::Pattern) -> String {
+    match &pattern.kind {
+        PatternKind::Name { name, mutable } => {
+            format!("{}{}", if *mutable { "mut " } else { "" }, name.text)
+        }
+        PatternKind::Wildcard => "_".into(),
+        PatternKind::Tuple(parts) => format!(
+            "({})",
+            parts
+                .iter()
+                .map(rendered_pattern)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        PatternKind::Variant { path, arguments } => match arguments {
+            None => path.text(),
+            Some(arguments) => format!(
+                "{}({})",
+                path.text(),
+                arguments
+                    .iter()
+                    .map(rendered_pattern)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        },
+        other => panic!("the table has no pattern like {other:?}"),
+    }
+}
+
+/// A block's statements, each on one line, and its tail: `let`, `let mut`,
+/// an assignment, or an expression, which ends in `;` whether or not the
+/// source needed one.
+fn rendered_statements(block: &Block) -> Vec<String> {
+    let mut lines: Vec<String> = block
+        .statements
+        .iter()
+        .map(|statement| match &statement.kind {
+            StatementKind::Let {
+                mutable,
+                pattern,
+                annotation,
+                value,
+            } => format!(
+                "let {}{}{} = {};",
+                if *mutable { "mut " } else { "" },
+                // `let mut name` puts its `mut` on the name as well.
+                match &pattern.kind {
+                    PatternKind::Name {
+                        name,
+                        mutable: true,
+                    } if *mutable => name.text.clone(),
+                    _ if *mutable => panic!("`let mut` without a mutable name: {pattern:?}"),
+                    _ => rendered_pattern(pattern),
+                },
+                annotation
+                    .as_ref()
+                    .map(|ty| format!(": {}", grouped_ty(ty)))
+                    .unwrap_or_default(),
+                grouped(value)
+            ),
+            StatementKind::Assign { place, value } => {
+                format!("{} = {};", grouped(place), grouped(value))
+            }
+            StatementKind::Expression(expr) => format!("{};", grouped(expr)),
+            StatementKind::Error => "<error>".into(),
+        })
+        .collect();
+    lines.extend(block.tail.iter().map(|tail| grouped(tail)));
+    lines
+}
+
+/// The first expression of a block: its first statement, or its tail, or
+/// `()` when it is empty.
+fn first_of(block: &Block) -> String {
+    match (&block.statements[..], &block.tail) {
+        ([statement, ..], _) => match &statement.kind {
+            StatementKind::Expression(expr) => grouped(expr),
+            other => panic!("{other:?}"),
+        },
+        ([], Some(tail)) => grouped(tail),
+        ([], None) => "()".into(),
+    }
+}
+
+/// The first expression of each branch of an `if`.
+fn branches(expr: &Expr) -> (String, String) {
+    let ExprKind::If {
+        then_branch,
+        else_branch,
+        ..
+    } = &expr.kind
+    else {
+        panic!("not an `if`: {expr:?}")
+    };
+    let ExprKind::Block(else_block) = &else_branch.kind else {
+        panic!()
+    };
+    (first_of(then_branch), first_of(else_block))
+}
+
+fn statement_expr(block: &Block, index: usize) -> &Expr {
+    let StatementKind::Expression(expr) = &block.statements[index].kind else {
+        panic!("statement {index} is not an expression")
+    };
+    expr
+}
+
+#[test]
+fn let_mut_and_assignment_are_statements() {
+    let block = body(
+        "fn f(p: (u8, u8), s: S) -> u8 {
+            let mut x = 1;
+            let mut y: u8 = 2;
+            let (mut a, b) = p;
+            let (_, mut c) = p;
+            x = x + 1;
+            s.lock.failures = 0;
+            p.0 = a;
+            s.pairs.0.first = b;
+            y = c;
+            x
+        }",
+    );
+    assert_eq!(
+        rendered_statements(&block),
+        [
+            "let mut x = 1;",
+            "let mut y: u8 = 2;",
+            "let (mut a, b) = p;",
+            "let (_, mut c) = p;",
+            "x = (x + 1);",
+            "s.lock.failures = 0;",
+            "p.0 = a;",
+            "s.pairs.0.first = b;",
+            "y = c;",
+            "x",
+        ]
+    );
+    // `let mut name` is recorded on the statement and on the name alike;
+    // `mut` inside a pattern is on the name alone.
+    let StatementKind::Let {
+        mutable, pattern, ..
+    } = &block.statements[0].kind
+    else {
+        panic!()
+    };
+    assert!(*mutable);
+    assert_eq!(bound_name(pattern), ("x", true));
+    let StatementKind::Let {
+        mutable, pattern, ..
+    } = &block.statements[2].kind
+    else {
+        panic!()
+    };
+    assert!(!*mutable);
+    let PatternKind::Tuple(parts) = &pattern.kind else {
+        panic!()
+    };
+    assert_eq!(bound_name(&parts[0]), ("a", true));
+    assert_eq!(bound_name(&parts[1]), ("b", false));
+    // The value of an assignment is a whole expression, and the statement
+    // spans from the place to the `;`.
+    let StatementKind::Assign { place, value } = &block.statements[4].kind else {
+        panic!()
+    };
+    assert!(matches!(place.kind, ExprKind::Name(_)));
+    assert!(matches!(value.kind, ExprKind::Binary { .. }));
+    let span = block.statements[4].span;
+    assert_eq!(span.end - span.start, "x = x + 1;".len());
+    // In a method, `self` and its fields are places.
+    let parsed = parse_text("impl S { fn f(&mut self) -> u8 { self.count = 0; self.count } }");
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    // `mut` on a parameter parses and is kept.
+    let parsed = parse_text("fn f(mut n: u8, m: u8) -> u8 { n = m; n }");
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    assert_eq!(
+        rendered_item(&parsed.program.declarations[0]),
+        "fn f(mut n: u8, m: u8) -> u8 { 2 statement(s) }"
+    );
+    let DeclarationKind::Function { parameters, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    assert!(parameters[0].mutable && !parameters[1].mutable);
+    assert_eq!(parameters[0].span.start, "fn f(".len());
+}
+
+#[test]
+fn an_assignment_needs_a_place_and_a_statement_of_its_own() {
+    // L0123, in rustc's words, at the `=`, with the place labelled.
+    for (text, place) in [
+        ("f(x) = 1;", "f(x)"),
+        ("x + 1 = 2;", "x + 1"),
+        ("(x) = 1;", "(x)"),
+        ("1 = x;", "1"),
+        ("S { x } = s;", "S { x }"),
+        ("x.f() = 1;", "x.f()"),
+        ("x as u8 = 1;", "x as u8"),
+        ("if c { a } else { b } = 1;", "if c { a } else { b }"),
+    ] {
+        let mut sources = SourceMap::default();
+        let source = format!("fn f(x: u8) -> u8 {{ {text} x }}");
+        let file = sources.add("test.lc", source.as_str());
+        let source = sources.get(file);
+        let parsed = parse(source);
+        let first = &parsed.diagnostics[0];
+        assert_eq!(first.code, "L0123", "{text}: {:#?}", parsed.diagnostics);
+        assert_eq!(first.message, "invalid left-hand side of assignment");
+        assert_eq!(source.slice(first.labels[0].span), Some("="), "{text}");
+        assert_eq!(source.slice(first.labels[1].span), Some(place), "{text}");
+        assert_eq!(first.labels[1].message, "cannot assign to this expression");
+    }
+    // L0124 where a value is needed: the message says what to write.
+    for text in [
+        "let y = x = 1;",
+        "if x = 1 { 1 } else { 2 };",
+        "while x = 1 { }",
+        "f(x = 1);",
+        "match x { _ => x = 1 };",
+        "(x = 1);",
+        "let y = { 1 } = 1;",
+        "for i in x = 1 { }",
+    ] {
+        let parsed = parse_text(&format!("fn f(x: u8) -> u8 {{ {text} x }}"));
+        let first = &parsed.diagnostics[0];
+        assert_eq!(first.code, "L0124", "{text}: {:#?}", parsed.diagnostics);
+        assert_eq!(first.message, "assignment is a statement and has no value");
+        assert!(first.notes[0].contains("`==`"), "{text}");
+    }
+    // Compound assignment is still Rust's alone.
+    let parsed = parse_text("fn f(x: u8) -> u8 { x += 1; x }");
+    assert_eq!(parsed.diagnostics[0].code, "L0116");
+    assert!(
+        parsed.diagnostics[0]
+            .message
+            .starts_with("compound assignment")
+    );
+    // After a `;` is missing, the fix is the usual one.
+    let parsed = parse_text("fn f(x: u8) -> u8 { x = 1 x }");
+    assert_eq!(parsed.diagnostics[0].code, "L0102");
+    assert_eq!(
+        parsed.diagnostics[0].message,
+        "expected `;` after this assignment"
+    );
+    // `=` after an operand is still the `=` of a state parameter.
+    assert!(
+        parse_text("fn f(n: u8) -> u8 { loop (ok: @within_limit(n) = _) -> u8 { break 1 } }")
+            .is_success()
+    );
+}
+
+#[test]
+fn mut_goes_before_a_name_alone() {
+    for (text, message) in [
+        (
+            "fn f(p: (u8, u8)) -> u8 { let mut (a, b) = p; a }",
+            "`mut` must be attached to each individual binding",
+        ),
+        (
+            "fn f(x: u8) -> u8 { let mut _ = x; x }",
+            "`mut` must be attached to each individual binding",
+        ),
+        (
+            "fn f(x: u8) -> u8 { let mut 1 = x; x }",
+            "`mut` must be attached to each individual binding",
+        ),
+        (
+            "fn f(x: u8) -> u8 { let mut mut y = x; x }",
+            "`mut` on a binding may not be repeated",
+        ),
+        (
+            "prop P(mut n: u8) { Any: @(true) }",
+            "a parameter of a quantifier or a proposition never changes, and `mut` is not written on it",
+        ),
+        (
+            "const c: Prop = prop!(forall (mut n: u8) { n == n });",
+            "a parameter of a quantifier or a proposition never changes, and `mut` is not written on it",
+        ),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let parsed = parse(source);
+        let first = &parsed.diagnostics[0];
+        assert_eq!(first.code, "L0125", "{text}: {:#?}", parsed.diagnostics);
+        assert_eq!(first.message, message, "{text}");
+        assert_eq!(source.slice(first.labels[0].span), Some("mut"), "{text}");
+        assert!(first.notes[0].contains("`let (mut a, b) = pair;`"));
+    }
+    // Where no pattern follows, `mut` was meant as a name.
+    for text in [
+        "fn f() -> u8 { let mut = 1; 1 }",
+        "fn f() -> u8 { let mut mut = 1; 1 }",
+        "fn f() -> u8 { let (a, mut) = p; 1 }",
+        "fn f(mut: u8) -> u8 { 1 }",
+        "fn f(mut mut: u8) -> u8 { 1 }",
+        "fn f() -> u8 { for mut in 0..1 { } 1 }",
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics[0].code, "L0115",
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert!(
+            parsed.diagnostics[0]
+                .message
+                .starts_with("`mut` is a Rust keyword")
+        );
+    }
+    // `mut` before an expression is not an expression.
+    let parsed = parse_text("fn f(x: u8) -> u8 { let y = mut x; y }");
+    assert_eq!(parsed.diagnostics[0].code, "L0100");
+    assert_eq!(parsed.diagnostics[0].message, "expected an expression");
+    // `mut S` is the binding `S`, as it is in Rust, so `let mut S { x }`
+    // fails at the brace.
+    let parsed = parse_text("fn f(s: S) -> u8 { let mut S { x } = s; x }");
+    assert_eq!(parsed.diagnostics[0].code, "L0100");
+    assert_eq!(parsed.diagnostics[0].message, "expected `=`, found `{`");
+}
+
+#[test]
+fn return_break_and_continue_stand_alone_or_carry_a_value() {
+    let block = body(
+        "fn f(x: u8) -> u8 {
+            if x == 0 { return; } else { }
+            if x == 1 { return x } else { return (x, x); }
+            loop { if x == 2 { break; } else { break x } }
+            loop { if x == 3 { continue; } else { continue } }
+            loop () -> u8 { if x == 4 { continue() } else { continue(x) } }
+            return
+        }",
+    );
+    assert_eq!(
+        branches(statement_expr(&block, 0)),
+        ("return".to_string(), "()".to_string())
+    );
+    assert_eq!(
+        branches(statement_expr(&block, 1)),
+        ("(return x)".to_string(), "(return (x, x,))".to_string())
+    );
+    let in_loop = |index: usize| -> (String, String) {
+        let ExprKind::Loop { body, .. } = &statement_expr(&block, index).kind else {
+            panic!("statement {index} is not a loop")
+        };
+        branches(body.tail.as_ref().unwrap())
+    };
+    assert_eq!(in_loop(2), ("break".to_string(), "(break x)".to_string()));
+    assert_eq!(in_loop(3), ("continue".to_string(), "continue".to_string()));
+    assert_eq!(
+        in_loop(4),
+        ("continue()".to_string(), "continue(x)".to_string())
+    );
+    assert_eq!(grouped(block.tail.as_ref().unwrap()), "return");
+    // The value of a jump is a whole expression, and a jump is an operand.
+    assert_eq!(grouped(&expression("return a + b")), "(return (a + b))");
+    assert_eq!(
+        grouped(&expression("(return, break, continue)")),
+        "(return, break, continue,)"
+    );
+    assert_eq!(
+        grouped(&expression("f(return 1, break)")),
+        "f((return 1), break)"
+    );
+    assert_eq!(grouped(&expression("break (1, 2).0")), "(break (1, 2,).0)");
+    // A `return` or `break` alone is not an operand of anything.
+    assert!(!parse_text("fn f() -> u8 { return + 1 }").is_success());
+    assert!(!parse_text("fn f() -> u8 { return as u8 }").is_success());
+}
+
+#[test]
+fn loops_take_rusts_forms_and_the_state_passing_one() {
+    let block = body(
+        "fn f(n: u8, items: List, pairs: List) -> u8 {
+            loop { break; }
+            while n < 3 { n = n + 1; }
+            while let Some(v) = items.next() { n = v; }
+            for i in 0..n { n = i; }
+            for i in 0..=n { n = i; }
+            for (a, b) in pairs { n = a; }
+            for x in items { n = x; }
+            for x in items.iter() { n = x; }
+            for E::V(x) in items { n = x; }
+            for i in 0..n (s: u8 = 0) { continue(s) }
+            loop (s: u8 = 0) -> u8 { break s }
+            n
+        }",
+    );
+    assert_eq!(
+        rendered_statements(&block),
+        [
+            "<loop>;",
+            "<while>;",
+            "<while let>;",
+            "<for>;",
+            "<for>;",
+            "<for>;",
+            "<for>;",
+            "<for>;",
+            "<for>;",
+            "<for>;",
+            "<loop (state)>;",
+            "n",
+        ]
+    );
+    let for_header = |index: usize| -> (String, String, usize) {
+        let ExprKind::For {
+            pattern,
+            iterable,
+            state,
+            ..
+        } = &statement_expr(&block, index).kind
+        else {
+            panic!("statement {index} is not a `for`")
+        };
+        (rendered_pattern(pattern), grouped(iterable), state.len())
+    };
+    assert_eq!(for_header(3), ("i".into(), "(0..n)".into(), 0));
+    assert_eq!(for_header(4), ("i".into(), "(0..=n)".into(), 0));
+    assert_eq!(for_header(5), ("(a, b)".into(), "pairs".into(), 0));
+    assert_eq!(for_header(6), ("x".into(), "items".into(), 0));
+    assert_eq!(for_header(7), ("x".into(), "items.iter()".into(), 0));
+    assert_eq!(for_header(8), ("E::V(x)".into(), "items".into(), 0));
+    assert_eq!(for_header(9), ("i".into(), "(0..n)".into(), 1));
+    let ExprKind::While {
+        pattern,
+        condition,
+        body,
+    } = &statement_expr(&block, 2).kind
+    else {
+        panic!()
+    };
+    assert_eq!(rendered_pattern(pattern.as_ref().unwrap()), "Some(v)");
+    assert_eq!(grouped(condition), "items.next()");
+    assert_eq!(rendered_statements(body), ["n = v;"]);
+    let ExprKind::While {
+        pattern, condition, ..
+    } = &statement_expr(&block, 1).kind
+    else {
+        panic!()
+    };
+    assert!(pattern.is_none());
+    assert_eq!(grouped(condition), "(n < 3)");
+    // The bounds of a range are whole expressions, and the range is the
+    // iterable of the loop, not an operator anywhere else.
+    let ExprKind::For { iterable, .. } = expression("for i in a + 1..b * 2 { }").kind else {
+        panic!()
+    };
+    assert_eq!(grouped(&iterable), "((a + 1)..(b * 2))");
+    for text in ["0..n", "let r = 0..n; 1", "f(0..n)"] {
+        let parsed = parse_text(&format!("fn f(n: u8) -> u8 {{ {text} }}"));
+        assert!(!parsed.is_success(), "{text}");
+    }
+    // A `while let` takes any pattern and needs its `=`.
+    assert!(parse_text("fn f() -> u8 { while let (a, _) = p { } 1 }").is_success());
+    let parsed = parse_text("fn f() -> u8 { while let (x, _) { } 1 }");
+    assert_eq!(parsed.diagnostics[0].message, "expected `=`, found `{`");
+}
+
+#[test]
+fn a_struct_literal_cannot_stand_in_a_loop_header() {
+    // `while flag {` and `for x in items {` begin the body at `{`.
+    let ExprKind::While { condition, .. } = expression("while flag { flag = false; }").kind else {
+        panic!()
+    };
+    assert!(matches!(condition.kind, ExprKind::Name(_)));
+    let ExprKind::While { condition, .. } =
+        expression("while let Some(x) = queue { queue = x; }").kind
+    else {
+        panic!()
+    };
+    assert!(matches!(condition.kind, ExprKind::Name(_)));
+    let ExprKind::For { iterable, .. } = expression("for x in items { }").kind else {
+        panic!()
+    };
+    assert!(matches!(iterable.kind, ExprKind::Name(_)));
+    let ExprKind::For { iterable, .. } = expression("for x in lo..items { }").kind else {
+        panic!()
+    };
+    assert!(matches!(range(&iterable).1.kind, ExprKind::Name(_)));
+    // Delimiters lift the restriction, as for `if`.
+    let ExprKind::While { condition, .. } =
+        expression("while same(Lock { failures: 0, open }) { }").kind
+    else {
+        panic!()
+    };
+    assert!(matches!(condition.kind, ExprKind::Call { .. }));
+}
+
+#[test]
+fn an_expression_ending_in_a_block_is_a_whole_statement() {
+    // As in Rust, `if c { } else { } (a, b)` is an `if` statement and then
+    // a tuple, not a call; the same for `match`, the loops, and a block.
+    let block = body(
+        "fn f(c: bool, a: u8, b: u8) -> (u8, u8) {
+            if c { g(); } else { h(); }
+            match c { _ => 1 }
+            loop { break; }
+            while c { }
+            for i in 0..a { }
+            { a }
+            if c { a } else { b }.wrapping_add(1);
+            match c { _ => a }.f().g();
+            (a, b)
+        }",
+    );
+    assert_eq!(
+        rendered_statements(&block),
+        [
+            "<if>;",
+            "<match>;",
+            "<loop>;",
+            "<while>;",
+            "<for>;",
+            "<block>;",
+            "<if>.wrapping_add(1);",
+            "<match>.f().g();",
+            "(a, b,)",
+        ]
+    );
+    // A `;` after such a statement is allowed, and none is needed before
+    // the tail.
+    let block = body("fn f(c: bool) -> u8 { if c { 1 } else { 2 }; while c { }; 3 }");
+    assert_eq!(rendered_statements(&block), ["<if>;", "<while>;", "3"]);
+    let block = body("fn f(c: bool) -> u8 { { 1 } if c { 1 } else { 2 } }");
+    assert_eq!(rendered_statements(&block), ["<block>;", "<if>"]);
+    // An operator after such a statement begins the next statement, where
+    // it is no expression; the value of a `let` is not restricted.
+    for text in ["match c { _ => 1 } + 1", "if c { 1 } else { 2 } == 3"] {
+        let parsed = parse_text(&format!("fn f(c: bool) -> u8 {{ {text} }}"));
+        assert_eq!(
+            parsed.diagnostics[0].message, "expected an expression",
+            "{text}"
+        );
+    }
+    let block = body("fn f(c: bool) -> u8 { let x = if c { 1 } else { 2 } + 1; x }");
+    assert_eq!(rendered_statements(&block), ["let x = (<if> + 1);", "x"]);
+    // The state-passing loops are statements in the same way.
+    let block = body("fn f(n: u8) -> (u8, u8) { for i in 0..n () { continue() } (n, n) }");
+    assert_eq!(rendered_statements(&block), ["<for>;", "(n, n,)"]);
+}
+
+#[test]
+fn references_and_the_never_type_parse_in_types_and_expressions() {
+    for (text, expected) in [
+        ("&x", "(&x)"),
+        ("&mut x", "(&mut x)"),
+        ("&mut lock.failures", "(&mut lock.failures)"),
+        ("&pair.0", "(&pair.0)"),
+        ("f(&mut a, &b, c)", "f((&mut a), (&b), c)"),
+        ("&&x", "(&(&x))"),
+        ("&&mut x", "(&(&mut x))"),
+        ("&x as u8", "((&x) as u8)"),
+        ("&x + 1", "((&x) + 1)"),
+        ("&f(x).y", "(&f(x).y)"),
+        ("-&x", "(-(&x))"),
+        ("!&x", "(!(&x))"),
+        ("&(a + b)", "(&(a + b))"),
+        ("a & &b", "(a & (&b))"),
+        ("a && &b", "(a && (&b))"),
+    ] {
+        assert_eq!(grouped(&expression(text)), expected, "{text}");
+    }
+    let parsed = parse_text(
+        "fn f(a: &u8, b: &mut Lock, c: &&u8, d: &mut (u8, u8), e: &Option<u8>, g: &mut &u8) -> ! { loop { } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    assert_eq!(
+        rendered_item(&parsed.program.declarations[0]),
+        "fn f(a: &u8, b: &mut Lock, c: &&u8, d: &mut (u8, u8), e: &Option<u8>, g: &mut &u8) -> ! { 1 statement(s) }"
+    );
+    let parsed = parse_text("impl S { fn f(&mut self, other: &S) -> &mut S { self } }");
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    // A reference is not a place, and `&mut x = y` is an invalid one.
+    let parsed = parse_text("fn f(x: u8, y: u8) -> u8 { &mut x = y; x }");
+    assert_eq!(parsed.diagnostics[0].code, "L0123");
+    // Dereference stays Rust's alone, in types and in expressions.
+    for text in [
+        "fn f(x: *const u8) -> u8 { 1 }",
+        "fn f(x: &u8) -> u8 { *x }",
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics[0].code, "L0116",
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert!(parsed.diagnostics[0].message.starts_with("dereferences"));
+    }
+    // `!` is a type, and `!` before a value is still negation.
+    let block = body("fn f(x: bool) -> ! { let y: ! = loop { }; !x; y }");
+    assert_eq!(
+        rendered_statements(&block),
+        ["let y: ! = <loop>;", "(!x);", "y"]
+    );
+    // The spans of a reference and of a `&&` reference are exact.
+    let ExprKind::Ref { expr, .. } = expression("&&x").kind else {
+        panic!()
+    };
+    let inner = expr.span;
+    assert_eq!(
+        (inner.start, inner.end),
+        (
+            "fn example() -> u8 { &".len(),
+            "fn example() -> u8 { &&x".len()
+        )
+    );
 }
 
 #[test]
@@ -2090,11 +2823,25 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
             "fn f() -> u8 { loop ({}: u8 = 0) -> u8 { break 1 } }",
             &[],
         ),
+        // The index of a `for` is a pattern, like a binding.
         (
             "a loop index",
             "fn f() -> u8 { for {} in 0..1 () { continue() } }",
-            &[],
+            &["true", "false"],
         ),
+        (
+            "a `while let` pattern",
+            "fn f() -> u8 { while let {} = e { } 1 }",
+            &["true", "false"],
+        ),
+        ("a `mut` binding", "fn f() -> u8 { let mut {} = 1; 1 }", &[]),
+        // `mut self` is a receiver, reported as one where no method is.
+        (
+            "a `mut` parameter",
+            "fn f(mut {}: u8) -> u8 { 1 }",
+            &["self"],
+        ),
+        ("a field of a place", "fn f() -> u8 { s.{} = 1; 1 }", &[]),
         (
             "a bound variable",
             "const c: Prop = prop!(forall ({}: u8) { true });",
@@ -2122,7 +2869,12 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
                 ("self", "a parameter" | "a bound variable") => "L0100",
                 (
                     "Self",
-                    "a type" | "a binding" | "a binding in a tuple" | "a binding in an arm",
+                    "a type"
+                    | "a binding"
+                    | "a binding in a tuple"
+                    | "a binding in an arm"
+                    | "a loop index"
+                    | "a `while let` pattern",
                 ) => "L0100",
                 _ => "L0115",
             };
@@ -2645,7 +3397,6 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
     // The binary operators of Rust's table all parse (S3); before an
     // operand, `&`, `|`, and `*` begin what Locus does not have yet.
     for (text, code, message) in [
-        ("&x", "L0116", "references (`&`) are not in Locus yet"),
         (
             "|y| y",
             "L0116",
@@ -2674,9 +3425,9 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
         ),
         ("f(...)", "L0116", "`...` is not in Locus yet"),
         (
-            "for i in 0..=9 () { continue() }",
+            "0..=9",
             "L0116",
-            "inclusive ranges (`..=`) are not in Locus yet",
+            "inclusive ranges (`..=`) are not in Locus yet, except in the header of a `for`",
         ),
     ] {
         cases.push((text.to_owned(), code, message.to_owned()));
@@ -2694,7 +3445,7 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
     }
     let parsed = parse_text("fn f(x: &u8, y: *mut u8) -> u8 { 1 }");
     assert_eq!(parsed.diagnostics.len(), 1);
-    assert!(parsed.diagnostics[0].message.starts_with("references"));
+    assert!(parsed.diagnostics[0].message.starts_with("dereferences"));
 }
 
 #[test]
@@ -2748,11 +3499,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         ),
         ("async fn f() -> u8 { 1 }", "`async` is not in Locus yet", 1),
         (
-            "fn f(mut x: u8) -> u8 { x }",
-            "`mut` is not in Locus yet",
-            0,
-        ),
-        (
             "fn f(x: dyn T) -> u8 { 1 }",
             "`dyn` trait objects are not in Locus yet",
             0,
@@ -2778,23 +3524,8 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
             0,
         ),
         (
-            "fn f(x: u8) -> u8 { while x < 3 { }; x }",
-            "`while` loops are not in Locus yet",
-            1,
-        ),
-        (
-            "fn f(x: u8) -> u8 { return x; }",
-            "`return` is not in Locus yet",
-            1,
-        ),
-        (
             "fn f(x: u8) -> u8 { unsafe { x } }",
             "`unsafe` is not in Locus yet",
-            1,
-        ),
-        (
-            "fn f(x: u8) -> u8 { let mut y = x; y }",
-            "`mut` is not in Locus yet",
             1,
         ),
         (
@@ -2805,16 +3536,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         (
             "fn f(x: u8) -> u8 { move || x; x }",
             "closures (`move`) are not in Locus yet",
-            1,
-        ),
-        (
-            "fn f(x: u8) -> u8 { let y = x; y = 1; y }",
-            "assignment (`=`) is not in Locus yet",
-            1,
-        ),
-        (
-            "fn f(x: u8) -> u8 { x = 1; x }",
-            "assignment (`=`) is not in Locus yet",
             1,
         ),
         (

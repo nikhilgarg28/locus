@@ -77,6 +77,8 @@ pub fn parse(source: &SourceFile) -> Parsed {
         steps: 0,
         no_struct: false,
         for_header: false,
+        for_upper: false,
+        statement: false,
         formula: false,
         in_impl: false,
         in_method: false,
@@ -94,11 +96,18 @@ struct Parser<'a> {
     position: usize,
     depth: usize,
     steps: usize,
-    /// Set in the header of an `if`, `match`, or `for`, where `Name {` begins
-    /// the following block rather than a struct literal.
+    /// Set in the header of an `if`, `match`, `while`, or `for`, where
+    /// `Name {` begins the following block rather than a struct literal.
     no_struct: bool,
-    /// Set in the bounds of a `for`, where `( ... ) {` is the state list.
+    /// Set in the bounds of a `for`, where `..` ends a bound.
     for_header: bool,
+    /// Set in the upper bound of a `for` over a range, where `( ... ) {` is
+    /// the state list of the state-passing form, not a call.
+    for_upper: bool,
+    /// Set by a block for the expression that begins a statement, and taken
+    /// by that expression alone: there, `=` ends the place of an assignment,
+    /// and an expression that ends in a block is the whole statement.
+    statement: bool,
     /// Set inside `prop!(...)`, `prove!(...)`, and `@(...)`, where `=>` is
     /// implication and `forall (` and `exists (` begin quantifiers. Outside
     /// a formula `forall` and `exists` are names, and `=>` is an error.
@@ -250,13 +259,7 @@ impl Parser<'_> {
         let spelling = self.source.slice(token.span).unwrap_or_default();
         let diagnostic = if token.kind == K::Keyword {
             match keyword_construct(spelling) {
-                Some((message, note)) => {
-                    let diagnostic = Diagnostic::error("L0116", message, token.span);
-                    match note {
-                        Some(note) => diagnostic.note(note),
-                        None => diagnostic,
-                    }
-                }
+                Some(message) => Diagnostic::error("L0116", message, token.span),
                 None => keyword_is_no_name(spelling, token.span),
             }
         } else {
@@ -269,9 +272,9 @@ impl Parser<'_> {
         true
     }
 
-    /// A keyword where a name belongs. Before a name, `mut` is Rust that
-    /// Locus does not have yet; anywhere else the keyword was meant as the
-    /// name.
+    /// A keyword where a name belongs. Before a name, `ref` or `move` is a
+    /// construct of Rust that Locus does not have yet; anywhere else the
+    /// keyword was meant as the name.
     #[inline(never)]
     fn keyword_as_name<T>(&mut self) -> ParseResult<T> {
         let token = self.current();
@@ -306,7 +309,7 @@ impl Parser<'_> {
     }
 
     /// A keyword of Rust that Locus reads in context: `pub`, `impl`,
-    /// `self`, `Self`, `mut`, `crate`, `super`.
+    /// `self`, `Self`, `crate`, `super`.
     fn at_keyword(&self, word: &str) -> bool {
         self.at(K::Keyword) && self.source.slice(self.current().span) == Some(word)
     }
@@ -367,10 +370,10 @@ impl Parser<'_> {
         &mut self,
         operation: impl FnOnce(&mut Self) -> ParseResult<T>,
     ) -> ParseResult<T> {
-        let saved = (self.no_struct, self.for_header);
-        (self.no_struct, self.for_header) = (false, false);
+        let saved = (self.no_struct, self.for_header, self.for_upper);
+        (self.no_struct, self.for_header, self.for_upper) = (false, false, false);
         let result = operation(self);
-        (self.no_struct, self.for_header) = saved;
+        (self.no_struct, self.for_header, self.for_upper) = saved;
         result
     }
 
@@ -379,10 +382,10 @@ impl Parser<'_> {
         for_header: bool,
         operation: impl FnOnce(&mut Self) -> ParseResult<T>,
     ) -> ParseResult<T> {
-        let saved = (self.no_struct, self.for_header);
-        (self.no_struct, self.for_header) = (true, for_header);
+        let saved = (self.no_struct, self.for_header, self.for_upper);
+        (self.no_struct, self.for_header, self.for_upper) = (true, for_header, false);
         let result = operation(self);
-        (self.no_struct, self.for_header) = saved;
+        (self.no_struct, self.for_header, self.for_upper) = saved;
         result
     }
 
@@ -618,7 +621,7 @@ impl Parser<'_> {
     fn function(&mut self, mode: FunctionMode) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         self.no_generics()?;
-        let (self_param, parameters) = self.parameter_list(self.in_impl)?;
+        let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
         self.expect(K::Arrow)?;
         let result = self.ty()?;
         let saved = std::mem::replace(&mut self.in_method, self_param.is_some());
@@ -861,12 +864,17 @@ impl Parser<'_> {
 
     /// The parameters of a quantifier or a proposition: names and types.
     fn parameters(&mut self) -> ParseResult<Vec<Parameter>> {
-        Ok(self.parameter_list(false)?.1)
+        Ok(self.parameter_list(false, false)?.1)
     }
 
     /// `( self, name: Type, ... )`. A `self` parameter, in any of its four
-    /// forms, comes first and only in a method.
-    fn parameter_list(&mut self, method: bool) -> ParseResult<(Option<SelfParam>, Vec<Parameter>)> {
+    /// forms, comes first and only in a method; `mut` before a name is
+    /// written on a function's parameter alone.
+    fn parameter_list(
+        &mut self,
+        function: bool,
+        method: bool,
+    ) -> ParseResult<(Option<SelfParam>, Vec<Parameter>)> {
         let opening = self.expect(K::LParen)?;
         let mut self_param = None;
         if self.at_self_param() {
@@ -887,11 +895,24 @@ impl Parser<'_> {
                 return Err(());
             }
             self.no_visibility("`pub` is not written on a parameter")?;
+            let start = self.current().span;
+            // `mut: u8` is the keyword meant as a name, which `name` reports.
+            let mutable = self.at(K::Mut) && self.peek(1) != K::Colon;
+            if mutable {
+                if !function {
+                    return self.misplaced_mut(
+                        start,
+                        "a parameter of a quantifier or a proposition never changes, and `mut` is not written on it",
+                    );
+                }
+                self.bump();
+            }
             let name = self.name()?;
             self.expect(K::Colon)?;
             let ty = self.ty()?;
             parameters.push(Parameter {
-                span: name.span.through(ty.span),
+                span: start.through(ty.span),
+                mutable,
                 name,
                 ty,
             });
@@ -910,26 +931,19 @@ impl Parser<'_> {
         if self.peek(at) == K::And {
             at += 1;
         }
-        let spelling_at = |distance: usize| {
-            self.tokens
-                .get(self.position + distance)
-                .filter(|token| token.kind == K::Keyword)
-                .and_then(|token| self.source.slice(token.span))
-        };
-        if spelling_at(at) == Some("mut") {
+        if self.peek(at) == K::Mut {
             at += 1;
         }
-        spelling_at(at) == Some("self") && self.peek(at + 1) != K::PathSep
+        self.tokens.get(self.position + at).is_some_and(|token| {
+            token.kind == K::Keyword && self.source.slice(token.span) == Some("self")
+        }) && self.peek(at + 1) != K::PathSep
     }
 
     #[inline(never)]
     fn self_param(&mut self, method: bool) -> ParseResult<SelfParam> {
         let start = self.current();
         let reference = self.eat(K::And).is_some();
-        let mutable = self.at_keyword("mut");
-        if mutable {
-            self.bump();
-        }
+        let mutable = self.eat(K::Mut).is_some();
         let end = self.bump();
         let span = start.span.through(end.span);
         if !method {
@@ -972,6 +986,14 @@ impl Parser<'_> {
             }
             K::Hash => self.hash_syntax(),
             K::LBracket => self.no_arrays("array and slice types", start.span),
+            K::And | K::AndAnd => self.reference_type(),
+            K::Bang => {
+                self.bump();
+                Ok(Type {
+                    span: start.span,
+                    kind: TypeKind::Never,
+                })
+            }
             K::LParen => {
                 self.bump();
                 if let Some(end) = self.eat(K::RParen) {
@@ -1059,6 +1081,35 @@ impl Parser<'_> {
             kind: TypeKind::Path {
                 path: Box::new(path),
                 arguments,
+            },
+        })
+    }
+
+    /// `&T` or `&mut T`. The lexer reads `&&` as one token, so `&&T` is a
+    /// reference to a reference, as it is in Rust.
+    #[inline(never)]
+    fn reference_type(&mut self) -> ParseResult<Type> {
+        let start = self.bump();
+        let mutable = start.kind == K::And && self.eat(K::Mut).is_some();
+        let inner = if start.kind == K::AndAnd {
+            let span = Span::new(start.span.file, start.span.start + 1, start.span.end);
+            let mutable = self.eat(K::Mut).is_some();
+            let inner = self.ty()?;
+            Type {
+                span: span.through(inner.span),
+                kind: TypeKind::Ref {
+                    mutable,
+                    inner: Box::new(inner),
+                },
+            }
+        } else {
+            self.ty()?
+        };
+        Ok(Type {
+            span: start.span.through(inner.span),
+            kind: TypeKind::Ref {
+                mutable,
+                inner: Box::new(inner),
             },
         })
     }
@@ -1242,6 +1293,7 @@ impl Parser<'_> {
         let start = self.current();
         match start.kind {
             K::Name | K::Keyword if self.at_named() => self.named_pattern(),
+            K::Mut => self.mut_pattern(),
             K::True | K::False => {
                 self.bump();
                 Ok(Pattern {
@@ -1291,6 +1343,58 @@ impl Parser<'_> {
         }
     }
 
+    /// `mut name`: a binding the body may assign. Before a pattern that is
+    /// not a name, `mut` is misplaced, in rustc's words; before a keyword,
+    /// the keyword was meant as the name; before anything else, `mut` was.
+    #[inline(never)]
+    fn mut_pattern(&mut self) -> ParseResult<Pattern> {
+        let start = self.bump();
+        if self.at(K::Mut) {
+            if self.peek(1) == K::Name {
+                return self.misplaced_mut(start.span, "`mut` on a binding may not be repeated");
+            }
+            // The second `mut` was meant as the name.
+            return self.mut_pattern();
+        }
+        if self.at(K::Name) || self.current().kind.is_rust_keyword() {
+            let name = self.name()?;
+            return Ok(Pattern {
+                span: start.span.through(name.span),
+                kind: PatternKind::Name {
+                    name,
+                    mutable: true,
+                },
+            });
+        }
+        if self.at_pattern_start() {
+            return self.misplaced_mut(
+                start.span,
+                "`mut` must be attached to each individual binding",
+            );
+        }
+        self.diagnostics.push(keyword_is_no_name("mut", start.span));
+        Err(())
+    }
+
+    /// Whether the current token can begin a pattern.
+    fn at_pattern_start(&self) -> bool {
+        self.at_named()
+            || matches!(
+                self.current().kind,
+                K::True | K::False | K::Integer | K::Underscore | K::LParen
+            )
+    }
+
+    /// L0125: `mut` where nothing can be made mutable, reported at the `mut`.
+    #[inline(never)]
+    fn misplaced_mut<T>(&mut self, span: Span, message: &str) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error("L0125", message, span)
+                .note("`mut` goes before the name of a binding or of a parameter, as in `let (mut a, b) = pair;` or `fn f(mut n: u8)`"),
+        );
+        Err(())
+    }
+
     #[inline(never)]
     fn no_pattern<T>(&mut self) -> ParseResult<T> {
         if self.current().kind.is_rust_keyword() {
@@ -1312,17 +1416,21 @@ impl Parser<'_> {
     }
 
     /// A pattern that begins with a name or a path: a binding, a struct
-    /// pattern, or a variant with or without its fields.
+    /// pattern, or a variant with or without its fields. A name before `(`
+    /// is a variant, as `Some(x)` is in Rust.
     #[inline(never)]
     fn named_pattern(&mut self) -> ParseResult<Pattern> {
         let mut path = self.path()?;
         if self.at(K::LBrace) {
             return self.struct_pattern(path);
         }
-        if path.single().is_some() {
+        if path.single().is_some() && !self.at(K::LParen) {
             return Ok(Pattern {
                 span: path.span,
-                kind: PatternKind::Name(path.segments.pop().expect("one segment")),
+                kind: PatternKind::Name {
+                    name: path.segments.pop().expect("one segment"),
+                    mutable: false,
+                },
             });
         }
         let (arguments, end) = if self.at(K::LParen) {
@@ -1448,7 +1556,10 @@ impl Parser<'_> {
                 self.let_statement()
                     .map(|statement| statements.push(statement))
             } else {
-                match self.expression() {
+                match self.statement_expression() {
+                    Ok(expression) if self.at(K::Equal) => self
+                        .assignment(expression)
+                        .map(|statement| statements.push(statement)),
                     Ok(expression) => {
                         if let Some(end) = self.eat(K::Semicolon) {
                             statements.push(Statement {
@@ -1459,6 +1570,14 @@ impl Parser<'_> {
                         } else if self.at(K::RBrace) || self.at(K::Eof) {
                             tail = Some(Box::new(expression));
                             break;
+                        } else if expression.is_block_like() {
+                            // As in Rust, `if`, `match`, a loop, or a block
+                            // is a statement on its own without a `;`.
+                            statements.push(Statement {
+                                span: expression.span,
+                                kind: StatementKind::Expression(expression),
+                            });
+                            Ok(())
                         } else {
                             self.semicolon(expression.span, "expression").map(|_| ())
                         }
@@ -1485,9 +1604,19 @@ impl Parser<'_> {
         })
     }
 
+    /// The expression that begins a statement: `=` after it is an
+    /// assignment, and one that ends in a block is the whole statement.
+    fn statement_expression(&mut self) -> ParseResult<Expr> {
+        self.statement = true;
+        let result = self.expression();
+        self.statement = false;
+        result
+    }
+
     #[inline(never)]
     fn let_statement(&mut self) -> ParseResult<Statement> {
         let opening = self.expect(K::Let)?;
+        let mutable = self.at(K::Mut);
         let pattern = self.pattern()?;
         let annotation = if self.eat(K::Colon).is_some() {
             Some(self.ty()?)
@@ -1500,11 +1629,51 @@ impl Parser<'_> {
         Ok(Statement {
             span: opening.span.through(closing.span),
             kind: StatementKind::Let {
+                mutable,
                 pattern,
                 annotation,
                 value,
             },
         })
+    }
+
+    /// `place = value;` after its place has been read. L0123 for a place
+    /// that is neither a name nor a field path, in rustc's words.
+    #[inline(never)]
+    fn assignment(&mut self, place: Expr) -> ParseResult<Statement> {
+        let equal = self.expect(K::Equal)?;
+        if !is_place(&place) {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "L0123",
+                    "invalid left-hand side of assignment",
+                    equal.span,
+                )
+                .label(place.span, "cannot assign to this expression")
+                .note("the left-hand side of an assignment is a variable or a field of one, as in `total = e` or `lock.failures = e`"),
+            );
+            return Err(());
+        }
+        let value = self.expression()?;
+        let closing = self.semicolon(value.span, "assignment")?;
+        Ok(Statement {
+            span: place.span.through(closing.span),
+            kind: StatementKind::Assign { place, value },
+        })
+    }
+
+    /// L0124: `=` after an expression that is not a statement's.
+    #[inline(never)]
+    fn assignment_in_value_position<T>(&mut self) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0124",
+                "assignment is a statement and has no value",
+                self.current().span,
+            )
+            .note("write the assignment on a line of its own, `place = value;`; to compare two values, write `==`"),
+        );
+        Err(())
     }
 
     fn semicolon(&mut self, previous: Span, context: &str) -> ParseResult<Token> {
@@ -1537,6 +1706,8 @@ impl Parser<'_> {
     // functions below stay small and leave node construction to helpers.
     // This loop moves an `Expr` at one site only.
     fn expression_bp_inner(&mut self, minimum: u8) -> ParseResult<Expr> {
+        // Taken here, so that no expression inside this one sees it.
+        let statement = std::mem::take(&mut self.statement);
         let mut left = self.prefix()?;
         let mut chain = 0;
         loop {
@@ -1545,7 +1716,11 @@ impl Parser<'_> {
                 return self.chain_limit();
             }
             chain += 1;
-            match self.operator(minimum)? {
+            // In statement position an expression that ends in a block is
+            // complete, as in Rust: only `.` continues it, and `match x { }
+            // (y)` is the match and then a tuple.
+            let complete = statement && left.is_block_like();
+            match self.operator(minimum, statement, complete)? {
                 Some(operator) => left = self.extend(left, operator)?,
                 None => break,
             }
@@ -1558,28 +1733,37 @@ impl Parser<'_> {
     /// binds at least as tightly as the minimum. Whatever else of Rust
     /// stands here and is not yet an operator of Locus is reported.
     #[inline(never)]
-    fn operator(&mut self, minimum: u8) -> ParseResult<Option<Operator>> {
+    fn operator(
+        &mut self,
+        minimum: u8,
+        statement: bool,
+        complete: bool,
+    ) -> ParseResult<Option<Operator>> {
         let kind = self.current().kind;
+        if complete && kind != K::Dot {
+            return Ok(None);
+        }
         match kind {
             K::LParen if minimum <= OPERAND => {
-                if self.for_header && self.state_list_follows() {
+                if self.for_upper && self.state_list_follows() {
                     return Ok(None);
                 }
                 return Ok(Some(Operator::Call));
             }
             K::Dot if minimum <= OPERAND => return Ok(Some(Operator::Member)),
             K::As => return Ok((CAST >= minimum).then_some(Operator::Cast)),
-            // After a whole expression, `=` can only be an assignment. After
-            // an operand it may end the proposition of a proof type, as in
-            // `bounded: @within_limit(n) = evidence`.
+            // After a whole expression, `=` can only be an assignment, whose
+            // place the statement has just read. After an operand it may end
+            // the proposition of a proof type, as in `bounded:
+            // @within_limit(n) = evidence`.
             K::Equal if minimum == 0 => {
-                self.diagnostics.push(Diagnostic::error(
-                    "L0116",
-                    "assignment (`=`) is not in Locus yet",
-                    self.current().span,
-                ));
-                return Err(());
+                if statement {
+                    return Ok(None);
+                }
+                return self.assignment_in_value_position();
             }
+            // In the header of a `for`, `..` and `..=` end a bound.
+            K::DotDot | K::DotDotEqual if self.for_header => return Ok(None),
             _ => {}
         }
         let Some((operator, (left_bp, right_bp))) = binary(kind) else {
@@ -1727,15 +1911,18 @@ impl Parser<'_> {
             K::OuterDoc | K::InnerDoc => self.misplaced_doc_comment(),
             K::Bang => self.not(),
             K::Minus => self.negate(),
+            K::And | K::AndAnd => self.reference(),
             K::LParen => self.parenthesized(),
             K::LBracket => self.bracketed(),
             K::LBrace => self.block_expression(),
             K::If => self.if_expression(),
             K::Match => self.match_expression(),
             K::Loop => self.loop_expression(),
+            K::While => self.while_expression(),
             K::For => self.for_expression(),
             K::Break => self.break_expression(),
             K::Continue => self.continue_expression(),
+            K::Return => self.return_expression(),
             K::At => self.proof(),
             K::Hash => self.hash_syntax(),
             _ => self.fail("expected an expression"),
@@ -1940,31 +2127,93 @@ impl Parser<'_> {
         })
     }
 
+    /// Whether `break` or `return` stands alone: what follows cannot begin
+    /// an expression.
+    fn at_end_of_jump(&self) -> bool {
+        matches!(
+            self.current().kind,
+            K::Semicolon | K::RBrace | K::RParen | K::RBracket | K::Comma | K::Eof
+        )
+    }
+
+    /// `break`, or `break value`.
     #[inline(never)]
     fn break_expression(&mut self) -> ParseResult<Expr> {
         let start = self.bump();
-        if matches!(self.current().kind, K::Semicolon | K::RBrace | K::Comma) {
-            return self.fail("`break` needs the value the loop produces");
+        if self.at_end_of_jump() {
+            return Ok(Expr {
+                span: start.span,
+                kind: ExprKind::Break(None),
+            });
         }
         let value = self.expression()?;
         Ok(Expr {
             span: start.span.through(value.span),
-            kind: ExprKind::Break(Box::new(value)),
+            kind: ExprKind::Break(Some(Box::new(value))),
         })
     }
 
+    /// `continue`, or the state-passing `continue(next, ...)`.
     #[inline(never)]
     fn continue_expression(&mut self) -> ParseResult<Expr> {
         let start = self.bump();
         if !self.at(K::LParen) {
-            return self.fail(
-                "`continue` needs the next loop state, as in `continue(next)`; write `continue()` when the loop has no state",
-            );
+            return Ok(Expr {
+                span: start.span,
+                kind: ExprKind::Continue(None),
+            });
         }
         let (arguments, closing) = self.arguments()?;
         Ok(Expr {
             span: start.span.through(closing.span),
-            kind: ExprKind::Continue(arguments),
+            kind: ExprKind::Continue(Some(arguments)),
+        })
+    }
+
+    /// `return`, or `return value`.
+    #[inline(never)]
+    fn return_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        if self.at_end_of_jump() {
+            return Ok(Expr {
+                span: start.span,
+                kind: ExprKind::Return(None),
+            });
+        }
+        let value = self.expression()?;
+        Ok(Expr {
+            span: start.span.through(value.span),
+            kind: ExprKind::Return(Some(Box::new(value))),
+        })
+    }
+
+    /// `&value` or `&mut value`, binding as the other prefix operators do.
+    /// The lexer reads `&&` as one token, so `&&value` is a reference to a
+    /// reference, as it is in Rust.
+    #[inline(never)]
+    fn reference(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        let mutable = start.kind == K::And && self.eat(K::Mut).is_some();
+        let inner = if start.kind == K::AndAnd {
+            let span = Span::new(start.span.file, start.span.start + 1, start.span.end);
+            let mutable = self.eat(K::Mut).is_some();
+            let value = self.expression_bp(OPERAND)?;
+            Expr {
+                span: span.through(value.span),
+                kind: ExprKind::Ref {
+                    mutable,
+                    expr: Box::new(value),
+                },
+            }
+        } else {
+            self.expression_bp(OPERAND)?
+        };
+        Ok(Expr {
+            span: start.span.through(inner.span),
+            kind: ExprKind::Ref {
+                mutable,
+                expr: Box::new(inner),
+            },
         })
     }
 
@@ -2114,11 +2363,16 @@ impl Parser<'_> {
         })
     }
 
-    /// In the bounds of a `for`, the parenthesized group directly before the
-    /// body is the state list, not a call on the upper bound.
+    /// In the upper bound of a `for`, a parenthesized group directly before
+    /// the body that is empty or begins `name:` is the state list, not a
+    /// call on the upper bound. `for i in 0..f() {` therefore reads `()` as
+    /// an empty state list until M3 retires the form; `for x in f() {`
+    /// is a call.
     fn state_list_follows(&mut self) -> bool {
-        self.closer_of(self.position)
-            .is_some_and(|closer| self.tokens[closer + 1].kind == K::LBrace)
+        (self.peek(1) == K::RParen || (self.peek(1) == K::Name && self.peek(2) == K::Colon))
+            && self
+                .closer_of(self.position)
+                .is_some_and(|closer| self.tokens[closer + 1].kind == K::LBrace)
     }
 
     /// `{ name: value, name }` after a struct's name or a variant's path.
@@ -2194,36 +2448,66 @@ impl Parser<'_> {
         })
     }
 
+    /// `loop { ... }`, or the state-passing `loop (state) -> R { ... }`.
     #[inline(never)]
     fn loop_expression(&mut self) -> ParseResult<Expr> {
         let start = self.expect(K::Loop)?;
-        if !self.at(K::LParen) {
-            return self.fail(
-                "a `loop` lists its state and result type: `loop (state: T = initial) -> R { ... }`",
-            );
-        }
-        let state = self.state_parameters()?;
-        self.expect(K::Arrow)?;
-        let result = self.ty()?;
+        let (state, result) = if self.at(K::LParen) {
+            let state = self.state_parameters()?;
+            self.expect(K::Arrow)?;
+            (state, Some(Box::new(self.ty()?)))
+        } else {
+            (Vec::new(), None)
+        };
         let body = self.block()?;
         Ok(Expr {
             span: start.span.through(body.span),
             kind: ExprKind::Loop {
                 state,
-                result: Box::new(result),
+                result,
                 body,
             },
         })
     }
 
+    /// `while condition { ... }` or `while let pattern = value { ... }`. As
+    /// in the header of an `if`, a struct literal cannot stand in the
+    /// condition.
+    #[inline(never)]
+    fn while_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::While)?;
+        let pattern = if self.eat(K::Let).is_some() {
+            let pattern = self.pattern()?;
+            self.expect(K::Equal)?;
+            Some(Box::new(pattern))
+        } else {
+            None
+        };
+        let condition = self.header(false, Self::expression)?;
+        let body = self.block()?;
+        Ok(Expr {
+            span: start.span.through(body.span),
+            kind: ExprKind::While {
+                pattern,
+                condition: Box::new(condition),
+                body,
+            },
+        })
+    }
+
+    /// `for pattern in lower..upper { ... }`, with `..=` for an inclusive
+    /// range, or `for pattern in value { ... }` over anything else. The
+    /// state list of the state-passing form may follow a range.
     #[inline(never)]
     fn for_expression(&mut self) -> ParseResult<Expr> {
         let start = self.expect(K::For)?;
-        let index = self.name()?;
+        // `for mut in` is the keyword meant as the index.
+        if self.at(K::Mut) && self.peek(1) == K::In {
+            return self.keyword_as_name();
+        }
+        let pattern = self.pattern()?;
         self.expect(K::In)?;
-        let lower = self.header(true, Self::expression)?;
-        self.expect(K::DotDot)?;
-        let upper = self.header(true, Self::expression)?;
+        let iterable = self.header(true, Self::for_iterable)?;
         // The state list is optional: `for i in lo..hi { ... }` carries none.
         let state = if self.at(K::LParen) {
             self.state_parameters()?
@@ -2234,11 +2518,34 @@ impl Parser<'_> {
         Ok(Expr {
             span: start.span.through(body.span),
             kind: ExprKind::For {
-                index,
-                lower: Box::new(lower),
-                upper: Box::new(upper),
+                pattern: Box::new(pattern),
+                iterable: Box::new(iterable),
                 state,
                 body,
+            },
+        })
+    }
+
+    /// The range or other value a `for` runs over.
+    #[inline(never)]
+    fn for_iterable(&mut self) -> ParseResult<Expr> {
+        let lower = self.expression()?;
+        let kind = match self.current().kind {
+            K::DotDot => RangeKind::Exclusive,
+            K::DotDotEqual => RangeKind::Inclusive,
+            _ => return Ok(lower),
+        };
+        self.bump();
+        self.for_upper = true;
+        let upper = self.expression();
+        self.for_upper = false;
+        let upper = upper?;
+        Ok(Expr {
+            span: lower.span.through(upper.span),
+            kind: ExprKind::Range {
+                kind,
+                lower: Box::new(lower),
+                upper: Box::new(upper),
             },
         })
     }
@@ -2527,6 +2834,16 @@ impl Parser<'_> {
     }
 }
 
+/// Whether an expression can be assigned to: a name, or a field path
+/// through names and positions, as `lock.failures` or `pair.0.x`.
+fn is_place(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Name(_) => true,
+        ExprKind::Member { value, .. } | ExprKind::Index { value, .. } => is_place(value),
+        _ => false,
+    }
+}
+
 /// Pairs delimiters by depth alone, as the recovery loops do: `(`, `{`, and
 /// `[` open, and any closer closes the nearest open one. One pass over the
 /// tokens.
@@ -2565,11 +2882,10 @@ fn keyword_is_no_name(keyword: &str, span: Span) -> Diagnostic {
     })
 }
 
-/// What a keyword that Locus does not use yet begins or marks in Rust, and a
-/// note where Locus has another way. `None` for the keywords Rust reserves
-/// without a use of its own.
-fn keyword_construct(keyword: &str) -> Option<(&'static str, Option<&'static str>)> {
-    let message = match keyword {
+/// What a keyword that Locus does not use yet begins or marks in Rust.
+/// `None` for the keywords Rust reserves without a use of its own.
+fn keyword_construct(keyword: &str) -> Option<&'static str> {
+    Some(match keyword {
         "async" => "`async` is not in Locus yet",
         "await" => "`await` is not in Locus yet",
         "dyn" => "`dyn` trait objects are not in Locus yet",
@@ -2577,25 +2893,15 @@ fn keyword_construct(keyword: &str) -> Option<(&'static str, Option<&'static str
         "impl" => "`impl Trait` types are not in Locus yet",
         "mod" => "modules (`mod`) are not in Locus yet",
         "move" => "closures (`move`) are not in Locus yet",
-        "mut" => "`mut` is not in Locus yet",
         "ref" => "`ref` bindings are not in Locus yet",
-        "return" => "`return` is not in Locus yet",
         "static" => "`static` items are not in Locus yet",
         "trait" => "traits are not in Locus yet",
         "type" => "type aliases (`type`) are not in Locus yet",
         "unsafe" => "`unsafe` is not in Locus yet",
         "use" => "`use` declarations are not in Locus yet",
         "where" => "`where` clauses are not in Locus yet",
-        "while" => "`while` loops are not in Locus yet",
         _ => return None,
-    };
-    let note = match keyword {
-        "mut" => Some("a binding never changes; `loop` and `for` carry their state explicitly"),
-        "return" => Some("the value of a function is the tail expression of its body"),
-        "while" => Some("write a `loop`, or a `for` over a range, with its state listed"),
-        _ => None,
-    };
-    Some((message, note))
+    })
 }
 
 /// L0116 for a token that is an operator or punctuation of Rust alone.
@@ -2613,13 +2919,14 @@ fn rust_only_token(kind: K, spelling: &str) -> Option<String> {
         | K::ShiftRightEqual => {
             format!("compound assignment (`{spelling}`) is not in Locus yet")
         }
-        // Before an operand: a borrow, a closure, or a dereference.
-        K::And => "references (`&`) are not in Locus yet".into(),
+        // Before an operand: a closure or a dereference.
         K::Or => "closures and or-patterns (`|`) are not in Locus yet".into(),
         K::Star => "dereferences and raw pointers (`*`) are not in Locus yet".into(),
         K::Question => "the `?` operator is not in Locus yet".into(),
         K::Dollar => "`$` belongs to macros, which are not in Locus yet".into(),
-        K::DotDotEqual => "inclusive ranges (`..=`) are not in Locus yet".into(),
+        K::DotDotEqual => {
+            "inclusive ranges (`..=`) are not in Locus yet, except in the header of a `for`".into()
+        }
         K::DotDotDot => "`...` is not in Locus yet".into(),
         K::Tilde | K::LeftArrow => {
             format!("`{spelling}` is a token of Rust with no meaning in Locus")

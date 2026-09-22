@@ -1,0 +1,10 @@
+// Assignment is a statement in Locus, not an expression of type `()` as in
+// Rust, so it has no value. Where Rust would let one stand, the message
+// says to write it on its own line, or `==` if a comparison was meant.
+fn f(x: u8, y: u8) -> u8 {
+    let mut total = x;
+    let z = total = y; //~ error: L0124 assignment is a statement and has no value
+    if total = 3 { 1 } else { 2 }; //~ error: L0124 assignment is a statement and has no value
+    g(total = 5); //~ error: L0124 assignment is a statement and has no value
+    total
+}

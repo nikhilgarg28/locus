@@ -8,64 +8,48 @@ error[L0116]: traits (`impl Trait for Type`) are not in Locus yet
    |
 16 | impl fmt::Debug for Counter { } //~ error: L0116 traits (`impl Trait for Type`)
    |                 ^^^
-error[L0116]: `mut` is not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:19:9
-   |
-19 |     let mut total = n; //~ error: L0116 `mut` is not in Locus yet
-   |         ^^^
-   |
-   = note: a binding never changes; `loop` and `for` carry their state explicitly
 error[L0116]: compound assignment (`+=`) is not in Locus yet
   --> tests/corpus/reject/rust_not_yet.lc:20:11
    |
 20 |     total += 1; //~ error: L0116 compound assignment (`+=`)
    |           ^^
-error[L0116]: assignment (`=`) is not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:21:11
+error[L0116]: dereferences and raw pointers (`*`) are not in Locus yet
+  --> tests/corpus/reject/rust_not_yet.lc:25:29
    |
-21 |     total = 2; //~ error: L0116 assignment (`=`)
+25 | fn borrowed(n: &u8) -> u8 { *n } //~ error: L0116 dereferences and raw pointers (`*`)
+   |                             ^
+error[L0116]: dereferences and raw pointers (`*`) are not in Locus yet
+  --> tests/corpus/reject/rust_not_yet.lc:27:11
+   |
+27 | fn raw(n: *mut u8) -> u8 { 1 } //~ error: L0116 dereferences and raw pointers (`*`)
    |           ^
-error[L0116]: references (`&`) are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:25:16
+error[L0116]: inclusive ranges (`..=`) are not in Locus yet, except in the header of a `for`
+  --> tests/corpus/reject/rust_not_yet.lc:31:14
    |
-25 | fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
-   |                ^
-error[L0116]: `while` loops are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:28:5
-   |
-28 |     while n < 3 { }; //~ error: L0116 `while` loops
-   |     ^^^^^
-   |
-   = note: write a `loop`, or a `for` over a range, with its state listed
-error[L0116]: `return` is not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:29:5
-   |
-29 |     return n; //~ error: L0116 `return`
-   |     ^^^^^^
-   |
-   = note: the value of a function is the tail expression of its body
+31 |     let r = 0..=n; //~ error: L0116 inclusive ranges (`..=`) are not in Locus yet, except in the header of a `for`
+   |              ^^^
 error[L0116]: generic parameters are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:32:13
+  --> tests/corpus/reject/rust_not_yet.lc:35:13
    |
-32 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
+35 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
    |             ^
 error[L0005]: lifetimes and loop labels are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:32:14
+  --> tests/corpus/reject/rust_not_yet.lc:35:14
    |
-32 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
+35 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
    |              ^^
 error[L0005]: character literals are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:36:18
+  --> tests/corpus/reject/rust_not_yet.lc:39:18
    |
-36 |     let letter = 'x'; //~ error: L0005 character literals
+39 |     let letter = 'x'; //~ error: L0005 character literals
    |                  ^^^
 error[L0005]: float literals are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:37:16
+  --> tests/corpus/reject/rust_not_yet.lc:40:16
    |
-37 |     let half = 0.5; //~ error: L0005 float literals
+40 |     let half = 0.5; //~ error: L0005 float literals
    |                ^^^
 error[L0005]: byte strings are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:38:17
+  --> tests/corpus/reject/rust_not_yet.lc:41:17
    |
-38 |     let bytes = b"raw"; //~ error: L0005 byte strings
+41 |     let bytes = b"raw"; //~ error: L0005 byte strings
    |                 ^^^^^^

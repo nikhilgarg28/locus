@@ -1,7 +1,6 @@
 //~ parse-only
-// The lock with 32-bit counts, from Target examples, as written there. The
-// items parse after S4; the lines S5 owns (`let mut`, assignment) are the
-// parser errors listed here, one per construct.
+// The lock with 32-bit counts, from Target examples, as written there. It
+// parses whole after S5; the elaborator's turn comes with M2 and M3.
 #[derive(Clone, Copy)]
 pub enum Event { Wrong, Right }
 
@@ -44,12 +43,12 @@ fn event_at(attempt: u32, correct: u32) -> Event {
 // A loop, so no promise to terminate can be made, and run cannot appear in a proposition.
 #[no_panic] #[no_io]
 pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
-    let mut lock = Lock { failures: 0, open: false }; //~ error: L0116 `mut` is not in Locus yet
-    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(lock.failures <= 3)); //~ error: L0116 `mut` is not in Locus yet
+    let mut lock = Lock { failures: 0, open: false };
+    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(lock.failures <= 3)); // computed
     for attempt in 0..attempts {
         let (next, still) = step(lock, ok, event_at(attempt, correct));
-        lock = next;        // ok is now invalid //~ error: L0116 assignment (`=`) is not in Locus yet
-        ok = still;         // exact, given that still is typed over next //~ error: L0116 assignment (`=`) is not in Locus yet
+        lock = next;        // ok is now invalid
+        ok = still;         // exact, given that still is typed over next
     }
     (lock, ok)
 }
