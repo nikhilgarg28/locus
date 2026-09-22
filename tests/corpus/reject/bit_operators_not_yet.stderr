@@ -1,0 +1,35 @@
+error[L0290]: the `<<` operator is not in Locus yet
+ --> tests/corpus/reject/bit_operators_not_yet.lc:4:7
+  |
+4 |     a << b //~ error: L0290 the `<<` operator is not in Locus yet
+  |       ^^
+  |
+  = note: bit operators and shifts come after the core
+error[L0290]: the `>>` operator is not in Locus yet
+ --> tests/corpus/reject/bit_operators_not_yet.lc:8:7
+  |
+8 |     a >> b //~ error: L0290 the `>>` operator is not in Locus yet
+  |       ^^
+  |
+  = note: bit operators and shifts come after the core
+error[L0290]: the `&` operator is not in Locus yet
+  --> tests/corpus/reject/bit_operators_not_yet.lc:12:7
+   |
+12 |     a & b //~ error: L0290 the `&` operator is not in Locus yet
+   |       ^
+   |
+   = note: bit operators and shifts come after the core
+error[L0290]: the `^` operator is not in Locus yet
+  --> tests/corpus/reject/bit_operators_not_yet.lc:16:7
+   |
+16 |     a ^ b //~ error: L0290 the `^` operator is not in Locus yet
+   |       ^
+   |
+   = note: bit operators and shifts come after the core
+error[L0290]: the `|` operator is not in Locus yet
+  --> tests/corpus/reject/bit_operators_not_yet.lc:20:7
+   |
+20 |     a | b //~ error: L0290 the `|` operator is not in Locus yet
+   |       ^
+   |
+   = note: bit operators and shifts come after the core

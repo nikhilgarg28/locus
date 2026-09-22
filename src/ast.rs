@@ -299,12 +299,25 @@ pub enum ExprKind {
         parameters: Vec<Parameter>,
         body: Block,
     },
+    /// `!value`, which reads as a proposition as well as a `bool`.
     Not(Box<Expr>),
+    /// A prefix operator other than `!`.
+    Unary {
+        operator: UnaryOp,
+        operator_span: Span,
+        expr: Box<Expr>,
+    },
     Binary {
         operator: BinaryOp,
         operator_span: Span,
         left: Box<Expr>,
         right: Box<Expr>,
+    },
+    /// `expr as Type`
+    Cast {
+        expr: Box<Expr>,
+        as_span: Span,
+        ty: Type,
     },
     Call {
         callee: Box<Expr>,
@@ -423,7 +436,34 @@ impl Form {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnaryOp {
+    /// `-value`
+    Neg,
+}
+
+impl UnaryOp {
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Self::Neg => "-",
+        }
+    }
+}
+
+/// The binary operators, in Rust's order of precedence from tightest to
+/// loosest. `as` and the postfix operators bind tighter than all of them,
+/// and `=>`, Locus's implication, is below `||`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOp {
+    Mul,
+    Div,
+    Rem,
+    Add,
+    Sub,
+    Shl,
+    Shr,
+    BitAnd,
+    BitXor,
+    BitOr,
     Equal,
     NotEqual,
     Less,
@@ -436,6 +476,46 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Rem => "%",
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Shl => "<<",
+            Self::Shr => ">>",
+            Self::BitAnd => "&",
+            Self::BitXor => "^",
+            Self::BitOr => "|",
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+            Self::Less => "<",
+            Self::LessEqual => "<=",
+            Self::Greater => ">",
+            Self::GreaterEqual => ">=",
+            Self::And => "&&",
+            Self::Or => "||",
+            Self::Implies => "=>",
+        }
+    }
+
+    /// `+ - * / %`, the arithmetic of the integer types.
+    pub fn is_arithmetic(self) -> bool {
+        matches!(
+            self,
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Rem
+        )
+    }
+
+    /// The shifts and the bitwise operators.
+    pub fn is_bitwise(self) -> bool {
+        matches!(
+            self,
+            Self::Shl | Self::Shr | Self::BitAnd | Self::BitXor | Self::BitOr
+        )
+    }
+
     pub fn is_comparison(self) -> bool {
         matches!(
             self,

@@ -19,10 +19,6 @@ fn assigned(n: u8) -> u8 {
     total
 }
 
-fn shifted(n: u8) -> u8 {
-    n << 1 //~ error: L0116 the shift operator `<<`
-}
-
 fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
 
 fn looped(n: u8) -> u8 {
@@ -38,8 +34,4 @@ fn literals() -> u8 {
     let half = 0.5; //~ error: L0005 float literals
     let bytes = b"raw"; //~ error: L0005 byte strings
     1
-}
-
-fn minus(n: u8) -> u8 {
-    n - 1 //~ error: L0112 `-` is not part of the core language
 }

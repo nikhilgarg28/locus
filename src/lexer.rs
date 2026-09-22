@@ -33,6 +33,7 @@ pub enum TokenKind {
     Continue,
     True,
     False,
+    As,
     /// A Rust keyword that Locus reserves and does not use yet.
     Keyword,
     LParen,
@@ -113,6 +114,7 @@ impl TokenKind {
             Self::Continue => "`continue`",
             Self::True => "`true`",
             Self::False => "`false`",
+            Self::As => "`as`",
             Self::Keyword => "a Rust keyword",
             Self::LParen => "`(`",
             Self::RParen => "`)`",
@@ -191,6 +193,7 @@ impl TokenKind {
                 | Self::Continue
                 | Self::True
                 | Self::False
+                | Self::As
                 | Self::Keyword
         )
     }
@@ -656,11 +659,12 @@ impl<'a> Lexer<'a> {
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "_" => TokenKind::Underscore,
+            "as" => TokenKind::As,
             // The other strict keywords of Rust 2024, then the reserved ones.
             // The weak keywords (`union`, `macro_rules`, `raw`, `safe`) are
             // names, as they are in Rust.
-            "as" | "async" | "await" | "crate" | "dyn" | "extern" | "impl" | "mod" | "move"
-            | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "super" | "trait"
+            "async" | "await" | "crate" | "dyn" | "extern" | "impl" | "mod" | "move" | "mut"
+            | "pub" | "ref" | "return" | "self" | "Self" | "static" | "super" | "trait"
             | "type" | "unsafe" | "use" | "where" | "while" => TokenKind::Keyword,
             "abstract" | "become" | "box" | "do" | "final" | "gen" | "macro" | "override"
             | "priv" | "try" | "typeof" | "unsized" | "virtual" | "yield" => TokenKind::Keyword,

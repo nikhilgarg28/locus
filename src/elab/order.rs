@@ -212,8 +212,15 @@ impl Mentions<'_> {
             | ExprKind::Unit
             | ExprKind::Hole
             | ExprKind::Error => {}
-            ExprKind::Group(inner) | ExprKind::Not(inner) | ExprKind::Break(inner) => {
-                self.expr(inner)
+            ExprKind::Group(inner)
+            | ExprKind::Not(inner)
+            | ExprKind::Unary { expr: inner, .. }
+            | ExprKind::Break(inner) => self.expr(inner),
+            ExprKind::Cast {
+                expr: inner, ty, ..
+            } => {
+                self.expr(inner);
+                self.ty(ty);
             }
             ExprKind::Tuple(items) | ExprKind::Continue(items) => {
                 items.iter().for_each(|item| self.expr(item));

@@ -32,59 +32,47 @@ error[L0116]: compound assignment (`+=`) is not in Locus yet
    |
 18 |     total += 1; //~ error: L0116 compound assignment (`+=`)
    |           ^^
-error[L0116]: the shift operator `<<` is not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:23:7
+error[L0116]: references (`&`) are not in Locus yet
+  --> tests/corpus/reject/rust_not_yet.lc:22:16
    |
-23 |     n << 1 //~ error: L0116 the shift operator `<<`
-   |       ^^
-error[L0116]: references and the `&` operator are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:26:16
-   |
-26 | fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
+22 | fn borrowed(n: &u8) -> u8 { 1 } //~ error: L0116 references
    |                ^
 error[L0116]: `while` loops are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:29:5
+  --> tests/corpus/reject/rust_not_yet.lc:25:5
    |
-29 |     while n < 3 { }; //~ error: L0116 `while` loops
+25 |     while n < 3 { }; //~ error: L0116 `while` loops
    |     ^^^^^
    |
    = note: write a `loop`, or a `for` over a range, with its state listed
 error[L0116]: `return` is not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:30:5
+  --> tests/corpus/reject/rust_not_yet.lc:26:5
    |
-30 |     return n; //~ error: L0116 `return`
+26 |     return n; //~ error: L0116 `return`
    |     ^^^^^^
    |
    = note: the value of a function is the tail expression of its body
 error[L0116]: generic parameters are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:33:13
+  --> tests/corpus/reject/rust_not_yet.lc:29:13
    |
-33 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
+29 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
    |             ^
 error[L0005]: lifetimes and loop labels are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:33:14
+  --> tests/corpus/reject/rust_not_yet.lc:29:14
    |
-33 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
+29 | fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
    |              ^^
 error[L0005]: character literals are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:37:18
+  --> tests/corpus/reject/rust_not_yet.lc:33:18
    |
-37 |     let letter = 'x'; //~ error: L0005 character literals
+33 |     let letter = 'x'; //~ error: L0005 character literals
    |                  ^^^
 error[L0005]: float literals are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:38:16
+  --> tests/corpus/reject/rust_not_yet.lc:34:16
    |
-38 |     let half = 0.5; //~ error: L0005 float literals
+34 |     let half = 0.5; //~ error: L0005 float literals
    |                ^^^
 error[L0005]: byte strings are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:39:17
+  --> tests/corpus/reject/rust_not_yet.lc:35:17
    |
-39 |     let bytes = b"raw"; //~ error: L0005 byte strings
+35 |     let bytes = b"raw"; //~ error: L0005 byte strings
    |                 ^^^^^^
-error[L0112]: `-` is not part of the core language
-  --> tests/corpus/reject/rust_not_yet.lc:44:7
-   |
-44 |     n - 1 //~ error: L0112 `-` is not part of the core language
-   |       ^
-   |
-   = note: u8 arithmetic says what happens on overflow: write `a.wrapping_sub(b)`

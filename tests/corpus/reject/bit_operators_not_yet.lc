@@ -1,0 +1,21 @@
+// The shifts and the bitwise operators parse with Rust's precedence and
+// have no meaning until after the core.
+fn shift_left(a: u8, b: u8) -> u8 {
+    a << b //~ error: L0290 the `<<` operator is not in Locus yet
+}
+
+fn shift_right(a: u8, b: u8) -> u8 {
+    a >> b //~ error: L0290 the `>>` operator is not in Locus yet
+}
+
+fn and(a: u8, b: u8) -> u8 {
+    a & b //~ error: L0290 the `&` operator is not in Locus yet
+}
+
+fn xor(a: u8, b: u8) -> u8 {
+    a ^ b //~ error: L0290 the `^` operator is not in Locus yet
+}
+
+fn or(a: u8, b: u8) -> u8 {
+    a | b //~ error: L0290 the `|` operator is not in Locus yet
+}

@@ -47,7 +47,10 @@ impl Env<'_> {
                         _ => Term::implies(left, right),
                     })
                 }
-                comparison => self.comparison(*comparison, left, right),
+                comparison if comparison.is_comparison() => {
+                    self.comparison(*comparison, left, right)
+                }
+                _ => self.operator_not_yet(expr),
             },
             ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } => {
                 let universal = matches!(expr.kind, ExprKind::Forall { .. });

@@ -3,6 +3,7 @@
 //! decided here too.
 
 use crate::ast::{self, BinaryOp, ExprKind, Form};
+use crate::diagnostic::Diagnostic;
 use crate::kernel::{Type, same_type};
 use crate::typed::{CompareOp, Expr};
 
@@ -102,6 +103,9 @@ impl Env<'_> {
         right: &ast::Expr,
         expected: Option<&Type>,
     ) -> Elab<Value> {
+        if !operator.is_comparison() {
+            return self.operator_not_yet(expr);
+        }
         if expected.is_some_and(|ty| same_type(ty, &Type::Prop)) {
             let term = self.formula(expr)?;
             return Ok(Value::new(Expr::Prop(term), Type::Prop));
@@ -110,7 +114,7 @@ impl Env<'_> {
         if !same_type(&left_value.ty, &Type::U8) {
             let shown = self.show_type(&left_value.ty);
             self.diagnostics.push(
-                        crate::diagnostic::Diagnostic::error(
+                        Diagnostic::error(
                             "L0211",
                             format!("values of type `{shown}` cannot be compared at runtime in the core"),
                             expr.span,
@@ -135,5 +139,65 @@ impl Env<'_> {
             },
             Type::Bool,
         ))
+    }
+
+    /// The operators that parse and have no meaning yet: the arithmetic and
+    /// bit operators, unary minus, and `as`. Each names the commit that
+    /// gives it one.
+    #[inline(never)]
+    pub(super) fn operator_not_yet<T>(&mut self, expr: &ast::Expr) -> Elab<T> {
+        let (what, span, note) = match &expr.kind {
+            ExprKind::Binary {
+                operator,
+                operator_span,
+                ..
+            } if operator.is_bitwise() => (
+                format!("the `{}` operator", operator.spelling()),
+                *operator_span,
+                "bit operators and shifts come after the core",
+            ),
+            ExprKind::Binary {
+                operator,
+                operator_span,
+                ..
+            } => (
+                format!("the `{}` operator", operator.spelling()),
+                *operator_span,
+                "it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions",
+            ),
+            ExprKind::Unary {
+                operator,
+                operator_span,
+                ..
+            } => (
+                format!("unary `{}`", operator.spelling()),
+                *operator_span,
+                "it arrives with E6 (LOC-172): the operators `+ - * / %` with their panic conditions",
+            ),
+            ExprKind::Cast { as_span, .. } => (
+                "`as`".to_owned(),
+                *as_span,
+                "it arrives with E5 (LOC-171): every machine integer type, and `as` between them",
+            ),
+            _ => unreachable!("only an operator without a meaning is reported here"),
+        };
+        let mut diagnostic =
+            Diagnostic::error("L0290", format!("{what} is not in Locus yet"), span).note(note);
+        if let ExprKind::Binary {
+            operator: operator @ (BinaryOp::Add | BinaryOp::Sub),
+            ..
+        } = &expr.kind
+        {
+            let method = if *operator == BinaryOp::Add {
+                "wrapping_add"
+            } else {
+                "wrapping_sub"
+            };
+            diagnostic = diagnostic.note(format!(
+                "until then, `u8` arithmetic says what happens on overflow: write `a.{method}(b)`"
+            ));
+        }
+        self.diagnostics.push(diagnostic);
+        Err(())
     }
 }

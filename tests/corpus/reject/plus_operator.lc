@@ -1,4 +1,0 @@
-// A parse error: the file never reaches the elaborator.
-fn add(a: u8, b: u8) -> u8 {
-    a + b //~ error: L0112
-}

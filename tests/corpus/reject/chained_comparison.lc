@@ -1,4 +1,8 @@
-// Comparisons chained without parentheses.
+// Comparisons chained without parentheses: an error, as in Rust.
 fn between(a: u8, b: u8, c: u8) -> bool {
-    a < b < c //~ error: L0103 comparisons cannot be chained
+    a < b < c //~ error: L0103 comparison operators cannot be chained
+}
+
+fn same(a: u8, b: u8, c: bool) -> bool {
+    a == b == c //~ error: L0103 comparison operators cannot be chained
 }

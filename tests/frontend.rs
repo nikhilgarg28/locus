@@ -1,6 +1,6 @@
 use locus::ast::{
     BinaryOp, Block, DeclarationKind, Expr, ExprKind, Form, FunctionMode, IntegerLiteral,
-    IntegerSuffix, PatternKind, StatementKind, TypeKind,
+    IntegerSuffix, PatternKind, StatementKind, Type, TypeKind,
 };
 use locus::diagnostic::Applicability;
 use locus::kernel::Natural;
@@ -184,26 +184,244 @@ fn equality_conjunction_and_implication_have_distinct_precedence() {
 }
 
 #[test]
-fn implication_is_right_associative_and_addition_is_retired() {
+fn implication_is_right_associative_and_arithmetic_parses() {
     let expr = formula("a => b => c");
     let (_, right) = binary(&expr, BinaryOp::Implies);
     binary(right, BinaryOp::Implies);
-    let parsed = parse_text("fn f(a: u8) -> u8 { a + 1 }");
-    let error = parsed
-        .diagnostics
-        .iter()
-        .find(|d| d.code == "L0112")
-        .unwrap();
-    assert!(error.notes.iter().any(|note| note.contains("wrapping_add")));
+    // Arithmetic is the parser's since S3; the elaborator says what it means.
+    let sum = expression("a + 1");
+    let (left, right) = binary(&sum, BinaryOp::Add);
+    assert!(matches!(left.kind, ExprKind::Name(_)));
+    assert!(matches!(right.kind, ExprKind::Integer(_)));
+}
+
+/// Every expression in the table below, parsed and then printed with the
+/// parentheses that make its grouping explicit. Source parentheses are not
+/// printed, so `(a + b) * c` and `a + b * c` are told apart by their
+/// grouping alone.
+fn grouped(expr: &Expr) -> String {
+    let list = |items: &[Expr]| items.iter().map(grouped).collect::<Vec<_>>().join(", ");
+    match &expr.kind {
+        ExprKind::Name(name) => name.text.clone(),
+        ExprKind::Path(path) => format!("{}::{}", path.prefix.text, path.name.text),
+        ExprKind::Integer(literal) => match literal.suffix {
+            Some(suffix) => format!("{}{}", literal.value, suffix.name()),
+            None => literal.value.to_string(),
+        },
+        ExprKind::Bool(value) => value.to_string(),
+        ExprKind::Unit => "()".into(),
+        ExprKind::Group(inner) => grouped(inner),
+        ExprKind::Tuple(items) => format!("({},)", list(items)),
+        ExprKind::Not(inner) => format!("(!{})", grouped(inner)),
+        ExprKind::Unary { operator, expr, .. } => {
+            format!("({}{})", operator.spelling(), grouped(expr))
+        }
+        ExprKind::Binary {
+            operator,
+            left,
+            right,
+            ..
+        } => format!(
+            "({} {} {})",
+            grouped(left),
+            operator.spelling(),
+            grouped(right)
+        ),
+        ExprKind::Cast { expr, ty, .. } => format!("({} as {})", grouped(expr), grouped_ty(ty)),
+        ExprKind::Call { callee, arguments } => {
+            format!("{}({})", grouped(callee), list(arguments))
+        }
+        ExprKind::Member { value, name } => format!("{}.{}", grouped(value), name.text),
+        ExprKind::Index { value, index, .. } => format!("{}.{index}", grouped(value)),
+        other => panic!("the table has no expression like {other:?}"),
+    }
+}
+
+fn grouped_ty(ty: &Type) -> String {
+    match &ty.kind {
+        TypeKind::Named(name) => name.text.clone(),
+        TypeKind::Unit => "()".into(),
+        TypeKind::Group(inner) => format!("({})", grouped_ty(inner)),
+        TypeKind::Tuple(fields) => format!(
+            "({})",
+            fields
+                .iter()
+                .map(|field| grouped_ty(&field.ty))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        other => panic!("the table has no type like {other:?}"),
+    }
+}
+
+/// Rust's precedence table (the Reference, "Expression precedence"), one
+/// level against the next, with the associativity of each level. What is
+/// valid in both languages groups the same way in both.
+#[test]
+fn operators_group_as_rusts_precedence_table_says() {
+    let table: &[(&str, &str)] = &[
+        // Method calls, fields, calls, and indexing bind tighter than unary.
+        ("-a.b", "(-a.b)"),
+        ("-f(a)", "(-f(a))"),
+        ("-a.0", "(-a.0)"),
+        ("!a.b", "(!a.b)"),
+        ("!f(a).b", "(!f(a).b)"),
+        ("-a.f(b).c", "(-a.f(b).c)"),
+        ("-E::A", "(-E::A)"),
+        // Unary operators nest, and bind tighter than `as`.
+        ("- -a", "(-(-a))"),
+        ("!!a", "(!(!a))"),
+        ("-!a", "(-(!a))"),
+        ("!-a", "(!(-a))"),
+        ("-a as u8", "((-a) as u8)"),
+        ("!a as u8", "((!a) as u8)"),
+        ("-1", "(-1)"),
+        ("-1u8", "(-1u8)"),
+        // `as` is left to right and binds tighter than `*`.
+        ("a as u8 as u16", "((a as u8) as u16)"),
+        ("a as u8 * b", "((a as u8) * b)"),
+        ("a * b as u8", "(a * (b as u8))"),
+        ("a as u8 / b as u8", "((a as u8) / (b as u8))"),
+        ("a as u8 + b as u8 * c", "((a as u8) + ((b as u8) * c))"),
+        ("a as (u8, bool)", "(a as (u8, bool))"),
+        ("a as ()", "(a as ())"),
+        // `* / %`, left to right.
+        ("a * b * c", "((a * b) * c)"),
+        ("a / b % c", "((a / b) % c)"),
+        ("a % b / c", "((a % b) / c)"),
+        ("a * b / c % d", "(((a * b) / c) % d)"),
+        // `* / %` bind tighter than `+ -`.
+        ("a + b * c", "(a + (b * c))"),
+        ("a * b + c", "((a * b) + c)"),
+        ("a - b / c", "(a - (b / c))"),
+        ("a % b - c", "((a % b) - c)"),
+        ("a + b * c - d / e", "((a + (b * c)) - (d / e))"),
+        ("1 + 2 * 3", "(1 + (2 * 3))"),
+        // `+ -`, left to right.
+        ("a - b - c", "((a - b) - c)"),
+        ("a + b - c", "((a + b) - c)"),
+        ("a - b + c", "((a - b) + c)"),
+        ("a + b + c + d", "(((a + b) + c) + d)"),
+        // Unary against `* / %` and `+ -`.
+        ("-a * b", "((-a) * b)"),
+        ("a * -b", "(a * (-b))"),
+        ("a - -b", "(a - (-b))"),
+        ("-a + b", "((-a) + b)"),
+        ("!a + b", "((!a) + b)"),
+        ("a.0 + b.1", "(a.0 + b.1)"),
+        ("a.b(c) + d.e", "(a.b(c) + d.e)"),
+        // `+ -` bind tighter than `<< >>`, which are left to right.
+        ("a << b + c", "(a << (b + c))"),
+        ("a + b >> c", "((a + b) >> c)"),
+        ("a << b << c", "((a << b) << c)"),
+        ("a >> b << c", "((a >> b) << c)"),
+        ("a << b * c", "(a << (b * c))"),
+        ("a as u8 << b", "((a as u8) << b)"),
+        // `<< >>` bind tighter than `&`, which is left to right.
+        ("a & b << c", "(a & (b << c))"),
+        ("a << b & c", "((a << b) & c)"),
+        ("a & b & c", "((a & b) & c)"),
+        ("a & b + c", "(a & (b + c))"),
+        // `&` binds tighter than `^`, which is left to right.
+        ("a ^ b & c", "(a ^ (b & c))"),
+        ("a & b ^ c", "((a & b) ^ c)"),
+        ("a ^ b ^ c", "((a ^ b) ^ c)"),
+        // `^` binds tighter than `|`, which is left to right.
+        ("a | b ^ c", "(a | (b ^ c))"),
+        ("a ^ b | c", "((a ^ b) | c)"),
+        ("a | b | c", "((a | b) | c)"),
+        ("a | b & c", "(a | (b & c))"),
+        // Every operator above binds tighter than a comparison.
+        ("a == b | c", "(a == (b | c))"),
+        ("a & b == c", "((a & b) == c)"),
+        ("a | b < c", "((a | b) < c)"),
+        ("a ^ b != c", "((a ^ b) != c)"),
+        ("a + b <= c", "((a + b) <= c)"),
+        ("a < b + c", "(a < (b + c))"),
+        ("a * b > c - d", "((a * b) > (c - d))"),
+        ("a as u8 < b", "((a as u8) < b)"),
+        ("a == b as u8", "(a == (b as u8))"),
+        ("!a == b", "((!a) == b)"),
+        ("-a >= b", "((-a) >= b)"),
+        ("a << b >= c", "((a << b) >= c)"),
+        // Comparisons bind tighter than `&&`, which is left to right.
+        ("a == b && c != d", "((a == b) && (c != d))"),
+        ("a && b == c", "(a && (b == c))"),
+        ("a < b && b < c", "((a < b) && (b < c))"),
+        ("a && b && c", "((a && b) && c)"),
+        ("!a && b", "((!a) && b)"),
+        // `&&` binds tighter than `||`, which is left to right.
+        ("a || b && c", "(a || (b && c))"),
+        ("a && b || c", "((a && b) || c)"),
+        ("a || b || c", "((a || b) || c)"),
+        ("a || b == c", "(a || (b == c))"),
+        ("a | b || c", "((a | b) || c)"),
+        ("a || b | c", "(a || (b | c))"),
+        // Parentheses group.
+        ("(a + b) * c", "((a + b) * c)"),
+        ("a * (b + c)", "(a * (b + c))"),
+        ("-(a + b)", "(-(a + b))"),
+        ("(a as u8) as u8", "((a as u8) as u8)"),
+        ("(-a) as u8", "((-a) as u8)"),
+        ("-(a as u8)", "(-(a as u8))"),
+        ("(a == b) == c", "((a == b) == c)"),
+        ("a == (b == c)", "(a == (b == c))"),
+        ("!(a && b)", "(!(a && b))"),
+        ("a - (b - c)", "(a - (b - c))"),
+        ("(a - b) - c", "((a - b) - c)"),
+        ("a << (b << c)", "(a << (b << c))"),
+        ("f(a + b, c * d)", "f((a + b), (c * d))"),
+        ("(a + b).c", "(a + b).c"),
+        ("(a, b + c)", "(a, (b + c),)"),
+    ];
+    for (text, expected) in table {
+        assert_eq!(grouped(&expression(text)), *expected, "{text}");
+    }
+    // Inside a formula, `=>` is right to left and below `||`.
+    let formulas: &[(&str, &str)] = &[
+        ("a || b => c", "((a || b) => c)"),
+        ("a => b || c", "(a => (b || c))"),
+        ("a => b => c", "(a => (b => c))"),
+        ("a && b => c || d", "((a && b) => (c || d))"),
+        ("a + b <= c => d", "(((a + b) <= c) => d)"),
+        ("a == b => -c < d", "((a == b) => ((-c) < d))"),
+        ("a as u8 == b => c", "(((a as u8) == b) => c)"),
+        ("!a => b", "((!a) => b)"),
+        ("(a => b) => c", "((a => b) => c)"),
+    ];
+    for (text, expected) in formulas {
+        assert_eq!(grouped(&formula(text)), *expected, "prop!({text})");
+    }
 }
 
 #[test]
 fn comparisons_reject_chaining_but_allow_explicit_grouping() {
-    for text in ["a == b == c", "a < b <= c", "a != b > c"] {
+    for text in [
+        "a == b == c",
+        "a < b < c",
+        "a < b <= c",
+        "a != b > c",
+        "a == b < c",
+        "a < b == c",
+        "a + b < c < d",
+        "prop!(a < b < c)",
+    ] {
         let parsed = parse_text(&format!("fn f() -> bool {{ {text} }}"));
-        assert!(parsed.diagnostics.iter().any(|error| error.code == "L0103"));
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|error| error.code == "L0103")
+            .unwrap_or_else(|| panic!("{text}: {:#?}", parsed.diagnostics));
+        assert_eq!(error.message, "comparison operators cannot be chained");
+        assert!(error.notes.iter().any(|note| note.contains("parenthesize")));
+        // The second operator is reported, and the first is labelled.
+        let spans: Vec<_> = error.labels.iter().map(|label| label.span).collect();
+        assert_eq!(spans.len(), 2, "{text}");
+        assert!(spans[1].start < spans[0].start, "{text}");
     }
     expression("(a == b) == c");
+    expression("a == (b == c)");
+    expression("a < b && b < c");
 }
 
 #[test]
@@ -399,6 +617,30 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("continue(", ")"),
                 ("prop!(forall (n: u8) { ", " })"),
                 ("prop!(exists (n: u8) { ", " })"),
+                // The operators of S3: prefix chains, `as` chains, and
+                // binary nesting to either side through parentheses.
+                ("-", ""),
+                ("- (", ")"),
+                ("!(", ")"),
+                ("(", ") as u8"),
+                ("((", ") as u8 as u8)"),
+                ("1 + (", ")"),
+                ("(", ") - 1"),
+                ("(1 * ", ")"),
+                ("1 / (", " % 2)"),
+                ("1 << (", ")"),
+                ("(", ") >> 1"),
+                ("1 & (", ")"),
+                ("1 ^ (", ")"),
+                ("(", ") | 1"),
+                ("1 == (", ")"),
+                ("(", ") < 1"),
+                ("1 && (", ")"),
+                ("(", ") || 1"),
+                ("prop!(p => -(", "))"),
+                ("prop!(", " + 1 <= 2)"),
+                ("-(1 + ", ")"),
+                ("(-", " as u8)"),
             ] {
                 limit_reported(
                     format!(
@@ -409,6 +651,28 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                     open,
                 );
             }
+            // A flat chain of one operator is bounded by the chain limit.
+            for operator in [
+                "+", "-", "*", "/", "%", "<<", ">>", "&", "^", "|", "&&", "||",
+            ] {
+                limit_reported(
+                    format!(
+                        "fn f() -> u8 {{ 1 {} }}",
+                        format!("{operator} 1").repeat(512)
+                    ),
+                    operator,
+                );
+            }
+            for postfix in ["as u8", ".f()", ".0"] {
+                limit_reported(
+                    format!("fn f() -> u8 {{ x {} }}", format!(" {postfix}").repeat(512)),
+                    postfix,
+                );
+            }
+            limit_reported(
+                format!("fn f() -> Prop {{ prop!(1 {}) }}", "=> 1".repeat(512)),
+                "=>",
+            );
             for (open, close) in [
                 ("(", ")"),
                 ("(x: ", ",)"),
@@ -1912,40 +2176,16 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
             format!("compound assignment (`{operator}`) is not in Locus yet"),
         ));
     }
+    // The binary operators of Rust's table all parse (S3); before an
+    // operand, `&`, `|`, and `*` begin what Locus does not have yet.
     for (text, code, message) in [
-        (
-            "x << 1",
-            "L0116",
-            "the shift operator `<<` is not in Locus yet",
-        ),
-        (
-            "x >> 1",
-            "L0116",
-            "the shift operator `>>` is not in Locus yet",
-        ),
-        (
-            "x & 1",
-            "L0116",
-            "references and the `&` operator are not in Locus yet",
-        ),
-        (
-            "&x",
-            "L0116",
-            "references and the `&` operator are not in Locus yet",
-        ),
-        (
-            "x | 1",
-            "L0116",
-            "closures, or-patterns, and the `|` operator are not in Locus yet",
-        ),
+        ("&x", "L0116", "references (`&`) are not in Locus yet"),
         (
             "|y| y",
             "L0116",
-            "closures, or-patterns, and the `|` operator are not in Locus yet",
+            "closures and or-patterns (`|`) are not in Locus yet",
         ),
-        ("x ^ 1", "L0116", "the `^` operator is not in Locus yet"),
         ("f(x)?", "L0116", "the `?` operator is not in Locus yet"),
-        ("-x", "L0116", "negation (`-`) is not in Locus yet"),
         (
             "*x",
             "L0116",
@@ -1972,11 +2212,6 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
             "L0116",
             "inclusive ranges (`..=`) are not in Locus yet",
         ),
-        ("x + 1", "L0112", "`+` is not part of the core language"),
-        ("x - 1", "L0112", "`-` is not part of the core language"),
-        ("x * 2", "L0112", "`*` is not part of the core language"),
-        ("x / 2", "L0112", "`/` is not part of the core language"),
-        ("x % 2", "L0112", "`%` is not part of the core language"),
     ] {
         cases.push((text.to_owned(), code, message.to_owned()));
     }
@@ -2105,11 +2340,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         (
             "fn f(x: u8) -> u8 { let ref y = x; x }",
             "`ref` bindings are not in Locus yet",
-            1,
-        ),
-        (
-            "fn f(x: u8) -> u8 { x as u8 }",
-            "`as` casts are not in Locus yet",
             1,
         ),
         (

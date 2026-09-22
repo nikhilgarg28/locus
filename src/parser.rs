@@ -9,6 +9,39 @@ const MAX_DEPTH: usize = 64;
 const MAX_EXPRESSION_CHAIN: usize = 128;
 type ParseResult<T> = Result<T, ()>;
 
+/// Rust's precedence table (the Reference, "Expression precedence"), as
+/// binding powers from loosest to tightest. A binary operator at `(left,
+/// right)` takes the expression on its left when `left` is at least the
+/// minimum in force, and reads its right operand with `right` as the
+/// minimum: `right` is `left + 1` for the left-associative operators and
+/// `left` for `=>`, which is right-associative. The comparisons are not
+/// associative: a comparison whose operand is a comparison is an error.
+const IMPLIES: (u8, u8) = (1, 1);
+const OR: (u8, u8) = (2, 3);
+const AND: (u8, u8) = (4, 5);
+const COMPARISON: (u8, u8) = (6, 7);
+const BIT_OR: (u8, u8) = (8, 9);
+const BIT_XOR: (u8, u8) = (10, 11);
+const BIT_AND: (u8, u8) = (12, 13);
+const SHIFT: (u8, u8) = (14, 15);
+const SUM: (u8, u8) = (16, 17);
+const PRODUCT: (u8, u8) = (18, 19);
+/// `as`, which takes a type and not an operand on its right.
+const CAST: u8 = 20;
+/// The minimum at which only the postfix operators (calls, `.name`, `.0`)
+/// apply: the operand of a prefix operator, and the proposition of `@claim`.
+const OPERAND: u8 = 21;
+
+/// What `Parser::operator` found after an operand.
+#[derive(Clone, Copy)]
+enum Operator {
+    Call,
+    Member,
+    Cast,
+    /// A binary operator, with the binding power of its right operand.
+    Binary(BinaryOp, u8),
+}
+
 #[derive(Debug)]
 pub struct Parsed {
     pub program: Program,
@@ -622,7 +655,7 @@ impl Parser<'_> {
     /// followed by a block, so `claim {` is not a struct literal.
     fn proof_target(&mut self, at: Token) -> ParseResult<Expr> {
         match self.current().kind {
-            K::Name => self.header(false, |parser| parser.expression_bp(11)),
+            K::Name => self.header(false, |parser| parser.expression_bp(OPERAND)),
             K::LParen => self.formula_mode(Self::parenthesized),
             K::LBracket => self.bracketed_proof_target(at),
             _ => {
@@ -987,6 +1020,7 @@ impl Parser<'_> {
 
     // Debug builds give every local its own stack slot, so the recursive
     // functions below stay small and leave node construction to helpers.
+    // This loop moves an `Expr` at one site only.
     fn expression_bp_inner(&mut self, minimum: u8) -> ParseResult<Expr> {
         let mut left = self.prefix()?;
         let mut chain = 0;
@@ -996,29 +1030,53 @@ impl Parser<'_> {
                 return self.chain_limit();
             }
             chain += 1;
-            if minimum <= 11 && self.at(K::LParen) {
-                if self.for_header && self.state_list_follows() {
-                    break;
-                }
-                left = self.call(left)?;
-                continue;
+            match self.operator(minimum)? {
+                Some(operator) => left = self.extend(left, operator)?,
+                None => break,
             }
-            if minimum <= 11 && self.at(K::Dot) {
-                left = self.member(left)?;
-                continue;
-            }
-            if self.operator_not_in_locus() {
-                return Err(());
-            }
-            let Some((operator, left_bp, right_bp)) = binary(self.current().kind) else {
-                break;
-            };
-            if left_bp < minimum {
-                break;
-            }
-            left = self.binary(left, operator, right_bp)?;
         }
         Ok(left)
+    }
+
+    /// What follows an operand at the minimum binding power in force, when
+    /// something does: a postfix operator, `as`, or a binary operator that
+    /// binds at least as tightly as the minimum. Whatever else of Rust
+    /// stands here and is not yet an operator of Locus is reported.
+    #[inline(never)]
+    fn operator(&mut self, minimum: u8) -> ParseResult<Option<Operator>> {
+        let kind = self.current().kind;
+        match kind {
+            K::LParen if minimum <= OPERAND => {
+                if self.for_header && self.state_list_follows() {
+                    return Ok(None);
+                }
+                return Ok(Some(Operator::Call));
+            }
+            K::Dot if minimum <= OPERAND => return Ok(Some(Operator::Member)),
+            K::As => return Ok((CAST >= minimum).then_some(Operator::Cast)),
+            _ => {}
+        }
+        let Some((operator, (left_bp, right_bp))) = binary(kind) else {
+            if self.rust_only() {
+                return Err(());
+            }
+            return Ok(None);
+        };
+        if operator == BinaryOp::Implies && !self.formula {
+            self.outside_formula("`=>` is implication only inside a formula");
+            return Err(());
+        }
+        Ok((left_bp >= minimum).then_some(Operator::Binary(operator, right_bp)))
+    }
+
+    #[inline(never)]
+    fn extend(&mut self, left: Expr, operator: Operator) -> ParseResult<Expr> {
+        match operator {
+            Operator::Call => self.call(left),
+            Operator::Member => self.member(left),
+            Operator::Cast => self.cast(left),
+            Operator::Binary(operator, right_bp) => self.binary(left, operator, right_bp),
+        }
     }
 
     /// L0119: `=>` or a quantifier where no formula is being read.
@@ -1044,42 +1102,19 @@ impl Parser<'_> {
         Err(())
     }
 
-    /// After an operand: reports an arithmetic operator, `=>` outside a
-    /// formula, or whatever else of Rust stands here that Locus does not use
-    /// yet.
+    /// `left as Type`
     #[inline(never)]
-    fn operator_not_in_locus(&mut self) -> bool {
-        let operator = self.current();
-        if operator.kind == K::Implies && !self.formula {
-            self.outside_formula("`=>` is implication only inside a formula");
-            return true;
-        }
-        if !matches!(
-            operator.kind,
-            K::Plus | K::Minus | K::Star | K::Slash | K::Percent
-        ) {
-            return self.rust_only();
-        }
-        let mut diagnostic = Diagnostic::error(
-            "L0112",
-            format!(
-                "{} is not part of the core language",
-                operator.kind.description()
-            ),
-            operator.span,
-        );
-        let method = match operator.kind {
-            K::Plus => Some("wrapping_add"),
-            K::Minus => Some("wrapping_sub"),
-            _ => None,
-        };
-        if let Some(method) = method {
-            diagnostic = diagnostic.note(format!(
-                "u8 arithmetic says what happens on overflow: write `a.{method}(b)`"
-            ));
-        }
-        self.diagnostics.push(diagnostic);
-        true
+    fn cast(&mut self, expr: Expr) -> ParseResult<Expr> {
+        let token = self.expect(K::As)?;
+        let ty = self.ty()?;
+        Ok(Expr {
+            span: expr.span.through(ty.span),
+            kind: ExprKind::Cast {
+                expr: Box::new(expr),
+                as_span: token.span,
+                ty,
+            },
+        })
     }
 
     #[inline(never)]
@@ -1129,18 +1164,14 @@ impl Parser<'_> {
     #[inline(never)]
     fn binary(&mut self, left: Expr, operator: BinaryOp, right_bp: u8) -> ParseResult<Expr> {
         if operator.is_comparison()
-            && matches!(&left.kind, ExprKind::Binary { operator: previous, .. } if previous.is_comparison())
+            && let ExprKind::Binary {
+                operator: previous,
+                operator_span,
+                ..
+            } = &left.kind
+            && previous.is_comparison()
         {
-            self.diagnostics.push(
-                Diagnostic::error(
-                    "L0103",
-                    "comparisons cannot be chained without parentheses",
-                    self.current().span,
-                )
-                .label(left.span, "the first comparison is here")
-                .note("write each comparison separately and combine them with `&&`"),
-            );
-            return Err(());
+            return self.chained_comparison(*operator_span);
         }
         let token = self.bump();
         let right = self.expression_bp(right_bp)?;
@@ -1164,6 +1195,7 @@ impl Parser<'_> {
                 self.atom()
             }
             K::Bang => self.not(),
+            K::Minus => self.negate(),
             K::LParen => self.parenthesized(),
             K::LBracket => self.bracketed(),
             K::LBrace => self.block_expression(),
@@ -1302,13 +1334,44 @@ impl Parser<'_> {
         }
     }
 
+    /// L0103, as rustc words it: `a < b < c` and `a == b == c` are errors,
+    /// not left-associative.
+    #[inline(never)]
+    fn chained_comparison<T>(&mut self, first: Span) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0103",
+                "comparison operators cannot be chained",
+                self.current().span,
+            )
+            .label(first, "the first comparison is here")
+            .note("parenthesize the comparison that is an operand, as in `(a == b) == c`, or join two comparisons with `&&`, as in `a < b && b < c`"),
+        );
+        Err(())
+    }
+
     #[inline(never)]
     fn not(&mut self) -> ParseResult<Expr> {
         let start = self.bump();
-        let value = self.expression_bp(9)?;
+        let value = self.expression_bp(OPERAND)?;
         Ok(Expr {
             span: start.span.through(value.span),
             kind: ExprKind::Not(Box::new(value)),
+        })
+    }
+
+    /// `-value`
+    #[inline(never)]
+    fn negate(&mut self) -> ParseResult<Expr> {
+        let start = self.bump();
+        let value = self.expression_bp(OPERAND)?;
+        Ok(Expr {
+            span: start.span.through(value.span),
+            kind: ExprKind::Unary {
+                operator: UnaryOp::Neg,
+                operator_span: start.span,
+                expr: Box::new(value),
+            },
         })
     }
 
@@ -1811,7 +1874,6 @@ fn keyword_is_no_name(keyword: &str, span: Span) -> Diagnostic {
 /// without a use of its own.
 fn keyword_construct(keyword: &str) -> Option<(&'static str, Option<&'static str>)> {
     let message = match keyword {
-        "as" => "`as` casts are not in Locus yet",
         "async" => "`async` is not in Locus yet",
         "await" => "`await` is not in Locus yet",
         "crate" => "`crate` paths are not in Locus yet",
@@ -1860,13 +1922,9 @@ fn rust_only_token(kind: K, spelling: &str) -> Option<String> {
         | K::ShiftRightEqual => {
             format!("compound assignment (`{spelling}`) is not in Locus yet")
         }
-        K::ShiftLeft | K::ShiftRight => {
-            format!("the shift operator `{spelling}` is not in Locus yet")
-        }
-        K::And => "references and the `&` operator are not in Locus yet".into(),
-        K::Or => "closures, or-patterns, and the `|` operator are not in Locus yet".into(),
-        K::Caret => "the `^` operator is not in Locus yet".into(),
-        K::Minus => "negation (`-`) is not in Locus yet".into(),
+        // Before an operand: a borrow, a closure, or a dereference.
+        K::And => "references (`&`) are not in Locus yet".into(),
+        K::Or => "closures and or-patterns (`|`) are not in Locus yet".into(),
         K::Star => "dereferences and raw pointers (`*`) are not in Locus yet".into(),
         K::Question => "the `?` operator is not in Locus yet".into(),
         K::Dollar => "`$` belongs to macros, which are not in Locus yet".into(),
@@ -1879,17 +1937,30 @@ fn rust_only_token(kind: K, spelling: &str) -> Option<String> {
     })
 }
 
-fn binary(kind: K) -> Option<(BinaryOp, u8, u8)> {
+/// The binary operators with their binding powers. Every operator of Rust's
+/// table that Locus lexes is here, whether or not the elaborator gives it a
+/// meaning yet: what parses in Rust groups the same way here.
+fn binary(kind: K) -> Option<(BinaryOp, (u8, u8))> {
     Some(match kind {
-        K::Implies => (BinaryOp::Implies, 1, 1),
-        K::OrOr => (BinaryOp::Or, 2, 3),
-        K::AndAnd => (BinaryOp::And, 3, 4),
-        K::EqualEqual => (BinaryOp::Equal, 5, 6),
-        K::BangEqual => (BinaryOp::NotEqual, 5, 6),
-        K::Less => (BinaryOp::Less, 5, 6),
-        K::LessEqual => (BinaryOp::LessEqual, 5, 6),
-        K::Greater => (BinaryOp::Greater, 5, 6),
-        K::GreaterEqual => (BinaryOp::GreaterEqual, 5, 6),
+        K::Implies => (BinaryOp::Implies, IMPLIES),
+        K::OrOr => (BinaryOp::Or, OR),
+        K::AndAnd => (BinaryOp::And, AND),
+        K::EqualEqual => (BinaryOp::Equal, COMPARISON),
+        K::BangEqual => (BinaryOp::NotEqual, COMPARISON),
+        K::Less => (BinaryOp::Less, COMPARISON),
+        K::LessEqual => (BinaryOp::LessEqual, COMPARISON),
+        K::Greater => (BinaryOp::Greater, COMPARISON),
+        K::GreaterEqual => (BinaryOp::GreaterEqual, COMPARISON),
+        K::Or => (BinaryOp::BitOr, BIT_OR),
+        K::Caret => (BinaryOp::BitXor, BIT_XOR),
+        K::And => (BinaryOp::BitAnd, BIT_AND),
+        K::ShiftLeft => (BinaryOp::Shl, SHIFT),
+        K::ShiftRight => (BinaryOp::Shr, SHIFT),
+        K::Plus => (BinaryOp::Add, SUM),
+        K::Minus => (BinaryOp::Sub, SUM),
+        K::Star => (BinaryOp::Mul, PRODUCT),
+        K::Slash => (BinaryOp::Div, PRODUCT),
+        K::Percent => (BinaryOp::Rem, PRODUCT),
         _ => return None,
     })
 }

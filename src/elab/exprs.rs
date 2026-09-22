@@ -174,6 +174,7 @@ impl Env<'_> {
                 right,
                 ..
             } => self.compare(expr, operator, left, right, expected),
+            ExprKind::Unary { .. } | ExprKind::Cast { .. } => self.operator_not_yet(expr),
             ExprKind::Struct { name, fields } => self.struct_literal(name, fields, expr.span),
             ExprKind::Path(path) => self.variant(path, &[], expected, expr.span),
             ExprKind::Call { callee, arguments } => {

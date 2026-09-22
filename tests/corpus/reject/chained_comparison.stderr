@@ -1,9 +1,18 @@
-error[L0103]: comparisons cannot be chained without parentheses
+error[L0103]: comparison operators cannot be chained
  --> tests/corpus/reject/chained_comparison.lc:3:11
   |
-3 |     a < b < c //~ error: L0103 comparisons cannot be chained
-  |     ----- ^
-  |     |
-  |     the first comparison is here
+3 |     a < b < c //~ error: L0103 comparison operators cannot be chained
+  |       -   ^
+  |       |
+  |       the first comparison is here
   |
-  = note: write each comparison separately and combine them with `&&`
+  = note: parenthesize the comparison that is an operand, as in `(a == b) == c`, or join two comparisons with `&&`, as in `a < b && b < c`
+error[L0103]: comparison operators cannot be chained
+ --> tests/corpus/reject/chained_comparison.lc:7:12
+  |
+7 |     a == b == c //~ error: L0103 comparison operators cannot be chained
+  |       --   ^^
+  |       |
+  |       the first comparison is here
+  |
+  = note: parenthesize the comparison that is an operand, as in `(a == b) == c`, or join two comparisons with `&&`, as in `a < b && b < c`

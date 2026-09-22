@@ -37,16 +37,15 @@ const STEP_FACTOR: usize = 4;
 /// Every spelling the lexer gives a token kind of its own.
 const TOKENS: &[&str] = &[
     "fn", "const", "let", "if", "else", "struct", "enum", "match", "loop", "for", "in", "break",
-    "continue", "true", "false", "_", "(", ")", "{", "}", "[", "]", ",", ":", ";", ".", "..", "::",
-    "#", "@", "+", "!", "=", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "->", "=>", "-", "*",
-    "/", "%", "^", "&", "|", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<=",
-    ">>=", "...", "..=", "<-", "?", "$", "~",
+    "continue", "true", "false", "as", "_", "(", ")", "{", "}", "[", "]", ",", ":", ";", ".", "..",
+    "::", "#", "@", "+", "!", "=", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "->", "=>", "-",
+    "*", "/", "%", "^", "&", "|", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=",
+    "<<=", ">>=", "...", "..=", "<-", "?", "$", "~",
 ];
 
 /// What Locus lexes because Rust has it: the keywords it reserves without
 /// using them, and literals in every form, valid and not.
 const RUST: &[&str] = &[
-    "as",
     "async",
     "await",
     "crate",
@@ -264,6 +263,19 @@ const FRAGMENTS: &[&str] = &[
     "let mut x =",
     "x += 1;",
     "x as u8",
+    "x as u8 as bool <",
+    "-x as u8",
+    "- -x",
+    "a + b * c",
+    "a - b - c",
+    "a << b + c",
+    "a & b == c",
+    "a ^ b | c",
+    "(a - b) - c",
+    "a < b < c",
+    "1 + (",
+    "x..y",
+    "..",
     "while x < 3 {",
     "return x;",
     "|y| y",
