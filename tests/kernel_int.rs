@@ -15,7 +15,7 @@ use std::rc::Rc;
 use locus::kernel::derive::{Chain, symm_at};
 use locus::kernel::{
     Axiom, Context, Definitions, HypRef, Integer, KernelError, MAX_DEPTH, MAX_EVAL_DEPTH,
-    MachineInt, Mode, Prelude, Prim, Proof, Term, Type, check_proof, infer_proof, infer_term,
+    MachineInt, Mode, Op, Prelude, Prim, Proof, Term, Type, check_proof, infer_proof, infer_term,
 };
 
 #[path = "common/rng.rs"]
@@ -1473,10 +1473,12 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::ViewWrap(MachineInt::U8, t()),
         Axiom::WrapPeriod(MachineInt::U8, t()),
         Axiom::CastDef(MachineInt::U8, MachineInt::U8, t()),
+        Axiom::OpModel(Op::Add, MachineInt::U8, vec![t(), t()]),
+        Axiom::OpExact(Op::Add, MachineInt::U8, vec![t(), t()]),
     ]
 }
 
-const AXIOMS: usize = 41;
+const AXIOMS: usize = 43;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1521,6 +1523,8 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::ViewWrap(..) => 38,
         Axiom::WrapPeriod(..) => 39,
         Axiom::CastDef(..) => 40,
+        Axiom::OpModel(..) => 41,
+        Axiom::OpExact(..) => 42,
     }
 }
 
@@ -1625,7 +1629,7 @@ fn rule_index(proof: &Proof) -> usize {
     }
 }
 
-const PRIMS: [Prim; 19] = [
+const PRIMS: [Prim; 20] = [
     Prim::WrappingAdd,
     Prim::WrappingSub,
     Prim::U8Eq,
@@ -1645,6 +1649,7 @@ const PRIMS: [Prim; 19] = [
     Prim::View(MachineInt::U8),
     Prim::Wrap(MachineInt::U8),
     Prim::Cast(MachineInt::U8, MachineInt::U8),
+    Prim::Op(Op::Add, MachineInt::U8),
 ];
 
 fn prim_index(prim: Prim) -> usize {
@@ -1668,6 +1673,7 @@ fn prim_index(prim: Prim) -> usize {
         Prim::View(_) => 16,
         Prim::Wrap(_) => 17,
         Prim::Cast(..) => 18,
+        Prim::Op(..) => 19,
     }
 }
 

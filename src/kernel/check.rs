@@ -9,6 +9,7 @@ use super::eval::{Evaluator, is_plain_data};
 use super::int::Integer;
 use super::linear::claim_of_linear;
 use super::machine::MachineInt;
+use super::ops::{Op, Row};
 use super::term::{Axiom, ForLoop, HypRef, Prim, Proof, ProofArm, Term, Type, VarId, field_type};
 
 /// The kernel's only comparison of terms: equality up to renaming of bound
@@ -208,6 +209,11 @@ fn type_of_prim(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
     let Term::Prim(prim, arguments) = term else {
         unreachable!("dispatched on this variant")
     };
+    if let Prim::Op(op, ty) = prim
+        && !op.exists_at(*ty)
+    {
+        return Err(KernelError::NoRow(*op, *ty));
+    }
     let (parameters, result) = prim_signature(*prim);
     if arguments.len() != parameters.len() {
         return Err(KernelError::WrongArity {
@@ -670,14 +676,17 @@ fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
         Prim::View(ty) => (vec![Type::machine(ty)], Type::Int),
         Prim::Wrap(ty) => (vec![Type::Int], Type::machine(ty)),
         Prim::Cast(from, to) => (vec![Type::machine(from)], Type::machine(to)),
+        // A row that does not exist is rejected before this is asked.
+        Prim::Op(op, ty) => (vec![Type::machine(ty); op.arity()], Type::machine(ty)),
     }
 }
 
 /// Native evaluation of a primitive applied to literals. This is the
 /// implementation that must agree with the `u8` model, with the integers
-/// as a model of the `Int` axioms, and with the machine integers as a model
-/// of the axioms about `view`, `wrap`, and `cast`. `int_le` is a
-/// proposition and has no value; `evaluate` decides it.
+/// as a model of the `Int` axioms, with the machine integers as a model of
+/// the axioms about `view`, `wrap`, and `cast`, and with the table of
+/// primitive operations. `int_le` is a proposition and has no value;
+/// `evaluate` decides it.
 pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
     // A machine literal of the type the primitive expects, as a number.
     let machine = |ty: MachineInt, term: &Term| -> Option<Integer> {
@@ -689,6 +698,19 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         (Prim::Wrap(ty), [Term::Int(n)]) => Term::machine(ty, ty.wrap(n)),
         // `x as T` is `wrap(T)` of the value of `x`, by `cast_def`.
         (Prim::Cast(from, to), [x]) => Term::machine(to, to.wrap(&machine(from, x)?)),
+        // A row of the table: the meaning that holds in every build, which
+        // is total, so nothing here panics.
+        (Prim::Op(op, ty), operands) => {
+            let row = op.row(ty)?;
+            if operands.len() != row.arity() {
+                return None;
+            }
+            let values: Vec<Integer> = operands
+                .iter()
+                .map(|operand| machine(ty, operand))
+                .collect::<Option<_>>()?;
+            Term::machine(ty, row.compute(&values))
+        }
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
         (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
         (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
@@ -752,7 +774,9 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         Axiom::ViewLower(ty, _)
         | Axiom::ViewUpper(ty, _)
         | Axiom::WrapView(ty, _)
-        | Axiom::CastDef(ty, _, _) => Some(Type::machine(*ty)),
+        | Axiom::CastDef(ty, _, _)
+        | Axiom::OpModel(_, ty, _)
+        | Axiom::OpExact(_, ty, _) => Some(Type::machine(*ty)),
         Axiom::Reflect(..) => None,
     };
     if let Some(expected) = &expected {
@@ -902,7 +926,28 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
             Term::cast(from, to, x.clone()),
             Term::wrap(to, Term::view(from, x)),
         ),
+        // The table of primitive operations: each schema is stated by the
+        // row it names, in `src/kernel/ops.rs`.
+        Axiom::OpModel(op, ty, operands) => {
+            table_row(op, ty, &operands)?.model_statement(&operands)
+        }
+        Axiom::OpExact(op, ty, operands) => table_row(op, ty, &operands)?
+            .exact_statement(&operands)
+            .ok_or(KernelError::NoOverflow(op, ty))?,
     })
+}
+
+/// The row an axiom about the table names, when it exists and the axiom
+/// has as many operands as the row.
+fn table_row(op: Op, ty: MachineInt, operands: &[Term]) -> Result<Row, KernelError> {
+    let row = op.row(ty).ok_or(KernelError::NoRow(op, ty))?;
+    if operands.len() != row.arity() {
+        return Err(KernelError::WrongArity {
+            expected: row.arity(),
+            found: operands.len(),
+        });
+    }
+    Ok(row)
 }
 
 /// The proposition a runtime comparison decides.

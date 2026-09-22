@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use super::int::Integer;
 use super::machine::MachineInt;
 use super::nat::Natural;
+use super::ops::Op;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -281,6 +282,14 @@ pub enum Prim {
     /// `S -> T`: what `as` between machine types compiles to; by axiom it
     /// is `wrap(T)` of `view(S)`.
     Cast(MachineInt, MachineInt),
+    /// `T, T -> T`, or `T -> T` for the negations: a row of the table of
+    /// primitive operations in `src/kernel/ops.rs`, `+`, `-`, `*`, `/`,
+    /// `%`, unary minus, or a wrapping method at a machine type. Runtime
+    /// data in, runtime data out. The negations exist at the signed types
+    /// only; `Op::row` says which rows exist, and the checker rejects any
+    /// other. Evaluation computes the meaning that holds in every build,
+    /// `wrap[T]` of the exact result, and never panics.
+    Op(Op, MachineInt),
 }
 
 impl Prim {
@@ -307,6 +316,7 @@ impl Prim {
             Self::View(_) => "view",
             Self::Wrap(_) => "wrap",
             Self::Cast(..) => "cast",
+            Self::Op(op, _) => op.name(),
         }
     }
 }
@@ -315,7 +325,7 @@ impl fmt::Display for Prim {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())?;
         match self {
-            Self::View(ty) | Self::Wrap(ty) => write!(f, "[{}]", ty.name()),
+            Self::View(ty) | Self::Wrap(ty) | Self::Op(_, ty) => write!(f, "[{}]", ty.name()),
             Self::Cast(from, to) => write!(f, "[{}, {}]", from.name(), to.name()),
             _ => Ok(()),
         }
@@ -420,6 +430,18 @@ pub enum Axiom {
     WrapPeriod(MachineInt, Term),
     /// `cast(S, T)(x) ==[T] wrap(T)(view(S)(x))`, for `x : S`
     CastDef(MachineInt, MachineInt, Term),
+    // The table of primitive operations, `src/kernel/ops.rs`: two schemas,
+    // instantiated at the row the axiom carries, an operation and a type,
+    // and at the operands, of which there are as many as the row's arity,
+    // each of type `T`. `e` stands for the exact result of the operands'
+    // views on `Int`, as `Row::exact_term` builds it.
+    /// `op[T](xs) ==[T] wrap[T](e)`, for every row: the meaning that holds
+    /// in every build.
+    OpModel(Op, MachineInt, Vec<Term>),
+    /// `min(T) <= e => (e <= max(T) => view[T](op[T](xs)) ==[Int] e)`, for
+    /// the rows that can overflow, `+`, `-`, `*`, and unary minus: the exact
+    /// result, under the condition that it fits. Rejected at any other row.
+    OpExact(Op, MachineInt, Vec<Term>),
 }
 
 impl Axiom {
@@ -467,6 +489,8 @@ impl Axiom {
             Self::ViewWrap(..) => "view_wrap",
             Self::WrapPeriod(..) => "wrap_period",
             Self::CastDef(..) => "cast_def",
+            Self::OpModel(..) => "op_model",
+            Self::OpExact(..) => "op_exact",
         }
     }
 
@@ -513,6 +537,8 @@ impl Axiom {
             Self::ViewWrap(ty, n) => Self::ViewWrap(*ty, f(n)),
             Self::WrapPeriod(ty, n) => Self::WrapPeriod(*ty, f(n)),
             Self::CastDef(from, to, x) => Self::CastDef(*from, *to, f(x)),
+            Self::OpModel(op, ty, xs) => Self::OpModel(*op, *ty, xs.iter().map(&f).collect()),
+            Self::OpExact(op, ty, xs) => Self::OpExact(*op, *ty, xs.iter().map(&f).collect()),
         }
     }
 
@@ -560,6 +586,7 @@ impl Axiom {
             | Self::IntMulAdd(a, b, c)
             | Self::IntLeTrans(a, b, c)
             | Self::IntLeAdd(a, b, c) => vec![a, b, c],
+            Self::OpModel(_, _, xs) | Self::OpExact(_, _, xs) => xs.iter().collect(),
         }
     }
 }
@@ -993,6 +1020,12 @@ impl Term {
     /// `cast(S, T)(x)`: `x as T` for `x : S`.
     pub fn cast(from: MachineInt, to: MachineInt, value: Term) -> Self {
         Self::Prim(Prim::Cast(from, to), vec![value])
+    }
+
+    /// `op[T](operands)`: a row of the table of primitive operations
+    /// applied. The number of operands is checked by typing, not here.
+    pub fn op(op: Op, ty: MachineInt, operands: Vec<Term>) -> Self {
+        Self::Prim(Prim::Op(op, ty), operands)
     }
 
     /// A tuple value of the given tuple type.

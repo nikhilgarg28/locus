@@ -4,6 +4,8 @@
 use std::fmt;
 
 use super::linear::LinearError;
+use super::machine::MachineInt;
+use super::ops::Op;
 use super::term::{HypId, Term, Type, VarId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,6 +111,12 @@ pub enum KernelError {
     /// A linear certificate refused by the rule itself, not by the proof
     /// of one of its pairs.
     Linear(LinearError),
+    /// The table of primitive operations has no row for this operation at
+    /// this type: a negation at an unsigned type.
+    NoRow(Op, MachineInt),
+    /// `op_exact` at a row that cannot overflow: a wrapping method, `/`,
+    /// or `%`, whose only axiom is `op_model`.
+    NoOverflow(Op, MachineInt),
 }
 
 impl From<LinearError> for KernelError {
@@ -218,6 +226,15 @@ impl fmt::Display for KernelError {
             Self::MachineFormOfU8 => f.write_str("u8 is written u8, not as a machine form"),
             Self::OutOfRange(term) => write!(f, "{term} is outside the range of its type"),
             Self::Linear(error) => write!(f, "linear certificate: {error}"),
+            Self::NoRow(op, ty) => {
+                write!(f, "the table has no row for {} at {}", op.name(), ty.name())
+            }
+            Self::NoOverflow(op, ty) => write!(
+                f,
+                "{}[{}] cannot overflow, so op_exact does not apply to it",
+                op.name(),
+                ty.name()
+            ),
         }
     }
 }

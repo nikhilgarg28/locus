@@ -41,9 +41,9 @@ use locus::elab::elaborate;
 use locus::kernel::derive::{Chain, fold_claim, symm_at, unfold_claim};
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, MachineInt, Mode, Prelude,
-    Prim, Proof, ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof, infer_proof,
-    infer_term,
+    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, MachineInt, Mode, Op,
+    Prelude, Prim, Proof, ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof,
+    infer_proof, infer_term,
 };
 use locus::parser::parse;
 use locus::source::SourceMap;
@@ -367,6 +367,58 @@ fn neighbours(ty: MachineInt) -> Vec<MachineInt> {
         I16 => vec![U16, I8, I32],
         I32 => vec![U32, I16, I64],
         I64 => vec![U64, I32],
+    }
+}
+
+/// The oracle's reading of a row of the table of primitive operations: the
+/// exact result over `i128` with checked arithmetic, reduced into the type.
+/// Division and remainder are total, `a / 0` being `0` and `a % 0` being
+/// `a`, as the kernel's `Int` has them; the checked operations cannot
+/// fail on values of a machine type, since every product of two `u64` or
+/// two `i64` values fits in `i128`. The negations exist at the signed
+/// types only; at an unsigned type there is no row and no value.
+fn machine_op(op: Op, ty: MachineInt, operands: &[i128]) -> Option<i128> {
+    if matches!(op, Op::Neg | Op::WrappingNeg) && !shape(ty).1 {
+        return None;
+    }
+    let exact = match (op, operands) {
+        (Op::Add | Op::WrappingAdd, [a, b]) => a.checked_add(*b)?,
+        (Op::Sub | Op::WrappingSub, [a, b]) => a.checked_sub(*b)?,
+        (Op::Mul | Op::WrappingMul, [a, b]) => a.checked_mul(*b)?,
+        (Op::Div, [a, b]) => {
+            if *b == 0 {
+                0
+            } else {
+                a.checked_div(*b)?
+            }
+        }
+        (Op::Rem, [a, b]) => {
+            if *b == 0 {
+                *a
+            } else {
+                a.checked_rem(*b)?
+            }
+        }
+        (Op::Neg | Op::WrappingNeg, [a]) => a.checked_neg()?,
+        _ => return None,
+    };
+    Some(machine_wrap(ty, exact))
+}
+
+/// The operation a row is confused with: the other operation of its kind,
+/// or its wrapping counterpart, or the plain one.
+fn op_sibling(op: Op) -> Op {
+    match op {
+        Op::Add => Op::Sub,
+        Op::Sub => Op::Add,
+        Op::Mul => Op::WrappingMul,
+        Op::Div => Op::Rem,
+        Op::Rem => Op::Div,
+        Op::Neg => Op::WrappingNeg,
+        Op::WrappingAdd => Op::WrappingSub,
+        Op::WrappingSub => Op::WrappingAdd,
+        Op::WrappingMul => Op::Mul,
+        Op::WrappingNeg => Op::Neg,
     }
 }
 
@@ -745,6 +797,15 @@ fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
         (Prim::View(ty), [x]) => Value::Int(machine_number(ty, x)?),
         (Prim::Wrap(ty), [Value::Int(n)]) => machine_of(ty, machine_wrap(ty, *n)),
         (Prim::Cast(from, to), [x]) => machine_of(to, machine_wrap(to, machine_number(from, x)?)),
+        // A row of the table of primitive operations: the meaning in every
+        // build, the exact result of the operands reduced into the type.
+        (Prim::Op(op, ty), operands) => {
+            let numbers: Vec<i128> = operands
+                .iter()
+                .map(|operand| machine_number(ty, operand))
+                .collect::<Option<_>>()?;
+            machine_of(ty, machine_op(op, ty, &numbers)?)
+        }
         _ => return None,
     })
 }
@@ -1241,6 +1302,8 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 Prim::IntLe => None,
                 // The machine primitives have several siblings each, below.
                 Prim::View(_) | Prim::Wrap(_) | Prim::Cast(..) => None,
+                // A row of the table: the sibling operation at the same type.
+                Prim::Op(op, ty) => Some(Prim::Op(op_sibling(*op), *ty)),
             };
             if let Some(sibling) = sibling {
                 out.push(Term::Prim(sibling, arguments.clone()));
@@ -1253,6 +1316,10 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
             let retyped: Vec<Prim> = match prim {
                 Prim::View(ty) => neighbours(*ty).into_iter().map(Prim::View).collect(),
                 Prim::Wrap(ty) => neighbours(*ty).into_iter().map(Prim::Wrap).collect(),
+                Prim::Op(op, ty) => neighbours(*ty)
+                    .into_iter()
+                    .map(|other| Prim::Op(*op, other))
+                    .collect(),
                 Prim::Cast(from, to) => {
                     let mut casts: Vec<Prim> = neighbours(*to)
                         .into_iter()
@@ -1579,6 +1646,8 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
         Axiom::ViewWrap(ty, _) => Axiom::ViewWrap(*ty, take()),
         Axiom::WrapPeriod(ty, _) => Axiom::WrapPeriod(*ty, take()),
         Axiom::CastDef(from, to, _) => Axiom::CastDef(*from, *to, take()),
+        Axiom::OpModel(op, ty, xs) => Axiom::OpModel(*op, *ty, xs.iter().map(|_| take()).collect()),
+        Axiom::OpExact(op, ty, xs) => Axiom::OpExact(*op, *ty, xs.iter().map(|_| take()).collect()),
     }
 }
 
@@ -1629,6 +1698,7 @@ fn machine_types(axiom: &Axiom) -> Vec<MachineInt> {
         | Axiom::ViewWrap(ty, _)
         | Axiom::WrapPeriod(ty, _) => vec![*ty],
         Axiom::CastDef(from, to, _) => vec![*from, *to],
+        Axiom::OpModel(_, ty, _) | Axiom::OpExact(_, ty, _) => vec![*ty],
     }
 }
 
@@ -1643,6 +1713,8 @@ fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
         Axiom::ViewWrap(_, n) => Axiom::ViewWrap(types[0], n.clone()),
         Axiom::WrapPeriod(_, n) => Axiom::WrapPeriod(types[0], n.clone()),
         Axiom::CastDef(_, _, x) => Axiom::CastDef(types[0], types[1], x.clone()),
+        Axiom::OpModel(op, _, xs) => Axiom::OpModel(*op, types[0], xs.clone()),
+        Axiom::OpExact(op, _, xs) => Axiom::OpExact(*op, types[0], xs.clone()),
         Axiom::NatAddZero(_)
         | Axiom::NatAddSucc(..)
         | Axiom::NatSuccInjective(..)
@@ -1730,7 +1802,25 @@ fn every_axiom_at(t: &Term) -> Vec<Axiom> {
         Axiom::ViewWrap(I32, t()),
         Axiom::WrapPeriod(U32, t()),
         Axiom::CastDef(I16, U16, t()),
+        Axiom::OpModel(Op::Add, U16, vec![t(), t()]),
+        Axiom::OpModel(Op::Div, I8, vec![t(), t()]),
+        Axiom::OpModel(Op::Neg, I64, vec![t()]),
+        Axiom::OpModel(Op::WrappingMul, U32, vec![t(), t()]),
+        Axiom::OpExact(Op::Sub, U8, vec![t(), t()]),
+        Axiom::OpExact(Op::Mul, I32, vec![t(), t()]),
+        Axiom::OpExact(Op::Neg, I16, vec![t()]),
     ]
+}
+
+/// The same axiom about the table, at a sibling operation: the inverse of
+/// nothing, since the operation is not a term. An axiom that carries no
+/// operation is returned as it is.
+fn axiom_with_op_sibling(axiom: &Axiom) -> Axiom {
+    match axiom {
+        Axiom::OpModel(op, ty, xs) => Axiom::OpModel(op_sibling(*op), *ty, xs.clone()),
+        Axiom::OpExact(op, ty, xs) => Axiom::OpExact(op_sibling(*op), *ty, xs.clone()),
+        other => other.clone(),
+    }
 }
 
 fn map_axiom(axiom: &Axiom, f: &dyn Fn(&Term) -> Term) -> Axiom {
@@ -2136,6 +2226,13 @@ impl<'a> Material<'a> {
             }
             _ => match axiom {
                 Axiom::Reflect(comparison, flag) => Axiom::Reflect(comparison.clone(), !flag),
+                // An axiom about the table, half the time at the sibling
+                // operation instead: a row that does not exist, a row with
+                // no exact statement, or an axiom about another operation,
+                // which the oracle can judge.
+                Axiom::OpModel(..) | Axiom::OpExact(..) if rng.below(2) == 0 => {
+                    axiom_with_op_sibling(axiom)
+                }
                 // One type parameter moved to a neighbouring type: the
                 // instance is then ill typed, or an axiom about another
                 // type, which the oracle can judge.
@@ -3668,6 +3765,242 @@ fn hand_built(world: &World) -> Vec<Triple> {
             .finish();
         let claim = eq_at(ty, cast(ty, ty, x.clone()), x);
         add(&format!("cast_identity_{}", ty.name()), scene, claim, proof);
+    }
+
+    // The table of primitive operations: a few rows of each schema, with
+    // the claims written from the test's own table. `op_model` at an
+    // operation that overflows, at a division, and at a negation;
+    // `op_exact` under its premises as hypotheses, and stated whole.
+    let op = |op: Op, ty: MachineInt, operands: Vec<Term>| Term::op(op, ty, operands);
+    for (which, ty) in [(Op::Add, U16), (Op::Mul, I32), (Op::WrappingSub, U8)] {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (
+            scene.declare(Type::machine(ty)),
+            scene.declare(Type::machine(ty)),
+        );
+        let exact = match which {
+            Op::Add => iadd(view(ty, a.clone()), view(ty, b.clone())),
+            Op::Mul => imul(view(ty, a.clone()), view(ty, b.clone())),
+            _ => Term::int_sub(view(ty, a.clone()), view(ty, b.clone())),
+        };
+        let claim = eq_at(
+            ty,
+            op(which, ty, vec![a.clone(), b.clone()]),
+            wrap(ty, exact),
+        );
+        add(
+            &format!("op_model_{}_{}", which.name(), ty.name()),
+            scene,
+            claim,
+            ax(Axiom::OpModel(which, ty, vec![a, b])),
+        );
+    }
+    for (which, ty) in [(Op::Div, I8), (Op::Rem, U64)] {
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (
+            scene.declare(Type::machine(ty)),
+            scene.declare(Type::machine(ty)),
+        );
+        let exact = match which {
+            Op::Div => Term::int_div(view(ty, a.clone()), view(ty, b.clone())),
+            _ => Term::int_rem(view(ty, a.clone()), view(ty, b.clone())),
+        };
+        let claim = eq_at(
+            ty,
+            op(which, ty, vec![a.clone(), b.clone()]),
+            wrap(ty, exact),
+        );
+        add(
+            &format!("op_model_{}_{}", which.name(), ty.name()),
+            scene,
+            claim,
+            ax(Axiom::OpModel(which, ty, vec![a, b])),
+        );
+    }
+    for ty in [I16, I64] {
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::machine(ty));
+        let claim = eq_at(
+            ty,
+            op(Op::Neg, ty, vec![a.clone()]),
+            wrap(ty, Term::int_neg(view(ty, a.clone()))),
+        );
+        add(
+            &format!("op_model_neg_{}", ty.name()),
+            scene,
+            claim,
+            ax(Axiom::OpModel(Op::Neg, ty, vec![a])),
+        );
+    }
+    for ty in [U8, I32] {
+        // The exact sum, under the two premises as hypotheses.
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (
+            scene.declare(Type::machine(ty)),
+            scene.declare(Type::machine(ty)),
+        );
+        let exact = iadd(view(ty, a.clone()), view(ty, b.clone()));
+        let lower = scene.assume(ile(min_of(ty), exact.clone()));
+        let upper = scene.assume(ile(exact.clone(), max_of(ty)));
+        let proof = Proof::implies_elim(
+            Proof::implies_elim(
+                ax(Axiom::OpExact(Op::Add, ty, vec![a.clone(), b.clone()])),
+                Proof::hyp(lower),
+            ),
+            Proof::hyp(upper),
+        );
+        let claim = int_eq(view(ty, op(Op::Add, ty, vec![a, b])), exact);
+        add(&format!("op_exact_add_{}", ty.name()), scene, claim, proof);
+    }
+    {
+        // The same schema stated whole at a product, so that its premises
+        // are attacked.
+        let mut scene = Scene::new(&world.definitions);
+        let (a, b) = (
+            scene.declare(Type::machine(I8)),
+            scene.declare(Type::machine(I8)),
+        );
+        let exact = imul(view(I8, a.clone()), view(I8, b.clone()));
+        let claim = Term::implies(
+            ile(min_of(I8), exact.clone()),
+            Term::implies(
+                ile(exact.clone(), max_of(I8)),
+                int_eq(view(I8, op(Op::Mul, I8, vec![a.clone(), b.clone()])), exact),
+            ),
+        );
+        add(
+            "op_exact_implication_mul_i8",
+            scene,
+            claim,
+            ax(Axiom::OpExact(Op::Mul, I8, vec![a, b])),
+        );
+    }
+    {
+        // Negation stated whole.
+        let mut scene = Scene::new(&world.definitions);
+        let a = scene.declare(Type::machine(I16));
+        let exact = Term::int_neg(view(I16, a.clone()));
+        let claim = Term::implies(
+            ile(min_of(I16), exact.clone()),
+            Term::implies(
+                ile(exact.clone(), max_of(I16)),
+                int_eq(view(I16, op(Op::Neg, I16, vec![a.clone()])), exact),
+            ),
+        );
+        add(
+            "op_exact_implication_neg_i16",
+            scene,
+            claim,
+            ax(Axiom::OpExact(Op::Neg, I16, vec![a])),
+        );
+    }
+
+    // The table of primitive operations: evaluation of closed operations,
+    // at the pairs where Rust panics included, since the kernel computes the
+    // meaning that holds in every build.
+    for (name, term, ty, value) in [
+        (
+            "add_u8",
+            op(Op::Add, U8, vec![Term::U8(200), Term::U8(100)]),
+            U8,
+            44,
+        ),
+        (
+            "sub_u16",
+            op(Op::Sub, U16, vec![lit(U16, 0), lit(U16, 1)]),
+            U16,
+            65535,
+        ),
+        (
+            "mul_i8",
+            op(Op::Mul, I8, vec![lit(I8, -128), lit(I8, -1)]),
+            I8,
+            -128,
+        ),
+        (
+            "div_i8_min",
+            op(Op::Div, I8, vec![lit(I8, -128), lit(I8, -1)]),
+            I8,
+            -128,
+        ),
+        (
+            "rem_i8_min",
+            op(Op::Rem, I8, vec![lit(I8, -128), lit(I8, -1)]),
+            I8,
+            0,
+        ),
+        (
+            "div_u32_zero",
+            op(Op::Div, U32, vec![lit(U32, 7), lit(U32, 0)]),
+            U32,
+            0,
+        ),
+        (
+            "rem_u32_zero",
+            op(Op::Rem, U32, vec![lit(U32, 7), lit(U32, 0)]),
+            U32,
+            7,
+        ),
+        (
+            "div_i64",
+            op(Op::Div, I64, vec![lit(I64, -7), lit(I64, 2)]),
+            I64,
+            -3,
+        ),
+        (
+            "rem_i64",
+            op(Op::Rem, I64, vec![lit(I64, -7), lit(I64, 2)]),
+            I64,
+            -1,
+        ),
+        (
+            "neg_i16_min",
+            op(Op::Neg, I16, vec![lit(I16, -32768)]),
+            I16,
+            -32768,
+        ),
+        (
+            "wrapping_add_u8",
+            op(Op::WrappingAdd, U8, vec![Term::U8(255), Term::U8(1)]),
+            U8,
+            0,
+        ),
+        (
+            "wrapping_mul_i32",
+            op(Op::WrappingMul, I32, vec![lit(I32, 65536), lit(I32, 65536)]),
+            I32,
+            0,
+        ),
+        (
+            "wrapping_neg_i8",
+            op(Op::WrappingNeg, I8, vec![lit(I8, -128)]),
+            I8,
+            -128,
+        ),
+    ] {
+        let scene = Scene::new(&world.definitions);
+        let claim = eq_at(ty, term.clone(), lit(ty, value));
+        add(
+            &format!("evaluate_{name}"),
+            scene,
+            claim,
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        // The row `wrapping_add` at `u8` agrees with the primitive of the
+        // `u8` model on closed values: both evaluate, and the two results
+        // are chained.
+        let scene = Scene::new(&world.definitions);
+        let (a, b) = (Term::U8(200), Term::U8(100));
+        let row = op(Op::WrappingAdd, U8, vec![a.clone(), b.clone()]);
+        let model = Term::wrapping_add(a, b);
+        let proof = Chain::new(Type::U8, row.clone())
+            .step(Proof::Evaluate(row.clone()))
+            .step_rev(&model, Proof::Evaluate(model.clone()))
+            .finish();
+        let claim = eq_at(U8, row, model);
+        add("wrapping_add_rows_agree", scene, claim, proof);
     }
 
     // Machine integers: evaluation of closed casts, wraps, and views.
