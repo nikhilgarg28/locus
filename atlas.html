@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 79,
-  "savedAt": "2026-09-22T17:42:04.000Z",
+  "rev": 80,
+  "savedAt": "2026-09-22T17:42:12.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7747,12 +7747,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t289",
    "n": 173,
    "title": "E7 · Arithmetic in holes and prove!",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 8.\nDepends on: K7 (LOC-165), E1 (LOC-167), E6 (LOC-172).\nUnblocks: R4 (LOC-189), E11 (LOC-192).\nCovers: LOC-72, LOC-15.\n\nScope. A hole is tried as exact, then computed, then arithmetic. When the procedure fails and finds values that satisfy the facts and break the goal, the diagnostic shows them.\n\nTests.\n- midpoint, and step and remaining from the 32-bit lock, check, run, and compile; their corpus files move from parse-only to run.\n- check --stats classifies the obligations as Target examples predicted: three exact, four computed, seven arithmetic. A difference is a finding to record, not a number to adjust.\n- midpoint without its ordered hypothesis is rejected with a counterexample.\n\nDone when. The second milestone: real 32-bit programs with overflow shown impossible.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T17:42:04.000Z"
+   "updated": "2026-09-22T17:42:12.000Z"
   },
   {
    "id": "t290",
