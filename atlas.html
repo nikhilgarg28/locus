@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 91,
-  "savedAt": "2026-09-22T20:42:07.000Z",
+  "rev": 92,
+  "savedAt": "2026-09-22T21:13:00.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7847,12 +7847,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t297",
    "n": 181,
    "title": "M5 · return and the never type in the surface language",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Mutation. Wave 9.\nDepends on: M3 (LOC-179).\nUnblocks: R4 (LOC-189).\nCovers: LOC-93, LOC-92.\n\nScope. return lowers to the block ending of M1. ! is the type of return, break, continue, and the panicking forms, and coerces to any type.\n\nTests.\n- A return inside a loop inside a branch, three ways.\n- Evidence owed at an early return is reported at the return.\n- Code after a never-typed expression is reported as unreachable, as rustc would warn.\n\nDone when. Early exit works as in Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. return lowers to Tail::Return in tail position and, elsewhere, to the two-arm leaving match E10 introduced for panics; a returning arm contributes nothing to a join. Never-typed values (return, break, continue, the panic forms, calls to -> ! functions) coerce to any expected type; a -> ! function has result type @False in the kernel and its body must end never-typed. Diagnostics gained a warning level: L0247 unreachable statement, as rustc warns, and locus check exits 0 on warnings; the corpus has //~ warning: directives and goldens beside accepted files. L0216 removed. Evidence owed at an early return is reported at the return.\n\nLane: Mutation. Wave 9.\nDepends on: M3 (LOC-179).\nUnblocks: R4 (LOC-189).\nCovers: LOC-93, LOC-92.\n\nScope. return lowers to the block ending of M1. ! is the type of return, break, continue, and the panicking forms, and coerces to any type.\n\nTests.\n- A return inside a loop inside a branch, three ways.\n- Evidence owed at an early return is reported at the return.\n- Code after a never-typed expression is reported as unreachable, as rustc would warn.\n\nDone when. Early exit works as in Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T20:22:59.000Z"
+   "updated": "2026-09-22T21:13:00.000Z"
   },
   {
    "id": "t298",
