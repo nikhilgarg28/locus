@@ -1,0 +1,8 @@
+error[L0239]: `unreachable!()` needs evidence that this point is unreachable in `reachable`, which promises no_panic: cannot show `false`
+ --> tests/corpus/reject/unreachable_under_no_panic.lc:6:17
+  |
+6 |     if n == 0 { unreachable!() } else { n } //~ error: L0239 `unreachable!()` needs evidence that this point is unreachable in `reach...
+  |                 ^^^^^^^^^^^^^^
+  |
+  = note: nothing known here speaks of the values in this claim
+  = note: it fails when n = 0, which the arithmetic facts known here allow

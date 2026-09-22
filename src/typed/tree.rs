@@ -391,6 +391,74 @@ pub enum Expr {
         proof: Proof,
         ty: Type,
     },
+    /// `panic!`, `todo!`, or `unreachable!`, with its string argument when
+    /// it had one: the call ends in a panic with the form's message, and
+    /// nothing follows. It yields no value, so it stands where any type is
+    /// expected; `ty` is that type, and `result` the identity lowering gives
+    /// the value it never produces where it is not the end of a block.
+    /// `unreachable` is evidence of the prelude's `False` at this point,
+    /// which a function that promises `no_panic` must have.
+    Panic {
+        form: PanicForm,
+        argument: Option<String>,
+        unreachable: Option<Proof>,
+        ty: Type,
+        result: VarId,
+    },
+    /// `assert!(condition)` or, with `debug`, `debug_assert!(condition)`,
+    /// with `message` what the panic says when the condition is false. Of
+    /// type `()`. `then_fact` is `condition == true` and `else_fact` is
+    /// `condition == false`, about the comparison the condition performs,
+    /// as for an `if`. Afterwards `result` is evidence of `then_fact`'s
+    /// claim: the check passed, so the condition is a fact; a
+    /// `debug_assert!` is not checked in every build and `result` is then
+    /// `()`. `unreachable` is evidence of `False` under `else_fact`, which
+    /// `no_panic` requires.
+    Assert {
+        debug: bool,
+        condition: Box<Expr>,
+        then_fact: HypId,
+        else_fact: HypId,
+        message: String,
+        unreachable: Option<Proof>,
+        result: VarId,
+    },
+}
+
+/// Which of the three forms a panic was written as. Each has the message
+/// Rust's form of that name prints, with the argument appended after a
+/// colon as Rust appends it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanicForm {
+    Panic,
+    Todo,
+    Unreachable,
+}
+
+impl PanicForm {
+    /// The name before the `!`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Panic => "panic",
+            Self::Todo => "todo",
+            Self::Unreachable => "unreachable",
+        }
+    }
+
+    /// The message the call ends with: Rust's for the form, or the
+    /// argument in its place for `panic!`, and after a colon for the
+    /// other two.
+    pub fn message(self, argument: Option<&str>) -> String {
+        let fixed = match self {
+            Self::Panic => return argument.unwrap_or("explicit panic").to_string(),
+            Self::Todo => "not yet implemented",
+            Self::Unreachable => "internal error: entered unreachable code",
+        };
+        match argument {
+            Some(argument) => format!("{fixed}: {argument}"),
+            None => fixed.to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -415,7 +483,8 @@ impl Expr {
             | Self::CallFn { ty, .. }
             | Self::If { ty, .. }
             | Self::Match { ty, .. }
-            | Self::Absurd { ty, .. } => proof(ty),
+            | Self::Absurd { ty, .. }
+            | Self::Panic { ty, .. } => proof(ty),
             Self::Loop { ty, .. } => proof(ty),
             Self::Block(block) => block.tail.as_deref().is_some_and(Self::is_proof),
             _ => false,

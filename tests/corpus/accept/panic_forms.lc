@@ -1,0 +1,113 @@
+// The forms that panic, with their Rust meaning and Rust's messages:
+// `panic!`, `todo!`, and `unreachable!` yield no value and stand where any
+// type is expected; `assert!` and `debug_assert!` are checks of type `()`.
+// A message is a string literal, written as it is.
+
+fn loud(n: u8) -> u8 {
+    if n == 0 { panic!("zero") } else { n }
+}
+
+fn quiet(n: u8) -> u8 {
+    if n == 0 { panic!() } else { n }
+}
+
+fn half(n: u8) -> u8 {
+    if n == 0 { todo!() } else { n }
+}
+
+fn half_named(n: u8) -> u8 {
+    if n == 0 { todo!("the zero case") } else { n }
+}
+
+fn dead(n: u8) -> u8 {
+    if n == 0 { unreachable!() } else { n }
+}
+
+fn dead_named(n: u8) -> u8 {
+    if n == 0 { unreachable!("n is never zero") } else { n }
+}
+
+// A panic in a `let` gives its name the annotated type, and what follows
+// is still typed and printed.
+fn later(n: u8) -> u8 {
+    let x: u8 = todo!("the rest");
+    x.wrapping_add(n)
+}
+
+// The message names the condition as written, as Rust's does.
+fn checked(x: u8) -> u8 {
+    assert!(x <= 3);
+    x.wrapping_add(1)
+}
+
+// A written message stands alone, as in Rust.
+fn named(x: u8) -> u8 {
+    assert!(x != 0, "x must not be zero");
+    x
+}
+
+fn any_bool(b: bool) -> u8 {
+    assert!(b);
+    1
+}
+
+// Checked in every build the interpreters and the corpus's Rust stand for,
+// which all have debug assertions on; it teaches nothing afterwards.
+fn debug(x: u8) -> u8 {
+    debug_assert!(x <= 200);
+    x
+}
+
+fn debug_named(x: u8) -> u8 {
+    debug_assert!(x != 7, "not seven");
+    x
+}
+
+// After `assert!(c)`, `c` is a fact: the check passed.
+fn taught(x: u8) -> (out: u8, @(out <= 3)) {
+    assert!(x <= 3);
+    prove!(x <= 3);
+    (x, _)
+}
+
+// A branch that panics takes the type of the other, and the message can
+// hold whatever a string literal holds.
+fn braces(n: u8) -> u8 {
+    if n == 0 { panic!("say \"hi\" to {n}, }{ and {{ and \\ too") } else { n }
+}
+
+//~ proofs: 2
+//~ run: loud(0) => panic: zero
+//~ run: loud(5) => 5
+//~ run: quiet(0) => panic: explicit panic
+//~ run: quiet(5) => 5
+//~ run: half(0) => panic: not yet implemented
+//~ run: half(5) => 5
+//~ run: half_named(0) => panic: not yet implemented: the zero case
+//~ run: dead(0) => panic: internal error: entered unreachable code
+//~ run: dead(5) => 5
+//~ run: dead_named(0) => panic: internal error: entered unreachable code: n is never zero
+//~ run: later(1) => panic: not yet implemented: the rest
+//~ run: checked(3) => 4
+//~ run: checked(4) => panic: assertion failed: x <= 3
+//~ run: named(1) => 1
+//~ run: named(0) => panic: x must not be zero
+//~ run: any_bool(true) => 1
+//~ run: any_bool(false) => panic: assertion failed: b
+//~ run: debug(200) => 200
+//~ run: debug(201) => panic: assertion failed: x <= 200
+//~ run: debug_named(7) => panic: not seven
+//~ run: taught(3) => (3, Proved)
+//~ run: taught(4) => panic: assertion failed: x <= 3
+//~ run: braces(0) => panic: say "hi" to {n}, }{ and {{ and \\ too
+//~ rust: panic!("{}", "zero")
+//~ rust: panic!()
+//~ rust: todo!()
+//~ rust: todo!("{}", "the zero case")
+//~ rust: unreachable!()
+//~ rust: unreachable!("{}", "n is never zero")
+//~ rust: let x: u8 = todo!("{}", "the rest");
+//~ rust: assert!(x <= 3_u8, "{}", "assertion failed: x <= 3");
+//~ rust: assert!(x != 0_u8, "{}", "x must not be zero");
+//~ rust: debug_assert!(x <= 200_u8, "{}", "assertion failed: x <= 200");
+//~ rust: panic!("{}", "say \"hi\" to {n}, }{ and {{ and \\ too")

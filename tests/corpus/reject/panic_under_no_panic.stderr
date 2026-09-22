@@ -1,0 +1,7 @@
+error[L0239]: `panic!` cannot appear in `refuse`, which promises no_panic
+ --> tests/corpus/reject/panic_under_no_panic.lc:6:17
+  |
+6 |     if n == 0 { panic!("zero") } else { n } //~ error: L0239 `panic!` cannot appear in `refuse`, which promises no_panic
+  |                 ^^^^^
+  |
+  = note: a function that promises no_panic has no panic it cannot show unreachable: `unreachable!()` takes that evidence, and `assert!(c)` evidence of `c`

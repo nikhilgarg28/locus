@@ -1,0 +1,10 @@
+error[L0239]: `todo!` cannot appear in a proposition: nothing there runs
+ --> tests/corpus/reject/panic_where_nothing_runs.lc:3:16
+  |
+3 |     prop!(n == todo!()) //~ error: L0239 `todo!` cannot appear in a proposition: nothing there runs
+  |                ^^^^
+error[L0239]: `unreachable!` cannot appear in a proposition: nothing there runs
+ --> tests/corpus/reject/panic_where_nothing_runs.lc:6:27
+  |
+6 | const never: Prop = prop!(unreachable!()); //~ error: L0239 `unreachable!` cannot appear in a proposition: nothing there runs
+  |                           ^^^^^^^^^^^

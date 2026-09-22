@@ -1,0 +1,16 @@
+// `assert!(c)` in a function that promises `no_panic` needs evidence of
+// `c`, found as a hole is filled; nothing here speaks of `x`. The failing
+// arm is the panic the promise forbids.
+#[no_panic]
+fn unchecked(x: u8) -> u8 {
+    assert!(x <= 3); //~ error: L0239 `assert!` needs evidence of its condition in `unchecked`, which promises no_panic: cannot show `x <= 3`
+    x
+}
+
+// A `debug_assert!` is checked in the debug build, so it needs the
+// evidence too.
+#[no_panic]
+fn unchecked_in_debug(x: u8, small: @(x <= 3)) -> u8 {
+    debug_assert!(x <= 2); //~ error: L0239 `debug_assert!` needs evidence of its condition in `unchecked_in_debug`, which promises no_panic: cannot show `x <= 2`
+    x
+}

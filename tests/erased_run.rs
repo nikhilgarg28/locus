@@ -9,7 +9,7 @@ use locus::erased::{
     RunError, TypeError, Value, check_module,
 };
 use locus::kernel::{Definitions, FnId, MachineInt, Op, Prim, Proof, Term, Type, VarId};
-use locus::typed::{Binder, CompareOp, Expr, FnItem, FnRef};
+use locus::typed::{Binder, CompareOp, Expr, FnItem, FnRef, PanicForm};
 
 const FUEL: u64 = 100_000;
 
@@ -144,7 +144,8 @@ fn a_panic_ends_the_call_and_everything_around_it() {
         panic!("increment binds a sum")
     };
     arguments[0] = EExpr::Panic {
-        message: "no sum".into(),
+        form: PanicForm::Panic,
+        argument: Some("no sum".into()),
     };
     let mut caller = module.fns[0].clone();
     caller.name = "caller".into();
@@ -194,7 +195,8 @@ fn out_of_fuel_is_not_a_panic() {
     module.fns[0].body = EBlock {
         stmts: vec![EStmt::Expr(EExpr::Tuple(vec![]))],
         tail: Some(Box::new(EExpr::Panic {
-            message: "reached".into(),
+            form: PanicForm::Panic,
+            argument: Some("reached".into()),
         })),
     };
     assert_eq!(check_module(&module), Ok(()));
@@ -436,7 +438,8 @@ fn what_follows_a_value_that_never_yields_is_still_checked() {
     session.declare_enum(&classified_enum(prelude)).unwrap();
     session.declare_fn(&increment(false)).unwrap();
     let panics = || EExpr::Panic {
-        message: "never".into(),
+        form: PanicForm::Panic,
+        argument: Some("never".into()),
     };
 
     // let m: u8 = panic!("never"); <rest>; m.wrapping_add(1)

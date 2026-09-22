@@ -339,7 +339,18 @@ impl<'m> Interpreter<'m> {
             EExpr::Proved => Value::Proved,
             EExpr::Ghost => Value::Ghost,
             EExpr::Trap => return Err(RunError::Trap.into()),
-            EExpr::Panic { message } => return Err(Stop::Panic(message.clone())),
+            EExpr::Panic { form, argument } => {
+                return Err(Stop::Panic(form.message(argument.as_deref())));
+            }
+            // Checked in both modes: the builds the modes stand for differ
+            // in overflow checks alone, and both have debug assertions on.
+            EExpr::Assert {
+                condition, message, ..
+            } => match value!(self.expr(condition)) {
+                Value::Bool(true) => Value::Tuple(Vec::new()),
+                Value::Bool(false) => return Err(Stop::Panic(message.clone())),
+                _ => return stuck("an assertion of something that is not a bool"),
+            },
             EExpr::Tuple(fields) => match self.all(fields)? {
                 Ok(values) => Value::Tuple(values),
                 Err(flow) => return Ok(flow),

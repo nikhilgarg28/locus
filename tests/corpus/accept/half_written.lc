@@ -1,0 +1,43 @@
+// A half-written file checks: `todo!()` stands for a body, or the rest of
+// one, of any type, and the finished parts are checked and run around it.
+
+#[derive(Clone, Copy, Debug)]
+struct Account {
+    balance: u8,
+    holds: u8,
+}
+
+fn available(account: Account) -> u8 {
+    if account.holds <= account.balance {
+        account.balance.wrapping_sub(account.holds)
+    } else {
+        0
+    }
+}
+
+fn deposit(account: Account, amount: u8) -> Account {
+    todo!()
+}
+
+fn withdraw(account: Account, amount: u8) -> (out: Account, @(out.holds == account.holds)) {
+    let room = available(account);
+    if amount <= room {
+        todo!("the withdrawal itself")
+    } else {
+        (account, _)
+    }
+}
+
+fn settle(account: Account) -> u8 {
+    let cleared: Account = todo!();
+    available(cleared)
+}
+
+//~ proofs: 1
+//~ run: available(Account { balance: 10, holds: 3 }) => 7
+//~ run: deposit(Account { balance: 10, holds: 3 }, 1) => panic: not yet implemented
+//~ run: withdraw(Account { balance: 10, holds: 3 }, 20) => (Account { balance: 10, holds: 3 }, Proved)
+//~ run: withdraw(Account { balance: 10, holds: 3 }, 2) => panic: not yet implemented: the withdrawal itself
+//~ run: settle(Account { balance: 10, holds: 3 }) => panic: not yet implemented
+//~ rust: pub fn deposit(account: Account, amount: u8) -> Account {
+//~ rust: let cleared: Account = todo!();

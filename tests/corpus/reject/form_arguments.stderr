@@ -1,0 +1,15 @@
+error[L0244]: `assert!` takes a condition
+ --> tests/corpus/reject/form_arguments.lc:4:5
+  |
+4 |     assert!(); //~ error: L0244 `assert!` takes a condition
+  |     ^^^^^^^^^
+error[L0244]: the message of `panic!` is a string literal
+ --> tests/corpus/reject/form_arguments.lc:9:12
+  |
+9 |     panic!(n) //~ error: L0244 the message of `panic!` is a string literal
+  |            ^
+error[L0244]: the message of `assert!` is a string literal
+  --> tests/corpus/reject/form_arguments.lc:13:21
+   |
+13 |     assert!(n <= 3, n); //~ error: L0244 the message of `assert!` is a string literal
+   |                     ^

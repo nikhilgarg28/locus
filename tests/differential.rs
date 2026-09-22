@@ -18,7 +18,7 @@ use common::*;
 use locus::erased::{EExpr, Interpreter, Outcome, Overflow, RunError, Value, check_module};
 use locus::exec::CheckInterpreter;
 use locus::kernel::{HypId, MachineInt, Op, Type, VarId};
-use locus::typed::{Binder, Block, Expr, FnItem, FnRef, Session};
+use locus::typed::{Binder, Block, Expr, FnItem, FnRef, PanicForm, Session};
 
 const FUEL: u64 = 200_000;
 
@@ -258,7 +258,8 @@ fn the_comparison_has_teeth() {
         panic!("preserve ends in an if")
     };
     then_block.tail = Some(Box::new(EExpr::Panic {
-        message: "not in the check IR".into(),
+        form: PanicForm::Panic,
+        argument: Some("not in the check IR".into()),
     }));
     else_block_too(&mut tampered);
     assert_eq!(check_module(&tampered), Ok(()));

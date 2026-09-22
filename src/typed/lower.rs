@@ -63,8 +63,8 @@ use crate::kernel::{
 };
 
 use super::tree::{
-    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, Pattern,
-    Step, Stmt, StructItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, PanicForm,
+    Pattern, Step, Stmt, StructItem,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -309,7 +309,9 @@ pub fn is_pure(expr: &Expr) -> bool {
         | Expr::For { .. }
         | Expr::Break(_)
         | Expr::Continue
-        | Expr::Operate { .. } => false,
+        | Expr::Operate { .. }
+        | Expr::Panic { .. }
+        | Expr::Assert { .. } => false,
         Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
         Expr::Struct { fields, .. } => fields.iter().all(|(_, field)| is_pure(field)),
@@ -561,7 +563,9 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         | Expr::For { .. }
         | Expr::Break(_)
         | Expr::Continue
-        | Expr::Operate { .. } => {
+        | Expr::Operate { .. }
+        | Expr::Panic { .. }
+        | Expr::Assert { .. } => {
             return Err(LowerError::ControlInExpression);
         }
     })
@@ -931,7 +935,8 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
             each_expr(inner, on_expr)
         }
         Expr::Break(value) => value.iter().for_each(|value| each_expr(value, on_expr)),
-        Expr::Continue => {}
+        Expr::Continue | Expr::Panic { .. } => {}
+        Expr::Assert { condition, .. } => each_expr(condition, on_expr),
         Expr::Method {
             receiver,
             arguments,
@@ -1078,6 +1083,15 @@ fn breaking(value: Option<Term>, env: &Versions) -> Result<exec::Tail, LowerErro
         (false, Some(_)) => return Err(LowerError::BreakWithValue),
     }
     Ok(exec::Tail::Break(Term::tuple(&frame.result, fields)))
+}
+
+/// The panic ending of one of the three forms, with the message Rust's
+/// form of that name ends with.
+fn panicking(form: PanicForm, argument: Option<&str>, unreachable: Option<Proof>) -> exec::Tail {
+    exec::Tail::Panic {
+        message: form.message(argument),
+        unreachable,
+    }
 }
 
 /// The bindings a loop carries: those declared outside it and assigned in
@@ -1430,6 +1444,87 @@ fn anf_form(
             unit()
         }
         Expr::Break(_) | Expr::Continue => return Err(LowerError::ControlInExpression),
+        // A panic that is not the end of its block: a match on `true` whose
+        // two arms both end in the panic. Every arm leaves, so the checker
+        // declares the value the panic never produces, at the type expected
+        // of it, and checks the evidence of `False` in each arm.
+        Expr::Panic {
+            form,
+            argument,
+            unreachable,
+            ty,
+            result,
+        } => {
+            let arms = (0..2)
+                .map(|_| Arm {
+                    payload: Vec::new(),
+                    fact: HypId::fresh(),
+                    body: exec::Block {
+                        stmts: Vec::new(),
+                        tail: panicking(*form, argument.as_deref(), unreachable.clone()),
+                    },
+                })
+                .collect();
+            out.push(exec::Stmt::Match {
+                var: *result,
+                ty: ty.clone(),
+                scrutinee: Term::Bool(true),
+                arms,
+            });
+            Term::var(*result)
+        }
+        Expr::Assert {
+            debug,
+            condition: tested,
+            then_fact,
+            else_fact,
+            message,
+            unreachable,
+            result,
+        } => {
+            let (comparison, negated) = condition(tested);
+            let scrutinee = anf(&comparison, out, env)?;
+            // The arm the check passes in yields the evidence that it did,
+            // which is the fact of that arm; a `debug_assert!` yields `()`,
+            // since a build may skip it. The other arm panics.
+            let (ty, passed) = if *debug {
+                (Type::Tuple(Vec::new()), unit())
+            } else {
+                let holds = Term::eq(Type::Bool, scrutinee.clone(), Term::Bool(!negated));
+                (Type::proof(holds), Term::proof(Proof::hyp(*then_fact)))
+            };
+            let pass = exec::Block {
+                stmts: Vec::new(),
+                tail: exec::Tail::Value(passed),
+            };
+            let fail = exec::Block {
+                stmts: Vec::new(),
+                tail: exec::Tail::Panic {
+                    message: message.clone(),
+                    unreachable: unreachable.clone(),
+                },
+            };
+            let (if_false, if_true) = if negated {
+                ((*then_fact, pass), (*else_fact, fail))
+            } else {
+                ((*else_fact, fail), (*then_fact, pass))
+            };
+            let arms = [if_false, if_true]
+                .into_iter()
+                .map(|(fact, body)| Arm {
+                    payload: Vec::new(),
+                    fact,
+                    body,
+                })
+                .collect();
+            out.push(exec::Stmt::Match {
+                var: *result,
+                ty,
+                scrutinee,
+                arms,
+            });
+            unit()
+        }
         // Handled by the purity test above.
         Expr::Var { .. }
         | Expr::Bool(_)
@@ -1575,6 +1670,10 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
             None => unit(),
         },
         Expr::Break(_) | Expr::Continue => return Err(LowerError::ControlInExpression),
+        // A panic's value is the one its statement declares and never
+        // produces; an assertion is a statement of type `()`.
+        Expr::Panic { result, .. } => Term::var(*result),
+        Expr::Assert { .. } => unit(),
         Expr::Var { .. }
         | Expr::Bool(_)
         | Expr::Literal(..)
@@ -1702,6 +1801,12 @@ fn lower_tail(
             breaking(value, env)?
         }
         Expr::Continue => End::Continue.finish(unit(), env)?,
+        Expr::Panic {
+            form,
+            argument,
+            unreachable,
+            ..
+        } => panicking(*form, argument.as_deref(), unreachable.clone()),
         Expr::If {
             condition: tested,
             then_fact,

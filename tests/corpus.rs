@@ -79,6 +79,7 @@ use locus::exec::{CheckInterpreter, Program};
 use locus::kernel::MachineInt;
 use locus::parser::parse;
 use locus::source::{SourceFile, SourceMap};
+use locus::typed::PanicForm;
 
 /// Steps an interpreter may take on one run line.
 const FUEL: u64 = 10_000_000;
@@ -1591,10 +1592,11 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     assert!(harness(&[]).ends_with("fn main() {}\n"));
 }
 
-// Panics and returns. No source panics or returns yet, so the erased tree of
-// a source is given them by hand: every call of `panics(k)` becomes a panic
-// with message `k`, every call of `returns(e)` a `return e`, and every call
-// of `returns_pair(k)` a `return (k, k)`.
+// Panics and returns. No source returns yet, and the forms that panic came
+// with E10 (tests/corpus/accept/panic_forms.lc); the harness itself is tested
+// on erased trees given them by hand: every call of `panics(k)` becomes a
+// `panic!` with message `k`, every call of `returns(e)` a `return e`, and
+// every call of `returns_pair(k)` a `return (k, k)`.
 
 const PANICS: &str = "\
 enum Event { Wrong, Right(u8) }
@@ -1722,7 +1724,8 @@ fn plant(expr: &mut EExpr) {
             let index = usize::try_from(which).expect("a small byte");
             *expr = if name == "panics" {
                 EExpr::Panic {
-                    message: MESSAGES[index].into(),
+                    form: PanicForm::Panic,
+                    argument: Some(MESSAGES[index].into()),
                 }
             } else {
                 EExpr::Return(Box::new(EExpr::Tuple(vec![
@@ -1751,6 +1754,9 @@ fn plant(expr: &mut EExpr) {
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
         EExpr::Field { target: inner, .. }
         | EExpr::Cast { expr: inner, .. }
+        | EExpr::Assert {
+            condition: inner, ..
+        }
         | EExpr::Return(inner) => {
             plant(inner);
         }

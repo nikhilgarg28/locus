@@ -13,14 +13,22 @@
 //! rustc from finding a use after a move here. `Proved` and `Ghost`, the
 //! printer's own types, derive everything.
 //!
-//! A panic is printed as `panic!("{}", "message")`. The message is an
-//! argument and never the format string, so its braces mean nothing to
-//! `panic!`, and it is written as Rust's `{:?}` writes a string, which is a
-//! string literal for any text. Whatever follows a panic in evaluation order
-//! is still printed, as it is for a trap: the rest of a block, the other
-//! arguments of a call, the call itself. Rust warns that such code is
-//! unreachable, and the header allows exactly that on purpose, since the
-//! printer keeps the shape of the source and does not prune it.
+//! A form that panics is printed as the form it was written as: `panic!()`,
+//! `todo!()`, `unreachable!()`, and with its argument `panic!("{}",
+//! "message")`, `todo!("{}", "message")`, `unreachable!("{}", "message")`,
+//! so that Rust's form ends with the message the interpreters end with. An
+//! assertion is printed as `assert!(condition, "{}", "message")`, or
+//! `debug_assert!`, with the whole message it panics with, which is
+//! `assertion failed: condition` in the source's spelling of the condition
+//! unless one was written; `assert!(condition)` alone would leave the
+//! message to rustc's spelling of the tokens. A message is an argument and
+//! never the format string, so its braces mean nothing to the form, and it
+//! is written as Rust's `{:?}` writes a string, which is a string literal
+//! for any text. Whatever follows a panic in evaluation order is still
+//! printed, as it is for a trap: the rest of a block, the other arguments of
+//! a call, the call itself. Rust warns that such code is unreachable, and
+//! the header allows exactly that on purpose, since the printer keeps the
+//! shape of the source and does not prune it.
 //!
 //! A `let` whose value contains a panic, a trap, or a transfer of control
 //! is printed with the type of its pattern, `let x: u8 = panic!(...)`,
@@ -396,7 +404,19 @@ impl Printer<'_> {
             EExpr::Proved => "Proved".into(),
             EExpr::Ghost => "Ghost".into(),
             EExpr::Trap => "unreachable!(\"shown never to be reached\")".into(),
-            EExpr::Panic { message } => format!("panic!(\"{{}}\", {message:?})"),
+            EExpr::Panic { form, argument } => match argument {
+                Some(argument) => format!("{}!(\"{{}}\", {argument:?})", form.name()),
+                None => format!("{}!()", form.name()),
+            },
+            EExpr::Assert {
+                debug,
+                condition,
+                message,
+            } => {
+                let name = if *debug { "debug_assert" } else { "assert" };
+                let condition = self.condition(condition);
+                format!("{name}!({condition}, \"{{}}\", {message:?})")
+            }
             EExpr::Tuple(fields) => tuple_of(&self.all(fields)),
             EExpr::Struct { name, fields, .. } => {
                 let fields: Vec<String> = fields
@@ -615,9 +635,11 @@ fn contains_divergence(expr: &EExpr) -> bool {
             arguments: exprs, ..
         } => any(exprs),
         EExpr::Struct { fields, .. } => fields.iter().any(|(_, value)| contains_divergence(value)),
-        EExpr::Field { target, .. } | EExpr::Cast { expr: target, .. } => {
-            contains_divergence(target)
-        }
+        EExpr::Field { target, .. }
+        | EExpr::Cast { expr: target, .. }
+        | EExpr::Assert {
+            condition: target, ..
+        } => contains_divergence(target),
         EExpr::Method {
             receiver,
             arguments,

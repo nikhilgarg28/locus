@@ -1,0 +1,78 @@
+// The forms that panic in a function that promises `no_panic`: every panic
+// ending must carry evidence of `False`, which the checker verifies.
+// `assert!(c)` takes evidence of `c`, found as a hole is filled, and
+// `unreachable!()` evidence that its point is never reached, from the facts
+// of the arms around it. The checks still run, and Rust still prints them.
+#![no_panic]
+
+// The condition is a hypothesis, exactly.
+fn bounded(x: u8, small: @(x <= 3)) -> u8 {
+    assert!(x <= 3);
+    x.wrapping_add(1)
+}
+
+// The condition follows by arithmetic, and `!=` is the negation of the
+// test performed.
+fn apart(x: u8, small: @(x <= 3)) -> u8 {
+    assert!(x != 4);
+    assert!(x < 4, "x is small");
+    x
+}
+
+// An equality, and one of `bool`s known from the branch taken.
+fn exact(x: u8, three: @(x == 3)) -> u8 {
+    assert!(x == 3);
+    x
+}
+
+fn branch(b: bool) -> u8 {
+    if b {
+        assert!(b);
+        1
+    } else {
+        0
+    }
+}
+
+// The dead arm: the facts of the arms contradict, which arithmetic shows.
+fn dead_arm(x: u8, small: @(x <= 3)) -> u8 {
+    if x <= 3 { x } else { unreachable!() }
+}
+
+fn dead_arm_named(x: u8, small: @(x <= 3)) -> u8 {
+    if x < 4 { x } else { unreachable!("x is at most 3") }
+}
+
+// Evidence of `False` in scope fills it exactly.
+fn absurd(x: u8, no: @(false)) -> u8 {
+    unreachable!()
+}
+
+// A check whose fact is what the result needs, in a function that also
+// promises the rest: its body is not a term of the logic, so it is checked
+// as an ordinary function with its promises and known by its contract.
+#[terminates] #[no_io]
+fn taught(x: u8, small: @(x <= 3)) -> (out: u8, @(out <= 3)) {
+    assert!(x <= 3);
+    (x, _)
+}
+
+// `debug_assert!` needs the evidence too, since the debug build checks it.
+fn debug(x: u8, small: @(x <= 3)) -> u8 {
+    debug_assert!(x <= 3);
+    x
+}
+
+//~ proofs: 11
+//~ run: bounded(3, Proved) => 4
+//~ run: apart(2, Proved) => 2
+//~ run: exact(3, Proved) => 3
+//~ run: branch(true) => 1
+//~ run: branch(false) => 0
+//~ run: dead_arm(1, Proved) => 1
+//~ run: dead_arm_named(3, Proved) => 3
+//~ run: taught(3, Proved) => (3, Proved)
+//~ run: debug(3, Proved) => 3
+//~ rust: assert!(x <= 3_u8, "{}", "assertion failed: x <= 3");
+//~ rust: unreachable!()
+//~ rust: unreachable!("{}", "x is at most 3")

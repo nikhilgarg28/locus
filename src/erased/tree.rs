@@ -1,7 +1,7 @@
 //! The erased tree. It mirrors `typed::tree` without its logical content.
 
 use crate::kernel::{EnumId, MachineInt, Op, Prim, StructId, VarId};
-use crate::typed::{CompareOp, Derive, FnRef};
+use crate::typed::{CompareOp, Derive, FnRef, PanicForm};
 
 /// A simple type: no propositions, no dependency.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,9 +217,20 @@ pub enum EExpr {
     Return(Box<EExpr>),
     /// A point the program was shown never to reach.
     Trap,
-    /// `panic!("message")`: the call in progress ends in a panic with this
-    /// message. It has every type, since it yields no value.
+    /// `panic!`, `todo!`, or `unreachable!`, with its string argument when
+    /// it had one: the call in progress ends in a panic with the form's
+    /// message, `PanicForm::message`. It has every type, since it yields
+    /// no value.
     Panic {
+        form: PanicForm,
+        argument: Option<String>,
+    },
+    /// `assert!(condition)` or, with `debug`, `debug_assert!(condition)`:
+    /// the call in progress ends in a panic with `message` when the
+    /// condition is false. Of type `()`.
+    Assert {
+        debug: bool,
+        condition: Box<EExpr>,
         message: String,
     },
 }

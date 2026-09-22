@@ -286,6 +286,13 @@ impl Checker<'_> {
             EExpr::Proved => EType::Proved,
             EExpr::Ghost => EType::Ghost,
             EExpr::Trap | EExpr::Panic { .. } => return Ok(None),
+            EExpr::Assert { condition, .. } => {
+                let condition = self.expr(condition)?;
+                if condition.as_ref().is_some_and(|ty| *ty != EType::Bool) {
+                    return fail("an assertion of something that is not a bool");
+                }
+                return Ok(condition.map(|_| EType::unit()));
+            }
             EExpr::Tuple(fields) => EType::Tuple(needed!(self.values(fields)?)),
             EExpr::Struct { id, name, fields } => {
                 let Some(decl) = self.module.structs.iter().find(|decl| decl.id == *id) else {

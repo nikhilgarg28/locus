@@ -1,0 +1,6 @@
+// `todo!()` lets a half-written file check, and panics when it is reached;
+// a function that promises `no_panic` cannot hold one until it is finished.
+#[no_panic]
+fn unfinished(n: u8) -> u8 {
+    todo!() //~ error: L0239 `todo!` panics, and `unfinished` promises no_panic
+}

@@ -1,0 +1,15 @@
+// The arguments of the forms that panic: `assert!` takes a condition, and
+// a message is a string literal.
+fn empty() -> u8 {
+    assert!(); //~ error: L0244 `assert!` takes a condition
+    1
+}
+
+fn not_a_literal(n: u8) -> u8 {
+    panic!(n) //~ error: L0244 the message of `panic!` is a string literal
+}
+
+fn not_a_literal_either(n: u8) -> u8 {
+    assert!(n <= 3, n); //~ error: L0244 the message of `assert!` is a string literal
+    n
+}

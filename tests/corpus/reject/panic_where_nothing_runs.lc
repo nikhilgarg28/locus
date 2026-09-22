@@ -1,0 +1,6 @@
+// A form that panics runs, and a proposition runs nothing.
+fn claim(n: u8) -> Prop {
+    prop!(n == todo!()) //~ error: L0239 `todo!` cannot appear in a proposition: nothing there runs
+}
+
+const never: Prop = prop!(unreachable!()); //~ error: L0239 `unreachable!` cannot appear in a proposition: nothing there runs

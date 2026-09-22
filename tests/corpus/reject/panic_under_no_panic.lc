@@ -1,0 +1,7 @@
+// `panic!` has no place in a function that promises `no_panic`: every
+// panic there must be shown unreachable, and `panic!` says nothing about
+// that. `unreachable!()` takes the evidence, and `assert!(c)` evidence of `c`.
+#[no_panic]
+fn refuse(n: u8) -> u8 {
+    if n == 0 { panic!("zero") } else { n } //~ error: L0239 `panic!` cannot appear in `refuse`, which promises no_panic
+}

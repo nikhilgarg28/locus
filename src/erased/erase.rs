@@ -420,14 +420,30 @@ impl Eraser<'_> {
                 EExpr::Break(value.as_deref().map(|value| Box::new(self.expr(value))))
             }
             Expr::Continue => EExpr::Continue,
+            // The evidence that a panic is unreachable, or that a check
+            // passes, is logical; the form stays as it was written.
+            Expr::Panic { form, argument, .. } => EExpr::Panic {
+                form: *form,
+                argument: argument.clone(),
+            },
+            Expr::Assert {
+                debug,
+                condition,
+                message,
+                ..
+            } => EExpr::Assert {
+                debug: *debug,
+                condition: Box::new(self.expr(condition)),
+                message: message.clone(),
+            },
         }
     }
 }
 
 /// Whether evaluating the expression does something that must still
 /// happen when its value is not needed: an assignment, a call to an
-/// ordinary function, an operator that may panic, a loop, or a transfer
-/// of control anywhere inside it.
+/// ordinary function, an operator that may panic, a loop, a transfer of
+/// control, or a form that panics anywhere inside it.
 fn has_effects(expr: &Expr) -> bool {
     let mut found = false;
     each_expr(expr, &mut |expr| {
@@ -440,6 +456,8 @@ fn has_effects(expr: &Expr) -> bool {
                 | Expr::Break(_)
                 | Expr::Continue
                 | Expr::Operate { .. }
+                | Expr::Panic { .. }
+                | Expr::Assert { .. }
         );
     });
     each_stmt_under(expr, &mut |stmt| {

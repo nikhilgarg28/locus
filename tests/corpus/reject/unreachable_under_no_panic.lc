@@ -1,0 +1,7 @@
+// `unreachable!()` in a function that promises `no_panic` needs evidence
+// that its point is never reached, `False` from the facts in scope; here
+// the branch's fact, `n == 0`, contradicts nothing.
+#[no_panic]
+fn reachable(n: u8) -> u8 {
+    if n == 0 { unreachable!() } else { n } //~ error: L0239 `unreachable!()` needs evidence that this point is unreachable in `reachable`, which promises no_panic: cannot show `false`
+}

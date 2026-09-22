@@ -1,0 +1,14 @@
+error[L0290]: format arguments are not in Locus yet; `panic!` takes a string literal as its message, written as it is
+ --> tests/corpus/reject/format_arguments.lc:4:23
+  |
+4 |     panic!("n is {}", n) //~ error: L0290 format arguments are not in Locus yet
+  |                       ^
+  |
+  = note: they arrive with the polish after the core (Target language)
+error[L0290]: format arguments are not in Locus yet; `assert!` takes a string literal as its message, written as it is
+ --> tests/corpus/reject/format_arguments.lc:8:43
+  |
+8 |     assert!(n <= 3, "n is {}, at most 3", n); //~ error: L0290 format arguments are not in Locus yet
+  |                                           ^
+  |
+  = note: they arrive with the polish after the core (Target language)

@@ -447,7 +447,9 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         | Expr::Continue
         | Expr::Proof(_)
         | Expr::Prop(_)
-        | Expr::Absurd { .. } => true,
+        | Expr::Absurd { .. }
+        | Expr::Panic { .. }
+        | Expr::Assert { .. } => true,
     }
 }
 
@@ -2829,13 +2831,15 @@ fn walk_expr(
                 .is_some_and(|value| walk_expr(value, ty.as_ref(), scope, visit))
         }
         Expr::Continue => false,
+        Expr::Assert { condition, .. } => walk_expr(condition, Some(&Type::Bool), scope, visit),
         Expr::Var { .. }
         | Expr::Bool(_)
         | Expr::Literal(..)
         | Expr::Int(_)
         | Expr::Proof(_)
         | Expr::Prop(_)
-        | Expr::Absurd { .. } => false,
+        | Expr::Absurd { .. }
+        | Expr::Panic { .. } => false,
     }
 }
 

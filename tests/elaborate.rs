@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use locus::elab::{Elaborated, elaborate};
-use locus::erased::{Interpreter, Value, check_module, print_module};
+use locus::erased::{Interpreter, Outcome, Value, check_module, print_module};
 use locus::parser::parse;
 use locus::source::SourceMap;
 
@@ -914,19 +914,10 @@ fn a_bare_rewrite_unfold_or_fold_gets_a_fix_that_elaborates() {
 fn the_forms_without_a_meaning_yet_say_which_task_brings_them() {
     for (text, form, task) in [
         (
-            "fn f(n: u8) -> u8 { assert!(n < 3, \"small\"); n }",
-            "assert",
-            "E10",
+            "fn f(n: u8) -> bool { matches!(n, 0) }",
+            "matches",
+            "LOC-71",
         ),
-        ("fn f(n: u8) -> u8 { panic!(\"no\") }", "panic", "E10"),
-        ("fn f(n: u8) -> u8 { unreachable!() }", "unreachable", "E10"),
-        ("fn f(n: u8) -> u8 { todo!() }", "todo", "E10"),
-        (
-            "fn f(n: u8) -> u8 { debug_assert!(n < 3); n }",
-            "debug_assert",
-            "E10",
-        ),
-        ("fn f(n: u8) -> bool { matches!(n, 0) }", "matches", "E10"),
         ("fn f(n: u8) -> u8 { old!(n) }", "old", "O3"),
         ("fn f(n: u8) -> u8 { snapshot!(n) }", "snapshot", "E8"),
         ("fn f(n: u8) -> u8 { recurse!(n, n) }", "recurse", "LOC-53"),
@@ -1462,4 +1453,270 @@ fn a_lemma_reads_its_argument_and_a_proposition_cannot_mention_a_moved_one() {
     );
     assert_eq!(codes, ["L0241"]);
     assert!(message.contains("`t` was moved at line 5"), "{message}");
+}
+
+// --- The forms that panic (E10) --------------------------------------------------------
+
+/// A call in the erased-tree interpreter, whatever it ends in.
+fn outcome(result: &Elaborated, name: &str, arguments: Vec<Value>) -> Outcome {
+    let module = result.session.erased();
+    let function = result.function(name).expect("the function exists");
+    Interpreter::new(module, FUEL)
+        .call(function, arguments)
+        .expect("the program runs")
+}
+
+fn panicked(message: &str) -> Outcome {
+    Outcome::Panic(message.into())
+}
+
+fn returned(value: u8) -> Outcome {
+    Outcome::Value(Value::u8(value))
+}
+
+#[test]
+fn the_forms_that_panic_yield_no_value_and_take_the_type_expected_of_them() {
+    // `panic!`, `todo!`, and `unreachable!` are the never type: a branch
+    // that panics takes the other's type, and a `let` its annotation.
+    let result = accepted(
+        "fn loud(c: bool) -> u8 { if c { panic!(\"x\") } else { 5 } }
+        fn quiet(c: bool) -> u8 { if c { panic!() } else { 5 } }
+        fn half(c: bool) -> u8 { if c { todo!() } else { todo!(\"later\") } }
+        fn dead(c: bool) -> (out: u8, @(out <= 5)) { if c { (5, _) } else { unreachable!(\"c holds\") } }
+        fn bound() -> u8 { let x: u8 = todo!(); x.wrapping_add(1) }
+        fn evidence(n: u8) -> @(n <= 9) { unreachable!() }
+        fn checked(x: u8) -> u8 { assert!(x <= 3); x }
+        fn named(x: u8) -> u8 { assert!(x != 0, \"x must not be zero\"); debug_assert!(x <= 200); x }",
+    );
+    // Rust's messages, exactly.
+    let (yes, no) = (Value::Bool(true), Value::Bool(false));
+    assert_eq!(outcome(&result, "loud", vec![yes.clone()]), panicked("x"));
+    assert_eq!(outcome(&result, "loud", vec![no.clone()]), returned(5));
+    assert_eq!(
+        outcome(&result, "quiet", vec![yes.clone()]),
+        panicked("explicit panic")
+    );
+    assert_eq!(
+        outcome(&result, "half", vec![yes.clone()]),
+        panicked("not yet implemented")
+    );
+    assert_eq!(
+        outcome(&result, "half", vec![no.clone()]),
+        panicked("not yet implemented: later")
+    );
+    assert_eq!(
+        outcome(&result, "dead", vec![no]),
+        panicked("internal error: entered unreachable code: c holds")
+    );
+    assert_eq!(
+        outcome(&result, "bound", vec![]),
+        panicked("not yet implemented")
+    );
+    assert_eq!(
+        outcome(&result, "evidence", vec![Value::u8(1)]),
+        panicked("internal error: entered unreachable code")
+    );
+    assert_eq!(
+        outcome(&result, "checked", vec![Value::u8(4)]),
+        panicked("assertion failed: x <= 3")
+    );
+    assert_eq!(outcome(&result, "checked", vec![Value::u8(3)]), returned(3));
+    assert_eq!(
+        outcome(&result, "named", vec![Value::u8(0)]),
+        panicked("x must not be zero")
+    );
+    assert_eq!(
+        outcome(&result, "named", vec![Value::u8(201)]),
+        panicked("assertion failed: x <= 200")
+    );
+    // Printed as written, with the message Rust's form ends with.
+    let rust = print_module(result.session.erased());
+    for line in [
+        "panic!(\"{}\", \"x\")",
+        "panic!()",
+        "todo!()",
+        "todo!(\"{}\", \"later\")",
+        "unreachable!(\"{}\", \"c holds\")",
+        "let x: u8 = todo!();",
+        "unreachable!()",
+        "assert!(x <= 3_u8, \"{}\", \"assertion failed: x <= 3\");",
+        "assert!(x != 0_u8, \"{}\", \"x must not be zero\");",
+        "debug_assert!(x <= 200_u8, \"{}\", \"assertion failed: x <= 200\");",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+}
+
+#[test]
+fn after_an_assertion_its_condition_is_a_fact_and_a_debug_assertion_teaches_nothing() {
+    // The check passed, so `x <= 3` holds: `prove!` finds it without any
+    // promise, by reflecting the outcome the check's statement is evidence
+    // of.
+    let result = accepted(
+        "fn f(x: u8) -> (out: u8, @(out <= 3)) { assert!(x <= 3); prove!(x <= 3); (x, _) }
+        fn g(x: u8, y: u8) -> @(x != y) { assert!(x != y); _ }
+        fn h(b: bool) -> @(b == true) { assert!(b); _ }",
+    );
+    assert!(result.holes.iter().all(|hole| hole.solved));
+    assert_eq!(result.holes.len(), 4);
+    // Without the check, nothing shows it; and a `debug_assert!` is not
+    // checked in every build, so it teaches nothing either.
+    let (codes, full) = rejected("fn f(x: u8) -> u8 { prove!(x <= 3); x }");
+    assert_eq!(codes, ["L0230"], "{full}");
+    let (codes, full) = rejected("fn f(x: u8) -> u8 { debug_assert!(x <= 3); prove!(x <= 3); x }");
+    assert_eq!(codes, ["L0230"], "{full}");
+}
+
+#[test]
+fn under_no_panic_each_form_is_refused_or_needs_its_evidence() {
+    let cases = [
+        (
+            "#[no_panic] fn f(n: u8) -> u8 { if n == 0 { panic!(\"zero\") } else { n } }",
+            "`panic!` cannot appear in `f`, which promises no_panic",
+        ),
+        (
+            "#[no_panic] fn f(n: u8) -> u8 { todo!() }",
+            "`todo!` panics, and `f` promises no_panic",
+        ),
+        (
+            "#[no_panic] fn f(x: u8) -> u8 { assert!(x <= 3); x }",
+            "`assert!` needs evidence of its condition in `f`, which promises no_panic: cannot show `x <= 3`",
+        ),
+        (
+            "#[no_panic] fn f(x: u8, h: @(x <= 3)) -> u8 { debug_assert!(x <= 2); x }",
+            "`debug_assert!` needs evidence of its condition in `f`, which promises no_panic: cannot show `x <= 2`",
+        ),
+        (
+            "#[no_panic] fn f(n: u8) -> u8 { if n == 0 { unreachable!() } else { n } }",
+            "`unreachable!()` needs evidence that this point is unreachable in `f`, which promises no_panic: cannot show `false`",
+        ),
+    ];
+    for (text, message) in cases {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, ["L0239"], "{text}: {full}");
+        assert!(full.contains(message), "{text}: {full}");
+    }
+    // The unsolved hole's notes come with the form's message.
+    let (_, full) = rejected("#[no_panic] fn f(x: u8) -> u8 { assert!(x <= 3); x }");
+    assert!(full.contains("it fails when x = 4"), "{full}");
+}
+
+#[test]
+fn under_no_panic_the_evidence_is_found_as_a_hole_is_filled_and_the_checker_verifies_it() {
+    // `assert!(c)` from a hypothesis, by arithmetic, and from the branch
+    // taken; `unreachable!()` from contradictory facts, and from `False`.
+    let result = accepted(
+        "#[no_panic] fn exact(x: u8, small: @(x <= 3)) -> u8 { assert!(x <= 3); x }
+        #[no_panic] fn apart(x: u8, small: @(x <= 3)) -> u8 { assert!(x != 4); assert!(x < 4); x }
+        #[no_panic] fn same(x: u8, three: @(x == 3)) -> u8 { assert!(x == 3); x }
+        #[no_panic] fn branch(b: bool) -> u8 { if b { assert!(b); 1 } else { 0 } }
+        #[no_panic] fn dead(x: u8, small: @(x <= 3)) -> u8 { if x <= 3 { x } else { unreachable!() } }
+        #[no_panic] fn absurd(no: @(false)) -> u8 { unreachable!() }
+        #[no_panic] fn taught(x: u8, small: @(x <= 3)) -> (out: u8, @(out <= 3)) { assert!(x <= 3); (x, _) }",
+    );
+    assert!(
+        result.holes.iter().all(|hole| hole.solved),
+        "{:#?}",
+        result.holes
+    );
+    let tiers: Vec<&str> = result.holes.iter().map(|hole| hole.tier).collect();
+    assert_eq!(
+        tiers,
+        [
+            "exact",
+            "arithmetic",
+            "arithmetic",
+            "exact",
+            "exact",
+            "arithmetic",
+            "exact",
+            "exact",
+            "exact"
+        ]
+    );
+    // The checks still run.
+    assert_eq!(
+        outcome(&result, "exact", vec![Value::u8(3), Value::Proved]),
+        returned(3)
+    );
+    assert_eq!(
+        outcome(&result, "branch", vec![Value::Bool(false)]),
+        returned(0)
+    );
+}
+
+#[test]
+fn without_the_promise_the_evidence_is_tried_and_kept_when_found() {
+    // Found: the proof is attached and counted, and the kernel checks it.
+    // Not found: the form panics as Rust's does, and no hole is reported.
+    let found = accepted(
+        "fn dead(x: u8, small: @(x <= 3)) -> u8 { if x <= 3 { x } else { unreachable!() } }",
+    );
+    assert_eq!(found.holes.len(), 1);
+    assert_eq!(found.holes[0].tier, "arithmetic");
+    let tried = accepted("fn dead(x: u8) -> u8 { if x <= 3 { x } else { unreachable!() } }");
+    assert!(tried.holes.is_empty(), "{:#?}", tried.holes);
+    assert_eq!(
+        outcome(&tried, "dead", vec![Value::u8(4)]),
+        panicked("internal error: entered unreachable code")
+    );
+}
+
+#[test]
+fn a_message_is_a_string_literal_and_the_forms_stand_nowhere_that_nothing_runs() {
+    let cases = [
+        (
+            "fn f() -> u8 { assert!(); 1 }",
+            "L0244",
+            "`assert!` takes a condition",
+        ),
+        (
+            "fn f(n: u8) -> u8 { panic!(n) }",
+            "L0244",
+            "the message of `panic!` is a string literal",
+        ),
+        (
+            "fn f(n: u8) -> u8 { assert!(n <= 3, n); n }",
+            "L0244",
+            "the message of `assert!` is a string literal",
+        ),
+        (
+            "fn f(n: u8) -> u8 { panic!(\"n is {}\", n) }",
+            "L0290",
+            "format arguments are not in Locus yet",
+        ),
+        (
+            "fn f(n: u8) -> u8 { todo!(\"{}\", n) }",
+            "L0290",
+            "format arguments are not in Locus yet",
+        ),
+        (
+            "fn f(n: u8) -> Prop { prop!(n == todo!()) }",
+            "L0239",
+            "`todo!` cannot appear in a proposition: nothing there runs",
+        ),
+        (
+            "fn f(n: u8) -> @(n <= todo!()) { _ }",
+            "L0239",
+            "cannot appear in a proposition",
+        ),
+    ];
+    for (text, code, fragment) in cases {
+        let (codes, full) = rejected(text);
+        assert_eq!(codes, [code], "{text}: {full}");
+        assert!(full.contains(fragment), "{text}: {full}");
+    }
+    // A function of the logic with a check in its body is elaborated again
+    // as an ordinary one with its promises (LOC-193), and is then known by
+    // its contract only.
+    let result = accepted(
+        "#[terminates] #[no_panic] #[no_io] fn f(x: u8, small: @(x <= 3)) -> u8 { assert!(x <= 3); x }",
+    );
+    assert!(result.holes.iter().all(|hole| hole.solved));
+    let (codes, full) = rejected(
+        "#[terminates] #[no_panic] #[no_io] fn f(x: u8, small: @(x <= 3)) -> u8 { assert!(x <= 3); x }
+        fn g(small: @(2u8 <= 3)) -> @(f(2, small) == 2) { _ }",
+    );
+    assert_eq!(codes, ["L0209"], "{full}");
+    assert!(full.contains("`assert!`"), "{full}");
 }

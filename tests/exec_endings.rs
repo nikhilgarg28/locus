@@ -716,3 +716,74 @@ fn the_other_promises_do_not_mind_a_loop_or_a_panic() {
     let id = program.declare(panicking).unwrap();
     assert_eq!(run(&program, id, vec![]), Outcome::Panic("allowed".into()));
 }
+
+// --- A panic that is not the end of its block ---------------------------------------
+
+/// fn later(h: @False) -> u8 { let v: u8 = todo!(); v }
+/// The shape E10's lowering gives a panic in a `let`: a match on `true`
+/// whose two arms both end in the panic. Every arm leaves, so the match
+/// declares `v` at `u8` although no arm produces one, and the evidence of
+/// `False` is checked in each arm.
+fn panic_in_a_let(promises: Promises, evidence: Option<Proof>) -> ExecFn {
+    let (h_id, h) = var();
+    let (v_id, v) = var();
+    let falsehood = Definitions::with_prelude().1.falsehood_prop();
+    let arms = (0..2)
+        .map(|_| {
+            arm(block(
+                vec![],
+                panic(
+                    "not yet implemented",
+                    evidence.clone().map(|_| Proof::OfTerm(h.clone())),
+                ),
+            ))
+        })
+        .collect();
+    ExecFn {
+        promises,
+        signature: Type::function(1, move |params| match params {
+            [] => Type::proof(falsehood.clone()),
+            _ => Type::U8,
+        }),
+        params: vec![h_id],
+        body: block(
+            vec![Stmt::Match {
+                var: v_id,
+                ty: Type::U8,
+                scrutinee: Term::Bool(true),
+                arms,
+            }],
+            Tail::Value(v),
+        ),
+    }
+}
+
+#[test]
+fn a_panic_in_a_let_is_a_match_whose_arms_both_panic_and_needs_evidence_under_no_panic() {
+    let world = world();
+    let mut program = Program::new((*world.definitions).clone());
+    // Without the promise nothing is demanded, and the call panics with
+    // the form's message before `v` is ever used.
+    let id = program
+        .declare(panic_in_a_let(Promises::default(), None))
+        .unwrap();
+    assert_eq!(
+        run(&program, id, vec![Value::Proved]),
+        Outcome::Panic("not yet implemented".into())
+    );
+    // Under `no_panic`, the checker rejects the ending without evidence...
+    let no_panic = only(Promise::NoPanic);
+    assert_eq!(
+        program.declare(panic_in_a_let(no_panic, None)).map(|_| ()),
+        Err(ExecError::PanicUnderNoPanic)
+    );
+    // ...and accepts evidence of `False`, here the hypothesis itself.
+    let id = program
+        .declare(panic_in_a_let(no_panic, Some(Proof::Omitted)))
+        .unwrap();
+    assert_eq!(program.promises(id), Some(no_panic));
+    assert_eq!(
+        run(&program, id, vec![Value::Proved]),
+        Outcome::Panic("not yet implemented".into())
+    );
+}
