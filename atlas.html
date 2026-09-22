@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 75,
-  "savedAt": "2026-09-22T16:13:17.000Z",
+  "rev": 76,
+  "savedAt": "2026-09-22T16:13:31.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7809,12 +7809,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t295",
    "n": 179,
    "title": "M3 · Rust's loops over let mut; the state-passing loop and the bounded for are removed",
-   "status": "todo",
+   "status": "doing",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Mutation. Wave 8.\nDepends on: M2 (LOC-178).\nUnblocks: M4 (LOC-180), M5 (LOC-181).\nCovers: LOC-127, LOC-5.\n\nScope. loop, while, and for i in a..b. A variable assigned in a loop becomes loop state in the check IR. break with a value, continue.\n\nTests.\n- Every old loop test is ported and passes.\n- The generated Rust uses the loop form the source used, by golden file.\n- The generator of R1 emits loops; fuel bounds them.\n- The assigned set for loops: a let mut inside the body is not loop state; an assignment in a while condition is; a &mut call in the condition is, once O3 lands.\n\nDone when. The provisional loops are gone, as planned since they were added.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T16:13:17.000Z"
+   "updated": "2026-09-22T16:13:31.000Z"
   },
   {
    "id": "t296",
