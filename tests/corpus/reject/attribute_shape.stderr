@@ -1,0 +1,15 @@
+error[L0121]: `#[no_panic]` takes no arguments
+ --> tests/corpus/reject/attribute_shape.lc:2:3
+  |
+2 | #[no_panic(always)] //~ error: L0121 `#[no_panic]` takes no arguments
+  |   ^^^^^^^^
+error[L0121]: `#[derive]` takes a list of traits in parentheses, as in `#[derive(Clone, Copy)]`
+ --> tests/corpus/reject/attribute_shape.lc:5:3
+  |
+5 | #[derive] //~ error: L0121 `#[derive]` takes a list of traits in parentheses
+  |   ^^^^^^
+error[L0121]: `#[terminates]` takes `decreases = expression` and nothing else
+ --> tests/corpus/reject/attribute_shape.lc:8:14
+  |
+8 | #[terminates(fuel = 3)] //~ error: L0121 `#[terminates]` takes `decreases = expression` and nothing else
+  |              ^^^^

@@ -1,0 +1,19 @@
+//~ parse-only
+// A protected type, and a way in from Rust, from Target examples, as written
+// there. `Option<Percent>` parses as a type with an argument; the plan has
+// Percent use an enum of its own until Option exists.
+pub struct Percent { value: u32, in_range: @(value <= 100) }      // not Copy: it moves
+
+impl Percent {
+    // Callable from Locus, where evidence exists.
+    #[terminates] #[no_panic] #[no_io]
+    pub fn new(value: u32, in_range: @(value <= 100)) -> Percent {
+        Percent { value, in_range }
+    }
+
+    // Callable from Rust: the check happens at runtime, and the evidence comes from the branch.
+    #[terminates] #[no_panic] #[no_io]
+    pub fn checked(value: u32) -> Option<Percent> {
+        if value <= 100 { Some(Percent::new(value, prove!(value <= 100))) } else { None }   // exact
+    }
+}

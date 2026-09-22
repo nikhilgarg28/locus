@@ -36,11 +36,79 @@ const STEP_FACTOR: usize = 4;
 
 /// Every spelling the lexer gives a token kind of its own.
 const TOKENS: &[&str] = &[
-    "fn", "const", "let", "if", "else", "struct", "enum", "match", "loop", "for", "in", "break",
-    "continue", "true", "false", "as", "_", "(", ")", "{", "}", "[", "]", ",", ":", ";", ".", "..",
-    "::", "#", "@", "+", "!", "=", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "->", "=>", "-",
-    "*", "/", "%", "^", "&", "|", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=",
-    "<<=", ">>=", "...", "..=", "<-", "?", "$", "~",
+    "fn",
+    "const",
+    "let",
+    "if",
+    "else",
+    "struct",
+    "enum",
+    "match",
+    "loop",
+    "for",
+    "in",
+    "break",
+    "continue",
+    "true",
+    "false",
+    "as",
+    "_",
+    "(",
+    ")",
+    "{",
+    "}",
+    "[",
+    "]",
+    ",",
+    ":",
+    ";",
+    ".",
+    "..",
+    "::",
+    "#",
+    "@",
+    "+",
+    "!",
+    "=",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "&&",
+    "||",
+    "->",
+    "=>",
+    "-",
+    "*",
+    "/",
+    "%",
+    "^",
+    "&",
+    "|",
+    "<<",
+    ">>",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "^=",
+    "&=",
+    "|=",
+    "<<=",
+    ">>=",
+    "...",
+    "..=",
+    "<-",
+    "?",
+    "$",
+    "~",
+    "/// doc\n",
+    "//! doc\n",
+    "/** doc */",
+    "/*! doc */",
 ];
 
 /// What Locus lexes because Rust has it: the keywords it reserves without
@@ -256,9 +324,57 @@ const FRAGMENTS: &[&str] = &[
     "!!",
     "#[derive(Debug, Clone)]",
     "#[cfg(",
+    "#[terminates]",
+    "#[terminates(decreases = n)]",
+    "#[terminates(decreases =",
+    "#[no_panic] #[no_alloc] #[no_io]",
+    "#![no_panic]",
+    "#[derive(Clone, std::marker::Copy)]",
+    "#[derive]",
+    "#[no_panic(x)]",
     "pub fn f(&self) -> u8 {",
+    "pub(crate) fn f(self) -> u8 {",
+    "pub(crate)",
+    "pub(super)",
+    "pub(in crate::a) struct S { pub x: u8 }",
+    "pub(self)",
+    "pub(in",
     "fn f<'a, T>(x: &'a T) -> T {",
     "impl S {",
+    "impl S { fn f(&mut self) -> Self { Self { x: self.x } } }",
+    "impl a::B {",
+    "impl<T> S {",
+    "impl T for S {",
+    "self",
+    "&self",
+    "&mut self",
+    "mut self",
+    "Self",
+    "Self::new(",
+    "Self {",
+    "::",
+    "a::b::c",
+    "crate::a",
+    "super::a::B",
+    "self::a",
+    "u32::MAX",
+    "{ a: 1 }",
+    "E::V { a: 1, b }",
+    "E::V { a, .. }",
+    "S { x, .. } =>",
+    "let E::V { a, b: _ } =",
+    "..",
+    "enum E { V { a: u8, b: bool }, W }",
+    "enum E { V {",
+    "Option<u8>",
+    "Ghost<Option<u8>>",
+    "-> Option<Percent> {",
+    "x: Option<",
+    "a as u8 < b",
+    "/// doc\n",
+    "//! doc\n",
+    "/** doc */",
+    "//// not doc\n",
     "use std::fmt;",
     "let mut x =",
     "x += 1;",
@@ -370,15 +486,22 @@ fn examine(text: &str) -> Result<ParseStats, String> {
         }
     }
     // An AST or a diagnostic, never neither: a silent parse has to account
-    // for every token with a declaration.
+    // for every token with a declaration, or with the file's own doc
+    // comments and attributes.
     if parsed.diagnostics.is_empty() {
-        let declarations = &parsed.program.declarations;
+        let program = &parsed.program;
+        let spans: Vec<_> = program
+            .declarations
+            .iter()
+            .map(|declaration| declaration.span)
+            .chain(program.doc.iter().map(|doc| doc.span))
+            .chain(program.attributes.iter().map(|attribute| attribute.span))
+            .collect();
         for token in lex(source).tokens {
             let covered = token.span.start == token.span.end
-                || declarations.iter().any(|declaration| {
-                    declaration.span.start <= token.span.start
-                        && token.span.end <= declaration.span.end
-                });
+                || spans
+                    .iter()
+                    .any(|span| span.start <= token.span.start && token.span.end <= span.end);
             if !covered {
                 return Err(format!(
                     "no diagnostic, yet no declaration covers the token at {:?}",

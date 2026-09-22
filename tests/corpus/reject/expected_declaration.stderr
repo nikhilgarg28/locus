@@ -1,4 +1,4 @@
-error[L0100]: expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, or `const`
+error[L0100]: expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, `const`, or `impl`
  --> tests/corpus/reject/expected_declaration.lc:3:1
   |
 3 | 7 //~ error: L0100 expected a declaration

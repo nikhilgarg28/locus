@@ -1,0 +1,12 @@
+// `pub` goes on items and on struct fields; nothing else can be made
+// visible on its own.
+pub impl Counter { //~ error: L0122 `pub` is not written on an `impl` block
+    pub fn get(n: u8) -> u8 { n }
+}
+
+enum Event {
+    pub Wrong, //~ error: L0122 a variant is as visible as its enum
+    Right,
+}
+
+fn first(pub n: u8) -> u8 { n } //~ error: L0122 `pub` is not written on a parameter

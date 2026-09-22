@@ -1,7 +1,7 @@
-error[L0105]: attributes are not in Locus yet
- --> tests/corpus/reject/hash_bracket_proof_syntax.lc:2:30
+error[L0121]: an attribute goes before an item, and nothing else takes one
+ --> tests/corpus/reject/hash_bracket_proof_syntax.lc:3:30
   |
-2 | fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0105 attributes are not in Locus yet
+3 | fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0121 an attribute goes before an item
   |                              ^^^^^^^^^^^
   |
   = note: proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence

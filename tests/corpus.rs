@@ -13,12 +13,16 @@
 //! //~^ error: L0204 unknown name         ... on the line above; `^^` is two
 //!                                        above. Text after the code must
 //!                                        appear in the message.
+//! //~ parse-only                         the file is parsed and nothing more
 //! ~~~
 //!
 //! A file with an `error` directive must be rejected, with exactly the
-//! errors it lists, each on its line. Any other file must be accepted: it is
-//! parsed, elaborated, and checked, every run line is called in the check-IR
-//! interpreter and in the erased-tree interpreter, and its Rust is printed.
+//! errors it lists, each on its line. A file in `tests/corpus/target` says
+//! `parse-only`: it is the target syntax, ahead of the elaborator, and only
+//! the parser's diagnostics are compared with its `error` lines. Any other
+//! file must be accepted: it is parsed, elaborated, and checked, every run
+//! line is called in the check-IR interpreter and in the erased-tree
+//! interpreter, and its Rust is printed.
 //! The Rust of all accepted files goes into one source file, each in a `mod`
 //! of its own, with a `main` that prints one line for every run line: the
 //! value, or `panic: ` and the message of a panic it caught. rustc runs
@@ -203,6 +207,8 @@ enum Directive {
         code: String,
         message: String,
     },
+    /// The file is only parsed.
+    ParseOnly,
 }
 
 /// The directives of a file, each with the line it is written on; a comment
@@ -216,6 +222,10 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
         };
         let above = rest.chars().take_while(|&c| c == '^').count();
         let rest = &rest[above..];
+        if above == 0 && rest.trim() == "parse-only" {
+            found.push((number, Ok(Directive::ParseOnly)));
+            continue;
+        }
         let Some((key, value)) = rest.split_once(':') else {
             found.push((number, Err("a directive reads `//~ key: value`".into())));
             continue;
@@ -262,7 +272,7 @@ fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 }
             }
             other => Err(format!(
-                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, and `error`"
+                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`"
             )),
         };
         found.push((number, directive));
@@ -275,6 +285,13 @@ fn expects_rejection(text: &str) -> bool {
     directives(text)
         .iter()
         .any(|(_, directive)| matches!(directive, Ok(Directive::Error { .. })))
+}
+
+/// Whether the file says it is only parsed.
+fn is_parse_only(text: &str) -> bool {
+    directives(text)
+        .iter()
+        .any(|(_, directive)| matches!(directive, Ok(Directive::ParseOnly)))
 }
 
 /// An accepted file's part of the one program rustc compiles.
@@ -398,9 +415,9 @@ fn examine_inner(name: &str, text: &str) -> Examined {
     let file = sources.add(name, text);
     let source = sources.get(file);
     let parsed = parse(source);
-    let elaborated = parsed
-        .is_success()
-        .then(|| elaborate(source, &parsed.program));
+    let parse_only = is_parse_only(text);
+    let elaborated =
+        (parsed.is_success() && !parse_only).then(|| elaborate(source, &parsed.program));
     let diagnostics = match &elaborated {
         Some(elaborated) => &elaborated.diagnostics,
         None => &parsed.diagnostics,
@@ -415,12 +432,25 @@ fn examine_inner(name: &str, text: &str) -> Examined {
         fail(line, why);
     }
     for (at, directive) in &found {
-        if rejection && !matches!(directive, Directive::Error { .. }) {
+        if rejection && !matches!(directive, Directive::Error { .. } | Directive::ParseOnly) {
             fail(
                 *at,
                 "a file with an `error` directive is not run, so this expects nothing".into(),
             );
+        } else if parse_only && !matches!(directive, Directive::Error { .. } | Directive::ParseOnly)
+        {
+            fail(
+                *at,
+                "a parse-only file is only parsed, so this expects nothing".into(),
+            );
         }
+    }
+    if parse_only {
+        return Examined {
+            failures,
+            inconclusive: Vec::new(),
+            compiled: None,
+        };
     }
     let Some(elaborated) = elaborated.filter(|elaborated| elaborated.is_success() && !rejection)
     else {
@@ -550,7 +580,7 @@ fn examine_accepted(
                     expected,
                 });
             }
-            Directive::Error { .. } => {}
+            Directive::Error { .. } | Directive::ParseOnly => {}
         }
     }
     Examined {
@@ -1107,13 +1137,24 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
     let mut inconclusive = Vec::new();
     let mut compiled = Vec::new();
     let mut examples = Vec::new();
-    for (directory, rejects) in [
-        ("examples", false),
-        ("tests/corpus/accept", false),
-        ("tests/corpus/reject", true),
+    for (directory, rejects, parse_only) in [
+        ("examples", false, false),
+        ("tests/corpus/accept", false, false),
+        ("tests/corpus/reject", true, false),
+        ("tests/corpus/target", false, true),
     ] {
         for (name, text) in files_in(directory) {
-            if expects_rejection(&text) != rejects {
+            if is_parse_only(&text) != parse_only {
+                failures.push(Failure {
+                    file: name.clone(),
+                    line: 0,
+                    message: if parse_only {
+                        "a file in `target` needs a `parse-only` directive".into()
+                    } else {
+                        "a file with a `parse-only` directive belongs in `target`".into()
+                    },
+                });
+            } else if !parse_only && expects_rejection(&text) != rejects {
                 failures.push(Failure {
                     file: name.clone(),
                     line: 0,
@@ -1260,7 +1301,7 @@ fn every_failure_in_a_file_is_reported() {
         failures_of(&text),
         [
             "10: a run line reads `f(arguments) => value`",
-            "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, and `error`",
+            "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, and `parse-only`",
             "13: `^` belongs to `error`, not `run`",
             "4: 1 proof(s) were found, expected 2",
             "6: `increment(true)`: expected a `u8`, found `true`",

@@ -1,0 +1,20 @@
+error[L0290]: `crate::` paths are not in Locus yet; modules are a later project
+ --> tests/corpus/reject/module_paths_not_yet.lc:4:23
+  |
+4 | fn first() -> Event { crate::Event::Wrong } //~ error: L0290 `crate::` paths are not in Locus yet
+  |                       ^^^^^^^^^^^^^^^^^^^
+error[L0290]: paths through modules are not in Locus yet; modules are a later project
+ --> tests/corpus/reject/module_paths_not_yet.lc:6:24
+  |
+6 | fn second() -> Event { outer::Event::Right } //~ error: L0290 paths through modules are not in Locus yet
+  |                        ^^^^^^^^^^^^^^^^^^^
+error[L0290]: paths through modules are not in Locus yet; modules are a later project
+ --> tests/corpus/reject/module_paths_not_yet.lc:8:13
+  |
+8 | fn third(x: outer::Lock) -> u8 { 1 } //~ error: L0290 paths through modules are not in Locus yet
+  |             ^^^^^^^^^^^
+error[L0290]: type arguments are not in Locus yet; E8 adds `Ghost<T>`
+  --> tests/corpus/reject/module_paths_not_yet.lc:10:14
+   |
+10 | fn fourth(x: Option<u8>) -> u8 { 1 } //~ error: L0290 type arguments are not in Locus yet; E8
+   |              ^^^^^^^^^^

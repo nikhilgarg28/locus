@@ -1,0 +1,9 @@
+// An attribute of the closed set in a shape it does not have.
+#[no_panic(always)] //~ error: L0121 `#[no_panic]` takes no arguments
+fn first(n: u8) -> u8 { n }
+
+#[derive] //~ error: L0121 `#[derive]` takes a list of traits in parentheses
+struct Lock { failures: u8 }
+
+#[terminates(fuel = 3)] //~ error: L0121 `#[terminates]` takes `decreases = expression` and nothing else
+fn second(n: u8) -> u8 { n }

@@ -1,4 +1,5 @@
-// The retired `#[condition]` proof type reads as an attribute.
-fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0105 attributes are not in Locus yet
+// The retired `#[condition]` proof type reads as an attribute, which stands
+// before an item only.
+fn first(n: u8) -> (out: u8, #[out == n]) { //~ error: L0121 an attribute goes before an item
     (n, _)
 }

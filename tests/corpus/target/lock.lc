@@ -1,0 +1,62 @@
+//~ parse-only
+// The lock with 32-bit counts, from Target examples, as written there. The
+// items parse after S4; the lines S5 owns (`let mut`, assignment) are the
+// parser errors listed here, one per construct.
+#[derive(Clone, Copy)]
+pub enum Event { Wrong, Right }
+
+#[derive(Clone, Copy)]
+pub struct Lock { failures: u32, open: bool }
+
+#[terminates] #[no_panic] #[no_io]
+fn within_limit(failures: u32) -> Prop {
+    prop!(failures <= 3)
+}
+
+#[terminates] #[no_panic] #[no_io]
+pub fn step(
+    lock: Lock,
+    bounded: @within_limit(lock.failures),
+    event: Event,
+) -> (next: Lock, @within_limit(next.failures)) {
+    match event {
+        Event::Right => {
+            let next = Lock { failures: 0, open: true };
+            (next, fold!(within_limit, prove!(next.failures <= 3)))             // computed: 0 <= 3
+        }
+        Event::Wrong => {
+            if lock.failures < 3 {
+                let fits = prove!(lock.failures as Int + 1 <= u32::MAX as Int); // arithmetic, from lock.failures < 3
+                let next = Lock { failures: lock.failures + 1, open: false };   // the obligation of + is fits: exact
+                (next, fold!(within_limit, prove!(next.failures <= 3)))         // arithmetic
+            } else {
+                (Lock { failures: lock.failures, open: false }, bounded)        // computed: the field is lock.failures
+            }
+        }
+    }
+}
+
+#[terminates] #[no_panic] #[no_io]
+fn event_at(attempt: u32, correct: u32) -> Event {
+    if attempt == correct { Event::Right } else { Event::Wrong }
+}
+
+// A loop, so no promise to terminate can be made, and run cannot appear in a proposition.
+#[no_panic] #[no_io]
+pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
+    let mut lock = Lock { failures: 0, open: false }; //~ error: L0116 `mut` is not in Locus yet
+    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(lock.failures <= 3)); //~ error: L0116 `mut` is not in Locus yet
+    for attempt in 0..attempts {
+        let (next, still) = step(lock, ok, event_at(attempt, correct));
+        lock = next;        // ok is now invalid //~ error: L0116 assignment (`=`) is not in Locus yet
+        ok = still;         // exact, given that still is typed over next //~ error: L0116 assignment (`=`) is not in Locus yet
+    }
+    (lock, ok)
+}
+
+#[terminates] #[no_panic] #[no_io]
+pub fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
+    let small = unfold!(within_limit, bounded);                                 // failures <= 3
+    let left = 3 - failures;                                                    // the obligation of -: arithmetic, from small
+    (left, prove!(left <= 3))                                                   // arithmetic
+}

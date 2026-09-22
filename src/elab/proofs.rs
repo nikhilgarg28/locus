@@ -50,13 +50,14 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        let name = path.last();
         let Some(index) = info
             .variants
             .iter()
-            .position(|variant| variant.name == path.name.text)
+            .position(|variant| variant.name == name.text)
         else {
-            let message = format!("`{}` has no variant `{}`", info.name, path.name.text);
-            return self.fail("L0212", message, path.name.span);
+            let message = format!("`{}` has no variant `{}`", info.name, name.text);
+            return self.fail("L0212", message, name.span);
         };
         let variant = &info.variants[index];
         let mut tys: Vec<Type> = variant
@@ -176,15 +177,19 @@ impl Env<'_> {
                         *slot = Some(arm);
                     }
                 }
-                PatternKind::Variant { path, .. } if path.prefix.text == info.name => {
+                PatternKind::Variant { path, .. }
+                    if path
+                        .pair()
+                        .is_some_and(|(prefix, _)| prefix.text == info.name) =>
+                {
+                    let name = path.last();
                     let Some(index) = info
                         .variants
                         .iter()
-                        .position(|variant| variant.name == path.name.text)
+                        .position(|variant| variant.name == name.text)
                     else {
-                        let message =
-                            format!("`{}` has no variant `{}`", info.name, path.name.text);
-                        return self.fail("L0212", message, path.name.span);
+                        let message = format!("`{}` has no variant `{}`", info.name, name.text);
+                        return self.fail("L0212", message, name.span);
                     };
                     if chosen[index].is_some() {
                         return self.fail("L0214", "this arm is never reached", arm.pattern.span);

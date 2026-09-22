@@ -148,10 +148,11 @@ impl Env<'_> {
                     }
                 }
                 PatternKind::Variant { path, .. } => {
-                    if path.prefix.text != info.name {
+                    let (prefix, _) = self.variant_path(path)?;
+                    if prefix.text != info.name {
                         let message = format!(
                             "this arm is for `{}`, and the value matched is a `{}`",
-                            path.prefix.text, info.name
+                            prefix.text, info.name
                         );
                         return self.fail("L0212", message, path.span);
                     }

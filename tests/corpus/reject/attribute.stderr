@@ -1,7 +1,7 @@
-error[L0105]: attributes are not in Locus yet
- --> tests/corpus/reject/attribute.lc:2:1
+error[L0120]: `inline` is not an attribute of Locus
+ --> tests/corpus/reject/attribute.lc:2:3
   |
-2 | #[inline] //~ error: L0105 attributes are not in Locus yet
-  | ^^^^^^^^^
+2 | #[inline] //~ error: L0120 `inline` is not an attribute of Locus
+  |   ^^^^^^
   |
-  = note: proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence
+  = note: the attributes are `#[terminates]`, `#[terminates(decreases = e)]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`, and `#[derive(...)]`; Locus has no user-defined attributes

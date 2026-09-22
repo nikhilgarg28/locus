@@ -17,7 +17,9 @@ pub(super) fn dependency_order(program: &Program) -> (Vec<usize>, Vec<usize>) {
         .declarations
         .iter()
         .enumerate()
-        .map(|(index, declaration)| (declared_name(declaration).text.as_str(), index))
+        .filter_map(|(index, declaration)| {
+            declared_name(declaration).map(|name| (name.text.as_str(), index))
+        })
         .collect();
     let edges: Vec<Vec<usize>> = program
         .declarations
@@ -73,13 +75,15 @@ pub(super) fn dependency_order(program: &Program) -> (Vec<usize>, Vec<usize>) {
     (order, cyclic)
 }
 
-pub(super) fn declared_name(declaration: &Declaration) -> &Name {
+/// The name an item declares. An `impl` block declares none of its own.
+pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
     match &declaration.kind {
         DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
         | DeclarationKind::Enum { name, .. }
         | DeclarationKind::Prop { name, .. }
-        | DeclarationKind::Constant { name, .. } => name,
+        | DeclarationKind::Constant { name, .. } => Some(name),
+        DeclarationKind::Impl { .. } => None,
     }
 }
 
@@ -135,12 +139,18 @@ impl Mentions<'_> {
                 self.ty(ty);
                 self.expr(value);
             }
+            // Not elaborated yet, so it depends on nothing.
+            DeclarationKind::Impl { .. } => {}
         }
     }
 
     fn ty(&mut self, ty: &Type) {
         match &ty.kind {
             TypeKind::Named(name) => self.name(name),
+            TypeKind::Path { path, arguments } => {
+                self.name(&path.segments[0]);
+                arguments.iter().for_each(|argument| self.ty(argument));
+            }
             TypeKind::Unit => {}
             TypeKind::Group(inner) => self.ty(inner),
             TypeKind::Tuple(fields) => fields.iter().for_each(|field| self.ty(&field.ty)),
@@ -163,12 +173,12 @@ impl Mentions<'_> {
             | PatternKind::Integer(_) => {}
             PatternKind::Group(inner) => self.pattern(inner),
             PatternKind::Tuple(patterns) => patterns.iter().for_each(|inner| self.pattern(inner)),
-            PatternKind::Struct { name, fields } => {
-                self.name(name);
+            PatternKind::Struct { path, fields, .. } => {
+                self.name(&path.segments[0]);
                 fields.iter().for_each(|field| self.pattern(&field.pattern));
             }
             PatternKind::Variant { path, arguments } => {
-                self.name(&path.prefix);
+                self.name(&path.segments[0]);
                 for argument in arguments.iter().flatten() {
                     self.pattern(argument);
                 }
@@ -205,7 +215,7 @@ impl Mentions<'_> {
     fn expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Name(name) => self.name(name),
-            ExprKind::Path(path) => self.name(&path.prefix),
+            ExprKind::Path(path) => self.name(&path.segments[0]),
             ExprKind::Integer(_)
             | ExprKind::String(_)
             | ExprKind::Bool(_)
@@ -228,8 +238,8 @@ impl Mentions<'_> {
             ExprKind::Form { arguments, .. } => {
                 arguments.iter().for_each(|argument| self.expr(argument));
             }
-            ExprKind::Struct { name, fields } => {
-                self.name(name);
+            ExprKind::Struct { path, fields } => {
+                self.name(&path.segments[0]);
                 fields.iter().for_each(|field| self.expr(&field.value));
             }
             ExprKind::Block(block) => self.block(block),

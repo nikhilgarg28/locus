@@ -203,7 +203,7 @@ fn grouped(expr: &Expr) -> String {
     let list = |items: &[Expr]| items.iter().map(grouped).collect::<Vec<_>>().join(", ");
     match &expr.kind {
         ExprKind::Name(name) => name.text.clone(),
-        ExprKind::Path(path) => format!("{}::{}", path.prefix.text, path.name.text),
+        ExprKind::Path(path) => path.text(),
         ExprKind::Integer(literal) => match literal.suffix {
             Some(suffix) => format!("{}{}", literal.value, suffix.name()),
             None => literal.value.to_string(),
@@ -240,18 +240,419 @@ fn grouped(expr: &Expr) -> String {
 fn grouped_ty(ty: &Type) -> String {
     match &ty.kind {
         TypeKind::Named(name) => name.text.clone(),
+        TypeKind::Path { path, arguments } if arguments.is_empty() => path.text(),
+        TypeKind::Path { path, arguments } => format!(
+            "{}<{}>",
+            path.text(),
+            arguments
+                .iter()
+                .map(grouped_ty)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        TypeKind::Proof(claim) => format!("@({})", grouped(claim)),
         TypeKind::Unit => "()".into(),
         TypeKind::Group(inner) => format!("({})", grouped_ty(inner)),
         TypeKind::Tuple(fields) => format!(
             "({})",
             fields
                 .iter()
-                .map(|field| grouped_ty(&field.ty))
+                .map(|field| match &field.name {
+                    Some(name) => format!("{}: {}", name.text, grouped_ty(&field.ty)),
+                    None => grouped_ty(&field.ty),
+                })
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
         other => panic!("the table has no type like {other:?}"),
     }
+}
+
+/// A compact, one-line rendering of an item: what the parser kept of its
+/// doc comments, attributes, visibility, and shape, without spans. The
+/// snapshot tests of the item forms compare against this.
+fn rendered_item(declaration: &locus::ast::Declaration) -> String {
+    use locus::ast::{AttributeKind, VariantShape, VisibilityScope};
+    let mut out = String::new();
+    for doc in &declaration.doc {
+        out.push_str(&format!("doc({:?}) ", doc.text));
+    }
+    for attribute in &declaration.attributes {
+        out.push_str(&match &attribute.kind {
+            AttributeKind::Terminates { decreases: None } => "#[terminates] ".to_string(),
+            AttributeKind::Terminates {
+                decreases: Some(measure),
+            } => format!("#[terminates(decreases = {})] ", grouped(measure)),
+            AttributeKind::Derive(traits) => format!(
+                "#[derive({})] ",
+                traits
+                    .iter()
+                    .map(locus::ast::Path::text)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            other => format!("#[{}] ", other.name()),
+        });
+    }
+    let visibility = |visibility: &Option<locus::ast::Visibility>| match visibility {
+        None => String::new(),
+        Some(visibility) => match &visibility.scope {
+            VisibilityScope::Public => "pub ".into(),
+            VisibilityScope::Crate => "pub(crate) ".into(),
+            VisibilityScope::Super => "pub(super) ".into(),
+            VisibilityScope::SelfModule => "pub(self) ".into(),
+            VisibilityScope::In(path) => format!("pub(in {}) ", path.text()),
+        },
+    };
+    out.push_str(&visibility(&declaration.visibility));
+    let fields = |fields: &[locus::ast::TypeField]| {
+        fields
+            .iter()
+            .map(|field| match &field.name {
+                Some(name) => format!("{}: {}", name.text, grouped_ty(&field.ty)),
+                None => grouped_ty(&field.ty),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    match &declaration.kind {
+        DeclarationKind::Function {
+            mode,
+            name,
+            self_param,
+            parameters,
+            result,
+            body,
+        } => {
+            let mut params: Vec<String> = self_param
+                .iter()
+                .map(|param| param.kind.spelling().to_string())
+                .collect();
+            params.extend(
+                parameters
+                    .iter()
+                    .map(|param| format!("{}: {}", param.name.text, grouped_ty(&param.ty))),
+            );
+            out.push_str(&format!(
+                "{}fn {}({}) -> {} {{ {} statement(s) }}",
+                if *mode == FunctionMode::Math {
+                    "math "
+                } else {
+                    ""
+                },
+                name.text,
+                params.join(", "),
+                grouped_ty(result),
+                body.statements.len() + usize::from(body.tail.is_some()),
+            ));
+        }
+        DeclarationKind::Struct { name, fields } => {
+            let fields: Vec<String> = fields
+                .iter()
+                .map(|field| {
+                    format!(
+                        "{}{}{}: {}",
+                        field
+                            .doc
+                            .iter()
+                            .map(|doc| format!("doc({:?}) ", doc.text))
+                            .collect::<String>(),
+                        visibility(&field.visibility),
+                        field.name.text,
+                        grouped_ty(&field.ty)
+                    )
+                })
+                .collect();
+            out.push_str(&format!("struct {} {{ {} }}", name.text, fields.join(", ")));
+        }
+        DeclarationKind::Enum { name, variants } => {
+            let variants: Vec<String> = variants
+                .iter()
+                .map(|variant| {
+                    let doc: String = variant
+                        .doc
+                        .iter()
+                        .map(|doc| format!("doc({:?}) ", doc.text))
+                        .collect();
+                    match variant.shape {
+                        VariantShape::Unit => format!("{doc}{}", variant.name.text),
+                        VariantShape::Tuple => {
+                            format!("{doc}{}({})", variant.name.text, fields(&variant.fields))
+                        }
+                        VariantShape::Struct => {
+                            format!(
+                                "{doc}{} {{ {} }}",
+                                variant.name.text,
+                                fields(&variant.fields)
+                            )
+                        }
+                    }
+                })
+                .collect();
+            out.push_str(&format!("enum {} {{ {} }}", name.text, variants.join(", ")));
+        }
+        DeclarationKind::Prop {
+            name,
+            parameters,
+            variants,
+        } => {
+            let parameters: Vec<String> = parameters
+                .iter()
+                .map(|param| format!("{}: {}", param.name.text, grouped_ty(&param.ty)))
+                .collect();
+            let variants: Vec<String> = variants
+                .iter()
+                .map(|variant| {
+                    let mut text: String = variant
+                        .doc
+                        .iter()
+                        .map(|doc| format!("doc({:?}) ", doc.text))
+                        .collect();
+                    text.push_str(&variant.name.text);
+                    if !variant.fields.is_empty() {
+                        text.push_str(&format!("({})", fields(&variant.fields)));
+                    }
+                    if let Some(target) = &variant.target {
+                        text.push_str(&format!(": @{}", grouped(target)));
+                    }
+                    text
+                })
+                .collect();
+            out.push_str(&format!(
+                "prop {}({}) {{ {} }}",
+                name.text,
+                parameters.join(", "),
+                variants.join(", ")
+            ));
+        }
+        DeclarationKind::Constant { name, ty, value } => {
+            out.push_str(&format!(
+                "const {}: {} = {};",
+                name.text,
+                grouped_ty(ty),
+                grouped(value)
+            ));
+        }
+        DeclarationKind::Impl { target, methods } => {
+            let methods: Vec<String> = methods.iter().map(rendered_item).collect();
+            out.push_str(&format!(
+                "impl {} {{ {} }}",
+                target.text(),
+                methods.join(" ")
+            ));
+        }
+    }
+    out
+}
+
+/// The item forms, each parsed from a small source and rendered.
+#[test]
+fn every_item_form_renders_from_its_syntax_tree() {
+    for (source, expected) in [
+        (
+            "fn f(n: u8) -> u8 { n }",
+            "fn f(n: u8) -> u8 { 1 statement(s) }",
+        ),
+        (
+            "pub math fn f(n: u8) -> Prop { prop!(n <= 3) }",
+            "pub math fn f(n: u8) -> Prop { 1 statement(s) }",
+        ),
+        (
+            "/// doc\n#[terminates] #[no_panic] #[no_alloc] #[no_io]\npub(crate) fn f(n: u8) -> (out: u8, @(out == n)) { let x = n; (x, _) }",
+            "doc(\" doc\") #[terminates] #[no_panic] #[no_alloc] #[no_io] pub(crate) fn f(n: u8) -> (out: u8, @((out == n))) { 2 statement(s) }",
+        ),
+        (
+            "#[terminates(decreases = n - 1)] pub(super) fn f(n: u8) -> u8 { n }",
+            "#[terminates(decreases = (n - 1))] pub(super) fn f(n: u8) -> u8 { 1 statement(s) }",
+        ),
+        (
+            "pub(in crate::verified) fn f() -> u8 { 1 }",
+            "pub(in crate::verified) fn f() -> u8 { 1 statement(s) }",
+        ),
+        (
+            "pub(self) fn f() -> u8 { 1 }",
+            "pub(self) fn f() -> u8 { 1 statement(s) }",
+        ),
+        (
+            "#[derive(Clone, Copy)]\npub struct Lock { /// count\n pub failures: u8, pub(crate) open: bool, secret: u8 }",
+            "#[derive(Clone, Copy)] pub struct Lock { doc(\" count\") pub failures: u8, pub(crate) open: bool, secret: u8 }",
+        ),
+        (
+            "struct Percent { value: u32, in_range: @(value <= 100) }",
+            "struct Percent { value: u32, in_range: @((value <= 100)) }",
+        ),
+        (
+            "pub enum Shape { Point, /// a pair\n Pair(u8, bool), Named(x: u8, y: u8), Box { width: u8, height: u8 }, }",
+            "pub enum Shape { Point, doc(\" a pair\") Pair(u8, bool), Named(x: u8, y: u8), Box { width: u8, height: u8 } }",
+        ),
+        (
+            "prop Within(n: u8) { /// small\n Small: @Within(0), Next(m: u8, @Within(m)) }",
+            "prop Within(n: u8) { doc(\" small\") Small: @Within(0), Next(m: u8, @(Within(m))) }",
+        ),
+        (
+            "/// three\n#[no_panic] pub const LIMIT: u8 = 3;",
+            "doc(\" three\") #[no_panic] pub const LIMIT: u8 = 3;",
+        ),
+        (
+            "impl Percent {\n    /// make one\n    #[terminates] pub fn new(value: u32) -> Self { Self { value } }\n    fn get(&self) -> u32 { self.value }\n    fn take(self) -> u32 { self.value }\n    fn bump(&mut self, by: u32) -> () { () }\n    pub(crate) fn drain(mut self) -> u32 { self.value }\n}",
+            "impl Percent { doc(\" make one\") #[terminates] pub fn new(value: u32) -> Self { 1 statement(s) } fn get(&self) -> u32 { 1 statement(s) } fn take(self) -> u32 { 1 statement(s) } fn bump(&mut self, by: u32) -> () { 1 statement(s) } pub(crate) fn drain(mut self) -> u32 { 1 statement(s) } }",
+        ),
+        ("impl outer::Percent { }", "impl outer::Percent {  }"),
+        (
+            "fn f(x: Option<Percent>, y: Ghost<Option<u8>>, z: a::b::C<u8, D>) -> Vec<u8> { x }",
+            "fn f(x: Option<Percent>, y: Ghost<Option<u8>>, z: a::b::C<u8, D>) -> Vec<u8> { 1 statement(s) }",
+        ),
+        (
+            "fn f(x: crate::a::B, y: super::C, z: self::D) -> u8 { 1 }",
+            "fn f(x: crate::a::B, y: super::C, z: self::D) -> u8 { 1 statement(s) }",
+        ),
+    ] {
+        let parsed = parse_text(source);
+        assert!(parsed.is_success(), "{source}: {:#?}", parsed.diagnostics);
+        assert_eq!(parsed.program.declarations.len(), 1, "{source}");
+        assert_eq!(
+            rendered_item(&parsed.program.declarations[0]),
+            expected,
+            "{source}"
+        );
+    }
+}
+
+/// `impl` blocks: what they hold, `Self` and `self` inside them, and what
+/// they reject.
+#[test]
+fn impl_blocks_hold_methods_and_associated_functions() {
+    let parsed = parse_text(
+        "impl S { fn f(&self) -> u8 { self.x } fn g() -> Self { Self { x: 1 } } fn h(n: u8) -> u8 { Self::f(n) } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Impl { methods, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    assert_eq!(methods.len(), 3);
+    for (text, message) in [
+        (
+            "impl S { struct T { x: u8 } }",
+            "an `impl` block holds functions: `fn` or `math fn`",
+        ),
+        (
+            "impl S { const N: u8 = 1; }",
+            "an `impl` block holds functions: `fn` or `math fn`",
+        ),
+        (
+            "impl S { fn f(n: u8, self) -> u8 { 1 } }",
+            "a `self` parameter comes first",
+        ),
+        (
+            "impl S { fn f() -> u8 { self.x } }",
+            "`self` is the receiver of a method, and this function has no `self` parameter",
+        ),
+        (
+            "fn f() -> u8 { self.x }",
+            "`self` is the receiver of a method, and this function has no `self` parameter",
+        ),
+        (
+            "fn f(&self) -> u8 { 1 }",
+            "a `self` parameter belongs to a method in an `impl` block",
+        ),
+        (
+            "fn f() -> Self { 1 }",
+            "`Self` is the type of an `impl` block, and this is outside one",
+        ),
+        (
+            "fn f() -> u8 { Self::g() }",
+            "`Self` is the type of an `impl` block, and this is outside one",
+        ),
+        ("impl { }", "expected the type an `impl` block is for"),
+    ] {
+        let parsed = parse_text(text);
+        let first = parsed
+            .diagnostics
+            .first()
+            .unwrap_or_else(|| panic!("{text}"));
+        assert_eq!(first.code, "L0100", "{text}");
+        assert_eq!(first.message, message, "{text}");
+    }
+    // A method that fails is recovered on its own, and the block closes.
+    let parsed =
+        parse_text("impl S { fn f(n: ) -> u8 { 1 } fn g() -> u8 { 2 } } fn h() -> u8 { 3 }");
+    assert_eq!(parsed.diagnostics.len(), 1, "{:#?}", parsed.diagnostics);
+    assert_eq!(parsed.program.declarations.len(), 2);
+    let DeclarationKind::Impl { methods, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    assert_eq!(methods.len(), 1);
+    // `Self` is a type only inside the block; method calls parse as before.
+    let parsed =
+        parse_text("impl S { fn f(&self) -> u8 { self.g(1).h() } } fn k(s: S) -> u8 { s.f() }");
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+}
+
+/// Variants with named fields in declarations, patterns, and expressions;
+/// `..` in struct patterns.
+#[test]
+fn named_field_variants_parse_in_every_position() {
+    let parsed = parse_text(
+        "enum E { V { a: u8, b: bool }, W }
+         fn f(e: E) -> u8 {
+             let E::V { a, b: _ } = e;
+             let E::V { a: x, .. } = e;
+             let S { x, .. } = s;
+             match e { E::V { a, b } => a, E::V { .. } => 0, E::W => 1 }
+         }
+         fn g() -> E { E::V { a: 1, b: true } }
+         fn h() -> E { if e == E::W { E::V { a, b } } else { E::W } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Function { body, .. } = &parsed.program.declarations[1].kind else {
+        panic!()
+    };
+    let StatementKind::Let { pattern, .. } = &body.statements[1].kind else {
+        panic!()
+    };
+    let PatternKind::Struct { path, fields, rest } = &pattern.kind else {
+        panic!("{pattern:?}")
+    };
+    assert_eq!(path.text(), "E::V");
+    assert_eq!(fields.len(), 1);
+    assert!(rest.is_some());
+    let expr = expression("E::V { a: 1, b: true }");
+    let ExprKind::Struct { path, fields } = &expr.kind else {
+        panic!("{expr:?}")
+    };
+    assert_eq!(path.text(), "E::V");
+    assert_eq!(fields.len(), 2);
+    // `..` comes last, and a variant's braces hold `name: Type` pairs.
+    let parsed = parse_text("fn f() -> u8 { let S { .., x } = s; 1 }");
+    assert_eq!(parsed.diagnostics[0].code, "L0101");
+    let parsed = parse_text("enum E { V { u8 } }");
+    assert_eq!(
+        parsed.diagnostics[0].message,
+        "a field of a variant written with braces is `name: Type`"
+    );
+}
+
+/// Paths of any length in the three positions, and `u32::MAX`.
+#[test]
+fn paths_of_any_length_parse_in_types_expressions_and_patterns() {
+    let expr = expression("a::b::c(u32::MAX, crate::d::E::F, super::g, self::h)");
+    let ExprKind::Call { callee, arguments } = &expr.kind else {
+        panic!()
+    };
+    assert_eq!(grouped(callee), "a::b::c");
+    let texts: Vec<String> = arguments.iter().map(grouped).collect();
+    assert_eq!(texts, ["u32::MAX", "crate::d::E::F", "super::g", "self::h"]);
+    let parsed = parse_text(
+        "fn f(e: crate::a::E) -> u8 { match e { crate::a::E::V(x) => x, a::E::W => 0, self::E::X { y } => y } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    // `self` alone is a value, `self::` a path, and `E::self` no name.
+    let parsed = parse_text("fn f() -> u8 { E::self }");
+    assert_eq!(parsed.diagnostics[0].code, "L0115");
+    // The second `>` of `>>` closes the outer arguments, and `>=` gives
+    // back its `=`.
+    let parsed = parse_text("fn f() -> u8 { let x: Ghost<Option<u8>>= 1; x }");
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
 }
 
 /// Rust's precedence table (the Reference, "Expression precedence"), one
@@ -538,10 +939,11 @@ fn unmatched_delimiter_points_back_to_its_opening() {
 }
 
 #[test]
-fn attributes_are_reserved_without_becoming_proofs() {
+fn attributes_outside_the_closed_set_are_rejected_and_the_item_is_parsed() {
     for prefix in ["#[test]", "#![allow(unused)]"] {
         let parsed = parse_text(&format!("{prefix} fn f() -> u8 {{ 1 }}"));
-        assert_eq!(parsed.diagnostics[0].code, "L0105");
+        assert_eq!(parsed.diagnostics.len(), 1, "{:#?}", parsed.diagnostics);
+        assert_eq!(parsed.diagnostics[0].code, "L0120");
         assert_eq!(parsed.program.declarations.len(), 1);
     }
 }
@@ -697,6 +1099,10 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("E::V(", ")"),
                 ("S { x: ", " }"),
                 ("S { ", " }"),
+                // S4: variants with named fields, and paths of any length.
+                ("E::V { a: ", " }"),
+                ("E::V { a: _, b: ", ", .. }"),
+                ("crate::a::E::V { a: ", " }"),
             ] {
                 let (open, close) = (open.repeat(512), close.repeat(512));
                 limit_reported(
@@ -706,6 +1112,57 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 limit_reported(
                     format!("fn f() -> u8 {{ match y {{ {open}x{close} => 1 }} }}"),
                     &open,
+                );
+            }
+            // S4: the same depth reached through an `impl` block and a method,
+            // through `Self` and `self`, through type arguments, through a
+            // named-field variant literal, and through the measure of a
+            // `#[terminates]` attribute.
+            for (before, open, close, after) in [
+                (
+                    "impl S { fn f(&self) -> Self { ",
+                    "Self { x: ",
+                    " }",
+                    " } }",
+                ),
+                ("impl S { fn f(&self) -> u8 { ", "self.g(", ")", " } }"),
+                ("impl S { fn f() -> u8 { ", "E::V { a: ", " }", " } }"),
+                (
+                    "impl S { fn f() -> u8 { ",
+                    "E::V { a: 1, b: (",
+                    ") }",
+                    " } }",
+                ),
+                ("impl S { fn f(x: ", "Option<", ">", ") -> u8 { 1 } }"),
+                ("impl S { fn f(x: ", "(u8, Ghost<", ">)", ") -> u8 { 1 } }"),
+                (
+                    "impl S { #[terminates(decreases = ",
+                    "(",
+                    ")",
+                    ")] fn f() -> u8 { 1 } }",
+                ),
+                (
+                    "#[terminates(decreases = ",
+                    "f(",
+                    ")",
+                    ")] fn f() -> u8 { 1 }",
+                ),
+                (
+                    "impl S { fn f() -> u8 { let ",
+                    "E::V { a: ",
+                    " }",
+                    " = 1; 1 } }",
+                ),
+                (
+                    "impl S { fn f() -> u8 { match y { ",
+                    "E::V { a: ",
+                    " }",
+                    " => 1 } } }",
+                ),
+            ] {
+                limit_reported(
+                    format!("{before}{}1{}{after}", open.repeat(512), close.repeat(512)),
+                    open,
                 );
             }
         })
@@ -1031,13 +1488,19 @@ fn old_hash_proof_syntax_reports_migration_help() {
             .unwrap();
         assert!(error.message.contains("no longer proof syntax"));
     }
+    // `#[condition]` reads as an attribute, which stands before an item only.
     for text in ["fn f() -> #[true] { _ }", "fn f() -> @(true) { #[true] }"] {
-        assert!(
-            parse_text(text)
-                .diagnostics
-                .iter()
-                .any(|d| d.code == "L0105")
+        let parsed = parse_text(text);
+        let error = parsed
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "L0121")
+            .unwrap();
+        assert_eq!(
+            error.message,
+            "an attribute goes before an item, and nothing else takes one"
         );
+        assert!(error.notes[0].contains("proof types use `@claim`"));
     }
 }
 
@@ -1288,7 +1751,7 @@ fn match_arms_take_every_pattern_form() {
     assert!(matches!(scrutinee.kind, ExprKind::Name(_)));
     assert_eq!(arms.len(), 6);
     assert!(
-        matches!(&arms[0].pattern.kind, PatternKind::Variant { path, arguments: None } if path.prefix.text == "Event" && path.name.text == "Wrong")
+        matches!(&arms[0].pattern.kind, PatternKind::Variant { path, arguments: None } if path.text() == "Event::Wrong")
     );
     assert!(
         matches!(&arms[1].pattern.kind, PatternKind::Variant { arguments: Some(arguments), .. } if arguments.len() == 1)
@@ -1302,10 +1765,11 @@ fn match_arms_take_every_pattern_form() {
     };
     assert!(matches!(arguments[0].kind, PatternKind::Wildcard));
     assert!(matches!(arguments[1].kind, PatternKind::Tuple(_)));
-    let PatternKind::Struct { name, fields } = &arms[3].pattern.kind else {
+    let PatternKind::Struct { path, fields, rest } = &arms[3].pattern.kind else {
         panic!()
     };
-    assert_eq!(name.text, "Lock");
+    assert_eq!(path.single().unwrap().text, "Lock");
+    assert!(rest.is_none());
     assert!(fields[0].name.is_none());
     assert!(matches!(fields[0].pattern.kind, PatternKind::Name(_)));
     assert_eq!(fields[1].name.as_ref().unwrap().text, "open");
@@ -1352,7 +1816,7 @@ fn paths_construct_variants_and_projections_take_names_or_positions() {
     let ExprKind::Call { callee, arguments } = expression("Event::Code(7)").kind else {
         panic!()
     };
-    assert!(matches!(&callee.kind, ExprKind::Path(path) if path.name.text == "Code"));
+    assert!(matches!(&callee.kind, ExprKind::Path(path) if path.last().text == "Code"));
     assert_eq!(arguments.len(), 1);
     assert!(matches!(expression("Event::Wrong").kind, ExprKind::Path(_)));
     let ExprKind::Member { value, name } = expression("pair.0.1.failures").kind else {
@@ -1368,12 +1832,12 @@ fn paths_construct_variants_and_projections_take_names_or_positions() {
 
 #[test]
 fn struct_literals_accept_named_and_shorthand_fields() {
-    let ExprKind::Struct { name, fields } =
+    let ExprKind::Struct { path, fields } =
         expression("Lock { failures: n.wrapping_add(1), open, }").kind
     else {
         panic!()
     };
-    assert_eq!(name.text, "Lock");
+    assert_eq!(path.single().unwrap().text, "Lock");
     assert_eq!(fields[0].name.as_ref().unwrap().text, "failures");
     assert!(fields[1].name.is_none());
     assert!(matches!(&fields[1].value.kind, ExprKind::Name(name) if name.text == "open"));
@@ -1494,15 +1958,13 @@ fn a_for_header_separates_the_upper_bound_from_the_state_list() {
     assert!(matches!(&upper.kind, ExprKind::Call { arguments, .. } if arguments.len() == 2));
     assert!(state.is_empty());
 
-    let parsed = parse_text("fn f(n: u8) -> () { for i in 0..n { continue() } }");
-    assert!(
-        parsed
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("lists its state")),
-        "{:?}",
-        parsed.diagnostics
-    );
+    // Rust's form, without a state list, parses with no state; S5 gives
+    // it its meaning.
+    let ExprKind::For { state, upper, .. } = expression("for i in 0..n { continue() }").kind else {
+        panic!()
+    };
+    assert!(state.is_empty());
+    assert!(matches!(&upper.kind, ExprKind::Name(name) if name.text == "n"));
 }
 
 #[test]
@@ -1653,12 +2115,16 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
                 .diagnostics
                 .first()
                 .unwrap_or_else(|| panic!("`{keyword}` was accepted as {position}: {text}"));
-            // The four that stand where names do in Rust are reported as the
-            // Rust they are; every other keyword as no name.
-            let code = if matches!(*keyword, "self" | "Self" | "crate" | "super") {
-                "L0116"
-            } else {
-                "L0115"
+            // A `self` parameter and `Self` are Locus outside their place,
+            // an `impl` block; every other keyword in every other position
+            // is no name.
+            let code = match (*keyword, *position) {
+                ("self", "a parameter" | "a bound variable") => "L0100",
+                (
+                    "Self",
+                    "a type" | "a binding" | "a binding in a tuple" | "a binding in an arm",
+                ) => "L0100",
+                _ => "L0115",
             };
             assert_eq!(first.code, code, "{text}: {}", first.message);
             assert_eq!(source.slice(first.labels[0].span), Some(*keyword), "{text}");
@@ -1671,7 +2137,7 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
             let reports = parsed
                 .diagnostics
                 .iter()
-                .filter(|diagnostic| matches!(diagnostic.code, "L0115" | "L0116"))
+                .filter(|diagnostic| diagnostic.labels[0].span == first.labels[0].span)
                 .count();
             assert_eq!(reports, 1, "{text}: {:#?}", parsed.diagnostics);
         }
@@ -2235,8 +2701,18 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
 fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
     for (text, message, declarations) in [
         (
-            "impl S { fn get() -> u8 { 1 } }",
-            "`impl` blocks and `impl Trait` are not in Locus yet",
+            "impl Show for S { fn get() -> u8 { 1 } }",
+            "traits (`impl Trait for Type`) are not in Locus yet",
+            0,
+        ),
+        (
+            "impl<T> S { fn get() -> u8 { 1 } }",
+            "generic parameters are not in Locus yet",
+            0,
+        ),
+        (
+            "impl S<T> { fn get() -> u8 { 1 } }",
+            "generic parameters are not in Locus yet",
             0,
         ),
         (
@@ -2266,32 +2742,16 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         ),
         ("extern crate core;", "`extern` is not in Locus yet", 0),
         (
-            "pub fn f() -> u8 { 1 }",
-            "visibility (`pub`) is not in Locus yet",
-            1,
-        ),
-        (
             "unsafe fn f() -> u8 { 1 }",
             "`unsafe` is not in Locus yet",
             1,
         ),
         ("async fn f() -> u8 { 1 }", "`async` is not in Locus yet", 1),
         (
-            "struct S { pub x: u8 }",
-            "visibility (`pub`) is not in Locus yet",
-            0,
-        ),
-        (
             "fn f(mut x: u8) -> u8 { x }",
             "`mut` is not in Locus yet",
             0,
         ),
-        (
-            "fn f(self) -> u8 { 1 }",
-            "`self` and methods are not in Locus yet",
-            0,
-        ),
-        ("fn f(x: Self) -> u8 { 1 }", "`Self` is not in Locus yet", 0),
         (
             "fn f(x: dyn T) -> u8 { 1 }",
             "`dyn` trait objects are not in Locus yet",
@@ -2299,7 +2759,7 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         ),
         (
             "fn f(x: impl T) -> u8 { 1 }",
-            "`impl` blocks and `impl Trait` are not in Locus yet",
+            "`impl Trait` types are not in Locus yet",
             0,
         ),
         (
@@ -2348,13 +2808,13 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
             1,
         ),
         (
-            "fn f(x: u8) -> u8 { crate::g(x) }",
-            "`crate` paths are not in Locus yet",
+            "fn f(x: u8) -> u8 { let y = x; y = 1; y }",
+            "assignment (`=`) is not in Locus yet",
             1,
         ),
         (
-            "fn f(x: u8) -> u8 { super::g(x) }",
-            "`super` paths are not in Locus yet",
+            "fn f(x: u8) -> u8 { x = 1; x }",
+            "assignment (`=`) is not in Locus yet",
             1,
         ),
         (
@@ -2388,38 +2848,303 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
 }
 
 #[test]
-fn an_attribute_is_reported_once_and_its_item_is_parsed() {
-    for (text, diagnostics, declarations) in [
-        ("#[derive(Debug, Clone)] struct S { x: u8 }", 1, 1),
-        ("#![allow(unused)] fn f() -> u8 { 1 }", 1, 1),
-        ("#[test] #[cfg(any(a, b))] fn f() -> u8 { 1 }", 2, 1),
-        ("fn f() -> u8 { 1 } #[trailing]", 1, 1),
-        ("fn f() -> u8 { #[inline] let x = 1; x }", 1, 1),
-        ("struct S { #[serde(rename = \"y\")] x: u8 }", 1, 0),
+fn an_unknown_or_misplaced_attribute_is_reported_once_and_its_item_is_parsed() {
+    // Unknown names: L0120, which lists the closed set.
+    for (text, declarations) in [
+        ("#[serde(rename_all = \"x\")] struct S { x: u8 }", 1),
+        ("#![allow(unused)] fn f() -> u8 { 1 }", 1),
+        ("#[test] #[cfg(any(a, b))] fn f() -> u8 { 1 }", 1),
+        ("fn f() -> u8 { 1 } #[trailing]", 1),
+        ("struct S { #[serde(rename = \"y\")] x: u8 }", 1),
+        ("#[never closed fn f() -> u8 { 1 }", 0),
     ] {
         let mut sources = SourceMap::default();
         let file = sources.add("test.lc", text);
         let source = sources.get(file);
         let parsed = parse(source);
-        assert_eq!(
-            parsed.diagnostics.len(),
-            diagnostics,
-            "{text}: {:#?}",
-            parsed.diagnostics
-        );
+        let unknown: Vec<_> = parsed
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "L0120")
+            .collect();
+        let others = parsed.diagnostics.len() - unknown.len();
+        assert!(!unknown.is_empty(), "{text}: {:#?}", parsed.diagnostics);
+        assert!(others <= 1, "{text}: {:#?}", parsed.diagnostics);
         assert_eq!(parsed.program.declarations.len(), declarations, "{text}");
-        for diagnostic in &parsed.diagnostics {
-            assert_eq!(diagnostic.code, "L0105");
-            assert_eq!(diagnostic.message, "attributes are not in Locus yet");
+        for diagnostic in unknown {
+            assert!(diagnostic.message.ends_with("is not an attribute of Locus"));
+            assert_eq!(
+                diagnostic.notes[0],
+                "the attributes are `#[terminates]`, `#[terminates(decreases = e)]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`, and `#[derive(...)]`; Locus has no user-defined attributes"
+            );
             let covered = source.slice(diagnostic.labels[0].span).unwrap();
             assert!(
-                covered.starts_with('#') && covered.ends_with(']'),
-                "{covered}"
+                text.contains(&format!("#[{covered}")) || text.contains(&format!("#![{covered}"))
             );
         }
     }
-    let parsed = parse_text("#[never closed fn f() -> u8 { 1 }");
-    assert_eq!(parsed.diagnostics[0].code, "L0105");
+    // A known attribute where no item begins: L0121, once, brackets and all.
+    for (text, declarations) in [
+        ("fn f() -> u8 { #[no_panic] let x = 1; x }", 1),
+        ("fn f() -> u8 { #[no_panic] 1 }", 1),
+        ("fn f(x: #[no_panic] u8) -> u8 { 1 }", 0),
+        ("fn f() -> u8 { let #[no_panic] x = 1; x }", 1),
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("test.lc", text);
+        let source = sources.get(file);
+        let parsed = parse(source);
+        let misplaced: Vec<_> = parsed
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "L0121")
+            .collect();
+        assert_eq!(misplaced.len(), 1, "{text}: {:#?}", parsed.diagnostics);
+        assert_eq!(
+            source.slice(misplaced[0].labels[0].span),
+            Some("#[no_panic]")
+        );
+        assert_eq!(parsed.program.declarations.len(), declarations, "{text}");
+    }
+    let parsed = parse_text("struct S { #[no_panic] x: u8 }");
+    assert_eq!(parsed.diagnostics.len(), 1);
+    assert_eq!(parsed.diagnostics[0].code, "L0121");
+    assert_eq!(
+        parsed.diagnostics[0].message,
+        "`#[no_panic]` goes before an item; a field or a variant takes no attribute"
+    );
+    assert_eq!(parsed.program.declarations.len(), 1);
+}
+
+#[test]
+fn attributes_of_the_closed_set_are_kept_on_the_item_in_every_shape() {
+    use locus::ast::AttributeKind;
+    let text = "\
+#![no_panic]
+#![terminates]
+//! about the file
+#![no_io]
+
+/// about f
+#[terminates(decreases = n - 1)]
+#[no_alloc] #[derive(Clone, std::marker::Copy)]
+#[derive()]
+/// more about f
+pub fn f(n: u8) -> u8 { n }
+";
+    let parsed = parse_text(text);
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let program = parsed.program;
+    assert_eq!(
+        program
+            .doc
+            .iter()
+            .map(|doc| doc.text.as_str())
+            .collect::<Vec<_>>(),
+        [" about the file"]
+    );
+    let kinds: Vec<_> = program
+        .attributes
+        .iter()
+        .map(|attribute| attribute.kind.name())
+        .collect();
+    assert_eq!(kinds, ["no_panic", "terminates", "no_io"]);
+    assert_eq!(program.declarations.len(), 1);
+    let declaration = &program.declarations[0];
+    assert_eq!(
+        declaration
+            .doc
+            .iter()
+            .map(|doc| doc.text.as_str())
+            .collect::<Vec<_>>(),
+        [" about f", " more about f"]
+    );
+    let attributes = &declaration.attributes;
+    assert_eq!(attributes.len(), 4);
+    let AttributeKind::Terminates {
+        decreases: Some(measure),
+    } = &attributes[0].kind
+    else {
+        panic!("{:?}", attributes[0]);
+    };
+    assert_eq!(grouped(measure), "(n - 1)");
+    assert!(matches!(attributes[1].kind, AttributeKind::NoAlloc));
+    let AttributeKind::Derive(traits) = &attributes[2].kind else {
+        panic!("{:?}", attributes[2]);
+    };
+    assert_eq!(
+        traits
+            .iter()
+            .map(locus::ast::Path::text)
+            .collect::<Vec<_>>(),
+        ["Clone", "std::marker::Copy"]
+    );
+    assert!(matches!(&attributes[3].kind, AttributeKind::Derive(traits) if traits.is_empty()));
+    // The item's span covers its doc comments and attributes.
+    assert_eq!(declaration.span.start, text.find("/// about f").unwrap());
+    assert_eq!(declaration.span.end, text.len() - 1);
+    // The bare and the measured form of `terminates` are distinct.
+    let parsed = parse_text("#[terminates] fn f() -> u8 { 1 }");
+    assert!(matches!(
+        parsed.program.declarations[0].attributes[0].kind,
+        AttributeKind::Terminates { decreases: None }
+    ));
+}
+
+#[test]
+fn an_attribute_in_the_wrong_shape_or_place_says_what_is_expected() {
+    for (text, message) in [
+        (
+            "#[no_panic(x)] fn f() -> u8 { 1 }",
+            "`#[no_panic]` takes no arguments",
+        ),
+        (
+            "#[no_io()] fn f() -> u8 { 1 }",
+            "`#[no_io]` takes no arguments",
+        ),
+        (
+            "#[derive] struct S { x: u8 }",
+            "`#[derive]` takes a list of traits in parentheses, as in `#[derive(Clone, Copy)]`",
+        ),
+        (
+            "#[derive(1)] struct S { x: u8 }",
+            "`#[derive]` lists traits by name, as in `#[derive(Clone, Copy)]`",
+        ),
+        (
+            "#[terminates(foo = 1)] fn f() -> u8 { 1 }",
+            "`#[terminates]` takes `decreases = expression` and nothing else",
+        ),
+        (
+            "#[terminates(decreases)] fn f() -> u8 { 1 }",
+            "`#[terminates]` takes `decreases = expression` and nothing else",
+        ),
+        (
+            "#![derive(Clone)] fn f() -> u8 { 1 }",
+            "`derive` goes on a struct or an enum, not at the top of the file",
+        ),
+        (
+            "#![terminates(decreases = n)] fn f() -> u8 { 1 }",
+            "`decreases` names the measure of one function; at the top of the file write `#![terminates]`",
+        ),
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.diagnostics[0].code, "L0121", "{text}");
+        assert_eq!(parsed.diagnostics[0].message, message, "{text}");
+        // The item after a bad attribute is still read.
+        assert_eq!(parsed.program.declarations.len(), 1, "{text}");
+    }
+    // Inner forms after the first item are reported and left out, and both
+    // items are read.
+    for (text, message) in [
+        (
+            "fn g() -> u8 { 1 } #![no_panic] fn f() -> u8 { 1 }",
+            "an inner attribute (`#![...]`) goes at the top of the file, before any item",
+        ),
+        (
+            "fn g() -> u8 { 1 } //! late\nfn f() -> u8 { 1 }",
+            "an inner doc comment (`//!`) goes at the top of the file, before any item",
+        ),
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.diagnostics[0].code, "L0121", "{text}");
+        assert_eq!(parsed.diagnostics[0].message, message, "{text}");
+        assert_eq!(parsed.program.declarations.len(), 2, "{text}");
+        assert!(parsed.program.declarations[1].attributes.is_empty());
+    }
+    // A shape error inside the parentheses reports the expression's error.
+    let parsed = parse_text("#[terminates(decreases = )] fn f() -> u8 { 1 }");
+    assert_eq!(parsed.diagnostics.len(), 1, "{:#?}", parsed.diagnostics);
+    assert_eq!(parsed.diagnostics[0].code, "L0100");
+    assert_eq!(parsed.program.declarations.len(), 1);
+    // An attribute with nothing after it.
+    let parsed = parse_text("#[no_panic]");
+    assert_eq!(parsed.diagnostics.len(), 1);
+    assert!(
+        parsed.diagnostics[0]
+            .message
+            .starts_with("expected a declaration")
+    );
+}
+
+#[test]
+fn doc_comments_are_lexed_as_tokens_and_kept_where_items_begin() {
+    let lexed = lex_text("/// a\n//! b\n//// not\n/** c */ /*! d */ /**/ /*** e */ x");
+    assert_eq!(
+        kinds(&lexed),
+        [
+            K::OuterDoc,
+            K::InnerDoc,
+            K::OuterDoc,
+            K::InnerDoc,
+            K::Name,
+            K::Eof
+        ]
+    );
+    let texts: Vec<_> = lexed.tokens[..4]
+        .iter()
+        .map(|token| match lexed.literal(*token) {
+            Some(Literal::String(text)) => text.clone(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(texts, [" a", " b", " c ", " d "]);
+
+    let parsed = parse_text(
+        "/// the struct\nstruct S {\n    /// the field\n    pub x: u8,\n}\n/// the enum\nenum E {\n    /// a variant\n    A,\n}\nprop P {\n    /// a constructor\n    Q: @(true),\n}\n/** block */\nimpl S {\n    /// a method\n    fn f(&self) -> u8 { 1 }\n}\n",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let declarations = &parsed.program.declarations;
+    assert_eq!(declarations[0].doc[0].text, " the struct");
+    let DeclarationKind::Struct { fields, .. } = &declarations[0].kind else {
+        panic!()
+    };
+    assert_eq!(fields[0].doc[0].text, " the field");
+    let DeclarationKind::Enum { variants, .. } = &declarations[1].kind else {
+        panic!()
+    };
+    assert_eq!(variants[0].doc[0].text, " a variant");
+    let DeclarationKind::Prop { variants, .. } = &declarations[2].kind else {
+        panic!()
+    };
+    assert_eq!(variants[0].doc[0].text, " a constructor");
+    assert_eq!(declarations[3].doc[0].text, " block ");
+    let DeclarationKind::Impl { methods, .. } = &declarations[3].kind else {
+        panic!()
+    };
+    assert_eq!(methods[0].doc[0].text, " a method");
+
+    // Anywhere else, a doc comment is reported where it stands.
+    for text in [
+        "fn f() -> u8 { /// here\n 1 }",
+        "fn f() -> u8 { let x = /// here\n 1; x }",
+        "fn f(x: /// here\n u8) -> u8 { 1 }",
+    ] {
+        let parsed = parse_text(text);
+        assert_eq!(
+            parsed.diagnostics.len(),
+            1,
+            "{text}: {:#?}",
+            parsed.diagnostics
+        );
+        assert_eq!(parsed.diagnostics[0].code, "L0100", "{text}");
+        assert!(
+            parsed.diagnostics[0].message.contains("doc comment"),
+            "{text}: {}",
+            parsed.diagnostics[0].message
+        );
+    }
 }
 
 // Built-in forms, and the formulas inside `prop!(...)`, `prove!(...)`, and

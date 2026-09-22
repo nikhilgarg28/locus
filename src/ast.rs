@@ -72,22 +72,139 @@ pub struct Name {
     pub span: Span,
 }
 
-/// `Prefix::name`: an enum variant or a proof constructor.
+/// `a::b::c`: segments joined by `::`, at least one. A path that begins
+/// with `crate`, `super`, `self`, or `Self` has that keyword as its first
+/// segment. Where a name stands on its own it is a `Name`, not a path of
+/// one segment; a one-segment path occurs only where a path is required,
+/// as in a `derive` list or a struct literal.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Path {
-    pub prefix: Name,
-    pub name: Name,
+    pub segments: Vec<Name>,
     pub span: Span,
+}
+
+impl Path {
+    /// The last segment: the variant of `Enum::Variant`, the constant of
+    /// `u32::MAX`.
+    pub fn last(&self) -> &Name {
+        self.segments.last().expect("a path has a segment")
+    }
+
+    /// The one segment of a path that has just one.
+    pub fn single(&self) -> Option<&Name> {
+        match self.segments.as_slice() {
+            [name] => Some(name),
+            _ => None,
+        }
+    }
+
+    /// The two segments of `Prefix::name`, when the path has just those.
+    pub fn pair(&self) -> Option<(&Name, &Name)> {
+        match self.segments.as_slice() {
+            [prefix, name] => Some((prefix, name)),
+            _ => None,
+        }
+    }
+
+    /// The path as written, without spaces.
+    pub fn text(&self) -> String {
+        self.segments
+            .iter()
+            .map(|segment| segment.text.as_str())
+            .collect::<Vec<_>>()
+            .join("::")
+    }
+}
+
+/// A `///` or `//!` line, or a `/** */` or `/*! */` block: the text after
+/// the marker, as written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DocComment {
+    pub text: String,
+    pub span: Span,
+}
+
+/// `#[name]` or `#[name(arguments)]` before an item, or `#![...]` at the
+/// top of a file. The set is closed: the parser knows every attribute.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attribute {
+    pub kind: AttributeKind,
+    /// Whole, from `#` to `]`.
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AttributeKind {
+    /// `#[terminates]`, or `#[terminates(decreases = expression)]`.
+    Terminates {
+        decreases: Option<Expr>,
+    },
+    NoPanic,
+    NoAlloc,
+    NoIo,
+    /// `#[derive(Clone, Copy)]`: traits by path.
+    Derive(Vec<Path>),
+}
+
+impl AttributeKind {
+    /// The names of the closed set, in the order they are listed in.
+    pub const NAMES: [&'static str; 5] = ["terminates", "no_panic", "no_alloc", "no_io", "derive"];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Terminates { .. } => "terminates",
+            Self::NoPanic => "no_panic",
+            Self::NoAlloc => "no_alloc",
+            Self::NoIo => "no_io",
+            Self::Derive(_) => "derive",
+        }
+    }
+
+    /// A promise about an effect, as opposed to `derive`.
+    pub fn is_promise(&self) -> bool {
+        !matches!(self, Self::Derive(_))
+    }
+}
+
+/// `pub` and its restricted forms. An item or field without one is private.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Visibility {
+    pub scope: VisibilityScope,
+    /// From `pub` to the end of its parenthesized scope, if any.
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VisibilityScope {
+    /// Plain `pub`.
+    Public,
+    /// `pub(crate)`
+    Crate,
+    /// `pub(super)`
+    Super,
+    /// `pub(self)`, which means private, as it does in Rust.
+    SelfModule,
+    /// `pub(in path)`
+    In(Path),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Program {
+    /// `//!` comments at the top of the file.
+    pub doc: Vec<DocComment>,
+    /// `#![...]` attributes at the top of the file: promises for every
+    /// function in it.
+    pub attributes: Vec<Attribute>,
     pub declarations: Vec<Declaration>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
+    pub doc: Vec<DocComment>,
+    pub attributes: Vec<Attribute>,
+    pub visibility: Option<Visibility>,
     pub kind: DeclarationKind,
+    /// From the first doc comment, attribute, or `pub` to the end of the item.
     pub span: Span,
 }
 
@@ -96,13 +213,15 @@ pub enum DeclarationKind {
     Function {
         mode: FunctionMode,
         name: Name,
+        /// The receiver of a method in an `impl` block.
+        self_param: Option<SelfParam>,
         parameters: Vec<Parameter>,
         result: Type,
         body: Block,
     },
     Struct {
         name: Name,
-        fields: Vec<Parameter>,
+        fields: Vec<Field>,
     },
     Enum {
         name: Name,
@@ -118,6 +237,43 @@ pub enum DeclarationKind {
         ty: Type,
         value: Expr,
     },
+    /// `impl Name { ... }`: methods and associated functions, each a
+    /// `Function` declaration with its own doc, attributes, and visibility.
+    Impl {
+        /// The type, by name or by path.
+        target: Path,
+        methods: Vec<Declaration>,
+    },
+}
+
+/// The receiver of a method: `self`, `mut self`, `&self`, or `&mut self`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelfParam {
+    pub kind: SelfKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelfKind {
+    /// `self`
+    Value,
+    /// `mut self`
+    MutValue,
+    /// `&self`
+    Ref,
+    /// `&mut self`
+    RefMut,
+}
+
+impl SelfKind {
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Self::Value => "self",
+            Self::MutValue => "mut self",
+            Self::Ref => "&self",
+            Self::RefMut => "&mut self",
+        }
+    }
 }
 
 /// `fn` may diverge and runs; `math fn` is pure, total, and usable in logic.
@@ -134,17 +290,43 @@ pub struct Parameter {
     pub span: Span,
 }
 
+/// A field of a struct: `pub name: Type`, private without the `pub`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Field {
+    pub doc: Vec<DocComment>,
+    pub visibility: Option<Visibility>,
+    pub name: Name,
+    pub ty: Type,
+    /// From the name to the end of the type.
+    pub span: Span,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Variant {
+    pub doc: Vec<DocComment>,
     pub name: Name,
+    pub shape: VariantShape,
+    /// Every field has a name when the shape is `Struct`.
     pub fields: Vec<TypeField>,
     pub span: Span,
+}
+
+/// How a variant's fields are written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VariantShape {
+    /// `Name`
+    Unit,
+    /// `Name(fields)`
+    Tuple,
+    /// `Name { name: Type, ... }`
+    Struct,
 }
 
 /// A way of proving a declared proposition. `target` is the proposition after
 /// `: @`, present when the variant proves the proposition at particular indices.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PropVariant {
+    pub doc: Vec<DocComment>,
     pub name: Name,
     pub fields: Vec<TypeField>,
     pub target: Option<Expr>,
@@ -160,6 +342,14 @@ pub struct Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Named(Name),
+    /// A type named by a path of two or more segments, or by a name with
+    /// type arguments: `a::B`, `Option<T>`, `crate::a::Map<K, V>`. The path
+    /// is boxed so that a `Type` stays the size it was: the parser keeps
+    /// types in the frames of its recursion.
+    Path {
+        path: Box<Path>,
+        arguments: Vec<Type>,
+    },
     Unit,
     Group(Box<Type>),
     Tuple(Vec<TypeField>),
@@ -193,9 +383,12 @@ pub enum PatternKind {
     Integer(IntegerLiteral),
     Group(Box<Pattern>),
     Tuple(Vec<Pattern>),
+    /// `S { fields }`, or `E::V { fields }` for a variant with named
+    /// fields; `rest` is the span of a `..` after the fields.
     Struct {
-        name: Name,
+        path: Box<Path>,
         fields: Vec<PatternField>,
+        rest: Option<Span>,
     },
     /// `arguments` is `None` for a variant written without parentheses.
     Variant {
@@ -263,8 +456,9 @@ pub enum ExprKind {
         name_span: Span,
         arguments: Vec<Expr>,
     },
+    /// `S { fields }`, or `E::V { fields }` for a variant with named fields.
     Struct {
-        name: Name,
+        path: Path,
         fields: Vec<ValueField>,
     },
     Block(Block),

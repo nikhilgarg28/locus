@@ -1,0 +1,10 @@
+//~ parse-only
+// A midpoint that cannot overflow, from Target examples, as written there.
+#[terminates] #[no_panic] #[no_io]
+pub fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
+    -> (mid: u32, @(mid as Int == (lo as Int + hi as Int) / 2))
+{
+    let half = (hi - lo) / 2;          // the obligation of -: arithmetic, from ordered. 2 is not zero: computed
+    let mid = lo + half;               // the obligation of +: arithmetic
+    (mid, prove!(mid as Int == (lo as Int + hi as Int) / 2))   // arithmetic, with division by a literal
+}

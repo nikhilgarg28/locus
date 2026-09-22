@@ -175,7 +175,14 @@ impl Env<'_> {
                 ..
             } => self.compare(expr, operator, left, right, expected),
             ExprKind::Unary { .. } | ExprKind::Cast { .. } => self.operator_not_yet(expr),
-            ExprKind::Struct { name, fields } => self.struct_literal(name, fields, expr.span),
+            ExprKind::Struct { path, fields } => match path.single() {
+                Some(name) => self.struct_literal(name, fields, expr.span),
+                None => self.fail(
+                    "L0290",
+                    "a variant with named fields is not in Locus yet; E9 adds it",
+                    expr.span,
+                ),
+            },
             ExprKind::Path(path) => self.variant(path, &[], expected, expr.span),
             ExprKind::Call { callee, arguments } => {
                 self.call(callee, arguments, expected, expr.span)

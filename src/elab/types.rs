@@ -47,6 +47,16 @@ impl Env<'_> {
                     }
                 },
             },
+            ast::TypeKind::Path { path, .. } if path.single().is_some() => self.fail(
+                "L0290",
+                "type arguments are not in Locus yet; E8 adds `Ghost<T>`",
+                ty.span,
+            ),
+            ast::TypeKind::Path { .. } => self.fail(
+                "L0290",
+                "paths through modules are not in Locus yet; modules are a later project",
+                ty.span,
+            ),
             ast::TypeKind::Unit => Ok(Type::Tuple(Vec::new())),
             ast::TypeKind::Group(inner) => self.ty(inner),
             ast::TypeKind::Tuple(fields) => {

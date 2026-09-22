@@ -189,36 +189,60 @@ impl Env<'_> {
         ))
     }
 
+    /// The `Prefix::name` of a path. A path through modules, or one that
+    /// begins with `crate`, `super`, or `self`, is not in Locus yet.
+    pub(super) fn variant_path<'p>(
+        &mut self,
+        path: &'p ast::Path,
+    ) -> Elab<(&'p ast::Name, &'p ast::Name)> {
+        let root = &path.segments[0].text;
+        if matches!(root.as_str(), "crate" | "super" | "self") {
+            return self.fail(
+                "L0290",
+                format!("`{root}::` paths are not in Locus yet; modules are a later project"),
+                path.span,
+            );
+        }
+        match path.pair() {
+            Some(pair) => Ok(pair),
+            None => self.fail(
+                "L0290",
+                "paths through modules are not in Locus yet; modules are a later project",
+                path.span,
+            ),
+        }
+    }
+
     pub(super) fn enum_variant(
         &mut self,
         path: &ast::Path,
     ) -> Elab<Option<(std::rc::Rc<EnumInfo>, usize)>> {
-        match self.globals.get(&path.prefix.text).cloned() {
+        let (prefix, name) = self.variant_path(path)?;
+        match self.globals.get(&prefix.text).cloned() {
             Some(Global::Enum(info)) => {
                 match info
                     .variants
                     .iter()
-                    .position(|(name, _)| *name == path.name.text)
+                    .position(|(variant, _)| *variant == name.text)
                 {
                     Some(index) => Ok(Some((info, index))),
                     None => {
-                        let message =
-                            format!("`{}` has no variant `{}`", info.name, path.name.text);
-                        self.fail("L0212", message, path.name.span)
+                        let message = format!("`{}` has no variant `{}`", info.name, name.text);
+                        self.fail("L0212", message, name.span)
                     }
                 }
             }
             Some(Global::Prop(_)) => Ok(None),
             Some(_) => self.fail(
                 "L0212",
-                format!("`{}` is not an enum or a proposition", path.prefix.text),
-                path.prefix.span,
+                format!("`{}` is not an enum or a proposition", prefix.text),
+                prefix.span,
             ),
-            None if self.failed.contains(&path.prefix.text) => Err(()),
+            None if self.failed.contains(&prefix.text) => Err(()),
             None => self.fail(
                 "L0204",
-                format!("unknown name `{}`", path.prefix.text),
-                path.prefix.span,
+                format!("unknown name `{}`", prefix.text),
+                prefix.span,
             ),
         }
     }
@@ -231,7 +255,7 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let Some((info, index)) = self.enum_variant(path)? else {
-            let Some(Global::Prop(info)) = self.globals.get(&path.prefix.text).cloned() else {
+            let Some(Global::Prop(info)) = self.globals.get(&path.segments[0].text).cloned() else {
                 unreachable!("`enum_variant` saw a proposition")
             };
             return self.construct(&info, path, arguments, expected, span);
@@ -239,14 +263,15 @@ impl Env<'_> {
         let payload = &info.variants[index].1;
         let ids: Vec<VarId> = payload.iter().map(|binder| binder.id).collect();
         let mut tys: Vec<Type> = payload.iter().map(|binder| binder.ty.clone()).collect();
-        let what = format!("`{}::{}`", info.name, path.name.text);
+        let variant_name = path.last().text.clone();
+        let what = format!("`{}::{variant_name}`", info.name);
         let payload = self.arguments(arguments, &ids, &mut tys, &what, span)?;
         Ok(Value::new(
             Expr::Variant {
                 id: info.id,
                 enum_name: info.name.clone(),
                 index,
-                variant_name: path.name.text.clone(),
+                variant_name,
                 payload,
             },
             Type::Enum(info.id),

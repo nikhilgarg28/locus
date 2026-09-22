@@ -1,0 +1,10 @@
+// Paths of any length parse; the elaborator has no modules to resolve them in.
+enum Event { Wrong, Right }
+
+fn first() -> Event { crate::Event::Wrong } //~ error: L0290 `crate::` paths are not in Locus yet
+
+fn second() -> Event { outer::Event::Right } //~ error: L0290 paths through modules are not in Locus yet
+
+fn third(x: outer::Lock) -> u8 { 1 } //~ error: L0290 paths through modules are not in Locus yet
+
+fn fourth(x: Option<u8>) -> u8 { 1 } //~ error: L0290 type arguments are not in Locus yet; E8

@@ -4,8 +4,9 @@
 //! retired `def`) are names, which the parser reads in context. A literal
 //! form Locus does not have yet is reported here and becomes an error token;
 //! an operator or a keyword it does not use yet is a token, and the parser
-//! reports it where it stands. Literals are decoded here; whether a value
-//! fits a type is decided during elaboration.
+//! reports it where it stands. Doc comments are tokens too, with their text,
+//! so that the parser can keep them on the items they document. Literals are
+//! decoded here; whether a value fits a type is decided during elaboration.
 
 use crate::ast::{IntegerLiteral, IntegerSuffix};
 use crate::diagnostic::Diagnostic;
@@ -17,6 +18,11 @@ pub enum TokenKind {
     Name,
     Integer,
     String,
+    /// `/// text` or `/** text */`, which documents the item after it. The
+    /// text is in `Lexed::literals`, as a string.
+    OuterDoc,
+    /// `//! text` or `/*! text */`, which documents the file.
+    InnerDoc,
     Underscore,
     Fn,
     Const,
@@ -98,6 +104,8 @@ impl TokenKind {
             Self::Name => "an identifier",
             Self::Integer => "an integer",
             Self::String => "a string",
+            Self::OuterDoc => "a doc comment",
+            Self::InnerDoc => "an inner doc comment (`//!`)",
             Self::Underscore => "`_`",
             Self::Fn => "`fn`",
             Self::Const => "`const`",
@@ -255,7 +263,8 @@ const PUNCTUATION: &[(&str, TokenKind)] = &[
     ("~", TokenKind::Tilde),
 ];
 
-/// The value of an `Integer` or a `String` token.
+/// The value of an `Integer` or a `String` token, or the text of a doc
+/// comment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
     Integer(IntegerLiteral),
@@ -281,8 +290,11 @@ pub struct Lexed {
 
 impl Lexed {
     pub fn literal(&self, token: Token) -> Option<&Literal> {
-        matches!(token.kind, TokenKind::Integer | TokenKind::String)
-            .then(|| &self.literals[token.literal as usize])
+        matches!(
+            token.kind,
+            TokenKind::Integer | TokenKind::String | TokenKind::OuterDoc | TokenKind::InnerDoc
+        )
+        .then(|| &self.literals[token.literal as usize])
     }
 }
 
@@ -325,9 +337,7 @@ impl<'a> Lexer<'a> {
             if character.is_whitespace() {
                 self.advance();
             } else if self.remaining().starts_with("//") {
-                while self.current().is_some_and(|character| character != '\n') {
-                    self.advance();
-                }
+                self.line_comment();
             } else if self.remaining().starts_with("/*") {
                 self.comment();
             } else if character.is_ascii_digit() {
@@ -430,9 +440,46 @@ impl<'a> Lexer<'a> {
         self.invalid(diagnostic, start);
     }
 
+    /// `// ...` to the end of the line. As in Rust, `///` (but not `////`)
+    /// is a doc comment and `//!` an inner one, and each is a token.
+    fn line_comment(&mut self) {
+        let start = self.position;
+        let rest = self.remaining();
+        let doc = if rest.starts_with("//!") {
+            Some(TokenKind::InnerDoc)
+        } else if rest.starts_with("///") && !rest.starts_with("////") {
+            Some(TokenKind::OuterDoc)
+        } else {
+            None
+        };
+        self.position += if doc.is_some() { 3 } else { 2 };
+        let text_start = self.position;
+        while self.current().is_some_and(|character| character != '\n') {
+            self.advance();
+        }
+        if let Some(kind) = doc {
+            let text = self.source.text()[text_start..self.position]
+                .trim_end_matches('\r')
+                .to_owned();
+            self.emit_literal(kind, start, Literal::String(text));
+        }
+    }
+
+    /// `/* ... */`, nesting. As in Rust, `/**` (but not `/***` or `/**/`) is
+    /// a doc comment and `/*!` an inner one.
     fn comment(&mut self) {
         let start = self.position;
-        self.position += 2;
+        let rest = self.remaining();
+        let doc = if rest.starts_with("/*!") {
+            Some(TokenKind::InnerDoc)
+        } else if rest.starts_with("/**") && !rest.starts_with("/***") && !rest.starts_with("/**/")
+        {
+            Some(TokenKind::OuterDoc)
+        } else {
+            None
+        };
+        self.position += if doc.is_some() { 3 } else { 2 };
+        let text_start = self.position;
         let mut depth = 1usize;
         while self.current().is_some() {
             if self.remaining().starts_with("/*") {
@@ -442,6 +489,10 @@ impl<'a> Lexer<'a> {
                 depth -= 1;
                 self.position += 2;
                 if depth == 0 {
+                    if let Some(kind) = doc {
+                        let text = self.source.text()[text_start..self.position - 2].to_owned();
+                        self.emit_literal(kind, start, Literal::String(text));
+                    }
                     return;
                 }
             } else {

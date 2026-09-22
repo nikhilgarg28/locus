@@ -78,6 +78,8 @@ pub fn parse(source: &SourceFile) -> Parsed {
         no_struct: false,
         for_header: false,
         formula: false,
+        in_impl: false,
+        in_method: false,
         closers: None,
         diagnostics: lexed.diagnostics,
     }
@@ -101,8 +103,14 @@ struct Parser<'a> {
     /// implication and `forall (` and `exists (` begin quantifiers. Outside
     /// a formula `forall` and `exists` are names, and `=>` is an error.
     formula: bool,
+    /// Set inside an `impl` block, where `Self` is a type.
+    in_impl: bool,
+    /// Set in the body of a method with a `self` parameter, where `self`
+    /// is a value.
+    in_method: bool,
     /// For each opening delimiter, the token that closes it; built by the
-    /// first `for` header that asks, so that the lookahead is not a rescan.
+    /// first `for` header or attribute that asks, so that the lookahead is
+    /// not a rescan.
     closers: Option<Vec<Option<usize>>>,
     diagnostics: Vec<Diagnostic>,
 }
@@ -110,6 +118,7 @@ struct Parser<'a> {
 impl Parser<'_> {
     fn program(mut self) -> Parsed {
         let mut program = Program::default();
+        self.file_header(&mut program);
         while !self.at(K::Eof) {
             self.step();
             if self.eat(K::Error).is_some() {
@@ -235,7 +244,7 @@ impl Parser<'_> {
     fn rust_only(&mut self) -> bool {
         let token = self.current();
         if self.attribute_start() {
-            self.attribute();
+            self.misplaced_attribute();
             return true;
         }
         let spelling = self.source.slice(token.span).unwrap_or_default();
@@ -260,22 +269,21 @@ impl Parser<'_> {
         true
     }
 
-    /// A keyword where a name belongs. Before a name, `mut` or `pub` is Rust
-    /// that Locus does not have yet, and so are the keywords that stand for
-    /// names in Rust; anywhere else the keyword was meant as the name.
+    /// A keyword where a name belongs. Before a name, `mut` is Rust that
+    /// Locus does not have yet; anywhere else the keyword was meant as the
+    /// name.
     #[inline(never)]
     fn keyword_as_name<T>(&mut self) -> ParseResult<T> {
         let token = self.current();
         let spelling = self.source.slice(token.span).unwrap_or_default();
-        let rust = token.kind == K::Keyword
-            && (self.peek(1) == K::Name || matches!(spelling, "self" | "Self" | "crate" | "super"));
+        let rust = token.kind == K::Keyword && self.peek(1) == K::Name;
         if !(rust && self.rust_only()) {
             self.diagnostics
                 .push(keyword_is_no_name(spelling, token.span));
-            // Taken as the name it was meant as, so that recovery does not
-            // read a `const` or an `fn` here as the start of a declaration.
-            self.bump();
         }
+        // Taken as the name it was meant as, so that recovery does not read
+        // a `const`, an `fn`, or an `impl` here as the start of a declaration.
+        self.bump();
         Err(())
     }
 
@@ -297,6 +305,16 @@ impl Parser<'_> {
         self.at(K::Name) && self.source.slice(self.current().span) == Some(word)
     }
 
+    /// A keyword of Rust that Locus reads in context: `pub`, `impl`,
+    /// `self`, `Self`, `mut`, `crate`, `super`.
+    fn at_keyword(&self, word: &str) -> bool {
+        self.at(K::Keyword) && self.source.slice(self.current().span) == Some(word)
+    }
+
+    fn spelling(&self) -> &str {
+        self.source.slice(self.current().span).unwrap_or_default()
+    }
+
     fn at_math_fn(&self) -> bool {
         self.at_word("math") && self.peek(1) == K::Fn
     }
@@ -304,7 +322,30 @@ impl Parser<'_> {
     fn declaration_start(&self) -> bool {
         matches!(self.current().kind, K::Fn | K::Const | K::Struct | K::Enum)
             || self.at_math_fn()
+            || self.at_keyword("pub")
+            || self.at_keyword("impl")
             || ((self.at_word("prop") || self.at_word("def")) && self.peek(1) == K::Name)
+    }
+
+    /// A doc comment or an attribute, which begin an item as well.
+    fn item_prefix_start(&self) -> bool {
+        self.at(K::OuterDoc) || self.at(K::InnerDoc) || self.attribute_start()
+    }
+
+    /// Whether the current token begins a name or a path in a type, an
+    /// expression, or a pattern: an identifier, `Self`, or `crate`, `super`,
+    /// or `self` before `::`.
+    fn at_named(&self) -> bool {
+        match self.current().kind {
+            K::Name => true,
+            K::Keyword => {
+                let spelling = self.spelling();
+                spelling == "Self"
+                    || (matches!(spelling, "crate" | "super" | "self")
+                        && self.peek(1) == K::PathSep)
+            }
+            _ => false,
+        }
     }
 
     /// `name!` before a delimiter: a form, or something reported as not one.
@@ -357,55 +398,186 @@ impl Parser<'_> {
         result
     }
 
+    /// An item: its doc comments, attributes, and visibility, then one of
+    /// the declaration forms. Inside an `impl` block, only a function.
     fn declaration(&mut self) -> ParseResult<Declaration> {
-        // Each attribute is reported and skipped, and its item is parsed.
-        while self.attribute_start() {
-            self.step();
-            if !self.attribute() || self.at(K::Eof) {
-                return Err(());
-            }
+        let start = self.current().span;
+        let (doc, attributes) = self.outer_attributes()?;
+        let visibility = self.visibility()?;
+        if self.in_impl && !matches!(self.current().kind, K::Fn) && !self.at_math_fn() {
+            return self.fail("an `impl` block holds functions: `fn` or `math fn`");
         }
         if !self.declaration_start() {
             return self.fail(
-                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, or `const`",
+                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
             );
         }
+        let (kind, end) = self.item(visibility.as_ref().map(|visibility| visibility.span))?;
+        Ok(Declaration {
+            doc,
+            attributes,
+            visibility,
+            kind,
+            span: start.through(end),
+        })
+    }
+
+    /// The doc comments and attributes before an item, in any order. An
+    /// inner attribute or doc comment here is reported and left out.
+    #[inline(never)]
+    fn outer_attributes(&mut self) -> ParseResult<(Vec<DocComment>, Vec<Attribute>)> {
+        let mut doc = Vec::new();
+        let mut attributes = Vec::new();
+        while self.item_prefix_start() {
+            self.step();
+            if let Some(token) = self.eat(K::OuterDoc) {
+                doc.push(self.doc_comment(token));
+            } else if let Some(token) = self.eat(K::InnerDoc) {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0121",
+                    "an inner doc comment (`//!`) goes at the top of the file, before any item",
+                    token.span,
+                ));
+            } else if let Some((attribute, inner)) = self.attribute()? {
+                if inner {
+                    self.diagnostics.push(Diagnostic::error(
+                        "L0121",
+                        "an inner attribute (`#![...]`) goes at the top of the file, before any item",
+                        attribute.span,
+                    ));
+                } else {
+                    attributes.push(attribute);
+                }
+            }
+        }
+        Ok((doc, attributes))
+    }
+
+    /// The doc comments before a field or a variant, which take no attribute.
+    #[inline(never)]
+    fn doc_comments(&mut self) -> ParseResult<Vec<DocComment>> {
+        let (doc, attributes) = self.outer_attributes()?;
+        for attribute in attributes {
+            self.diagnostics.push(Diagnostic::error(
+                "L0121",
+                format!(
+                    "`#[{}]` goes before an item; a field or a variant takes no attribute",
+                    attribute.kind.name()
+                ),
+                attribute.span,
+            ));
+        }
+        Ok(doc)
+    }
+
+    fn doc_comment(&self, token: Token) -> DocComment {
+        DocComment {
+            text: self.string(token),
+            span: token.span,
+        }
+    }
+
+    /// `//!` comments and `#![...]` attributes at the top of the file.
+    #[inline(never)]
+    fn file_header(&mut self, program: &mut Program) {
+        loop {
+            self.step();
+            if let Some(token) = self.eat(K::InnerDoc) {
+                program.doc.push(self.doc_comment(token));
+            } else if self.at(K::Hash) && self.peek(1) == K::Bang && self.peek(2) == K::LBracket {
+                match self.attribute() {
+                    Ok(Some((attribute, _))) => program.attributes.push(attribute),
+                    Ok(None) => {}
+                    Err(()) => return,
+                }
+            } else {
+                return;
+            }
+        }
+    }
+
+    /// `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, or `pub(in path)`.
+    #[inline(never)]
+    fn visibility(&mut self) -> ParseResult<Option<Visibility>> {
+        if !self.at_keyword("pub") {
+            return Ok(None);
+        }
+        let start = self.bump();
+        if !self.at(K::LParen) {
+            return Ok(Some(Visibility {
+                scope: VisibilityScope::Public,
+                span: start.span,
+            }));
+        }
+        let opening = self.bump();
+        let scope = if self.at_keyword("crate") {
+            self.bump();
+            VisibilityScope::Crate
+        } else if self.at_keyword("super") {
+            self.bump();
+            VisibilityScope::Super
+        } else if self.at_keyword("self") {
+            self.bump();
+            VisibilityScope::SelfModule
+        } else if self.eat(K::In).is_some() {
+            if !self.at_named() {
+                return self.fail("`pub(in ...)` names a module by its path");
+            }
+            VisibilityScope::In(self.path()?)
+        } else {
+            return self.fail(
+                "`pub` is restricted with `pub(crate)`, `pub(super)`, `pub(self)`, or `pub(in path)`",
+            );
+        };
+        let end = self.close(K::RParen, opening)?;
+        Ok(Some(Visibility {
+            scope,
+            span: start.span.through(end.span),
+        }))
+    }
+
+    /// `pub` before a name or a restriction, where it reads as visibility;
+    /// `pub: u8` and `pub(u8)` are the keyword meant as a name.
+    fn at_visibility(&self) -> bool {
+        self.at_keyword("pub")
+            && (self.peek(1) == K::Name
+                || (self.peek(1) == K::LParen
+                    && (self.peek(2) == K::In
+                        || self.tokens.get(self.position + 2).is_some_and(|token| {
+                            token.kind == K::Keyword
+                                && matches!(
+                                    self.source.slice(token.span),
+                                    Some("crate" | "super" | "self")
+                                )
+                        }))))
+    }
+
+    /// L0122: `pub` where nothing can be made visible.
+    #[inline(never)]
+    fn no_visibility(&mut self, message: &str) -> ParseResult<()> {
+        if self.at_visibility()
+            && let Some(visibility) = self.visibility()?
+        {
+            // Reported and passed over: what follows is still read.
+            self.diagnostics
+                .push(Diagnostic::error("L0122", message, visibility.span));
+        }
+        Ok(())
+    }
+
+    /// One declaration form, from its keyword. Returns the kind and where it
+    /// ends.
+    fn item(&mut self, visible: Option<Span>) -> ParseResult<(DeclarationKind, Span)> {
         let start = self.bump();
         match start.kind {
-            K::Fn => self.function(start, FunctionMode::Runtime),
+            K::Fn => self.function(FunctionMode::Runtime),
             K::Struct => {
                 let name = self.name()?;
                 self.no_generics()?;
-                let (fields, end) = self.parameter_list(K::LBrace, K::RBrace)?;
-                Ok(Declaration {
-                    span: start.span.through(end.span),
-                    kind: DeclarationKind::Struct { name, fields },
-                })
+                let (fields, end) = self.struct_fields()?;
+                Ok((DeclarationKind::Struct { name, fields }, end.span))
             }
-            K::Enum => {
-                let name = self.name()?;
-                self.no_generics()?;
-                let opening = self.expect(K::LBrace)?;
-                let mut variants = Vec::new();
-                while !self.at(K::RBrace) && !self.at(K::Eof) {
-                    self.step();
-                    let name = self.name()?;
-                    let (fields, end) = self.variant_fields(name.span)?;
-                    variants.push(Variant {
-                        span: name.span.through(end),
-                        name,
-                        fields,
-                    });
-                    if self.eat(K::Comma).is_none() {
-                        break;
-                    }
-                }
-                let end = self.close(K::RBrace, opening)?;
-                Ok(Declaration {
-                    span: start.span.through(end.span),
-                    kind: DeclarationKind::Enum { name, variants },
-                })
-            }
+            K::Enum => self.enum_declaration(),
             K::Const => {
                 let name = self.name()?;
                 self.expect(K::Colon)?;
@@ -413,15 +585,18 @@ impl Parser<'_> {
                 self.expect(K::Equal)?;
                 let value = self.expression()?;
                 let end = self.semicolon(value.span, "constant declaration")?;
-                Ok(Declaration {
-                    span: start.span.through(end.span),
-                    kind: DeclarationKind::Constant { name, ty, value },
-                })
+                Ok((DeclarationKind::Constant { name, ty, value }, end.span))
             }
+            K::Keyword if self.source.slice(start.span) == Some("impl") => {
+                self.impl_block(visible)
+            }
+            K::Keyword => self.fail(
+                "expected a declaration: `fn`, `math fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
+            ),
             // `declaration_start` leaves the three contextual words.
             _ if self.at(K::Fn) => {
                 self.bump();
-                self.function(start, FunctionMode::Math)
+                self.function(FunctionMode::Math)
             }
             _ if self.source.slice(start.span) == Some("def") => {
                 self.diagnostics.push(
@@ -434,29 +609,85 @@ impl Parser<'_> {
                             applicability: Applicability::MachineApplicable,
                         }),
                 );
-                self.function(start, FunctionMode::Math)
+                self.function(FunctionMode::Math)
             }
-            _ => self.prop(start),
+            _ => self.prop(),
         }
     }
 
-    fn function(&mut self, start: Token, mode: FunctionMode) -> ParseResult<Declaration> {
+    fn function(&mut self, mode: FunctionMode) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         self.no_generics()?;
-        let parameters = self.parameters()?;
+        let (self_param, parameters) = self.parameter_list(self.in_impl)?;
         self.expect(K::Arrow)?;
         let result = self.ty()?;
-        let body = self.block()?;
-        Ok(Declaration {
-            span: start.span.through(body.span),
-            kind: DeclarationKind::Function {
+        let saved = std::mem::replace(&mut self.in_method, self_param.is_some());
+        let body = self.block();
+        self.in_method = saved;
+        let body = body?;
+        let end = body.span;
+        Ok((
+            DeclarationKind::Function {
                 mode,
                 name,
+                self_param,
                 parameters,
                 result,
                 body,
             },
-        })
+            end,
+        ))
+    }
+
+    /// `impl Name { methods }`
+    #[inline(never)]
+    fn impl_block(&mut self, visible: Option<Span>) -> ParseResult<(DeclarationKind, Span)> {
+        if let Some(span) = visible {
+            self.diagnostics.push(Diagnostic::error(
+                "L0122",
+                "`pub` is not written on an `impl` block; write it on each method",
+                span,
+            ));
+        }
+        self.no_generics()?;
+        if !self.at_named() {
+            return self.fail("expected the type an `impl` block is for");
+        }
+        let target = self.path()?;
+        self.no_generics()?;
+        if self.at(K::For) {
+            self.diagnostics.push(Diagnostic::error(
+                "L0116",
+                "traits (`impl Trait for Type`) are not in Locus yet",
+                self.current().span,
+            ));
+            return Err(());
+        }
+        let opening = self.expect(K::LBrace)?;
+        let saved = std::mem::replace(&mut self.in_impl, true);
+        let methods = self.impl_body();
+        self.in_impl = saved;
+        let methods = methods?;
+        let end = self.close(K::RBrace, opening)?;
+        Ok((DeclarationKind::Impl { target, methods }, end.span))
+    }
+
+    /// The methods of an `impl` block, each recovered on its own.
+    #[inline(never)]
+    fn impl_body(&mut self) -> ParseResult<Vec<Declaration>> {
+        let mut methods = Vec::new();
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
+            let start = self.position;
+            match self.declaration() {
+                Ok(method) => methods.push(method),
+                Err(()) => self.recover_declaration(),
+            }
+            if self.position == start {
+                self.bump();
+            }
+        }
+        Ok(methods)
     }
 
     /// `<` after the name an item declares.
@@ -472,7 +703,36 @@ impl Parser<'_> {
         Ok(())
     }
 
-    fn prop(&mut self, start: Token) -> ParseResult<Declaration> {
+    #[inline(never)]
+    fn enum_declaration(&mut self) -> ParseResult<(DeclarationKind, Span)> {
+        let name = self.name()?;
+        self.no_generics()?;
+        let opening = self.expect(K::LBrace)?;
+        let mut variants = Vec::new();
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
+            let doc = self.doc_comments()?;
+            self.no_visibility(
+                "a variant is as visible as its enum, and `pub` is not written on it",
+            )?;
+            let name = self.name()?;
+            let (shape, fields, end) = self.variant_fields(name.span)?;
+            variants.push(Variant {
+                span: name.span.through(end),
+                doc,
+                name,
+                shape,
+                fields,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBrace, opening)?;
+        Ok((DeclarationKind::Enum { name, variants }, end.span))
+    }
+
+    fn prop(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         let parameters = if self.at(K::LParen) {
             self.parameters()?
@@ -483,8 +743,12 @@ impl Parser<'_> {
         let mut variants = Vec::new();
         while !self.at(K::RBrace) && !self.at(K::Eof) {
             self.step();
+            let doc = self.doc_comments()?;
+            self.no_visibility(
+                "a constructor is as visible as its proposition, and `pub` is not written on it",
+            )?;
             let name = self.name()?;
-            let (fields, mut end) = self.variant_fields(name.span)?;
+            let (_, fields, mut end) = self.variant_fields(name.span)?;
             let target = if self.eat(K::Colon).is_some() {
                 let at = self.expect(K::At)?;
                 let target = self.unrestricted(|parser| parser.proof_target(at))?;
@@ -495,6 +759,7 @@ impl Parser<'_> {
             };
             variants.push(PropVariant {
                 span: name.span.through(end),
+                doc,
                 name,
                 fields,
                 target,
@@ -504,23 +769,28 @@ impl Parser<'_> {
             }
         }
         let end = self.close(K::RBrace, opening)?;
-        Ok(Declaration {
-            span: start.span.through(end.span),
-            kind: DeclarationKind::Prop {
+        Ok((
+            DeclarationKind::Prop {
                 name,
                 parameters,
                 variants,
             },
-        })
+            end.span,
+        ))
     }
 
-    /// The optional `( fields )` of a variant, and where the variant ends.
-    fn variant_fields(&mut self, name: Span) -> ParseResult<(Vec<TypeField>, Span)> {
-        if !self.at(K::LParen) {
-            return Ok((Vec::new(), name));
+    /// The optional `( fields )` or `{ name: Type, ... }` of a variant, and
+    /// where the variant ends.
+    fn variant_fields(&mut self, name: Span) -> ParseResult<(VariantShape, Vec<TypeField>, Span)> {
+        if self.at(K::LParen) {
+            let (fields, end) = self.type_fields()?;
+            return Ok((VariantShape::Tuple, fields, end.span));
         }
-        let (fields, end) = self.type_fields()?;
-        Ok((fields, end.span))
+        if self.at(K::LBrace) {
+            let (fields, end) = self.named_type_fields()?;
+            return Ok((VariantShape::Struct, fields, end.span));
+        }
+        Ok((VariantShape::Unit, Vec::new(), name))
     }
 
     fn type_fields(&mut self) -> ParseResult<(Vec<TypeField>, Token)> {
@@ -537,15 +807,86 @@ impl Parser<'_> {
         Ok((fields, end))
     }
 
-    fn parameters(&mut self) -> ParseResult<Vec<Parameter>> {
-        Ok(self.parameter_list(K::LParen, K::RParen)?.0)
+    /// `{ name: Type, ... }`: the fields of a variant written with braces,
+    /// each of which has a name.
+    #[inline(never)]
+    fn named_type_fields(&mut self) -> ParseResult<(Vec<TypeField>, Token)> {
+        let opening = self.expect(K::LBrace)?;
+        let mut fields = Vec::new();
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
+            if self.peek(1) != K::Colon {
+                return self.fail("a field of a variant written with braces is `name: Type`");
+            }
+            fields.push(self.type_field()?);
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBrace, opening)?;
+        Ok((fields, end))
     }
 
-    fn parameter_list(&mut self, open: K, close: K) -> ParseResult<(Vec<Parameter>, Token)> {
-        let opening = self.expect(open)?;
-        let mut parameters = Vec::new();
-        while !self.at(close) && !self.at(K::Eof) {
+    /// `{ pub name: Type, ... }`: the fields of a struct.
+    #[inline(never)]
+    fn struct_fields(&mut self) -> ParseResult<(Vec<Field>, Token)> {
+        let opening = self.expect(K::LBrace)?;
+        let mut fields = Vec::new();
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
             self.step();
+            let doc = self.doc_comments()?;
+            // `pub: u8` is the keyword meant as a field's name.
+            let visibility = if self.peek(1) == K::Colon {
+                None
+            } else {
+                self.visibility()?
+            };
+            let name = self.name()?;
+            self.expect(K::Colon)?;
+            let ty = self.ty()?;
+            fields.push(Field {
+                span: name.span.through(ty.span),
+                doc,
+                visibility,
+                name,
+                ty,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBrace, opening)?;
+        Ok((fields, end))
+    }
+
+    /// The parameters of a quantifier or a proposition: names and types.
+    fn parameters(&mut self) -> ParseResult<Vec<Parameter>> {
+        Ok(self.parameter_list(false)?.1)
+    }
+
+    /// `( self, name: Type, ... )`. A `self` parameter, in any of its four
+    /// forms, comes first and only in a method.
+    fn parameter_list(&mut self, method: bool) -> ParseResult<(Option<SelfParam>, Vec<Parameter>)> {
+        let opening = self.expect(K::LParen)?;
+        let mut self_param = None;
+        if self.at_self_param() {
+            self_param = Some(self.self_param(method)?);
+            if self.eat(K::Comma).is_none() && !self.at(K::RParen) {
+                return self.fail("expected `,` or `)` after the `self` parameter");
+            }
+        }
+        let mut parameters = Vec::new();
+        while !self.at(K::RParen) && !self.at(K::Eof) {
+            self.step();
+            if self.at_self_param() {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0100",
+                    "a `self` parameter comes first",
+                    self.current().span,
+                ));
+                return Err(());
+            }
+            self.no_visibility("`pub` is not written on a parameter")?;
             let name = self.name()?;
             self.expect(K::Colon)?;
             let ty = self.ty()?;
@@ -558,8 +899,54 @@ impl Parser<'_> {
                 break;
             }
         }
-        let end = self.close(close, opening)?;
-        Ok((parameters, end))
+        self.close(K::RParen, opening)?;
+        Ok((self_param, parameters))
+    }
+
+    /// `self`, `mut self`, `&self`, or `&mut self`, when not the start of
+    /// a `self::` path.
+    fn at_self_param(&self) -> bool {
+        let mut at = 0;
+        if self.peek(at) == K::And {
+            at += 1;
+        }
+        let spelling_at = |distance: usize| {
+            self.tokens
+                .get(self.position + distance)
+                .filter(|token| token.kind == K::Keyword)
+                .and_then(|token| self.source.slice(token.span))
+        };
+        if spelling_at(at) == Some("mut") {
+            at += 1;
+        }
+        spelling_at(at) == Some("self") && self.peek(at + 1) != K::PathSep
+    }
+
+    #[inline(never)]
+    fn self_param(&mut self, method: bool) -> ParseResult<SelfParam> {
+        let start = self.current();
+        let reference = self.eat(K::And).is_some();
+        let mutable = self.at_keyword("mut");
+        if mutable {
+            self.bump();
+        }
+        let end = self.bump();
+        let span = start.span.through(end.span);
+        if !method {
+            self.diagnostics.push(Diagnostic::error(
+                "L0100",
+                "a `self` parameter belongs to a method in an `impl` block",
+                span,
+            ));
+            return Err(());
+        }
+        let kind = match (reference, mutable) {
+            (false, false) => SelfKind::Value,
+            (false, true) => SelfKind::MutValue,
+            (true, false) => SelfKind::Ref,
+            (true, true) => SelfKind::RefMut,
+        };
+        Ok(SelfParam { kind, span })
     }
 
     fn ty(&mut self) -> ParseResult<Type> {
@@ -574,13 +961,7 @@ impl Parser<'_> {
                 self.bump();
                 self.function_type(start, FunctionMode::Math)
             }
-            K::Name => {
-                let name = self.name()?;
-                Ok(Type {
-                    span: name.span,
-                    kind: TypeKind::Named(name),
-                })
-            }
+            K::Name | K::Keyword if self.at_named() => self.named_type(false),
             K::At => {
                 self.bump();
                 let proposition = self.proof_target(start)?;
@@ -642,12 +1023,99 @@ impl Parser<'_> {
         }
     }
 
+    /// A type named by a name or a path, with type arguments or without:
+    /// `u8`, `Self`, `a::B`, `Option<T>`. Directly after `as`, a `<` is
+    /// the comparison that follows the cast.
+    #[inline(never)]
+    fn named_type(&mut self, after_as: bool) -> ParseResult<Type> {
+        let mut path = self.path()?;
+        if after_as || !self.at(K::Less) {
+            return Ok(match path.single() {
+                Some(_) => Type {
+                    span: path.span,
+                    kind: TypeKind::Named(path.segments.pop().expect("one segment")),
+                },
+                None => Type {
+                    span: path.span,
+                    kind: TypeKind::Path {
+                        path: Box::new(path),
+                        arguments: Vec::new(),
+                    },
+                },
+            });
+        }
+        let opening = self.bump();
+        let mut arguments = Vec::new();
+        while !self.at_angle_close() && !self.at(K::Eof) {
+            self.step();
+            arguments.push(self.ty()?);
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close_angle(opening)?;
+        Ok(Type {
+            span: path.span.through(end),
+            kind: TypeKind::Path {
+                path: Box::new(path),
+                arguments,
+            },
+        })
+    }
+
+    fn at_angle_close(&self) -> bool {
+        matches!(
+            self.current().kind,
+            K::Greater | K::ShiftRight | K::GreaterEqual | K::ShiftRightEqual
+        )
+    }
+
+    /// The `>` that closes type arguments. The lexer reads `>>` as one
+    /// token, so the second `>` of `Ghost<Option<T>>` is given back to the
+    /// token stream, and likewise the `=` of `>=`.
+    #[inline(never)]
+    fn close_angle(&mut self, opening: Token) -> ParseResult<Span> {
+        let token = self.current();
+        let rest = match token.kind {
+            K::Greater => None,
+            K::ShiftRight => Some(K::Greater),
+            K::GreaterEqual => Some(K::Equal),
+            K::ShiftRightEqual => Some(K::GreaterEqual),
+            _ => {
+                self.close(K::Greater, opening)?;
+                unreachable!("`close` fails on any other token")
+            }
+        };
+        let Some(rest) = rest else {
+            return Ok(self.bump().span);
+        };
+        let split = token.span.start + 1;
+        self.tokens[self.position] = Token {
+            kind: rest,
+            span: Span::new(token.span.file, split, token.span.end),
+            literal: 0,
+        };
+        Ok(Span::new(token.span.file, token.span.start, split))
+    }
+
     #[inline(never)]
     fn no_type<T>(&mut self) -> ParseResult<T> {
         if self.current().kind.is_rust_keyword() {
             return self.keyword_as_name();
         }
+        if self.at_doc_comment() {
+            return self.misplaced_doc_comment();
+        }
         self.fail("expected a type such as `u8`, `Prop`, a tuple, or `@(condition)`")
+    }
+
+    fn at_doc_comment(&self) -> bool {
+        matches!(self.current().kind, K::OuterDoc | K::InnerDoc)
+    }
+
+    #[inline(never)]
+    fn misplaced_doc_comment<T>(&mut self) -> ParseResult<T> {
+        self.fail("a doc comment goes before an item, a field, or a variant")
     }
 
     /// The proposition of a proof type: a name, which calls and projections
@@ -773,68 +1241,7 @@ impl Parser<'_> {
     fn pattern_inner(&mut self) -> ParseResult<Pattern> {
         let start = self.current();
         match start.kind {
-            K::Name if self.peek(1) == K::PathSep => {
-                let path = self.path()?;
-                let (arguments, end) = if self.at(K::LParen) {
-                    let opening = self.bump();
-                    let mut arguments = Vec::new();
-                    while !self.at(K::RParen) && !self.at(K::Eof) {
-                        self.step();
-                        arguments.push(self.pattern()?);
-                        if self.eat(K::Comma).is_none() {
-                            break;
-                        }
-                    }
-                    let end = self.close(K::RParen, opening)?;
-                    (Some(arguments), end.span)
-                } else {
-                    (None, path.span)
-                };
-                Ok(Pattern {
-                    span: path.span.through(end),
-                    kind: PatternKind::Variant {
-                        path: Box::new(path),
-                        arguments,
-                    },
-                })
-            }
-            K::Name if self.peek(1) == K::LBrace => {
-                let name = self.name()?;
-                let opening = self.bump();
-                let mut fields = Vec::new();
-                while !self.at(K::RBrace) && !self.at(K::Eof) {
-                    self.step();
-                    let start = self.current().span;
-                    let name = if self.peek(1) == K::Colon {
-                        let name = self.name()?;
-                        self.bump();
-                        Some(name)
-                    } else {
-                        None
-                    };
-                    let pattern = self.pattern()?;
-                    fields.push(PatternField {
-                        span: start.through(pattern.span),
-                        name,
-                        pattern,
-                    });
-                    if self.eat(K::Comma).is_none() {
-                        break;
-                    }
-                }
-                let end = self.close(K::RBrace, opening)?;
-                Ok(Pattern {
-                    span: name.span.through(end.span),
-                    kind: PatternKind::Struct { name, fields },
-                })
-            }
-            K::Name => {
-                let name = self.name()?;
-                Ok(Pattern {
-                    span: name.span,
-                    kind: PatternKind::Name(name),
-                })
-            }
+            K::Name | K::Keyword if self.at_named() => self.named_pattern(),
             K::True | K::False => {
                 self.bump();
                 Ok(Pattern {
@@ -889,6 +1296,9 @@ impl Parser<'_> {
         if self.current().kind.is_rust_keyword() {
             return self.keyword_as_name();
         }
+        if self.at_doc_comment() {
+            return self.misplaced_doc_comment();
+        }
         self.fail("expected a pattern: a name, `_`, a literal, a tuple, or a constructor")
     }
 
@@ -901,14 +1311,119 @@ impl Parser<'_> {
         }
     }
 
+    /// A pattern that begins with a name or a path: a binding, a struct
+    /// pattern, or a variant with or without its fields.
+    #[inline(never)]
+    fn named_pattern(&mut self) -> ParseResult<Pattern> {
+        let mut path = self.path()?;
+        if self.at(K::LBrace) {
+            return self.struct_pattern(path);
+        }
+        if path.single().is_some() {
+            return Ok(Pattern {
+                span: path.span,
+                kind: PatternKind::Name(path.segments.pop().expect("one segment")),
+            });
+        }
+        let (arguments, end) = if self.at(K::LParen) {
+            let opening = self.bump();
+            let mut arguments = Vec::new();
+            while !self.at(K::RParen) && !self.at(K::Eof) {
+                self.step();
+                arguments.push(self.pattern()?);
+                if self.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            let end = self.close(K::RParen, opening)?;
+            (Some(arguments), end.span)
+        } else {
+            (None, path.span)
+        };
+        Ok(Pattern {
+            span: path.span.through(end),
+            kind: PatternKind::Variant {
+                path: Box::new(path),
+                arguments,
+            },
+        })
+    }
+
+    /// `{ name: pattern, name, .. }` after a struct's name or a variant's path.
+    #[inline(never)]
+    fn struct_pattern(&mut self, path: Path) -> ParseResult<Pattern> {
+        let opening = self.expect(K::LBrace)?;
+        let mut fields = Vec::new();
+        let mut rest = None;
+        while !self.at(K::RBrace) && !self.at(K::Eof) {
+            self.step();
+            if let Some(dots) = self.eat(K::DotDot) {
+                rest = Some(dots.span);
+                break;
+            }
+            let start = self.current().span;
+            let name = if self.peek(1) == K::Colon {
+                let name = self.name()?;
+                self.bump();
+                Some(name)
+            } else {
+                None
+            };
+            let pattern = self.pattern()?;
+            fields.push(PatternField {
+                span: start.through(pattern.span),
+                name,
+                pattern,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBrace, opening)?;
+        Ok(Pattern {
+            span: path.span.through(end.span),
+            kind: PatternKind::Struct {
+                path: Box::new(path),
+                fields,
+                rest,
+            },
+        })
+    }
+
+    /// `a::b::c` from a token that `at_named` accepted: one segment or more.
     fn path(&mut self) -> ParseResult<Path> {
-        let prefix = self.name()?;
-        self.expect(K::PathSep)?;
-        let name = self.name()?;
-        Ok(Path {
-            span: prefix.span.through(name.span),
-            prefix,
-            name,
+        let first = self.first_segment()?;
+        let mut span = first.span;
+        let mut segments = vec![first];
+        while self.eat(K::PathSep).is_some() {
+            self.step();
+            let segment = self.name()?;
+            span = span.through(segment.span);
+            segments.push(segment);
+        }
+        Ok(Path { segments, span })
+    }
+
+    /// The first segment of a path: a name, `Self` inside an `impl`, or
+    /// `crate`, `super`, or `self` before `::`.
+    #[inline(never)]
+    fn first_segment(&mut self) -> ParseResult<Name> {
+        if self.at(K::Name) {
+            return self.name();
+        }
+        let token = self.bump();
+        let text = self.source.slice(token.span).unwrap_or_default().to_owned();
+        if text == "Self" && !self.in_impl {
+            self.diagnostics.push(Diagnostic::error(
+                "L0100",
+                "`Self` is the type of an `impl` block, and this is outside one",
+                token.span,
+            ));
+            return Err(());
+        }
+        Ok(Name {
+            text,
+            span: token.span,
         })
     }
 
@@ -1054,6 +1569,17 @@ impl Parser<'_> {
             }
             K::Dot if minimum <= OPERAND => return Ok(Some(Operator::Member)),
             K::As => return Ok((CAST >= minimum).then_some(Operator::Cast)),
+            // After a whole expression, `=` can only be an assignment. After
+            // an operand it may end the proposition of a proof type, as in
+            // `bounded: @within_limit(n) = evidence`.
+            K::Equal if minimum == 0 => {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0116",
+                    "assignment (`=`) is not in Locus yet",
+                    self.current().span,
+                ));
+                return Err(());
+            }
             _ => {}
         }
         let Some((operator, (left_bp, right_bp))) = binary(kind) else {
@@ -1106,7 +1632,12 @@ impl Parser<'_> {
     #[inline(never)]
     fn cast(&mut self, expr: Expr) -> ParseResult<Expr> {
         let token = self.expect(K::As)?;
-        let ty = self.ty()?;
+        // Directly after `as`, a `<` is the comparison that follows the cast.
+        let ty = if self.at_named() && !self.at_math_fn() {
+            self.nested(|parser| parser.named_type(true))?
+        } else {
+            self.ty()?
+        };
         Ok(Expr {
             span: expr.span.through(ty.span),
             kind: ExprKind::Cast {
@@ -1190,10 +1721,10 @@ impl Parser<'_> {
         match self.current().kind {
             K::Name if self.at_form() => self.form(),
             K::Name if self.at_quantifier() => self.quantifier(),
-            K::Name if self.peek(1) == K::LBrace && !self.no_struct => self.struct_literal(),
-            K::Name | K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => {
-                self.atom()
-            }
+            K::Name | K::Keyword if self.at_named() => self.named(),
+            K::Keyword if self.at_keyword("self") => self.self_expression(),
+            K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => self.atom(),
+            K::OuterDoc | K::InnerDoc => self.misplaced_doc_comment(),
             K::Bang => self.not(),
             K::Minus => self.negate(),
             K::LParen => self.parenthesized(),
@@ -1290,22 +1821,47 @@ impl Parser<'_> {
         Err(())
     }
 
+    /// An expression that begins with a name or a path: the name, the path,
+    /// or a struct literal where one can stand.
+    #[inline(never)]
+    fn named(&mut self) -> ParseResult<Expr> {
+        let mut path = self.path()?;
+        if self.at(K::LBrace) && !self.no_struct {
+            return self.struct_literal(path);
+        }
+        Ok(Expr {
+            span: path.span,
+            kind: match path.single() {
+                Some(_) => ExprKind::Name(path.segments.pop().expect("one segment")),
+                None => ExprKind::Path(Box::new(path)),
+            },
+        })
+    }
+
+    /// `self`, the receiver, in the body of a method that has one.
+    #[inline(never)]
+    fn self_expression(&mut self) -> ParseResult<Expr> {
+        let token = self.current();
+        if !self.in_method {
+            self.diagnostics.push(Diagnostic::error(
+                "L0100",
+                "`self` is the receiver of a method, and this function has no `self` parameter",
+                token.span,
+            ));
+            return Err(());
+        }
+        self.bump();
+        Ok(Expr {
+            span: token.span,
+            kind: ExprKind::Name(Name {
+                text: "self".into(),
+                span: token.span,
+            }),
+        })
+    }
+
     #[inline(never)]
     fn atom(&mut self) -> ParseResult<Expr> {
-        if self.at(K::Name) && self.peek(1) == K::PathSep {
-            let path = self.path()?;
-            return Ok(Expr {
-                span: path.span,
-                kind: ExprKind::Path(Box::new(path)),
-            });
-        }
-        if self.at(K::Name) {
-            let name = self.name()?;
-            return Ok(Expr {
-                span: name.span,
-                kind: ExprKind::Name(name),
-            });
-        }
         let token = self.bump();
         Ok(Expr {
             span: token.span,
@@ -1561,15 +2117,13 @@ impl Parser<'_> {
     /// In the bounds of a `for`, the parenthesized group directly before the
     /// body is the state list, not a call on the upper bound.
     fn state_list_follows(&mut self) -> bool {
-        let closers = self
-            .closers
-            .get_or_insert_with(|| matching_delimiters(&self.tokens));
-        closers[self.position].is_some_and(|closer| self.tokens[closer + 1].kind == K::LBrace)
+        self.closer_of(self.position)
+            .is_some_and(|closer| self.tokens[closer + 1].kind == K::LBrace)
     }
 
+    /// `{ name: value, name }` after a struct's name or a variant's path.
     #[inline(never)]
-    fn struct_literal(&mut self) -> ParseResult<Expr> {
-        let name = self.name()?;
+    fn struct_literal(&mut self, path: Path) -> ParseResult<Expr> {
         let opening = self.expect(K::LBrace)?;
         let fields = self.unrestricted(|parser| {
             let mut fields = Vec::new();
@@ -1597,8 +2151,8 @@ impl Parser<'_> {
         })?;
         let end = self.close(K::RBrace, opening)?;
         Ok(Expr {
-            span: name.span.through(end.span),
-            kind: ExprKind::Struct { name, fields },
+            span: path.span.through(end.span),
+            kind: ExprKind::Struct { path, fields },
         })
     }
 
@@ -1670,12 +2224,12 @@ impl Parser<'_> {
         let lower = self.header(true, Self::expression)?;
         self.expect(K::DotDot)?;
         let upper = self.header(true, Self::expression)?;
-        if !self.at(K::LParen) {
-            return self.fail(
-                "a `for` lists its state before the body: `for i in lo..hi (state: T = initial) { ... }`; write `()` when there is none",
-            );
-        }
-        let state = self.state_parameters()?;
+        // The state list is optional: `for i in lo..hi { ... }` carries none.
+        let state = if self.at(K::LParen) {
+            self.state_parameters()?
+        } else {
+            Vec::new()
+        };
         let body = self.block()?;
         Ok(Expr {
             span: start.span.through(body.span),
@@ -1718,7 +2272,8 @@ impl Parser<'_> {
 
     fn hash_syntax<T>(&mut self) -> ParseResult<T> {
         if self.attribute_start() {
-            return self.unsupported_attribute();
+            self.misplaced_attribute();
+            return Err(());
         }
         self.diagnostics.push(Diagnostic::error(
             "L0111", "`#` is no longer proof syntax", self.current().span,
@@ -1732,25 +2287,27 @@ impl Parser<'_> {
                 || (self.peek(1) == K::Bang && self.peek(2) == K::LBracket))
     }
 
-    fn unsupported_attribute<T>(&mut self) -> ParseResult<T> {
-        self.attribute();
-        Err(())
-    }
-
-    /// Reports one attribute and skips it, brackets and all, so that it is
-    /// reported once. False when its bracket is never closed.
-    fn attribute(&mut self) -> bool {
-        let start = self.bump();
-        self.eat(K::Bang);
+    /// The token that closes the delimiter at `position`, if any.
+    fn closer_of(&mut self, position: usize) -> Option<usize> {
         let closers = self
             .closers
             .get_or_insert_with(|| matching_delimiters(&self.tokens));
-        let closer = closers[self.position];
+        closers[position]
+    }
+
+    /// L0121 for an attribute where no item begins: in a type, an
+    /// expression, a pattern, or a statement. Reported once and skipped,
+    /// brackets and all.
+    #[inline(never)]
+    fn misplaced_attribute(&mut self) {
+        let start = self.bump();
+        self.eat(K::Bang);
+        let closer = self.closer_of(self.position);
         let end = closer.map_or(self.current(), |closer| self.tokens[closer]);
         self.diagnostics.push(
             Diagnostic::error(
-                "L0105",
-                "attributes are not in Locus yet",
+                "L0121",
+                "an attribute goes before an item, and nothing else takes one",
                 start.span.through(end.span),
             )
             .note("proof types use `@claim` or `@(condition)`, and `_` asks the elaborator for evidence"),
@@ -1758,35 +2315,172 @@ impl Parser<'_> {
         if let Some(closer) = closer {
             self.position = closer + 1;
         }
-        closer.is_some()
     }
 
-    /// An attribute, or a keyword that begins an item in Rust and not yet in
-    /// Locus.
+    /// One attribute, `#[...]` or `#![...]`, read against the closed set,
+    /// with whether it is inner. A malformed or unknown one is reported and
+    /// skipped to its `]`, and is `None`; when the `[` is never closed, the
+    /// rest of the file is skipped and this is `Err`.
+    #[inline(never)]
+    fn attribute(&mut self) -> ParseResult<Option<(Attribute, bool)>> {
+        let start = self.bump();
+        let inner = self.eat(K::Bang).is_some();
+        let opening = self.bump();
+        let closer = self.closer_of(self.position - 1);
+        if let Ok(kind) = self.attribute_kind(inner) {
+            if let Some(end) = self.eat(K::RBracket) {
+                let attribute = Attribute {
+                    kind,
+                    span: start.span.through(end.span),
+                };
+                return Ok(Some((attribute, inner)));
+            }
+            let _ = self.close(K::RBracket, opening);
+        }
+        match closer {
+            Some(closer) => {
+                self.position = closer + 1;
+                Ok(None)
+            }
+            None => {
+                self.position = self.tokens.len() - 1;
+                Err(())
+            }
+        }
+    }
+
+    /// The name and arguments between the brackets of an attribute.
+    #[inline(never)]
+    fn attribute_kind(&mut self, inner: bool) -> ParseResult<AttributeKind> {
+        let name = self.expect(K::Name)?;
+        let spelling = self.source.slice(name.span).unwrap_or_default().to_owned();
+        match spelling.as_str() {
+            "terminates" => {
+                if !self.at(K::LParen) {
+                    return Ok(AttributeKind::Terminates { decreases: None });
+                }
+                if inner {
+                    return self.attribute_shape(
+                        name.span,
+                        "`decreases` names the measure of one function; at the top of the file write `#![terminates]`",
+                    );
+                }
+                let decreases = self.decreases()?;
+                Ok(AttributeKind::Terminates {
+                    decreases: Some(decreases),
+                })
+            }
+            "no_panic" | "no_alloc" | "no_io" => {
+                if self.at(K::LParen) {
+                    return self.attribute_shape(
+                        name.span,
+                        &format!("`#[{spelling}]` takes no arguments"),
+                    );
+                }
+                Ok(match spelling.as_str() {
+                    "no_panic" => AttributeKind::NoPanic,
+                    "no_alloc" => AttributeKind::NoAlloc,
+                    _ => AttributeKind::NoIo,
+                })
+            }
+            "derive" => {
+                if inner {
+                    return self.attribute_shape(
+                        name.span,
+                        "`derive` goes on a struct or an enum, not at the top of the file",
+                    );
+                }
+                if !self.at(K::LParen) {
+                    return self.attribute_shape(
+                        name.span,
+                        "`#[derive]` takes a list of traits in parentheses, as in `#[derive(Clone, Copy)]`",
+                    );
+                }
+                Ok(AttributeKind::Derive(self.derive_list()?))
+            }
+            _ => self.unknown_attribute(name.span, &spelling),
+        }
+    }
+
+    /// `(decreases = expression)`
+    #[inline(never)]
+    fn decreases(&mut self) -> ParseResult<Expr> {
+        let opening = self.expect(K::LParen)?;
+        if !self.at_word("decreases") || self.peek(1) != K::Equal {
+            return self.attribute_shape(
+                self.current().span,
+                "`#[terminates]` takes `decreases = expression` and nothing else",
+            );
+        }
+        self.bump();
+        self.bump();
+        let expr = self.unrestricted(Self::expression)?;
+        self.close(K::RParen, opening)?;
+        Ok(expr)
+    }
+
+    /// `(Trait, a::Trait, ...)`
+    #[inline(never)]
+    fn derive_list(&mut self) -> ParseResult<Vec<Path>> {
+        let opening = self.expect(K::LParen)?;
+        let mut traits = Vec::new();
+        while !self.at(K::RParen) && !self.at(K::Eof) {
+            self.step();
+            if !self.at_named() {
+                return self.attribute_shape(
+                    self.current().span,
+                    "`#[derive]` lists traits by name, as in `#[derive(Clone, Copy)]`",
+                );
+            }
+            traits.push(self.path()?);
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        self.close(K::RParen, opening)?;
+        Ok(traits)
+    }
+
+    /// L0121: an attribute of the closed set in a shape it does not have.
+    #[inline(never)]
+    fn attribute_shape<T>(&mut self, span: Span, message: &str) -> ParseResult<T> {
+        self.diagnostics
+            .push(Diagnostic::error("L0121", message, span));
+        Err(())
+    }
+
+    /// L0120: a name outside the closed set of attributes.
+    #[inline(never)]
+    fn unknown_attribute<T>(&mut self, span: Span, spelling: &str) -> ParseResult<T> {
+        self.diagnostics.push(
+            Diagnostic::error(
+                "L0120",
+                format!("`{spelling}` is not an attribute of Locus"),
+                span,
+            )
+            .note(
+                "the attributes are `#[terminates]`, `#[terminates(decreases = e)]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`, and `#[derive(...)]`; Locus has no user-defined attributes",
+            ),
+        );
+        Err(())
+    }
+
+    /// An attribute or a doc comment, or a keyword that begins an item in
+    /// Rust and not yet in Locus.
     fn rust_item_start(&self) -> bool {
-        if self.attribute_start() {
+        if self.item_prefix_start() {
             return true;
         }
         self.at(K::Keyword)
             && matches!(
                 self.source.slice(self.current().span),
-                Some(
-                    "async"
-                        | "extern"
-                        | "impl"
-                        | "mod"
-                        | "pub"
-                        | "static"
-                        | "trait"
-                        | "type"
-                        | "unsafe"
-                        | "use"
-                )
+                Some("async" | "extern" | "mod" | "static" | "trait" | "type" | "unsafe" | "use")
             )
     }
 
     /// Skips to where the next declaration begins. An item of Rust is a place
-    /// to stop as well, past the one that failed, so that each is reported.
+    /// to stop as well, past the one that failed, so that each is reported;
+    /// inside an `impl` block, so is the `}` that closes it.
     fn recover_declaration(&mut self) {
         let start = self.position;
         let mut depth = 0usize;
@@ -1794,7 +2488,9 @@ impl Parser<'_> {
             self.step();
             let kind = self.current().kind;
             if depth == 0
-                && (self.declaration_start() || (self.position > start && self.rust_item_start()))
+                && (self.declaration_start()
+                    || (self.position > start && self.rust_item_start())
+                    || (self.in_impl && kind == K::RBrace))
             {
                 return;
             }
@@ -1876,20 +2572,15 @@ fn keyword_construct(keyword: &str) -> Option<(&'static str, Option<&'static str
     let message = match keyword {
         "async" => "`async` is not in Locus yet",
         "await" => "`await` is not in Locus yet",
-        "crate" => "`crate` paths are not in Locus yet",
         "dyn" => "`dyn` trait objects are not in Locus yet",
         "extern" => "`extern` is not in Locus yet",
-        "impl" => "`impl` blocks and `impl Trait` are not in Locus yet",
+        "impl" => "`impl Trait` types are not in Locus yet",
         "mod" => "modules (`mod`) are not in Locus yet",
         "move" => "closures (`move`) are not in Locus yet",
         "mut" => "`mut` is not in Locus yet",
-        "pub" => "visibility (`pub`) is not in Locus yet",
         "ref" => "`ref` bindings are not in Locus yet",
         "return" => "`return` is not in Locus yet",
-        "self" => "`self` and methods are not in Locus yet",
-        "Self" => "`Self` is not in Locus yet",
         "static" => "`static` items are not in Locus yet",
-        "super" => "`super` paths are not in Locus yet",
         "trait" => "traits are not in Locus yet",
         "type" => "type aliases (`type`) are not in Locus yet",
         "unsafe" => "`unsafe` is not in Locus yet",

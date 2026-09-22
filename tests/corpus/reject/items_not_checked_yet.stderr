@@ -1,0 +1,20 @@
+error[L0290]: promises (`#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`) are parsed but not checked yet; E2 adds them
+ --> tests/corpus/reject/items_not_checked_yet.lc:3:1
+  |
+3 | #![no_io] //~ error: L0290 promises (`#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`) are parsed but not checked yet; E2
+  | ^^^^^^^^^
+error[L0290]: `#[derive(...)]` is parsed but not checked yet; O1 adds it
+ --> tests/corpus/reject/items_not_checked_yet.lc:4:1
+  |
+4 | #[derive(Clone, Copy)] //~ error: L0290 `#[derive(...)]` is parsed but not checked yet; O1
+  | ^^^^^^^^^^^^^^^^^^^^^^
+error[L0290]: `impl Counter` is parsed but not checked yet; O4 adds impl blocks
+  --> tests/corpus/reject/items_not_checked_yet.lc:12:6
+   |
+12 | impl Counter { //~ error: L0290 `impl Counter` is parsed but not checked yet; O4
+   |      ^^^^^^^
+error[L0290]: a variant with named fields is not in Locus yet; E9 adds it
+  --> tests/corpus/reject/items_not_checked_yet.lc:19:5
+   |
+19 |     Box { width: u8, height: u8 }, //~ error: L0290 a variant with named fields is not in Locus yet; E9
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

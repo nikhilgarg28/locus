@@ -97,11 +97,14 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
 
     env.declare_builtin_props();
     env.declare_builtin_lemmas();
+    env.report_unchecked_syntax(program);
 
     let mut seen: HashMap<&str, Span> = HashMap::new();
     let mut duplicates = HashSet::new();
     for (index, declaration) in program.declarations.iter().enumerate() {
-        let name = declared_name(declaration);
+        let Some(name) = declared_name(declaration) else {
+            continue;
+        };
         if let Some(first) = seen.get(name.text.as_str()) {
             env.diagnostics.push(
                 Diagnostic::error(
@@ -119,7 +122,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
 
     let (order, cyclic) = dependency_order(program);
     for index in cyclic {
-        let name = declared_name(&program.declarations[index]);
+        let name = declared_name(&program.declarations[index]).expect("an impl mentions nothing");
         env.diagnostics.push(
             Diagnostic::error(
                 "L0203",
@@ -136,7 +139,11 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
             continue;
         }
         let declaration = &program.declarations[index];
-        let name = declared_name(declaration).text.clone();
+        // An `impl` block was reported as not checked yet.
+        let Some(name) = declared_name(declaration) else {
+            continue;
+        };
+        let name = name.text.clone();
         match env.declaration(declaration) {
             Ok(global) => {
                 if let Global::Fn(info) = &global {
@@ -166,6 +173,60 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
 }
 
 impl Env<'_> {
+    /// What S4 parses and no commit has given a meaning yet: the promises
+    /// and `derive`, once per file each, and every `impl` block. Doc comments
+    /// and visibility need no report, since ignoring them changes nothing a
+    /// program says.
+    fn report_unchecked_syntax(&mut self, program: &ast::Program) {
+        let mut promise: Option<Span> = None;
+        let mut derive: Option<Span> = None;
+        let mut note = |attributes: &[ast::Attribute]| {
+            for attribute in attributes {
+                let slot = if attribute.kind.is_promise() {
+                    &mut promise
+                } else {
+                    &mut derive
+                };
+                slot.get_or_insert(attribute.span);
+            }
+        };
+        note(&program.attributes);
+        for declaration in &program.declarations {
+            note(&declaration.attributes);
+            if let DeclarationKind::Impl { methods, .. } = &declaration.kind {
+                for method in methods {
+                    note(&method.attributes);
+                }
+            }
+        }
+        if let Some(span) = promise {
+            self.diagnostics.push(Diagnostic::error(
+                "L0290",
+                "promises (`#[terminates]`, `#[no_panic]`, `#[no_alloc]`, `#[no_io]`) are parsed but not checked yet; E2 adds them",
+                span,
+            ));
+        }
+        if let Some(span) = derive {
+            self.diagnostics.push(Diagnostic::error(
+                "L0290",
+                "`#[derive(...)]` is parsed but not checked yet; O1 adds it",
+                span,
+            ));
+        }
+        for declaration in &program.declarations {
+            if let DeclarationKind::Impl { target, .. } = &declaration.kind {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0290",
+                    format!(
+                        "`impl {}` is parsed but not checked yet; O4 adds impl blocks",
+                        target.text()
+                    ),
+                    target.span,
+                ));
+            }
+        }
+    }
+
     /// A fresh function scope over the declarations accepted so far.
     fn start_item(&mut self, total: bool) {
         let definitions = self.session.program().definitions().clone();
@@ -209,6 +270,13 @@ impl Env<'_> {
                         let message = format!("variant `{}` is declared twice", variant.name.text);
                         return self.fail("L0202", message, variant.name.span);
                     }
+                    if variant.shape == ast::VariantShape::Struct {
+                        return self.fail(
+                            "L0290",
+                            "a variant with named fields is not in Locus yet; E9 adds it",
+                            variant.span,
+                        );
+                    }
                     self.start_item(true);
                     let payload = self.telescope(
                         variant
@@ -244,6 +312,7 @@ impl Env<'_> {
                 parameters,
                 result,
                 body,
+                ..
             } => {
                 let math = *mode == FunctionMode::Math;
                 self.function(name, math, parameters, result, Body::Block(body), false)
@@ -256,6 +325,9 @@ impl Env<'_> {
                 parameters,
                 variants,
             } => self.prop(name, parameters, variants),
+            DeclarationKind::Impl { .. } => {
+                unreachable!("an impl block is reported before the declarations are elaborated")
+            }
         }
     }
 

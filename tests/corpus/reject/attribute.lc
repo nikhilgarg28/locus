@@ -1,3 +1,3 @@
-// An attribute.
-#[inline] //~ error: L0105 attributes are not in Locus yet
+// An attribute outside the closed set is rejected, and the item is still read.
+#[inline] //~ error: L0120 `inline` is not an attribute of Locus
 fn first(n: u8) -> u8 { n }

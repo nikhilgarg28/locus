@@ -1,0 +1,15 @@
+error[L0122]: `pub` is not written on an `impl` block; write it on each method
+ --> tests/corpus/reject/visibility_misplaced.lc:3:1
+  |
+3 | pub impl Counter { //~ error: L0122 `pub` is not written on an `impl` block
+  | ^^^
+error[L0122]: a variant is as visible as its enum, and `pub` is not written on it
+ --> tests/corpus/reject/visibility_misplaced.lc:8:5
+  |
+8 |     pub Wrong, //~ error: L0122 a variant is as visible as its enum
+  |     ^^^
+error[L0122]: `pub` is not written on a parameter
+  --> tests/corpus/reject/visibility_misplaced.lc:12:10
+   |
+12 | fn first(pub n: u8) -> u8 { n } //~ error: L0122 `pub` is not written on a parameter
+   |          ^^^
