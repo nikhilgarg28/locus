@@ -1,0 +1,16 @@
+locus-proofs 1
+
+obligation add64ff5a8ada27d run 1
+evaluate(int_le(view[u8](0), view[u8](3)))
+
+obligation 3e5398446530a8a5 run 2
+transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), fn:within_limit(#0.0), transport(transport(h3, (#0 ==[struct:Lock] $9), refl($9)), fn:within_limit(#0.0), transport(h3, fn:within_limit(#0.0), of_term(proof(of_term($10))))))
+
+obligation 936fef6b03d000c8 step 1
+implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)
+
+obligation a15f9d76bd69e629 step 2
+transport(transport(projection(struct:Lock { $0.0, false }.0), (#0 ==[u8] struct:Lock { $0.0, false }.0), refl(struct:Lock { $0.0, false }.0)), fn:within_limit(#0), of_term(proof(of_term($1))))
+
+obligation 913f1cc68c1b7fcb step 3
+evaluate(int_le(view[u8](0), view[u8](3)))

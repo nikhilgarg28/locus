@@ -1,0 +1,7 @@
+locus-proofs 1
+
+obligation 0b6836f7560a240b preserve 1
+of_term(fn:u8_view_injective($0, 0, proof(implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0))))
+
+obligation 66f7429fee90a6b2 preserve 2
+refl($0)

@@ -30,7 +30,25 @@ mod patterns;
 mod proofs;
 mod show;
 mod solve;
+mod stored;
 mod types;
 
 pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate, elaborate_with};
 pub use solve::certificate_pairs;
+
+use crate::ast;
+use crate::source::SourceFile;
+use crate::store::ProofStore;
+
+/// `elaborate` with the proofs file of the source: each obligation is looked
+/// up in `store` before it is searched for, and what the search finds is
+/// recorded there (`stored.rs`). The store comes back with what the run did
+/// to it. Without a store, `elaborate` searches every obligation and
+/// records nothing.
+pub fn elaborate_with_store(
+    source: &SourceFile,
+    program: &ast::Program,
+    store: ProofStore,
+) -> (Elaborated, ProofStore) {
+    crate::store::with_store(store, || elaborate(source, program))
+}

@@ -12,6 +12,7 @@ use locus::kernel::Integer;
 use locus::lexer;
 use locus::parser;
 use locus::source::SourceMap;
+use locus::store::ProofStore;
 
 const HELP: &str = "Locus
 
@@ -19,7 +20,10 @@ Usage: locus <command> <file.lc> [arguments]
 
   check   Check types and proofs; --holes lists every `_` and how it was filled,
           --stats what each function cost to elaborate and to check, and the
-          obligations counted by the tier that filled them
+          obligations counted by the tier that filled them. The proofs found
+          are stored in <file.lc>.proofs beside the source and used again on
+          the next run; --locked never searches, so a missing or stale entry
+          is an error, and --no-store neither reads nor writes the file
   run     Check, then interpret a function: locus run <file.lc> <function> [u8|true|false]...
   rust    Check, then print the generated Rust
   build   Check, then write a Rust crate: locus build <file.lc>... --out <dir> [--name <crate>]
@@ -38,7 +42,38 @@ const FUEL: u64 = 10_000_000;
 /// The tiers in the order they are tried, for the counts of `--stats`; a
 /// tier not listed here, such as the lemma a `for` from `0` is filled by,
 /// follows them, and `unsolved` last.
-const TIERS: [&str; 4] = ["exact", "computed", "evaluation", "arithmetic"];
+const TIERS: [&str; 5] = ["stored", "exact", "computed", "evaluation", "arithmetic"];
+
+/// The flags `check` takes after the file.
+const CHECK_FLAGS: [&str; 4] = ["--holes", "--stats", "--locked", "--no-store"];
+
+/// How `check` uses the proofs file: read from the environment and the
+/// flags. `LOCUS_PROOFS=off` is `--no-store`; `LOCUS_SEARCH=none` makes
+/// every tier fail, which is the test hook for surviving an upgrade: a file
+/// with every proof still checks under it.
+struct StoreOptions {
+    enabled: bool,
+    locked: bool,
+    search: bool,
+}
+
+impl StoreOptions {
+    fn from(flags: &[&str]) -> Self {
+        let off = |name: &str, value: &str| env::var(name).is_ok_and(|found| found == value);
+        Self {
+            enabled: !flags.contains(&"--no-store") && !off("LOCUS_PROOFS", "off"),
+            locked: flags.contains(&"--locked"),
+            search: !off("LOCUS_SEARCH", "none"),
+        }
+    }
+}
+
+/// The path of the proofs file: the source's path with `.proofs` appended.
+fn proofs_path(source: &OsString) -> OsString {
+    let mut path = source.clone();
+    path.push(".proofs");
+    path
+}
 
 /// The size of the certificate the arithmetic tier found, for a report:
 /// `, N pairs` after the tier, and nothing for any other tier.
@@ -83,13 +118,14 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
     if command == "build" {
         return build(&arguments[1..]);
     }
+    let flags: Vec<&str> = arguments
+        .iter()
+        .skip(2)
+        .map(|flag| flag.to_str().unwrap_or(""))
+        .collect();
     let well_formed = match command {
         "tokens" | "parse" | "ast" | "rust" => arguments.len() == 2,
-        "check" => {
-            arguments.len() == 2
-                || (arguments.len() == 3
-                    && (arguments[2] == "--holes" || arguments[2] == "--stats"))
-        }
+        "check" => arguments.len() >= 2 && flags.iter().all(|flag| CHECK_FLAGS.contains(flag)),
         "run" => arguments.len() >= 3,
         _ => false,
     };
@@ -137,8 +173,56 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         return Ok(1);
     }
     if matches!(command, "check" | "run" | "rust") {
-        let elaborated = elab::elaborate(source, &parsed.program);
-        if command == "check" && arguments.len() == 3 && arguments[2] == "--stats" {
+        // The proofs file beside the source, for `check`: read before
+        // elaboration, written after it when it changed, unless `--locked`,
+        // under which nothing is searched and nothing is written.
+        let options = StoreOptions::from(&flags);
+        let store_path = proofs_path(path);
+        let store = if command == "check" && options.enabled {
+            let store = match fs::read_to_string(&store_path) {
+                Ok(text) => match ProofStore::parse(&text) {
+                    Ok((store, warnings)) => {
+                        for warning in warnings {
+                            writeln!(
+                                io::stderr(),
+                                "warning: {}: {warning}",
+                                store_path.to_string_lossy()
+                            )?;
+                        }
+                        store
+                    }
+                    Err(problem) => {
+                        writeln!(
+                            io::stderr(),
+                            "warning: {}: {problem}; every proof is searched for and the file is rewritten",
+                            store_path.to_string_lossy()
+                        )?;
+                        ProofStore::new()
+                    }
+                },
+                Err(error) if error.kind() == io::ErrorKind::NotFound => ProofStore::new(),
+                Err(error) => {
+                    writeln!(
+                        io::stderr(),
+                        "error: cannot read {}: {error}",
+                        store_path.to_string_lossy()
+                    )?;
+                    return Ok(1);
+                }
+            };
+            Some(store.locked(options.locked).searching(options.search))
+        } else {
+            None
+        };
+        let (elaborated, store) = match store {
+            Some(store) => {
+                let (elaborated, store) =
+                    elab::elaborate_with_store(source, &parsed.program, store);
+                (elaborated, Some(store))
+            }
+            None => (elab::elaborate(source, &parsed.program), None),
+        };
+        if command == "check" && flags.contains(&"--stats") {
             writeln!(
                 output,
                 "{:<28} {:>14} {:>12}",
@@ -177,6 +261,14 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
             for hole in &elaborated.holes {
                 *counts.entry(hole.tier).or_default() += 1;
             }
+            if let Some(store) = &store {
+                let stats = store.stats();
+                writeln!(
+                    output,
+                    "proofs file: {} used, {} found and recorded, {} stale, {} searched, {} unwritable",
+                    stats.hits, stats.recorded, stats.stale, stats.searches, stats.unprintable
+                )?;
+            }
             let mut listed: Vec<String> = Vec::new();
             for tier in TIERS {
                 if let Some(count) = counts.remove(tier) {
@@ -198,7 +290,7 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
                 let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
                 writeln!(output, "  {line}:{column} {}{}", hole.tier, pairs_of(hole))?;
             }
-        } else if command == "check" && arguments.len() == 3 {
+        } else if command == "check" && flags.contains(&"--holes") {
             for hole in &elaborated.holes {
                 let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
                 writeln!(
@@ -216,6 +308,19 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         if !elaborated.is_success() {
             output.flush()?;
             emit_diagnostics(&sources, &elaborated.diagnostics)?;
+            return Ok(1);
+        }
+        if let Some(store) = &store
+            && !options.locked
+            && let Some(text) = store.changed()
+            && let Err(error) = fs::write(&store_path, text)
+        {
+            output.flush()?;
+            writeln!(
+                io::stderr(),
+                "error: cannot write {}: {error}",
+                store_path.to_string_lossy()
+            )?;
             return Ok(1);
         }
         let module = elaborated.session.erased();

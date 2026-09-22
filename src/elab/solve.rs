@@ -113,7 +113,8 @@ impl Env<'_> {
     /// evidence the programmer supplied, when this is a conversion.
     pub fn solve(&mut self, goal: &Term, span: Span, given: Option<&Term>) -> Elab<Proof> {
         let started = Instant::now();
-        let found = self.attempt(goal);
+        // The proofs file first; the tiers on a miss (`stored.rs`).
+        let found = self.stored_or(goal, |env| env.attempt(goal));
         let (proof, tier) = match found {
             Some((proof, tier)) => (
                 check_proof(&mut self.ctx, &proof, goal)
@@ -137,6 +138,9 @@ impl Env<'_> {
         });
         if let Some(proof) = proof {
             return Ok(proof);
+        }
+        if self.locked_miss(goal, span) {
+            return Err(());
         }
         self.report_unsolved(goal, span, given);
         Err(())

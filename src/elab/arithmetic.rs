@@ -471,7 +471,8 @@ impl Env<'_> {
         operator_span: Span,
     ) -> Elab<Proof> {
         let started = Instant::now();
-        let found = self.discharge(premise);
+        // The proofs file first; the tiers on a miss (`stored.rs`).
+        let found = self.stored_or(premise, |env| env.discharge(premise));
         let (proof, tier) = match found {
             Some((proof, tier)) => (
                 check_proof(&mut self.ctx, &proof, premise)
@@ -495,6 +496,9 @@ impl Env<'_> {
         });
         if let Some(proof) = proof {
             return Ok(proof);
+        }
+        if self.locked_miss(premise, operator_span) {
+            return Err(());
         }
         self.report_obligation(row, index, premise, texts, result, operator_span);
         Err(())

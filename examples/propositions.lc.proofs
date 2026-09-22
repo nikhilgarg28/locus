@@ -1,0 +1,10 @@
+locus-proofs 1
+
+obligation 80dd705a525b03b3 reflexivity_claim 1
+transport(transport(h0, (#0 ==[Prop] $1), refl($1)), #0, refl($0))
+
+obligation 179a659619ae7f53 small_is_below_ten 1
+h0
+
+obligation b9c901005ceb7f88 small_is_below_ten 2
+evaluate(int_le(int_add(view[u8](0), 1i), view[u8](10)))

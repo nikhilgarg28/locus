@@ -76,10 +76,12 @@ fn a_file_is_checked_run_and_printed_as_rust() {
             .unwrap()
             .contains("Checked 6 function(s); 5 proof(s) found and accepted by the kernel.")
     );
+    // Without the proofs file, so that the tiers themselves are seen.
     let output = locus()
         .arg("check")
         .arg(example("lock.lc"))
         .arg("--holes")
+        .env("LOCUS_PROOFS", "off")
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
@@ -245,6 +247,7 @@ fn holes_without_timings(stdout: &str) -> String {
 fn checking_is_deterministic() {
     // Which tier fills each hole, and how large the proof is, is a function
     // of the file alone: two runs over every example agree byte for byte.
+    // Without the proofs file, which would make every second run `stored`.
     let examples = std::fs::read_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -256,6 +259,7 @@ fn checking_is_deterministic() {
                 .arg("check")
                 .arg(&path)
                 .arg("--holes")
+                .env("LOCUS_PROOFS", "off")
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{}", path.display());
@@ -301,6 +305,8 @@ fn stats_count_the_obligations_by_tier() {
             .arg("check")
             .arg(&path)
             .arg("--stats")
+            // The tiers themselves, not the proofs file.
+            .env("LOCUS_PROOFS", "off")
             .output()
             .unwrap();
         assert!(output.status.success(), "{}", path.display());
@@ -335,4 +341,127 @@ fn stats_count_the_obligations_by_tier() {
             "Checked 3 function(s); 9 proof(s) found and accepted by the kernel.",
         ]
     );
+}
+
+/// A scratch directory of its own for a test that writes files.
+fn scratch(name: &str) -> PathBuf {
+    let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    directory
+}
+
+#[test]
+fn check_stores_the_proofs_beside_the_source_and_locked_never_searches() {
+    let directory = scratch("cli_store");
+    let source = directory.join("lock.lc");
+    std::fs::copy(example("lock.lc"), &source).unwrap();
+    let proofs = directory.join("lock.lc.proofs");
+    let check = |flags: &[&str], env: &[(&str, &str)]| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
+        command.arg("check").arg(&source).args(flags);
+        for (name, value) in env {
+            command.env(name, value);
+        }
+        let output = command.output().unwrap();
+        (
+            output.status.code(),
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+
+    // `--locked` with no file: an error naming the function, the line, and
+    // the claim, and no file is written.
+    let (code, _, stderr) = check(&["--locked"], &[]);
+    assert_eq!(code, Some(1));
+    assert!(
+        stderr.contains("`step` needs a proof of `lock.failures < 3` at line 34"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("the proofs file has none"), "{stderr}");
+    assert!(!proofs.exists());
+
+    // A plain check writes the file; a second run uses every entry, searches
+    // for nothing, and leaves the bytes as they are.
+    let (code, stdout, _) = check(&["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(stdout.contains("proofs file: 0 used, 5 found and recorded, 0 stale, 5 searched"));
+    let written = std::fs::read_to_string(&proofs).unwrap();
+    assert!(written.starts_with("locus-proofs 1\n"), "{written}");
+    assert_eq!(written.matches("\nobligation ").count(), 5, "{written}");
+    let (code, stdout, _) = check(&["--stats", "--locked"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(
+        stdout.contains("proofs file: 5 used, 0 found and recorded, 0 stale, 0 searched"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("obligations: 5 (5 stored)"), "{stdout}");
+    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+    let (code, stdout, _) = check(&["--holes"], &[]);
+    assert_eq!(code, Some(0));
+    assert_eq!(stdout.matches("filled (stored,").count(), 5, "{stdout}");
+    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+
+    // Surviving an upgrade: with the search disabled altogether, the file
+    // still checks; without the file, nothing does.
+    let (code, stdout, _) = check(&["--stats"], &[("LOCUS_SEARCH", "none")]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(stdout.contains("0 searched"), "{stdout}");
+    let fresh = directory.join("fresh.lc");
+    std::fs::copy(example("lock.lc"), &fresh).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_locus"))
+        .arg("check")
+        .arg(&fresh)
+        .env("LOCUS_SEARCH", "none")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("cannot show"), "{stderr}");
+    assert!(!directory.join("fresh.lc.proofs").exists());
+
+    // `--no-store` and `LOCUS_PROOFS=off` neither read nor write.
+    let (code, stdout, _) = check(&["--holes", "--no-store"], &[]);
+    assert_eq!(code, Some(0));
+    assert!(!stdout.contains("stored"), "{stdout}");
+    let (code, stdout, _) = check(&["--holes"], &[("LOCUS_PROOFS", "off")]);
+    assert_eq!(code, Some(0));
+    assert!(!stdout.contains("stored"), "{stdout}");
+    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+
+    // A stale entry: the file is a hint. One proof swapped for another's
+    // is refused by the kernel, searched for again, and rewritten; under
+    // `--locked` it is an error.
+    let mut lines: Vec<String> = written.lines().map(str::to_string).collect();
+    let proofs_at: Vec<usize> = (0..lines.len())
+        .filter(|&index| lines[index].starts_with("obligation "))
+        .map(|index| index + 1)
+        .collect();
+    lines.swap(proofs_at[1], proofs_at[2]);
+    std::fs::write(&proofs, lines.join("\n") + "\n").unwrap();
+    let (code, _, stderr) = check(&["--locked"], &[]);
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("the proofs file has none"), "{stderr}");
+    let (code, stdout, _) = check(&["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(
+        stdout.contains("proofs file: 3 used, 2 found and recorded, 2 stale, 2 searched"),
+        "{stdout}"
+    );
+    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+
+    // A file that is not a proofs file at all is reported and replaced.
+    std::fs::write(&proofs, "not a proofs file\n").unwrap();
+    let (code, _, stderr) = check(&[], &[]);
+    assert_eq!(code, Some(0));
+    assert!(
+        stderr.contains("does not start with `locus-proofs 1`"),
+        "{stderr}"
+    );
+    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+    std::fs::write(&proofs, "locus-proofs 7\n").unwrap();
+    let (code, _, stderr) = check(&["--locked"], &[]);
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("version 7"), "{stderr}");
 }
