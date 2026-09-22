@@ -4,6 +4,7 @@
 // with references (O3); here the right side is a block that assigns, and
 // a call whose argument reads the place.
 
+#[derive(Clone, Copy, Debug)]
 struct Pair {
     lo: u8,
     hi: u8,

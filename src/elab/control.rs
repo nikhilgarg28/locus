@@ -86,13 +86,17 @@ impl Env<'_> {
         // and leaves them as it found them; the join carries what it
         // assigned to the code after the branch (`mutation.rs`).
         let entry = self.mutable_entry();
+        // What each arm moves is joined the same way (`moves.rs`).
+        let moves_entry = self.moves_now();
         let mark = self.mark();
         let then_result = self
             .assume(then_fact, fact(true), condition.span)
             .and_then(|()| self.branch(&then, expected));
         let then_versions = self.versions_now(&entry);
+        let then_moves = self.moves_now();
         self.close(mark);
         self.restore_versions(&entry);
+        self.restore_moves(&moves_entry);
         let (then_block, then_ty, then_never) = then_result?;
 
         let expected_else = match expected {
@@ -107,9 +111,14 @@ impl Env<'_> {
             .assume(else_fact, fact(false), condition.span)
             .and_then(|()| self.branch(&otherwise, expected_else.as_ref()));
         let else_versions = self.versions_now(&entry);
+        let else_moves = self.moves_now();
         self.close(mark);
         self.restore_versions(&entry);
         let (else_block, else_ty, else_never) = else_result?;
+        self.join_moves(
+            &moves_entry,
+            &[(then_moves, then_never), (else_moves, else_never)],
+        );
 
         let never = then_never && else_never;
         let ty = match expected {
@@ -163,7 +172,11 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        // A matched place is read here; an arm whose pattern binds a part
+        // that is not `Copy` moves it (`moves.rs`).
+        self.mark_place_root(scrutinee);
         let scrutinee_value = self.infer(scrutinee)?;
+        let place = self.place_taken(&scrutinee_value, scrutinee.span);
         if matches!(scrutinee_value.ty, Type::Proof(_)) {
             return self.match_evidence(scrutinee_value, scrutinee.span, arms, expected, span);
         }
@@ -233,6 +246,8 @@ impl Env<'_> {
         let mut ty: Option<Type> = expected.cloned();
         let mut never = true;
         let entry = self.mutable_entry();
+        let moves_entry = self.moves_now();
+        let mut arm_moves = Vec::new();
         let mut ends = Vec::new();
         for (index, arm) in chosen.iter().enumerate() {
             let arm = arm.expect("every variant has an arm");
@@ -261,6 +276,7 @@ impl Env<'_> {
                     }
                     payload.push(binder);
                 }
+                self.move_by_arm(place.as_ref(), &payload, &names);
                 let ids: Vec<VarId> = payload.iter().map(|binder| binder.id).collect();
                 let fact = HypId::fresh();
                 let claim = Term::eq(
@@ -274,9 +290,12 @@ impl Env<'_> {
                 Ok((payload, fact, body, body_ty, body_never))
             })();
             let versions = self.versions_now(&entry);
+            let moves = self.moves_now();
             self.close(mark);
             self.restore_versions(&entry);
+            self.restore_moves(&moves_entry);
             let (payload, fact, body, body_ty, body_never) = arm_result?;
+            arm_moves.push((moves, body_never));
             if !body_never {
                 never = false;
                 if !Env::mentions_arm_version(&entry, &versions, &body_ty) {
@@ -297,6 +316,7 @@ impl Env<'_> {
         }
         let ty = ty.unwrap_or_else(unit_type);
         let result = VarId::fresh();
+        self.join_moves(&moves_entry, &arm_moves);
         let (joined, ty) = self.join(&entry, &ends, ty, result, span)?;
         let expr = Expr::Match {
             scrutinee: Box::new(scrutinee_value.expr),

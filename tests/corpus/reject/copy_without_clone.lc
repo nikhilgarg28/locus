@@ -1,0 +1,12 @@
+// `Copy` requires `Clone`, as in Rust (E0277), and `Eq` requires `PartialEq`.
+#[derive(Copy)] //~ error: L0242 the trait bound `Point: Clone` is not satisfied, and `Copy` requires it
+struct Point {
+    x: u8,
+    y: u8,
+}
+
+#[derive(Eq, Debug)] //~ error: L0242 the trait bound `Mode: PartialEq` is not satisfied, and `Eq` requires it
+enum Mode {
+    Off,
+    On,
+}

@@ -1,0 +1,137 @@
+// Values move, as in Rust, and the programs rustc accepts are accepted
+// here: a moved `let mut` is whole again once assigned, also inside a loop
+// before its back edge and in every arm of a branch; a field that is
+// `Copy` is copied out of a value that is not; a field that is not `Copy`
+// is moved out on its own, and the other fields stay usable; a new binding
+// of the same name is a new value; evidence and other types with no
+// runtime form are never moved; and a proposition may mention a value
+// that is still whole. The fifth case of the mutation design, move and
+// reinitialise, is `consume_twice`.
+
+#[derive(Debug)]
+struct Token {
+    id: u8,
+}
+
+#[derive(Debug)]
+struct Pair {
+    left: Token,
+    right: Token,
+    tag: u8,
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn consume_twice(first: u8, second: u8) -> u8 {
+    let mut t = Token { id: first };
+    let a = consume(t);
+    t = Token { id: second };
+    let b = consume(t);
+    a.wrapping_add(b)
+}
+
+// Moved in the body, assigned again before the next pass.
+fn spin(n: u8) -> u8 {
+    let mut t = Token { id: 0 };
+    let mut total = 0u8;
+    for i in 0..n {
+        total = total.wrapping_add(consume(t));
+        t = Token { id: i };
+    }
+    total.wrapping_add(consume(t))
+}
+
+// Moved on one path and assigned again on the other, then in both.
+fn choose(flag: bool, n: u8) -> u8 {
+    let mut t = Token { id: n };
+    let mut seen = 0u8;
+    if flag {
+        seen = consume(t);
+        t = Token { id: 1 };
+    } else {
+        t = Token { id: 2 };
+    }
+    seen.wrapping_add(consume(t))
+}
+
+// A `Copy` field is copied; a field that is not is moved on its own, and
+// the rest of the value stays.
+fn split(p: Pair) -> u8 {
+    let tag = p.tag;
+    let left = p.left;
+    let right = p.right;
+    tag.wrapping_add(consume(left)).wrapping_add(consume(right))
+}
+
+// A shadowing `let` is a new value.
+fn shadow(n: u8) -> u8 {
+    let t = Token { id: n };
+    let first = consume(t);
+    let t = Token { id: first };
+    consume(t)
+}
+
+// Evidence is used as often as needed, before and after a move of the
+// value it speaks of; a proposition is formed while the value is whole.
+fn bounded_id(n: u8, small: @(n <= 10)) -> u8 {
+    n
+}
+
+fn with_evidence(n: u8, small: @(n <= 10)) -> (out: u8, @(n <= 10)) {
+    let t = Token { id: n };
+    prove!(t.id == n);
+    let first = bounded_id(n, small);
+    let out = consume(t);
+    let second = bounded_id(n, small);
+    (out.wrapping_add(first).wrapping_add(second), small)
+}
+
+// A match that binds nothing that moves leaves the value whole.
+#[derive(Debug)]
+enum Slot {
+    Empty,
+    Full(Token),
+}
+
+fn peek(s: Slot) -> u8 {
+    let kind = match s {
+        Slot::Empty => 0u8,
+        Slot::Full(_) => 1,
+    };
+    match s {
+        Slot::Empty => kind,
+        Slot::Full(t) => kind.wrapping_add(consume(t)),
+    }
+}
+
+// A `break` carries a moved value out, and the loop is left with it gone;
+// the value is assigned again before the next pass.
+fn until(limit: u8) -> u8 {
+    let mut t = Token { id: 0 };
+    let found = loop {
+        if t.id >= limit {
+            break consume(t);
+        } else {
+            t = Token { id: t.id.wrapping_add(1) };
+        }
+    };
+    found
+}
+
+//~ proofs: 1
+//~ run: consume_twice(3, 4) => 7
+//~ run: spin(4) => 6
+//~ run: choose(true, 5) => 6
+//~ run: choose(false, 5) => 2
+//~ run: split(Pair { left: Token { id: 1 }, right: Token { id: 2 }, tag: 4 }) => 7
+//~ run: shadow(9) => 9
+//~ run: with_evidence(3, Proved) => (9, Proved)
+//~ run: peek(Full(Token { id: 5 })) => 6
+//~ run: peek(Empty) => 0
+//~ run: until(3) => 3
+//~ rust: #[derive(Debug)]
+//~ rust: pub struct Token {
+//~ rust: let a = consume(t);
+//~ rust: t = Token { id: second };

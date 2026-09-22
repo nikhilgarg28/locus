@@ -1,0 +1,14 @@
+error[L0240]: use of moved value: `t`
+  --> tests/corpus/reject/moved_in_loop.lc:16:44
+   |
+16 |         total = total.wrapping_add(consume(t)); //~ error: L0240 use of moved value: `t`
+   |                                            ^ value moved here, in previous iteration of loop
+   |
+   = note: move occurs because `t` has type `Token`, which does not implement the `Copy` trait; assign `t` again before the end of the body, or declare it inside the loop
+error[L0240]: use of moved value: `t`
+  --> tests/corpus/reject/moved_in_loop.lc:28:44
+   |
+28 |         total = total.wrapping_add(consume(t)); //~ error: L0240 use of moved value: `t`
+   |                                            ^ value moved here, in previous iteration of loop
+   |
+   = note: move occurs because `t` has type `Token`, which does not implement the `Copy` trait; assign `t` again before the end of the body, or declare it inside the loop

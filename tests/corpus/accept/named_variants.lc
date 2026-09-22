@@ -3,6 +3,7 @@
 // as `E::V { a, b: other, .. }`. The fields are the payload by position in
 // the logic; the names are how the source and the generated Rust write them.
 
+#[derive(Clone, Copy, Debug)]
 enum Shape {
     Dot,
     Line(u8),
@@ -41,6 +42,7 @@ fn area_of_square(side: u8) -> u8 {
 }
 
 // A field's type may depend on an earlier field's name, as in a tuple.
+#[derive(Clone, Copy, Debug)]
 enum Bounded {
     Below { limit: u8, value: u8, fits: @(value <= limit) },
 }

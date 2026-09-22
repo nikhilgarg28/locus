@@ -22,6 +22,7 @@ mod items;
 mod literals;
 mod logic;
 mod loops;
+mod moves;
 mod mutation;
 mod operators;
 mod order;
@@ -31,5 +32,5 @@ mod show;
 mod solve;
 mod types;
 
-pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate};
+pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate, elaborate_with};
 pub use solve::certificate_pairs;

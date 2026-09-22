@@ -1,0 +1,16 @@
+// The list of `#[derive(...)]` is closed: `Clone`, `Copy`, `PartialEq`, `Eq`,
+// and `Debug`, each at most once, and only before a struct or an enum.
+#[derive(Clone, Hash)] //~ error: L0242 `Hash` cannot be derived
+struct Point {
+    x: u8,
+}
+
+#[derive(Debug, Debug)] //~ error: L0242 `Debug` is derived twice
+enum Mode {
+    Off,
+}
+
+#[derive(Clone)] //~ error: L0242 `#[derive(...)]` goes before a `struct` or an `enum`, and this is a function
+fn zero() -> u8 {
+    0
+}

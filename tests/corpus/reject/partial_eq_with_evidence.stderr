@@ -1,0 +1,14 @@
+error[L0243]: `Bounded` cannot derive `PartialEq`: `Bounded.fits` is logic-only data, which has no equality at runtime
+ --> tests/corpus/reject/partial_eq_with_evidence.lc:5:23
+  |
+5 | #[derive(Clone, Copy, PartialEq)] //~ error: L0243 `Bounded` cannot derive `PartialEq`: `Bounded.fits` is logic-only data, which has ...
+  |                       ^^^^^^^^^
+  |
+  = note: erased data has no equality at runtime: every `Proved` marker would compare equal, and lie
+error[L0243]: `Outer` cannot derive `PartialEq`: `Outer.inner.claim` is logic-only data, which has no equality at runtime
+  --> tests/corpus/reject/partial_eq_with_evidence.lc:16:23
+   |
+16 | #[derive(Clone, Copy, PartialEq, Debug)] //~ error: L0243 `Outer` cannot derive `PartialEq`: `Outer.inner.claim` is logic-only data,...
+   |                       ^^^^^^^^^
+   |
+   = note: erased data has no equality at runtime: every `Proved` marker would compare equal, and lie

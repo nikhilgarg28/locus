@@ -1,0 +1,20 @@
+// `PartialEq` and `Eq` are derivable only for a type with no logic-only data
+// at any depth: erased data has no equality at runtime, so every `Proved`
+// marker would compare equal and lie. The field is named, through the
+// depth it is found at.
+#[derive(Clone, Copy, PartialEq)] //~ error: L0243 `Bounded` cannot derive `PartialEq`: `Bounded.fits` is logic-only data, which has no equality at runtime
+struct Bounded {
+    value: u8,
+    fits: @(value <= 100),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Inner {
+    claim: Prop,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)] //~ error: L0243 `Outer` cannot derive `PartialEq`: `Outer.inner.claim` is logic-only data, which has no equality at runtime
+struct Outer {
+    tag: u8,
+    inner: Inner,
+}

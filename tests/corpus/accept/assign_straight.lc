@@ -2,11 +2,13 @@
 // checker sees one version of the variable per assignment, and the Rust
 // printed is what was written.
 
+#[derive(Clone, Copy, Debug)]
 struct Pair {
     lo: u8,
     hi: u8,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Nested {
     pair: Pair,
     count: u8,

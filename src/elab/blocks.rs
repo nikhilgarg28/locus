@@ -25,7 +25,11 @@ impl Env<'_> {
                 // records it too.
                 StatementKind::Assign { place, value } => {
                     match self.assign_statement(place, value, statement.span) {
-                        Ok(stmt) => stmts.push(stmt),
+                        Ok(stmt) => {
+                            // The place is whole again (`moves.rs`).
+                            self.assigned(&stmt, place.span);
+                            stmts.push(stmt);
+                        }
                         Err(()) => failed = true,
                     }
                 }
@@ -36,17 +40,24 @@ impl Env<'_> {
                     ..
                 } => {
                     let result = (|| {
-                        let value = match annotation {
-                            Some(annotation) => {
-                                let ty = self.ty(annotation)?;
-                                self.check(value, &ty)?
-                            }
+                        let annotated = match annotation {
+                            Some(annotation) => Some(self.ty(annotation)?),
+                            None => None,
+                        };
+                        // A value that is a place is taken apart by the
+                        // pattern, which moves the parts it binds (`moves.rs`).
+                        let span = value.span;
+                        self.mark_place_root(value);
+                        let value = match &annotated {
+                            Some(ty) => self.check(value, ty)?,
                             None => self.infer(value)?,
                         };
+                        let place = self.place_taken(&value, span);
                         let term = self.term(&value, statement.span)?;
-                        let pattern = self.bind_pattern(pattern, term)?;
+                        let typed = self.bind_pattern(pattern, term)?;
+                        self.move_by_pattern(place.as_ref(), pattern, &typed, span);
                         Ok(Stmt::Let {
-                            pattern,
+                            pattern: typed,
                             value: value.expr,
                         })
                     })();

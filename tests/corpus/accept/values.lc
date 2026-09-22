@@ -1,12 +1,14 @@
 // Every kind of value a run line can write: bytes, booleans, unit, tuples,
 // structs, and enum variants with and without a payload.
 
+#[derive(Clone, Copy, Debug)]
 enum Shape {
     Dot,
     Line(u8),
     Box(u8, bool),
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Pixel {
     shape: Shape,
     lit: bool,

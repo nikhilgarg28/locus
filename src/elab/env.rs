@@ -11,9 +11,10 @@ use crate::kernel::{
     VarId, infer_term, telescope_entry,
 };
 use crate::source::{SourceFile, Span};
-use crate::typed::{Binder, FnRef, Session};
+use crate::typed::{Binder, Derive, FnRef, Session};
 
 use super::items::{HoleReport, ItemReport};
+use super::moves::{LoopMoves, Moved, Moves};
 use super::mutation::{ArmEnd, Entry};
 
 pub(super) type Elab<T> = Result<T, ()>;
@@ -24,6 +25,8 @@ pub(super) struct StructInfo {
     pub name: String,
     /// A field's type may mention the binders of the fields before it.
     pub fields: Vec<Binder>,
+    /// `#[derive(...)]`, checked: `Copy` in it makes the type reusable.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Debug)]
@@ -31,6 +34,8 @@ pub(super) struct EnumInfo {
     pub id: EnumId,
     pub name: String,
     pub variants: Vec<VariantInfo>,
+    /// `#[derive(...)]`, checked: `Copy` in it makes the type reusable.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Debug)]
@@ -141,6 +146,8 @@ pub(super) struct Local {
     /// For a binding declared `let mut`: its identity, which every version
     /// of it refers to. `id` is then the current version (`mutation.rs`).
     pub binding: Option<VarId>,
+    /// What has been moved out of it, and where (`moves.rs`).
+    pub moved: Vec<Moved>,
 }
 
 /// Something known at this point, with the proof that it holds.
@@ -185,6 +192,8 @@ pub(super) struct LoopTarget {
     pub entry: Entry,
     /// What each `break`, and the exit of a `while`, ended with.
     pub exits: Vec<ArmEnd>,
+    /// What was moved at entry and at each exit (`moves.rs`).
+    pub moves: LoopMoves,
 }
 
 /// A point to return to at the end of a lexical scope.
@@ -244,6 +253,8 @@ pub(super) struct Env<'a> {
     /// a call of such a function: what it was and where. `items` then
     /// elaborates the function again as an ordinary one (LOC-193).
     pub not_a_term: Option<(String, Span)>,
+    /// The move analysis (`moves.rs`).
+    pub moves: Moves,
 }
 
 impl Env<'_> {
@@ -326,6 +337,7 @@ impl Env<'_> {
             ty: ty.clone(),
             poisoned: false,
             binding: None,
+            moved: Vec::new(),
         });
         self.learn_from(&Term::var(id), ty);
     }
@@ -340,6 +352,7 @@ impl Env<'_> {
                 ty: Type::Tuple(Vec::new()),
                 poisoned: true,
                 binding: None,
+                moved: Vec::new(),
             }),
             PatternKind::Group(inner) => self.poison(inner),
             PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.poison(part)),

@@ -1,0 +1,19 @@
+error[L0240]: use of moved value: `t`
+  --> tests/corpus/reject/moved_in_one_arm.lc:13:31
+   |
+12 |     let seen = if flag { consume(t) } else { 0 };
+   |                                  - value moved here
+13 |     seen.wrapping_add(consume(t)) //~ error: L0240 use of moved value: `t`
+   |                               ^ value used here after move
+   |
+   = note: move occurs because `t` has type `Token`, which does not implement the `Copy` trait; a struct or enum is `Copy` with `#[derive(Clone, Copy)]`, and a `let mut` is whole again once assigned
+error[L0240]: use of partially moved value: `s`
+  --> tests/corpus/reject/moved_in_one_arm.lc:27:11
+   |
+25 |         Slot::Full(t) => consume(t),
+   |                    - value partially moved here
+26 |     };
+27 |     match s { //~ error: L0240 use of partially moved value: `s`
+   |           ^ value used here after move
+   |
+   = note: move occurs because `s` has type `Slot`, which does not implement the `Copy` trait; a struct or enum is `Copy` with `#[derive(Clone, Copy)]`, and a `let mut` is whole again once assigned

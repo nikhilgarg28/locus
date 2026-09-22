@@ -53,6 +53,7 @@ pub fn erase_struct(id: crate::kernel::StructId, item: &StructItem) -> EStruct {
             .iter()
             .map(|field| (field.name.clone(), erase_type(&field.ty)))
             .collect(),
+        derives: item.derives.clone(),
     }
 }
 
@@ -71,6 +72,7 @@ pub fn erase_enum(id: crate::kernel::EnumId, item: &EnumItem) -> EEnum {
                     .then(|| variant.payload.iter().map(|b| b.name.clone()).collect()),
             })
             .collect(),
+        derives: item.derives.clone(),
     }
 }
 

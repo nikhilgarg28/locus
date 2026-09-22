@@ -1,0 +1,18 @@
+error[L0241]: `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; take `snapshot!(t)` before the move
+  --> tests/corpus/reject/proposition_mentions_moved.lc:17:12
+   |
+16 |     let out = consume(t);
+   |                       - value moved here
+17 |     prove!(t.id == n); //~ error: L0241 `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; take `snapshot...
+   |            ^^^^
+   |
+   = note: a proposition mentions a value the code still has; evidence obtained before the move stays valid, being a value of its own
+error[L0241]: `t` was moved at line 29 and cannot be mentioned in a proposition afterwards; take `snapshot!(t)` before the move
+  --> tests/corpus/reject/proposition_mentions_moved.lc:30:29
+   |
+29 |     let out = consume(t);
+   |                       - value moved here
+30 |     let claim = prop!(id_of(t) == n); //~ error: L0241 `t` was moved at line 29 and cannot be mentioned in a proposition afterwards
+   |                             ^
+   |
+   = note: a proposition mentions a value the code still has; evidence obtained before the move stays valid, being a value of its own

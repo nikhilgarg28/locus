@@ -908,6 +908,7 @@ fn a_field_that_evidence_depends_on_cannot_be_assigned_alone() {
         .declare_struct(&StructItem {
             name: "Percent".into(),
             fields: vec![value.clone(), in_range],
+            derives: Vec::new(),
         })
         .unwrap();
     // fn set(p: Percent) -> Percent { let mut copy = p; copy.value = 0; copy }

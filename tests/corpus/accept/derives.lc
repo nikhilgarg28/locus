@@ -1,0 +1,78 @@
+// `#[derive(...)]` from the closed list, printed on the generated type in
+// the order written. A plain struct may derive all five; a type holding
+// evidence may derive `Clone`, `Copy`, and `Debug` (evidence is erased, is
+// `Copy`, and prints as its marker) but not `PartialEq` or `Eq`. Without
+// `Copy` a value moves; with it, it is reused freely.
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Point {
+    x: u8,
+    y: u8,
+}
+
+#[derive(Clone, Debug)]
+struct Bounded {
+    value: u8,
+    fits: @(value <= 100),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Mode {
+    Off,
+    On(u8),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Checked {
+    Small(value: u8, @(value <= 100)),
+    Large(u8),
+}
+
+// A `Copy` value is used as often as one likes.
+fn sum(p: Point) -> u8 {
+    let q = p;
+    p.x.wrapping_add(q.y)
+}
+
+// A value without `Copy` moves; its `Copy` fields are copied out of it.
+fn bounded(v: u8, fits: @(v <= 100)) -> Bounded {
+    Bounded { value: v, fits }
+}
+
+fn value_of(b: Bounded) -> u8 {
+    let v = b.value;
+    let again = b;
+    v.wrapping_add(again.value)
+}
+
+fn level(mode: Mode) -> u8 {
+    let copy = mode;
+    match mode {
+        Mode::Off => 0,
+        Mode::On(n) => match copy {
+            Mode::Off => 0,
+            Mode::On(m) => n.wrapping_add(m),
+        },
+    }
+}
+
+fn classify(n: u8) -> Checked {
+    if n <= 100 { Checked::Small(n, prove!(n <= 100)) } else { Checked::Large(n) }
+}
+
+fn twice(c: Checked) -> (Checked, Checked) {
+    (c, c)
+}
+
+//~ proofs: 1
+//~ run: sum(Point { x: 1, y: 2 }) => 3
+//~ run: value_of(Bounded { value: 7, fits: Proved }) => 14
+//~ run: level(On(4)) => 8
+//~ run: level(Off) => 0
+//~ run: classify(3) => Small(3, Proved)
+//~ run: twice(Checked::Large(200)) => (Large(200), Large(200))
+//~ rust: #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+//~ rust: #[derive(Clone, Debug)]
+//~ rust: pub struct Bounded {
+//~ rust: #[derive(Debug, Clone, Copy)]
+//~ rust: pub enum Mode {

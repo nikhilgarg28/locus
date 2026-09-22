@@ -5,6 +5,7 @@
 // condition of a `while` is part of the loop, so what it assigns is carried
 // too.
 
+#[derive(Clone, Copy, Debug)]
 struct Counter {
     count: u8,
     high: bool,

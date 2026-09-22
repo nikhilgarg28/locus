@@ -230,12 +230,21 @@ impl Env<'_> {
             ExprKind::Call { callee, arguments } => {
                 self.call(callee, arguments, expected, expr.span)
             }
-            ExprKind::Member { value, name } => self.member(expr, value, name),
+            // A field of a local is copied or moved on its own (`moves.rs`).
+            ExprKind::Member { value, name } => {
+                let outermost = self.mark_place_root(expr);
+                let value = self.member(expr, value, name);
+                self.place_used(value, expr.span, outermost)
+            }
             ExprKind::Index {
                 value,
                 index,
                 index_span,
-            } => self.index(expr, value, index, index_span),
+            } => {
+                let outermost = self.mark_place_root(expr);
+                let value = self.index(expr, value, index, index_span);
+                self.place_used(value, expr.span, outermost)
+            }
             ExprKind::Block(block) => {
                 let entry = self.mutable_entry();
                 let mark = self.mark();
@@ -342,7 +351,11 @@ impl Env<'_> {
     }
 
     fn name(&mut self, name: &ast::Name, expected: Option<&Type>) -> Elab<Value> {
-        if let Some(local) = self.lookup(&name.text) {
+        if let Some(slot) = self.names.iter().rposition(|local| local.name == name.text) {
+            // A use of a value moves it, unless it is `Copy` or is read
+            // where nothing runs (`moves.rs`).
+            self.use_local(slot, name.span);
+            let local = &self.names[slot];
             if local.poisoned {
                 return Err(());
             }

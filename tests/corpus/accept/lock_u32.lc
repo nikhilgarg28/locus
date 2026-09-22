@@ -3,11 +3,13 @@
 // count never exceeds the limit, and every function that hands the count on
 // says so with evidence.
 
+#[derive(Clone, Copy, Debug)]
 enum Event {
     Wrong,
     Right,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Lock {
     failures: u32,
     open: bool,

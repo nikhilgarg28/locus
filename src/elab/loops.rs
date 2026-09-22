@@ -315,13 +315,18 @@ impl Env<'_> {
             value,
             span,
         )?;
+        self.leave_loop_moves(&elaborated.target.moves);
         Ok((Carried { tuple, joins }, ty))
     }
 
     /// The body of a loop, which produces no value: it ends in `()`, or in
     /// a transfer of control.
     fn loop_body(&mut self, body: &ast::Block) -> Elab<typed::Block> {
-        let (block, _, _) = self.block(body, Some(&unit_type()))?;
+        let (block, _, never) = self.block(body, Some(&unit_type()))?;
+        // The end of the body is a back edge (`moves.rs`).
+        if !never {
+            self.back_edge();
+        }
         Ok(block)
     }
 
@@ -340,6 +345,7 @@ impl Env<'_> {
             valued: true,
             entry: entry.clone(),
             exits: Vec::new(),
+            moves: self.loop_moves(),
         };
         let elaborated = self.in_loop(body, None, target, span, |env| env.loop_body(body))?;
         let never = elaborated.target.exits.is_empty();
@@ -383,11 +389,13 @@ impl Env<'_> {
             valued: false,
             entry: entry.clone(),
             exits: Vec::new(),
+            moves: self.loop_moves(),
         };
         let elaborated = self.in_loop(body, Some(condition), target, span, |env| {
             let condition_value = env.check(condition, &Type::Bool)?;
             let (tested, negated) = env.tested(&condition_value, condition.span)?;
             let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
+            env.loop_exit();
             let versions = env.versions_now(&entry);
             env.loops
                 .last_mut()
@@ -470,8 +478,11 @@ impl Env<'_> {
             valued: false,
             entry: entry.clone(),
             exits: Vec::new(),
+            moves: self.loop_moves(),
         };
         let elaborated = self.in_loop(body, None, target, span, |env| {
+            // An empty range leaves the loop at entry (`moves.rs`).
+            env.loop_exit();
             env.declare(&index, false, span)?;
             env.assume(
                 lower_fact,
@@ -548,6 +559,7 @@ impl Env<'_> {
             let target = self.loops.last().expect("checked above");
             self.versions_now(&target.entry)
         };
+        self.loop_exit();
         let target = self.loops.last_mut().expect("checked above");
         if target.result.is_none() && !Env::mentions_arm_version(&target.entry, &versions, &ty) {
             target.result = Some(ty.clone());
@@ -568,6 +580,8 @@ impl Env<'_> {
         if self.loops.is_empty() {
             return self.fail("L0217", "`continue` outside a loop", expr.span);
         }
+        // A `continue` is a back edge (`moves.rs`).
+        self.back_edge();
         Ok(Value {
             expr: Expr::Continue,
             ty: unit_type(),

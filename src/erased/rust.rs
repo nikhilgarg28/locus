@@ -7,8 +7,11 @@
 //! `break value`, and `continue` as they were written: what a loop carries
 //! in the check IR is, here, the variables the body assigns.
 //!
-//! Every value in the core is immutable and freely reusable, so structs and
-//! enums derive `Copy`.
+//! A struct or an enum derives exactly what its declaration derived, in the
+//! order written, and nothing else: a type without `Copy` moves in the
+//! generated Rust as it does in Locus, whose move analysis is what keeps
+//! rustc from finding a use after a move here. `Proved` and `Ghost`, the
+//! printer's own types, derive everything.
 //!
 //! A panic is printed as `panic!("{}", "message")`. The message is an
 //! argument and never the format string, so its braces mean nothing to
@@ -63,7 +66,7 @@
 use std::fmt::Write;
 
 use crate::kernel::{MachineInt, Op, Prim};
-use crate::typed::CompareOp;
+use crate::typed::{CompareOp, Derive};
 
 use super::interp::Value;
 use super::tree::{EBlock, EExpr, EPattern, EStmt, EType, Module};
@@ -95,11 +98,8 @@ pub fn print_module(module: &Module) -> String {
         out: String::from(HEADER),
     };
     for item in &module.structs {
-        let _ = writeln!(
-            printer.out,
-            "\n#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub struct {} {{",
-            item.name
-        );
+        printer.derives(&item.derives);
+        let _ = writeln!(printer.out, "pub struct {} {{", item.name);
         for (name, ty) in &item.fields {
             let ty = printer.ty(ty);
             let _ = writeln!(printer.out, "    pub {name}: {ty},");
@@ -107,11 +107,8 @@ pub fn print_module(module: &Module) -> String {
         printer.out.push_str("}\n");
     }
     for item in &module.enums {
-        let _ = writeln!(
-            printer.out,
-            "\n#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub enum {} {{",
-            item.name
-        );
+        printer.derives(&item.derives);
+        let _ = writeln!(printer.out, "pub enum {} {{", item.name);
         for variant in &item.variants {
             let payload: Vec<String> = variant.payload.iter().map(|ty| printer.ty(ty)).collect();
             if let Some(fields) = &variant.fields {
@@ -219,6 +216,17 @@ fn tuple_of(items: &[String]) -> String {
 }
 
 impl Printer<'_> {
+    /// The `#[derive(...)]` line before a struct or an enum, when it
+    /// derives anything, after the blank line that separates items.
+    fn derives(&mut self, derives: &[Derive]) {
+        self.out.push('\n');
+        if derives.is_empty() {
+            return;
+        }
+        let names: Vec<&str> = derives.iter().map(|derive| derive.name()).collect();
+        let _ = writeln!(self.out, "#[derive({})]", names.join(", "));
+    }
+
     fn ty(&self, ty: &EType) -> String {
         match ty {
             EType::Bool => "bool".into(),

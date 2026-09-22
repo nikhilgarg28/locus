@@ -1,0 +1,31 @@
+// A value moved on one path of a branch is moved after the join, whichever
+// path ran: Rust's rule, and rustc's E0382 at the later use.
+struct Token {
+    id: u8,
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn maybe(flag: bool, t: Token) -> u8 {
+    let seen = if flag { consume(t) } else { 0 };
+    seen.wrapping_add(consume(t)) //~ error: L0240 use of moved value: `t`
+}
+
+// A match arm that binds a part moves the value matched, in that arm.
+enum Slot {
+    Empty,
+    Full(Token),
+}
+
+fn take(s: Slot) -> u8 {
+    let id = match s {
+        Slot::Empty => 0u8,
+        Slot::Full(t) => consume(t),
+    };
+    match s { //~ error: L0240 use of partially moved value: `s`
+        Slot::Empty => id,
+        Slot::Full(_) => id.wrapping_add(1),
+    }
+}

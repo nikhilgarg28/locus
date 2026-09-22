@@ -1,0 +1,28 @@
+// A struct or an enum is `Copy` only if every field is: a field whose type
+// does not derive `Copy` prevents it, and is named. `Clone` asks the same
+// of its fields, and a tuple field has what its parts have.
+#[derive(Clone)]
+struct Token {
+    id: u8,
+}
+
+struct Opaque {
+    id: u8,
+}
+
+#[derive(Clone, Copy)] //~ error: L0243 `Pair` cannot derive `Copy`: field `Pair.left` is `Token`, which does not derive `Copy`
+struct Pair {
+    left: Token,
+    tag: u8,
+}
+
+#[derive(Clone, Copy)] //~ error: L0243 `Slot` cannot derive `Copy`: field `Slot::Full.0` is `Token`, which does not derive `Copy`
+enum Slot {
+    Empty,
+    Full(Token),
+}
+
+#[derive(Clone)] //~ error: L0243 `Holder` cannot derive `Clone`: field `Holder.inner` is `(u8, Opaque)`, which does not derive `Clone`
+struct Holder {
+    inner: (u8, Opaque),
+}

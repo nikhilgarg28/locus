@@ -3,11 +3,14 @@
 // they need: the operators `+` and `-` under `no_panic`, their obligations
 // and the claims after them discharged by the tiers, arithmetic among
 // them. The `run` of the target needs `let mut` of evidence, refreshed
-// as the lock changes (M4), and stays in the target file. `#[derive]` is
-// left off, since O1 has not given it a meaning.
+// as the lock changes (M4), and stays in the target file. The derives are
+// the target's, with `Debug` for the run lines: a `Copy` lock is named
+// again in the claim after it is placed in the tuple.
 
+#[derive(Clone, Copy, Debug)]
 pub enum Event { Wrong, Right }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Lock { failures: u32, open: bool }
 
 #[terminates] #[no_panic] #[no_io]

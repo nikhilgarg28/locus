@@ -1,0 +1,14 @@
+error[L0242]: the trait bound `Point: Clone` is not satisfied, and `Copy` requires it
+ --> tests/corpus/reject/copy_without_clone.lc:2:10
+  |
+2 | #[derive(Copy)] //~ error: L0242 the trait bound `Point: Clone` is not satisfied, and `Copy` requires it
+  |          ^^^^
+  |
+  = note: write `#[derive(Clone, Copy)]`; a type is `Copy` only if it is `Clone`, as in Rust
+error[L0242]: the trait bound `Mode: PartialEq` is not satisfied, and `Eq` requires it
+ --> tests/corpus/reject/copy_without_clone.lc:8:10
+  |
+8 | #[derive(Eq, Debug)] //~ error: L0242 the trait bound `Mode: PartialEq` is not satisfied, and `Eq` requires it
+  |          ^^
+  |
+  = note: write `#[derive(PartialEq, Eq)]`; a type is `Eq` only if it is `PartialEq`, as in Rust

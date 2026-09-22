@@ -1,0 +1,21 @@
+error[L0242]: `Hash` cannot be derived
+ --> tests/corpus/reject/unknown_derive.lc:3:17
+  |
+3 | #[derive(Clone, Hash)] //~ error: L0242 `Hash` cannot be derived
+  |                 ^^^^
+  |
+  = note: the traits a type may derive are `Clone`, `Copy`, `PartialEq`, `Eq`, and `Debug`
+error[L0242]: `Debug` is derived twice
+ --> tests/corpus/reject/unknown_derive.lc:8:17
+  |
+8 | #[derive(Debug, Debug)] //~ error: L0242 `Debug` is derived twice
+  |          -----  ^^^^^
+  |          |
+  |          first derived here
+error[L0242]: `#[derive(...)]` goes before a `struct` or an `enum`, and this is a function
+  --> tests/corpus/reject/unknown_derive.lc:13:1
+   |
+13 | #[derive(Clone)] //~ error: L0242 `#[derive(...)]` goes before a `struct` or an `enum`, and this is a function
+   | ^^^^^^^^^^^^^^^^
+   |
+   = note: the traits a type may derive are `Clone`, `Copy`, `PartialEq`, `Eq`, and `Debug`

@@ -30,18 +30,60 @@ pub struct Binder {
     pub ty: Type,
 }
 
+/// A trait a struct or an enum derives, from the closed list of
+/// `#[derive(...)]`. The elaborator checks that the type may derive it; the
+/// printer writes the list on the generated type, in the order given, and
+/// adds nothing of its own. A type without `Copy` moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Derive {
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Debug,
+}
+
+impl Derive {
+    /// The closed list, in the order Rust conventionally writes it.
+    pub const ALL: [Self; 5] = [
+        Self::Clone,
+        Self::Copy,
+        Self::PartialEq,
+        Self::Eq,
+        Self::Debug,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Clone => "Clone",
+            Self::Copy => "Copy",
+            Self::PartialEq => "PartialEq",
+            Self::Eq => "Eq",
+            Self::Debug => "Debug",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|derive| derive.name() == name)
+    }
+}
+
 /// `struct Name { field: Type, ... }`. A field's type may mention the
 /// fields before it, by their binders' identities.
 #[derive(Clone, Debug)]
 pub struct StructItem {
     pub name: String,
     pub fields: Vec<Binder>,
+    /// `#[derive(...)]`, as written and in that order.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Clone, Debug)]
 pub struct EnumItem {
     pub name: String,
     pub variants: Vec<VariantItem>,
+    /// `#[derive(...)]`, as written and in that order.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Clone, Debug)]

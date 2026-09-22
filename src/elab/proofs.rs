@@ -107,7 +107,10 @@ impl Env<'_> {
             }
         }
         let ids: Vec<VarId> = variant.payload.iter().map(|binder| binder.id).collect();
-        let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &what, span)?;
+        // Evidence is erased with what it holds: its values are read, not
+        // moved (`moves.rs`).
+        let payload =
+            self.ghost(|env| env.arguments_by_ref(arguments, &ids, &mut tys, &what, span))?;
         let mut terms = Vec::new();
         for expr in &payload {
             match value_term(expr) {
@@ -224,6 +227,9 @@ impl Env<'_> {
             );
         }
 
+        // The match is a proof: its arms are erased, and a value named in
+        // one is read, not moved (`moves.rs`).
+        let ghost = self.moves.enter_ghost();
         let mut proof_arms = Vec::new();
         for (variant, arm) in info.variants.iter().zip(chosen) {
             let arm = arm.expect("every variant has an arm");
@@ -292,6 +298,7 @@ impl Env<'_> {
                 substitute(body, &vars, &hyps)
             }));
         }
+        self.moves.leave_ghost(ghost);
         self.proved(
             Proof::CaseProof {
                 scrutinee: Box::new(evidence),

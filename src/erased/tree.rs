@@ -1,7 +1,7 @@
 //! The erased tree. It mirrors `typed::tree` without its logical content.
 
 use crate::kernel::{EnumId, MachineInt, Op, Prim, StructId, VarId};
-use crate::typed::{CompareOp, FnRef};
+use crate::typed::{CompareOp, Derive, FnRef};
 
 /// A simple type: no propositions, no dependency.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +37,8 @@ pub struct EStruct {
     pub id: StructId,
     pub name: String,
     pub fields: Vec<(String, EType)>,
+    /// Printed as `#[derive(...)]`, in this order.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +46,8 @@ pub struct EEnum {
     pub id: EnumId,
     pub name: String,
     pub variants: Vec<EVariant>,
+    /// Printed as `#[derive(...)]`, in this order.
+    pub derives: Vec<Derive>,
 }
 
 #[derive(Clone, Debug)]

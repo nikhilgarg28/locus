@@ -174,9 +174,19 @@ impl Env<'_> {
                 .arguments(arguments, &ids, &mut only_params, &what, span)
                 .map(|_| unreachable!("the counts differ"));
         }
+        // The arguments of a call erasure removes are read, not moved
+        // (`moves.rs`).
+        let erased = match info.reference {
+            FnRef::Math(id) => !self.session.program().definitions().is_executable(id),
+            FnRef::Exec(_) => false,
+        };
         let mut exprs = Vec::new();
         for (index, argument) in arguments.iter().enumerate() {
-            let value = self.check(argument, &tys[index].clone())?;
+            let value = if erased {
+                self.ghost(|env| env.check(argument, &tys[index].clone()))?
+            } else {
+                self.check(argument, &tys[index].clone())?
+            };
             let term = self.term(&value, argument.span)?;
             for later in tys[index + 1..].iter_mut() {
                 *later = later.replace_var(ids[index], &term);
@@ -248,7 +258,8 @@ impl Env<'_> {
         }
         let mut terms = Vec::new();
         for (argument, param) in arguments.iter().zip(&info.params) {
-            let value = self.check(argument, &param.ty)?;
+            // A proposition's arguments are read, not moved (`moves.rs`).
+            let value = self.ghost(|env| env.check(argument, &param.ty))?;
             terms.push(self.term(&value, argument.span)?);
         }
         Ok(Term::PropApp(info.id, terms))

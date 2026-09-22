@@ -9,8 +9,8 @@ use locus::kernel::{
     Type, VarId,
 };
 use locus::typed::{
-    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm,
-    Pattern, Place, Session, Step, Stmt, VariantItem,
+    Binder, Block, Carried, CompareOp, Derive, EnumItem, Expr, FnItem, FnRef, Join, Joined,
+    MatchArm, Pattern, Place, Session, Step, Stmt, VariantItem,
 };
 
 pub fn setup() -> (Session, Prelude, Theory) {
@@ -479,6 +479,7 @@ pub fn classified_enum(prelude: Prelude) -> EnumItem {
     };
     EnumItem {
         name: "Classified".into(),
+        derives: Derive::ALL.to_vec(),
         variants: vec![
             VariantItem {
                 name: "Zero".into(),

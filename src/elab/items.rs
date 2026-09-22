@@ -9,7 +9,7 @@ use crate::exec::Promises;
 use crate::kernel::theory;
 use crate::kernel::{Context, Definitions, FnId, Proof, PropVariant, Term, Type};
 use crate::source::{SourceFile, Span};
-use crate::typed::{Binder, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
+use crate::typed::{Binder, Derive, EnumItem, FnItem, FnRef, Session, StructItem, VariantItem};
 
 use super::env::{
     Elab, EnumInfo, Env, FnInfo, Global, LOGICAL, PropInfo, PropVariantInfo, StructInfo,
@@ -79,7 +79,19 @@ impl Elaborated {
     }
 }
 
+/// Elaborates a program, moves checked.
 pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
+    elaborate_with(source, program, true)
+}
+
+/// Elaborates a program. `check_moves` is the test hook of `moves.rs`: `false`
+/// skips the move analysis, so that a program with a use after a move is
+/// printed as Rust and handed to rustc, which must reject it.
+pub fn elaborate_with(
+    source: &SourceFile,
+    program: &ast::Program,
+    check_moves: bool,
+) -> Elaborated {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
     let mut env = Env {
@@ -104,6 +116,7 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
         promises: Promises::default(),
         formula: None,
         not_a_term: None,
+        moves: super::moves::Moves::new(check_moves),
     };
 
     env.declare_builtin_props();
@@ -192,33 +205,18 @@ pub fn elaborate(source: &SourceFile, program: &ast::Program) -> Elaborated {
 }
 
 impl Env<'_> {
-    /// What S4 parses and no commit has given a meaning yet: `derive`, once
-    /// per file, and every `impl` block. Doc comments and visibility need no
-    /// report, since ignoring them changes nothing a program says.
+    /// What S4 parses and no commit has given a meaning yet: every `impl`
+    /// block. Doc comments and visibility need no report, since ignoring
+    /// them changes nothing a program says. A `derive` at the top of the
+    /// file or on a method is out of place.
     fn report_unchecked_syntax(&mut self, program: &ast::Program) {
-        let mut derive: Option<Span> = None;
-        let mut note = |attributes: &[ast::Attribute]| {
-            for attribute in attributes {
-                if !attribute.kind.is_promise() {
-                    derive.get_or_insert(attribute.span);
-                }
-            }
-        };
-        note(&program.attributes);
+        self.refuse_derive(&program.attributes, "the file");
         for declaration in &program.declarations {
-            note(&declaration.attributes);
             if let DeclarationKind::Impl { methods, .. } = &declaration.kind {
                 for method in methods {
-                    note(&method.attributes);
+                    self.refuse_derive(&method.attributes, "a method");
                 }
             }
-        }
-        if let Some(span) = derive {
-            self.diagnostics.push(Diagnostic::error(
-                "L0290",
-                "`#[derive(...)]` is parsed but not checked yet; O1 adds it",
-                span,
-            ));
         }
         for declaration in &program.declarations {
             if let DeclarationKind::Impl { target, .. } = &declaration.kind {
@@ -284,6 +282,155 @@ impl Env<'_> {
         }
     }
 
+    /// `#[derive(...)]` where there is nothing to derive for: `what` is not
+    /// a struct or an enum.
+    fn refuse_derive(&mut self, attributes: &[ast::Attribute], what: &str) {
+        for attribute in attributes {
+            if let AttributeKind::Derive(_) = &attribute.kind {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "L0242",
+                        format!("`#[derive(...)]` goes before a `struct` or an `enum`, and this is {what}"),
+                        attribute.span,
+                    )
+                    .note("the traits a type may derive are `Clone`, `Copy`, `PartialEq`, `Eq`, and `Debug`"),
+                );
+            }
+        }
+    }
+
+    /// The traits a struct or an enum derives (O1): each `#[derive(...)]`
+    /// before it, read in order, from the closed list `Clone`, `Copy`,
+    /// `PartialEq`, `Eq`, and `Debug`, none twice; `Copy` with `Clone` and
+    /// `Eq` with `PartialEq`, as Rust demands (`L0242`). Each trait must
+    /// hold of every field (`L0243`): a struct or enum field must derive it
+    /// too, since the generated Rust would not compile otherwise; `Copy`
+    /// needs `Copy` fields; and `PartialEq` and `Eq` need data with no
+    /// logic-only part at any depth, since erased data has no equality at
+    /// runtime (every `Proved` marker would compare equal, and lie). A
+    /// type with no runtime form is `Copy`, `Clone`, and `Debug` (the
+    /// marker prints as its name). `fields` are the field groups: one for a
+    /// struct, one per variant for an enum, each named for a message.
+    fn derives(
+        &mut self,
+        attributes: &[ast::Attribute],
+        type_name: &str,
+        fields: &[(String, &[Binder])],
+    ) -> Elab<Vec<Derive>> {
+        let mut derives: Vec<(Derive, Span)> = Vec::new();
+        let mut failed = false;
+        let closed =
+            "the traits a type may derive are `Clone`, `Copy`, `PartialEq`, `Eq`, and `Debug`";
+        for attribute in attributes {
+            let AttributeKind::Derive(paths) = &attribute.kind else {
+                continue;
+            };
+            for path in paths {
+                let name = path.text();
+                let Some(derive) = path.single().and_then(|name| Derive::from_name(&name.text))
+                else {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "L0242",
+                            format!("`{name}` cannot be derived"),
+                            path.span,
+                        )
+                        .note(closed),
+                    );
+                    failed = true;
+                    continue;
+                };
+                if let Some((_, first)) = derives.iter().find(|(earlier, _)| *earlier == derive) {
+                    self.diagnostics.push(
+                        Diagnostic::error("L0242", format!("`{name}` is derived twice"), path.span)
+                            .label(*first, "first derived here"),
+                    );
+                    failed = true;
+                    continue;
+                }
+                derives.push((derive, path.span));
+            }
+        }
+        for (needs, needed) in [
+            (Derive::Copy, Derive::Clone),
+            (Derive::Eq, Derive::PartialEq),
+        ] {
+            if let Some((_, span)) = derives.iter().find(|(derive, _)| *derive == needs)
+                && !derives.iter().any(|(derive, _)| *derive == needed)
+            {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "L0242",
+                        format!(
+                            "the trait bound `{type_name}: {}` is not satisfied, and `{}` requires it",
+                            needed.name(),
+                            needs.name()
+                        ),
+                        *span,
+                    )
+                    .note(format!(
+                        "write `#[derive({}, {})]`; a type is `{}` only if it is `{}`, as in Rust",
+                        needed.name(),
+                        needs.name(),
+                        needs.name(),
+                        needed.name()
+                    )),
+                );
+                failed = true;
+            }
+        }
+        for (derive, span) in &derives {
+            for (group, binders) in fields {
+                for (index, field) in binders.iter().enumerate() {
+                    let field_name = if field.name == "_" {
+                        format!("{group}.{index}")
+                    } else {
+                        format!("{group}.{}", field.name)
+                    };
+                    let shown = self.show_type(&field.ty);
+                    let why = if matches!(derive, Derive::PartialEq | Derive::Eq)
+                        && let Some(inner) = self.logic_only_data(&field.ty)
+                    {
+                        Some((
+                            format!(
+                                "`{field_name}{inner}` is logic-only data, which has no equality at runtime"
+                            ),
+                            "erased data has no equality at runtime: every `Proved` marker would compare equal, and lie",
+                        ))
+                    } else if !self.derives_trait(&field.ty, *derive) {
+                        Some((
+                            format!(
+                                "field `{field_name}` is `{shown}`, which does not derive `{}`",
+                                derive.name()
+                            ),
+                            "a struct or an enum has a trait only by deriving it, and its fields must have it too",
+                        ))
+                    } else {
+                        None
+                    };
+                    if let Some((message, note)) = why {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "L0243",
+                                format!(
+                                    "`{type_name}` cannot derive `{}`: {message}",
+                                    derive.name()
+                                ),
+                                *span,
+                            )
+                            .note(note),
+                        );
+                        failed = true;
+                    }
+                }
+            }
+        }
+        if failed {
+            return Err(());
+        }
+        Ok(derives.into_iter().map(|(derive, _)| derive).collect())
+    }
+
     /// A fresh function scope over the declarations accepted so far.
     fn start_item(&mut self, name: &str, total: bool, promises: Promises) {
         let definitions = self.session.program().definitions().clone();
@@ -295,6 +442,7 @@ impl Env<'_> {
         self.item_name = name.to_string();
         self.promises = promises;
         self.formula = None;
+        self.moves.start_item();
     }
 
     fn declaration(&mut self, declaration: &ast::Declaration) -> Elab<Global> {
@@ -308,9 +456,12 @@ impl Env<'_> {
                         .iter()
                         .map(|field| (Some(&field.name), &field.ty, field.span)),
                 )?;
+                let derives =
+                    self.derives(attributes, &name.text, &[(name.text.clone(), &fields)])?;
                 let item = StructItem {
                     name: name.text.clone(),
                     fields: fields.clone(),
+                    derives: derives.clone(),
                 };
                 let id = match self.session.declare_struct(&item) {
                     Ok(id) => id,
@@ -320,6 +471,7 @@ impl Env<'_> {
                     id,
                     name: name.text.clone(),
                     fields,
+                    derives,
                 })))
             }
             DeclarationKind::Enum { name, variants } => {
@@ -346,6 +498,16 @@ impl Env<'_> {
                         named: variant.shape == ast::VariantShape::Struct,
                     });
                 }
+                let groups: Vec<(String, &[Binder])> = items
+                    .iter()
+                    .map(|variant| {
+                        (
+                            format!("{}::{}", name.text, variant.name),
+                            variant.payload.as_slice(),
+                        )
+                    })
+                    .collect();
+                let derives = self.derives(attributes, &name.text, &groups)?;
                 let item = EnumItem {
                     name: name.text.clone(),
                     variants: items
@@ -356,6 +518,7 @@ impl Env<'_> {
                             named: variant.named,
                         })
                         .collect(),
+                    derives: derives.clone(),
                 };
                 let id = match self.session.declare_enum(&item) {
                     Ok(id) => id,
@@ -365,6 +528,7 @@ impl Env<'_> {
                     id,
                     name: name.text.clone(),
                     variants: items,
+                    derives,
                 })))
             }
             DeclarationKind::Function {
@@ -374,6 +538,7 @@ impl Env<'_> {
                 body,
                 ..
             } => {
+                self.refuse_derive(attributes, "a function");
                 let promises = self.promises_of(attributes, self.file_promises);
                 let takes_mut = parameters.iter().any(|parameter| {
                     matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
@@ -388,6 +553,7 @@ impl Env<'_> {
             }
             DeclarationKind::Constant { name, ty, value } => {
                 self.refuse_promises(attributes, name, "a constant");
+                self.refuse_derive(attributes, "a constant");
                 let function = Function {
                     promises: LOGICAL,
                     takes_mut: false,
@@ -402,6 +568,7 @@ impl Env<'_> {
                 variants,
             } => {
                 self.refuse_promises(attributes, name, "a proposition");
+                self.refuse_derive(attributes, "a proposition");
                 self.prop(name, parameters, variants)
             }
             DeclarationKind::Impl { .. } => {

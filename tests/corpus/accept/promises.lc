@@ -43,6 +43,7 @@ fn twice(n: u8) -> u8 {
 }
 
 // A conditional and a `match` in a promised function.
+#[derive(Clone, Copy, Debug)]
 enum Mode {
     Off,
     On(u8),

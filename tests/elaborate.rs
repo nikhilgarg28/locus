@@ -170,14 +170,14 @@ fn the_lock_runs_as_written() {
         [
             // step: `prove!(lock.failures < 3)` is the branch taken, reflected
             // through `cmp_reflect`, whose comparison names its type.
-            (32, 63, "computed", 14),
+            (34, 63, "computed", 14),
             // step: `bounded` serves for `within_limit((Lock { .. }).failures)`.
-            (35, 65, "computed", 37),
+            (37, 65, "computed", 37),
             // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
             // it stands.
-            (29, 80, "evaluation", 11),
+            (31, 80, "evaluation", 11),
             // run: `prove!(0u8 <= 3)` for the initial state.
-            (52, 65, "evaluation", 11),
+            (54, 65, "evaluation", 11),
         ]
     );
 }
@@ -188,7 +188,7 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
     let module = result.session.erased();
     let mut source = print_module(module);
     for expected in [
-        "pub struct Lock {",
+        "#[derive(Clone, Copy, Debug)]\npub struct Lock {",
         "pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {",
         "    match event {",
         "            if lock.failures < 3_u8 {",
@@ -1372,4 +1372,94 @@ fn a_variant_with_named_fields_is_a_tuple_variant_with_names_in_the_logic() {
         rust.contains("Shape::Bounded { limit, value, fits }"),
         "{rust}"
     );
+}
+
+#[test]
+fn derives_are_printed_as_written_and_nothing_else_is_added() {
+    // O1: the closed list, in the order given; a type without a derive
+    // gets no attribute, since `Copy` would let a moved value be reused.
+    let result = accepted(
+        "#[derive(Debug, Clone, Copy)] struct Point { x: u8, y: u8 }
+        #[derive(Clone, PartialEq, Eq, Debug)] enum Mode { Off, On(u8) }
+        struct Token { id: u8 }
+        fn origin() -> Point { Point { x: 0, y: 0 } }",
+    );
+    let rust = print_module(result.session.erased());
+    assert!(
+        rust.contains("#[derive(Debug, Clone, Copy)]\npub struct Point {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("#[derive(Clone, PartialEq, Eq, Debug)]\npub enum Mode {"),
+        "{rust}"
+    );
+    assert!(rust.contains("}\n\npub struct Token {"), "{rust}");
+}
+
+#[test]
+fn a_copy_value_is_reused_and_a_moved_one_is_not() {
+    // The fifth case of the mutation design: move and reinitialise.
+    let result = accepted(
+        "struct Token { id: u8 }
+        fn consume(t: Token) -> u8 { t.id }
+        fn twice(a: u8, b: u8) -> u8 {
+            let mut t = Token { id: a };
+            let first = consume(t);
+            t = Token { id: b };
+            first.wrapping_add(consume(t))
+        }",
+    );
+    assert_eq!(call(&result, "twice", &[3, 4]), "7");
+    let (codes, message) = rejected(
+        "struct Token { id: u8 }
+        fn consume(t: Token) -> u8 { t.id }
+        fn twice(a: u8) -> u8 {
+            let t = Token { id: a };
+            let first = consume(t);
+            first.wrapping_add(consume(t))
+        }",
+    );
+    assert_eq!(codes, ["L0240"]);
+    assert!(message.starts_with("use of moved value: `t`"), "{message}");
+    // With `Copy`, the same program is accepted.
+    let result = accepted(
+        "#[derive(Clone, Copy)] struct Token { id: u8 }
+        fn consume(t: Token) -> u8 { t.id }
+        fn twice(a: u8) -> u8 {
+            let t = Token { id: a };
+            let first = consume(t);
+            first.wrapping_add(consume(t))
+        }",
+    );
+    assert_eq!(call(&result, "twice", &[3]), "6");
+}
+
+#[test]
+fn a_lemma_reads_its_argument_and_a_proposition_cannot_mention_a_moved_one() {
+    // The argument of a call erasure removes is a reading: the value stays
+    // whole for the code after it.
+    accepted(
+        "struct Token { id: u8 }
+        #[terminates] #[no_panic] #[no_io]
+        fn small(t: Token) -> Prop { prop!(t.id <= 10) }
+        fn consume(t: Token) -> u8 { t.id }
+        fn read_then_use(n: u8) -> u8 {
+            let t = Token { id: n };
+            let claim = small(t);
+            let again = prop!(small(t) && t.id == n);
+            consume(t)
+        }",
+    );
+    let (codes, message) = rejected(
+        "struct Token { id: u8 }
+        fn consume(t: Token) -> u8 { t.id }
+        fn afterwards(n: u8) -> u8 {
+            let t = Token { id: n };
+            let out = consume(t);
+            prove!(t.id == n);
+            out
+        }",
+    );
+    assert_eq!(codes, ["L0241"]);
+    assert!(message.contains("`t` was moved at line 5"), "{message}");
 }

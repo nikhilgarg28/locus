@@ -1,8 +1,9 @@
-// S4 parses derive and impl blocks; what gives them meaning comes later,
-// and the elaborator says which commit. The promises have theirs:
+// S4 parses impl blocks; what gives them meaning comes later, and the
+// elaborator says which commit. `derive` has its meaning since O1, and the
+// promises have theirs:
 // `#![no_io]` and the two on `get` admit it to a proposition.
 #![no_io]
-#[derive(Clone, Copy)] //~ error: L0290 `#[derive(...)]` is parsed but not checked yet; O1
+#[derive(Clone, Copy)]
 pub struct Counter {
     pub count: u8,
 }

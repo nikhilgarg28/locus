@@ -1,0 +1,21 @@
+// A value without `Copy` moves when it is used, and a use afterwards is an
+// error, as rustc's E0382: at the use, naming the move.
+struct Token {
+    id: u8,
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn twice(t: Token) -> u8 {
+    let first = consume(t);
+    let second = consume(t); //~ error: L0240 use of moved value: `t`
+    first.wrapping_add(second)
+}
+
+// A `let` moves too, and a `Copy` field of a moved value is gone with it.
+fn bind_then_read(t: Token) -> u8 {
+    let kept = t;
+    t.id //~ error: L0240 use of moved value: `t`
+}

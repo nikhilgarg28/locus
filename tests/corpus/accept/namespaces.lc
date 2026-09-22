@@ -5,6 +5,7 @@
 // proposition applied otherwise. The values here are of the logic, so the
 // Rust has the types alone and no lint to raise about their names.
 
+#[derive(Clone, Copy, Debug)]
 struct Point {
     x: u8,
     y: u8,
@@ -16,6 +17,7 @@ fn Point(x: u8, y: u8) -> Prop {
     prop!(x <= y)
 }
 
+#[derive(Clone, Copy, Debug)]
 enum Mode {
     Off,
     On,

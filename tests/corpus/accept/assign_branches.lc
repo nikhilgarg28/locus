@@ -2,11 +2,13 @@
 // match whose result carries the new versions of what the arms assigned;
 // an arm that leaves a binding alone passes its entry version through.
 
+#[derive(Clone, Copy, Debug)]
 enum Event {
     Wrong,
     Right,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Lock {
     failures: u8,
     open: bool,

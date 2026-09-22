@@ -12,6 +12,7 @@ const PAIR: (u8, bool) = (LIMIT, OPEN);
 const SUM: u8 = LIMIT.wrapping_add(4);
 const SMALL: bool = LIMIT < 10;
 
+#[derive(Clone, Copy, Debug)]
 struct Point {
     x: u8,
     y: u8,
@@ -20,6 +21,7 @@ struct Point {
 const ORIGIN: Point = Point { x: 0, y: 0 };
 const CORNER: Point = Point { x: LIMIT, y: SUM };
 
+#[derive(Clone, Copy, Debug)]
 enum Mode {
     Off,
     On { level: u8 },

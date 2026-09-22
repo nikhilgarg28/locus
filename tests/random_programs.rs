@@ -101,8 +101,8 @@ use locus::kernel::{
     EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId, same_type,
 };
 use locus::typed::{
-    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm,
-    Pattern, Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
+    Binder, Block, Carried, CompareOp, Derive, EnumItem, Expr, FnItem, FnRef, Join, Joined,
+    MatchArm, Pattern, Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
 };
 use rng::{Rng, case_seed};
 
@@ -769,6 +769,7 @@ impl Generator {
         let item = StructItem {
             name: format!("S{index}"),
             fields,
+            derives: Derive::ALL.to_vec(),
         };
         let id = self
             .session
@@ -794,6 +795,7 @@ impl Generator {
         let item = EnumItem {
             name: format!("E{index}"),
             variants,
+            derives: Derive::ALL.to_vec(),
         };
         let id = self
             .session
