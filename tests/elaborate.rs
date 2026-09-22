@@ -1134,6 +1134,7 @@ fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
                     pattern: Pattern::Bind {
                         binder: out.clone(),
                         equation: HypId::fresh(),
+                        mutable: false,
                     },
                     value: Expr::CallFn {
                         id: callee_id,
