@@ -30,12 +30,24 @@ use crate::typed::{
 
 use super::env::{Elab, Env, Fact, Mark};
 
-/// The mutable bindings in scope at the entry of a branch: each one's slot
-/// among the names, its identity, and its version at entry.
+/// The mutable bindings in scope at the entry of a branch or a loop: each
+/// one's slot among the names, its identity, and its version at entry.
+#[derive(Clone)]
 pub(super) struct Entry(Vec<(usize, VarId, VarId)>);
 
-/// What one arm of a branch ended with: the version each entry binding had,
-/// the type of the arm's value, and whether the arm transfers control.
+impl Entry {
+    /// The positions in the entry of the bindings at the given slots.
+    pub fn positions(&self, slots: &[usize]) -> Vec<usize> {
+        (0..self.0.len())
+            .filter(|&i| slots.contains(&self.0[i].0))
+            .collect()
+    }
+}
+
+/// What one arm of a branch, or one exit of a loop, ended with: the version
+/// each entry binding had, the type of the value, and whether the arm
+/// transfers control.
+#[derive(Clone)]
 pub(super) struct ArmEnd {
     pub versions: Vec<VarId>,
     pub ty: Type,
@@ -123,16 +135,6 @@ impl Env<'_> {
             );
             return Err(());
         };
-        if local.depth < self.loops.len() {
-            return self.fail(
-                "L0290",
-                format!(
-                    "assignment to `{}` inside a loop body, where it was declared outside, is not in Locus yet; M3 replaces the loop forms",
-                    root.text
-                ),
-                span,
-            );
-        }
         let name = local.name.clone();
         let declared = local.ty.clone();
         let mut target = Term::var(local.id);
@@ -372,6 +374,41 @@ impl Env<'_> {
         if assigned.is_empty() {
             return Ok((None, fallback));
         }
+        let equation = HypId::fresh();
+        let (tuple, joins, ty) = self.join_over(
+            entry,
+            &assigned,
+            arms,
+            fallback,
+            Some((result, equation)),
+            span,
+        )?;
+        Ok((
+            Some(Joined {
+                tuple,
+                joins,
+                equation,
+            }),
+            ty,
+        ))
+    }
+
+    /// Joins the paths that reach the end of a branch, or leave a loop,
+    /// given which entry bindings (by position) were assigned: each gets a
+    /// version for afterwards, the value's type is stated over those
+    /// versions, and the mirrored context binds the tuple's parts as
+    /// lowering will, the versions and then the value under the identity
+    /// and equation of `value` when there is one. Returns the tuple's
+    /// identity, the joins, and the value's type.
+    pub(super) fn join_over(
+        &mut self,
+        entry: &Entry,
+        assigned: &[usize],
+        arms: &[ArmEnd],
+        fallback: Type,
+        value: Option<(VarId, HypId)>,
+        span: Span,
+    ) -> Elab<(VarId, Vec<Join>, Type)> {
         let joins: Vec<Join> = assigned
             .iter()
             .map(|&i| {
@@ -394,7 +431,7 @@ impl Env<'_> {
         let renamed = |arm: &ArmEnd| {
             joins
                 .iter()
-                .zip(&assigned)
+                .zip(assigned)
                 .fold(arm.ty.clone(), |ty, (join, &i)| {
                     ty.replace_var(arm.versions[i], &Term::var(join.version.id))
                 })
@@ -411,32 +448,30 @@ impl Env<'_> {
                 } else {
                     return self.fail(
                         "L0220",
-                        "the arms of this branch produce values of different types over what they assign",
+                        "the paths that leave here produce values of different types over what they assign",
                         span,
                     );
                 }
             }
         };
-        let joined = Joined {
-            tuple: VarId::fresh(),
-            joins,
-            equation: HypId::fresh(),
-        };
-        let declared = self
-            .ctx
-            .declare_with(joined.tuple, join_type(&joined, result, &ty), false);
+        let tuple = VarId::fresh();
+        let declared = self.ctx.declare_with(
+            tuple,
+            join_type(&joins, value.map(|(result, _)| (result, &ty))),
+            false,
+        );
         self.kernel(declared, span)?;
         let label = self
             .text(span)
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        self.labels.insert(joined.tuple, label.clone());
-        let tuple = Term::var(joined.tuple);
+        self.labels.insert(tuple, label.clone());
+        let tuple_term = Term::var(tuple);
         let mut earlier: Vec<Named> = Vec::new();
-        for (index, (join, &i)) in joined.joins.iter().zip(&assigned).enumerate() {
+        for (index, (join, &i)) in joins.iter().zip(assigned).enumerate() {
             let found = self.bind_part(
-                &tuple,
+                &tuple_term,
                 index,
                 join.version.id,
                 join.equation,
@@ -449,24 +484,26 @@ impl Env<'_> {
                 .insert(join.version.id, join.version.name.clone());
             self.learn_from(&Term::var(join.version.id), &found);
         }
-        let found = self.bind_part(
-            &tuple,
-            joined.joins.len(),
-            result,
-            joined.equation,
-            &mut earlier,
-            span,
-        )?;
-        if !same_type(&found, &ty) {
-            let (wanted, found) = (self.show_type(&ty), self.show_type(&found));
-            return self.internal(
-                format!("the joined value has type `{found}`, and `{wanted}` was expected"),
+        if let Some((result, equation)) = value {
+            let found = self.bind_part(
+                &tuple_term,
+                joins.len(),
+                result,
+                equation,
+                &mut earlier,
                 span,
-            );
+            )?;
+            if !same_type(&found, &ty) {
+                let (wanted, found) = (self.show_type(&ty), self.show_type(&found));
+                return self.internal(
+                    format!("the joined value has type `{found}`, and `{wanted}` was expected"),
+                    span,
+                );
+            }
+            self.labels.insert(result, label);
+            self.learn_from(&Term::var(result), &ty);
         }
-        self.labels.insert(result, label);
-        self.learn_from(&Term::var(result), &ty);
-        Ok((Some(joined), ty))
+        Ok((tuple, joins, ty))
     }
 
     /// Binds one part of the join's tuple, as a `let` pattern binds a part

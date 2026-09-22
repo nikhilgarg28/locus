@@ -160,17 +160,19 @@ pub struct OperateStmt {
     pub learned: Vec<HypId>,
 }
 
-/// `let var = for index in lo..hi (vars: state = init) { body }`.
+/// `let var = for index in lo..hi (vars: state = init) { body }`, or over
+/// `lo..=hi` when `inclusive`.
 ///
-/// `state` is a function type from the index to the state's tuple type,
-/// `math fn(T) -> (A_0, ..., A_n)` for the machine type `T` of the index and
-/// the bounds, which is how a state type mentions the index: an invariant
-/// can say what holds after `index` steps. `ordered` proves
-/// `int_le(view[T](lo), view[T](hi))`. The body sees the index, abstract
-/// state, and the facts `lo <= index` (`lower`) and `index < hi` (`upper`),
-/// both over the views, and must end every path in `continue` with the
-/// state for `wrapping_add[T](index, 1)`, in `return`, or in a panic. There
-/// is no `break`. `var` is the state at `hi`.
+/// The bounds have one machine integer type `T`, which is the index's, and
+/// `state` is a tuple telescope as a `loop`'s is: it does not depend on the
+/// index. An empty range runs no pass, so nothing about the order of the
+/// bounds is asked. The body sees the index, the abstract state, and the
+/// facts `lo <= index` (`lower`) and `index < hi` (`upper`), or
+/// `index <= hi` when inclusive, all over the views, afresh on each pass.
+/// Every path through it ends in `continue` with the next state, in
+/// `break` with the state as the result, in `return`, or in a panic. `var`
+/// is the state when the range is exhausted or a `break` is reached, so
+/// its type is `state`.
 #[derive(Clone, Debug)]
 pub struct ForStmt {
     pub var: VarId,
@@ -179,7 +181,7 @@ pub struct ForStmt {
     pub upper: HypId,
     pub lo: Term,
     pub hi: Term,
-    pub ordered: Proof,
+    pub inclusive: bool,
     pub state: Type,
     pub vars: Vec<VarId>,
     pub init: Vec<Term>,
@@ -200,8 +202,8 @@ pub struct Arm {
 pub enum Tail {
     /// The block's result.
     Value(Term),
-    /// Leaves the nearest enclosing loop with its result. Not available when
-    /// the nearest enclosing iteration is a `for`.
+    /// Leaves the nearest enclosing loop or `for` with its result; in a
+    /// `for` that is the state.
     Break(Term),
     /// Starts the next iteration of the nearest enclosing loop or `for` with
     /// this state.

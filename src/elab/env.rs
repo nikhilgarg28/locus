@@ -14,6 +14,7 @@ use crate::source::{SourceFile, Span};
 use crate::typed::{Binder, FnRef, Session};
 
 use super::items::{HoleReport, ItemReport};
+use super::mutation::{ArmEnd, Entry};
 
 pub(super) type Elab<T> = Result<T, ()>;
 
@@ -128,8 +129,6 @@ pub(super) struct Local {
     /// For a binding declared `let mut`: its identity, which every version
     /// of it refers to. `id` is then the current version (`mutation.rs`).
     pub binding: Option<VarId>,
-    /// How many loops enclosed the binding when it was made.
-    pub depth: usize,
 }
 
 /// Something known at this point, with the proof that it holds.
@@ -160,15 +159,20 @@ impl Fact {
     }
 }
 
-/// The loop a `break` or `continue` belongs to.
-#[derive(Clone, Debug)]
+/// The loop a `break` or `continue` belongs to (`loops.rs`).
 pub(super) struct LoopTarget {
-    /// The state binders, in order.
-    pub state: Vec<Binder>,
-    /// What `continue` substitutes for the index of a `for`.
-    pub advance: Option<(VarId, Term)>,
-    /// The type `break` produces; absent in a `for`.
+    /// The type a `break` supplies, once it is known: the type expected of
+    /// a `loop`, or the type of its first `break value`.
     pub result: Option<Type>,
+    /// Whether a `break` may carry a value: in a `loop`, and not in a
+    /// `while` or a `for`, which produce none.
+    pub valued: bool,
+    /// The mutable bindings in scope at the loop, at their versions before
+    /// it; each `break` records the versions current where it stands, for
+    /// the join after the loop.
+    pub entry: Entry,
+    /// What each `break`, and the exit of a `while`, ended with.
+    pub exits: Vec<ArmEnd>,
 }
 
 /// A point to return to at the end of a lexical scope.
@@ -305,7 +309,6 @@ impl Env<'_> {
             ty: ty.clone(),
             poisoned: false,
             binding: None,
-            depth: self.loops.len(),
         });
         self.learn_from(&Term::var(id), ty);
     }
@@ -320,7 +323,6 @@ impl Env<'_> {
                 ty: Type::Tuple(Vec::new()),
                 poisoned: true,
                 binding: None,
-                depth: 0,
             }),
             PatternKind::Group(inner) => self.poison(inner),
             PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.poison(part)),

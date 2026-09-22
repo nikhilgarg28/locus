@@ -325,18 +325,8 @@ fn a_return_inside_a_bounded_for_leaves_the_function() {
                 upper: HypId::fresh(),
                 lo: Term::U8(0),
                 hi: n.clone(),
-                ordered: Proof::OfTerm(Term::call(
-                    Term::Fn(
-                        world
-                            .theory
-                            .machine(MachineInt::U8)
-                            .unsigned
-                            .unwrap()
-                            .zero_le,
-                    ),
-                    vec![n],
-                )),
-                state: Type::Fn(vec![Type::U8], Box::new(Type::Tuple(vec![]))),
+                inclusive: false,
+                state: Type::Tuple(vec![]),
                 vars: vec![],
                 init: vec![],
                 body: block(
@@ -673,18 +663,8 @@ fn terminates_forbids_a_loop_wherever_it_stands() {
                     upper: HypId::fresh(),
                     lo: Term::U8(0),
                     hi: n.clone(),
-                    ordered: Proof::OfTerm(Term::call(
-                        Term::Fn(
-                            world
-                                .theory
-                                .machine(MachineInt::U8)
-                                .unsigned
-                                .unwrap()
-                                .zero_le,
-                        ),
-                        vec![n.clone()],
-                    )),
-                    state: Type::Fn(vec![Type::U8], Box::new(Type::Tuple(vec![]))),
+                    inclusive: false,
+                    state: Type::Tuple(vec![]),
                     vars: vec![],
                     init: vec![],
                     body: block(vec![], Tail::Continue(vec![])),

@@ -44,18 +44,11 @@ impl Env<'_> {
         }
     }
 
-    pub(super) fn conditional(
-        &mut self,
-        condition: &ast::Expr,
-        then: Branch<'_>,
-        otherwise: Branch<'_>,
-        expected: Option<&Type>,
-        span: Span,
-    ) -> Elab<Value> {
-        let condition_value = self.check(condition, &Type::Bool)?;
-        // Branch facts speak of the comparison performed: `a != b` tests
-        // `a == b` and exchanges the branches.
-        let (tested, negated) = match &condition_value.expr {
+    /// The comparison a condition performs, as a term, and whether the
+    /// condition is its negation. Branch facts speak of the comparison
+    /// performed: `a != b` tests `a == b` and exchanges the branches.
+    pub(super) fn tested(&mut self, condition: &Value, span: Span) -> Elab<(Term, bool)> {
+        let (tested, negated) = match &condition.expr {
             Expr::Compare {
                 op: CompareOp::Ne,
                 ty,
@@ -72,7 +65,20 @@ impl Env<'_> {
             ),
             other => (other.clone(), false),
         };
-        let tested = self.term(&Value::new(tested, Type::Bool), condition.span)?;
+        let tested = self.term(&Value::new(tested, Type::Bool), span)?;
+        Ok((tested, negated))
+    }
+
+    pub(super) fn conditional(
+        &mut self,
+        condition: &ast::Expr,
+        then: Branch<'_>,
+        otherwise: Branch<'_>,
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
+        let condition_value = self.check(condition, &Type::Bool)?;
+        let (tested, negated) = self.tested(&condition_value, condition.span)?;
         let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
         let fact = |holds: bool| Term::eq(Type::Bool, tested.clone(), Term::Bool(holds != negated));
 

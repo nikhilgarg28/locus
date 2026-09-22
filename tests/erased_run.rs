@@ -5,8 +5,8 @@ mod common;
 
 use common::*;
 use locus::erased::{
-    EArm, EBlock, EExpr, EFn, EPattern, EStmt, EType, Interpreter, Module, Outcome, RunError,
-    TypeError, Value, check_module,
+    EArm, EBlock, EExpr, EFn, EPattern, EPlace, EStmt, EType, Interpreter, Module, Outcome,
+    RunError, TypeError, Value, check_module,
 };
 use locus::kernel::{Definitions, FnId, MachineInt, Op, Prim, Proof, Term, Type, VarId};
 use locus::typed::{Binder, CompareOp, Expr, FnItem, FnRef};
@@ -64,38 +64,31 @@ fn erasure_keeps_the_shape_and_fills_ghost_positions_with_markers() {
 
 #[test]
 fn the_programs_of_the_specification_run() {
-    let (mut session, prelude, theory) = setup();
+    let (mut session, _, theory) = setup();
     let preserve_fn = session.declare_fn(&preserve(theory, false, true)).unwrap();
     let preserve_math = session.declare_fn(&preserve(theory, true, true)).unwrap();
-    let walk = session
-        .declare_fn(&bounded_walk(prelude, theory, true))
-        .unwrap();
-    let count_pure = session
-        .declare_fn(&counting_loop(theory, false, None))
-        .unwrap();
-    let count_math = session
-        .declare_fn(&counting_loop(theory, true, None))
-        .unwrap();
+    let walk = session.declare_fn(&bounded_walk(theory, true)).unwrap();
+    let count_pure = session.declare_fn(&counting_loop(false, None)).unwrap();
     let increment_id = exec_id(session.declare_fn(&increment(false)).unwrap());
     let count_calls = session
-        .declare_fn(&counting_loop(theory, false, Some(increment_id)))
+        .declare_fn(&counting_loop(false, Some(increment_id)))
         .unwrap();
     let module = session.erased();
     assert_eq!(check_module(module), Ok(()));
 
     for byte in [0u8, 1, 7, 200, 255] {
         let argument = vec![Value::u8(byte)];
-        for callee in [
-            preserve_fn,
-            preserve_math,
-            walk,
-            count_pure,
-            count_math,
-            count_calls,
-        ] {
+        for callee in [preserve_fn, preserve_math, walk] {
             assert_eq!(
                 run(module, callee, argument.clone()),
                 Ok(with_evidence(byte)),
+                "{callee:?} at {byte}"
+            );
+        }
+        for callee in [count_pure, count_calls] {
+            assert_eq!(
+                run(module, callee, argument.clone()),
+                Ok(Outcome::Value(Value::u8(byte))),
                 "{callee:?} at {byte}"
             );
         }
@@ -364,8 +357,9 @@ fn tail(expr: EExpr) -> EBlock {
 #[test]
 fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
     // fn f(n: u8) -> u8 {
-    //     loop (i: u8 = 0) -> u8 {
-    //         if i == n { return <returned> } else { continue(i.wrapping_add(1)) }
+    //     let mut i = 0;
+    //     loop {
+    //         if i == n { return <returned> } else { i = i.wrapping_add(1); }
     //     }
     // }
     let (mut session, _, _) = setup();
@@ -379,27 +373,39 @@ fn a_return_leaves_the_function_from_inside_a_loop_and_has_the_result_type() {
     let looping = |returned: EExpr| {
         u8_to_u8(
             &session,
-            tail(EExpr::Loop {
-                state: vec![(
-                    i_id,
-                    "i".into(),
-                    EType::Int(MachineInt::U8),
-                    EExpr::Literal(MachineInt::U8, 0),
-                )],
-                result: EType::Int(MachineInt::U8),
-                body: tail(EExpr::If {
-                    condition: Box::new(EExpr::Compare {
-                        op: CompareOp::Eq,
-                        left: Box::new(i()),
-                        right: Box::new(n.clone()),
+            EBlock {
+                stmts: vec![EStmt::Let {
+                    pattern: EPattern::Bind {
+                        id: i_id,
+                        name: "i".into(),
+                        ty: EType::Int(MachineInt::U8),
+                        mutable: true,
+                    },
+                    value: EExpr::Literal(MachineInt::U8, 0),
+                }],
+                tail: Some(Box::new(EExpr::Loop {
+                    result: EType::Int(MachineInt::U8),
+                    body: tail(EExpr::If {
+                        condition: Box::new(EExpr::Compare {
+                            op: CompareOp::Eq,
+                            left: Box::new(i()),
+                            right: Box::new(n.clone()),
+                        }),
+                        then_block: tail(EExpr::Return(Box::new(returned))),
+                        else_block: EBlock {
+                            stmts: vec![EStmt::Assign {
+                                place: EPlace {
+                                    id: i_id,
+                                    name: "i".into(),
+                                    path: vec![],
+                                },
+                                value: wrapping_add(i(), EExpr::Literal(MachineInt::U8, 1)),
+                            }],
+                            tail: None,
+                        },
                     }),
-                    then_block: tail(EExpr::Return(Box::new(returned))),
-                    else_block: tail(EExpr::Continue(vec![wrapping_add(
-                        i(),
-                        EExpr::Literal(MachineInt::U8, 1),
-                    )])),
-                }),
-            }),
+                })),
+            },
         )
     };
     let module = looping(wrapping_add(i(), EExpr::Literal(MachineInt::U8, 100)));

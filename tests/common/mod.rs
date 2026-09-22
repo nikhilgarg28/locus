@@ -9,8 +9,8 @@ use locus::kernel::{
     Type, VarId,
 };
 use locus::typed::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm, Pattern,
-    Place, Session, Step, Stmt, VariantItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm,
+    Pattern, Place, Session, Step, Stmt, VariantItem,
 };
 
 pub fn setup() -> (Session, Prelude, Theory) {
@@ -208,9 +208,94 @@ pub fn preserve(theory: Theory, math: bool, use_the_fact: bool) -> FnItem {
     }
 }
 
-/// fn bounded_walk(limit: u8) -> (value: u8, evidence: @[value <= limit]) of
-/// specification section 10.4, in source shape.
-pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool) -> FnItem {
+// --- Loops (M3): what a loop carries, in source shape ---------------------------------
+
+/// The versions of a binding a loop carries: the one its body sees at the
+/// start of each pass, and the one after the loop.
+pub fn versions(binder: &Binder) -> (Binder, Binder) {
+    (
+        Binder::new(&binder.name, binder.ty.clone()),
+        Binder::new(&binder.name, binder.ty.clone()),
+    )
+}
+
+/// What a loop carries: each binding with its version after the loop, in
+/// declaration order.
+pub fn carried(joins: Vec<(&Binder, &Binder)>) -> Carried {
+    Carried {
+        tuple: VarId::fresh(),
+        joins: joins
+            .into_iter()
+            .map(|(binding, after)| Join {
+                binding: binding.id,
+                version: after.clone(),
+                equation: HypId::fresh(),
+            })
+            .collect(),
+    }
+}
+
+/// `loop { body }` of type `ty`, carrying `state`, the versions its body
+/// sees, with `carried` the versions after it.
+pub fn loop_(state: Vec<Binder>, carried: Carried, ty: Type, body: Block) -> Expr {
+    Expr::Loop {
+        state,
+        carried,
+        ty,
+        result: VarId::fresh(),
+        equation: HypId::fresh(),
+        body,
+    }
+}
+
+/// `while condition { body }`.
+pub fn while_(condition: Expr, state: Vec<Binder>, carried: Carried, body: Block) -> Expr {
+    Expr::While {
+        condition: Box::new(condition),
+        then_fact: HypId::fresh(),
+        else_fact: HypId::fresh(),
+        state,
+        carried,
+        body,
+    }
+}
+
+/// `for index in lo..hi { body }`.
+pub fn for_(
+    index: &Binder,
+    lo: Expr,
+    hi: Expr,
+    state: Vec<Binder>,
+    carried: Carried,
+    body: Block,
+) -> Expr {
+    Expr::For {
+        index: index.clone(),
+        lower: HypId::fresh(),
+        upper: HypId::fresh(),
+        lo: Box::new(lo),
+        hi: Box::new(hi),
+        inclusive: false,
+        state,
+        carried,
+        body,
+    }
+}
+
+pub fn break_(value: Option<Expr>) -> Expr {
+    Expr::Break(value.map(Box::new))
+}
+
+/// fn bounded_walk(limit: u8) -> (value: u8, evidence: @[value <= limit]) {
+///     let mut i = 0;
+///     loop {
+///         if i == limit { break (i, _) } else { i = i.wrapping_add(1); }
+///     }
+/// }
+/// The evidence at the break is about the version of `i` the body sees,
+/// from the fact of the branch; with `carry_the_invariant` false it is
+/// `0 <= limit`, about the value `i` started with, which the kernel rejects.
+pub fn bounded_walk(theory: Theory, carry_the_invariant: bool) -> FnItem {
     let limit = Binder::new("limit", Type::U8);
     let limit_term = limit.term();
     let result = data_with_evidence({
@@ -218,199 +303,127 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
         move |value| u8_le(value, limit_term.clone())
     });
     let i = Binder::new("i", Type::U8);
-    let bound = Binder::new("bound", Type::proof(u8_le(i.term(), limit_term.clone())));
-    let next = Binder::new("next", Type::U8);
-    let next_bound = Binder::new(
-        "next_bound",
-        Type::proof(u8_le(next.term(), limit_term.clone())),
+    let (inside, after) = versions(&i);
+    let stepped = Binder::new("i", Type::U8);
+    let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
+    let comparison = u8_test_eq(inside.term(), limit_term.clone());
+    let views_equal = Proof::implies_elim(
+        Proof::Axiom(Axiom::CmpReflect(comparison, true)),
+        Proof::hyp(then_fact),
     );
-    let differs = Binder::new(
-        "differs",
-        Type::proof(prelude.not_prop(Term::eq(
-            Type::Int,
-            view(i.term()),
-            view(limit_term.clone()),
-        ))),
+    let i_is_limit = lemma(
+        theory.machine(MachineInt::U8).view_injective,
+        vec![inside.term(), limit_term.clone(), Term::proof(views_equal)],
     );
-    let below = Binder::new("below", Type::proof(u8_lt(i.term(), limit_term.clone())));
-    let (then_fact, else_fact, next_is) = (HypId::fresh(), HypId::fresh(), HypId::fresh());
-    let comparison = u8_test_eq(i.term(), limit_term.clone());
-    let as_proof = |binder: &Binder| Proof::OfTerm(binder.term());
+    let limit_is_i = symm_at(&Type::U8, &inside.term(), i_is_limit);
     let limit_in = limit_term.clone();
-    let carried = if carry_the_invariant {
-        Expr::var(&next_bound)
-    } else {
-        Expr::var(&bound)
-    };
-    let keep_walking = block(
-        vec![
-            let_(
-                &differs,
-                HypId::fresh(),
-                Expr::Proof(Proof::implies_elim(
-                    Proof::Axiom(Axiom::CmpReflect(comparison, false)),
-                    Proof::hyp(else_fact),
-                )),
-            ),
-            let_(
-                &below,
-                HypId::fresh(),
-                Expr::Proof(lemma(
-                    theory.machine(MachineInt::U8).lt_of_le_of_ne,
-                    vec![
-                        i.term(),
-                        limit_term.clone(),
-                        Term::proof(as_proof(&bound)),
-                        Term::proof(as_proof(&differs)),
-                    ],
-                )),
-            ),
-            let_(&next, next_is, plus_one(Expr::var(&i))),
-            let_(
-                &next_bound,
-                HypId::fresh(),
-                Expr::Proof(Proof::transport(
-                    symm_at(&Type::U8, &next.term(), Proof::hyp(next_is)),
-                    |hole| u8_le(hole, limit_in.clone()),
-                    lemma(
-                        theory.machine(MachineInt::U8).succ_le_of_lt,
-                        vec![i.term(), limit_term.clone(), Term::proof(as_proof(&below))],
-                    ),
-                )),
-            ),
-        ],
-        Expr::Continue(vec![Expr::var(&next), carried]),
+    let at_limit = Proof::transport(
+        limit_is_i,
+        |hole| u8_le(hole, limit_in.clone()),
+        lemma(
+            theory.machine(MachineInt::U8).le_refl,
+            vec![limit_term.clone()],
+        ),
     );
+    let evidence = if carry_the_invariant {
+        at_limit
+    } else {
+        lemma(
+            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
+            vec![limit_term],
+        )
+    };
     let stop = block(
         vec![],
-        Expr::Break(Box::new(Expr::Tuple {
+        break_(Some(Expr::Tuple {
             ty: result.clone(),
-            fields: vec![Expr::var(&i), Expr::var(&bound)],
+            fields: vec![Expr::var(&inside), Expr::Proof(evidence)],
         })),
     );
+    let go = unit_block(vec![assign(
+        &i,
+        vec![],
+        plus_one(Expr::var(&inside)),
+        &stepped,
+    )]);
+    let body = Block {
+        stmts: vec![],
+        tail: Some(Box::new(Expr::If {
+            condition: Box::new(compare_u8(
+                CompareOp::Eq,
+                Expr::var(&inside),
+                Expr::var(&limit),
+            )),
+            then_fact,
+            else_fact,
+            then_block: stop,
+            else_block: go,
+            ty: Type::Tuple(vec![]),
+            result: VarId::fresh(),
+            joined: None,
+        })),
+    };
     FnItem {
         name: "bounded_walk".into(),
         math: false,
         params: vec![limit.clone()],
         result: result.clone(),
-        body: Block {
-            stmts: vec![],
-            tail: Some(Box::new(Expr::Loop {
-                state: vec![
-                    (i.clone(), Expr::u8(0)),
-                    (
-                        bound.clone(),
-                        Expr::Proof(lemma(
-                            theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
-                            vec![limit_term.clone()],
-                        )),
-                    ),
-                ],
-                result_ty: result,
-                body: Block {
-                    stmts: vec![],
-                    tail: Some(Box::new(Expr::If {
-                        condition: Box::new(Expr::Compare {
-                            op: CompareOp::Eq,
-                            ty: Type::U8,
-                            left: Box::new(Expr::var(&i)),
-                            right: Box::new(Expr::var(&limit)),
-                        }),
-                        then_fact,
-                        else_fact,
-                        then_block: stop,
-                        else_block: keep_walking,
-                        ty: Type::Tuple(vec![]),
-                        result: VarId::fresh(),
-                        joined: None,
-                    })),
-                },
-                result: VarId::fresh(),
-            })),
-        },
+        body: block(
+            vec![let_mut(&i, Expr::u8(0))],
+            loop_(vec![inside], carried(vec![(&i, &after)]), result, body),
+        ),
     }
 }
 
-/// for i in 0..n (acc: u8 = 0, same: @[acc == i] = _) { continue(step(acc), _) }
-/// where `step` is either a pure increment or a call to `increment`.
-pub fn counting_loop(theory: Theory, math: bool, step: Option<locus::exec::ExecFnId>) -> FnItem {
+/// fn count(n: u8) -> u8 { let mut acc = 0; for i in 0..n { acc = step(acc); } acc }
+/// where `step` is either a pure increment or a call to `increment`, whose
+/// result's first field is taken.
+pub fn counting_loop(math: bool, step: Option<locus::exec::ExecFnId>) -> FnItem {
     let n = Binder::new("n", Type::U8);
     let i = Binder::new("i", Type::U8);
     let acc = Binder::new("acc", Type::U8);
-    let same = Binder::new("same", Type::proof(u8_eq(acc.term(), i.term())));
-    let n_term = n.term();
-    let result = data_with_evidence(move |total| u8_eq(total, n_term.clone()));
-
-    let (stmts, stepped, stepped_term, because) = match step {
-        None => {
-            let value = add_one(acc.term());
-            (
-                vec![],
-                plus_one(Expr::var(&acc)),
-                value.clone(),
-                Proof::Refl(value),
-            )
-        }
+    let (inside, after) = versions(&acc);
+    let stepped = Binder::new("acc", Type::U8);
+    let value = match step {
+        None => plus_one(Expr::var(&inside)),
         Some(increment_id) => {
-            // let r = increment(acc);   r.1 : r.0 == acc + 1
-            let acc_term = acc.term();
+            let acc_term = inside.term();
             let r_type = data_with_evidence(move |out| u8_eq(out, add_one(acc_term.clone())));
-            let r = Binder::new("r", r_type.clone());
-            let stmts = vec![let_(
-                &r,
-                HypId::fresh(),
+            field(
                 Expr::CallFn {
                     id: increment_id,
                     name: "increment".into(),
-                    arguments: vec![Expr::var(&acc)],
+                    arguments: vec![Expr::var(&inside)],
                     result: VarId::fresh(),
                     ty: r_type,
                 },
-            )];
-            (
-                stmts,
-                field(Expr::var(&r), 0),
-                Term::proj(r.term(), 0),
-                Proof::OfTerm(Term::proj(r.term(), 1)),
+                0,
             )
         }
     };
-    // stepped == acc + 1 and acc == i give stepped == i + 1.
-    let left = stepped_term.clone();
-    let advanced = Proof::transport(
-        Proof::OfTerm(same.term()),
-        |hole| u8_eq(left.clone(), add_one(hole)),
-        because,
-    );
     FnItem {
         name: "count".into(),
         math,
         params: vec![n.clone()],
-        result,
-        body: Block {
-            stmts: vec![],
-            tail: Some(Box::new(Expr::For {
-                index: i.clone(),
-                lower: HypId::fresh(),
-                upper: HypId::fresh(),
-                lo: Box::new(Expr::u8(0)),
-                hi: Box::new(Expr::var(&n)),
-                ordered: lemma(
-                    theory.machine(MachineInt::U8).unsigned.unwrap().zero_le,
-                    vec![n.term()],
-                ),
-                state: vec![
-                    (acc.clone(), Expr::u8(0)),
-                    (same.clone(), Expr::Proof(Proof::Refl(Term::U8(0)))),
-                ],
-                body: block(stmts, Expr::Continue(vec![stepped, Expr::Proof(advanced)])),
-                result: VarId::fresh(),
-            })),
-        },
+        result: Type::U8,
+        body: block(
+            vec![
+                let_mut(&acc, Expr::u8(0)),
+                Stmt::Expr(for_(
+                    &i,
+                    Expr::u8(0),
+                    Expr::var(&n),
+                    vec![inside],
+                    carried(vec![(&acc, &after)]),
+                    unit_block(vec![assign(&acc, vec![], value, &stepped)]),
+                )),
+            ],
+            Expr::var(&after),
+        ),
     }
 }
 
-/// fn spin() -> @[false] { loop () -> @[false] { continue(); } }
+/// fn spin() -> @[false] { loop { } }
 pub fn spin(prelude: Prelude) -> FnItem {
     let falsehood = Type::proof(prelude.falsehood_prop());
     FnItem {
@@ -420,12 +433,12 @@ pub fn spin(prelude: Prelude) -> FnItem {
         result: falsehood.clone(),
         body: Block {
             stmts: vec![],
-            tail: Some(Box::new(Expr::Loop {
-                state: vec![],
-                result_ty: falsehood,
-                body: block(vec![], Expr::Continue(vec![])),
-                result: VarId::fresh(),
-            })),
+            tail: Some(Box::new(loop_(
+                vec![],
+                carried(vec![]),
+                falsehood,
+                unit_block(vec![]),
+            ))),
         },
     }
 }

@@ -1,7 +1,7 @@
 error[L0215]: `loop` cannot appear in `first`, which promises terminates
  --> tests/corpus/reject/loop_in_math_fn.lc:3:5
   |
-3 |     loop () -> u8 { //~ error: L0215 `loop` cannot appear in `first`, which promises terminates
+3 |     loop { //~ error: L0215 `loop` cannot appear in `first`, which promises terminates
   |     ^^^^
   |
   = note: a function that promises terminates contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion

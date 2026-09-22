@@ -1,6 +1,15 @@
-// Loop state whose evidence holds at the start and not after a step.
+// The evidence a `break` supplies is about the values current at the break,
+// and nothing carried from earlier passes speaks of `total` there: after
+// `total = total.wrapping_add(1)` nothing is known of it, and the bound
+// cannot be shown at the break. Evidence that holds across passes is M4's
+// tracked evidence.
 fn count(n: u8) -> (total: u8, @(total <= 3)) {
-    for i in 0..n (total: u8 = 0, small: @(total <= 3) = _) {
-        continue(total.wrapping_add(1), _) //~ error: L0230 cannot show `total.wrapping_add(1) <= 3`
+    let mut total: u8 = 0;
+    loop {
+        if total == n {
+            break (total, prove!(total <= 3)) //~ error: L0230 cannot show `total <= 3`
+        } else {
+            total = total.wrapping_add(1);
+        }
     }
 }

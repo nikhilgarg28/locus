@@ -1,0 +1,115 @@
+// Rust's loops over `let mut`: `loop` with `break value`, `while`, and
+// `for` over a range. A variable declared before a loop and assigned in its
+// body is what the loop carries in the check IR; the generated Rust is the
+// loop as written.
+
+// `break value` gives the loop its value; `continue` starts the next pass.
+fn find(n: u8) -> u8 {
+    let mut i: u8 = 0;
+    loop {
+        if i == n {
+            break i.wrapping_add(100)
+        } else {
+        }
+        i = i.wrapping_add(1);
+        if i == 7 {
+            continue
+        } else {
+        }
+    }
+}
+
+// A `loop` that never breaks never produces a value, which fits any result.
+fn forever(n: u8) -> u8 {
+    let mut i: u8 = n;
+    loop {
+        i = i.wrapping_add(1);
+    }
+}
+
+// A `while` is `()`, and its `break` carries nothing.
+fn climb(n: u8) -> u8 {
+    let mut k: u8 = 0;
+    while k < n {
+        k = k.wrapping_add(1);
+        if k == 200 {
+            break
+        } else {
+        }
+    }
+    k
+}
+
+// The body of a `while` may reach its end on some passes and `continue` on
+// others; both start the next pass.
+fn odd_steps(n: u8) -> u8 {
+    let mut k: u8 = 0;
+    let mut steps: u8 = 0;
+    while k < n {
+        k = k.wrapping_add(1);
+        if k.wrapping_mul(128) == 128 {
+            continue
+        } else {
+        }
+        steps = steps.wrapping_add(1);
+    }
+    steps
+}
+
+// A `for` over a range: the index is immutable and the range's type is the
+// bounds'; what the body assigned is read after the loop.
+fn sum(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        total = total.wrapping_add(i);
+    }
+    total
+}
+
+// `break` leaves a `for` early, with what was assigned so far.
+fn first_over(limit: u8) -> u8 {
+    let mut found: u8 = 0;
+    for i in 0..255u8 {
+        if i.wrapping_mul(3) > limit {
+            found = i;
+            break
+        } else {
+        }
+    }
+    found
+}
+
+// Two variables carried by one loop, assigned on different paths.
+fn pair(n: u8) -> (u8, u8) {
+    let mut evens: u8 = 0;
+    let mut odds: u8 = 0;
+    for i in 0..n {
+        if i.wrapping_mul(128) == 128 {
+            odds = odds.wrapping_add(1);
+        } else {
+            evens = evens.wrapping_add(1);
+        }
+    }
+    (evens, odds)
+}
+
+//~ run: find(0) => 100
+//~ run: find(3) => 103
+//~ run: find(9) => 109
+//~ run: climb(3) => 3
+//~ run: climb(250) => 200
+//~ run: odd_steps(6) => 3
+//~ run: sum(10) => 45
+//~ run: sum(0) => 0
+//~ run: first_over(10) => 4
+//~ run: first_over(255) => 0
+//~ run: pair(7) => (4, 3)
+//~ rust: pub fn find(n: u8) -> u8 {
+//~ rust: let mut i = 0_u8;
+//~ rust: loop {
+//~ rust: break i.wrapping_add(100_u8)
+//~ rust: continue
+//~ rust: while k < n {
+//~ rust: for i in 0_u8..n {
+//~ rust: total = total.wrapping_add(i);
+//~ rust: pub fn forever(n: u8) -> u8 {

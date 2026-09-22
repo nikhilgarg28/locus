@@ -5,7 +5,7 @@
 //! type expected of it when there is one, which is how a `_` learns what to
 //! prove and how a tuple learns that its second field speaks of its first.
 
-use crate::ast::{self, BinaryOp, ExprKind, PatternKind, RangeKind, UnaryOp};
+use crate::ast::{self, BinaryOp, ExprKind, PatternKind, UnaryOp};
 use crate::kernel::{Proof, Term, Type, same_type};
 use crate::source::Span;
 use crate::typed::{Expr, FnRef, value_term};
@@ -276,45 +276,53 @@ impl Env<'_> {
             {
                 self.loop_refused(expr)
             }
+            // The state-passing forms, removed by M3.
             ExprKind::Loop {
-                state,
-                result: Some(result),
+                result: Some(_), ..
+            } => self.removed_loop_form("loop", expr.span),
+            ExprKind::For { state, .. } if !state.is_empty() => {
+                self.removed_loop_form("for", expr.span)
+            }
+            ExprKind::Continue(Some(_)) => self.removed_loop_form("continue", expr.span),
+            ExprKind::Loop { body, .. } => self.loop_(body, expected, expr.span),
+            ExprKind::While {
+                pattern: None,
+                condition,
                 body,
-            } => self.loop_(state, result, body, expr.span),
+            } => self.while_(condition, body, expr.span),
+            ExprKind::While {
+                pattern: Some(_), ..
+            } => self.fail(
+                "L0290",
+                "`while let` is not in Locus yet; it comes with the patterns E9 adds",
+                expr.span,
+            ),
             ExprKind::For {
                 pattern,
                 iterable,
-                state,
                 body,
+                ..
             } => match (&pattern.kind, &iterable.kind) {
                 (
                     PatternKind::Name {
                         name,
                         mutable: false,
                     },
-                    ExprKind::Range {
-                        kind: RangeKind::Exclusive,
-                        lower,
-                        upper,
-                    },
-                ) => self.for_(name, lower, upper, state, body, expr.span),
+                    ExprKind::Range { kind, lower, upper },
+                ) => self.for_(name, *kind, lower, upper, body, expr.span),
+                (_, ExprKind::Range { .. }) => self.fail(
+                    "L0290",
+                    "the index of a `for` over a range is a name; other patterns are not in Locus yet",
+                    pattern.span,
+                ),
                 _ => self.fail(
                     "L0290",
-                    "a `for` over anything but a range `lo..hi` with a name for its index is not in Locus yet; M3 adds Rust's loop forms",
-                    expr.span,
+                    "a `for` over anything but a range `lo..hi` or `lo..=hi` is not in Locus yet; iterators come later",
+                    iterable.span,
                 ),
             },
-            ExprKind::Break(Some(value)) => self.break_(expr, value),
-            ExprKind::Continue(Some(arguments)) => self.continue_(expr, arguments),
-            // The forms of S5 that later commits give a meaning.
-            ExprKind::Loop { result: None, .. }
-            | ExprKind::While { .. }
-            | ExprKind::Break(None)
-            | ExprKind::Continue(None) => self.fail(
-                "L0290",
-                "`loop` without a state list, `while`, and `break` and `continue` without a value are not in Locus yet; M3 adds Rust's loop forms",
-                expr.span,
-            ),
+            ExprKind::Break(value) => self.break_(expr, value.as_deref()),
+            ExprKind::Continue(None) => self.continue_(expr),
             ExprKind::Range { .. } => self.fail(
                 "L0290",
                 "a range is read only in the header of a `for` for now",

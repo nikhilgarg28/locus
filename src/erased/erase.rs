@@ -14,9 +14,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::kernel::{Definitions, Type, VarId};
+use crate::kernel::{Definitions, MachineInt, Type, VarId};
 use crate::typed::{
-    Binder, Block, EnumItem, Expr, FnItem, FnRef, Joined, Pattern, Stmt, StructItem, each_stmt,
+    Binder, Block, Carried, EnumItem, Expr, FnItem, FnRef, Joined, Pattern, Stmt, StructItem,
+    each_expr, each_stmt, each_stmt_under,
 };
 
 use super::tree::{
@@ -191,14 +192,13 @@ impl Eraser<'_> {
         exprs.iter().map(|expr| self.expr(expr)).collect()
     }
 
-    fn state(&mut self, state: &[(Binder, Expr)]) -> Vec<(VarId, String, EType, EExpr)> {
-        state
-            .iter()
-            .map(|(binder, init)| {
-                let (id, name, ty) = bound(binder);
-                (id, name, ty, self.expr(init))
-            })
-            .collect()
+    /// The versions a loop's body sees of what it carries, and the versions
+    /// after it, are the bindings, which the body assigns in place.
+    fn carried(&mut self, state: &[Binder], carried: &Carried) {
+        for (inside, join) in state.iter().zip(&carried.joins) {
+            self.binding.insert(inside.id, join.binding);
+            self.binding.insert(join.version.id, join.binding);
+        }
     }
 
     fn expr(&mut self, expr: &Expr) -> EExpr {
@@ -218,9 +218,29 @@ impl Eraser<'_> {
             // when it stands for a value.
             Expr::Absurd { ty, .. } => marker(ty).unwrap_or(EExpr::Trap),
             // A function with no runtime form was not emitted, so a call to
-            // it has nothing to call. It is total, so nothing is lost.
-            Expr::CallMath { id, ty, .. } if !self.definitions.is_executable(*id) => {
-                marker(ty).unwrap_or(EExpr::Trap)
+            // it has nothing to call. It is total, so nothing of it is lost;
+            // an argument that assigns, calls, or loops still runs, in
+            // order, before the marker stands for the call.
+            Expr::CallMath {
+                id, arguments, ty, ..
+            } if !self.definitions.is_executable(*id) => {
+                let marker = marker(ty).unwrap_or(EExpr::Trap);
+                let effects: Vec<EStmt> = arguments
+                    .iter()
+                    .filter(|argument| has_effects(argument))
+                    .map(|argument| EStmt::Let {
+                        pattern: EPattern::Wildcard,
+                        value: self.expr(argument),
+                    })
+                    .collect();
+                if effects.is_empty() {
+                    marker
+                } else {
+                    EExpr::Block(EBlock {
+                        stmts: effects,
+                        tail: Some(Box::new(marker)),
+                    })
+                }
             }
             Expr::Var { id, name, .. } => EExpr::Var {
                 id: self.root(*id),
@@ -350,32 +370,80 @@ impl Eraser<'_> {
             Expr::Block(block) => EExpr::Block(self.block(block)),
             Expr::Loop {
                 state,
-                result_ty,
+                carried,
+                ty,
                 body,
                 ..
-            } => EExpr::Loop {
-                state: self.state(state),
-                result: erase_type(result_ty),
-                body: self.block(body),
-            },
+            } => {
+                self.carried(state, carried);
+                EExpr::Loop {
+                    result: erase_type(ty),
+                    body: self.block(body),
+                }
+            }
+            Expr::While {
+                condition,
+                state,
+                carried,
+                body,
+                ..
+            } => {
+                self.carried(state, carried);
+                EExpr::While {
+                    condition: Box::new(self.expr(condition)),
+                    body: self.block(body),
+                }
+            }
             Expr::For {
                 index,
                 lo,
                 hi,
+                inclusive,
                 state,
+                carried,
                 body,
                 ..
-            } => EExpr::For {
-                index: (index.id, index.name.clone()),
-                lo: Box::new(self.expr(lo)),
-                hi: Box::new(self.expr(hi)),
-                state: self.state(state),
-                body: self.block(body),
-            },
-            Expr::Break(value) => EExpr::Break(Box::new(self.expr(value))),
-            Expr::Continue(next) => EExpr::Continue(self.all(next)),
+            } => {
+                self.carried(state, carried);
+                let ty = index.ty.as_machine().unwrap_or(MachineInt::U8);
+                EExpr::For {
+                    index: (index.id, index.name.clone(), ty),
+                    lo: Box::new(self.expr(lo)),
+                    hi: Box::new(self.expr(hi)),
+                    inclusive: *inclusive,
+                    body: self.block(body),
+                }
+            }
+            Expr::Break(value) => {
+                EExpr::Break(value.as_deref().map(|value| Box::new(self.expr(value))))
+            }
+            Expr::Continue => EExpr::Continue,
         }
     }
+}
+
+/// Whether evaluating the expression does something that must still
+/// happen when its value is not needed: an assignment, a call to an
+/// ordinary function, an operator that may panic, a loop, or a transfer
+/// of control anywhere inside it.
+fn has_effects(expr: &Expr) -> bool {
+    let mut found = false;
+    each_expr(expr, &mut |expr| {
+        found |= matches!(
+            expr,
+            Expr::CallFn { .. }
+                | Expr::Loop { .. }
+                | Expr::While { .. }
+                | Expr::For { .. }
+                | Expr::Break(_)
+                | Expr::Continue
+                | Expr::Operate { .. }
+        );
+    });
+    each_stmt_under(expr, &mut |stmt| {
+        found |= matches!(stmt, Stmt::Assign { .. })
+    });
+    found
 }
 
 /// The marker for a ghost type, or `None` for a type with a runtime form.

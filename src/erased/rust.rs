@@ -2,25 +2,10 @@
 //! the Rust toolchain beneath it.
 //!
 //! The erased tree already has the shape of the source, so this is mostly a
-//! matter of spelling. Layout is left to rustfmt. Two constructs have no
-//! direct Rust form and are printed through mutable state:
-//!
-//! ~~~text
-//! loop (acc: u8 = 0) -> R { ... continue(next) ... break value ... }
-//!
-//! {
-//!     let mut state_acc: u8 = 0;
-//!     loop {
-//!         let acc = state_acc;
-//!         ... { state_acc = next; continue; } ... break value ...
-//!     }
-//! }
-//! ~~~
-//!
-//! The state lives in variables of its own and each iteration rebinds the
-//! source's names from them, so a `let` in the body that shadows a state
-//! name cannot disturb the loop, exactly as in Locus. A `for` is printed the
-//! same way around a Rust `for`, and yields its final state.
+//! matter of spelling. Layout is left to rustfmt. `loop`, `while`, and
+//! `for i in lo..hi` are printed as they were written, with `break`,
+//! `break value`, and `continue` as they were written: what a loop carries
+//! in the check IR is, here, the variables the body assigns.
 //!
 //! Every value in the core is immutable and freely reusable, so structs and
 //! enums derive `Copy`.
@@ -77,7 +62,7 @@
 
 use std::fmt::Write;
 
-use crate::kernel::{MachineInt, Op, Prim, VarId};
+use crate::kernel::{MachineInt, Op, Prim};
 use crate::typed::CompareOp;
 
 use super::interp::Value;
@@ -98,13 +83,9 @@ pub struct Proved;
 pub struct Ghost;
 ";
 
-/// The state variables of the loops enclosing the current position.
-type Loops = Vec<Vec<String>>;
-
 struct Printer<'m> {
     module: &'m Module,
     out: String,
-    loops: Loops,
 }
 
 /// The module as Rust source.
@@ -112,7 +93,6 @@ pub fn print_module(module: &Module) -> String {
     let mut printer = Printer {
         module,
         out: String::from(HEADER),
-        loops: Vec::new(),
     };
     for item in &module.structs {
         let _ = writeln!(
@@ -182,7 +162,6 @@ pub fn print_module(module: &Module) -> String {
             function.name,
             params.join(", ")
         );
-        printer.loops.clear();
         let body = printer.block(&function.body);
         printer.out.push_str(&body);
         printer.out.push('\n');
@@ -273,9 +252,9 @@ impl Printer<'_> {
         format!("{{\n{}}}", self.contents(block))
     }
 
-    /// A block's statements and tail, without its braces. A loop, a `for`, a
-    /// nested block, or a `continue` in tail position is written straight
-    /// into the enclosing block instead of getting braces of its own.
+    /// A block's statements and tail, without its braces. A nested block in
+    /// tail position is written straight into the enclosing block instead of
+    /// getting braces of its own.
     fn contents(&mut self, block: &EBlock) -> String {
         let mut out = String::new();
         for stmt in &block.stmts {
@@ -310,18 +289,6 @@ impl Printer<'_> {
         match block.tail.as_deref() {
             None => {}
             Some(EExpr::Block(inner)) => out.push_str(&self.contents(inner)),
-            Some(EExpr::Loop { state, body, .. }) => out.push_str(&self.looping(state, body, None)),
-            Some(EExpr::For {
-                index,
-                lo,
-                hi,
-                state,
-                body,
-            }) => {
-                let header = format!("for {} in {}..{}", index.1, self.expr(lo), self.expr(hi));
-                out.push_str(&self.looping(state, body, Some(header)));
-            }
-            Some(EExpr::Continue(next)) => out.push_str(&self.continuing(next)),
             Some(tail) => {
                 out.push_str(&self.standing_alone(tail));
                 out.push('\n');
@@ -331,10 +298,11 @@ impl Printer<'_> {
     }
 
     /// An expression that is a whole statement or a whole tail, where a
-    /// `return` needs no parentheses.
+    /// `return` or a `break` needs no parentheses.
     fn standing_alone(&mut self, expr: &EExpr) -> String {
         match expr {
             EExpr::Return(value) => format!("return {}", self.expr(value)),
+            EExpr::Break(Some(value)) => format!("break {}", self.expr(value)),
             other => self.expr(other),
         }
     }
@@ -355,37 +323,6 @@ impl Printer<'_> {
                     .collect();
                 tuple_of(&types)
             }
-        }
-    }
-
-    /// A loop or a `for` as statements: the state's declarations, the loop,
-    /// and for a `for` the final state as the value.
-    fn looping(
-        &mut self,
-        state: &[(VarId, String, EType, EExpr)],
-        body: &EBlock,
-        for_header: Option<String>,
-    ) -> String {
-        let (names, declare, rebind) = self.state(state);
-        let result = tuple_of(&names);
-        self.loops.push(names);
-        let body = self.contents(body);
-        self.loops.pop();
-        match for_header {
-            None => format!("{declare}loop {{\n{rebind}{body}}}\n"),
-            Some(header) => format!("{declare}{header} {{\n{rebind}{body}}}\n{result}\n"),
-        }
-    }
-
-    /// `continue(next...)` as statements. The right side is evaluated in
-    /// full before any state is assigned.
-    fn continuing(&mut self, next: &[EExpr]) -> String {
-        let next = self.all(next);
-        let slots = self.loops.last().cloned().unwrap_or_default();
-        match slots.as_slice() {
-            [] => "continue\n".into(),
-            [slot] => format!("{slot} = {};\ncontinue\n", next.join(", ")),
-            _ => format!("{} = {};\ncontinue\n", tuple_of(&slots), tuple_of(&next)),
         }
     }
 
@@ -426,8 +363,9 @@ impl Printer<'_> {
             | EExpr::Match { .. }
             | EExpr::Block(_)
             | EExpr::Loop { .. }
+            | EExpr::While { .. }
             | EExpr::For { .. }
-            | EExpr::Continue(_)
+            | EExpr::Continue
             | EExpr::Break(_) => true,
             _ => false,
         };
@@ -440,23 +378,6 @@ impl Printer<'_> {
 
     fn all(&mut self, exprs: &[EExpr]) -> Vec<String> {
         exprs.iter().map(|expr| self.expr(expr)).collect()
-    }
-
-    /// Declares the state variables of a loop and returns their names, the
-    /// declarations, and the rebinding of the source's names that starts
-    /// each iteration.
-    fn state(&mut self, state: &[(VarId, String, EType, EExpr)]) -> (Vec<String>, String, String) {
-        let mut names = Vec::new();
-        let mut declare = String::new();
-        let mut rebind = String::new();
-        for (_, name, ty, init) in state {
-            let slot = format!("state_{name}");
-            let init = self.expr(init);
-            let _ = writeln!(declare, "let mut {slot}: {} = {init};", self.ty(ty));
-            let _ = writeln!(rebind, "let {name} = {slot};");
-            names.push(slot);
-        }
-        (names, declare, rebind)
     }
 
     fn expr(&mut self, expr: &EExpr) -> String {
@@ -603,23 +524,32 @@ impl Printer<'_> {
                 out
             }
             EExpr::Block(block) => self.block(block),
-            // Not in tail position: as a block of its own.
-            EExpr::Loop { state, body, .. } => format!("{{\n{}}}", self.looping(state, body, None)),
+            EExpr::Loop { body, .. } => format!("loop {}", self.block(body)),
+            EExpr::While { condition, body } => {
+                format!("while {} {}", self.condition(condition), self.block(body))
+            }
             EExpr::For {
                 index,
                 lo,
                 hi,
-                state,
+                inclusive,
                 body,
             } => {
-                let header = format!("for {} in {}..{}", index.1, self.expr(lo), self.expr(hi));
-                format!("{{\n{}}}", self.looping(state, body, Some(header)))
+                let range = if *inclusive { "..=" } else { ".." };
+                format!(
+                    "for {} in {}{range}{} {}",
+                    index.1,
+                    self.expr(lo),
+                    self.expr(hi),
+                    self.block(body)
+                )
             }
-            EExpr::Break(value) => format!("break {}", self.expr(value)),
-            // Inside a larger expression: `return` would take whatever
-            // follows it as part of its value.
+            EExpr::Break(None) => "break".into(),
+            // Inside a larger expression: `return` and `break` would take
+            // whatever follows them as part of their value.
+            EExpr::Break(Some(value)) => format!("(break {})", self.expr(value)),
             EExpr::Return(value) => format!("(return {})", self.expr(value)),
-            EExpr::Continue(next) => format!("{{\n{}}}", self.continuing(next)),
+            EExpr::Continue => "continue".into(),
         }
     }
 }
@@ -634,7 +564,7 @@ fn diverges(expr: &EExpr) -> bool {
         EExpr::Trap
         | EExpr::Panic { .. }
         | EExpr::Break(_)
-        | EExpr::Continue(_)
+        | EExpr::Continue
         | EExpr::Return(_) => true,
         EExpr::If {
             then_block,
@@ -662,16 +592,11 @@ fn contains_divergence(expr: &EExpr) -> bool {
             EStmt::Expr(expr) => contains_divergence(expr),
         }) || block.tail.as_deref().is_some_and(contains_divergence)
     };
-    let state = |state: &[(VarId, String, EType, EExpr)]| {
-        state
-            .iter()
-            .any(|(_, _, _, init)| contains_divergence(init))
-    };
     match expr {
         EExpr::Trap
         | EExpr::Panic { .. }
         | EExpr::Break(_)
-        | EExpr::Continue(_)
+        | EExpr::Continue
         | EExpr::Return(_) => true,
         EExpr::Var { .. } | EExpr::Bool(_) | EExpr::Literal(..) | EExpr::Proved | EExpr::Ghost => {
             false
@@ -702,15 +627,11 @@ fn contains_divergence(expr: &EExpr) -> bool {
         EExpr::Match {
             scrutinee, arms, ..
         } => contains_divergence(scrutinee) || arms.iter().any(|arm| block(&arm.body)),
-        EExpr::Block(inner) => block(inner),
-        EExpr::Loop { state: s, body, .. } => state(s) || block(body),
-        EExpr::For {
-            lo,
-            hi,
-            state: s,
-            body,
-            ..
-        } => contains_divergence(lo) || contains_divergence(hi) || state(s) || block(body),
+        EExpr::Block(inner) | EExpr::Loop { body: inner, .. } => block(inner),
+        EExpr::While { condition, body } => contains_divergence(condition) || block(body),
+        EExpr::For { lo, hi, body, .. } => {
+            contains_divergence(lo) || contains_divergence(hi) || block(body)
+        }
     }
 }
 

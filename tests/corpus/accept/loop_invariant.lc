@@ -1,30 +1,33 @@
-// A loop whose invariant is part of its state, and a bounded `for`. The
-// invariant is established and kept by lemma calls, since `0 <= limit` and
-// `limit <= limit` are not facts in scope.
+// A `loop` whose value is what its `break` supplies, evidence included, and
+// a bounded `for` that adds up what it assigns. The evidence at the break
+// is about the values current there: `limit <= limit` by a lemma call, since
+// `limit <= limit` is not a fact in scope. Evidence that must hold across
+// passes, refreshed as the loop goes, is M4's tracked evidence.
 
 fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
-    loop (i: u8 = 0, bound: @(i <= limit) = u8_zero_le(limit)) -> (out: u8, @(out <= limit)) {
+    let mut i: u8 = 0;
+    loop {
         if i == limit {
-            break (i, bound)
+            break (limit, u8_le_refl(limit))
         } else {
-            continue(limit, u8_le_refl(limit))
+            i = i.wrapping_add(1);
         }
     }
 }
 
-// A `for` yields its final state, which is a tuple even of one value.
+// What the `for` assigned is read after it; the loop itself is `()`.
 fn count(n: u8) -> u8 {
-    let (total,) = for step in 0..n (total: u8 = 0) {
-        continue(total.wrapping_add(1))
-    };
+    let mut total: u8 = 0;
+    for step in 0..n {
+        total = total.wrapping_add(1);
+    }
     total
 }
 
-// The one proof is what the bounded `for` asks for about its range, which
-// starts at `0`.
-//~ proofs: 1
+//~ proofs: 0
 //~ run: walk(0) => (0, Proved)
 //~ run: walk(9) => (9, Proved)
 //~ run: count(0) => 0
 //~ run: count(255) => 255
 //~ rust: for step in 0_u8..n {
+//~ rust: break (limit, Proved)

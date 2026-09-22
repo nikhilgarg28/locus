@@ -885,94 +885,48 @@ fn calls_and_bindings_are_checked() {
 
 // --- Bounded for ----------------------------------------------------------------
 
-/// The state `(acc: u8, same: @[acc == i])` as a function of the index.
+/// The state `(acc: u8)`, a plain tuple as a `loop`'s: it does not depend
+/// on the index.
 fn counting_state() -> Type {
-    Type::function(1, |params| match params {
-        [] => Type::U8,
-        [i] => {
-            let i = i.clone();
-            Type::tuple(move |earlier| match earlier {
-                [] => Some(Type::U8),
-                [acc] => Some(Type::proof(u8_eq(acc.clone(), i.clone()))),
-                _ => None,
-            })
-        }
-        _ => unreachable!(),
-    })
-}
-
-fn counted_result(n: &Term) -> Type {
-    let n = n.clone();
-    Type::tuple(move |earlier| match earlier {
-        [] => Some(Type::U8),
-        [total] => Some(Type::proof(u8_eq(total.clone(), n.clone()))),
-        _ => None,
-    })
+    Type::Tuple(vec![Type::U8])
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum CountBug {
     None,
-    StaleInvariant,
+    /// `break` with the state, which is what a `for` allows.
     Breaks,
+    /// `break` with something that is not the state.
+    BreaksWrongly,
     FallsThrough,
-    Unordered,
+    /// `continue` with the wrong number of values.
+    ShortContinue,
 }
 
-/// fn count_by_calls(n: u8) -> (total: u8, same: @[total == n]) {
-///     for i in 0..n (acc: u8 = 0, same: @[acc == i] = _) {
+/// fn count_by_calls(n: u8) -> u8 {
+///     let done = for i in 0..n (acc: u8 = 0) {
 ///         let r = increment(acc);          // an ordinary call in the body
-///         continue(r.0, _);                // r.0 == acc + 1 == i + 1
-///     }
+///         continue(r.0);
+///     };
+///     done.0
 /// }
-fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
+fn count_by_calls(increment: ExecFnId, bug: CountBug) -> ExecFn {
     let (n_id, n) = var();
-    let (i_id, i) = var();
+    let (i_id, _) = var();
     let (acc_id, acc) = var();
-    let (same_id, same) = var();
     let (r_id, r) = var();
     let (done_id, done) = var();
-    let advanced = HypId::fresh();
     let stepped = Term::proj(r.clone(), 0);
-    // r.1 : r.0 == acc + 1, and same : acc == i, give r.0 == i + 1.
-    let left = stepped.clone();
-    let proof = Proof::transport(
-        Proof::OfTerm(same.clone()),
-        |hole| u8_eq(left.clone(), add_one(hole)),
-        Proof::OfTerm(Term::proj(r, 1)),
-    );
     let tail = match bug {
-        CountBug::Breaks => Tail::Break(Term::U8(0)),
+        CountBug::Breaks => Tail::Break(Term::tuple(&counting_state(), vec![stepped])),
+        CountBug::BreaksWrongly => Tail::Break(Term::U8(0)),
         CountBug::FallsThrough => Tail::Value(Term::U8(0)),
-        CountBug::StaleInvariant => {
-            Tail::Continue(vec![stepped.clone(), Term::proof(Proof::OfTerm(same))])
-        }
-        _ => Tail::Continue(vec![stepped.clone(), Term::proof(Proof::hyp(advanced))]),
-    };
-    let ordered = if bug == CountBug::Unordered {
-        // A true fact, about the wrong bounds.
-        lemma(
-            world.theory.machine(MachineInt::U8).le_refl,
-            vec![n.clone()],
-        )
-    } else {
-        lemma(
-            world
-                .theory
-                .machine(MachineInt::U8)
-                .unsigned
-                .unwrap()
-                .zero_le,
-            vec![n.clone()],
-        )
+        CountBug::ShortContinue => Tail::Continue(vec![]),
+        CountBug::None => Tail::Continue(vec![stepped]),
     };
     ExecFn {
         promises: Promises::default(),
-        signature: Type::function(1, |params| match params {
-            [] => Type::U8,
-            [n] => counted_result(n),
-            _ => unreachable!(),
-        }),
+        signature: Type::function(1, |_| Type::U8),
         params: vec![n_id],
         body: block(
             vec![Stmt::For(Box::new(ForStmt {
@@ -982,83 +936,64 @@ fn count_by_calls(world: &World, increment: ExecFnId, bug: CountBug) -> ExecFn {
                 upper: HypId::fresh(),
                 lo: Term::U8(0),
                 hi: n,
-                ordered,
+                inclusive: false,
                 state: counting_state(),
-                vars: vec![acc_id, same_id],
-                init: vec![Term::U8(0), Term::proof(Proof::Refl(Term::U8(0)))],
+                vars: vec![acc_id],
+                init: vec![Term::U8(0)],
                 body: block(
-                    vec![
-                        Stmt::Call {
-                            var: r_id,
-                            callee: increment,
-                            arguments: vec![acc],
-                        },
-                        Stmt::Have {
-                            hyp: advanced,
-                            claim: u8_eq(stepped, add_one(i)),
-                            proof,
-                        },
-                    ],
+                    vec![Stmt::Call {
+                        var: r_id,
+                        callee: increment,
+                        arguments: vec![acc],
+                    }],
                     tail,
                 ),
             }))],
-            // The state at the final index n is exactly the declared result.
-            Tail::Value(done),
+            // The result is the state, whether the range ran out or a
+            // break was reached.
+            Tail::Value(Term::proj(done, 0)),
         ),
     }
 }
 
 #[test]
-fn a_bounded_for_may_call_ordinary_functions_and_carries_an_indexed_invariant() {
+fn a_bounded_for_may_call_ordinary_functions_and_break_with_its_state() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
     let increment = program.declare(increment()).unwrap();
-    assert_eq!(
-        program
-            .declare(count_by_calls(&world, increment, CountBug::None))
-            .map(|_| ()),
-        Ok(())
-    );
-    // The invariant is about the index, so the old evidence does not carry.
+    for bug in [CountBug::None, CountBug::Breaks] {
+        assert_eq!(
+            program.declare(count_by_calls(increment, bug)).map(|_| ()),
+            Ok(())
+        );
+    }
     assert!(matches!(
-        program.declare(count_by_calls(&world, increment, CountBug::StaleInvariant)),
-        Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
+        program.declare(count_by_calls(increment, CountBug::BreaksWrongly)),
+        Err(ExecError::Kernel(KernelError::TypeMismatch { .. }))
     ));
     assert_eq!(
         program
-            .declare(count_by_calls(&world, increment, CountBug::Breaks))
-            .map(|_| ()),
-        Err(ExecError::BreakInFor)
-    );
-    assert_eq!(
-        program
-            .declare(count_by_calls(&world, increment, CountBug::FallsThrough))
+            .declare(count_by_calls(increment, CountBug::FallsThrough))
             .map(|_| ()),
         Err(ExecError::FallsThrough)
     );
-    // The bounds must be shown to be ordered, by a proof about these bounds.
-    assert!(matches!(
-        program.declare(count_by_calls(&world, increment, CountBug::Unordered)),
-        Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
-    ));
+    assert!(
+        program
+            .declare(count_by_calls(increment, CountBug::ShortContinue))
+            .is_err()
+    );
 }
 
 #[test]
-fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
+fn a_for_inside_a_loop_takes_both_the_continue_and_the_break() {
     // fn twice_over(n: u8) -> u8 {
     //     loop () -> u8 {
-    //         let swept = for i in 0..n (last: u8 = 0) { continue(i) };
+    //         let swept = for i in 0..n (last: u8 = 0) { <tail> };
     //         break swept.0;
     //     }
     // }
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
-    let plain_state = || {
-        Type::function(1, |params| match params {
-            [] => Type::U8,
-            _ => Type::Tuple(vec![Type::U8]),
-        })
-    };
     let build = |inner_tail: fn(Term) -> Tail| {
         let (n_id, n) = var();
         let (i_id, i) = var();
@@ -1081,17 +1016,9 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
                             lower: HypId::fresh(),
                             upper: HypId::fresh(),
                             lo: Term::U8(0),
-                            hi: n.clone(),
-                            ordered: lemma(
-                                world
-                                    .theory
-                                    .machine(MachineInt::U8)
-                                    .unsigned
-                                    .unwrap()
-                                    .zero_le,
-                                vec![n],
-                            ),
-                            state: plain_state(),
+                            hi: n,
+                            inclusive: false,
+                            state: Type::Tuple(vec![Type::U8]),
                             vars: vec![VarId::fresh()],
                             init: vec![Term::U8(0)],
                             body: block(vec![], inner_tail(i)),
@@ -1107,11 +1034,20 @@ fn a_for_inside_a_loop_takes_the_continue_and_refuses_the_break() {
     assert!(program.declare(build(|i| Tail::Continue(vec![i]))).is_ok());
     // The loop's own continue takes no arguments, so this is not it.
     assert!(program.declare(build(|_| Tail::Continue(vec![]))).is_err());
-    // And break does not reach past the for to the loop.
-    assert_eq!(
-        program.declare(build(Tail::Break)).map(|_| ()),
-        Err(ExecError::BreakInFor)
+    // And so does break: it leaves the for with the for's state, and does
+    // not reach the loop, whose break takes a byte.
+    assert!(
+        program
+            .declare(build(|i| Tail::Break(Term::tuple(
+                &Type::Tuple(vec![Type::U8]),
+                vec![i]
+            ))))
+            .is_ok()
     );
+    assert!(matches!(
+        program.declare(build(Tail::Break)),
+        Err(ExecError::Kernel(KernelError::TypeMismatch { .. }))
+    ));
 }
 
 #[test]
@@ -1141,16 +1077,8 @@ fn a_for_checks_its_bounds_and_state_shape() {
                         lower: HypId::fresh(),
                         upper: HypId::fresh(),
                         lo: Term::U8(0),
-                        hi: hi.clone(),
-                        ordered: lemma(
-                            world
-                                .theory
-                                .machine(MachineInt::U8)
-                                .unsigned
-                                .unwrap()
-                                .zero_le,
-                            vec![hi],
-                        ),
+                        hi,
+                        inclusive: false,
                         state,
                         vars: vec![VarId::fresh()],
                         init: vec![Term::U8(0)],
@@ -1161,30 +1089,106 @@ fn a_for_checks_its_bounds_and_state_shape() {
             ),
         )
     };
-    let plain_state = || {
-        Type::function(1, |params| match params {
-            [] => Type::U8,
-            _ => Type::Tuple(vec![Type::U8]),
-        })
-    };
-    assert!(program.declare(build(false, plain_state())).is_ok());
-    // A ghost cannot decide how many times executable code runs.
-    assert!(matches!(
-        program.declare(build(true, plain_state())),
-        Err(ExecError::Kernel(KernelError::GhostInExecutable(_)))
-    ));
-    // The state must be a function from the index to a tuple type.
-    assert_eq!(
+    assert!(
         program
             .declare(build(false, Type::Tuple(vec![Type::U8])))
-            .map(|_| ()),
-        Err(ExecError::BadLoopState)
+            .is_ok()
     );
-    let not_a_tuple = Type::function(1, |_| Type::U8);
+    // A ghost cannot decide how many times executable code runs.
+    assert!(matches!(
+        program.declare(build(true, Type::Tuple(vec![Type::U8]))),
+        Err(ExecError::Kernel(KernelError::GhostInExecutable(_)))
+    ));
+    // The state is a tuple type, as a loop's: not a function of the index.
+    let indexed = Type::function(1, |params| match params {
+        [] => Type::U8,
+        _ => Type::Tuple(vec![Type::U8]),
+    });
     assert_eq!(
-        program.declare(build(false, not_a_tuple)).map(|_| ()),
+        program.declare(build(false, indexed)).map(|_| ()),
         Err(ExecError::BadLoopState)
     );
+    assert_eq!(
+        program.declare(build(false, Type::U8)).map(|_| ()),
+        Err(ExecError::BadLoopState)
+    );
+}
+
+#[test]
+fn the_bounds_of_a_for_have_one_type_and_need_no_order_and_the_body_knows_them() {
+    // fn f(n: i16) -> i16 { let done = for i in 5..n () { <have> continue() }; 0 }
+    // over i16, with the lower bound past the upper one for small n: an
+    // empty range, which runs no pass and needs no proof of anything.
+    let world = world();
+    let mut program = Program::new((*world.definitions).clone());
+    let i16 = |value: i128| Term::machine_int(MachineInt::I16, value);
+    fn view(x: &Term) -> Term {
+        Term::view(MachineInt::I16, x.clone())
+    }
+    fn below(i: &Term, n: &Term) -> Term {
+        Term::int_lt(view(i), view(n))
+    }
+    fn at_most(i: &Term, n: &Term) -> Term {
+        Term::int_le(view(i), view(n))
+    }
+    let build = |inclusive: bool, hi: fn(&Term) -> Term, claim: fn(&Term, &Term) -> Term| {
+        let (n_id, n) = var();
+        let (i_id, i) = var();
+        let (done_id, _) = var();
+        let (lower, upper) = (HypId::fresh(), HypId::fresh());
+        let claim = claim(&i, &n);
+        ExecFn {
+            promises: Promises::default(),
+            signature: Type::function(1, |_| Type::machine(MachineInt::I16)),
+            params: vec![n_id],
+            body: block(
+                vec![Stmt::For(Box::new(ForStmt {
+                    var: done_id,
+                    index: i_id,
+                    lower,
+                    upper,
+                    lo: i16(5),
+                    hi: hi(&n),
+                    inclusive,
+                    state: Type::Tuple(vec![]),
+                    vars: vec![],
+                    init: vec![],
+                    body: block(
+                        vec![Stmt::Have {
+                            hyp: HypId::fresh(),
+                            claim,
+                            proof: Proof::hyp(upper),
+                        }],
+                        Tail::Continue(vec![]),
+                    ),
+                }))],
+                Tail::Value(i16(0)),
+            ),
+        }
+    };
+    // Exclusive: the body knows i < n; inclusive: i <= n.
+    assert_eq!(
+        program
+            .declare(build(false, Term::clone, below))
+            .map(|_| ()),
+        Ok(())
+    );
+    assert_eq!(
+        program
+            .declare(build(true, Term::clone, at_most))
+            .map(|_| ()),
+        Ok(())
+    );
+    // The upper fact of an exclusive range is not `i <= n`.
+    assert!(matches!(
+        program.declare(build(false, Term::clone, at_most)),
+        Err(ExecError::Kernel(KernelError::ProofMismatch { .. }))
+    ));
+    // Bounds of two types are refused.
+    assert!(matches!(
+        program.declare(build(false, |_| Term::U8(9), below)),
+        Err(ExecError::Kernel(KernelError::TypeMismatch { .. }))
+    ));
 }
 
 #[test]

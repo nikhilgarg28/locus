@@ -1,19 +1,19 @@
-// Under `terminates` there is no iteration of any kind: the state-passing
-// `loop` and `for`, and Rust's `loop` and `while`, which are otherwise not
-// in Locus yet. The error is at the keyword, and the promise is named
-// whether it was written on the function or at the top of the file.
+// Under `terminates` there is no iteration of any kind: `loop`, `while`,
+// and the bounded `for`. The error is at the keyword, and the promise is
+// named whether it was written on the function or at the top of the file.
 #![terminates]
 
 fn spin(n: u8) -> u8 {
-    loop () -> u8 { //~ error: L0215 `loop` cannot appear in `spin`, which promises terminates
+    loop { //~ error: L0215 `loop` cannot appear in `spin`, which promises terminates
         break n
     }
 }
 
 fn count(n: u8) -> u8 {
-    let (total,) = for i in 0..n (total: u8 = 0) { //~ error: L0215 `for` cannot appear in `count`, which promises terminates
-        continue(total.wrapping_add(i))
-    };
+    let mut total: u8 = 0;
+    for i in 0..n { //~ error: L0215 `for` cannot appear in `count`, which promises terminates
+        total = total.wrapping_add(i);
+    }
     total
 }
 

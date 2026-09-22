@@ -1,0 +1,25 @@
+// The state-passing loop forms of the language as first built were removed
+// by M3: the state of a loop is what `let mut` bindings it assigns. Each is
+// still parsed and is reported with the spelling that replaced it; the
+// rewrite is not mechanical, so no fix is offered.
+fn walk(limit: u8) -> u8 {
+    loop (i: u8 = 0) -> u8 { //~ error: L0234 the state-passing `loop (state) -> R { ... }` was removed
+        if i == limit { break i } else { continue(i.wrapping_add(1)) }
+    }
+}
+
+fn count(n: u8) -> u8 {
+    let (total,) = for i in 0..n (total: u8 = 0) { //~ error: L0234 the state-passing `for i in lo..hi (state) { ... }` was removed
+        continue(total.wrapping_add(i))
+    };
+    total
+}
+
+fn again(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        total = total.wrapping_add(i);
+        continue(total) //~ error: L0234 `continue(next)` was removed; write `continue`
+    }
+    total
+}

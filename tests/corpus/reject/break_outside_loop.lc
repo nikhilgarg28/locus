@@ -4,5 +4,5 @@ fn first(n: u8) -> u8 {
 }
 
 fn second(n: u8) -> u8 {
-    continue(n) //~ error: L0217 `continue` outside a loop
+    continue //~ error: L0217 `continue` outside a loop
 }

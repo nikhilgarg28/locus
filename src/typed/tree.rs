@@ -14,8 +14,8 @@
 //!
 //! Everything the checker will bind has an identity here, because the proofs
 //! in the tree refer to those identities: binders, the fact of each branch
-//! and arm, the equation of each `let`, and the result of each call, `if`,
-//! `match`, and loop, which needs a name only if lowering has to name it.
+//! and arm, the equation of each `let`, the versions a loop's body sees of
+//! what it carries, and the result of each call, `if`, `match`, and loop.
 
 use crate::exec::ExecFnId;
 use crate::kernel::{
@@ -131,6 +131,19 @@ pub struct Join {
     pub binding: VarId,
     pub version: Binder,
     pub equation: HypId,
+}
+
+/// What a loop carries: the bindings declared outside it that it assigns,
+/// in declaration order, each with the version it has after the loop, and
+/// the identity of the loop's result, a tuple of those versions followed,
+/// for a `loop`, by the value of the `break`. After the loop each version
+/// is bound by projection, as after a branch that assigns. Lowering computes
+/// the set of assigned bindings itself and rejects a tree whose `joins`
+/// differ.
+#[derive(Clone, Debug)]
+pub struct Carried {
+    pub tuple: VarId,
+    pub joins: Vec<Join>,
 }
 
 #[derive(Clone, Debug)]
@@ -278,25 +291,54 @@ pub enum Expr {
         joined: Option<Joined>,
     },
     Block(Block),
+    /// `loop { body }`. What the loop carries is the tuple of the bindings
+    /// declared outside it that its body assigns (`carried`), and `state`
+    /// is the version of each that the body sees at the start of every
+    /// pass, in the same order; a proof in the body may mention it. The
+    /// loop's value is what `break` supplies, of type `ty`, and is bound
+    /// under `result` with `equation` by projection from the carried
+    /// tuple's last field. A loop that never breaks produces no value.
     Loop {
-        state: Vec<(Binder, Expr)>,
-        result_ty: Type,
-        body: Block,
+        state: Vec<Binder>,
+        carried: Carried,
+        ty: Type,
         result: VarId,
+        equation: HypId,
+        body: Block,
     },
+    /// `while condition { body }`: a loop whose body tests the condition,
+    /// under `then_fact` (`condition == true`, about the comparison
+    /// performed) runs `body`, and under `else_fact` leaves the loop. The
+    /// condition is part of the loop, so what it assigns is carried too.
+    /// Its value is `()` and `break` carries nothing.
+    While {
+        condition: Box<Expr>,
+        then_fact: HypId,
+        else_fact: HypId,
+        state: Vec<Binder>,
+        carried: Carried,
+        body: Block,
+    },
+    /// `for index in lo..hi { body }`, or `lo..=hi` when `inclusive`. The
+    /// index is an immutable binding of the bounds' machine type, and the
+    /// body has `lo <= index` as `lower` and `index < hi` (`index <= hi`
+    /// when inclusive) as `upper`, over the views, afresh on each pass. An
+    /// empty range runs no pass. Its value is `()` and `break` carries
+    /// nothing.
     For {
         index: Binder,
         lower: HypId,
         upper: HypId,
         lo: Box<Expr>,
         hi: Box<Expr>,
-        ordered: Proof,
-        state: Vec<(Binder, Expr)>,
+        inclusive: bool,
+        state: Vec<Binder>,
+        carried: Carried,
         body: Block,
-        result: VarId,
     },
-    Break(Box<Expr>),
-    Continue(Vec<Expr>),
+    /// `break`, or `break value` in a `loop`.
+    Break(Option<Box<Expr>>),
+    Continue,
     /// Any proof expression: a hole that was filled, a lemma call, a proof
     /// constructor. It prints as `Proved`.
     Proof(Proof),
@@ -319,8 +361,8 @@ pub struct MatchArm {
 }
 
 impl Expr {
-    /// Whether the expression's value is a proof. A `for` yields its state
-    /// tuple and a comparison yields a `bool`, so neither is one.
+    /// Whether the expression's value is a proof. A `while` or `for` yields
+    /// `()` and a comparison yields a `bool`, so neither is one.
     pub fn is_proof(&self) -> bool {
         let proof = |ty: &Type| matches!(ty, Type::Proof(_));
         match self {
@@ -332,7 +374,7 @@ impl Expr {
             | Self::If { ty, .. }
             | Self::Match { ty, .. }
             | Self::Absurd { ty, .. } => proof(ty),
-            Self::Loop { result_ty, .. } => proof(result_ty),
+            Self::Loop { ty, .. } => proof(ty),
             Self::Block(block) => block.tail.as_deref().is_some_and(Self::is_proof),
             _ => false,
         }

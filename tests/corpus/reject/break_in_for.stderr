@@ -1,7 +1,14 @@
-error[L0218]: a bounded `for` runs to the end of its range and has no `break`
- --> tests/corpus/reject/break_in_for.lc:4:9
+error[L0218]: `break` with a value leaves a `while` or a `for`, which produce no value
+ --> tests/corpus/reject/break_in_for.lc:6:9
   |
-4 |         break total //~ error: L0218 has no `break`
+6 |         break total //~ error: L0218 `break` with a value leaves a `while` or a `for`
   |         ^^^^^^^^^^^
   |
-  = note: carry a `bool` in the state to stop doing work early
+  = note: only a `loop` has the value of its `break`; assign the value to a `let mut` declared before the loop and `break`
+error[L0218]: `break` with a value leaves a `while` or a `for`, which produce no value
+  --> tests/corpus/reject/break_in_for.lc:14:9
+   |
+14 |         break k //~ error: L0218 `break` with a value leaves a `while` or a `for`
+   |         ^^^^^^^
+   |
+   = note: only a `loop` has the value of its `break`; assign the value to a `let mut` declared before the loop and `break`

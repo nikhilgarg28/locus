@@ -1,0 +1,66 @@
+// Nested loops: `break` and `continue` belong to the innermost loop, and a
+// binding assigned in an inner loop is carried by every loop around it.
+
+fn triangle(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        let mut j: u8 = 0;
+        loop {
+            if j == i {
+                break
+            } else {
+            }
+            j = j.wrapping_add(1);
+            if j == 2 {
+                continue
+            } else {
+            }
+            total = total.wrapping_add(1);
+        }
+    }
+    total
+}
+
+// The inner `break` leaves the inner loop only; the outer `while` goes on.
+fn rows(n: u8) -> u8 {
+    let mut row: u8 = 0;
+    let mut cells: u8 = 0;
+    while row < n {
+        let mut col: u8 = 0;
+        while col < 10 {
+            if col == row {
+                break
+            } else {
+            }
+            cells = cells.wrapping_add(1);
+            col = col.wrapping_add(1);
+        }
+        row = row.wrapping_add(1);
+    }
+    cells
+}
+
+// A `loop` inside a `for`, breaking with a value read by the `for` body.
+fn doubled(n: u8) -> u8 {
+    let mut acc: u8 = 0;
+    for i in 0..n {
+        let mut k: u8 = 0;
+        let twice = loop {
+            if k == i {
+                break k.wrapping_add(i)
+            } else {
+            }
+            k = k.wrapping_add(1);
+        };
+        acc = acc.wrapping_add(twice);
+    }
+    acc
+}
+
+//~ run: triangle(0) => 0
+//~ run: triangle(5) => 7
+//~ run: rows(4) => 6
+//~ run: rows(0) => 0
+//~ run: doubled(4) => 12
+//~ rust: let twice: u8 = loop {
+//~ rust: while col < 10_u8 {

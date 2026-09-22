@@ -52,7 +52,7 @@ fn both(session: &Session, callee: FnRef, arguments: &[Value]) -> [Answer; 2] {
 
 #[test]
 fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
-    let (mut session, prelude, theory) = setup();
+    let (mut session, _, theory) = setup();
     let increment_ref = session.declare_fn(&increment(false)).unwrap();
     let increment_id = exec_id(increment_ref);
     let programs = [
@@ -60,17 +60,10 @@ fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
         session.declare_fn(&increment(true)).unwrap(),
         session.declare_fn(&preserve(theory, false, true)).unwrap(),
         session.declare_fn(&preserve(theory, true, true)).unwrap(),
+        session.declare_fn(&bounded_walk(theory, true)).unwrap(),
+        session.declare_fn(&counting_loop(false, None)).unwrap(),
         session
-            .declare_fn(&bounded_walk(prelude, theory, true))
-            .unwrap(),
-        session
-            .declare_fn(&counting_loop(theory, false, None))
-            .unwrap(),
-        session
-            .declare_fn(&counting_loop(theory, true, None))
-            .unwrap(),
-        session
-            .declare_fn(&counting_loop(theory, false, Some(increment_id)))
+            .declare_fn(&counting_loop(false, Some(increment_id)))
             .unwrap(),
         // Mutation: the check IR runs the versions, the erased tree runs
         // the assignments.

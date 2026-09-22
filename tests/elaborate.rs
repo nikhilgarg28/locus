@@ -176,11 +176,8 @@ fn the_lock_runs_as_written() {
             // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
             // it stands.
             (29, 80, "evaluation", 11),
-            // run: the range `0..attempts`, by the lemma at `attempts`, whose
-            // size is measured now rather than assumed.
-            (50, 20, "u8_zero_le", 6),
             // run: `prove!(0u8 <= 3)` for the initial state.
-            (52, 69, "evaluation", 11),
+            (52, 65, "evaluation", 11),
         ]
     );
 }
@@ -197,7 +194,8 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
         "            if lock.failures < 3_u8 {",
         "                (Lock { failures: lock.failures.wrapping_add(1_u8), open: false }, Proved)",
         "    for attempt in 0_u8..attempts {",
-        "        let (next, still_bounded) = step(lock, bounded, event_at(attempt, correct));",
+        "        let (lock, bounded) = state;",
+        "        state = step(lock, bounded, event_at(attempt, correct));",
         "    (3_u8.wrapping_sub(failures), Proved)",
         "    let (last, bounded) = run(attempts, correct);",
     ] {
@@ -455,19 +453,64 @@ fn a_function_of_the_logic_runs_and_is_usable_in_claims() {
 }
 
 #[test]
-fn a_loop_carries_its_invariant_as_state() {
+fn a_loop_supplies_its_value_and_evidence_at_the_break() {
     let result = accepted(
         "fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
-            loop (i: u8 = 0, bound: @(i <= limit) = u8_zero_le(limit)) -> (out: u8, @(out <= limit)) {
+            let mut i: u8 = 0;
+            loop {
                 if i == limit {
-                    break (i, bound)
+                    break (limit, u8_le_refl(limit))
                 } else {
-                    continue(limit, u8_le_refl(limit))
+                    i = i.wrapping_add(1);
                 }
             }
         }",
     );
     assert_eq!(call(&result, "walk", &[9]), "(9, Proved)");
+    // The evidence is checked against the versions current at the break,
+    // and nothing carried from earlier passes speaks of `i` there.
+    let (codes, full) = rejected(
+        "fn walk(limit: u8) -> (out: u8, @(out <= limit)) {
+            let mut i: u8 = 0;
+            loop {
+                if i == limit {
+                    break (i, prove!(i <= limit))
+                } else {
+                    i = i.wrapping_add(1);
+                }
+            }
+        }",
+    );
+    assert_eq!(codes, ["L0230"]);
+    assert!(full.contains("cannot show `i <= limit`"), "{full}");
+}
+
+#[test]
+fn a_loop_carries_what_its_body_assigns_and_the_rest_is_read_after_it() {
+    let result = accepted(
+        "fn tally(n: u8) -> (u8, u8) {
+            let mut evens: u8 = 0;
+            let mut odds: u8 = 0;
+            let mut k: u8 = 0;
+            while k < n {
+                if k.wrapping_mul(128) == 128 { odds = odds.wrapping_add(1); } else { evens = evens.wrapping_add(1); }
+                k = k.wrapping_add(1);
+            }
+            (evens, odds)
+        }",
+    );
+    assert_eq!(call(&result, "tally", &[7]), "(4, 3)");
+    // What a loop assigned is all that is known of it afterwards.
+    let (codes, full) = rejected(
+        "fn f(n: u8) -> u8 {
+            let mut x: u8 = 0;
+            for i in 0..n { x = i; }
+            prove!(x == 0);
+            x
+        }",
+    );
+    assert_eq!(codes, ["L0230"]);
+    assert!(full.contains("cannot show `x == 0`"), "{full}");
 }
 
 #[test]
@@ -504,7 +547,7 @@ fn a_wildcard_arm_covers_the_remaining_variants() {
 
 #[test]
 fn errors_name_the_problem() {
-    let cases: [(&str, &str, &str); 14] = [
+    let cases: [(&str, &str, &str); 15] = [
         (
             "fn f() -> u8 { missing }",
             "L0204",
@@ -538,12 +581,17 @@ fn errors_name_the_problem() {
             "no arm handles `E::B`",
         ),
         (
-            "fn f(n: u8) -> u8 { for i in 0..n (a: u8 = 0) { break a } }",
+            "fn f(n: u8) -> u8 { let mut a: u8 = 0; for i in 0..n { a = i; break a } a }",
             "L0218",
-            "has no `break`",
+            "`break` with a value leaves a `while` or a `for`",
         ),
         (
-            "#[terminates] #[no_panic] #[no_io] fn f(n: u8) -> u8 { loop () -> u8 { break n } }",
+            "fn f(n: u8) -> u8 { loop (i: u8 = 0) -> u8 { break i } }",
+            "L0234",
+            "was removed; write `loop { ... }`",
+        ),
+        (
+            "#[terminates] #[no_panic] #[no_io] fn f(n: u8) -> u8 { loop { break n } }",
             "L0215",
             "`loop` cannot appear in `f`, which promises terminates",
         ),
@@ -586,16 +634,16 @@ fn a_false_claim_is_refuted_with_a_case() {
 }
 
 #[test]
-fn a_reversed_range_is_rejected_for_want_of_evidence() {
-    let (codes, full) = rejected("fn f(n: u8) -> () { for i in 5..n () { continue() } }");
-    assert_eq!(codes, ["L0230"]);
-    assert!(full.contains("cannot show `5 <= n`"), "{full}");
-    assert!(full.contains("it fails when `n` is 0"), "{full}");
-    accepted(
-        "fn f(n: u8) -> () {
-            if 5 <= n { for i in 5..n () { continue() } } else { () }
+fn a_reversed_range_runs_no_pass_and_needs_no_evidence() {
+    let result = accepted(
+        "fn f(n: u8) -> u8 {
+            let mut passes: u8 = 0;
+            for i in 5..n { passes = passes.wrapping_add(1); }
+            passes
         }",
     );
+    assert_eq!(call(&result, "f", &[0]), "0");
+    assert_eq!(call(&result, "f", &[7]), "2");
 }
 
 // Evidence written out, with the specification's examples (sections 7.3 and 8).
@@ -1085,13 +1133,10 @@ fn a_function_appears_in_a_proposition_exactly_when_it_promises_the_three() {
 #[test]
 fn a_loop_of_any_form_is_refused_under_terminates_at_its_keyword() {
     let bodies = [
+        ("loop { break n }", "loop"),
+        ("let mut a: u8 = 0; for i in 0..n { a = i; } a", "for"),
+        // The removed state-passing forms: the promise is what is reported.
         ("loop () -> u8 { break n }", "loop"),
-        (
-            "let (a,) = for i in 0..n (a: u8 = 0) { continue(a) }; a",
-            "for",
-        ),
-        // The two forms M3 gives a meaning: the promise is what is reported.
-        ("loop { break }", "loop"),
         ("while n < 3 { } n", "while"),
     ];
     for (body, keyword) in bodies {
@@ -1116,16 +1161,15 @@ fn a_loop_of_any_form_is_refused_under_terminates_at_its_keyword() {
         let (codes, _) = rejected(&text);
         assert_eq!(codes, ["L0215"], "{text}");
     }
-    // Without the promise the state-passing forms are accepted and the
-    // others are not in Locus yet.
-    accepted("fn f(n: u8) -> u8 { loop () -> u8 { break n } }");
-    for body in ["loop { break }", "while n < 3 { } n"] {
-        let (codes, full) = rejected(&format!("fn f(n: u8) -> u8 {{ {body} }}"));
-        assert_eq!(codes, ["L0290"]);
-        assert!(full.contains("M3"), "{full}");
-    }
+    // Without the promise Rust's forms are accepted and the state-passing
+    // ones were removed.
+    accepted("fn f(n: u8) -> u8 { loop { break n } }");
+    accepted("fn f(n: u8) -> u8 { while n < 3 { } n }");
+    let (codes, full) = rejected("fn f(n: u8) -> u8 { loop () -> u8 { break n } }");
+    assert_eq!(codes, ["L0234"]);
+    assert!(full.contains("was removed"), "{full}");
     // Nothing in a proposition runs.
-    let (codes, full) = rejected("fn f(n: u8) -> Prop { prop!(loop () -> u8 { break n } == n) }");
+    let (codes, full) = rejected("fn f(n: u8) -> Prop { prop!(loop { break n } == n) }");
     assert_eq!(codes, ["L0215"]);
     assert!(
         full.starts_with("`loop` cannot appear in a proposition"),

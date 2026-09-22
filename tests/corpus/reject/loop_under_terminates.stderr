@@ -1,15 +1,15 @@
 error[L0215]: `loop` cannot appear in `spin`, which promises terminates
- --> tests/corpus/reject/loop_under_terminates.lc:8:5
+ --> tests/corpus/reject/loop_under_terminates.lc:7:5
   |
-8 |     loop () -> u8 { //~ error: L0215 `loop` cannot appear in `spin`, which promises terminates
+7 |     loop { //~ error: L0215 `loop` cannot appear in `spin`, which promises terminates
   |     ^^^^
   |
   = note: a function that promises terminates contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion
 error[L0215]: `for` cannot appear in `count`, which promises terminates
-  --> tests/corpus/reject/loop_under_terminates.lc:14:20
+  --> tests/corpus/reject/loop_under_terminates.lc:14:5
    |
-14 |     let (total,) = for i in 0..n (total: u8 = 0) { //~ error: L0215 `for` cannot appear in `count`, which promises terminates
-   |                    ^^^
+14 |     for i in 0..n { //~ error: L0215 `for` cannot appear in `count`, which promises terminates
+   |     ^^^
    |
    = note: a function that promises terminates contains no loop of any kind, a bounded `for` included, and calls only functions that promise it; loops that keep the promise come with recursion
 error[L0215]: `loop` cannot appear in `plain`, which promises terminates

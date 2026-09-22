@@ -19,25 +19,27 @@
 //! machine types, comparisons at each type, `if` (which is also how `!`,
 //! `&&`, and `||` appear in the tree), `match` with payload bindings, calls
 //! to functions generated earlier (so the call graph is acyclic), `math fn`s
-//! over the pure part of all this, the two loops, since M2 `let mut`
-//! with assignment, whole or by a field path, in straight-line code and in
-//! the arms of branches, and since E6 the operators `+`, `-`, `*`, `/`,
-//! `%`, and unary minus at a random machine type on random operands, so
-//! that overflow and division by zero do occur: no generated function
-//! promises `no_panic`, so no operator carries evidence, and every panic
-//! is an outcome the three sides must agree on. The generator plays the elaborator's part for
-//! mutation: a mutable local's identity is updated in place to each new
-//! version, an arm's versions are put back after it, and a branch some arm
-//! of which assigned an outer binding records the join lowering will
-//! compute, so the three-way comparison covers versions and joins. Where the tree needs
-//! evidence it gets trivial evidence: the ordered bounds of a `for` are
-//! literals, proved by evaluating the comparison, and the one proof type in
-//! the fragment is `@[0 == 0]`, proved by reflexivity.
+//! over the pure part of all this, Rust's three loops, since M2 `let mut`
+//! with assignment, whole or by a field path, in straight-line code, in the
+//! arms of branches, and since M3 in the bodies of loops, and since E6 the
+//! operators `+`, `-`, `*`, `/`, `%`, and unary minus at a random machine
+//! type on random operands, so that overflow and division by zero do occur:
+//! no generated function promises `no_panic`, so no operator carries
+//! evidence, and every panic is an outcome the three sides must agree on.
+//! The generator plays the elaborator's part for mutation: a mutable local's
+//! identity is updated in place to each new version, an arm's versions are
+//! put back after it, a branch some arm of which assigned an outer binding
+//! records the join lowering will compute, and a loop chooses which of the
+//! mutable locals in scope it carries, gives them the versions its body
+//! sees, makes sure the body assigns each of them, and records the versions
+//! after the loop; so the three-way comparison covers versions, joins, and
+//! what loops carry. The one proof type in the fragment is `@[0 == 0]`,
+//! proved by reflexivity.
 //!
 //! Every loop terminates by construction, because interpreter fuel does not
-//! bound the compiled program: a `loop` carries a counter in its state that
-//! starts at zero, is never assigned in the body, and goes up by one on every
-//! `continue`, with a `break` when it reaches a literal limit; a `for` runs
+//! bound the compiled program: a `loop` counts a `let mut` declared just
+//! before it up by one on every pass and breaks when it reaches a literal
+//! limit, a `while` tests such a counter against its limit, and a `for` runs
 //! between two literals. Calls and loops are also charged against a budget
 //! (`BUDGET`) so that no program does much work, which keeps the interpreters
 //! far from running out of fuel. The process timeout on the compiled program
@@ -96,12 +98,11 @@ use locus::erased::{
 };
 use locus::exec::CheckInterpreter;
 use locus::kernel::{
-    Axiom, CmpOp, EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId,
-    same_type,
+    EnumId, HypId, MachineInt, Op, Prim, Proof, StructId, Term, Type, VarId, same_type,
 };
 use locus::typed::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm, Pattern,
-    Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm,
+    Pattern, Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
 };
 use rng::{Rng, case_seed};
 
@@ -324,21 +325,6 @@ fn evidence() -> Expr {
     Expr::Proof(Proof::Refl(Term::U8(0)))
 }
 
-/// `lo <= hi` for two literals, by evaluating the comparison and reflecting
-/// the result: the trivial evidence a `for` over literal bounds needs.
-fn ordered(ty: MachineInt, lo: i128, hi: i128) -> Proof {
-    let comparison = Term::cmp(
-        CmpOp::Le,
-        ty,
-        Term::machine_int(ty, lo),
-        Term::machine_int(ty, hi),
-    );
-    Proof::implies_elim(
-        Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true)),
-        Proof::Evaluate(comparison),
-    )
-}
-
 fn if_(
     condition: Expr,
     then_block: Block,
@@ -455,9 +441,10 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         | Expr::Cast { .. }
         | Expr::CallMath { .. }
         | Expr::CallFn { .. }
+        | Expr::While { .. }
         | Expr::For { .. }
         | Expr::Break(_)
-        | Expr::Continue(_)
+        | Expr::Continue
         | Expr::Proof(_)
         | Expr::Prop(_)
         | Expr::Absurd { .. } => true,
@@ -468,7 +455,9 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
 /// tail chain of the body; a nested loop's breaks are its own.
 fn breaks_determined(block: &Block, locals: &HashMap<VarId, bool>) -> bool {
     match block.tail.as_deref() {
-        Some(Expr::Break(value)) => determined(value, locals),
+        Some(Expr::Break(value)) => value
+            .as_deref()
+            .is_none_or(|value| determined(value, locals)),
         Some(Expr::If {
             then_block,
             else_block,
@@ -554,9 +543,12 @@ enum Production {
     Match,
     /// A call to a function generated earlier.
     Call,
-    /// A state-passing `loop`, bounded by a counter in its state.
+    /// A `loop` bounded by a `let mut` counter declared just before it, whose
+    /// value is what its `break` supplies.
     Loop,
-    /// A `for` between two literals, whose value is its final state.
+    /// A `while` over such a counter; its value is `()`.
+    While,
+    /// A `for` between two literals; its value is `()`.
     For,
     /// A block with statements of its own.
     Block,
@@ -577,6 +569,7 @@ const PRODUCTIONS: &[(Production, u32)] = &[
     (Production::Match, 3),
     (Production::Call, 5),
     (Production::Loop, 2),
+    (Production::While, 2),
     (Production::For, 2),
     (Production::Block, 2),
 ];
@@ -588,7 +581,8 @@ const STATEMENTS: &[(Production, u32)] = &[
     (Production::Match, 2),
     (Production::Call, 4),
     (Production::Loop, 2),
-    (Production::For, 2),
+    (Production::While, 3),
+    (Production::For, 3),
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -643,12 +637,17 @@ struct Generator {
     // The function being generated.
     locals: Vec<Binder>,
     /// Beside each local: for a mutable one, the identity of its binding and
-    /// the loop depth it was declared at. The local's own `id` is its
+    /// the loop depth at which it may be assigned: where it was declared,
+    /// or inside a loop that carries it. The local's own `id` is its
     /// current version.
     bindings: Vec<Option<(VarId, usize)>>,
-    /// How many loop bodies enclose the current position: a mutable binding
-    /// declared outside a loop body is not assigned inside it (M3).
+    /// How many loop bodies enclose the current position. A mutable binding
+    /// declared outside a loop is assigned inside it only when the loop
+    /// carries it, which is what lowering computes from the body.
     loop_depth: usize,
+    /// Every binding assigned so far, in order: a loop reads what its body
+    /// assigned off the end of it.
+    assigned: Vec<VarId>,
     /// Whether each local's Rust type is determined; see `determined`.
     known: HashMap<VarId, bool>,
     /// How many times the current position runs per call, from the loops
@@ -676,6 +675,7 @@ impl Generator {
             locals: Vec::new(),
             bindings: Vec::new(),
             loop_depth: 0,
+            assigned: Vec::new(),
             known: HashMap::new(),
             multiplier: 1,
             cost: 0,
@@ -809,6 +809,7 @@ impl Generator {
         self.locals.clear();
         self.bindings.clear();
         self.loop_depth = 0;
+        self.assigned.clear();
         self.known.clear();
         self.multiplier = 1;
         self.cost = 0;
@@ -992,20 +993,32 @@ impl Generator {
         }
     }
 
-    /// An assignment to a mutable local declared at this loop depth, whole
-    /// or by a path into its products, or `None` when there is none. Not in
-    /// a `math fn`, whose body is pure.
+    /// The mutable locals that may be assigned here: declared at this loop
+    /// depth, or carried by the loop around the position.
+    fn assignable(&self) -> Vec<usize> {
+        (0..self.locals.len())
+            .filter(|&slot| matches!(self.bindings[slot], Some((_, at)) if at == self.loop_depth))
+            .collect()
+    }
+
+    /// An assignment to a mutable local that may be assigned here, whole or
+    /// by a path into its products, or `None` when there is none. Not in a
+    /// `math fn`, whose body is pure.
     fn assign(&mut self, depth: usize) -> Option<Stmt> {
         if self.math {
             return None;
         }
-        let candidates: Vec<usize> = (0..self.locals.len())
-            .filter(|&slot| matches!(self.bindings[slot], Some((_, at)) if at == self.loop_depth))
-            .collect();
+        let candidates = self.assignable();
         if candidates.is_empty() {
             return None;
         }
         let slot = *self.rng.choose(&candidates);
+        Some(self.assign_to(slot, depth))
+    }
+
+    /// An assignment to the mutable local at the slot, whole or by a path
+    /// into its products.
+    fn assign_to(&mut self, slot: usize, depth: usize) -> Stmt {
         let (binding, _) = self.bindings[slot].expect("a mutable local");
         let root = self.locals[slot].clone();
         let mut path = Vec::new();
@@ -1058,7 +1071,8 @@ impl Generator {
         let determined = self.known[&self.locals[slot].id];
         self.known.insert(version.id, determined);
         self.locals[slot].id = version.id;
-        Some(Stmt::Assign {
+        self.assigned.push(binding);
+        Stmt::Assign {
             place: Place {
                 binding,
                 name: root.name,
@@ -1067,7 +1081,7 @@ impl Generator {
             value,
             version,
             equation: HypId::fresh(),
-        })
+        }
     }
 
     // --- Blocks and statements ---
@@ -1127,9 +1141,14 @@ impl Generator {
                 }
             }
             StmtKind::Effect => {
+                // Often of unit type, which is what a `while` or a `for` is.
                 // Not of a ghost type: a call to a `math fn` that returns a
                 // proof erases to `Proved;`, a path statement Rust lints.
-                let ty = self.random_type(1);
+                let ty = if self.rng.chance(1, 2) {
+                    unit()
+                } else {
+                    self.random_type(1)
+                };
                 let effect = if ty.is_ghost() {
                     None
                 } else {
@@ -1205,8 +1224,9 @@ impl Generator {
             }
             Production::Match => depth > 0 && !ty.is_ghost() && !self.program.enums.is_empty(),
             Production::Call => depth > 0 && !self.callable(ty).is_empty(),
-            Production::Loop => depth > 0 && !self.math,
-            Production::For => depth > 0 && matches!(ty, Type::Tuple(_)),
+            // No loop is pure, so none stands in a math function.
+            Production::Loop => depth > 0 && !self.math && !ty.is_ghost(),
+            Production::While | Production::For => depth > 0 && !self.math && is_unit(ty),
         }
     }
 
@@ -1345,7 +1365,8 @@ impl Generator {
             Production::Match => self.match_(ty, inner, determined),
             Production::Call => self.call(ty, inner)?,
             Production::Loop => self.loop_(ty, inner, determined),
-            Production::For => self.for_(ty, inner),
+            Production::While => self.while_(inner),
+            Production::For => self.for_(inner),
             Production::Block => Expr::Block(self.block(ty, inner, determined)),
         })
     }
@@ -1582,31 +1603,182 @@ impl Generator {
         })
     }
 
-    /// loop (i: u8 = 0, s: S = init, ...) -> ty {
-    ///     stmts
-    ///     if i == LIMIT { stmts; break value } else { stmts; continue(i + 1, next...) }
+    // --- Loops: what a loop carries, as the elaborator finds it ---
+
+    /// Enters a loop: chooses which of the mutable locals assignable here
+    /// the loop carries, and gives each the version its body sees. The
+    /// loop's `counter`, when it has one, is carried too, and is assigned
+    /// only by the step that bounds the loop: nothing else inside may
+    /// assign it, or the loop might never end. Returns the slots chosen, in
+    /// declaration order, with the versions their bodies see and the
+    /// depths they had.
+    fn enter_loop(&mut self, counter: Option<usize>) -> Vec<(usize, Binder, usize)> {
+        let mut chosen = Vec::new();
+        for slot in self.assignable() {
+            let is_counter = Some(slot) == counter;
+            if !is_counter && !self.rng.chance(1, 2) {
+                continue;
+            }
+            let (binding, at) = self.bindings[slot].expect("a mutable local");
+            let inside = Binder {
+                id: VarId::fresh(),
+                name: self.locals[slot].name.clone(),
+                ty: self.locals[slot].ty.clone(),
+            };
+            let determined = self.known[&self.locals[slot].id];
+            self.known.insert(inside.id, determined);
+            self.locals[slot].id = inside.id;
+            if !is_counter {
+                self.bindings[slot] = Some((binding, self.loop_depth + 1));
+            }
+            chosen.push((slot, inside, at));
+        }
+        self.loop_depth += 1;
+        chosen
+    }
+
+    /// Assignments to every chosen binding the body has not assigned since
+    /// the mark, so that what the loop carries is what its body assigns.
+    fn ensure_assigned(
+        &mut self,
+        chosen: &[(usize, Binder, usize)],
+        mark: usize,
+        depth: usize,
+    ) -> Vec<Stmt> {
+        let mut stmts = Vec::new();
+        for (slot, _, _) in chosen {
+            let (binding, at) = self.bindings[*slot].expect("a mutable local");
+            // The counter is assigned by its step alone.
+            if at == self.loop_depth && !self.assigned[mark..].contains(&binding) {
+                stmts.push(self.assign_to(*slot, depth));
+            }
+        }
+        stmts
+    }
+
+    /// Leaves a loop: the entry versions come back, each chosen binding gets
+    /// its version after the loop, and what the tree carries is recorded.
+    fn leave_loop(
+        &mut self,
+        entry: &[(usize, VarId, VarId)],
+        chosen: Vec<(usize, Binder, usize)>,
+    ) -> (Vec<Binder>, Carried) {
+        self.loop_depth -= 1;
+        self.restore(entry);
+        let mut state = Vec::new();
+        let mut joins = Vec::new();
+        for (slot, inside, at) in chosen {
+            let (binding, _) = self.bindings[slot].expect("a mutable local");
+            self.bindings[slot] = Some((binding, at));
+            let after = Binder {
+                id: VarId::fresh(),
+                name: inside.name.clone(),
+                ty: inside.ty.clone(),
+            };
+            let determined = self.known[&inside.id];
+            self.known.insert(after.id, determined);
+            self.locals[slot].id = after.id;
+            joins.push(Join {
+                binding,
+                version: after,
+                equation: HypId::fresh(),
+            });
+            state.push(inside);
+        }
+        (
+            state,
+            Carried {
+                tuple: VarId::fresh(),
+                joins,
+            },
+        )
+    }
+
+    /// `let mut counter: u8 = 0;` just before a loop, which bounds it.
+    fn counter(&mut self) -> (Stmt, usize) {
+        let counter = self.fresh(Type::U8);
+        self.bind_mutable(counter.clone(), true);
+        let slot = self.locals.len() - 1;
+        let declare = Stmt::Let {
+            pattern: Pattern::Bind {
+                binder: counter,
+                equation: HypId::fresh(),
+                mutable: true,
+            },
+            value: Expr::u8(0),
+        };
+        (declare, slot)
+    }
+
+    /// `counter = counter.wrapping_add(1);`
+    fn step_counter(&mut self, slot: usize) -> Stmt {
+        let (binding, _) = self.bindings[slot].expect("the counter");
+        let current = self.locals[slot].clone();
+        let version = Binder {
+            id: VarId::fresh(),
+            name: current.name.clone(),
+            ty: Type::U8,
+        };
+        self.known.insert(version.id, true);
+        self.locals[slot].id = version.id;
+        self.assigned.push(binding);
+        Stmt::Assign {
+            place: Place {
+                binding,
+                name: current.name.clone(),
+                path: Vec::new(),
+            },
+            value: plus_one(Expr::var(&current)),
+            version,
+            equation: HypId::fresh(),
+        }
+    }
+
+    /// A tail that sometimes leaves or restarts a `while` or a `for` early:
+    /// `if condition { break } else { }`, or with `continue`, or nothing.
+    fn early_exit(&mut self, depth: usize) -> Option<Expr> {
+        if !self.rng.chance(1, 3) {
+            return None;
+        }
+        let condition = self.condition(depth);
+        let transfer = if self.rng.chance(1, 2) {
+            Expr::Break(None)
+        } else {
+            Expr::Continue
+        };
+        Some(self.branch(
+            condition,
+            &unit(),
+            |_| tail_block(transfer),
+            |_| Block {
+                stmts: Vec::new(),
+                tail: None,
+            },
+        ))
+    }
+
+    /// {
+    ///     let mut counter = 0;
+    ///     loop {
+    ///         stmts
+    ///         if counter == LIMIT { stmts; break value }
+    ///         else { stmts; counter = counter + 1; [continue] }
+    ///     }
     /// }
     /// The test is spelled in one of several ways, with the branches to
-    /// match; the counter is never assigned, so the loop ends.
+    /// match; the counter goes up on every pass, so the loop ends.
     fn loop_(&mut self, ty: &Type, depth: usize, determined: bool) -> Expr {
         let limit = self.rng.below(6) as u8;
         let scope = self.locals.len();
-        let counter = self.fresh(Type::U8);
-        let mut state = vec![(counter.clone(), Expr::u8(0))];
-        for _ in 0..self.rng.below(3) {
-            let state_ty = self.random_type(1);
-            // Evaluated before the state is in scope.
-            let init = self.expr(&state_ty, depth, false);
-            state.push((self.fresh(state_ty), init));
-        }
-        for (binder, _) in &state {
-            self.bind(binder.clone(), true);
-        }
+        let (declare, counter) = self.counter();
+        let entry = self.entry();
+        let chosen = self.enter_loop(Some(counter));
+        let mark = self.assigned.len();
         let outer = self.multiplier;
         self.multiplier = outer * (u64::from(limit) + 1);
-        self.loop_depth += 1;
-        let head = self.stmts(depth);
-        let i = Expr::var(&counter);
+        let mut head = self.stmts(depth);
+        head.extend(self.ensure_assigned(&chosen, mark, depth));
+        let i = Expr::var(&self.locals[counter]);
         let at_limit = Expr::u8(limit);
         let spelling = self.rng.below(4);
         let condition = match spelling {
@@ -1615,8 +1787,8 @@ impl Generator {
             2 => compare(CompareOp::Ge, MachineInt::U8, i, at_limit),
             _ => compare(CompareOp::Lt, MachineInt::U8, i, at_limit),
         };
-        // The arms may assign what `head` declared; the join is recorded
-        // although every arm leaves the loop or continues it.
+        // The arms may assign what is carried; the join is recorded although
+        // every arm leaves the loop or continues it.
         let stop = |g: &mut Self| {
             let scope = g.locals.len();
             let stmts = g.stmts(depth);
@@ -1624,63 +1796,106 @@ impl Generator {
             g.truncate(scope);
             Block {
                 stmts,
-                tail: Some(Box::new(Expr::Break(Box::new(value)))),
+                tail: Some(Box::new(Expr::Break(Some(Box::new(value))))),
             }
         };
-        let go = |g: &mut Self| g.advance(Some(&counter), &state[1..], depth);
+        let go = |g: &mut Self| {
+            let scope = g.locals.len();
+            let mut stmts = g.stmts(depth);
+            stmts.push(g.step_counter(counter));
+            g.truncate(scope);
+            let tail = g.rng.chance(1, 3).then(|| Box::new(Expr::Continue));
+            Block { stmts, tail }
+        };
         let tail = if matches!(spelling, 0 | 2) {
             self.branch(condition, &unit(), stop, go)
         } else {
             self.branch(condition, &unit(), go, stop)
         };
-        self.loop_depth -= 1;
         self.multiplier = outer;
+        let (state, carried) = self.leave_loop(&entry, chosen);
         self.truncate(scope);
-        let body = Block {
-            stmts: head,
-            tail: Some(Box::new(tail)),
-        };
-        Expr::Loop {
-            state,
-            result_ty: ty.clone(),
-            body,
-            result: VarId::fresh(),
-        }
+        Expr::Block(Block {
+            stmts: vec![declare],
+            tail: Some(Box::new(Expr::Loop {
+                state,
+                carried,
+                ty: ty.clone(),
+                result: VarId::fresh(),
+                equation: HypId::fresh(),
+                body: Block {
+                    stmts: head,
+                    tail: Some(Box::new(tail)),
+                },
+            })),
+        })
     }
 
-    /// for i in LO..HI (s: S = init, ...) { stmts; continue(next...) }
-    /// The value is the final state, a tuple of the type.
-    fn for_(&mut self, ty: &Type, depth: usize) -> Expr {
-        let Type::Tuple(fields) = ty else {
-            unreachable!("a for is produced for a tuple type")
-        };
+    /// {
+    ///     let mut counter = 0;
+    ///     while counter < LIMIT { counter = counter + 1; stmts; [early exit] }
+    /// }
+    fn while_(&mut self, depth: usize) -> Expr {
+        let limit = self.rng.below(6) as u8;
+        let scope = self.locals.len();
+        let (declare, counter) = self.counter();
+        let entry = self.entry();
+        let chosen = self.enter_loop(Some(counter));
+        let mark = self.assigned.len();
+        let outer = self.multiplier;
+        self.multiplier = outer * (u64::from(limit) + 1);
+        // The condition reads the version the pass starts with.
+        let condition = compare(
+            CompareOp::Lt,
+            MachineInt::U8,
+            Expr::var(&self.locals[counter]),
+            Expr::u8(limit),
+        );
+        let inner = self.locals.len();
+        let mut stmts = vec![self.step_counter(counter)];
+        stmts.extend(self.stmts(depth));
+        stmts.extend(self.ensure_assigned(&chosen, mark, depth));
+        let tail = self.early_exit(depth).map(Box::new);
+        self.truncate(inner);
+        self.multiplier = outer;
+        let (state, carried) = self.leave_loop(&entry, chosen);
+        self.truncate(scope);
+        Expr::Block(Block {
+            stmts: vec![declare],
+            tail: Some(Box::new(Expr::While {
+                condition: Box::new(condition),
+                then_fact: HypId::fresh(),
+                else_fact: HypId::fresh(),
+                state,
+                carried,
+                body: Block { stmts, tail },
+            })),
+        })
+    }
+
+    /// for i in LO..HI { stmts; [early exit] }, or over `LO..=HI`.
+    fn for_(&mut self, depth: usize) -> Expr {
         // The index has a random machine type; the bounds are literals
         // near zero, so that a signed range may start below it.
         let machine = self.machine_type();
         let base = if machine.signed() { -2 } else { 0 };
         let lo = base + self.rng.below(4) as i128;
         let hi = lo + self.rng.below(6) as i128;
+        let inclusive = self.rng.chance(1, 3);
         let scope = self.locals.len();
-        let state: Vec<(Binder, Expr)> = fields
-            .clone()
-            .into_iter()
-            .map(|field| {
-                let init = self.expr(&field, depth, false);
-                (self.fresh(field), init)
-            })
-            .collect();
+        let entry = self.entry();
+        let chosen = self.enter_loop(None);
+        let mark = self.assigned.len();
         let index = self.fresh(Type::machine(machine));
         // The bounds are suffixed literals, so the index has a type.
         self.bind(index.clone(), true);
-        for (binder, _) in &state {
-            self.bind(binder.clone(), true);
-        }
         let outer = self.multiplier;
-        self.multiplier = outer * ((hi - lo) as u64 + 1);
-        self.loop_depth += 1;
-        let body = self.advance(None, &state, depth);
-        self.loop_depth -= 1;
+        self.multiplier = outer * ((hi - lo) as u64 + 2);
+        let mut stmts = self.stmts(depth);
+        stmts.extend(self.ensure_assigned(&chosen, mark, depth));
+        let tail = self.early_exit(depth).map(Box::new);
         self.multiplier = outer;
+        let (state, carried) = self.leave_loop(&entry, chosen);
         self.truncate(scope);
         Expr::For {
             index,
@@ -1688,69 +1903,11 @@ impl Generator {
             upper: HypId::fresh(),
             lo: Box::new(Expr::Literal(machine, lo)),
             hi: Box::new(Expr::Literal(machine, hi)),
-            ordered: ordered(machine, lo, hi),
+            inclusive,
             state,
-            body,
-            result: VarId::fresh(),
+            carried,
+            body: Block { stmts, tail },
         }
-    }
-
-    /// A block that ends the iteration with `continue`: the counter stepped,
-    /// the rest of the state generated. Outside a `math fn` the `continue`
-    /// is sometimes under an `if`, so that a match in tail position is
-    /// exercised in a loop.
-    fn advance(
-        &mut self,
-        counter: Option<&Binder>,
-        state: &[(Binder, Expr)],
-        depth: usize,
-    ) -> Block {
-        let scope = self.locals.len();
-        let stmts = self.stmts(depth);
-        let tail = if !self.math && self.rng.chance(1, 4) {
-            let condition = self.condition(depth);
-            self.branch(
-                condition,
-                &unit(),
-                |g| g.advance_plainly(counter, state, depth),
-                |g| g.advance_plainly(counter, state, depth),
-            )
-        } else {
-            self.next(counter, state, depth)
-        };
-        self.truncate(scope);
-        Block {
-            stmts,
-            tail: Some(Box::new(tail)),
-        }
-    }
-
-    fn advance_plainly(
-        &mut self,
-        counter: Option<&Binder>,
-        state: &[(Binder, Expr)],
-        depth: usize,
-    ) -> Block {
-        let scope = self.locals.len();
-        let stmts = self.stmts(depth);
-        let tail = self.next(counter, state, depth);
-        self.truncate(scope);
-        Block {
-            stmts,
-            tail: Some(Box::new(tail)),
-        }
-    }
-
-    fn next(&mut self, counter: Option<&Binder>, state: &[(Binder, Expr)], depth: usize) -> Expr {
-        let mut next: Vec<Expr> = counter
-            .map(|counter| plus_one(Expr::var(counter)))
-            .into_iter()
-            .collect();
-        for (binder, _) in state {
-            let ty = binder.ty.clone();
-            next.push(self.expr(&ty, depth, false));
-        }
-        Expr::Continue(next)
     }
 }
 
@@ -1952,10 +2109,12 @@ struct Disagreement {
 #[derive(Default)]
 struct Summary {
     generated: usize,
-    /// Programs with an assignment, and with one inside an arm of a branch:
-    /// what the weights of `STMTS` are set for.
+    /// Programs with an assignment, with one inside an arm of a branch, and
+    /// with one inside the body of a loop: what the weights of `STMTS` are
+    /// set for.
     assigning: usize,
     branching_assignment: usize,
+    looping_assignment: usize,
     /// Programs with an operator that may panic, and among the cases those
     /// that panicked with overflow checks on, and those whose outcome
     /// differed between the two modes: what the weight of `Arith` is set
@@ -2139,9 +2298,10 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
     }));
     match attempt {
         Ok(Ok(prepared)) => {
-            let (assigns, in_branches) = assignments_of(&prepared.program);
+            let (assigns, in_branches, in_loops) = assignments_of(&prepared.program);
             summary.assigning += usize::from(assigns);
             summary.branching_assignment += usize::from(in_branches);
+            summary.looping_assignment += usize::from(in_loops);
             summary.arithmetic += usize::from(has_operator(&prepared.program));
             for case in &prepared.cases {
                 let [checked, wrapped] = &case.answers[1];
@@ -2167,7 +2327,6 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
     }
 }
 
-/// Whether the program assigns anywhere, and inside an arm of a branch.
 /// Whether the program applies an operator that may panic.
 fn has_operator(program: &Program) -> bool {
     let mut counting = program.clone();
@@ -2179,9 +2338,11 @@ fn has_operator(program: &Program) -> bool {
     found
 }
 
-fn assignments_of(program: &Program) -> (bool, bool) {
+/// Whether the program assigns anywhere, inside an arm of a branch, and
+/// inside the body of a loop.
+fn assignments_of(program: &Program) -> (bool, bool, bool) {
     let mut counting = program.clone();
-    let (mut assigns, mut in_branches) = (false, false);
+    let (mut assigns, mut in_branches, mut in_loops) = (false, false, false);
     let assigns_in = |block: &Block| {
         block
             .stmts
@@ -2200,11 +2361,14 @@ fn assignments_of(program: &Program) -> (bool, bool) {
                 ..
             } => in_branches |= assigns_in(then_block) || assigns_in(else_block),
             Expr::Match { arms, .. } => in_branches |= arms.iter().any(|arm| assigns_in(&arm.body)),
+            Expr::Loop { body, .. } | Expr::While { body, .. } | Expr::For { body, .. } => {
+                in_loops |= assigns_in(body);
+            }
             _ => {}
         }
         false
     });
-    (assigns, in_branches)
+    (assigns, in_branches, in_loops)
 }
 
 /// Runs `count` programs from the seed, a batch at a time.
@@ -2472,10 +2636,10 @@ impl Tables {
 }
 
 /// What the walk knows where it stands: the loops around the position, each
-/// with the type its `break` needs and the types its `continue` needs.
+/// with the type its `break` carries, which a `while` or a `for` has none of.
 struct Scope<'t> {
     tables: &'t Tables,
-    loops: Vec<(Option<Type>, Vec<Type>)>,
+    loops: Vec<Option<Type>>,
 }
 
 /// Visits an expression in place. Returns true to stop the walk, which is
@@ -2622,20 +2786,20 @@ fn walk_expr(
                     .any(|arm| walk_block(&mut arm.body, Some(ty), scope, visit))
         }
         Expr::Block(block) => walk_block(block, expected, scope, visit),
-        Expr::Loop {
-            state,
-            result_ty,
-            body,
-            ..
-        } => {
-            for (binder, init) in state.iter_mut() {
-                if walk_expr(init, Some(&binder.ty), scope, visit) {
-                    return true;
-                }
-            }
-            let types = state.iter().map(|(binder, _)| binder.ty.clone()).collect();
-            scope.loops.push((Some(result_ty.clone()), types));
+        Expr::Loop { ty, body, .. } => {
+            scope.loops.push(Some(ty.clone()));
             let stopped = walk_block(body, None, scope, visit);
+            scope.loops.pop();
+            stopped
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            // The condition is part of the loop: a `break` in it is the
+            // loop's, but it is a bool that the walk may replace.
+            scope.loops.push(None);
+            let stopped = walk_expr(condition, Some(&Type::Bool), scope, visit)
+                || walk_block(body, None, scope, visit);
             scope.loops.pop();
             stopped
         }
@@ -2643,7 +2807,6 @@ fn walk_expr(
             index,
             lo,
             hi,
-            state,
             body,
             ..
         } => {
@@ -2652,29 +2815,18 @@ fn walk_expr(
             {
                 return true;
             }
-            for (binder, init) in state.iter_mut() {
-                if walk_expr(init, Some(&binder.ty), scope, visit) {
-                    return true;
-                }
-            }
-            let types = state.iter().map(|(binder, _)| binder.ty.clone()).collect();
-            scope.loops.push((None, types));
+            scope.loops.push(None);
             let stopped = walk_block(body, None, scope, visit);
             scope.loops.pop();
             stopped
         }
         Expr::Break(value) => {
-            let ty = scope.loops.last().and_then(|(result, _)| result.clone());
-            walk_expr(value, ty.as_ref(), scope, visit)
+            let ty = scope.loops.last().cloned().flatten();
+            value
+                .as_deref_mut()
+                .is_some_and(|value| walk_expr(value, ty.as_ref(), scope, visit))
         }
-        Expr::Continue(next) => {
-            let types = scope
-                .loops
-                .last()
-                .map(|(_, state)| state.clone())
-                .unwrap_or_default();
-            walk_all(next, &types, scope, visit)
-        }
+        Expr::Continue => false,
         Expr::Var { .. }
         | Expr::Bool(_)
         | Expr::Literal(..)
@@ -2718,9 +2870,10 @@ impl Program {
                 ..
             } => visit(then_block) || visit(else_block),
             Expr::Match { arms, .. } => arms.iter_mut().any(|arm| visit(&mut arm.body)),
-            Expr::Block(block) | Expr::Loop { body: block, .. } | Expr::For { body: block, .. } => {
-                visit(block)
-            }
+            Expr::Block(block)
+            | Expr::Loop { body: block, .. }
+            | Expr::While { body: block, .. }
+            | Expr::For { body: block, .. } => visit(block),
             _ => false,
         })
     }
@@ -3065,10 +3218,11 @@ fn shortened(text: &str) -> String {
 
 fn print_summary(summary: &Summary, mode: &str) {
     let mut out = format!(
-        "random programs ({mode}): {} generated ({} assign, {} in a branch, {} with an operator), {} rejected by the checker, {} crashed, {} cases ({} panic with overflow checks on, {} differ between the builds): {} agreed, {} inconclusive, {} disagreed\n",
+        "random programs ({mode}): {} generated ({} assign, {} in a branch, {} in a loop, {} with an operator), {} rejected by the checker, {} crashed, {} cases ({} panic with overflow checks on, {} differ between the builds): {} agreed, {} inconclusive, {} disagreed\n",
         summary.generated,
         summary.assigning,
         summary.branching_assignment,
+        summary.looping_assignment,
         summary.arithmetic,
         summary.rejected.len(),
         summary.crashed.len(),
@@ -3346,6 +3500,7 @@ fn a_shrink_step_that_breaks_the_program_is_not_kept() {
 fn a_generated_program_is_declared_to_the_same_identities_again() {
     let (base, _, _) = setup();
     let mut seen_loop = false;
+    let mut seen_while = false;
     let mut seen_for = false;
     let mut seen_math = false;
     for index in 0..20 {
@@ -3359,11 +3514,12 @@ fn a_generated_program_is_declared_to_the_same_identities_again() {
         assert_eq!(print_module(again.erased()), print_module(session.erased()));
         let rust = print_module(session.erased());
         seen_loop |= rust.contains("loop {");
+        seen_while |= rust.contains("while v");
         seen_for |= rust.contains("for v");
         seen_math |= program.fns.iter().any(|function| function.item.math);
     }
     assert!(
-        seen_loop && seen_for && seen_math,
+        seen_loop && seen_while && seen_for && seen_math,
         "the fragment is exercised"
     );
 }
@@ -3404,30 +3560,67 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
             })),
         },
     };
-    // fn by_for(n: u8) -> (u8,) { for i in 0..3 (acc: u8 = n) { continue(i.wrapping_add(acc)) } }
+    // fn by_for(n: u8) -> u8 { let mut acc = n; for i in 0..3 { acc = i.wrapping_add(acc); } acc }
     let n = Binder::new("n", Type::U8);
     let i = Binder::new("i", Type::U8);
     let acc = Binder::new("acc", Type::U8);
+    let (inside, after, stepped) = (
+        Binder::new("acc", Type::U8),
+        Binder::new("acc", Type::U8),
+        Binder::new("acc", Type::U8),
+    );
     let by_for = FnItem {
         name: "by_for".into(),
         math: false,
         params: vec![n.clone()],
-        result: Type::Tuple(vec![Type::U8]),
-        body: tail_block(Expr::For {
-            index: i.clone(),
-            lower: HypId::fresh(),
-            upper: HypId::fresh(),
-            lo: Box::new(Expr::u8(0)),
-            hi: Box::new(Expr::u8(3)),
-            ordered: ordered(MachineInt::U8, 0, 3),
-            state: vec![(acc.clone(), Expr::var(&n))],
-            body: tail_block(Expr::Continue(vec![Expr::Method {
-                prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
-                receiver: Box::new(Expr::var(&i)),
-                arguments: vec![Expr::var(&acc)],
-            }])),
-            result: VarId::fresh(),
-        }),
+        result: Type::U8,
+        body: Block {
+            stmts: vec![
+                Stmt::Let {
+                    pattern: Pattern::Bind {
+                        binder: acc.clone(),
+                        equation: HypId::fresh(),
+                        mutable: true,
+                    },
+                    value: Expr::var(&n),
+                },
+                Stmt::Expr(Expr::For {
+                    index: i.clone(),
+                    lower: HypId::fresh(),
+                    upper: HypId::fresh(),
+                    lo: Box::new(Expr::u8(0)),
+                    hi: Box::new(Expr::u8(3)),
+                    inclusive: false,
+                    state: vec![inside.clone()],
+                    carried: Carried {
+                        tuple: VarId::fresh(),
+                        joins: vec![Join {
+                            binding: acc.id,
+                            version: after.clone(),
+                            equation: HypId::fresh(),
+                        }],
+                    },
+                    body: Block {
+                        stmts: vec![Stmt::Assign {
+                            place: Place {
+                                binding: acc.id,
+                                name: "acc".into(),
+                                path: Vec::new(),
+                            },
+                            value: Expr::Method {
+                                prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
+                                receiver: Box::new(Expr::var(&i)),
+                                arguments: vec![Expr::var(&inside)],
+                            },
+                            version: stepped,
+                            equation: HypId::fresh(),
+                        }],
+                        tail: None,
+                    },
+                }),
+            ],
+            tail: Some(Box::new(Expr::var(&after))),
+        },
     };
     let mut session = base.clone();
     session.declare_fn(&by_let).unwrap();

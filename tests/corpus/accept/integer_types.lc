@@ -83,19 +83,21 @@ fn wrapping_u64(a: u64, b: u64) -> (u64, u64, u64) {
     (a.wrapping_add(b), a.wrapping_sub(b), a.wrapping_mul(b))
 }
 
-// A bounded `for` over each kind of index: an unsigned range from `0` needs
-// no evidence of its order, and its final state is the value.
+// A bounded `for` over each kind of index. Nothing is asked about the order
+// of the bounds: a range whose start lies past its end runs no pass.
 fn count_u32(n: u32) -> u32 {
-    let (total,) = for i in 0..n (total: u32 = 0) {
-        continue(total.wrapping_add(i))
-    };
+    let mut total: u32 = 0;
+    for i in 0..n {
+        total = total.wrapping_add(i);
+    }
     total
 }
 
-fn count_i16(n: i16, ordered: @(-3 <= n)) -> i16 {
-    let (total,) = for i in -3..n (total: i16 = 0) {
-        continue(total.wrapping_add(i))
-    };
+fn count_i16(n: i16) -> i16 {
+    let mut total: i16 = 0;
+    for i in -3..n {
+        total = total.wrapping_add(i);
+    }
     total
 }
 
@@ -145,7 +147,8 @@ fn within(a: i32) -> @bound(a) {
 //~ run: wrapping_i32(-2147483648, -1) => (2147483647, -2147483647, -2147483648, -2147483648)
 //~ run: wrapping_u64(18446744073709551615, 2) => (1, 18446744073709551613, 18446744073709551614)
 //~ run: count_u32(100000) => 704982704
-//~ run: count_i16(5, Proved) => 4
+//~ run: count_i16(5) => 4
+//~ run: count_i16(-10) => 0
 //~ run: viewed(1, 2, Proved) => Proved
 //~ run: within(7) => Proved
 //~ rust: pub fn negative() -> i8 {

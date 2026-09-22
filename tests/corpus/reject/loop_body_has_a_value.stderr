@@ -1,0 +1,10 @@
+error[L0220]: expected `()`, found `u8`
+ --> tests/corpus/reject/loop_body_has_a_value.lc:7:9
+  |
+7 |         total.wrapping_add(1) //~ error: L0220 expected `()`, found `u8`
+  |         ^^^^^^^^^^^^^^^^^^^^^
+error[L0220]: expected `()`, found `u8`
+  --> tests/corpus/reject/loop_body_has_a_value.lc:15:9
+   |
+15 |         total.wrapping_add(1) //~ error: L0220 expected `()`, found `u8`
+   |         ^^^^^^^^^^^^^^^^^^^^^

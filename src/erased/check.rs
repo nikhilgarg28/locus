@@ -26,11 +26,10 @@ fn fail<T>(message: impl Into<String>) -> Result<T, TypeError> {
     Err(TypeError(message.into()))
 }
 
-/// What `break` and `continue` refer to.
+/// What `break` refers to: the type of the value it carries in a `loop`,
+/// or `None` in a `while` or a `for`, where it carries nothing.
 #[derive(Clone)]
 struct Target {
-    state: Vec<EType>,
-    /// `None` for a `for`, which has no `break`.
     result: Option<EType>,
 }
 
@@ -271,18 +270,6 @@ impl Checker<'_> {
         Ok(yields)
     }
 
-    /// The declared types of a loop's state, and `None` beside them when an
-    /// initial value never yields.
-    fn state(
-        &mut self,
-        state: &[(VarId, String, EType, EExpr)],
-    ) -> Result<(Vec<EType>, Option<()>), TypeError> {
-        let types: Vec<EType> = state.iter().map(|(_, _, ty, _)| ty.clone()).collect();
-        let inits = state.iter().map(|(_, _, _, init)| init);
-        let yields = self.arguments(inits, &types, "the initial loop state")?;
-        Ok((types, yields))
-    }
-
     fn expr(&mut self, expr: &EExpr) -> Result<Yield, TypeError> {
         Ok(Some(match expr {
             EExpr::Var { id, name } => match self.env.iter().rev().find(|(var, _, _)| var == id) {
@@ -457,61 +444,66 @@ impl Checker<'_> {
                 return Ok(scrutinee.and(result));
             }
             EExpr::Block(block) => return self.block(block),
-            EExpr::Loop {
-                state,
-                result,
-                body,
-            } => {
-                let (types, yields) = self.state(state)?;
-                self.iterate(state, types, Some(result.clone()), body, None)?;
-                needed!(yields);
+            EExpr::Loop { result, body } => {
+                self.iterate(Some(result.clone()), body, None)?;
                 result.clone()
+            }
+            EExpr::While { condition, body } => {
+                let condition = self.expr(condition)?;
+                if condition.as_ref().is_some_and(|ty| *ty != EType::Bool) {
+                    return fail("a while condition that is not a bool");
+                }
+                self.iterate(None, body, None)?;
+                needed!(condition);
+                EType::unit()
             }
             EExpr::For {
                 index,
                 lo,
                 hi,
-                state,
                 body,
+                ..
             } => {
                 let bounds = self.values([&**lo, &**hi])?;
-                let index_type = match bounds.as_deref() {
-                    Some([EType::Int(lo), EType::Int(hi)]) if lo == hi => Some(*lo),
+                match bounds.as_deref() {
+                    Some([EType::Int(lo), EType::Int(hi)]) if lo == hi && *lo == index.2 => {}
                     Some(_) => {
-                        return fail("for bounds that are not two machine integers of one type");
+                        return fail(
+                            "for bounds that are not two machine integers of the index's type",
+                        );
                     }
-                    // The bounds never yield; the body is checked at any index type.
-                    None => None,
-                };
-                let (types, yields) = self.state(state)?;
-                self.iterate(
-                    state,
-                    types.clone(),
-                    None,
-                    body,
-                    Some((index.0, index_type.unwrap_or(crate::kernel::MachineInt::U8))),
-                )?;
-                needed!(bounds.and(yields));
-                EType::Tuple(types)
+                    // The bounds never yield, and the body is still checked.
+                    None => {}
+                }
+                self.iterate(None, body, Some((index.0, index.2)))?;
+                needed!(bounds);
+                EType::unit()
             }
             EExpr::Break(value) => {
                 let Some(target) = self.targets.last().cloned() else {
                     return fail("break outside a loop");
                 };
-                let Some(result) = target.result else {
-                    return fail("break inside a for");
-                };
-                let found = needed!(self.expr(value)?);
-                if found != result {
-                    return fail(format!("break with {found:?}, the loop yields {result:?}"));
+                match (target.result, value) {
+                    (None, None) => {}
+                    (None, Some(_)) => return fail("break with a value inside a while or a for"),
+                    (Some(result), value) => {
+                        let found = match value {
+                            Some(value) => needed!(self.expr(value)?),
+                            None => EType::unit(),
+                        };
+                        if found != result {
+                            return fail(format!(
+                                "break with {found:?}, the loop yields {result:?}"
+                            ));
+                        }
+                    }
                 }
                 return Ok(None);
             }
-            EExpr::Continue(next) => {
-                let Some(target) = self.targets.last().cloned() else {
+            EExpr::Continue => {
+                if self.targets.is_empty() {
                     return fail("continue outside a loop");
-                };
-                self.arguments(next, &target.state, "the next loop state")?;
+                }
                 return Ok(None);
             }
             EExpr::Return(value) => {
@@ -523,12 +515,11 @@ impl Checker<'_> {
         }))
     }
 
-    /// Checks the body of a loop or a for: it sees the state, and the index
-    /// if there is one, and must not yield a value.
+    /// Checks the body of a loop, a while, or a for: it sees the index if
+    /// there is one, and where it reaches its end it yields `()`, which is
+    /// the next pass.
     fn iterate(
         &mut self,
-        state: &[(VarId, String, EType, EExpr)],
-        types: Vec<EType>,
         result: Option<EType>,
         body: &EBlock,
         index: Option<(VarId, crate::kernel::MachineInt)>,
@@ -537,19 +528,10 @@ impl Checker<'_> {
         if let Some((index, ty)) = index {
             self.env.push((index, EType::Int(ty), false));
         }
-        for (id, _, ty, _) in state {
-            self.env.push((*id, ty.clone(), false));
-        }
-        self.targets.push(Target {
-            state: types,
-            result,
-        });
+        self.targets.push(Target { result });
         let yielded = self.block(body);
         self.targets.pop();
         self.env.truncate(scope);
-        match yielded? {
-            None => Ok(()),
-            Some(_) => fail("a loop body that falls through"),
-        }
+        expect(&yielded?, &EType::unit(), "the body of a loop")
     }
 }

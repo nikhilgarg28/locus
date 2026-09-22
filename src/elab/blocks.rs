@@ -101,7 +101,7 @@ impl Env<'_> {
                 ))
             }
             None if never => {
-                // `continue(next);` written as a statement ends the block.
+                // `continue;` or `break;` written as a statement ends the block.
                 let tail = match stmts.pop() {
                     Some(Stmt::Expr(expr)) => expr,
                     other => {

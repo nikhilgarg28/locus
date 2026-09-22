@@ -34,11 +34,8 @@ pub enum ExecError {
     /// A match needs a `bool` or an enum, one arm per variant, each binding
     /// exactly its variant's payload.
     BadMatch,
-    /// A loop's state identities do not match its state telescope, or a
-    /// `for`'s state is not a function from the index to a tuple type.
+    /// A loop's state identities do not match its state telescope.
     BadLoopState,
-    /// `break` where the nearest enclosing iteration is a `for`.
-    BreakInFor,
     /// A `for` is stated with the prelude's orderings, and a panic is shown
     /// unreachable by a proof of the prelude's `False`.
     NoPrelude,
@@ -85,7 +82,6 @@ impl fmt::Display for ExecError {
             Self::NoEnclosingLoop => f.write_str("break or continue outside a loop"),
             Self::BadMatch => f.write_str("the arms do not match the scrutinee's variants"),
             Self::BadLoopState => f.write_str("the loop state does not match its telescope"),
-            Self::BreakInFor => f.write_str("a bounded for has no break"),
             Self::NoPrelude => f.write_str(
                 "a bounded for and an unreachable panic need the prelude declarations",
             ),
@@ -153,11 +149,12 @@ struct Declared<'a> {
 }
 
 /// The iteration that `break` and `continue` refer to. `state` is what a
-/// `continue` must supply. A `for` has no `break`, so it has no result here.
+/// `continue` must supply and `result` what a `break` must supply; in a
+/// `for` the two are the same type.
 #[derive(Clone, Copy)]
 struct Target<'a> {
     state: &'a Type,
-    result: Option<&'a Type>,
+    result: &'a Type,
 }
 
 impl Program {
@@ -261,7 +258,7 @@ impl Program {
             }
             Tail::Break(value) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
-                expect(ctx, value, target.result.ok_or(ExecError::BreakInFor)?)
+                expect(ctx, value, target.result)
             }
             Tail::Continue(next) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
@@ -361,15 +358,15 @@ impl Program {
                 // Formed in the outer context: the state is not in scope in
                 // the result type.
                 check_type(ctx, result)?;
+                if !matches!(state, Type::Tuple(_)) {
+                    return Err(ExecError::BadLoopState);
+                }
                 check_values(ctx, state, init, Mode::Executable)?;
                 let scope = ctx.checkpoint();
                 let checked = (|| {
                     self.declare_state(ctx, state, vars)?;
                     let mut inner = loops.to_vec();
-                    inner.push(Target {
-                        state,
-                        result: Some(result),
-                    });
+                    inner.push(Target { state, result });
                     self.check_block(ctx, body, None, declared, &inner)
                 })();
                 ctx.rollback(scope);
@@ -384,7 +381,7 @@ impl Program {
                     upper,
                     lo,
                     hi,
-                    ordered,
+                    inclusive,
                     state,
                     vars,
                     init,
@@ -396,49 +393,46 @@ impl Program {
                     return Err(ExecError::LoopUnderTerminates);
                 }
                 self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
-                // The index type is the state function's parameter, a
-                // machine type, and both bounds have it.
-                check_type(ctx, state)?;
-                let index_type = match state {
-                    Type::Fn(params, _) => match params.as_slice() {
-                        [param] => param.as_machine().ok_or(ExecError::BadLoopState)?,
-                        _ => return Err(ExecError::BadLoopState),
-                    },
-                    _ => return Err(ExecError::BadLoopState),
-                };
-                for bound in [lo, hi] {
-                    expect(ctx, bound, &Type::machine(index_type))?;
-                }
+                // The index type is the lower bound's, a machine type, and
+                // the upper bound has it too. A ghost cannot decide how many
+                // times executable code runs.
+                let found = infer_term(ctx, lo, Mode::Executable)?;
+                let index_type = found.as_machine().ok_or(KernelError::TypeMismatch {
+                    expected: Type::U8,
+                    found,
+                })?;
+                expect(ctx, hi, &Type::machine(index_type))?;
                 let view = |x: &Term| Term::view(index_type, x.clone());
-                // Ordered bounds make the final index hi.
-                check_proof(ctx, ordered, &Term::int_le(view(lo), view(hi)))?;
-                let state_at = |at: &Term| {
-                    telescope_entry(state, 1, std::slice::from_ref(at))
-                        .filter(|ty| matches!(ty, Type::Tuple(_)))
-                        .ok_or(ExecError::BadLoopState)
-                };
-                check_values(ctx, &state_at(lo)?, init, Mode::Executable)?;
+                // The state is a tuple telescope formed outside the loop,
+                // as a `loop`'s is.
+                check_type(ctx, state)?;
+                if !matches!(state, Type::Tuple(_)) {
+                    return Err(ExecError::BadLoopState);
+                }
+                check_values(ctx, state, init, Mode::Executable)?;
 
                 let scope = ctx.checkpoint();
                 let checked = (|| {
                     ctx.declare_with(*index, Type::machine(index_type), false)?;
                     let i = Term::var(*index);
-                    let current = state_at(&i)?;
-                    // index < hi, so the successor does not wrap.
-                    let next = state_at(&Term::successor(index_type, i.clone()))?;
-                    self.declare_state(ctx, &current, vars)?;
+                    self.declare_state(ctx, state, vars)?;
                     ctx.assume_with(*lower, Term::int_le(view(lo), view(&i)))?;
-                    ctx.assume_with(*upper, Term::int_lt(view(&i), view(hi)))?;
+                    let below = if *inclusive {
+                        Term::int_le(view(&i), view(hi))
+                    } else {
+                        Term::int_lt(view(&i), view(hi))
+                    };
+                    ctx.assume_with(*upper, below)?;
                     let mut inner = loops.to_vec();
                     inner.push(Target {
-                        state: &next,
-                        result: None,
+                        state,
+                        result: state,
                     });
                     self.check_block(ctx, body, None, declared, &inner)
                 })();
                 ctx.rollback(scope);
                 checked?;
-                Ok(ctx.declare_with(*var, state_at(hi)?, false)?)
+                Ok(ctx.declare_with(*var, state.clone(), false)?)
             }
             Stmt::Operate(operation) => self.check_operate(ctx, operation, declared),
         }

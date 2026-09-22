@@ -1,0 +1,17 @@
+error[L0290]: `while let` is not in Locus yet; it comes with the patterns E9 adds
+  --> tests/corpus/reject/loops_not_yet.lc:11:5
+   |
+11 | /     while let Step::More(n) = step { //~ error: L0290 `while let` is not in Locus yet
+12 | |         seen = n;
+13 | |     }
+   | |_____^
+error[L0290]: a `for` over anything but a range `lo..hi` or `lo..=hi` is not in Locus yet; iterators come later
+  --> tests/corpus/reject/loops_not_yet.lc:19:17
+   |
+19 |     for item in pair { //~ error: L0290 a `for` over anything but a range
+   |                 ^^^^
+error[L0290]: the index of a `for` over a range is a name; other patterns are not in Locus yet
+  --> tests/corpus/reject/loops_not_yet.lc:27:9
+   |
+27 |     for (a, b) in 0..n { //~ error: L0290 the index of a `for` over a range is a name
+   |         ^^^^^^

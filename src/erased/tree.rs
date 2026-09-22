@@ -185,22 +185,29 @@ pub enum EExpr {
         arms: Vec<EArm>,
     },
     Block(EBlock),
-    /// `loop (state = init) { body }`: each state variable with its initial
-    /// value.
+    /// `loop { body }`. What it carries is assigned in place; `result` is
+    /// the type of the value a `break` supplies, which is the loop's.
     Loop {
-        state: Vec<(VarId, String, EType, EExpr)>,
         result: EType,
         body: EBlock,
     },
-    For {
-        index: (VarId, String),
-        lo: Box<EExpr>,
-        hi: Box<EExpr>,
-        state: Vec<(VarId, String, EType, EExpr)>,
+    /// `while condition { body }`.
+    While {
+        condition: Box<EExpr>,
         body: EBlock,
     },
-    Break(Box<EExpr>),
-    Continue(Vec<EExpr>),
+    /// `for index in lo..hi { body }`, or `lo..=hi` when `inclusive`. The
+    /// index has the bounds' machine type.
+    For {
+        index: (VarId, String, MachineInt),
+        lo: Box<EExpr>,
+        hi: Box<EExpr>,
+        inclusive: bool,
+        body: EBlock,
+    },
+    /// `break`, or `break value` in a `loop`.
+    Break(Option<Box<EExpr>>),
+    Continue,
     /// `return value`: the call in progress ends with this value, from any
     /// depth of loops and matches. Like `break` it yields no value.
     Return(Box<EExpr>),

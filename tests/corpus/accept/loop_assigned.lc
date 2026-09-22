@@ -1,0 +1,97 @@
+// What a loop carries is what its body assigns, over binding identities: a
+// field write counts for its root; a `let mut` inside the body is local to
+// it, and so is a name that shadows an outer one; an outer binding assigned
+// only inside a nested block or branch of the body is carried; and the
+// condition of a `while` is part of the loop, so what it assigns is carried
+// too.
+
+struct Counter {
+    count: u8,
+    high: bool,
+}
+
+// A field assigned in the body: the whole struct is carried.
+fn tally(n: u8) -> Counter {
+    let mut counter = Counter { count: 0, high: false };
+    for i in 0..n {
+        counter.count = counter.count.wrapping_add(i);
+        if counter.count > 20 {
+            counter.high = true;
+        } else {
+        }
+    }
+    counter
+}
+
+// A field of a tuple, through a path.
+fn corner(n: u8) -> ((u8, u8), u8) {
+    let mut cell: ((u8, u8), u8) = ((0, 0), 0);
+    let mut k: u8 = 0;
+    while k < n {
+        cell.0.1 = cell.0.1.wrapping_add(k);
+        k = k.wrapping_add(1);
+    }
+    cell
+}
+
+// `local` is declared in the body and is not carried; `total` is.
+fn local_scratch(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        let mut local = i;
+        local = local.wrapping_mul(2);
+        total = total.wrapping_add(local);
+    }
+    total
+}
+
+// The inner `x` shadows the outer one from its declaration on; the outer
+// `x` is assigned before that and is carried, the inner is not.
+fn shadowed(n: u8) -> u8 {
+    let mut x: u8 = 0;
+    for i in 0..n {
+        x = x.wrapping_add(1);
+        let mut x: u8 = 100;
+        x = x.wrapping_add(i);
+    }
+    x
+}
+
+// Assigned only inside a block and a branch of the body: still carried.
+fn deep(n: u8) -> (u8, u8) {
+    let mut a: u8 = 0;
+    let mut b: u8 = 0;
+    for i in 0..n {
+        {
+            a = a.wrapping_add(1);
+        }
+        if i == 2 {
+            b = 9;
+        } else {
+        }
+    }
+    (a, b)
+}
+
+// The condition assigns `n`: it is part of the loop.
+fn counted_condition(limit: u8) -> (u8, u8) {
+    let mut n: u8 = 0;
+    let mut passes: u8 = 0;
+    while { n = n.wrapping_add(1); n < limit } {
+        passes = passes.wrapping_add(1);
+    }
+    (n, passes)
+}
+
+//~ run: tally(4) => Counter { count: 6, high: false }
+//~ run: tally(8) => Counter { count: 28, high: true }
+//~ run: corner(4) => ((0, 6), 0)
+//~ run: local_scratch(4) => 12
+//~ run: shadowed(5) => 5
+//~ run: deep(5) => (5, 9)
+//~ run: deep(2) => (2, 0)
+//~ run: counted_condition(5) => (5, 4)
+//~ run: counted_condition(0) => (1, 0)
+//~ rust: counter.count = counter.count.wrapping_add(i);
+//~ rust: cell.0.1 = cell.0.1.wrapping_add(k);
+//~ rust: while {

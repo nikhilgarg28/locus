@@ -14,7 +14,8 @@ pub use lower::{
     FnRef, LowerError, Named, Session, is_pure, join_type, opened_part, opened_type, rebuilt,
     value_term,
 };
+pub(crate) use lower::{each_expr, visit_expr as each_stmt_under};
 pub use tree::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, Pattern, Place, Step,
-    Stmt, StructItem, VariantItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, Pattern,
+    Place, Step, Stmt, StructItem, VariantItem,
 };

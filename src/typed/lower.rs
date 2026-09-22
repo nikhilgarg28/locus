@@ -34,6 +34,22 @@
 //! whose set differs is rejected. Tracked evidence (`let mut ok: @P`) is
 //! M4's; here a proposition or a type that mentions a mutable binding names
 //! the version current where it was written, which is what a snapshot means.
+//!
+//! A loop carries, as the state of the check IR's `loop` or `for`, the tuple
+//! of the bindings declared outside it that its body assigns, in declaration
+//! order, and for a `while` those its condition assigns too; the set is
+//! computed here as a branch's is (`carried_bindings`). The entry supplies
+//! the versions current before the loop; the body sees the versions the
+//! tree names for its state; each `continue`, and the end of the body,
+//! supplies the versions current at that point; a `break` supplies them
+//! too, after the value it carries when it is a `loop`'s. The loop's result
+//! is the tuple of the versions after the loop, followed by the value for a
+//! `loop`, and after the loop the versions and the value are bound by
+//! projection as after a branch. `while c { body }` is a `loop` whose body
+//! evaluates `c` and matches on it, `false` breaking and `true` running the
+//! body to a `continue`. `for` is the check IR's bounded `for` with the same
+//! state; nothing is asked about the order of its bounds, since an empty
+//! range runs no pass. No loop lowers to a kernel term.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -42,13 +58,13 @@ use crate::erased::{self, Module};
 use crate::exec::{self, Arm, ExecError, ExecFn, ExecFnId, ForStmt, OperateStmt, Program};
 use crate::kernel::derive::symm_at;
 use crate::kernel::{
-    CmpOp, Definitions, EnumId, FnId, HypId, KernelError, MachineInt, Op, Panic, Proof, PropId,
-    PropVariant, StructId, Term, Type, VarId, same, same_type,
+    CmpOp, Definitions, EnumId, FnId, HypId, KernelError, Op, Panic, Proof, PropId, PropVariant,
+    StructId, Term, Type, VarId, same, same_type,
 };
 
 use super::tree::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, Joined, MatchArm, Pattern, Step, Stmt,
-    StructItem,
+    Binder, Block, Carried, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, Pattern,
+    Step, Stmt, StructItem,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,20 +76,20 @@ pub enum LowerError {
     ImpureInMath(String),
     /// `break` or `continue` somewhere other than the end of a block.
     ControlInExpression,
-    /// The body of a bounded `for` must end in `continue`.
-    ForBodyMustContinue,
+    /// `break` or `continue` with no loop around it.
+    NoEnclosingLoop,
+    /// `break` with a value in a `while` or a `for`, which produce none.
+    BreakWithValue,
     /// An assignment to a binding that no `let mut` of the function
     /// declared: unknown to lowering, so it has no version to replace.
     AssignToUnknown(String),
     /// A mention of a version of a mutable binding that is not the current
     /// one. The tree names versions; lowering decides which is current.
     StaleMention(String),
-    /// The versions an `if` or `match` says it joins are not the bindings
-    /// its arms assign, in declaration order.
+    /// The versions an `if` or `match` says it joins, or a loop says it
+    /// carries, are not the bindings its arms or its body assign, in
+    /// declaration order.
     JoinMismatch,
-    /// An assignment inside the body of the state-passing `loop` or `for`
-    /// to a binding declared outside it. M3 replaces those forms.
-    AssignInLoop(String),
     /// A place's path steps into something that is not a product with that
     /// field.
     BadPlace(String),
@@ -103,7 +119,10 @@ impl fmt::Display for LowerError {
                 write!(f, "math fn {name} has a body that is not pure")
             }
             Self::ControlInExpression => f.write_str("break and continue may only end a block"),
-            Self::ForBodyMustContinue => f.write_str("the body of a for must end in continue"),
+            Self::NoEnclosingLoop => f.write_str("break or continue outside a loop"),
+            Self::BreakWithValue => {
+                f.write_str("a break with a value in a while or a for, which produce none")
+            }
             Self::AssignToUnknown(name) => {
                 write!(f, "assignment to `{name}`, which no `let mut` declared")
             }
@@ -112,11 +131,7 @@ impl fmt::Display for LowerError {
                 "`{name}` is mentioned at a version that is not its current one"
             ),
             Self::JoinMismatch => f.write_str(
-                "the versions joined after a branch are not the bindings its arms assign",
-            ),
-            Self::AssignInLoop(name) => write!(
-                f,
-                "assignment to `{name}` inside a loop body, which was declared outside it"
+                "the versions joined after a branch or a loop are not the bindings it assigns",
             ),
             Self::BadPlace(name) => write!(f, "`{name}` has no such field to assign"),
             Self::AssignmentInTerm => f.write_str("an assignment where a term is wanted"),
@@ -273,7 +288,9 @@ fn telescope(binders: &[Binder]) -> Type {
 // --- Purity ---------------------------------------------------------------------
 
 /// Whether evaluating the expression always returns and transfers no
-/// control, so that it can be a kernel term.
+/// control, so that it can be a kernel term. No loop is pure: a `for` over
+/// a range is bounded, but it assigns or it does nothing, and either way
+/// it is a statement of the check IR.
 pub fn is_pure(expr: &Expr) -> bool {
     match expr {
         Expr::Var { .. }
@@ -288,8 +305,10 @@ pub fn is_pure(expr: &Expr) -> bool {
         // and the operators of `Int` are terms.
         Expr::CallFn { .. }
         | Expr::Loop { .. }
+        | Expr::While { .. }
+        | Expr::For { .. }
         | Expr::Break(_)
-        | Expr::Continue(_)
+        | Expr::Continue
         | Expr::Operate { .. } => false,
         Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
@@ -314,20 +333,6 @@ pub fn is_pure(expr: &Expr) -> bool {
             scrutinee, arms, ..
         } => is_pure(scrutinee) && arms.iter().all(|arm| block_is_pure(&arm.body)),
         Expr::Block(block) => block_is_pure(block),
-        // A for is pure when its body is, apart from the continue that ends it.
-        Expr::For {
-            lo,
-            hi,
-            state,
-            body,
-            ..
-        } => {
-            is_pure(lo)
-                && is_pure(hi)
-                && state.iter().all(|(_, init)| is_pure(init))
-                && body.stmts.iter().all(stmt_is_pure)
-                && matches!(body.tail.as_deref(), Some(Expr::Continue(next)) if next.iter().all(is_pure))
-        }
     }
 }
 
@@ -414,18 +419,6 @@ fn cast(from: &Type, to: &Type, value: Term) -> Result<Term, LowerError> {
             }));
         }
     })
-}
-
-/// The machine type of a `for` index; a binder of any other type is a
-/// tree the elaborator never builds.
-fn index_type(index: &Binder) -> Result<MachineInt, LowerError> {
-    index
-        .ty
-        .as_machine()
-        .ok_or(LowerError::Kernel(KernelError::TypeMismatch {
-            expected: Type::U8,
-            found: index.ty.clone(),
-        }))
 }
 
 /// The comparison a condition performs, and whether the condition is its
@@ -562,53 +555,12 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
             Term::case_with(pure(scrutinee)?, ty.clone(), arms)
         }
         Expr::Block(block) => pure_block(block)?,
-        Expr::For {
-            index,
-            lower,
-            upper,
-            lo,
-            hi,
-            ordered,
-            state,
-            body,
-            ..
-        } => {
-            let Some(Expr::Continue(next)) = body.tail.as_deref() else {
-                return Err(LowerError::ForBodyMustContinue);
-            };
-            // The body's lets are substituted into the next state.
-            let mut next = pure_all(next)?;
-            for stmt in body.stmts.iter().rev() {
-                next = next
-                    .into_iter()
-                    .map(|term| substitute_stmt(stmt, term))
-                    .collect::<Result<_, _>>()?;
-            }
-            let binders: Vec<(VarId, Type)> = state
-                .iter()
-                .map(|(binder, _)| (binder.id, binder.ty.clone()))
-                .collect();
-            let init = state
-                .iter()
-                .map(|(_, init)| pure(init))
-                .collect::<Result<_, _>>()?;
-            Term::for_with(
-                index_type(index)?,
-                index.id,
-                *lower,
-                *upper,
-                pure(lo)?,
-                pure(hi)?,
-                ordered.clone(),
-                &binders,
-                init,
-                next,
-            )
-        }
         Expr::CallFn { .. }
         | Expr::Loop { .. }
+        | Expr::While { .. }
+        | Expr::For { .. }
         | Expr::Break(_)
-        | Expr::Continue(_)
+        | Expr::Continue
         | Expr::Operate { .. } => {
             return Err(LowerError::ControlInExpression);
         }
@@ -776,7 +728,8 @@ fn open_claim(claim: &Term, earlier: &[Named], proof: Proof) -> (Proof, Term, bo
 /// The current version of every binding declared `let mut` so far, and
 /// which binding each version belongs to. An arm of a branch and the body
 /// of a loop work on a copy, since what they assign does not reach the code
-/// after them except through the join.
+/// after them except through the join. The loops around the position are
+/// here too, for what `break` and `continue` must supply.
 #[derive(Clone, Debug, Default)]
 struct Versions {
     /// Binding to current version.
@@ -788,6 +741,18 @@ struct Versions {
     /// The mutable bindings in declaration order, which fixes the order of
     /// a join's tuple.
     order: Vec<VarId>,
+    /// The loops around the position, innermost last.
+    loops: Vec<Frame>,
+}
+
+/// A loop around the position: the bindings it carries, the type of its
+/// result, and whether a `break` carries a value after the versions, which
+/// it does in a `loop` and not in a `while` or a `for`.
+#[derive(Clone, Debug)]
+struct Frame {
+    bindings: Vec<VarId>,
+    result: Type,
+    valued: bool,
 }
 
 impl Versions {
@@ -833,27 +798,42 @@ impl Versions {
         }
     }
 
-    /// The bindings declared outside the given blocks and assigned inside
-    /// any of them, nested blocks included, in declaration order. A write to
-    /// a field counts for the root of its path, a binding declared inside
-    /// is local to the block, and a binding that shadows another is a
-    /// different binding, since identities are unique.
-    fn assigned_in(&self, blocks: &[&Block]) -> Vec<VarId> {
+    /// The bindings declared outside the given blocks and expressions and
+    /// assigned inside any of them, nested blocks included, in declaration
+    /// order. A write to a field counts for the root of its path, a binding
+    /// declared inside is local to the block, and a binding that shadows
+    /// another is a different binding, since identities are unique.
+    fn assigned_in(&self, blocks: &[&Block], exprs: &[&Expr]) -> Vec<VarId> {
         let mut roots = HashSet::new();
         let mut declared = HashSet::new();
+        let mut on_stmt = |stmt: &Stmt| match stmt {
+            Stmt::Assign { place, .. } => {
+                roots.insert(place.binding);
+            }
+            Stmt::Let { pattern, .. } => bound_ids(pattern, &mut declared),
+            Stmt::Expr(_) => {}
+        };
         for block in blocks {
-            visit_block(block, &mut |stmt| match stmt {
-                Stmt::Assign { place, .. } => {
-                    roots.insert(place.binding);
-                }
-                Stmt::Let { pattern, .. } => bound_ids(pattern, &mut declared),
-                Stmt::Expr(_) => {}
-            });
+            visit_block(block, &mut on_stmt);
+        }
+        for expr in exprs {
+            visit_expr(expr, &mut on_stmt);
         }
         self.order
             .iter()
             .copied()
             .filter(|binding| roots.contains(binding) && !declared.contains(binding))
+            .collect()
+    }
+
+    /// The current versions of the given bindings.
+    fn versions(&self, bindings: &[VarId]) -> Result<Vec<Term>, LowerError> {
+        bindings
+            .iter()
+            .map(|binding| {
+                let (name, _) = &self.declared[binding];
+                self.current(*binding, name).map(Term::var)
+            })
             .collect()
     }
 }
@@ -884,7 +864,7 @@ pub(crate) fn visit_block(block: &Block, on_stmt: &mut dyn FnMut(&Stmt)) {
 }
 
 /// Every statement under an expression, in source order.
-fn visit_expr(expr: &Expr, on_stmt: &mut dyn FnMut(&Stmt)) {
+pub(crate) fn visit_expr(expr: &Expr, on_stmt: &mut dyn FnMut(&Stmt)) {
     each_expr(expr, &mut |expr| {
         let blocks: Vec<&Block> = match expr {
             Expr::If {
@@ -893,9 +873,10 @@ fn visit_expr(expr: &Expr, on_stmt: &mut dyn FnMut(&Stmt)) {
                 ..
             } => vec![then_block, else_block],
             Expr::Match { arms, .. } => arms.iter().map(|arm| &arm.body).collect(),
-            Expr::Block(block) | Expr::Loop { body: block, .. } | Expr::For { body: block, .. } => {
-                vec![block]
-            }
+            Expr::Block(block)
+            | Expr::Loop { body: block, .. }
+            | Expr::While { body: block, .. }
+            | Expr::For { body: block, .. } => vec![block],
             _ => Vec::new(),
         };
         for block in blocks {
@@ -908,7 +889,7 @@ fn visit_expr(expr: &Expr, on_stmt: &mut dyn FnMut(&Stmt)) {
 
 /// Every expression under `expr`, itself included, in source order: the
 /// statements' values and the tails of nested blocks among them.
-fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
+pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
     on_expr(expr);
     let all = |exprs: &[Expr], on_expr: &mut dyn FnMut(&Expr)| {
         exprs.iter().for_each(|expr| each_expr(expr, on_expr));
@@ -942,14 +923,15 @@ fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         }
         | Expr::CallFn {
             arguments: fields, ..
-        }
-        | Expr::Continue(fields) => all(fields, on_expr),
+        } => all(fields, on_expr),
         Expr::Struct { fields, .. } => fields
             .iter()
             .for_each(|(_, field)| each_expr(field, on_expr)),
-        Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } | Expr::Break(inner) => {
+        Expr::Field { target: inner, .. } | Expr::Cast { expr: inner, .. } => {
             each_expr(inner, on_expr)
         }
+        Expr::Break(value) => value.iter().for_each(|value| each_expr(value, on_expr)),
+        Expr::Continue => {}
         Expr::Method {
             receiver,
             arguments,
@@ -979,21 +961,16 @@ fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
             each_expr(scrutinee, on_expr);
             arms.iter().for_each(|arm| block(&arm.body, on_expr));
         }
-        Expr::Block(inner) => block(inner, on_expr),
-        Expr::Loop { state, body, .. } => {
-            state.iter().for_each(|(_, init)| each_expr(init, on_expr));
+        Expr::Block(inner) | Expr::Loop { body: inner, .. } => block(inner, on_expr),
+        Expr::While {
+            condition, body, ..
+        } => {
+            each_expr(condition, on_expr);
             block(body, on_expr);
         }
-        Expr::For {
-            lo,
-            hi,
-            state,
-            body,
-            ..
-        } => {
+        Expr::For { lo, hi, body, .. } => {
             each_expr(lo, on_expr);
             each_expr(hi, on_expr);
-            state.iter().for_each(|(_, init)| each_expr(init, on_expr));
             block(body, on_expr);
         }
     }
@@ -1050,45 +1027,145 @@ pub fn rebuilt(current: Term, path: &[Step], value: Term) -> Result<Term, LowerE
     }
 }
 
-/// The type of the tuple a branch with assignments produces: the joined
-/// versions, each at its binding's declared type, then the value, whose
-/// type may mention them.
-pub fn join_type(joined: &Joined, result: VarId, value: &Type) -> Type {
-    let mut fields: Vec<(VarId, Type)> = joined
-        .joins
+/// The type of the tuple a branch with assignments, or a loop, produces:
+/// the joined versions, each at its binding's declared type, then the
+/// value when there is one, whose type may mention them.
+pub fn join_type(joins: &[Join], value: Option<(VarId, &Type)>) -> Type {
+    let mut fields: Vec<(VarId, Type)> = joins
         .iter()
         .map(|join| (join.version.id, join.version.ty.clone()))
         .collect();
-    fields.push((result, value.clone()));
+    fields.extend(value.map(|(result, ty)| (result, ty.clone())));
     Type::tuple_over(&fields)
 }
 
-/// How a block ends: with its value, or, as an arm of a branch that joins
+/// How a block ends: with its value; as an arm of a branch that joins
 /// assigned bindings, with the tuple of their current versions and the
-/// value.
+/// value; or as the body of a loop, with `continue` at the current versions
+/// of what the loop carries, its value dropped.
 #[derive(Clone, Copy)]
 enum End<'a> {
     Value,
     Join { bindings: &'a [VarId], ty: &'a Type },
+    Continue,
 }
 
 impl End<'_> {
-    fn finish(self, value: Term, env: &Versions) -> Result<Term, LowerError> {
-        match self {
-            Self::Value => Ok(value),
+    fn finish(self, value: Term, env: &Versions) -> Result<exec::Tail, LowerError> {
+        Ok(match self {
+            Self::Value => exec::Tail::Value(value),
             Self::Join { bindings, ty } => {
-                let mut fields = bindings
-                    .iter()
-                    .map(|binding| {
-                        let (name, _) = &env.declared[binding];
-                        env.current(*binding, name).map(Term::var)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                let mut fields = env.versions(bindings)?;
                 fields.push(value);
-                Ok(Term::tuple(ty, fields))
+                exec::Tail::Value(Term::tuple(ty, fields))
+            }
+            Self::Continue => {
+                let frame = env.loops.last().ok_or(LowerError::NoEnclosingLoop)?;
+                exec::Tail::Continue(env.versions(&frame.bindings)?)
+            }
+        })
+    }
+}
+
+/// `break` from the innermost loop: its result tuple at the current
+/// versions of what it carries, then the value in a `loop`.
+fn breaking(value: Option<Term>, env: &Versions) -> Result<exec::Tail, LowerError> {
+    let frame = env.loops.last().ok_or(LowerError::NoEnclosingLoop)?;
+    let mut fields = env.versions(&frame.bindings)?;
+    match (frame.valued, value) {
+        (true, value) => fields.push(value.unwrap_or_else(unit)),
+        (false, None) => {}
+        (false, Some(_)) => return Err(LowerError::BreakWithValue),
+    }
+    Ok(exec::Tail::Break(Term::tuple(&frame.result, fields)))
+}
+
+/// The bindings a loop carries: those declared outside it and assigned in
+/// its body, or in its condition, in declaration order, which the tree's
+/// `carried` and `state` must name exactly, at the bindings' declared types.
+fn carried_bindings(
+    env: &Versions,
+    blocks: &[&Block],
+    exprs: &[&Expr],
+    state: &[Binder],
+    carried: &Carried,
+) -> Result<Vec<VarId>, LowerError> {
+    let assigned = env.assigned_in(blocks, exprs);
+    let named: Vec<VarId> = carried.joins.iter().map(|join| join.binding).collect();
+    if named != assigned || state.len() != assigned.len() {
+        return Err(LowerError::JoinMismatch);
+    }
+    for (join, inside) in carried.joins.iter().zip(state) {
+        let declared = env.declared_type(join.binding, &join.version.name)?;
+        for found in [&join.version.ty, &inside.ty] {
+            if !same_type(declared, found) {
+                return Err(LowerError::Kernel(KernelError::TypeMismatch {
+                    expected: declared.clone(),
+                    found: found.clone(),
+                }));
             }
         }
     }
+    Ok(assigned)
+}
+
+/// The versions a loop body works on: a copy of the versions at entry in
+/// which each carried binding is at the version the tree names for its
+/// state, under the loop's frame.
+fn loop_env(
+    env: &Versions,
+    state: &[Binder],
+    bindings: Vec<VarId>,
+    result: Type,
+    valued: bool,
+) -> Result<Versions, LowerError> {
+    let mut inner = env.clone();
+    for (binder, binding) in state.iter().zip(&bindings) {
+        inner.assign(*binding, binder.id, &binder.name)?;
+    }
+    inner.loops.push(Frame {
+        bindings,
+        result,
+        valued,
+    });
+    Ok(inner)
+}
+
+/// After a branch or a loop: the versions and the value, opened from the
+/// result tuple as a `let` pattern opens a tuple, so that evidence typed
+/// over a version is restated over the name bound to it; then each joined
+/// binding is at its new version.
+fn bind_joined(
+    out: &mut Vec<exec::Stmt>,
+    env: &mut Versions,
+    tuple: VarId,
+    joins: &[Join],
+    value: Option<(VarId, HypId, &Type)>,
+) -> Result<(), LowerError> {
+    let mut parts: Vec<Pattern> = joins
+        .iter()
+        .map(|join| Pattern::Bind {
+            binder: join.version.clone(),
+            equation: join.equation,
+            mutable: false,
+        })
+        .collect();
+    if let Some((result, equation, ty)) = value {
+        parts.push(Pattern::Bind {
+            binder: Binder {
+                id: result,
+                name: String::new(),
+                ty: ty.clone(),
+            },
+            equation,
+            mutable: false,
+        });
+    }
+    bind_pattern(&Pattern::Tuple(parts), Term::var(tuple), out, env)?;
+    for join in joins {
+        env.assign(join.binding, join.version.id, &join.version.name)?;
+    }
+    Ok(())
 }
 
 // --- Expressions that may not return: the check IR --------------------------------
@@ -1238,24 +1315,84 @@ fn anf_form(
         }
         Expr::Loop {
             state,
-            result_ty,
-            body,
+            carried,
+            ty,
             result,
+            equation,
+            body,
         } => {
-            let init = state
-                .iter()
-                .map(|(_, init)| anf(init, out, env))
-                .collect::<Result<_, _>>()?;
-            let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();
+            let bindings = carried_bindings(env, &[body], &[], state, carried)?;
+            let result_ty = join_type(&carried.joins, Some((*result, ty)));
+            let init = env.versions(&bindings)?;
+            let mut inner = loop_env(env, state, bindings, result_ty.clone(), true)?;
+            let body = lower_block(body, &mut inner, End::Continue)?;
             out.push(exec::Stmt::Loop {
-                var: *result,
-                state: telescope(&binders),
-                vars: binders.iter().map(|binder| binder.id).collect(),
+                var: carried.tuple,
+                state: telescope(state),
+                vars: state.iter().map(|binder| binder.id).collect(),
                 init,
-                result: result_ty.clone(),
-                body: lower_loop_body(body, env)?,
+                result: result_ty,
+                body,
             });
+            bind_joined(
+                out,
+                env,
+                carried.tuple,
+                &carried.joins,
+                Some((*result, *equation, ty)),
+            )?;
             Term::var(*result)
+        }
+        Expr::While {
+            condition: tested,
+            then_fact,
+            else_fact,
+            state,
+            carried,
+            body,
+        } => {
+            let bindings = carried_bindings(env, &[body], &[tested], state, carried)?;
+            // The result of a while is its state.
+            let result_ty = telescope(state);
+            let init = env.versions(&bindings)?;
+            let mut inner = loop_env(env, state, bindings, result_ty.clone(), false)?;
+            // Each pass evaluates the condition at the versions it starts
+            // with, and leaves on `false` with the versions the condition
+            // left, or runs the body on `true` and continues.
+            let mut stmts = Vec::new();
+            let (comparison, negated) = condition(tested);
+            let scrutinee = anf(&comparison, &mut stmts, &mut inner)?;
+            let exit = exec::Block {
+                stmts: Vec::new(),
+                tail: breaking(None, &inner)?,
+            };
+            let run = lower_block(body, &mut inner.clone(), End::Continue)?;
+            let (if_false, if_true) = if negated {
+                ((*then_fact, run), (*else_fact, exit))
+            } else {
+                ((*else_fact, exit), (*then_fact, run))
+            };
+            let arms = [if_false, if_true]
+                .into_iter()
+                .map(|(fact, body)| Arm {
+                    payload: Vec::new(),
+                    fact,
+                    body,
+                })
+                .collect();
+            out.push(exec::Stmt::Loop {
+                var: carried.tuple,
+                state: telescope(state),
+                vars: state.iter().map(|binder| binder.id).collect(),
+                init,
+                result: result_ty,
+                body: exec::Block {
+                    stmts,
+                    tail: exec::Tail::Match { scrutinee, arms },
+                },
+            });
+            bind_joined(out, env, carried.tuple, &carried.joins, None)?;
+            unit()
         }
         Expr::For {
             index,
@@ -1263,34 +1400,36 @@ fn anf_form(
             upper,
             lo,
             hi,
-            ordered,
+            inclusive,
             state,
+            carried,
             body,
-            result,
         } => {
             let lo = anf(lo, out, env)?;
             let hi = anf(hi, out, env)?;
-            let init = state
-                .iter()
-                .map(|(_, init)| anf(init, out, env))
-                .collect::<Result<_, _>>()?;
-            let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();
+            let bindings = carried_bindings(env, &[body], &[], state, carried)?;
+            // A for yields its state, on a break as at the end of the range.
+            let result_ty = telescope(state);
+            let init = env.versions(&bindings)?;
+            let mut inner = loop_env(env, state, bindings, result_ty, false)?;
+            let body = lower_block(body, &mut inner, End::Continue)?;
             out.push(exec::Stmt::For(Box::new(ForStmt {
-                var: *result,
+                var: carried.tuple,
                 index: index.id,
                 lower: *lower,
                 upper: *upper,
                 lo,
                 hi,
-                ordered: ordered.clone(),
-                state: Type::function_over(&[(index.id, index.ty.clone())], &telescope(&binders)),
-                vars: binders.iter().map(|binder| binder.id).collect(),
+                inclusive: *inclusive,
+                state: telescope(state),
+                vars: state.iter().map(|binder| binder.id).collect(),
                 init,
-                body: lower_loop_body(body, env)?,
+                body,
             })));
-            Term::var(*result)
+            bind_joined(out, env, carried.tuple, &carried.joins, None)?;
+            unit()
         }
-        Expr::Break(_) | Expr::Continue(_) => return Err(LowerError::ControlInExpression),
+        Expr::Break(_) | Expr::Continue => return Err(LowerError::ControlInExpression),
         // Handled by the purity test above.
         Expr::Var { .. }
         | Expr::Bool(_)
@@ -1300,17 +1439,6 @@ fn anf_form(
         | Expr::Prop(_)
         | Expr::Absurd { .. } => pure(expr)?,
     })
-}
-
-/// The body of one of the state-passing loops. An assignment in it to a
-/// binding declared outside it is refused until M3 replaces these forms:
-/// the state of such a loop is what it passes, not what the body assigns.
-fn lower_loop_body(body: &Block, env: &Versions) -> Result<exec::Block, LowerError> {
-    if let Some(binding) = env.assigned_in(&[body]).first() {
-        let (name, _) = &env.declared[binding];
-        return Err(LowerError::AssignInLoop(name.clone()));
-    }
-    lower_block(body, &mut env.clone(), End::Value)
 }
 
 /// A branch in statement or value position: a match statement. When some
@@ -1329,7 +1457,7 @@ fn lower_branch(
     arms: Vec<(Vec<VarId>, HypId, &Block)>,
 ) -> Result<Term, LowerError> {
     let blocks: Vec<&Block> = arms.iter().map(|(_, _, block)| *block).collect();
-    let assigned = env.assigned_in(&blocks);
+    let assigned = env.assigned_in(&blocks, &[]);
     let lower_arms = |end: End<'_>, env: &Versions| -> Result<Vec<Arm>, LowerError> {
         arms.iter()
             .map(|(payload, fact, block)| {
@@ -1368,7 +1496,7 @@ fn lower_branch(
             }));
         }
     }
-    let tuple = join_type(joined, result, ty);
+    let tuple = join_type(&joined.joins, Some((result, ty)));
     let arms = lower_arms(
         End::Join {
             bindings: &bindings,
@@ -1382,30 +1510,13 @@ fn lower_branch(
         scrutinee,
         arms,
     });
-    // The versions and the value, opened as a `let` pattern opens a tuple:
-    // evidence typed over a version is restated over the name bound to it.
-    let mut parts: Vec<Pattern> = joined
-        .joins
-        .iter()
-        .map(|join| Pattern::Bind {
-            binder: join.version.clone(),
-            equation: join.equation,
-            mutable: false,
-        })
-        .collect();
-    parts.push(Pattern::Bind {
-        binder: Binder {
-            id: result,
-            name: String::new(),
-            ty: ty.clone(),
-        },
-        equation: joined.equation,
-        mutable: false,
-    });
-    bind_pattern(&Pattern::Tuple(parts), Term::var(joined.tuple), out, env)?;
-    for join in &joined.joins {
-        env.assign(join.binding, join.version.id, &join.version.name)?;
-    }
+    bind_joined(
+        out,
+        env,
+        joined.tuple,
+        &joined.joins,
+        Some((result, joined.equation, ty)),
+    )?;
     Ok(Term::var(result))
 }
 
@@ -1457,13 +1568,13 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
         | Expr::Operate { result, .. }
         | Expr::If { result, .. }
         | Expr::Match { result, .. }
-        | Expr::Loop { result, .. }
-        | Expr::For { result, .. } => Term::var(*result),
+        | Expr::Loop { result, .. } => Term::var(*result),
+        Expr::While { .. } | Expr::For { .. } => unit(),
         Expr::Block(block) => match block.tail.as_deref() {
             Some(tail) => return value_term(tail),
             None => unit(),
         },
-        Expr::Break(_) | Expr::Continue(_) => return Err(LowerError::ControlInExpression),
+        Expr::Break(_) | Expr::Continue => return Err(LowerError::ControlInExpression),
         Expr::Var { .. }
         | Expr::Bool(_)
         | Expr::Literal(..)
@@ -1564,7 +1675,7 @@ fn lower_block(block: &Block, env: &mut Versions, end: End<'_>) -> Result<exec::
     let mut stmts = Vec::new();
     lower_stmts(&block.stmts, &mut stmts, env)?;
     let tail = match block.tail.as_deref() {
-        None => exec::Tail::Value(end.finish(unit(), env)?),
+        None => end.finish(unit(), env)?,
         Some(tail) => lower_tail(tail, &mut stmts, env, end)?,
     };
     Ok(exec::Block { stmts, tail })
@@ -1582,12 +1693,15 @@ fn lower_tail(
     end: End<'_>,
 ) -> Result<exec::Tail, LowerError> {
     Ok(match tail {
-        Expr::Break(value) => exec::Tail::Break(anf(value, stmts, env)?),
-        Expr::Continue(next) => exec::Tail::Continue(
-            next.iter()
-                .map(|expr| anf(expr, stmts, env))
-                .collect::<Result<_, _>>()?,
-        ),
+        // The value first, with whatever it assigns; then the versions.
+        Expr::Break(value) => {
+            let value = match value {
+                Some(value) => Some(anf(value, stmts, env)?),
+                None => None,
+            };
+            breaking(value, env)?
+        }
+        Expr::Continue => End::Continue.finish(unit(), env)?,
         Expr::If {
             condition: tested,
             then_fact,
@@ -1623,12 +1737,12 @@ fn lower_tail(
             lower_stmts(&block.stmts, stmts, env)?;
             match block.tail.as_deref() {
                 Some(inner) => lower_tail(inner, stmts, env, end)?,
-                None => exec::Tail::Value(end.finish(unit(), env)?),
+                None => end.finish(unit(), env)?,
             }
         }
         other => {
             let value = anf(other, stmts, env)?;
-            exec::Tail::Value(end.finish(value, env)?)
+            end.finish(value, env)?
         }
     })
 }

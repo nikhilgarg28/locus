@@ -206,22 +206,30 @@ impl<'p> CheckInterpreter<'p> {
                     index,
                     lo,
                     hi,
+                    inclusive,
                     vars,
                     init,
                     body,
                     ..
                 } = &**looped;
                 let (ty, lo, hi) = bounds(self.term(lo)?, self.term(hi)?)?;
+                let last = if *inclusive { hi } else { hi - 1 };
                 let mut current = self.terms(init)?;
-                for i in lo..hi {
+                let mut i = lo;
+                let value = loop {
+                    if i > last {
+                        break Value::Tuple(current);
+                    }
                     self.spend()?;
                     let at = Some((*index, Value::Int(ty, i)));
                     match self.iteration(vars, current, at, body)? {
                         Flow::Continue(next) => current = next,
-                        _ => return stuck("a for body that does not continue"),
+                        Flow::Break(value) => break value,
+                        Flow::Value(_) => return stuck("a for body that falls through"),
                     }
-                }
-                self.free.push((*var, Value::Tuple(current)));
+                    i += 1;
+                };
+                self.free.push((*var, value));
             }
             // The evidence and the learned facts are ghosts: skipped. The
             // operation itself panics or wraps by the mode.

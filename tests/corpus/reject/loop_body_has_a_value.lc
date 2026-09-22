@@ -1,0 +1,17 @@
+// The body of a loop produces no value: it ends in `()`, or it transfers
+// control. A value at its end is not the loop's value, which only `break`
+// supplies.
+fn count(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        total.wrapping_add(1) //~ error: L0220 expected `()`, found `u8`
+    }
+    total
+}
+
+fn spin(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    loop {
+        total.wrapping_add(1) //~ error: L0220 expected `()`, found `u8`
+    }
+}

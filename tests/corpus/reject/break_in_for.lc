@@ -1,6 +1,17 @@
-// A bounded `for` has no `break`.
+// `break` with a value leaves a `while` or a `for`, which produce no value;
+// only a `loop` has the value of its `break`.
 fn first(n: u8) -> u8 {
-    for i in 0..n (total: u8 = 0) {
-        break total //~ error: L0218 has no `break`
+    let mut total: u8 = 0;
+    for i in 0..n {
+        break total //~ error: L0218 `break` with a value leaves a `while` or a `for`
     }
+}
+
+fn second(n: u8) -> u8 {
+    let mut k: u8 = 0;
+    while k < n {
+        k = k.wrapping_add(1);
+        break k //~ error: L0218 `break` with a value leaves a `while` or a `for`
+    }
+    k
 }

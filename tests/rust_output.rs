@@ -35,13 +35,9 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
     declare("increment_math", increment(true));
     declare("preserve", preserve(theory, false, true));
     declare("preserve_math", preserve(theory, true, true));
-    declare("bounded_walk", bounded_walk(prelude, theory, true));
-    declare("count", counting_loop(theory, false, None));
-    declare("count_math", counting_loop(theory, true, None));
-    declare(
-        "count_by_calls",
-        counting_loop(theory, false, Some(increment_id)),
-    );
+    declare("bounded_walk", bounded_walk(theory, true));
+    declare("count", counting_loop(false, None));
+    declare("count_by_calls", counting_loop(false, Some(increment_id)));
     declare(
         "zero_or_self",
         zero_or_self(prelude, classified, exec_id(classify_ref)),
@@ -63,9 +59,12 @@ fn generated_rust_compiles_and_agrees_with_the_interpreter() {
         "match classify(m) {",
         "Classified::Zero(v, h) => {",
         "pub fn bounded_walk(limit: u8) -> (u8, Proved) {",
-        "let next = i.wrapping_add(1_u8);",
-        "let next_bound = Proved;",
-        "break (i, bound)",
+        "let mut i = 0_u8;",
+        "loop {",
+        "break (i, Proved)",
+        "i = i.wrapping_add(1_u8);",
+        "for i in 0_u8..n {",
+        "acc = increment(acc).0;",
     ] {
         assert!(source.contains(expected), "missing: {expected}\n{source}");
     }

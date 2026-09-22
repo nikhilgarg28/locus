@@ -1623,12 +1623,13 @@ fn in_arm(event: Event) -> u8 {
 }
 
 fn after_three(n: u8) -> u8 {
-    loop (i: u8 = 0) -> u8 {
+    let mut i: u8 = 0;
+    loop {
         if i == n {
             break i
         } else {
             let _ = if i == 3 { panics(5) } else { i };
-            continue(i.wrapping_add(1))
+            i = i.wrapping_add(1);
         }
     }
 }
@@ -1745,12 +1746,12 @@ fn plant(expr: &mut EExpr) {
         }
         | EExpr::Operate {
             operands: exprs, ..
-        }
-        | EExpr::Continue(exprs) => exprs.iter_mut().for_each(plant),
+        } => exprs.iter_mut().for_each(plant),
+        EExpr::Continue => {}
+        EExpr::Break(inner) => inner.iter_mut().for_each(|inner| plant(inner)),
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
         EExpr::Field { target: inner, .. }
         | EExpr::Cast { expr: inner, .. }
-        | EExpr::Break(inner)
         | EExpr::Return(inner) => {
             plant(inner);
         }
@@ -1782,21 +1783,14 @@ fn plant(expr: &mut EExpr) {
             arms.iter_mut()
                 .for_each(|arm| plant_in_block(&mut arm.body));
         }
-        EExpr::Block(block) => plant_in_block(block),
-        EExpr::Loop { state, body, .. } => {
-            state.iter_mut().for_each(|(_, _, _, init)| plant(init));
+        EExpr::Block(block) | EExpr::Loop { body: block, .. } => plant_in_block(block),
+        EExpr::While { condition, body } => {
+            plant(condition);
             plant_in_block(body);
         }
-        EExpr::For {
-            lo,
-            hi,
-            state,
-            body,
-            ..
-        } => {
+        EExpr::For { lo, hi, body, .. } => {
             plant(lo);
             plant(hi);
-            state.iter_mut().for_each(|(_, _, _, init)| plant(init));
             plant_in_block(body);
         }
     }
@@ -1826,20 +1820,22 @@ fn early(n: u8) -> u8 {
 }
 
 fn from_a_loop(n: u8) -> u8 {
-    loop (i: u8 = 0) -> u8 {
+    let mut i: u8 = 0;
+    loop {
         if i == n {
             break returns(i.wrapping_add(100))
         } else {
-            continue(i.wrapping_add(1))
+            i = i.wrapping_add(1);
         }
     }
 }
 
 fn from_a_for(n: u8) -> u8 {
-    let (last,) = for i in 0..n (last: u8 = 0) {
+    let mut last: u8 = 0;
+    for i in 0..n {
         let _ = if i == 2 { returns(50) } else { i };
-        continue(i)
-    };
+        last = i;
+    }
     last
 }
 
@@ -1914,7 +1910,7 @@ fn trees_that_panic_agree_with_their_compiled_rust_message_included() {
     let rust = &right.compiled.as_ref().unwrap().rust;
     assert!(
         rust.contains(
-            "\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut state_i: u8 = 0_u8;\n"
+            "\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut i = 0_u8;\n    loop {\n"
         ),
         "{rust}"
     );
@@ -2008,8 +2004,9 @@ fn out_of_fuel_is_inconclusive_and_is_not_a_panic() {
 fn a_run_line_that_never_answers_is_inconclusive_and_the_rest_are_compared() {
     let text = "\
 fn forever(n: u8) -> u8 {
-    loop (i: u8 = n) -> u8 {
-        continue(i.wrapping_add(1))
+    let mut i: u8 = n;
+    loop {
+        i = i.wrapping_add(1);
     }
 }
 
@@ -2043,14 +2040,14 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
     assert_eq!(
         listed(&examined.inconclusive),
         [
-            by_interpreter(10, "forever(1)"),
-            by_interpreter(12, "forever(2)")
+            by_interpreter(11, "forever(1)"),
+            by_interpreter(13, "forever(2)")
         ]
         .concat()
     );
     assert_eq!(
         listed(&examined.failures),
-        in_each_interpreter("forever.lc:13", "`next(3)` is `4`, expected `9`")
+        in_each_interpreter("forever.lc:14", "`next(3)` is `4`, expected `9`")
     );
 
     // Compiled, each `forever` is killed at the timeout, which is short
@@ -2073,8 +2070,8 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
         builds
             .map(|build| {
                 [
-                    killed(build, 10, "forever::forever(1)"),
-                    killed(build, 12, "forever::forever(2)"),
+                    killed(build, 11, "forever::forever(1)"),
+                    killed(build, 13, "forever::forever(2)"),
                 ]
             })
             .concat()
@@ -2082,7 +2079,7 @@ fn next(n: u8) -> u8 { n.wrapping_add(1) }
     assert_eq!(
         listed(&report.failures),
         builds.map(|build| format!(
-            "forever.lc:13: compiled Rust, {build}: `forever::next(3)` is `4`, expected `9`"
+            "forever.lc:14: compiled Rust, {build}: `forever::next(3)` is `4`, expected `9`"
         ))
     );
 }

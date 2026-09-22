@@ -158,7 +158,7 @@ pub(crate) fn outcome(result: Result<Value, Stop>) -> Result<Outcome, RunError> 
 enum Flow {
     Value(Value),
     Break(Value),
-    Continue(Vec<Value>),
+    Continue,
 }
 
 const MAX_CALL_DEPTH: usize = 200;
@@ -433,25 +433,30 @@ impl<'m> Interpreter<'m> {
                 return result;
             }
             EExpr::Block(block) => return self.block(block),
-            EExpr::Loop { state, body, .. } => {
-                let mut current = match self.initial(state)? {
-                    Ok(values) => values,
-                    Err(flow) => return Ok(flow),
-                };
-                loop {
-                    self.spend()?;
-                    match self.iteration(state, current, None, body)? {
-                        Flow::Break(value) => break value,
-                        Flow::Continue(next) => current = next,
-                        Flow::Value(_) => return stuck("a loop body that falls through"),
-                    }
+            // What a loop carries is assigned in place; a pass that reaches
+            // the end of the body, or `continue`, starts the next.
+            EExpr::Loop { body, .. } => loop {
+                self.spend()?;
+                if let Flow::Break(value) = self.block(body)? {
+                    break value;
                 }
-            }
+            },
+            EExpr::While { condition, body } => loop {
+                self.spend()?;
+                match value!(self.expr(condition)) {
+                    Value::Bool(true) => {}
+                    Value::Bool(false) => break Value::Tuple(Vec::new()),
+                    _ => return stuck("a while condition that is not a bool"),
+                }
+                if let Flow::Break(value) = self.block(body)? {
+                    break value;
+                }
+            },
             EExpr::For {
                 index,
                 lo,
                 hi,
-                state,
+                inclusive,
                 body,
             } => {
                 let (Value::Int(ty, lo), Value::Int(hi_type, hi)) =
@@ -462,57 +467,32 @@ impl<'m> Interpreter<'m> {
                 if ty != hi_type {
                     return stuck("for bounds of two types");
                 }
-                let mut current = match self.initial(state)? {
-                    Ok(values) => values,
-                    Err(flow) => return Ok(flow),
-                };
-                for i in lo..hi {
-                    self.spend()?;
-                    let at = Some((index.0, Value::Int(ty, i)));
-                    match self.iteration(state, current, at, body)? {
-                        Flow::Continue(next) => current = next,
-                        _ => return stuck("a for body that does not continue"),
+                let last = if *inclusive { hi } else { hi - 1 };
+                let mut i = lo;
+                loop {
+                    if i > last {
+                        break Value::Tuple(Vec::new());
                     }
+                    self.spend()?;
+                    let scope = self.env.len();
+                    self.env.push((index.0, Value::Int(ty, i)));
+                    let flow = self.block(body);
+                    self.env.truncate(scope);
+                    if let Flow::Break(value) = flow? {
+                        break value;
+                    }
+                    i += 1;
                 }
-                Value::Tuple(current)
             }
-            EExpr::Break(value) => return Ok(Flow::Break(value!(self.expr(value)))),
-            EExpr::Continue(next) => {
-                return Ok(match self.all(next)? {
-                    Ok(values) => Flow::Continue(values),
-                    Err(flow) => flow,
-                });
+            EExpr::Break(value) => {
+                return Ok(Flow::Break(match value {
+                    Some(value) => value!(self.expr(value)),
+                    None => Value::Tuple(Vec::new()),
+                }));
             }
+            EExpr::Continue => return Ok(Flow::Continue),
             EExpr::Return(value) => return Err(Stop::Return(value!(self.expr(value)))),
         }))
-    }
-
-    fn initial(
-        &mut self,
-        state: &[(VarId, String, super::tree::EType, EExpr)],
-    ) -> Result<Result<Vec<Value>, Flow>, Stop> {
-        let exprs: Vec<EExpr> = state.iter().map(|(_, _, _, init)| init.clone()).collect();
-        self.all(&exprs)
-    }
-
-    /// Runs a loop body once with the given state in scope.
-    fn iteration(
-        &mut self,
-        state: &[(VarId, String, super::tree::EType, EExpr)],
-        current: Vec<Value>,
-        index: Option<(VarId, Value)>,
-        body: &EBlock,
-    ) -> Result<Flow, Stop> {
-        if state.len() != current.len() {
-            return stuck("continue with the wrong number of state values");
-        }
-        let scope = self.env.len();
-        self.env.extend(index);
-        self.env
-            .extend(state.iter().map(|(id, _, _, _)| *id).zip(current));
-        let result = self.block(body);
-        self.env.truncate(scope);
-        result
     }
 }
 

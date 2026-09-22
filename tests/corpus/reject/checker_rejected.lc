@@ -6,8 +6,10 @@ fn choose(flag: bool) -> @(1 == 1) { //~ error: L0299 the checker rejected this
 }
 
 fn count(n: u8) -> u8 {
-    for i in 0..n (total: u8 = 0) {
-        let next = continue(total); //~ error: L0299 break and continue may only end a block
-        continue(next)
+    let mut total: u8 = 0;
+    for i in 0..n {
+        let _ = continue; //~ error: L0299 break and continue may only end a block
+        total = total.wrapping_add(i);
     }
+    total
 }

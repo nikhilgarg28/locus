@@ -6,9 +6,9 @@ error[L0299]: the checker rejected this: a term-level case cannot have the proof
   |
   = note: this is a gap in the elaborator's own checks; the program was not accepted
 error[L0299]: the checker rejected this: break and continue may only end a block
-  --> tests/corpus/reject/checker_rejected.lc:10:9
+  --> tests/corpus/reject/checker_rejected.lc:11:9
    |
-10 |         let next = continue(total); //~ error: L0299 break and continue may only end a block
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+11 |         let _ = continue; //~ error: L0299 break and continue may only end a block
+   |         ^^^^^^^^^^^^^^^^^
    |
    = note: this is a gap in the elaborator's own checks; the program was not accepted

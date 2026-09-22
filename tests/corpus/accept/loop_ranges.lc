@@ -1,0 +1,92 @@
+// Ranges of every shape: over a signed type and below zero, empty, inclusive,
+// and inclusive up to the largest value of the type, where an exclusive
+// range could not reach. Nothing is asked about the order of the bounds: a
+// range whose start lies past its end runs no pass. The body knows
+// `lo <= i` and `i < hi`, or `i <= hi`, on every pass.
+
+fn sum_from(lo: i32, hi: i32) -> i32 {
+    let mut total: i32 = 0;
+    for i in lo..hi {
+        total = total.wrapping_add(i);
+    }
+    total
+}
+
+fn sum_through(lo: i32, hi: i32) -> i32 {
+    let mut total: i32 = 0;
+    for i in lo..=hi {
+        total = total.wrapping_add(i);
+    }
+    total
+}
+
+// `0..=255` over `u8` runs 256 passes; `0..255` runs 255.
+fn every_byte() -> (u16, u16) {
+    let mut inclusive: u16 = 0;
+    let mut exclusive: u16 = 0;
+    for i in 0..=255u8 {
+        inclusive = inclusive.wrapping_add(1);
+    }
+    for i in 0..255u8 {
+        exclusive = exclusive.wrapping_add(1);
+    }
+    (inclusive, exclusive)
+}
+
+// An empty range: the body never runs, and what was assigned before it is
+// what is read after it.
+fn none(n: u8) -> u8 {
+    let mut seen: u8 = 7;
+    for i in n..0 {
+        seen = 0;
+    }
+    seen
+}
+
+// The bounds are evaluated once, before the loop, and are not affected by
+// what the body assigns.
+fn bounds_once(n: u8) -> u8 {
+    let mut hi: u8 = n;
+    let mut passes: u8 = 0;
+    for i in 0..hi {
+        hi = 0;
+        passes = passes.wrapping_add(1);
+    }
+    passes
+}
+
+// The facts of the range are in scope in the body, afresh on each pass.
+fn bounded(n: u8) -> u8 {
+    let mut last: u8 = 0;
+    for i in 3..n {
+        prove!(3 <= i);
+        prove!(i < n);
+        last = i;
+    }
+    last
+}
+
+fn bounded_through(n: u8) -> u8 {
+    let mut last: u8 = 0;
+    for i in 3..=n {
+        prove!(i <= n);
+        last = i;
+    }
+    last
+}
+
+//~ proofs: 3
+//~ run: sum_from(-3, 3) => -3
+//~ run: sum_from(3, -3) => 0
+//~ run: sum_through(-3, 3) => 0
+//~ run: sum_through(-2147483648, -2147483647) => 1
+//~ run: every_byte() => (256, 255)
+//~ run: none(0) => 7
+//~ run: none(9) => 7
+//~ run: bounds_once(5) => 5
+//~ run: bounded(2) => 0
+//~ run: bounded(6) => 5
+//~ run: bounded_through(6) => 6
+//~ rust: for i in lo..=hi {
+//~ rust: for i in 0_u8..=255_u8 {
+//~ rust: for i in n..0_u8 {

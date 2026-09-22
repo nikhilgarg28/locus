@@ -1,125 +1,437 @@
-//! Loops: `loop` with its state and result, the bounded `for`, and the
-//! `break` and `continue` that leave or advance them.
+//! Loops: `loop`, `while`, and `for` over a range, with `break` and
+//! `continue`.
+//!
+//! What a loop carries, in the check IR, is the tuple of the bindings
+//! declared outside it that its body assigns, or for a `while` its
+//! condition (`Carried`). The elaborator finds that set by a scan of the
+//! source before elaborating the body (`assigned_outside`), so that the body
+//! works on fresh versions of those bindings, which is what lowering gives
+//! them, and a proof in the body speaks of the version the checker binds.
+//! After the loop each carried binding is at a version bound by projection
+//! from the loop's result, exactly as after a branch that assigns
+//! (`mutation.rs`); a `loop`'s value, what its `break` supplies, is the last
+//! field of that result. Nothing here is trusted: lowering computes the
+//! carried set itself and rejects a tree that names another, and a wrong
+//! version in a proof is a proof the kernel rejects.
+//!
+//! The state-passing forms these replace, `loop (state) -> R`,
+//! `for i in lo..hi (state)`, and `continue(next)`, are still parsed and
+//! are reported with the new spelling (`removed_loop_form`).
 
-use crate::ast;
-use crate::kernel::{HypId, MachineInt, Proof, Term, Type, VarId, check_proof};
+use crate::ast::{self, ExprKind, PatternKind, RangeKind, StatementKind};
+use crate::diagnostic::Diagnostic;
+use crate::kernel::{HypId, Term, Type, VarId};
 use crate::source::Span;
-use crate::typed::{self, Binder, Expr, is_pure};
+use crate::typed::{self, Binder, Carried, Expr};
 
 use super::env::{Elab, Env, LoopTarget};
 use super::exprs::{Value, unit_type};
-use super::items::{FoundProof, HoleReport};
 use super::literals::untyped_literal;
-use super::types::tuple_over;
+use super::mutation::{ArmEnd, Entry};
 
-impl Env<'_> {
-    /// The state binders of a loop, whose types may mention `index` and the
-    /// state before them, and the initial values, which may not.
-    fn loop_state(
-        &mut self,
-        state: &[ast::StateParameter],
-        index: Option<(&Binder, &Term)>,
-    ) -> Elab<Vec<(Binder, Expr)>> {
-        let mark = self.mark();
-        let binders = (|| {
-            if let Some((index, _)) = index {
-                self.declare(
-                    index,
-                    false,
-                    state
-                        .first()
-                        .map_or(Span::new(self.source.id, 0, 0), |s| s.span),
-                )?;
-            }
-            self.telescope(
-                state
-                    .iter()
-                    .map(|parameter| (Some(&parameter.name), &parameter.ty, parameter.span)),
-            )
-        })();
-        self.close(mark);
-        let binders = binders?;
+/// The names assigned somewhere in a loop's body, or in its condition,
+/// that resolve outside the loop: a name declared inside, by a `let` or a
+/// pattern, in the scope the assignment stands in, is local to the loop and
+/// is left out. The scan reads the source as the elaborator will, one scope
+/// at a time, so a name that shadows an outer one is the inner binding
+/// from its declaration on. An assignment to a name that is not a mutable
+/// binding is left to the elaborator to report.
+fn assigned_outside(body: &ast::Block, condition: Option<&ast::Expr>) -> Vec<String> {
+    let mut scan = Scan {
+        scopes: vec![Vec::new()],
+        found: Vec::new(),
+    };
+    if let Some(condition) = condition {
+        scan.expr(condition);
+    }
+    scan.block(body);
+    scan.found
+}
 
-        let mut tys: Vec<Type> = binders
+struct Scan {
+    scopes: Vec<Vec<String>>,
+    found: Vec<String>,
+}
+
+impl Scan {
+    fn declared(&self, name: &str) -> bool {
+        self.scopes
             .iter()
-            .map(|binder| match index {
-                Some((index, start)) => binder.ty.replace_var(index.id, start),
-                None => binder.ty.clone(),
-            })
-            .collect();
-        let mut result = Vec::new();
-        for (position, parameter) in state.iter().enumerate() {
-            let value = self.check(&parameter.initial, &tys[position].clone())?;
-            let term = self.term(&value, parameter.initial.span)?;
-            for later in tys[position + 1..].iter_mut() {
-                *later = later.replace_var(binders[position].id, &term);
-            }
-            result.push((binders[position].clone(), value.expr));
-        }
-        Ok(result)
+            .any(|scope| scope.iter().any(|n| n == name))
     }
 
-    fn loop_body(&mut self, body: &ast::Block, what: &str) -> Elab<typed::Block> {
-        let (block, _, never) = self.block(body, None)?;
-        if !never {
-            let message = format!("every path through {what} must end in `continue(...)`");
-            let message = if what.contains("loop") {
-                message.replace("`continue(...)`", "`continue(...)` or `break`")
-            } else {
-                message
-            };
-            return self.fail("L0216", message, body.span);
+    fn declare(&mut self, pattern: &ast::Pattern) {
+        match &pattern.kind {
+            PatternKind::Name { name, .. } => self
+                .scopes
+                .last_mut()
+                .expect("a scope is open")
+                .push(name.text.clone()),
+            PatternKind::Wildcard
+            | PatternKind::Unit
+            | PatternKind::Bool(_)
+            | PatternKind::Integer(_) => {}
+            PatternKind::Group(inner) => self.declare(inner),
+            PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.declare(part)),
+            PatternKind::Struct { fields, .. } => {
+                fields.iter().for_each(|field| self.declare(&field.pattern));
+            }
+            PatternKind::Variant { arguments, .. } => {
+                arguments
+                    .iter()
+                    .flatten()
+                    .for_each(|part| self.declare(part));
+            }
         }
+    }
+
+    fn scoped(&mut self, inside: impl FnOnce(&mut Self)) {
+        self.scopes.push(Vec::new());
+        inside(self);
+        self.scopes.pop();
+    }
+
+    fn block(&mut self, block: &ast::Block) {
+        self.scoped(|scan| {
+            for statement in &block.statements {
+                match &statement.kind {
+                    StatementKind::Let { pattern, value, .. } => {
+                        scan.expr(value);
+                        scan.declare(pattern);
+                    }
+                    StatementKind::Assign { place, value } => {
+                        scan.expr(value);
+                        let mut root = place;
+                        while let ExprKind::Member { value, .. } | ExprKind::Index { value, .. } =
+                            &root.kind
+                        {
+                            root = value;
+                        }
+                        if let ExprKind::Name(name) = &root.kind
+                            && !scan.declared(&name.text)
+                            && !scan.found.contains(&name.text)
+                        {
+                            scan.found.push(name.text.clone());
+                        }
+                    }
+                    StatementKind::Expression(expr) => scan.expr(expr),
+                    StatementKind::Error => {}
+                }
+            }
+            if let Some(tail) = &block.tail {
+                scan.expr(tail);
+            }
+        });
+    }
+
+    fn expr(&mut self, expr: &ast::Expr) {
+        match &expr.kind {
+            ExprKind::Block(block) | ExprKind::Loop { body: block, .. } => self.block(block),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.expr(condition);
+                self.block(then_branch);
+                self.expr(else_branch);
+            }
+            ExprKind::Match { scrutinee, arms } => {
+                self.expr(scrutinee);
+                for arm in arms {
+                    self.scoped(|scan| {
+                        scan.declare(&arm.pattern);
+                        scan.expr(&arm.body);
+                    });
+                }
+            }
+            ExprKind::While {
+                pattern,
+                condition,
+                body,
+            } => self.scoped(|scan| {
+                scan.expr(condition);
+                pattern.iter().for_each(|pattern| scan.declare(pattern));
+                scan.block(body);
+            }),
+            ExprKind::For {
+                pattern,
+                iterable,
+                state,
+                body,
+            } => {
+                self.expr(iterable);
+                state
+                    .iter()
+                    .for_each(|parameter| self.expr(&parameter.initial));
+                self.scoped(|scan| {
+                    scan.declare(pattern);
+                    scan.block(body);
+                });
+            }
+            ExprKind::Group(inner)
+            | ExprKind::Not(inner)
+            | ExprKind::Unary { expr: inner, .. }
+            | ExprKind::Ref { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::Member { value: inner, .. }
+            | ExprKind::Index { value: inner, .. } => self.expr(inner),
+            ExprKind::Break(inner) | ExprKind::Return(inner) => {
+                inner.iter().for_each(|inner| self.expr(inner));
+            }
+            ExprKind::Continue(items) => items.iter().flatten().for_each(|item| self.expr(item)),
+            ExprKind::Tuple(items)
+            | ExprKind::Form {
+                arguments: items, ..
+            } => {
+                items.iter().for_each(|item| self.expr(item));
+            }
+            ExprKind::Struct { fields, .. } => {
+                fields.iter().for_each(|field| self.expr(&field.value));
+            }
+            ExprKind::Range { lower, upper, .. }
+            | ExprKind::Binary {
+                left: lower,
+                right: upper,
+                ..
+            } => {
+                self.expr(lower);
+                self.expr(upper);
+            }
+            ExprKind::Call { callee, arguments } => {
+                self.expr(callee);
+                arguments.iter().for_each(|argument| self.expr(argument));
+            }
+            // A formula runs nothing and assigns nothing.
+            ExprKind::Forall { .. }
+            | ExprKind::Exists { .. }
+            | ExprKind::Name(_)
+            | ExprKind::Path(_)
+            | ExprKind::Integer(_)
+            | ExprKind::String(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Unit
+            | ExprKind::Hole
+            | ExprKind::Error => {}
+        }
+    }
+}
+
+/// What a loop's elaboration leaves for the tree: the slots of the carried
+/// bindings, the versions its body saw, its body, and its target with the
+/// exits recorded in it.
+struct Elaborated<T> {
+    slots: Vec<usize>,
+    state: Vec<Binder>,
+    inside: T,
+    target: LoopTarget,
+}
+
+impl Env<'_> {
+    /// Brings the bindings a loop carries to fresh versions for its body,
+    /// in declaration order, and declares them in the mirrored context,
+    /// where they stand for the abstract state the checker will declare.
+    fn enter_loop(
+        &mut self,
+        body: &ast::Block,
+        condition: Option<&ast::Expr>,
+        target: LoopTarget,
+        span: Span,
+    ) -> Elab<(Vec<usize>, Vec<Binder>)> {
+        let mut slots: Vec<usize> = assigned_outside(body, condition)
+            .iter()
+            .filter_map(|name| self.names.iter().rposition(|local| local.name == *name))
+            .filter(|&slot| self.names[slot].binding.is_some() && !self.names[slot].poisoned)
+            .collect();
+        slots.sort_unstable();
+        slots.dedup();
+        let mut state = Vec::new();
+        for &slot in &slots {
+            let local = &self.names[slot];
+            let inside = Binder {
+                id: VarId::fresh(),
+                name: local.name.clone(),
+                ty: local.ty.clone(),
+            };
+            let declared = self.ctx.declare_with(inside.id, inside.ty.clone(), false);
+            self.kernel(declared, span)?;
+            self.names[slot].id = inside.id;
+            self.labels.insert(inside.id, inside.name.clone());
+            self.learn_from(&Term::var(inside.id), &inside.ty);
+            state.push(inside);
+        }
+        self.loops.push(target);
+        Ok((slots, state))
+    }
+
+    /// Elaborates a loop's inside under its own scope: `inside` runs after
+    /// the carried bindings are at their fresh versions and the target is
+    /// in place, and whatever it bound or assumed ends with the loop.
+    fn in_loop<T>(
+        &mut self,
+        body: &ast::Block,
+        condition: Option<&ast::Expr>,
+        target: LoopTarget,
+        span: Span,
+        inside: impl FnOnce(&mut Self) -> Elab<T>,
+    ) -> Elab<Elaborated<T>> {
+        let mark = self.mark();
+        let elaborated = (|| {
+            let (slots, state) = self.enter_loop(body, condition, target, span)?;
+            let inside = inside(self);
+            let target = self.loops.pop().expect("the target pushed at entry");
+            Ok(Elaborated {
+                slots,
+                state,
+                inside: inside?,
+                target,
+            })
+        })();
+        self.close(mark);
+        // The versions before the loop; the join brings in those after it.
+        if let Ok(elaborated) = &elaborated {
+            self.restore_versions(&elaborated.target.entry);
+        }
+        elaborated
+    }
+
+    /// After a loop: the carried bindings at their versions after it, and
+    /// for a `loop` its value, joined from the exits as a branch's arms
+    /// are. Returns what the tree carries and the loop's type.
+    fn leave_loop(
+        &mut self,
+        entry: &Entry,
+        elaborated: &Elaborated<impl Sized>,
+        fallback: Type,
+        value: Option<(VarId, HypId)>,
+        span: Span,
+    ) -> Elab<(Carried, Type)> {
+        let assigned = entry.positions(&elaborated.slots);
+        let (tuple, joins, ty) = self.join_over(
+            entry,
+            &assigned,
+            &elaborated.target.exits,
+            fallback,
+            value,
+            span,
+        )?;
+        Ok((Carried { tuple, joins }, ty))
+    }
+
+    /// The body of a loop, which produces no value: it ends in `()`, or in
+    /// a transfer of control.
+    fn loop_body(&mut self, body: &ast::Block) -> Elab<typed::Block> {
+        let (block, _, _) = self.block(body, Some(&unit_type()))?;
         Ok(block)
     }
 
+    /// `loop { body }`. Its value is what `break` supplies, checked against
+    /// the type expected of the loop when there is one; a loop that never
+    /// breaks produces none.
     pub(super) fn loop_(
         &mut self,
-        state: &[ast::StateParameter],
-        result: &ast::Type,
+        body: &ast::Block,
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
+        let entry = self.mutable_entry();
+        let target = LoopTarget {
+            result: expected.cloned(),
+            valued: true,
+            entry: entry.clone(),
+            exits: Vec::new(),
+        };
+        let elaborated = self.in_loop(body, None, target, span, |env| env.loop_body(body))?;
+        let never = elaborated.target.exits.is_empty();
+        let (result, equation) = (VarId::fresh(), HypId::fresh());
+        let fallback = expected.cloned().unwrap_or_else(unit_type);
+        let (carried, ty) = self.leave_loop(
+            &entry,
+            &elaborated,
+            fallback,
+            Some((result, equation)),
+            span,
+        )?;
+        Ok(Value {
+            expr: Expr::Loop {
+                state: elaborated.state,
+                carried,
+                ty: ty.clone(),
+                result,
+                equation,
+                body: elaborated.inside,
+            },
+            ty,
+            never,
+        })
+    }
+
+    /// `while condition { body }`. The condition is elaborated inside the
+    /// loop, at the versions each pass starts with, and the body under the
+    /// fact that it held; its `false` is an exit at the versions the
+    /// condition left. Nothing of the exit test is known after the loop
+    /// yet: carrying it out needs the evidence of M4.
+    pub(super) fn while_(
+        &mut self,
+        condition: &ast::Expr,
         body: &ast::Block,
         span: Span,
     ) -> Elab<Value> {
-        let state = self.loop_state(state, None)?;
-        let result_ty = self.ty(result)?;
-        let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();
-
-        let mark = self.mark();
-        let body_result = (|| {
-            for binder in &binders {
-                self.declare(binder, false, span)?;
-            }
-            self.loops.push(LoopTarget {
-                state: binders.clone(),
-                advance: None,
-                result: Some(result_ty.clone()),
-            });
-            let block = self.loop_body(body, "a loop");
-            self.loops.pop();
-            block
-        })();
-        self.close(mark);
-        let body = body_result?;
-
-        let result = VarId::fresh();
-        self.declare_result(result, &result_ty, span)?;
+        let entry = self.mutable_entry();
+        let target = LoopTarget {
+            result: None,
+            valued: false,
+            entry: entry.clone(),
+            exits: Vec::new(),
+        };
+        let elaborated = self.in_loop(body, Some(condition), target, span, |env| {
+            let condition_value = env.check(condition, &Type::Bool)?;
+            let (tested, negated) = env.tested(&condition_value, condition.span)?;
+            let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
+            let versions = env.versions_now(&entry);
+            env.loops
+                .last_mut()
+                .expect("inside the loop")
+                .exits
+                .push(ArmEnd {
+                    versions,
+                    ty: unit_type(),
+                    never: false,
+                });
+            let mark = env.mark();
+            let holds = Term::eq(Type::Bool, tested, Term::Bool(!negated));
+            let block = env
+                .assume(then_fact, holds, condition.span)
+                .and_then(|()| env.loop_body(body));
+            env.close(mark);
+            Ok((condition_value.expr, then_fact, else_fact, block?))
+        })?;
+        let (carried, _) = self.leave_loop(&entry, &elaborated, unit_type(), None, span)?;
+        let (condition, then_fact, else_fact, body) = elaborated.inside;
         Ok(Value::new(
-            Expr::Loop {
-                state,
-                result_ty: result_ty.clone(),
+            Expr::While {
+                condition: Box::new(condition),
+                then_fact,
+                else_fact,
+                state: elaborated.state,
+                carried,
                 body,
-                result,
             },
-            result_ty,
+            unit_type(),
         ))
     }
 
+    /// `for index in lo..hi { body }`, or `lo..=hi`. The bounds have one
+    /// machine type, the index's, and are evaluated before the loop; the
+    /// body knows `lo <= index` and `index < hi`, or `index <= hi`, afresh
+    /// on each pass, and nothing is asked about the order of the bounds,
+    /// since an empty range runs no pass.
     pub(super) fn for_(
         &mut self,
         index: &ast::Name,
+        kind: RangeKind,
         lower: &ast::Expr,
         upper: &ast::Expr,
-        state: &[ast::StateParameter],
         body: &ast::Block,
         span: Span,
     ) -> Elab<Value> {
@@ -144,148 +456,145 @@ impl Env<'_> {
         let lo_term = self.term(&lo, lower.span)?;
         let hi_term = self.term(&hi, upper.span)?;
         let view = |x: &Term| Term::view(ty, x.clone());
-        let ordered =
-            self.range_evidence(ty, &lo_term, &hi_term, lower.span.through(upper.span))?;
-
         let index = Binder {
             id: VarId::fresh(),
             name: index.text.clone(),
             ty: Type::machine(ty),
         };
-        let state = self.loop_state(state, Some((&index, &lo_term)))?;
-        let binders: Vec<Binder> = state.iter().map(|(binder, _)| binder.clone()).collect();
         let (lower_fact, upper_fact) = (HypId::fresh(), HypId::fresh());
+        let inclusive = kind == RangeKind::Inclusive;
 
-        let mark = self.mark();
-        let body_result = (|| {
-            self.declare(&index, false, span)?;
-            for binder in &binders {
-                self.declare(binder, false, span)?;
-            }
-            self.assume(
+        let entry = self.mutable_entry();
+        let target = LoopTarget {
+            result: None,
+            valued: false,
+            entry: entry.clone(),
+            exits: Vec::new(),
+        };
+        let elaborated = self.in_loop(body, None, target, span, |env| {
+            env.declare(&index, false, span)?;
+            env.assume(
                 lower_fact,
                 Term::int_le(view(&lo_term), view(&index.term())),
                 span,
             )?;
-            self.assume(
-                upper_fact,
-                Term::int_lt(view(&index.term()), view(&hi_term)),
-                span,
-            )?;
-            self.loops.push(LoopTarget {
-                state: binders.clone(),
-                advance: Some((index.id, Term::successor(ty, index.term()))),
-                result: None,
-            });
-            let block = self.loop_body(body, "the body of a `for`");
-            self.loops.pop();
-            block
-        })();
-        self.close(mark);
-        let body = body_result?;
-
-        // The final state: the telescope at the upper bound.
-        let ty = tuple_over(&binders).replace_var(index.id, &hi_term);
-        let result = VarId::fresh();
-        let expr = Expr::For {
-            index,
-            lower: lower_fact,
-            upper: upper_fact,
-            lo: Box::new(lo.expr),
-            hi: Box::new(hi.expr),
-            ordered,
-            state,
-            body,
-            result,
-        };
-        if !is_pure(&expr) {
-            self.declare_result(result, &ty, span)?;
-        }
-        Ok(Value::new(expr, ty))
+            let below = if inclusive {
+                Term::int_le(view(&index.term()), view(&hi_term))
+            } else {
+                Term::int_lt(view(&index.term()), view(&hi_term))
+            };
+            env.assume(upper_fact, below, span)?;
+            env.loop_body(body)
+        })?;
+        let (carried, _) = self.leave_loop(&entry, &elaborated, unit_type(), None, span)?;
+        Ok(Value::new(
+            Expr::For {
+                index,
+                lower: lower_fact,
+                upper: upper_fact,
+                lo: Box::new(lo.expr),
+                hi: Box::new(hi.expr),
+                inclusive,
+                state: elaborated.state,
+                carried,
+                body: elaborated.inside,
+            },
+            unit_type(),
+        ))
     }
 
-    /// Evidence that the range `lo..hi` is ordered, `lo <= hi` over the
-    /// views. A range over an unsigned type that starts at `0` is ordered by
-    /// the lemma `<T>_zero_le`, which the elaborator applies here because
-    /// the range has no place to write it; any other range needs the fact
-    /// in scope, as a hole does.
-    fn range_evidence(&mut self, ty: MachineInt, lo: &Term, hi: &Term, span: Span) -> Elab<Proof> {
-        let view = |x: &Term| Term::view(ty, x.clone());
-        let claim = Term::int_le(view(lo), view(hi));
-        let zero_le = self
-            .theory
-            .machine(ty)
-            .unsigned
-            .map(|lemmas| lemmas.zero_le);
-        let (Some(zero_le), true) = (zero_le, *lo == Term::machine_int(ty, 0)) else {
-            return self.solve(&claim, span, None);
-        };
-        let started = std::time::Instant::now();
-        let proof = Proof::OfTerm(Term::call(Term::Fn(zero_le), vec![hi.clone()]));
-        let checked = check_proof(&mut self.ctx, &proof, &claim);
-        self.kernel(checked, span)?;
-        let tier = self
-            .theory
-            .lemma_names()
-            .into_iter()
-            .find(|(_, id)| *id == zero_le)
-            .map_or("zero_le", |(name, _)| name);
-        self.holes.push(HoleReport {
-            span,
-            solved: true,
-            tier,
-            proof_size: super::solve::proof_size(&proof),
-            micros: started.elapsed().as_micros(),
-            found: Some(FoundProof {
-                context: self.ctx.clone(),
-                claim,
-                proof: proof.clone(),
-            }),
-        });
-        Ok(proof)
-    }
-
-    pub(super) fn break_(&mut self, expr: &ast::Expr, value: &ast::Expr) -> Elab<Value> {
-        let Some(target) = self.loops.last().cloned() else {
+    /// `break`, or `break value` in a `loop`. The first `break value` of a
+    /// loop with no expected type fixes the loop's type, unless that type
+    /// speaks of a version made inside the loop, which later breaks may not
+    /// share; then each break is inferred on its own and the join reconciles
+    /// them over the versions after the loop.
+    pub(super) fn break_(&mut self, expr: &ast::Expr, value: Option<&ast::Expr>) -> Elab<Value> {
+        let Some(target) = self.loops.last() else {
             return self.fail("L0217", "`break` outside a loop", expr.span);
         };
-        let Some(result) = target.result else {
-            self.diagnostics.push(
-                crate::diagnostic::Diagnostic::error(
-                    "L0218",
-                    "a bounded `for` runs to the end of its range and has no `break`",
-                    expr.span,
-                )
-                .note("carry a `bool` in the state to stop doing work early"),
-            );
-            return Err(());
+        let (valued, result) = (target.valued, target.result.clone());
+        let value = match value {
+            None => None,
+            Some(_) if !valued => {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "L0218",
+                        "`break` with a value leaves a `while` or a `for`, which produce no value",
+                        expr.span,
+                    )
+                    .note("only a `loop` has the value of its `break`; assign the value to a `let mut` declared before the loop and `break`"),
+                );
+                return Err(());
+            }
+            Some(value) => Some(match &result {
+                Some(ty) => self.check(value, ty)?,
+                None => self.infer(value)?,
+            }),
         };
-        let value = self.check(value, &result)?;
+        let ty = value
+            .as_ref()
+            .map_or_else(unit_type, |value| value.ty.clone());
+        if let (None, Some(result)) = (&value, &result)
+            && !crate::kernel::same_type(result, &ty)
+        {
+            let shown = self.show_type(result);
+            return self.fail(
+                "L0220",
+                format!("this `break` carries no value, and the loop produces `{shown}`"),
+                expr.span,
+            );
+        }
+        let versions = {
+            let target = self.loops.last().expect("checked above");
+            self.versions_now(&target.entry)
+        };
+        let target = self.loops.last_mut().expect("checked above");
+        if target.result.is_none() && !Env::mentions_arm_version(&target.entry, &versions, &ty) {
+            target.result = Some(ty.clone());
+        }
+        target.exits.push(ArmEnd {
+            versions,
+            ty,
+            never: false,
+        });
         Ok(Value {
-            expr: Expr::Break(Box::new(value.expr)),
+            expr: Expr::Break(value.map(|value| Box::new(value.expr))),
             ty: unit_type(),
             never: true,
         })
     }
 
-    pub(super) fn continue_(&mut self, expr: &ast::Expr, arguments: &[ast::Expr]) -> Elab<Value> {
-        let Some(target) = self.loops.last().cloned() else {
+    pub(super) fn continue_(&mut self, expr: &ast::Expr) -> Elab<Value> {
+        if self.loops.is_empty() {
             return self.fail("L0217", "`continue` outside a loop", expr.span);
-        };
-        let mut tys: Vec<Type> = target
-            .state
-            .iter()
-            .map(|binder| match &target.advance {
-                Some((index, next)) => binder.ty.replace_var(*index, next),
-                None => binder.ty.clone(),
-            })
-            .collect();
-        let ids: Vec<VarId> = target.state.iter().map(|binder| binder.id).collect();
-        let next = self.arguments(arguments, &ids, &mut tys, "the loop's state", expr.span)?;
+        }
         Ok(Value {
-            expr: Expr::Continue(next),
+            expr: Expr::Continue,
             ty: unit_type(),
             never: true,
         })
+    }
+
+    /// One of the state-passing loop forms, which M3 removed: reported with
+    /// the spelling that replaced it. The rewrite is not mechanical, so no
+    /// fix is offered.
+    pub(super) fn removed_loop_form<T>(&mut self, what: &str, span: Span) -> Elab<T> {
+        let (message, note) = match what {
+            "loop" => (
+                "the state-passing `loop (state) -> R { ... }` was removed; write `loop { ... }`",
+                "declare the state with `let mut` before the loop and assign it in the body; `break value` gives the loop its value, and a plain `continue` starts the next pass",
+            ),
+            "for" => (
+                "the state-passing `for i in lo..hi (state) { ... }` was removed; write `for i in lo..hi { ... }`",
+                "declare the state with `let mut` before the loop and assign it in the body; the loop's value is `()`, and what it assigned is read after it",
+            ),
+            _ => (
+                "`continue(next)` was removed; write `continue`",
+                "assign the loop's `let mut` variables in the body; a `continue`, and the end of the body, start the next pass with their current values",
+            ),
+        };
+        self.diagnostics
+            .push(Diagnostic::error("L0234", message, span).note(note));
+        Err(())
     }
 }

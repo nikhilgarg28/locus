@@ -1,0 +1,31 @@
+// Loop forms that parse and are not in Locus yet: `while let`, which waits
+// for the patterns of E9, and `for` over anything but a range, which waits
+// for iterators.
+enum Step {
+    More(u8),
+    Done,
+}
+
+fn drain(step: Step) -> u8 {
+    let mut seen: u8 = 0;
+    while let Step::More(n) = step { //~ error: L0290 `while let` is not in Locus yet
+        seen = n;
+    }
+    seen
+}
+
+fn each(pair: (u8, u8)) -> u8 {
+    let mut last: u8 = 0;
+    for item in pair { //~ error: L0290 a `for` over anything but a range
+        last = item;
+    }
+    last
+}
+
+fn destructure(n: u8) -> u8 {
+    let mut last: u8 = 0;
+    for (a, b) in 0..n { //~ error: L0290 the index of a `for` over a range is a name
+        last = a;
+    }
+    last
+}
