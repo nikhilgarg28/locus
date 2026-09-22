@@ -9,8 +9,9 @@
 //! Implemented so far: gates K1 to K6 of the kernel contract in `atlas.html`,
 //! `Int`, the integers of the logic, by axioms and native evaluation, the
 //! model of each machine integer type over `Int`, the table of primitive
-//! operations on those types, and the rule that checks a certificate of
-//! linear arithmetic.
+//! operations on those types, the runtime comparisons at every machine type
+//! with their reflection into the order of the views, and the rule that
+//! checks a certificate of linear arithmetic.
 
 mod check;
 mod classical;
@@ -48,6 +49,6 @@ pub use machine::MachineInt;
 pub use nat::{Natural, ParseNumberError};
 pub use ops::{Op, Panic, Row};
 pub use term::{
-    ArmBuilder, Axiom, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,
+    ArmBuilder, Axiom, CmpOp, EnumId, FnId, ForLoop, HypId, HypRef, Prim, Proof, ProofArm, PropId,
     StructId, Term, TermArm, Type, VarId,
 };

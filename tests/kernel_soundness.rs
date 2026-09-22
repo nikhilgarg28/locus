@@ -41,8 +41,8 @@ use locus::elab::elaborate;
 use locus::kernel::derive::{Chain, fold_claim, symm_at, unfold_claim};
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, MachineInt, Mode, Op,
-    Prelude, Prim, Proof, ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof,
+    Axiom, Binding, CmpOp, Context, Definitions, FnId, HypId, HypRef, Integer, MachineInt, Mode,
+    Op, Prelude, Prim, Proof, ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof,
     infer_proof, infer_term,
 };
 use locus::parser::parse;
@@ -806,8 +806,27 @@ fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
                 .collect::<Option<_>>()?;
             machine_of(ty, machine_op(op, ty, &numbers)?)
         }
+        // A comparison at a machine type: the comparison of the numbers,
+        // which are the views.
+        (Prim::Cmp(op, ty), [a, b]) => {
+            let (a, b) = (machine_number(ty, a)?, machine_number(ty, b)?);
+            Value::Bool(match op {
+                CmpOp::Eq => a == b,
+                CmpOp::Lt => a < b,
+                CmpOp::Le => a <= b,
+            })
+        }
         _ => return None,
     })
+}
+
+/// The comparison a comparison is confused with, as for the `u8` model's.
+fn cmp_sibling(op: CmpOp) -> CmpOp {
+    match op {
+        CmpOp::Le => CmpOp::Lt,
+        CmpOp::Lt => CmpOp::Le,
+        CmpOp::Eq => CmpOp::Lt,
+    }
 }
 
 // --- Witnesses: assignments under which every hypothesis holds ------------------
@@ -1304,6 +1323,7 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 Prim::View(_) | Prim::Wrap(_) | Prim::Cast(..) => None,
                 // A row of the table: the sibling operation at the same type.
                 Prim::Op(op, ty) => Some(Prim::Op(op_sibling(*op), *ty)),
+                Prim::Cmp(op, ty) => Some(Prim::Cmp(cmp_sibling(*op), *ty)),
             };
             if let Some(sibling) = sibling {
                 out.push(Term::Prim(sibling, arguments.clone()));
@@ -1319,6 +1339,10 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 Prim::Op(op, ty) => neighbours(*ty)
                     .into_iter()
                     .map(|other| Prim::Op(*op, other))
+                    .collect(),
+                Prim::Cmp(op, ty) => neighbours(*ty)
+                    .into_iter()
+                    .map(|other| Prim::Cmp(*op, other))
                     .collect(),
                 Prim::Cast(from, to) => {
                     let mut casts: Vec<Prim> = neighbours(*to)
@@ -1616,6 +1640,7 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
         Axiom::WrappingAddModel(..) => Axiom::WrappingAddModel(take(), take()),
         Axiom::WrappingSubModel(..) => Axiom::WrappingSubModel(take(), take()),
         Axiom::Reflect(_, flag) => Axiom::Reflect(take(), *flag),
+        Axiom::CmpReflect(_, flag) => Axiom::CmpReflect(take(), *flag),
         Axiom::IntAddAssoc(..) => Axiom::IntAddAssoc(take(), take(), take()),
         Axiom::IntAddComm(..) => Axiom::IntAddComm(take(), take()),
         Axiom::IntAddZero(_) => Axiom::IntAddZero(take()),
@@ -1668,6 +1693,7 @@ fn machine_types(axiom: &Axiom) -> Vec<MachineInt> {
         | Axiom::WrappingAddModel(..)
         | Axiom::WrappingSubModel(..)
         | Axiom::Reflect(..)
+        | Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -1726,6 +1752,7 @@ fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
         | Axiom::WrappingAddModel(..)
         | Axiom::WrappingSubModel(..)
         | Axiom::Reflect(..)
+        | Axiom::CmpReflect(..)
         | Axiom::IntAddAssoc(..)
         | Axiom::IntAddComm(..)
         | Axiom::IntAddZero(_)
@@ -1772,6 +1799,8 @@ fn every_axiom_at(t: &Term) -> Vec<Axiom> {
         Axiom::WrappingSubModel(t(), t()),
         Axiom::Reflect(t(), true),
         Axiom::Reflect(t(), false),
+        Axiom::CmpReflect(t(), true),
+        Axiom::CmpReflect(t(), false),
         Axiom::IntAddAssoc(t(), t(), t()),
         Axiom::IntAddComm(t(), t()),
         Axiom::IntAddZero(t()),
@@ -2177,7 +2206,8 @@ impl<'a> Material<'a> {
         let mut terms: Vec<Term> = axiom.terms().into_iter().cloned().collect();
         let arity = terms.len();
         let own_types = machine_types(axiom);
-        let has_extra = matches!(axiom, Axiom::Reflect(..)) || !own_types.is_empty();
+        let has_extra =
+            matches!(axiom, Axiom::Reflect(..) | Axiom::CmpReflect(..)) || !own_types.is_empty();
         let choice = rng.below(if has_extra { 4 } else { 3 });
         match choice {
             // One term perturbed, or replaced by any other.
@@ -2226,6 +2256,7 @@ impl<'a> Material<'a> {
             }
             _ => match axiom {
                 Axiom::Reflect(comparison, flag) => Axiom::Reflect(comparison.clone(), !flag),
+                Axiom::CmpReflect(comparison, flag) => Axiom::CmpReflect(comparison.clone(), !flag),
                 // An axiom about the table, half the time at the sibling
                 // operation instead: a row that does not exist, a row with
                 // no exact statement, or an axiom about another operation,
@@ -3205,6 +3236,67 @@ fn hand_built(world: &World) -> Vec<Triple> {
             prelude.not_prop(u8_eq(x, Term::U8(0))),
             proof,
         );
+    }
+
+    // Reflection of runtime comparisons at a machine type: each comparison
+    // at two types, in both directions, with the claim written from the
+    // test's own reading of the order of the views.
+    for (ty, op) in [
+        (U16, CmpOp::Le),
+        (U16, CmpOp::Lt),
+        (U16, CmpOp::Eq),
+        (I32, CmpOp::Le),
+        (I32, CmpOp::Lt),
+        (I32, CmpOp::Eq),
+    ] {
+        let name = format!("cmp_reflect_{}_{}", op.name(), ty.name());
+        let claim_of = |a: &Term, b: &Term| match op {
+            CmpOp::Eq => int_eq(Term::view(ty, a.clone()), Term::view(ty, b.clone())),
+            CmpOp::Lt => Term::int_lt(Term::view(ty, a.clone()), Term::view(ty, b.clone())),
+            CmpOp::Le => Term::int_le(Term::view(ty, a.clone()), Term::view(ty, b.clone())),
+        };
+        {
+            let mut scene = Scene::new(&world.definitions);
+            let (a, b) = (
+                scene.declare(Type::machine(ty)),
+                scene.declare(Type::machine(ty)),
+            );
+            let comparison = Term::cmp(op, ty, a.clone(), b.clone());
+            let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(true)));
+            let proof = Proof::implies_elim(
+                Proof::Axiom(Axiom::CmpReflect(comparison, true)),
+                Proof::hyp(h),
+            );
+            add(&format!("{name}_true"), scene, claim_of(&a, &b), proof);
+        }
+        {
+            let mut scene = Scene::new(&world.definitions);
+            let a = scene.declare(Type::machine(ty));
+            let b = lit(ty, 3);
+            let comparison = Term::cmp(op, ty, a.clone(), b.clone());
+            let h = scene.assume(Term::eq(Type::Bool, comparison.clone(), Term::Bool(false)));
+            let proof = Proof::implies_elim(
+                Proof::Axiom(Axiom::CmpReflect(comparison, false)),
+                Proof::hyp(h),
+            );
+            add(
+                &format!("{name}_false"),
+                scene,
+                prelude.not_prop(claim_of(&a, &b)),
+                proof,
+            );
+        }
+    }
+    {
+        // A comparison at a literal pair, evaluated, then reflected.
+        let scene = Scene::new(&world.definitions);
+        let comparison = Term::cmp(CmpOp::Lt, I8, lit(I8, -128), lit(I8, 127));
+        let proof = Proof::implies_elim(
+            Proof::Axiom(Axiom::CmpReflect(comparison.clone(), true)),
+            Proof::Evaluate(comparison),
+        );
+        let claim = Term::int_lt(Term::view(I8, lit(I8, -128)), Term::view(I8, lit(I8, 127)));
+        add("cmp_reflect_evaluated_i8", scene, claim, proof);
     }
 
     // Evaluation.
@@ -4391,7 +4483,21 @@ fn theory_triples(world: &World) -> Vec<Triple> {
         ("u8_eq_symm", theory.u8_eq_symm),
     ];
     let mut triples = Vec::new();
-    for (name, id) in lemmas {
+    // The lemmas about `Int` and about the machine types come from the
+    // table of names that E5 exposes to source, so a lemma added there is
+    // attacked here without being listed twice. The family about a machine
+    // type is one code path declared at each type, so it is attacked at an
+    // unsigned and a signed type, neither of them `u8`, whose every value
+    // the oracle would try under each quantifier; `tests/kernel_lemmas.rs`
+    // uses every lemma at every type.
+    let named: Vec<(&str, FnId)> = theory
+        .lemma_names()
+        .into_iter()
+        .filter(|(name, _)| {
+            name.starts_with("int_") || name.starts_with("u16_") || name.starts_with("i32_")
+        })
+        .collect();
+    for (name, id) in lemmas.iter().copied().chain(named.iter().copied()) {
         let origin = format!("theory/{name}");
         let before = triples.len();
         let unplaced = math_triples(&world.definitions, id, &origin, &mut triples);
@@ -4527,15 +4633,35 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
             let sample = machine_sample(ty);
             return (ty, lit(ty, *rng.pick(&sample).unwrap()));
         }
-        match rng.below(3) {
+        match rng.below(4) {
             0 => (ty, Term::wrap(ty, integer(rng, world, depth - 1))),
             1 => {
                 let (from, value) = machine(rng, world, depth - 1);
                 (ty, Term::cast(from, ty, value))
             }
-            _ => {
+            2 => {
                 let (inner, value) = machine(rng, world, depth - 1);
                 (inner, Term::wrap(inner, Term::view(inner, value)))
+            }
+            // A comparison at a machine type chooses between two literals.
+            _ => {
+                let (inner, left) = machine(rng, world, depth - 1);
+                let right = Term::wrap(inner, integer(rng, world, depth - 1));
+                let op = *rng.pick(&CmpOp::ALL).unwrap();
+                let sample = machine_sample(ty);
+                let (no, yes) = (
+                    lit(ty, *rng.pick(&sample).unwrap()),
+                    lit(ty, *rng.pick(&sample).unwrap()),
+                );
+                let chosen = Term::case(
+                    Term::cmp(op, inner, left, right),
+                    Type::machine(ty),
+                    vec![
+                        (0, Box::new(move |_, _| no)),
+                        (0, Box::new(move |_, _| yes)),
+                    ],
+                );
+                (ty, chosen)
             }
         }
     }

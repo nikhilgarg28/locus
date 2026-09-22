@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use locus::kernel::derive::{Chain, symm_at};
 use locus::kernel::{
-    Axiom, Context, Definitions, HypRef, Integer, KernelError, MAX_DEPTH, MAX_EVAL_DEPTH,
+    Axiom, CmpOp, Context, Definitions, HypRef, Integer, KernelError, MAX_DEPTH, MAX_EVAL_DEPTH,
     MachineInt, Mode, Op, Prelude, Prim, Proof, Term, Type, check_proof, infer_proof, infer_term,
 };
 
@@ -1475,10 +1475,11 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::CastDef(MachineInt::U8, MachineInt::U8, t()),
         Axiom::OpModel(Op::Add, MachineInt::U8, vec![t(), t()]),
         Axiom::OpExact(Op::Add, MachineInt::U8, vec![t(), t()]),
+        Axiom::CmpReflect(t(), true),
     ]
 }
 
-const AXIOMS: usize = 43;
+const AXIOMS: usize = 44;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1525,6 +1526,7 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::CastDef(..) => 40,
         Axiom::OpModel(..) => 41,
         Axiom::OpExact(..) => 42,
+        Axiom::CmpReflect(..) => 43,
     }
 }
 
@@ -1629,7 +1631,7 @@ fn rule_index(proof: &Proof) -> usize {
     }
 }
 
-const PRIMS: [Prim; 20] = [
+const PRIMS: [Prim; 21] = [
     Prim::WrappingAdd,
     Prim::WrappingSub,
     Prim::U8Eq,
@@ -1650,6 +1652,7 @@ const PRIMS: [Prim; 20] = [
     Prim::Wrap(MachineInt::U8),
     Prim::Cast(MachineInt::U8, MachineInt::U8),
     Prim::Op(Op::Add, MachineInt::U8),
+    Prim::Cmp(CmpOp::Le, MachineInt::U8),
 ];
 
 fn prim_index(prim: Prim) -> usize {
@@ -1674,6 +1677,7 @@ fn prim_index(prim: Prim) -> usize {
         Prim::Wrap(_) => 17,
         Prim::Cast(..) => 18,
         Prim::Op(..) => 19,
+        Prim::Cmp(..) => 20,
     }
 }
 
@@ -1710,6 +1714,14 @@ fn kernel_names() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = axioms.iter().map(Axiom::name).collect();
     names.extend(rules.iter().map(Proof::rule_name));
     names.extend(PRIMS.iter().map(|prim| prim.name()));
+    // The sample above shows one of the three comparisons; the contract
+    // names the other two as well.
+    names.extend(
+        CmpOp::ALL
+            .iter()
+            .filter(|op| **op != CmpOp::Le)
+            .map(|op| op.name()),
+    );
     let mut distinct = names.clone();
     distinct.sort_unstable();
     distinct.dedup();

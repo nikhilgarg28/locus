@@ -678,6 +678,7 @@ fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
         Prim::Cast(from, to) => (vec![Type::machine(from)], Type::machine(to)),
         // A row that does not exist is rejected before this is asked.
         Prim::Op(op, ty) => (vec![Type::machine(ty); op.arity()], Type::machine(ty)),
+        Prim::Cmp(_, ty) => (vec![Type::machine(ty); 2], Type::Bool),
     }
 }
 
@@ -711,6 +712,9 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
                 .collect::<Option<_>>()?;
             Term::machine(ty, row.compute(&values))
         }
+        // A comparison of two values of a type is the comparison of their
+        // numbers, which is what `cmp_reflect` states of the views.
+        (Prim::Cmp(op, ty), [a, b]) => Term::Bool(op.holds(&machine(ty, a)?, &machine(ty, b)?)),
         (Prim::WrappingAdd, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_add(*b)),
         (Prim::WrappingSub, [Term::U8(a), Term::U8(b)]) => Term::U8(a.wrapping_sub(*b)),
         (Prim::U8Eq, [Term::U8(a), Term::U8(b)]) => Term::Bool(a == b),
@@ -777,7 +781,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::CastDef(ty, _, _)
         | Axiom::OpModel(_, ty, _)
         | Axiom::OpExact(_, ty, _) => Some(Type::machine(*ty)),
-        Axiom::Reflect(..) => None,
+        Axiom::Reflect(..) | Axiom::CmpReflect(..) => None,
     };
     if let Some(expected) = &expected {
         for term in axiom.terms() {
@@ -934,7 +938,36 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         Axiom::OpExact(op, ty, operands) => table_row(op, ty, &operands)?
             .exact_statement(&operands)
             .ok_or(KernelError::NoOverflow(op, ty))?,
+        // Reflection at every machine type: the comparison decides the
+        // proposition of the same name about the views. Typing the
+        // comparison types its operands at the type it carries.
+        Axiom::CmpReflect(comparison, flag) => {
+            expect_type(ctx, &comparison, &Type::Bool, Mode::Logical)?;
+            let claim = machine_comparison_claim(&comparison)
+                .ok_or_else(|| KernelError::NoComputationStep(comparison.clone()))?;
+            let observed = Term::eq(Type::Bool, comparison, Term::Bool(flag));
+            if flag {
+                Term::implies(observed, claim)
+            } else {
+                Term::implies(observed, prelude.not_prop(claim))
+            }
+        }
     })
+}
+
+/// The proposition a runtime comparison at a machine type decides, over
+/// the views of its operands.
+fn machine_comparison_claim(comparison: &Term) -> Option<Term> {
+    let Term::Prim(Prim::Cmp(op, ty), arguments) = comparison else {
+        return None;
+    };
+    let [left, right] = arguments.as_slice() else {
+        return None;
+    };
+    Some(op.claim(
+        Term::view(*ty, left.clone()),
+        Term::view(*ty, right.clone()),
+    ))
 }
 
 /// The row an axiom about the table names, when it exists and the axiom

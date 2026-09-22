@@ -290,6 +290,56 @@ pub enum Prim {
     /// other. Evaluation computes the meaning that holds in every build,
     /// `wrap[T]` of the exact result, and never panics.
     Op(Op, MachineInt),
+    /// `T, T -> bool`: a runtime comparison at a machine type, `==`, `<`,
+    /// or `<=`; `!=`, `>`, and `>=` are the negation of the first and the
+    /// other two with their operands exchanged, as the lowering writes
+    /// them. Runtime data in, a `bool` out, in either mode. Evaluation
+    /// compares the values of the two literals as numbers, which is the
+    /// comparison of their views; `cmp_reflect` states that.
+    Cmp(CmpOp, MachineInt),
+}
+
+/// The three runtime comparisons `Prim::Cmp` is instantiated at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CmpOp {
+    Eq,
+    Lt,
+    Le,
+}
+
+impl CmpOp {
+    /// Every comparison.
+    pub const ALL: [CmpOp; 3] = [Self::Eq, Self::Lt, Self::Le];
+
+    /// The name the kernel contract uses, without the type.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Eq => "eq",
+            Self::Lt => "lt",
+            Self::Le => "le",
+        }
+    }
+
+    /// The comparison on numbers: what evaluation computes, and what the
+    /// proposition of `cmp_reflect` says of the views.
+    pub fn holds(self, left: &Integer, right: &Integer) -> bool {
+        match self {
+            Self::Eq => left == right,
+            Self::Lt => left < right,
+            Self::Le => left <= right,
+        }
+    }
+
+    /// The proposition the comparison decides, over two terms of `Int`:
+    /// `left ==[Int] right`, `int_lt(left, right)`, or `int_le(left,
+    /// right)`.
+    pub fn claim(self, left: Term, right: Term) -> Term {
+        match self {
+            Self::Eq => Term::eq(Type::Int, left, right),
+            Self::Lt => Term::int_lt(left, right),
+            Self::Le => Term::int_le(left, right),
+        }
+    }
 }
 
 impl Prim {
@@ -317,6 +367,7 @@ impl Prim {
             Self::Wrap(_) => "wrap",
             Self::Cast(..) => "cast",
             Self::Op(op, _) => op.name(),
+            Self::Cmp(op, _) => op.name(),
         }
     }
 }
@@ -325,7 +376,9 @@ impl fmt::Display for Prim {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())?;
         match self {
-            Self::View(ty) | Self::Wrap(ty) | Self::Op(_, ty) => write!(f, "[{}]", ty.name()),
+            Self::View(ty) | Self::Wrap(ty) | Self::Op(_, ty) | Self::Cmp(_, ty) => {
+                write!(f, "[{}]", ty.name())
+            }
             Self::Cast(from, to) => write!(f, "[{}, {}]", from.name(), to.name()),
             _ => Ok(()),
         }
@@ -442,6 +495,12 @@ pub enum Axiom {
     /// the rows that can overflow, `+`, `-`, `*`, and unary minus: the exact
     /// result, under the condition that it fits. Rejected at any other row.
     OpExact(Op, MachineInt, Vec<Term>),
+    /// For a comparison `c` of the form `op[T](a, b)`, `Prim::Cmp`, and its
+    /// proposition `P` over the views, `CmpOp::claim` of `view[T](a)` and
+    /// `view[T](b)`: `c == true => P` when the flag is true, and
+    /// `c == false => (P => False)` when it is false. `Reflect` for every
+    /// machine type; the type is read off the comparison.
+    CmpReflect(Term, bool),
 }
 
 impl Axiom {
@@ -491,6 +550,7 @@ impl Axiom {
             Self::CastDef(..) => "cast_def",
             Self::OpModel(..) => "op_model",
             Self::OpExact(..) => "op_exact",
+            Self::CmpReflect(..) => "cmp_reflect",
         }
     }
 
@@ -539,6 +599,7 @@ impl Axiom {
             Self::CastDef(from, to, x) => Self::CastDef(*from, *to, f(x)),
             Self::OpModel(op, ty, xs) => Self::OpModel(*op, *ty, xs.iter().map(&f).collect()),
             Self::OpExact(op, ty, xs) => Self::OpExact(*op, *ty, xs.iter().map(&f).collect()),
+            Self::CmpReflect(c, flag) => Self::CmpReflect(f(c), *flag),
         }
     }
 
@@ -552,6 +613,7 @@ impl Axiom {
             | Self::ToOfNat(a)
             | Self::OfNatWrap(a)
             | Self::Reflect(a, _)
+            | Self::CmpReflect(a, _)
             | Self::IntAddZero(a)
             | Self::IntAddNeg(a)
             | Self::IntMulOne(a)
@@ -1026,6 +1088,11 @@ impl Term {
     /// applied. The number of operands is checked by typing, not here.
     pub fn op(op: Op, ty: MachineInt, operands: Vec<Term>) -> Self {
         Self::Prim(Prim::Op(op, ty), operands)
+    }
+
+    /// `op[T](left, right)`: a runtime comparison at a machine type.
+    pub fn cmp(op: CmpOp, ty: MachineInt, left: Term, right: Term) -> Self {
+        Self::Prim(Prim::Cmp(op, ty), vec![left, right])
     }
 
     /// A tuple value of the given tuple type.
