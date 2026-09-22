@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 89,
-  "savedAt": "2026-09-22T20:30:17.000Z",
+  "rev": 90,
+  "savedAt": "2026-09-22T20:37:36.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -2428,10 +2428,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Tracked evidence",
     "",
-    "Tracked evidence is a mutable binding like any other in lowering. Its declared type mentions the versions of other mutable bindings that were current where it was written, and the type of each of its versions, at an assignment, in the tuple of a join, and in the state of a loop, is that declared type over the versions current at that point. A refresh is an assignment whose value is checked against that type, and a use of a version whose type speaks of an old version of what it mentions, where the claim over the current one is wanted, is a mismatch the checker of the check IR already rejects, since it type-checks versions and nothing else. The elaborator's flow analysis, which decides when evidence must be refreshed, which evidence a loop carries and which a join keeps, is not trusted for this and only gives the early error. Two rules of lowering were sharpened for it: what an arm assigns joins nothing when the arm leaves by break, continue, or a panic, since no tuple is ever built from it, and a binding of proof type may be left out of a join or a loop's state, its earlier version remaining a true fact about the versions it names, while a binding of data may not."
+    "Tracked evidence is a mutable binding like any other in lowering. Its declared type mentions the versions of other mutable bindings that were current where it was written, and the type of each of its versions, at an assignment, in the tuple of a join, and in the state of a loop, is that declared type over the versions current at that point. A refresh is an assignment whose value is checked against that type, and a use of a version whose type speaks of an old version of what it mentions, where the claim over the current one is wanted, is a mismatch the checker of the check IR already rejects, since it type-checks versions and nothing else. The elaborator's flow analysis, which decides when evidence must be refreshed, which evidence a loop carries and which a join keeps, is not trusted for this and only gives the early error. Two rules of lowering were sharpened for it: what an arm assigns joins nothing when the arm leaves by break, continue, or a panic, since no tuple is ever built from it, and a binding of proof type may be left out of a join or a loop's state, its earlier version remaining a true fact about the versions it names, while a binding of data may not.",
+    "",
+    "## Found proofs are stored",
+    "",
+    "src/store keeps a file beside each source with one entry per obligation, keyed by a hash of the context and the claim as kernel terms in a text form that names definitions and numbers context positions, so that renaming and reformatting leave the key unchanged. A stored proof is read by a total reader and handed to the kernel like any found proof; a proof that does not check is a miss. locus check --locked runs no search at all, which is what a reviewer or a build server uses."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T20:22:59.000Z"
+   "updated": "2026-09-22T20:37:36.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7964,12 +7968,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t308",
    "n": 192,
    "title": "E11 · Found proofs are stored beside the source, and locus check --locked never searches",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. \u003csource>.proofs beside each file, version 1: one entry per obligation keyed by an FNV-1a hash of the context (variables with types, ghostness, hypotheses) and the claim in a text form of kernel terms; definitions by name, context entries by position, rebound on read; every rule and axiom round-trips; a stored proof is parsed by a total, depth-limited reader and kernel-checked, never trusted. locus check reads, searches on a miss, writes only on change; --locked never searches and names the missing obligation; --no-store, LOCUS_PROOFS=off, and LOCUS_SEARCH=none (the upgrade hook) exist. The five examples' files are committed, 1.8 KB in all; reformatting, renaming, and editing another function keep every entry in use; hostile files are always a miss.\n\nLane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:41:03.000Z",
-   "updated": "2026-09-22T19:37:12.000Z"
+   "updated": "2026-09-22T20:37:36.000Z"
   },
   {
    "id": "t309",
