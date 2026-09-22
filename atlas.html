@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 86,
-  "savedAt": "2026-09-22T19:45:50.000Z",
+  "rev": 87,
+  "savedAt": "2026-09-22T20:14:12.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7938,12 +7938,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t306",
    "n": 190,
    "title": "E10 · The forms that panic: panic!, assert!, unreachable!, todo!, debug_assert!",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Elaborator. Wave 7.\nDepends on: M1 (LOC-177), E2 (LOC-168), S2 (LOC-155).\nUnblocks: R4 (LOC-189).\nCovers: LOC-71, LOC-85, LOC-95.\n\nScope. The forms with their Rust meaning and string literal messages, lowered to the panic ending of M1. Their type is the never type where Rust's is. Under no_panic, assert!(c) needs evidence of c and unreachable!() needs evidence of false, as Target language states; panic! and todo! are rejected there.\n\nTests.\n- Each form three ways, message included.\n- After assert!(c), c is a fact; under no_panic without evidence it is an error at the assert.\n- Check IR built by hand with a panic ending and no evidence of false is rejected under no_panic by the checker.\n\nDone when. A half-written file checks with todo!(), and a runtime check can teach the logic a fact.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. panic!, todo!, unreachable! are never-typed and lower to Tail::Panic (or a two-arm match that panics, in statement position); assert! lowers to a match whose failing arm panics and whose passing arm yields evidence of the condition, so the condition is a fact afterwards; debug_assert! teaches nothing. Under no_panic: panic! and todo! are refused (L0239), assert! must prove its condition and unreachable! must prove False through the usual tiers; without the promise the proofs are tried and attached when found. Messages are Rust's and the harness compares them exactly three ways, so the printer passes the message explicitly. Noted for M5: statements after a never-typed statement still hit L0216. debug_assert! is checked in both builds because the harness's two rustc builds both have debug_assertions on.\n\nLane: Elaborator. Wave 7.\nDepends on: M1 (LOC-177), E2 (LOC-168), S2 (LOC-155).\nUnblocks: R4 (LOC-189).\nCovers: LOC-71, LOC-85, LOC-95.\n\nScope. The forms with their Rust meaning and string literal messages, lowered to the panic ending of M1. Their type is the never type where Rust's is. Under no_panic, assert!(c) needs evidence of c and unreachable!() needs evidence of false, as Target language states; panic! and todo! are rejected there.\n\nTests.\n- Each form three ways, message included.\n- After assert!(c), c is a fact; under no_panic without evidence it is an error at the assert.\n- Check IR built by hand with a panic ending and no evidence of false is rejected under no_panic by the checker.\n\nDone when. A half-written file checks with todo!(), and a runtime check can teach the logic a fact.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:27:28.000Z",
-   "updated": "2026-09-22T19:37:12.000Z"
+   "updated": "2026-09-22T20:14:12.000Z"
   },
   {
    "id": "t307",
