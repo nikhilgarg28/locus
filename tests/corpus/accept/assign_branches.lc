@@ -1,0 +1,141 @@
+// Assignment inside the arms of an `if` and a `match`. The checker sees a
+// match whose result carries the new versions of what the arms assigned;
+// an arm that leaves a binding alone passes its entry version through.
+
+enum Event {
+    Wrong,
+    Right,
+}
+
+struct Lock {
+    failures: u8,
+    open: bool,
+}
+
+// One arm assigns, the other does not. (An `if` without `else` is the
+// parser's to add.)
+fn one_arm(n: u8, flag: bool) -> u8 {
+    let mut x = n;
+    if flag {
+        x = 1;
+    } else {
+    }
+    x
+}
+
+// Both arms assign, with different values.
+fn both_arms(n: u8, flag: bool) -> u8 {
+    let mut x = n;
+    if flag {
+        x = 1;
+    } else {
+        x = x.wrapping_add(2);
+    }
+    x
+}
+
+// Two bindings, each assigned in some arm, and a value out of the branch.
+fn two_bindings(n: u8, flag: bool) -> (u8, u8) {
+    let mut a = n;
+    let mut b: u8 = 0;
+    let doubled = if flag {
+        a = a.wrapping_mul(2);
+        a
+    } else {
+        b = 5;
+        b
+    };
+    (a.wrapping_add(b), doubled)
+}
+
+// Field assignment in the arms of a match, and a whole-value replacement.
+fn step(lock: Lock, event: Event) -> Lock {
+    let mut next = lock;
+    match event {
+        Event::Right => {
+            next = Lock { failures: 0, open: true };
+        }
+        Event::Wrong => {
+            next.failures = next.failures.wrapping_add(1);
+            next.open = false;
+        }
+    }
+    next
+}
+
+// A `let mut` local to an arm stays local: the join carries nothing for it.
+fn local_to_arm(n: u8, flag: bool) -> u8 {
+    let mut x = n;
+    if flag {
+        let mut scratch: u8 = 0;
+        scratch = scratch.wrapping_add(x);
+        x = scratch;
+    } else {
+    }
+    x
+}
+
+// Assignment inside a block nested in an arm reaches the join.
+fn nested_in_arm(n: u8, flag: bool) -> u8 {
+    let mut x = n;
+    if flag {
+        {
+            x = 9;
+        }
+    } else {
+    }
+    x
+}
+
+// A nested `if` in an arm, each level joining what it assigns.
+fn nested_ifs(n: u8, a: bool, b: bool) -> u8 {
+    let mut x = n;
+    if a {
+        if b {
+            x = 1;
+        } else {
+            x = 2;
+        }
+        x = x.wrapping_add(10);
+    } else {
+        x = 3;
+    }
+    x
+}
+
+// The condition reads the entry version: assigning in an arm does not
+// change what was tested.
+fn condition_reads_entry(n: u8) -> u8 {
+    let mut x = n;
+    if x < 2 {
+        x = 1;
+    } else {
+        x = 2;
+    }
+    x
+}
+
+//~ proofs: 0
+//~ run: one_arm(7, true) => 1
+//~ run: one_arm(7, false) => 7
+//~ run: both_arms(7, true) => 1
+//~ run: both_arms(7, false) => 9
+//~ run: two_bindings(3, true) => (6, 6)
+//~ run: two_bindings(3, false) => (8, 5)
+//~ run: step(Lock { failures: 2, open: false }, Right) => Lock { failures: 0, open: true }
+//~ run: step(Lock { failures: 2, open: true }, Wrong) => Lock { failures: 3, open: false }
+//~ run: local_to_arm(4, true) => 4
+//~ run: local_to_arm(4, false) => 4
+//~ run: nested_in_arm(4, true) => 9
+//~ run: nested_in_arm(4, false) => 4
+//~ run: nested_ifs(0, true, true) => 11
+//~ run: nested_ifs(0, true, false) => 12
+//~ run: nested_ifs(0, false, false) => 3
+//~ run: condition_reads_entry(0) => 1
+//~ run: condition_reads_entry(1) => 1
+//~ run: condition_reads_entry(2) => 2
+//~ run: condition_reads_entry(200) => 2
+//~ rust: if flag {
+//~ rust: x = 1_u8;
+//~ rust: next.failures = next.failures.wrapping_add(1_u8);
+//~ rust: let mut scratch = 0_u8;

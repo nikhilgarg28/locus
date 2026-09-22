@@ -229,9 +229,16 @@ impl Env<'_> {
                 index_span,
             } => self.index(expr, value, index, index_span),
             ExprKind::Block(block) => {
+                let entry = self.mutable_entry();
                 let mark = self.mark();
                 let result = self.block(block, expected);
+                // The block's statements are spliced into the enclosing
+                // sequence, so what it assigned to an outer binding stays
+                // assigned, and the facts about the versions it made stay
+                // known (`mutation.rs`).
+                let kept = self.facts_since(&mark, &entry);
                 self.close_names(mark);
+                self.facts.extend(kept);
                 let (block, ty, never) = result?;
                 Ok(Value {
                     expr: Expr::Block(block),

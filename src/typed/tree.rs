@@ -69,17 +69,77 @@ pub struct Block {
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    Let { pattern: Pattern, value: Expr },
+    Let {
+        pattern: Pattern,
+        value: Expr,
+    },
+    /// `place = value;`. The place is a binding declared with `let mut`,
+    /// whole or by a field path. Lowering gives the binding a new version,
+    /// `version`, a `let` of the old version with the path replaced by the
+    /// value, under the equation `equation`; every later mention of the
+    /// binding is that version. The right side is evaluated first, and the
+    /// place is rebuilt from the versions current after it.
+    Assign {
+        place: Place,
+        value: Expr,
+        version: Binder,
+        equation: HypId,
+    },
     Expr(Expr),
+}
+
+/// The left side of an assignment: the identity of the binding declared by
+/// `let mut`, its name, and the path of fields into it, outermost first.
+#[derive(Clone, Debug)]
+pub struct Place {
+    pub binding: VarId,
+    pub name: String,
+    pub path: Vec<Step>,
+}
+
+/// One field of a place's path, with what rebuilding the product around it
+/// needs: the product's type, and which of its fields hold evidence, whose
+/// number is the product's arity.
+#[derive(Clone, Debug)]
+pub struct Step {
+    pub index: usize,
+    pub name: Option<String>,
+    pub ty: Type,
+    pub proof_fields: Vec<bool>,
+}
+
+/// What an `if` or `match` carries when some arm assigns a binding declared
+/// outside it. Lowering makes the branch a match whose result, `tuple`, is
+/// the new versions of the assigned bindings followed by the branch's value;
+/// each is then bound by a `let` of the projection: the versions under the
+/// identities of `joins`, in the order lowering fixes, and the value under
+/// the branch's `result`, with `equation`. Lowering computes the set of
+/// assigned bindings itself and rejects a tree whose `joins` differ.
+#[derive(Clone, Debug)]
+pub struct Joined {
+    pub tuple: VarId,
+    pub joins: Vec<Join>,
+    pub equation: HypId,
+}
+
+/// A binding assigned in some arm, and the version it has after the join.
+#[derive(Clone, Debug)]
+pub struct Join {
+    pub binding: VarId,
+    pub version: Binder,
+    pub equation: HypId,
 }
 
 #[derive(Clone, Debug)]
 pub enum Pattern {
     /// A name, with the identity of the equation `name == value`. A proof
-    /// has no equation and the identity is unused.
+    /// has no equation and the identity is unused. `mutable` is `let mut`:
+    /// the name may be assigned, and its identity is the binding every
+    /// version of it refers to.
     Bind {
         binder: Binder,
         equation: HypId,
+        mutable: bool,
     },
     Wildcard,
     Tuple(Vec<Pattern>),
@@ -179,6 +239,7 @@ pub enum Expr {
         else_block: Block,
         ty: Type,
         result: VarId,
+        joined: Option<Joined>,
     },
     /// One arm per variant, in declaration order, each binding exactly its
     /// variant's payload.
@@ -188,6 +249,7 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         ty: Type,
         result: VarId,
+        joined: Option<Joined>,
     },
     Block(Block),
     Loop {

@@ -113,6 +113,11 @@ pub(super) struct Local {
     /// The binding failed to elaborate. A use of it is a consequence of an
     /// error already reported, and is not reported again.
     pub poisoned: bool,
+    /// For a binding declared `let mut`: its identity, which every version
+    /// of it refers to. `id` is then the current version (`mutation.rs`).
+    pub binding: Option<VarId>,
+    /// How many loops enclosed the binding when it was made.
+    pub depth: usize,
 }
 
 /// Something known at this point, with the proof that it holds.
@@ -159,6 +164,13 @@ pub(super) struct Mark {
     ctx: crate::kernel::Checkpoint,
     names: usize,
     facts: usize,
+}
+
+impl Mark {
+    /// How many facts were known at the mark.
+    pub fn facts(&self) -> usize {
+        self.facts
+    }
 }
 
 pub(super) struct Env<'a> {
@@ -276,6 +288,8 @@ impl Env<'_> {
             id,
             ty: ty.clone(),
             poisoned: false,
+            binding: None,
+            depth: self.loops.len(),
         });
         self.learn_from(&Term::var(id), ty);
     }
@@ -289,6 +303,8 @@ impl Env<'_> {
                 id: VarId::fresh(),
                 ty: Type::Tuple(Vec::new()),
                 poisoned: true,
+                binding: None,
+                depth: 0,
             }),
             PatternKind::Group(inner) => self.poison(inner),
             PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.poison(part)),
@@ -336,7 +352,7 @@ impl Env<'_> {
 
     /// The facts a value carries: itself when it is a proof, and the proof
     /// fields of a tuple or struct, each about the value's own fields.
-    fn learn_from(&mut self, value: &Term, ty: &Type) {
+    pub fn learn_from(&mut self, value: &Term, ty: &Type) {
         match ty {
             Type::Proof(claim) => self
                 .facts

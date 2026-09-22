@@ -69,8 +69,27 @@ pub struct EBlock {
 
 #[derive(Clone, Debug)]
 pub enum EStmt {
-    Let { pattern: EPattern, value: EExpr },
+    Let {
+        pattern: EPattern,
+        value: EExpr,
+    },
+    /// `place = value;`: the binding, or the field of it the path names, is
+    /// replaced in place. The versions of the typed tree are gone: every
+    /// mention of the binding is the binding.
+    Assign {
+        place: EPlace,
+        value: EExpr,
+    },
     Expr(EExpr),
+}
+
+/// The left side of an assignment: a binding and a path of fields into it.
+#[derive(Clone, Debug)]
+pub struct EPlace {
+    pub id: VarId,
+    pub name: String,
+    /// Each field by position, with its name when it has one.
+    pub path: Vec<(usize, Option<String>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,10 +97,13 @@ pub enum EPattern {
     /// A name with its type. The type is what the name has when the value
     /// bound never yields, where there is no value to take a type from, and
     /// it is what the printer writes there so that Rust need not infer it.
+    /// `mutable` is `let mut`, and is set only when the function assigns
+    /// to the name, since Rust warns of a `mut` that is never needed.
     Bind {
         id: VarId,
         name: String,
         ty: EType,
+        mutable: bool,
     },
     Wildcard,
     Tuple(Vec<EPattern>),

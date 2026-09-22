@@ -9,8 +9,12 @@
 mod lower;
 mod tree;
 
-pub use lower::{FnRef, LowerError, Named, Session, is_pure, opened_part, opened_type, value_term};
+pub(crate) use lower::visit_block as each_stmt;
+pub use lower::{
+    FnRef, LowerError, Named, Session, is_pure, join_type, opened_part, opened_type, rebuilt,
+    value_term,
+};
 pub use tree::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, MatchArm, Pattern, Stmt, StructItem,
-    VariantItem,
+    Binder, Block, CompareOp, EnumItem, Expr, FnItem, Join, Joined, MatchArm, Pattern, Place, Step,
+    Stmt, StructItem, VariantItem,
 };

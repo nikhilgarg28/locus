@@ -9,7 +9,7 @@ use std::fmt;
 use crate::kernel::{Prim, VarId};
 use crate::typed::{CompareOp, FnRef};
 
-use super::tree::{EBlock, EExpr, EPattern, EStmt, EType, Module};
+use super::tree::{EBlock, EExpr, EPattern, EPlace, EStmt, EType, Module};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeError(pub String);
@@ -39,7 +39,8 @@ struct Checker<'m> {
     signatures: HashMap<FnRef, (Vec<EType>, EType)>,
     /// The result type of the function being checked, for `return`.
     result: EType,
-    env: Vec<(VarId, EType)>,
+    /// Each name in scope with its type and whether it may be assigned.
+    env: Vec<(VarId, EType, bool)>,
     targets: Vec<Target>,
 }
 
@@ -87,7 +88,7 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         checker.env = function
             .params
             .iter()
-            .map(|(id, _, ty)| (*id, ty.clone()))
+            .map(|(id, _, ty)| (*id, ty.clone(), false))
             .collect();
         checker.targets.clear();
         checker.result = function.result.clone();
@@ -138,6 +139,16 @@ impl Checker<'_> {
                     self.bind(pattern, found.as_ref())?;
                     found
                 }
+                EStmt::Assign { place, value } => {
+                    let found = self.expr(value)?;
+                    let expected = self.place(place)?;
+                    expect(
+                        &found,
+                        &expected,
+                        &format!("the value assigned to {}", place.name),
+                    )?;
+                    found.map(|_| EType::unit())
+                }
                 EStmt::Expr(expr) => self.expr(expr)?,
             };
             reaches_its_end &= found.is_some();
@@ -156,11 +167,16 @@ impl Checker<'_> {
     fn bind(&mut self, pattern: &EPattern, found: Option<&EType>) -> Result<(), TypeError> {
         match pattern {
             EPattern::Wildcard => Ok(()),
-            EPattern::Bind { id, name, ty } => {
+            EPattern::Bind {
+                id,
+                name,
+                ty,
+                mutable,
+            } => {
                 if found.is_some_and(|found| found != ty) {
                     return fail(format!("{name} is bound as {ty:?} to {found:?}"));
                 }
-                self.env.push((*id, ty.clone()));
+                self.env.push((*id, ty.clone(), *mutable));
                 Ok(())
             }
             EPattern::Tuple(patterns) => match found {
@@ -174,6 +190,37 @@ impl Checker<'_> {
                 Some(other) => fail(format!("a tuple pattern against {other:?}")),
             },
         }
+    }
+
+    /// The type of a place: the binding must be in scope and assignable, and
+    /// the path must step through products that have those fields.
+    fn place(&mut self, place: &EPlace) -> Result<EType, TypeError> {
+        let Some((_, ty, mutable)) = self.env.iter().rev().find(|(var, _, _)| *var == place.id)
+        else {
+            return fail(format!("{} is not in scope", place.name));
+        };
+        if !mutable {
+            return fail(format!("{} is assigned but not declared mut", place.name));
+        }
+        let mut ty = ty.clone();
+        for (index, name) in &place.path {
+            let fields = match &ty {
+                EType::Tuple(fields) => fields.clone(),
+                EType::Struct(id) => match self.module.structs.iter().find(|d| d.id == *id) {
+                    Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                    None => return fail("assignment into a struct that was not emitted"),
+                },
+                other => return fail(format!("assignment into a field of {other:?}")),
+            };
+            ty = match fields.get(*index) {
+                Some(field) => field.clone(),
+                None => {
+                    let shown = name.clone().unwrap_or_else(|| index.to_string());
+                    return fail(format!("{} has no field {shown}", place.name));
+                }
+            };
+        }
+        Ok(ty)
     }
 
     /// Subexpressions whose values are all needed. Every one is checked, and
@@ -238,8 +285,8 @@ impl Checker<'_> {
 
     fn expr(&mut self, expr: &EExpr) -> Result<Yield, TypeError> {
         Ok(Some(match expr {
-            EExpr::Var { id, name } => match self.env.iter().rev().find(|(var, _)| var == id) {
-                Some((_, ty)) => ty.clone(),
+            EExpr::Var { id, name } => match self.env.iter().rev().find(|(var, _, _)| var == id) {
+                Some((_, ty, _)) => ty.clone(),
                 None => return fail(format!("{name} is not in scope")),
             },
             EExpr::Bool(_) => EType::Bool,
@@ -391,7 +438,7 @@ impl Checker<'_> {
                     }
                     let scope = self.env.len();
                     for ((id, _), ty) in arm.payload.iter().zip(&variant.payload) {
-                        self.env.push((*id, ty.clone()));
+                        self.env.push((*id, ty.clone(), false));
                     }
                     let arm_type = self.block(&arm.body);
                     self.env.truncate(scope);
@@ -478,10 +525,10 @@ impl Checker<'_> {
     ) -> Result<(), TypeError> {
         let scope = self.env.len();
         if let Some((index, ty)) = index {
-            self.env.push((index, EType::Int(ty)));
+            self.env.push((index, EType::Int(ty), false));
         }
         for (id, _, ty, _) in state {
-            self.env.push((*id, ty.clone()));
+            self.env.push((*id, ty.clone(), false));
         }
         self.targets.push(Target {
             state: types,

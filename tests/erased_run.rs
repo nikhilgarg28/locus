@@ -345,6 +345,7 @@ fn bind(name: &str, ty: EType) -> (EPattern, EExpr) {
         id,
         name: name.into(),
         ty,
+        mutable: false,
     };
     let var = EExpr::Var {
         id,

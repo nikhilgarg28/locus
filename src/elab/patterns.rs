@@ -2,7 +2,8 @@
 //!
 //! A tuple pattern opens a dependent product over its own names: in
 //! `let (next, still) = step(...)`, `still` is typed over `next`, not over
-//! `step(...).0` (`typed::opened_part`, which lowering uses too).
+//! `step(...).0` (`typed::opened_part`, which lowering uses too). A name
+//! with `mut` is a mutable binding (`mutation.rs`).
 
 use crate::ast::{self, PatternKind};
 use crate::kernel::{HypId, Proof, Term, Type, VarId};
@@ -27,18 +28,20 @@ impl Env<'_> {
         match &pattern.kind {
             PatternKind::Wildcard => Ok(Pattern::Wildcard),
             PatternKind::Group(inner) => self.bind_pattern_in(inner, value, earlier),
-            PatternKind::Name { mutable: true, .. } => self.fail(
-                "L0290",
-                "`mut` bindings are not in Locus yet; M2 adds them",
-                pattern.span,
-            ),
-            PatternKind::Name { name, .. } => {
+            PatternKind::Name { name, mutable } => {
                 let (id, equation) = (VarId::fresh(), HypId::fresh());
                 let over_projections = self.type_of(&value, pattern.span)?;
                 let opened = opened_type(&over_projections, earlier);
                 let value = opened_part(&value, &opened, earlier);
                 let defined = self.ctx.define_with(id, equation, &value);
                 let ty = self.kernel(defined, pattern.span)?;
+                if *mutable && matches!(ty, Type::Proof(_)) {
+                    return self.fail(
+                        "L0290",
+                        "`let mut` of evidence is not in Locus yet; M4 adds tracked evidence, refreshed as the values it speaks of change",
+                        pattern.span,
+                    );
+                }
                 if !matches!(ty, Type::Proof(_)) {
                     self.facts.push(Fact::definition(
                         Proof::hyp(equation),
@@ -52,6 +55,9 @@ impl Env<'_> {
                     });
                 }
                 self.bind(&name.text, id, &ty);
+                if *mutable {
+                    self.make_mutable(id);
+                }
                 Ok(Pattern::Bind {
                     binder: Binder {
                         id,
@@ -59,6 +65,7 @@ impl Env<'_> {
                         ty,
                     },
                     equation,
+                    mutable: *mutable,
                 })
             }
             PatternKind::Unit => Ok(Pattern::Tuple(Vec::new())),

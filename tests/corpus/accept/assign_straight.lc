@@ -1,0 +1,73 @@
+// Straight-line mutation: `let mut` and assignment, whole and by field. The
+// checker sees one version of the variable per assignment, and the Rust
+// printed is what was written.
+
+struct Pair {
+    lo: u8,
+    hi: u8,
+}
+
+struct Nested {
+    pair: Pair,
+    count: u8,
+}
+
+fn count_up(n: u8) -> u8 {
+    let mut total = n;
+    total = total.wrapping_add(1);
+    total = total.wrapping_add(1);
+    prove!(total == n.wrapping_add(1).wrapping_add(1));
+    total
+}
+
+fn set_lo(pair: Pair, lo: u8) -> Pair {
+    let mut copy = pair;
+    copy.lo = lo;
+    prove!(copy.hi == pair.hi);
+    copy
+}
+
+fn set_deep(n: Nested) -> Nested {
+    let mut copy = n;
+    copy.pair.hi = 7;
+    copy.count = copy.count.wrapping_add(1);
+    prove!(copy.pair.lo == n.pair.lo);
+    copy
+}
+
+fn set_tuple(t: (u8, bool)) -> (u8, bool) {
+    let mut copy = t;
+    copy.0 = 9;
+    copy
+}
+
+// A `let mut` never assigned is printed without `mut`.
+fn never_assigned(n: u8) -> u8 {
+    let mut x = n;
+    x
+}
+
+// An assignment inside a nested block reaches the code after it.
+fn nested_block(n: u8) -> u8 {
+    let mut x = n;
+    {
+        x = 3;
+    }
+    prove!(x == 3);
+    x
+}
+
+//~ proofs: 4
+//~ run: count_up(5) => 7
+//~ run: count_up(255) => 1
+//~ run: set_lo(Pair { lo: 1, hi: 2 }, 9) => Pair { lo: 9, hi: 2 }
+//~ run: set_deep(Nested { pair: Pair { lo: 1, hi: 2 }, count: 4 }) => Nested { pair: Pair { lo: 1, hi: 7 }, count: 5 }
+//~ run: set_tuple((1, true)) => (9, true)
+//~ run: never_assigned(4) => 4
+//~ run: nested_block(4) => 3
+//~ rust: let mut total = n;
+//~ rust: total = total.wrapping_add(1_u8);
+//~ rust: copy.lo = lo;
+//~ rust: copy.pair.hi = 7_u8;
+//~ rust: copy.0 = 9_u8;
+//~ rust: let x = n;

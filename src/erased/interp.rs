@@ -15,7 +15,7 @@ use std::fmt;
 use crate::kernel::{CmpOp, EnumId, MachineInt, Prim, StructId, Term, VarId, evaluate_primitive};
 use crate::typed::{CompareOp, FnRef};
 
-use super::tree::{EBlock, EExpr, EPattern, EStmt, Module};
+use super::tree::{EBlock, EExpr, EPattern, EPlace, EStmt, Module};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
@@ -221,6 +221,11 @@ impl<'m> Interpreter<'m> {
                     let value = value!(self.expr(value));
                     self.bind(pattern, value)?;
                 }
+                // The right side in full, then the place.
+                EStmt::Assign { place, value } => {
+                    let value = value!(self.expr(value));
+                    self.assign(place, value)?;
+                }
                 EStmt::Expr(expr) => {
                     value!(self.expr(expr));
                 }
@@ -247,6 +252,25 @@ impl<'m> Interpreter<'m> {
             }
             _ => stuck("a tuple pattern against something else"),
         }
+    }
+
+    /// Replaces the binding, or the field of it the path names, in place.
+    fn assign(&mut self, place: &EPlace, value: Value) -> Result<(), Stop> {
+        let Some((_, slot)) = self.env.iter_mut().rev().find(|(var, _)| *var == place.id) else {
+            return stuck(format!("{} is not bound", place.name));
+        };
+        let mut target = slot;
+        for (index, _) in &place.path {
+            target = match target {
+                Value::Tuple(fields) | Value::Struct(_, fields) => match fields.get_mut(*index) {
+                    Some(field) => field,
+                    None => return stuck("assignment to a field that is not there"),
+                },
+                _ => return stuck("assignment into something that is not a product"),
+            };
+        }
+        *target = value;
+        Ok(())
     }
 
     /// Evaluates expressions left to right, stopping at a control transfer.

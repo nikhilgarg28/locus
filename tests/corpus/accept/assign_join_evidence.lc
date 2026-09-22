@@ -1,0 +1,61 @@
+// Case 10 of the mutation design, without tracked evidence (M4): both arms
+// assign `x` and prove the bound; the evidence comes out of the branch as
+// its value, typed over the joined `x`. The condition reads the entry
+// version. After the join nothing is known of `x` but what the evidence
+// says; `assign_join_snapshot.lc` in `reject` shows the other half.
+
+fn use_it(x: u8, ok: @(x <= 2)) -> u8 {
+    x
+}
+
+fn clamp(n: u8) -> u8 {
+    let mut x = n;
+    let ok = if x < 2 {
+        x = 1;
+        prove!(x <= 2)
+    } else {
+        x = 2;
+        prove!(x <= 2)
+    };
+    use_it(x, ok)
+}
+
+// The evidence can also be stated after the join, from the evidence the
+// branch produced.
+fn clamp_then_state(n: u8) -> u8 {
+    let mut x = n;
+    let ok = if x < 2 {
+        x = 1;
+        prove!(x <= 2)
+    } else {
+        x = 2;
+        prove!(x <= 2)
+    };
+    prove!(x <= 2);
+    x
+}
+
+// A branch whose value is data, alongside the versions it joins. Nothing is
+// known of `y` afterwards, not even that it is 6 or 7: a program that needs
+// that carries it as evidence, as `clamp` does.
+fn pick(n: u8, flag: bool) -> u8 {
+    let mut x = n;
+    let y = if flag {
+        x = 5;
+        x.wrapping_add(1)
+    } else {
+        7
+    };
+    x.wrapping_add(y)
+}
+
+//~ proofs: 5
+//~ run: clamp(0) => 1
+//~ run: clamp(1) => 1
+//~ run: clamp(2) => 2
+//~ run: clamp(255) => 2
+//~ run: clamp_then_state(0) => 1
+//~ run: clamp_then_state(9) => 2
+//~ run: pick(1, true) => 11
+//~ run: pick(1, false) => 8
+//~ rust: let ok = if x < 2_u8 {

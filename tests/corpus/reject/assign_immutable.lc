@@ -1,0 +1,8 @@
+// Assignment needs `let mut`, in Rust's words. A parameter cannot be
+// assigned either, until `mut` parameters mean something.
+fn f(n: u8) -> u8 {
+    let total = n;
+    total = 1; //~ error: L0232 cannot assign twice to immutable variable `total`
+    n = 2; //~ error: L0232 cannot assign twice to immutable variable `n`
+    total
+}

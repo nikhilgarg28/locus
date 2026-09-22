@@ -1,0 +1,71 @@
+// Case 9 of the mutation design: the right side of an assignment runs
+// first, and changes what the left side names. Rust leaves lo == 3 and
+// hi == 7, and so do both interpreters. The `&mut` form of the case comes
+// with references (O3); here the right side is a block that assigns, and
+// a call whose argument reads the place.
+
+struct Pair {
+    lo: u8,
+    hi: u8,
+}
+
+fn touch(pair: Pair) -> Pair {
+    let mut copy = pair;
+    copy.lo = {
+        copy.hi = 7;
+        3
+    };
+    copy
+}
+
+fn three(hi: u8) -> u8 {
+    hi.wrapping_sub(4)
+}
+
+// The argument is read from the pair as it is after `hi` was assigned.
+fn read_then_write(pair: Pair) -> Pair {
+    let mut copy = pair;
+    copy.hi = 7;
+    copy.lo = three(copy.hi);
+    copy
+}
+
+fn both(a: u8, b: u8) -> (u8, u8) {
+    (a, b)
+}
+
+// Arguments are evaluated left to right, and each sees the versions
+// current when it runs: the first reads `lo` before the block assigns it,
+// the second after.
+fn first_reads_before(pair: Pair) -> (u8, u8) {
+    let mut copy = pair;
+    both(copy.lo, {
+        copy.lo = 7;
+        3
+    })
+}
+
+fn second_reads_after(pair: Pair) -> (u8, u8) {
+    let mut copy = pair;
+    both({
+        copy.lo = 7;
+        3
+    }, copy.lo)
+}
+
+// `x = x + 1` reads the old version and defines the new one.
+fn self_referential(n: u8) -> u8 {
+    let mut x = n;
+    x = x.wrapping_add(1);
+    prove!(x == n.wrapping_add(1));
+    x
+}
+
+//~ proofs: 1
+//~ run: touch(Pair { lo: 1, hi: 2 }) => Pair { lo: 3, hi: 7 }
+//~ run: read_then_write(Pair { lo: 1, hi: 2 }) => Pair { lo: 3, hi: 7 }
+//~ run: first_reads_before(Pair { lo: 1, hi: 2 }) => (1, 3)
+//~ run: second_reads_after(Pair { lo: 1, hi: 2 }) => (3, 7)
+//~ run: self_referential(41) => 42
+//~ rust: copy.lo = {
+//~ rust: copy.hi = 7_u8;

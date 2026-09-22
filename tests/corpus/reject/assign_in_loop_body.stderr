@@ -1,0 +1,5 @@
+error[L0290]: assignment to `total` inside a loop body, where it was declared outside, is not in Locus yet; M3 replaces the loop forms
+ --> tests/corpus/reject/assign_in_loop_body.lc:9:9
+  |
+9 |         total = local; //~ error: L0290 assignment to `total` inside a loop body
+  |         ^^^^^^^^^^^^^^

@@ -21,5 +21,5 @@ pub use interp::{Interpreter, Outcome, RunError, Value};
 pub(crate) use interp::{Stop, outcome, term_value, value_term};
 pub use rust::print_module;
 pub use tree::{
-    EArm, EBlock, EEnum, EExpr, EFn, EPattern, EStmt, EStruct, EType, EVariant, Module,
+    EArm, EBlock, EEnum, EExpr, EFn, EPattern, EPlace, EStmt, EStruct, EType, EVariant, Module,
 };

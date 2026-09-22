@@ -6,11 +6,22 @@
 //! becomes its marker. Everything else is erased by recursion, in place: a proof-typed variable stays a variable, and a call
 //! to an ordinary function that returns a proof stays a call, because at
 //! runtime it returns `Proved`.
+//!
+//! The versions lowering gives a mutable binding have no runtime form
+//! either: an assignment stays an assignment, and every mention of a version
+//! becomes a mention of the binding, which the assignment updated in place.
+//! `mut` is printed on a binding only when the function assigns to it.
 
-use crate::kernel::{Definitions, Type};
-use crate::typed::{Binder, Block, EnumItem, Expr, FnItem, FnRef, Pattern, Stmt, StructItem};
+use std::collections::{HashMap, HashSet};
 
-use super::tree::{EArm, EBlock, EEnum, EExpr, EFn, EPattern, EStmt, EStruct, EType, EVariant};
+use crate::kernel::{Definitions, Type, VarId};
+use crate::typed::{
+    Binder, Block, EnumItem, Expr, FnItem, FnRef, Joined, Pattern, Stmt, StructItem, each_stmt,
+};
+
+use super::tree::{
+    EArm, EBlock, EEnum, EExpr, EFn, EPattern, EPlace, EStmt, EStruct, EType, EVariant,
+};
 
 pub fn erase_type(ty: &Type) -> EType {
     match ty {
@@ -67,7 +78,11 @@ pub fn erase_fn(definitions: &Definitions, reference: FnRef, item: &FnItem) -> O
     {
         return None;
     }
-    let eraser = Eraser { definitions };
+    let mut eraser = Eraser {
+        definitions,
+        binding: HashMap::new(),
+        assigned: assigned_bindings(&item.body),
+    };
     Some(EFn {
         reference,
         name: item.name.clone(),
@@ -77,37 +92,102 @@ pub fn erase_fn(definitions: &Definitions, reference: FnRef, item: &FnItem) -> O
     })
 }
 
-fn bound(binder: &Binder) -> (crate::kernel::VarId, String, EType) {
+fn bound(binder: &Binder) -> (VarId, String, EType) {
     (binder.id, binder.name.clone(), erase_type(&binder.ty))
+}
+
+/// The bindings the body assigns to, whole or by a field: the ones whose
+/// `let mut` needs its `mut`.
+fn assigned_bindings(body: &Block) -> HashSet<VarId> {
+    let mut assigned = HashSet::new();
+    each_stmt(body, &mut |stmt| {
+        if let Stmt::Assign { place, .. } = stmt {
+            assigned.insert(place.binding);
+        }
+    });
+    assigned
 }
 
 struct Eraser<'d> {
     definitions: &'d Definitions,
+    /// The binding each version of a mutable binding belongs to, filled as
+    /// the versions are met, which is before any mention of them.
+    binding: HashMap<VarId, VarId>,
+    assigned: HashSet<VarId>,
 }
 
 impl Eraser<'_> {
-    fn block(&self, block: &Block) -> EBlock {
+    /// The binding a mention refers to: itself, unless it is a version.
+    fn root(&self, id: VarId) -> VarId {
+        self.binding.get(&id).copied().unwrap_or(id)
+    }
+
+    fn joined(&mut self, joined: Option<&Joined>) {
+        for join in joined.iter().flat_map(|joined| &joined.joins) {
+            self.binding.insert(join.version.id, join.binding);
+        }
+    }
+
+    fn block(&mut self, block: &Block) -> EBlock {
         EBlock {
             stmts: block.stmts.iter().map(|stmt| self.stmt(stmt)).collect(),
             tail: block.tail.as_deref().map(|tail| Box::new(self.expr(tail))),
         }
     }
 
-    fn stmt(&self, stmt: &Stmt) -> EStmt {
+    fn stmt(&mut self, stmt: &Stmt) -> EStmt {
         match stmt {
             Stmt::Let { pattern, value } => EStmt::Let {
-                pattern: pattern_of(pattern),
+                pattern: self.pattern(pattern),
                 value: self.expr(value),
             },
+            Stmt::Assign {
+                place,
+                value,
+                version,
+                ..
+            } => {
+                let value = self.expr(value);
+                self.binding.insert(version.id, place.binding);
+                EStmt::Assign {
+                    place: EPlace {
+                        id: place.binding,
+                        name: place.name.clone(),
+                        path: place
+                            .path
+                            .iter()
+                            .map(|step| (step.index, step.name.clone()))
+                            .collect(),
+                    },
+                    value,
+                }
+            }
             Stmt::Expr(expr) => EStmt::Expr(self.expr(expr)),
         }
     }
 
-    fn all(&self, exprs: &[Expr]) -> Vec<EExpr> {
+    fn pattern(&self, pattern: &Pattern) -> EPattern {
+        match pattern {
+            Pattern::Bind {
+                binder, mutable, ..
+            } => EPattern::Bind {
+                id: binder.id,
+                name: binder.name.clone(),
+                ty: erase_type(&binder.ty),
+                mutable: *mutable && self.assigned.contains(&binder.id),
+            },
+            Pattern::Wildcard => EPattern::Wildcard,
+            Pattern::Tuple(patterns) => {
+                EPattern::Tuple(patterns.iter().map(|part| self.pattern(part)).collect())
+            }
+        }
+    }
+
+    fn all(&mut self, exprs: &[Expr]) -> Vec<EExpr> {
         exprs.iter().map(|expr| self.expr(expr)).collect()
     }
 
-    fn state(&self, state: &[(Binder, Expr)]) -> Vec<(crate::kernel::VarId, String, EType, EExpr)> {
+    fn state(&mut self, state: &[(Binder, Expr)]) -> Vec<(VarId, String, EType, EExpr)> {
         state
             .iter()
             .map(|(binder, init)| {
@@ -117,7 +197,7 @@ impl Eraser<'_> {
             .collect()
     }
 
-    fn expr(&self, expr: &Expr) -> EExpr {
+    fn expr(&mut self, expr: &Expr) -> EExpr {
         match expr {
             Expr::Proof(_) => EExpr::Proved,
             Expr::Prop(_) | Expr::Int(_) => EExpr::Ghost,
@@ -130,7 +210,7 @@ impl Eraser<'_> {
                 marker(ty).unwrap_or(EExpr::Trap)
             }
             Expr::Var { id, name, .. } => EExpr::Var {
-                id: *id,
+                id: self.root(*id),
                 name: name.clone(),
             },
             Expr::Bool(value) => EExpr::Bool(*value),
@@ -217,33 +297,43 @@ impl Eraser<'_> {
                 condition,
                 then_block,
                 else_block,
+                joined,
                 ..
-            } => EExpr::If {
-                condition: Box::new(self.expr(condition)),
-                then_block: self.block(then_block),
-                else_block: self.block(else_block),
-            },
+            } => {
+                let erased = EExpr::If {
+                    condition: Box::new(self.expr(condition)),
+                    then_block: self.block(then_block),
+                    else_block: self.block(else_block),
+                };
+                self.joined(joined.as_ref());
+                erased
+            }
             Expr::Match {
                 scrutinee,
                 enum_name,
                 arms,
+                joined,
                 ..
-            } => EExpr::Match {
-                scrutinee: Box::new(self.expr(scrutinee)),
-                enum_name: enum_name.clone(),
-                arms: arms
-                    .iter()
-                    .map(|arm| EArm {
-                        variant_name: arm.variant_name.clone(),
-                        payload: arm
-                            .payload
-                            .iter()
-                            .map(|binder| (binder.id, binder.name.clone()))
-                            .collect(),
-                        body: self.block(&arm.body),
-                    })
-                    .collect(),
-            },
+            } => {
+                let erased = EExpr::Match {
+                    scrutinee: Box::new(self.expr(scrutinee)),
+                    enum_name: enum_name.clone(),
+                    arms: arms
+                        .iter()
+                        .map(|arm| EArm {
+                            variant_name: arm.variant_name.clone(),
+                            payload: arm
+                                .payload
+                                .iter()
+                                .map(|binder| (binder.id, binder.name.clone()))
+                                .collect(),
+                            body: self.block(&arm.body),
+                        })
+                        .collect(),
+                };
+                self.joined(joined.as_ref());
+                erased
+            }
             Expr::Block(block) => EExpr::Block(self.block(block)),
             Expr::Loop {
                 state,
@@ -281,17 +371,5 @@ fn marker(ty: &Type) -> Option<EExpr> {
         EType::Proved => Some(EExpr::Proved),
         EType::Ghost => Some(EExpr::Ghost),
         _ => None,
-    }
-}
-
-fn pattern_of(pattern: &Pattern) -> EPattern {
-    match pattern {
-        Pattern::Bind { binder, .. } => EPattern::Bind {
-            id: binder.id,
-            name: binder.name.clone(),
-            ty: erase_type(&binder.ty),
-        },
-        Pattern::Wildcard => EPattern::Wildcard,
-        Pattern::Tuple(patterns) => EPattern::Tuple(patterns.iter().map(pattern_of).collect()),
     }
 }

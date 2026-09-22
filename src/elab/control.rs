@@ -8,6 +8,7 @@ use crate::typed::{self, Binder, CompareOp, Expr, MatchArm, is_pure};
 
 use super::env::{Elab, Env};
 use super::exprs::{Value, unit_type};
+use super::mutation::ArmEnd;
 
 pub(super) enum Branch<'a> {
     Block(&'a ast::Block),
@@ -75,32 +76,55 @@ impl Env<'_> {
         let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
         let fact = |holds: bool| Term::eq(Type::Bool, tested.clone(), Term::Bool(holds != negated));
 
+        // Each arm works on the versions of the mutable bindings it finds
+        // and leaves them as it found them; the join carries what it
+        // assigned to the code after the branch (`mutation.rs`).
+        let entry = self.mutable_entry();
         let mark = self.mark();
         let then_result = self
             .assume(then_fact, fact(true), condition.span)
             .and_then(|()| self.branch(&then, expected));
+        let then_versions = self.versions_now(&entry);
         self.close(mark);
+        self.restore_versions(&entry);
         let (then_block, then_ty, then_never) = then_result?;
 
         let expected_else = match expected {
             Some(expected) => Some(expected.clone()),
-            None if !then_never => Some(then_ty.clone()),
+            None if !then_never && !Env::mentions_arm_version(&entry, &then_versions, &then_ty) => {
+                Some(then_ty.clone())
+            }
             None => None,
         };
         let mark = self.mark();
         let else_result = self
             .assume(else_fact, fact(false), condition.span)
             .and_then(|()| self.branch(&otherwise, expected_else.as_ref()));
+        let else_versions = self.versions_now(&entry);
         self.close(mark);
+        self.restore_versions(&entry);
         let (else_block, else_ty, else_never) = else_result?;
 
         let never = then_never && else_never;
         let ty = match expected {
             Some(expected) => expected.clone(),
-            None if !then_never => then_ty,
-            None => else_ty,
+            None if !then_never => then_ty.clone(),
+            None => else_ty.clone(),
         };
         let result = VarId::fresh();
+        let arms = [
+            ArmEnd {
+                versions: then_versions,
+                ty: then_ty,
+                never: then_never,
+            },
+            ArmEnd {
+                versions: else_versions,
+                ty: else_ty,
+                never: else_never,
+            },
+        ];
+        let (joined, ty) = self.join(&entry, &arms, ty, result, span)?;
         let expr = Expr::If {
             condition: Box::new(condition_value.expr),
             then_fact,
@@ -109,8 +133,18 @@ impl Env<'_> {
             else_block,
             ty: ty.clone(),
             result,
+            joined,
         };
-        if !never && !is_pure(&expr) {
+        if !never
+            && !is_pure(&expr)
+            && !matches!(
+                expr,
+                Expr::If {
+                    joined: Some(_),
+                    ..
+                }
+            )
+        {
             self.declare_result(result, &ty, span)?;
         }
         Ok(Value { expr, ty, never })
@@ -192,6 +226,8 @@ impl Env<'_> {
         let mut typed_arms = Vec::new();
         let mut ty: Option<Type> = expected.cloned();
         let mut never = true;
+        let entry = self.mutable_entry();
+        let mut ends = Vec::new();
         for (index, arm) in chosen.iter().enumerate() {
             let arm = arm.expect("every variant has an arm");
             let (variant_name, declared) = &info.variants[index];
@@ -260,12 +296,21 @@ impl Env<'_> {
                     self.branch(&Branch::Expr(&arm.body), ty.as_ref())?;
                 Ok((payload, fact, body, body_ty, body_never))
             })();
+            let versions = self.versions_now(&entry);
             self.close(mark);
+            self.restore_versions(&entry);
             let (payload, fact, body, body_ty, body_never) = arm_result?;
             if !body_never {
                 never = false;
-                ty.get_or_insert(body_ty);
+                if !Env::mentions_arm_version(&entry, &versions, &body_ty) {
+                    ty.get_or_insert(body_ty.clone());
+                }
             }
+            ends.push(ArmEnd {
+                versions,
+                ty: body_ty,
+                never: body_never,
+            });
             typed_arms.push(MatchArm {
                 variant_name: variant_name.clone(),
                 payload,
@@ -275,14 +320,25 @@ impl Env<'_> {
         }
         let ty = ty.unwrap_or_else(unit_type);
         let result = VarId::fresh();
+        let (joined, ty) = self.join(&entry, &ends, ty, result, span)?;
         let expr = Expr::Match {
             scrutinee: Box::new(scrutinee_value.expr),
             enum_name: info.name.clone(),
             arms: typed_arms,
             ty: ty.clone(),
             result,
+            joined,
         };
-        if !never && !is_pure(&expr) {
+        if !never
+            && !is_pure(&expr)
+            && !matches!(
+                expr,
+                Expr::Match {
+                    joined: Some(_),
+                    ..
+                }
+            )
+        {
             self.declare_result(result, &ty, span)?;
         }
         Ok(Value { expr, ty, never })

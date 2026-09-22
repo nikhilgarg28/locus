@@ -9,8 +9,8 @@ use locus::kernel::{
     Type, VarId,
 };
 use locus::typed::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, MatchArm, Pattern, Session, Stmt,
-    VariantItem,
+    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm, Pattern,
+    Place, Session, Step, Stmt, VariantItem,
 };
 
 pub fn setup() -> (Session, Prelude, Theory) {
@@ -87,6 +87,7 @@ pub fn let_(binder: &Binder, equation: HypId, value: Expr) -> Stmt {
         pattern: Pattern::Bind {
             binder: binder.clone(),
             equation,
+            mutable: false,
         },
         value,
     }
@@ -201,6 +202,7 @@ pub fn preserve(theory: Theory, math: bool, use_the_fact: bool) -> FnItem {
                 else_block: block(vec![], pair(Expr::var(&n), Proof::Refl(n_term))),
                 ty: result.clone(),
                 result: VarId::fresh(),
+                joined: None,
             })),
         },
     }
@@ -320,6 +322,7 @@ pub fn bounded_walk(prelude: Prelude, theory: Theory, carry_the_invariant: bool)
                         else_block: keep_walking,
                         ty: Type::Tuple(vec![]),
                         result: VarId::fresh(),
+                        joined: None,
                     })),
                 },
                 result: VarId::fresh(),
@@ -518,6 +521,7 @@ pub fn classify(classified: EnumId) -> FnItem {
                 else_block: block(vec![], variant(0, "Zero", reflect(true, else_fact))),
                 ty: Type::Enum(classified),
                 result: VarId::fresh(),
+                joined: None,
             })),
         },
     }
@@ -566,7 +570,207 @@ pub fn zero_or_self(
                 ],
                 ty: Type::U8,
                 result: VarId::fresh(),
+                joined: None,
             })),
         },
+    }
+}
+
+// --- Mutation: `let mut`, assignment, and joins (M2) ----------------------------------
+
+pub fn let_mut(binder: &Binder, value: Expr) -> Stmt {
+    Stmt::Let {
+        pattern: Pattern::Bind {
+            binder: binder.clone(),
+            equation: HypId::fresh(),
+            mutable: true,
+        },
+        value,
+    }
+}
+
+/// `binding.path = value;`, giving the binding the version `version`.
+pub fn assign(binding: &Binder, path: Vec<Step>, value: Expr, version: &Binder) -> Stmt {
+    Stmt::Assign {
+        place: Place {
+            binding: binding.id,
+            name: binding.name.clone(),
+            path,
+        },
+        value,
+        version: version.clone(),
+        equation: HypId::fresh(),
+    }
+}
+
+/// A step into a tuple of bytes with `arity` fields.
+pub fn byte_tuple_step(index: usize, arity: usize) -> Step {
+    Step {
+        index,
+        name: None,
+        ty: Type::Tuple(vec![Type::U8; arity]),
+        proof_fields: vec![false; arity],
+    }
+}
+
+/// The join of a branch: each assigned binding with the version it has
+/// afterwards, in declaration order.
+pub fn joined(joins: Vec<(&Binder, &Binder)>) -> Joined {
+    Joined {
+        tuple: VarId::fresh(),
+        joins: joins
+            .into_iter()
+            .map(|(binding, version)| Join {
+                binding: binding.id,
+                version: version.clone(),
+                equation: HypId::fresh(),
+            })
+            .collect(),
+        equation: HypId::fresh(),
+    }
+}
+
+/// `if condition { then } else { otherwise }` of type `ty`.
+pub fn if_(
+    condition: Expr,
+    then_block: Block,
+    else_block: Block,
+    ty: Type,
+    joined: Option<Joined>,
+) -> Expr {
+    Expr::If {
+        condition: Box::new(condition),
+        then_fact: HypId::fresh(),
+        else_fact: HypId::fresh(),
+        then_block,
+        else_block,
+        ty,
+        result: VarId::fresh(),
+        joined,
+    }
+}
+
+pub fn unit_block(stmts: Vec<Stmt>) -> Block {
+    Block { stmts, tail: None }
+}
+
+/// `n == 0`
+pub fn is_zero(n: &Binder) -> Expr {
+    compare_u8(CompareOp::Eq, Expr::var(n), Expr::u8(0))
+}
+
+/// A byte pair.
+pub fn pair_type() -> Type {
+    Type::Tuple(vec![Type::U8, Type::U8])
+}
+
+pub fn pair(left: Expr, right: Expr) -> Expr {
+    Expr::Tuple {
+        ty: pair_type(),
+        fields: vec![left, right],
+    }
+}
+
+/// fn straight(n: u8) -> u8 { let mut x = n; x = x + 1; x = x + 1; x }
+pub fn straight_line_mutation() -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let x = Binder::new("x", Type::U8);
+    let x1 = Binder::new("x", Type::U8);
+    let x2 = Binder::new("x", Type::U8);
+    FnItem {
+        name: "straight".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: Type::U8,
+        body: block(
+            vec![
+                let_mut(&x, Expr::var(&n)),
+                assign(&x, vec![], plus_one(Expr::var(&x)), &x1),
+                assign(&x, vec![], plus_one(Expr::var(&x1)), &x2),
+            ],
+            Expr::var(&x2),
+        ),
+    }
+}
+
+/// fn branching(n: u8) -> (u8, u8) {
+///     let mut a = n; let mut b = 0;
+///     if n == 0 { b = 1; a = 2; } else { a = a + 3; }
+///     (a, b)
+/// }
+/// The join carries `a` and `b`, in declaration order, and a unit value.
+pub fn branching_mutation() -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let a = Binder::new("a", Type::U8);
+    let b = Binder::new("b", Type::U8);
+    let (a_then, b_then, a_else) = (
+        Binder::new("a", Type::U8),
+        Binder::new("b", Type::U8),
+        Binder::new("a", Type::U8),
+    );
+    let (a_join, b_join) = (Binder::new("a", Type::U8), Binder::new("b", Type::U8));
+    let branch = if_(
+        is_zero(&n),
+        unit_block(vec![
+            assign(&b, vec![], Expr::u8(1), &b_then),
+            assign(&a, vec![], Expr::u8(2), &a_then),
+        ]),
+        unit_block(vec![assign(
+            &a,
+            vec![],
+            Expr::Method {
+                prim: Prim::Op(Op::WrappingAdd, MachineInt::U8),
+                receiver: Box::new(Expr::var(&a)),
+                arguments: vec![Expr::u8(3)],
+            },
+            &a_else,
+        )]),
+        Type::Tuple(vec![]),
+        Some(joined(vec![(&a, &a_join), (&b, &b_join)])),
+    );
+    FnItem {
+        name: "branching".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: pair_type(),
+        body: block(
+            vec![
+                let_mut(&a, Expr::var(&n)),
+                let_mut(&b, Expr::u8(0)),
+                Stmt::Expr(branch),
+            ],
+            pair(Expr::var(&a_join), Expr::var(&b_join)),
+        ),
+    }
+}
+
+/// fn touch(n: u8) -> (u8, u8) { let mut p = (n, n); p.0 = { p.1 = 7; 3 }; p }
+/// Case 9: the right side changes what the left side names.
+pub fn right_side_changes_the_place() -> FnItem {
+    let n = Binder::new("n", Type::U8);
+    let p = Binder::new("p", pair_type());
+    let p_inner = Binder::new("p", pair_type());
+    let p_outer = Binder::new("p", pair_type());
+    let right = Expr::Block(block(
+        vec![assign(
+            &p,
+            vec![byte_tuple_step(1, 2)],
+            Expr::u8(7),
+            &p_inner,
+        )],
+        Expr::u8(3),
+    ));
+    FnItem {
+        name: "touch".into(),
+        math: false,
+        params: vec![n.clone()],
+        result: pair_type(),
+        body: block(
+            vec![
+                let_mut(&p, pair(Expr::var(&n), Expr::var(&n))),
+                assign(&p, vec![byte_tuple_step(0, 2)], right, &p_outer),
+            ],
+            Expr::var(&p_outer),
+        ),
     }
 }

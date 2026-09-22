@@ -1,0 +1,19 @@
+// A field that evidence in the same struct depends on cannot be assigned
+// alone: the rebuilt value would carry evidence about the old field. The
+// whole value is replaced instead, as `set_whole` does.
+struct Percent {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+fn set(p: Percent, v: u8, fits: @(v <= 100)) -> Percent {
+    let mut copy = p;
+    copy.value = v; //~ error: L0233 assigning `copy.value` alone would invalidate `copy.in_range`; replace the whole value
+    copy
+}
+
+fn set_whole(p: Percent, v: u8, fits: @(v <= 100)) -> Percent {
+    let mut copy = p;
+    copy = Percent { value: v, in_range: fits };
+    copy
+}

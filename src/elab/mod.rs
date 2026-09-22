@@ -21,6 +21,7 @@ mod items;
 mod literals;
 mod logic;
 mod loops;
+mod mutation;
 mod operators;
 mod order;
 mod patterns;

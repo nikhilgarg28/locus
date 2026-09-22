@@ -1,0 +1,14 @@
+error[L0232]: cannot assign twice to immutable variable `total`
+ --> tests/corpus/reject/assign_immutable.lc:5:5
+  |
+5 |     total = 1; //~ error: L0232 cannot assign twice to immutable variable `total`
+  |     ^^^^^
+  |
+  = note: a binding is assigned only when declared with `let mut total`; a parameter cannot be assigned yet
+error[L0232]: cannot assign twice to immutable variable `n`
+ --> tests/corpus/reject/assign_immutable.lc:6:5
+  |
+6 |     n = 2; //~ error: L0232 cannot assign twice to immutable variable `n`
+  |     ^
+  |
+  = note: a binding is assigned only when declared with `let mut n`; a parameter cannot be assigned yet

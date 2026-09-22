@@ -1,0 +1,54 @@
+// A binding that shadows another is a different binding. Assigning the
+// inner one leaves the outer alone, and assigning the outer before it is
+// shadowed changes the outer; the join of a branch tells them apart.
+
+fn inner_assigned(n: u8, flag: bool) -> (u8, u8) {
+    let mut x = n;
+    let outer = if flag {
+        let mut x: u8 = 100;
+        x = x.wrapping_add(1);
+        x
+    } else {
+        0u8
+    };
+    // The outer `x` was not assigned in the branch, so what was known of
+    // it still holds.
+    prove!(x == n);
+    (x, outer)
+}
+
+fn outer_assigned(n: u8, flag: bool) -> (u8, u8) {
+    let mut x = n;
+    let inner = if flag {
+        x = 5;
+        let x: u8 = 100;
+        x
+    } else {
+        0u8
+    };
+    (x, inner)
+}
+
+// Both, in one arm: the outer is assigned before the shadow, and the
+// shadow after; only the outer reaches the join.
+fn both_assigned(n: u8, flag: bool) -> (u8, u8) {
+    let mut x = n;
+    let inner = if flag {
+        x = 5;
+        let mut x: u8 = 100;
+        x = x.wrapping_add(1);
+        x
+    } else {
+        0u8
+    };
+    (x, inner)
+}
+
+//~ proofs: 1
+//~ run: inner_assigned(3, true) => (3, 101)
+//~ run: inner_assigned(3, false) => (3, 0)
+//~ run: outer_assigned(3, true) => (5, 100)
+//~ run: outer_assigned(3, false) => (3, 0)
+//~ run: both_assigned(3, true) => (5, 101)
+//~ run: both_assigned(3, false) => (3, 0)
+//~ rust: let mut x = 100_u8;

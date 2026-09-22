@@ -1,4 +1,5 @@
-//! Blocks and the statements in them. A `let` binds through `patterns`.
+//! Blocks and the statements in them. A `let` binds through `patterns`,
+//! and an assignment through `mutation`.
 
 use crate::ast::{self, ExprKind, Form, StatementKind};
 use crate::kernel::{Type, same_type};
@@ -20,26 +21,13 @@ impl Env<'_> {
         for statement in &block.statements {
             match &statement.kind {
                 StatementKind::Error => failed = true,
-                StatementKind::Let {
-                    mutable: true,
-                    pattern,
-                    ..
-                } => {
-                    self.error(
-                        "L0290",
-                        "`let mut` is not in Locus yet; M2 adds it with assignment",
-                        statement.span,
-                    );
-                    self.poison(pattern);
-                    failed = true;
-                }
-                StatementKind::Assign { .. } => {
-                    self.error(
-                        "L0290",
-                        "assignment is not in Locus yet; M2 adds it with `let mut`",
-                        statement.span,
-                    );
-                    failed = true;
+                // `let mut` is read off the pattern's name, where the parser
+                // records it too.
+                StatementKind::Assign { place, value } => {
+                    match self.assign_statement(place, value, statement.span) {
+                        Ok(stmt) => stmts.push(stmt),
+                        Err(()) => failed = true,
+                    }
                 }
                 StatementKind::Let {
                     pattern,

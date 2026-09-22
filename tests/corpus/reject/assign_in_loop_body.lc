@@ -1,0 +1,13 @@
+// Inside the state-passing `loop` and `for`, state is what the loop passes;
+// assigning a binding declared outside the body waits for M3, which
+// replaces those forms. A binding local to the body is fine.
+fn f(n: u8) -> u8 {
+    let mut total = n;
+    for i in 0..n (acc: u8 = 0) {
+        let mut local = acc;
+        local = local.wrapping_add(i);
+        total = local; //~ error: L0290 assignment to `total` inside a loop body
+        continue(local)
+    }
+    total
+}

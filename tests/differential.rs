@@ -71,6 +71,11 @@ fn lowering_and_erasure_agree_on_every_program_and_every_byte() {
         session
             .declare_fn(&counting_loop(theory, false, Some(increment_id)))
             .unwrap(),
+        // Mutation: the check IR runs the versions, the erased tree runs
+        // the assignments.
+        session.declare_fn(&straight_line_mutation()).unwrap(),
+        session.declare_fn(&branching_mutation()).unwrap(),
+        session.declare_fn(&right_side_changes_the_place()).unwrap(),
     ];
     assert_eq!(check_module(session.erased()), Ok(()));
 

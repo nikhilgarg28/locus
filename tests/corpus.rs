@@ -1514,7 +1514,7 @@ fn planted_module(text: &str) -> Module {
 fn plant_in_block(block: &mut EBlock) {
     for stmt in &mut block.stmts {
         match stmt {
-            EStmt::Let { value, .. } => plant(value),
+            EStmt::Let { value, .. } | EStmt::Assign { value, .. } => plant(value),
             EStmt::Expr(expr) => plant(expr),
         }
     }

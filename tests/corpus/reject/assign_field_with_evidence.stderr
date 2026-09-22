@@ -1,0 +1,7 @@
+error[L0233]: assigning `copy.value` alone would invalidate `copy.in_range`; replace the whole value
+  --> tests/corpus/reject/assign_field_with_evidence.lc:11:10
+   |
+11 |     copy.value = v; //~ error: L0233 assigning `copy.value` alone would invalidate `copy.in_range`; replace the whole value
+   |          ^^^^^
+   |
+   = note: evidence in a field speaks of the fields before it, and a value must satisfy its evidence at every moment

@@ -1,0 +1,8 @@
+// Tracked evidence, `let mut ok: @P`, is M4's: evidence that is refreshed
+// as the values it speaks of change. Until then evidence is a snapshot.
+fn f(n: u8) -> u8 {
+    let mut x = n;
+    let mut ok = prove!(x == n); //~ error: L0290 `let mut` of evidence is not in Locus yet
+    x = 1;
+    x
+}

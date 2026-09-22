@@ -19,7 +19,13 @@
 //! machine types, comparisons at each type, `if` (which is also how `!`,
 //! `&&`, and `||` appear in the tree), `match` with payload bindings, calls
 //! to functions generated earlier (so the call graph is acyclic), `math fn`s
-//! over the pure part of all this, and the two loops. Where the tree needs
+//! over the pure part of all this, the two loops, and since M2 `let mut`
+//! with assignment, whole or by a field path, in straight-line code and in
+//! the arms of branches. The generator plays the elaborator's part for
+//! mutation: a mutable local's identity is updated in place to each new
+//! version, an arm's versions are put back after it, and a branch some arm
+//! of which assigned an outer binding records the join lowering will
+//! compute, so the three-way comparison covers versions and joins. Where the tree needs
 //! evidence it gets trivial evidence: the ordered bounds of a `for` are
 //! literals, proved by evaluating the comparison, and the one proof type in
 //! the fragment is `@[0 == 0]`, proved by reflexivity.
@@ -87,8 +93,8 @@ use locus::kernel::{
     same_type,
 };
 use locus::typed::{
-    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, MatchArm, Pattern, Session, Stmt,
-    StructItem, VariantItem,
+    Binder, Block, CompareOp, EnumItem, Expr, FnItem, FnRef, Join, Joined, MatchArm, Pattern,
+    Place, Session, Step as PathStep, Stmt, StructItem, VariantItem,
 };
 use rng::{Rng, case_seed};
 
@@ -326,7 +332,13 @@ fn ordered(ty: MachineInt, lo: i128, hi: i128) -> Proof {
     )
 }
 
-fn if_(condition: Expr, then_block: Block, else_block: Block, ty: &Type) -> Expr {
+fn if_(
+    condition: Expr,
+    then_block: Block,
+    else_block: Block,
+    ty: &Type,
+    joined: Option<Joined>,
+) -> Expr {
     Expr::If {
         condition: Box::new(condition),
         then_fact: HypId::fresh(),
@@ -335,6 +347,7 @@ fn if_(condition: Expr, then_block: Block, else_block: Block, ty: &Type) -> Expr
         else_block,
         ty: ty.clone(),
         result: VarId::fresh(),
+        joined,
     }
 }
 
@@ -367,6 +380,7 @@ fn let_(binder: &Binder, value: Expr) -> Stmt {
         pattern: Pattern::Bind {
             binder: binder.clone(),
             equation: HypId::fresh(),
+            mutable: false,
         },
         value,
     }
@@ -550,6 +564,10 @@ enum StmtKind {
     Discard,
     /// A call, a conditional, or a loop for its own sake.
     Effect,
+    /// `let mut v = value;`
+    LetMut,
+    /// `v = value;` or `v.f.0 = value;`, to a mutable local in scope.
+    Assign,
 }
 
 const STMTS: &[(StmtKind, u32)] = &[
@@ -557,6 +575,8 @@ const STMTS: &[(StmtKind, u32)] = &[
     (StmtKind::Destructure, 1),
     (StmtKind::Discard, 1),
     (StmtKind::Effect, 2),
+    (StmtKind::LetMut, 3),
+    (StmtKind::Assign, 5),
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -585,6 +605,13 @@ struct Generator {
     program: Program,
     // The function being generated.
     locals: Vec<Binder>,
+    /// Beside each local: for a mutable one, the identity of its binding and
+    /// the loop depth it was declared at. The local's own `id` is its
+    /// current version.
+    bindings: Vec<Option<(VarId, usize)>>,
+    /// How many loop bodies enclose the current position: a mutable binding
+    /// declared outside a loop body is not assigned inside it (M3).
+    loop_depth: usize,
     /// Whether each local's Rust type is determined; see `determined`.
     known: HashMap<VarId, bool>,
     /// How many times the current position runs per call, from the loops
@@ -610,6 +637,8 @@ impl Generator {
                 fns: Vec::new(),
             },
             locals: Vec::new(),
+            bindings: Vec::new(),
+            loop_depth: 0,
             known: HashMap::new(),
             multiplier: 1,
             cost: 0,
@@ -740,6 +769,8 @@ impl Generator {
     /// that it can call everything before it.
     fn function(&mut self, index: usize, last: bool) -> Result<(), Rejection> {
         self.locals.clear();
+        self.bindings.clear();
+        self.loop_depth = 0;
         self.known.clear();
         self.multiplier = 1;
         self.cost = 0;
@@ -802,6 +833,203 @@ impl Generator {
     fn bind(&mut self, binder: Binder, determined: bool) {
         self.known.insert(binder.id, determined);
         self.locals.push(binder);
+        self.bindings.push(None);
+    }
+
+    fn bind_mutable(&mut self, binder: Binder, determined: bool) {
+        self.known.insert(binder.id, determined);
+        self.bindings.push(Some((binder.id, self.loop_depth)));
+        self.locals.push(binder);
+    }
+
+    /// Ends a scope: the locals declared in it go away.
+    fn truncate(&mut self, scope: usize) {
+        self.locals.truncate(scope);
+        self.bindings.truncate(scope);
+    }
+
+    // --- Mutation: versions and joins, as the elaborator keeps them ---
+
+    /// The mutable locals in scope: each one's slot, binding, and current
+    /// version. Taken at the entry of a branch.
+    fn entry(&self) -> Vec<(usize, VarId, VarId)> {
+        self.bindings
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, binding)| {
+                binding.map(|(binding, _)| (slot, binding, self.locals[slot].id))
+            })
+            .collect()
+    }
+
+    /// The versions the entry bindings have now: at the end of an arm.
+    fn versions(&self, entry: &[(usize, VarId, VarId)]) -> Vec<VarId> {
+        entry
+            .iter()
+            .map(|(slot, _, _)| self.locals[*slot].id)
+            .collect()
+    }
+
+    /// Puts the entry versions back after an arm.
+    fn restore(&mut self, entry: &[(usize, VarId, VarId)]) {
+        for (slot, _, version) in entry {
+            self.locals[*slot].id = *version;
+        }
+    }
+
+    /// The join of a branch whose arms ended with the given versions: every
+    /// binding some arm assigned gets a version for after the branch, in
+    /// declaration order, which is the set and order lowering computes.
+    fn join(&mut self, entry: &[(usize, VarId, VarId)], ends: &[Vec<VarId>]) -> Option<Joined> {
+        let assigned: Vec<usize> = (0..entry.len())
+            .filter(|&k| ends.iter().any(|end| end[k] != entry[k].2))
+            .collect();
+        if assigned.is_empty() {
+            return None;
+        }
+        let joins = assigned
+            .iter()
+            .map(|&k| {
+                let (slot, binding, _) = entry[k];
+                let version = Binder {
+                    id: VarId::fresh(),
+                    name: self.locals[slot].name.clone(),
+                    ty: self.locals[slot].ty.clone(),
+                };
+                let determined = self.known[&self.locals[slot].id];
+                self.known.insert(version.id, determined);
+                self.locals[slot].id = version.id;
+                Join {
+                    binding,
+                    version,
+                    equation: HypId::fresh(),
+                }
+            })
+            .collect();
+        Some(Joined {
+            tuple: VarId::fresh(),
+            joins,
+            equation: HypId::fresh(),
+        })
+    }
+
+    /// `if condition { then } else { otherwise }`, each arm generated by its
+    /// closure on the entry versions, with the join of what they assigned.
+    fn branch(
+        &mut self,
+        condition: Expr,
+        ty: &Type,
+        then: impl FnOnce(&mut Self) -> Block,
+        otherwise: impl FnOnce(&mut Self) -> Block,
+    ) -> Expr {
+        let entry = self.entry();
+        let then_block = then(self);
+        let then_end = self.versions(&entry);
+        self.restore(&entry);
+        let else_block = otherwise(self);
+        let else_end = self.versions(&entry);
+        self.restore(&entry);
+        let joined = self.join(&entry, &[then_end, else_end]);
+        if_(condition, then_block, else_block, ty, joined)
+    }
+
+    /// `let mut v = value;`, of a type with a runtime form: tracked evidence
+    /// is M4's.
+    fn let_mut(&mut self, depth: usize) -> Stmt {
+        let ty = self.random_type(1);
+        if ty.is_ghost() {
+            return self.binding(depth);
+        }
+        let value = self.expr(&ty, depth, false);
+        let determined = determined(&value, &self.known);
+        let binder = self.fresh(ty);
+        self.bind_mutable(binder.clone(), determined);
+        Stmt::Let {
+            pattern: Pattern::Bind {
+                binder,
+                equation: HypId::fresh(),
+                mutable: true,
+            },
+            value,
+        }
+    }
+
+    /// An assignment to a mutable local declared at this loop depth, whole
+    /// or by a path into its products, or `None` when there is none. Not in
+    /// a `math fn`, whose body is pure.
+    fn assign(&mut self, depth: usize) -> Option<Stmt> {
+        if self.math {
+            return None;
+        }
+        let candidates: Vec<usize> = (0..self.locals.len())
+            .filter(|&slot| matches!(self.bindings[slot], Some((_, at)) if at == self.loop_depth))
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let slot = *self.rng.choose(&candidates);
+        let (binding, _) = self.bindings[slot].expect("a mutable local");
+        let root = self.locals[slot].clone();
+        let mut path = Vec::new();
+        let mut ty = root.ty.clone();
+        while self.rng.chance(1, 2) {
+            let step = match &ty {
+                Type::Tuple(fields) if !fields.is_empty() => {
+                    let index = self.rng.range(0..fields.len());
+                    let step = PathStep {
+                        index,
+                        name: None,
+                        ty: ty.clone(),
+                        proof_fields: fields
+                            .iter()
+                            .map(|field| matches!(field, Type::Proof(_)))
+                            .collect(),
+                    };
+                    ty = fields[index].clone();
+                    step
+                }
+                Type::Struct(id) => {
+                    let item = self.program.struct_item(*id).clone();
+                    let index = self.rng.range(0..item.fields.len());
+                    let step = PathStep {
+                        index,
+                        name: Some(item.fields[index].name.clone()),
+                        ty: ty.clone(),
+                        proof_fields: item
+                            .fields
+                            .iter()
+                            .map(|field| matches!(field.ty, Type::Proof(_)))
+                            .collect(),
+                    };
+                    ty = item.fields[index].ty.clone();
+                    step
+                }
+                _ => break,
+            };
+            path.push(step);
+        }
+        // The right side may assign the binding itself; the version it
+        // leaves is what the place is rebuilt from, and this assignment
+        // makes the next one.
+        let value = self.expr(&ty, depth, false);
+        let version = Binder {
+            id: VarId::fresh(),
+            name: root.name.clone(),
+            ty: root.ty.clone(),
+        };
+        let determined = self.known[&self.locals[slot].id];
+        self.known.insert(version.id, determined);
+        self.locals[slot].id = version.id;
+        Some(Stmt::Assign {
+            place: Place {
+                binding,
+                name: root.name,
+                path,
+            },
+            value,
+            version,
+            equation: HypId::fresh(),
+        })
     }
 
     // --- Blocks and statements ---
@@ -815,7 +1043,7 @@ impl Generator {
         } else {
             Some(Box::new(self.expr(ty, depth, determined)))
         };
-        self.locals.truncate(scope);
+        self.truncate(scope);
         Block { stmts, tail }
     }
 
@@ -844,6 +1072,7 @@ impl Generator {
                         Pattern::Bind {
                             binder,
                             equation: HypId::fresh(),
+                            mutable: false,
                         }
                     })
                     .collect();
@@ -874,6 +1103,8 @@ impl Generator {
                 }
             }
             StmtKind::Bind => self.binding(depth),
+            StmtKind::LetMut => self.let_mut(depth),
+            StmtKind::Assign => self.assign(depth).unwrap_or_else(|| self.binding(depth)),
         }
     }
 
@@ -1022,19 +1253,31 @@ impl Generator {
             }
             Production::If => {
                 let condition = self.condition(inner);
-                let then_block = self.block(ty, inner, determined);
-                let else_block = self.block(ty, inner, determined);
-                if_(condition, then_block, else_block, ty)
+                self.branch(
+                    condition,
+                    ty,
+                    |g| g.block(ty, inner, determined),
+                    |g| g.block(ty, inner, determined),
+                )
             }
             Production::ShortCircuit => {
                 let left = self.condition(inner);
-                let right = self.block(&Type::Bool, inner, false);
                 if self.rng.chance(1, 2) {
                     // a && b
-                    if_(left, right, tail_block(Expr::Bool(false)), ty)
+                    self.branch(
+                        left,
+                        ty,
+                        |g| g.block(&Type::Bool, inner, false),
+                        |_| tail_block(Expr::Bool(false)),
+                    )
                 } else {
                     // a || b
-                    if_(left, tail_block(Expr::Bool(true)), right, ty)
+                    self.branch(
+                        left,
+                        ty,
+                        |_| tail_block(Expr::Bool(true)),
+                        |g| g.block(&Type::Bool, inner, false),
+                    )
                 }
             }
             Production::Not => {
@@ -1044,6 +1287,7 @@ impl Generator {
                     tail_block(Expr::Bool(false)),
                     tail_block(Expr::Bool(true)),
                     ty,
+                    None,
                 )
             }
             Production::Match => self.match_(ty, inner, determined),
@@ -1216,6 +1460,8 @@ impl Generator {
     fn match_(&mut self, ty: &Type, depth: usize, determined: bool) -> Expr {
         let (id, item) = self.rng.choose(&self.program.enums).clone();
         let scrutinee = guarded(self.expr(&Type::Enum(id), depth, false));
+        let entry = self.entry();
+        let mut ends = Vec::new();
         let arms = item
             .variants
             .iter()
@@ -1231,7 +1477,9 @@ impl Generator {
                     })
                     .collect();
                 let body = self.block(ty, depth, determined);
-                self.locals.truncate(scope);
+                self.truncate(scope);
+                ends.push(self.versions(&entry));
+                self.restore(&entry);
                 MatchArm {
                     variant_name: variant.name.clone(),
                     payload,
@@ -1240,12 +1488,14 @@ impl Generator {
                 }
             })
             .collect();
+        let joined = self.join(&entry, &ends);
         Expr::Match {
             scrutinee: Box::new(scrutinee),
             enum_name: item.name,
             arms,
             ty: ty.clone(),
             result: VarId::fresh(),
+            joined,
         }
     }
 
@@ -1302,48 +1552,41 @@ impl Generator {
         }
         let outer = self.multiplier;
         self.multiplier = outer * (u64::from(limit) + 1);
+        self.loop_depth += 1;
         let head = self.stmts(depth);
-        let stop = {
-            let scope = self.locals.len();
-            let stmts = self.stmts(depth);
-            let value = self.expr(ty, depth, determined);
-            self.locals.truncate(scope);
+        let i = Expr::var(&counter);
+        let at_limit = Expr::u8(limit);
+        let spelling = self.rng.below(4);
+        let condition = match spelling {
+            0 => compare(CompareOp::Eq, MachineInt::U8, i, at_limit),
+            1 => compare(CompareOp::Ne, MachineInt::U8, i, at_limit),
+            2 => compare(CompareOp::Ge, MachineInt::U8, i, at_limit),
+            _ => compare(CompareOp::Lt, MachineInt::U8, i, at_limit),
+        };
+        // The arms may assign what `head` declared; the join is recorded
+        // although every arm leaves the loop or continues it.
+        let stop = |g: &mut Self| {
+            let scope = g.locals.len();
+            let stmts = g.stmts(depth);
+            let value = g.expr(ty, depth, determined);
+            g.truncate(scope);
             Block {
                 stmts,
                 tail: Some(Box::new(Expr::Break(Box::new(value)))),
             }
         };
-        let go = self.advance(Some(&counter), &state[1..], depth);
-        self.multiplier = outer;
-        self.locals.truncate(scope);
-        let i = Expr::var(&counter);
-        let at_limit = Expr::u8(limit);
-        let spelling = self.rng.below(4);
-        let (condition, then_block, else_block) = match spelling {
-            0 => (
-                compare(CompareOp::Eq, MachineInt::U8, i, at_limit),
-                stop,
-                go,
-            ),
-            1 => (
-                compare(CompareOp::Ne, MachineInt::U8, i, at_limit),
-                go,
-                stop,
-            ),
-            2 => (
-                compare(CompareOp::Ge, MachineInt::U8, i, at_limit),
-                stop,
-                go,
-            ),
-            _ => (
-                compare(CompareOp::Lt, MachineInt::U8, i, at_limit),
-                go,
-                stop,
-            ),
+        let go = |g: &mut Self| g.advance(Some(&counter), &state[1..], depth);
+        let tail = if matches!(spelling, 0 | 2) {
+            self.branch(condition, &unit(), stop, go)
+        } else {
+            self.branch(condition, &unit(), go, stop)
         };
+        self.loop_depth -= 1;
+        self.multiplier = outer;
+        self.truncate(scope);
         let body = Block {
             stmts: head,
-            tail: Some(Box::new(if_(condition, then_block, else_block, &unit()))),
+            tail: Some(Box::new(tail)),
         };
         Expr::Loop {
             state,
@@ -1382,9 +1625,11 @@ impl Generator {
         }
         let outer = self.multiplier;
         self.multiplier = outer * ((hi - lo) as u64 + 1);
+        self.loop_depth += 1;
         let body = self.advance(None, &state, depth);
+        self.loop_depth -= 1;
         self.multiplier = outer;
-        self.locals.truncate(scope);
+        self.truncate(scope);
         Expr::For {
             index,
             lower: HypId::fresh(),
@@ -1412,13 +1657,16 @@ impl Generator {
         let stmts = self.stmts(depth);
         let tail = if !self.math && self.rng.chance(1, 4) {
             let condition = self.condition(depth);
-            let then_block = self.advance_plainly(counter, state, depth);
-            let else_block = self.advance_plainly(counter, state, depth);
-            if_(condition, then_block, else_block, &unit())
+            self.branch(
+                condition,
+                &unit(),
+                |g| g.advance_plainly(counter, state, depth),
+                |g| g.advance_plainly(counter, state, depth),
+            )
         } else {
             self.next(counter, state, depth)
         };
-        self.locals.truncate(scope);
+        self.truncate(scope);
         Block {
             stmts,
             tail: Some(Box::new(tail)),
@@ -1434,7 +1682,7 @@ impl Generator {
         let scope = self.locals.len();
         let stmts = self.stmts(depth);
         let tail = self.next(counter, state, depth);
-        self.locals.truncate(scope);
+        self.truncate(scope);
         Block {
             stmts,
             tail: Some(Box::new(tail)),
@@ -1622,6 +1870,10 @@ struct Disagreement {
 #[derive(Default)]
 struct Summary {
     generated: usize,
+    /// Programs with an assignment, and with one inside an arm of a branch:
+    /// what the weights of `STMTS` are set for.
+    assigning: usize,
+    branching_assignment: usize,
     rejected: Vec<Rejection>,
     /// Generation or checking panicked: the seed and the message.
     crashed: Vec<(u64, String)>,
@@ -1797,7 +2049,12 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
         })
     }));
     match attempt {
-        Ok(Ok(prepared)) => Some(prepared),
+        Ok(Ok(prepared)) => {
+            let (assigns, in_branches) = assignments_of(&prepared.program);
+            summary.assigning += usize::from(assigns);
+            summary.branching_assignment += usize::from(in_branches);
+            Some(prepared)
+        }
         Ok(Err(rejection)) => {
             summary.rejected.push(rejection);
             None
@@ -1812,6 +2069,35 @@ fn generate_one(seed: u64, base: &Session, summary: &mut Summary) -> Option<Prep
             None
         }
     }
+}
+
+/// Whether the program assigns anywhere, and inside an arm of a branch.
+fn assignments_of(program: &Program) -> (bool, bool) {
+    let mut counting = program.clone();
+    let (mut assigns, mut in_branches) = (false, false);
+    let assigns_in = |block: &Block| {
+        block
+            .stmts
+            .iter()
+            .any(|stmt| matches!(stmt, Stmt::Assign { .. }))
+    };
+    counting.visit_blocks(&mut |block| {
+        assigns |= assigns_in(block);
+        false
+    });
+    counting.visit_exprs(&mut |expr, _, _| {
+        match expr {
+            Expr::If {
+                then_block,
+                else_block,
+                ..
+            } => in_branches |= assigns_in(then_block) || assigns_in(else_block),
+            Expr::Match { arms, .. } => in_branches |= arms.iter().any(|arm| assigns_in(&arm.body)),
+            _ => {}
+        }
+        false
+    });
+    (assigns, in_branches)
 }
 
 /// Runs `count` programs from the seed, a batch at a time.
@@ -2038,6 +2324,20 @@ impl Tables {
         }
     }
 
+    /// The type of a place: the binding's type, then each field's.
+    fn place_type(&self, place: &Place) -> Option<Type> {
+        let mut ty = place.path.first().map(|step| step.ty.clone())?;
+        for step in &place.path {
+            let fields = match &step.ty {
+                Type::Tuple(fields) => fields.clone(),
+                Type::Struct(id) => self.struct_fields(*id),
+                _ => return None,
+            };
+            ty = fields.get(step.index)?.clone();
+        }
+        Some(ty)
+    }
+
     fn struct_fields(&self, id: StructId) -> Vec<Type> {
         self.structs
             .get(&id)
@@ -2087,6 +2387,10 @@ fn walk_block(
         let stopped = match stmt {
             Stmt::Let { pattern, value } => {
                 let ty = pattern_type(pattern);
+                walk_expr(value, ty.as_ref(), scope, visit)
+            }
+            Stmt::Assign { place, value, .. } => {
+                let ty = scope.tables.place_type(place);
                 walk_expr(value, ty.as_ref(), scope, visit)
             }
             Stmt::Expr(expr) => walk_expr(expr, None, scope, visit),
@@ -2441,7 +2745,12 @@ fn apply(program: &mut Program, step: Step) -> Option<bool> {
             program.visit_blocks(&mut |block| {
                 for (index, stmt) in block.stmts.iter().enumerate() {
                     let Stmt::Let {
-                        pattern: Pattern::Bind { binder, .. },
+                        pattern:
+                            Pattern::Bind {
+                                binder,
+                                mutable: false,
+                                ..
+                            },
                         value,
                     } = stmt
                     else {
@@ -2630,8 +2939,10 @@ fn shortened(text: &str) -> String {
 
 fn print_summary(summary: &Summary, mode: &str) {
     let mut out = format!(
-        "random programs ({mode}): {} generated, {} rejected by the checker, {} crashed, {} cases: {} agreed, {} inconclusive, {} disagreed\n",
+        "random programs ({mode}): {} generated ({} assign, {} in a branch), {} rejected by the checker, {} crashed, {} cases: {} agreed, {} inconclusive, {} disagreed\n",
         summary.generated,
+        summary.assigning,
+        summary.branching_assignment,
         summary.rejected.len(),
         summary.crashed.len(),
         summary.cases,
@@ -2755,6 +3066,7 @@ fn planted(base: &Session) -> (Program, Session) {
                         tail_block(Expr::u8(7)),
                         tail_block(Expr::var(&v1)),
                         &Type::U8,
+                        None,
                     ),
                 ),
                 let_(
