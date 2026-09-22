@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 65,
-  "savedAt": "2026-09-22T02:05:40.000Z",
+  "rev": 66,
+  "savedAt": "2026-09-22T04:05:28.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -7152,12 +7152,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t274",
    "n": 158,
    "title": "S5 · Statements and expressions: let mut, assignment, return, Rust's loop forms, references, the never type",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Syntax. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: M2 (LOC-178).\nCovers: LOC-1, LOC-93, LOC-92, LOC-127.\n\nScope. Parse let mut, assignment to a variable or field path, return, loop, while, while let, for pattern in range, break with a value, continue, & and &mut in types and arguments, and ! as a type. Rust's rule against struct literals in condition position is kept. The state-passing loop still parses until M3 removes it.\n\nTests.\n- The three target examples are added verbatim under tests/corpus/target, marked parse-only. Later commits raise each file's marking to check and then to run; the marking is the visible progress of the whole plan.\n- Fuzz and stack-depth tests cover the new forms.\n\nDone when. Every program in Target examples parses. The syntax lane is done.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. let mut, assignment as a statement (L0123 bad place, L0124 in value position), mut on bindings and parameters (L0125 misplaced), return, loop, while, while let, for over a range or any expression, break with a value, plain continue beside the old continue(...), & and &mut in types and expressions, ! as a type, ..= in for headers. Rust's statement rule: a block-like expression in statement position ends the statement, which fixed a silent misparse of for { } (a, b) as a call. All three target files parse clean. Nesting test passes at 544 KB. The syntax lane is done: later lanes never edit parser.rs.\n\nLane: Syntax. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: M2 (LOC-178).\nCovers: LOC-1, LOC-93, LOC-92, LOC-127.\n\nScope. Parse let mut, assignment to a variable or field path, return, loop, while, while let, for pattern in range, break with a value, continue, & and &mut in types and arguments, and ! as a type. Rust's rule against struct literals in condition position is kept. The state-passing loop still parses until M3 removes it.\n\nTests.\n- The three target examples are added verbatim under tests/corpus/target, marked parse-only. Later commits raise each file's marking to check and then to run; the marking is the visible progress of the whole plan.\n- Fuzz and stack-depth tests cover the new forms.\n\nDone when. Every program in Target examples parses. The syntax lane is done.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T02:05:40.000Z"
+   "updated": "2026-09-22T04:05:28.000Z"
   },
   {
    "id": "t275",
@@ -7377,7 +7377,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "project": "p266",
    "notes": "Lane: Mutation. Wave 7.\nDepends on: M1 (LOC-177), S5 (LOC-158).\nUnblocks: M3 (LOC-179), O1 (LOC-182).\nCovers: LOC-1, LOC-142.\n\nScope. The typed tree gains assignment to a variable or field path and stays source-shaped. lower gives each assignment a new version and makes a variable assigned in a branch a result of the branch. The printer emits let mut and assignment as written.\n\nTests.\n- Differential and compiled tests for straight-line and branching mutation.\n- The generator of R1 emits mutable locals, and the three-way comparison holds.\n- The generated Rust has no unused mut, which -D warnings already enforces.\n- Case 9: the right side changes what the left side names; lo == 3 and hi == 7 three ways. The same for the two argument orders.\n- Case 10: both arms assign and refresh, and the condition reads the entry version.\n- The assigned set, on the check IR lowering produces and through both interpreters: an outer binding assigned in a nested block; a field write counting for its root; a local let mut inside a branch staying local; a shadowing binding assigned while the outer one is not, and the reverse.\n\nDone when. The first program that reads like ordinary imperative Rust.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T23:37:20.000Z"
+   "updated": "2026-09-22T04:05:28.000Z"
   },
   {
    "id": "t295",
