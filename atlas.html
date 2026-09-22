@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 88,
-  "savedAt": "2026-09-22T20:22:59.000Z",
+  "rev": 89,
+  "savedAt": "2026-09-22T20:30:17.000Z",
   "nextTask": 194,
   "nextId": 310,
   "taskPrefix": "LOC",
@@ -7337,12 +7337,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t250",
    "n": 135,
    "title": "Decide what locus build emits",
-   "status": "todo",
+   "status": "done",
    "priority": 2,
    "project": "p89",
-   "notes": "Partly decided 21 September (Target language: What is generated): Proved and Ghost cannot be constructed outside generated code, and are defined once for all generated modules. Still open: the layout on disk, and how a crate includes it.\n\nOne module per file, to be declared with mod? Where Proved and Ghost live when there are several files, since each file defining its own makes them different Rust types; and whether Proved can be made unconstructible outside generated code from the start, which shapes every signature that is generated.",
+   "notes": "Decided 22 September by O2: a plain Cargo layout. locus build writes \u003cdir>/Cargo.toml (edition 2024, no dependencies), src/lib.rs with the header lints, the marker types Proved and Ghost (a struct with a private field and a private constant, so descendants can name the value and a Rust caller cannot construct it), and one pub mod per file; each Locus file becomes src/\u003cstem>.rs. Output is byte-identical across runs.\n\nPartly decided 21 September (Target language: What is generated): Proved and Ghost cannot be constructed outside generated code, and are defined once for all generated modules. Still open: the layout on disk, and how a crate includes it.\n\nOne module per file, to be declared with mod? Where Proved and Ghost live when there are several files, since each file defining its own makes them different Rust types; and whether Proved can be made unconstructible outside generated code from the start, which shapes every signature that is generated.",
    "created": "2026-09-21T21:08:15.000Z",
-   "updated": "2026-09-21T21:22:55.000Z"
+   "updated": "2026-09-22T20:30:17.000Z"
   },
   {
    "id": "t251",
@@ -7865,12 +7865,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t299",
    "n": 183,
    "title": "O2 · Visibility, the export boundary, and locus build",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 22 September. Visibility recorded and printed as written, private by default. The export boundary: L0244 a plain pub function with a forgeable parameter type (evidence, or a tuple, enum, or struct through which Rust could pass a marker or set a field the evidence speaks of); L0245 a pub struct carrying evidence with a pub field. locus build writes a Cargo crate (LOC-135 closed). From the Rust side: calling a pub(crate) evidence-taking function, naming or constructing the marker, and building a struct with private fields are E0603, E0451, E0616; the marker replay fails to compile; a plain pub function runs. For the vision discussion: Target examples write pub fn step, remaining, and midpoint with evidence parameters, which the Vision's own rule forbids; the corpus copies say pub(crate).\n\nLane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T19:45:50.000Z"
+   "updated": "2026-09-22T20:30:17.000Z"
   },
   {
    "id": "t300",
