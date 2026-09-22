@@ -23,10 +23,12 @@
 //! the kernel: a claim is false when some assignment of values to the
 //! context's variables makes every hypothesis true and the claim false. Its
 //! integers are `i128` with checked arithmetic, so a claim that computes
-//! past `i128` goes undecided, as does a quantifier over `Nat` or `Int` that
-//! no sampled value settles. A claim the evaluator cannot decide is
-//! skipped, and the skips are counted. Three tests at the end check the
-//! evaluator itself.
+//! past `i128` goes undecided, as does a quantifier over `Nat`, `Int`, or a
+//! machine integer type that no sampled value settles. The machine integer
+//! types are `i128` values held in range, with their own table of widths
+//! and a reduction written out in modulus arithmetic. A claim the
+//! evaluator cannot decide is skipped, and the skips are counted. Four
+//! tests at the end check the evaluator itself.
 //!
 //! `LOCUS_EXTENDED=1` runs a hundred times as many mutants.
 
@@ -39,12 +41,15 @@ use locus::elab::elaborate;
 use locus::kernel::derive::{Chain, fold_claim, symm_at, unfold_claim};
 use locus::kernel::theory::{self, Theory};
 use locus::kernel::{
-    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, Mode, Prelude, Prim, Proof,
-    ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof, infer_proof, infer_term,
+    Axiom, Binding, Context, Definitions, FnId, HypId, HypRef, Integer, MachineInt, Mode, Prelude,
+    Prim, Proof, ProofArm, Term, TermArm, Type, VarId, case_variants, check_proof, infer_proof,
+    infer_term,
 };
 use locus::parser::parse;
 use locus::source::SourceMap;
 use locus::typed::FnRef;
+
+use MachineInt::{I8, I16, I32, I64, U8, U16, U32, U64};
 
 const SEED: u64 = 0x5eed_10c5_2024_0002;
 
@@ -210,6 +215,10 @@ enum Value {
     /// arithmetic is checked, and a result outside `i128` is no value: the
     /// claim goes undecided.
     Int(i128),
+    /// A value of a machine integer type other than `u8`, which is `U8`.
+    /// The value lies in the range of the type: `machine_of` builds one, and
+    /// a literal outside its range has no value.
+    Machine(MachineInt, i128),
     /// A tuple or a struct.
     Product(Vec<Value>),
     Variant(usize, Vec<Value>),
@@ -225,16 +234,150 @@ enum Value {
 impl Value {
     fn is_data(&self) -> bool {
         match self {
-            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) => true,
+            Self::Bool(_) | Self::U8(_) | Self::Nat(_) | Self::Int(_) | Self::Machine(..) => true,
             Self::Product(values) | Self::Variant(_, values) => values
                 .iter()
                 .all(|value| *value == Self::Opaque || value.is_data()),
             Self::Fn(_) | Self::Prop(_) | Self::Opaque => false,
         }
     }
+
+    /// Two data values of different machine types are not comparable: an
+    /// equation between them is ill typed, not false.
+    fn comparable(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Machine(left, _), Self::Machine(right, _)) => left == right,
+            (Self::U8(_), Self::Machine(..)) | (Self::Machine(..), Self::U8(_)) => false,
+            _ => true,
+        }
+    }
 }
 
 type Assignment = HashMap<VarId, Value>;
+
+// --- The oracle's own table of the machine integer types ------------------------
+
+/// The width and signedness of a machine type, from its name. Every other
+/// fact about the type below is computed from this pair.
+fn shape(ty: MachineInt) -> (u32, bool) {
+    match ty {
+        U8 => (8, false),
+        U16 => (16, false),
+        U32 => (32, false),
+        U64 => (64, false),
+        I8 => (8, true),
+        I16 => (16, true),
+        I32 => (32, true),
+        I64 => (64, true),
+    }
+}
+
+/// The least and greatest value of a machine type.
+fn machine_range(ty: MachineInt) -> (i128, i128) {
+    let (bits, signed) = shape(ty);
+    if signed {
+        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+    } else {
+        (0, (1i128 << bits) - 1)
+    }
+}
+
+fn in_range(ty: MachineInt, value: i128) -> bool {
+    let (lo, hi) = machine_range(ty);
+    lo <= value && value <= hi
+}
+
+/// The one value of `ty` congruent to `value` modulo `2^bits`: the
+/// remainder, made non-negative, and moved down by a period when a signed
+/// type has it in its upper half. Every value of `u64` fits in `i128`, so
+/// nothing here overflows.
+fn machine_wrap(ty: MachineInt, value: i128) -> i128 {
+    let (bits, signed) = shape(ty);
+    let modulus = 1i128 << bits;
+    let mut reduced = value % modulus;
+    if reduced < 0 {
+        reduced += modulus;
+    }
+    if signed && reduced >= modulus / 2 {
+        reduced -= modulus;
+    }
+    reduced
+}
+
+/// The value of `ty` with the given number, which must be in range.
+fn machine_of(ty: MachineInt, value: i128) -> Value {
+    assert!(
+        in_range(ty, value),
+        "{value} is not a value of {}",
+        ty.name()
+    );
+    match ty {
+        U8 => Value::U8(value as u8),
+        other => Value::Machine(other, value),
+    }
+}
+
+/// The number of a value of `ty`, when the value is of that type.
+fn machine_number(ty: MachineInt, value: &Value) -> Option<i128> {
+    match (ty, value) {
+        (U8, Value::U8(byte)) => Some(i128::from(*byte)),
+        (ty, Value::Machine(found, number)) if *found == ty => Some(*number),
+        _ => None,
+    }
+}
+
+/// The values a quantifier over a machine type is tried at, and the fixed
+/// part of what a variable of the type is tried at: the ends of the range
+/// and their neighbours, and the small numbers around zero and around a
+/// byte, where in range. A sample, like `INT_SAMPLE`.
+fn machine_sample(ty: MachineInt) -> Vec<i128> {
+    let (lo, hi) = machine_range(ty);
+    let mut values = vec![
+        lo,
+        lo + 1,
+        lo + 2,
+        hi,
+        hi - 1,
+        hi - 2,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        127,
+        128,
+        255,
+        256,
+    ];
+    values.retain(|value| in_range(ty, *value));
+    values.sort_unstable();
+    values.dedup();
+    values
+}
+
+/// The types a machine type is confused with: the other sign at the same
+/// width, and the same sign one width up and down.
+fn neighbours(ty: MachineInt) -> Vec<MachineInt> {
+    match ty {
+        U8 => vec![I8, U16],
+        U16 => vec![I16, U8, U32],
+        U32 => vec![I32, U16, U64],
+        U64 => vec![I64, U32],
+        I8 => vec![U8, I16],
+        I16 => vec![U16, I8, I32],
+        I32 => vec![U32, I16, I64],
+        I64 => vec![U64, I32],
+    }
+}
+
+/// A literal of a machine type, `u8` included.
+fn lit(ty: MachineInt, value: i128) -> Term {
+    Term::machine(ty, Integer::from(value))
+}
+
+fn int128(value: i128) -> Term {
+    Term::Int(Integer::from(value))
+}
 
 /// How much one question to the oracle may compute.
 const ORACLE_STEPS: usize = 400_000;
@@ -288,7 +431,8 @@ impl<'a> Oracle<'a> {
                     return (left != right).then_some(false);
                 }
                 let (left, right) = (self.value(left)?, self.value(right)?);
-                (left.is_data() && right.is_data()).then_some(left == right)
+                (left.is_data() && right.is_data() && left.comparable(&right))
+                    .then_some(left == right)
             }
             Term::Implies(premise, conclusion) => {
                 match (self.prop(premise), self.prop(conclusion)) {
@@ -422,6 +566,13 @@ impl<'a> Oracle<'a> {
             Type::U8 => ((0..=255).map(Value::U8).collect(), true),
             Type::Nat => ([0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(), false),
             Type::Int => (INT_SAMPLE.map(Value::Int).to_vec(), false),
+            Type::Machine(ty) => (
+                machine_sample(*ty)
+                    .into_iter()
+                    .map(|value| machine_of(*ty, value))
+                    .collect(),
+                false,
+            ),
             // A proof has no content: quantifying over proofs of `P` is
             // assuming `P`.
             Type::Proof(prop) => {
@@ -490,6 +641,12 @@ impl<'a> Oracle<'a> {
             Term::U8(value) => Some(Value::U8(*value)),
             Term::Nat(value) => value.to_u64().map(Value::Nat),
             Term::Int(value) => value.to_i128().map(Value::Int),
+            // A literal at `u8` in this form, or outside its range, is not a
+            // term and has no value.
+            Term::Machine(ty, value) => {
+                let value = value.to_i128()?;
+                (*ty != U8 && in_range(*ty, value)).then_some(Value::Machine(*ty, value))
+            }
             Term::Prim(prim, arguments) => {
                 let arguments = self.values(arguments)?;
                 primitive(*prim, &arguments)
@@ -583,6 +740,11 @@ fn primitive(prim: Prim, arguments: &[Value]) -> Option<Value> {
         (Prim::IntRem, [Value::Int(a), Value::Int(b)]) => {
             Value::Int(if *b == 0 { *a } else { a.checked_rem(*b)? })
         }
+        // The model of a machine type over Int: view is the inclusion, wrap
+        // is reduction into the range, and cast is wrap of view.
+        (Prim::View(ty), [x]) => Value::Int(machine_number(ty, x)?),
+        (Prim::Wrap(ty), [Value::Int(n)]) => machine_of(ty, machine_wrap(ty, *n)),
+        (Prim::Cast(from, to), [x]) => machine_of(to, machine_wrap(to, machine_number(from, x)?)),
         _ => return None,
     })
 }
@@ -598,16 +760,20 @@ struct Search<'a> {
     oracle: Oracle<'a>,
     bytes: Vec<u8>,
     ints: Vec<i128>,
+    /// A few random numbers of the full 64-bit width, either sign, for the
+    /// variables of machine types; the ones in range of the type are used.
+    randoms: Vec<i128>,
     nodes: usize,
     found: Vec<Assignment>,
 }
 
-/// Every byte and integer literal in a term, as a place where a comparison
-/// changes.
+/// Every byte, integer, and machine literal in a term, as a place where a
+/// comparison changes. A machine literal's number is an integer worth
+/// trying: it is what the literal views to.
 fn literals(term: &Term, bytes: &mut Vec<u8>, ints: &mut Vec<i128>) {
     match term {
         Term::U8(byte) => bytes.push(*byte),
-        Term::Int(value) => ints.extend(value.to_i128()),
+        Term::Int(value) | Term::Machine(_, value) => ints.extend(value.to_i128()),
         _ => {}
     }
     for child in term_children(term) {
@@ -638,14 +804,42 @@ impl<'a> Search<'a> {
         ints.sort_unstable();
         ints.dedup();
         rng.shuffle(&mut ints);
+        let randoms = (0..3)
+            .flat_map(|_| {
+                let wide = i128::from(rng.next());
+                let narrow = i128::from(rng.next() % 1000);
+                [wide, -wide, narrow, -narrow]
+            })
+            .collect();
         Self {
             scene,
             oracle: Oracle::new(scene),
             bytes,
             ints,
+            randoms,
             nodes: 0,
             found: Vec::new(),
         }
+    }
+
+    /// The values of a machine type a variable is tried at: the sample of
+    /// the type, every integer literal around that lies in its range, and
+    /// the random numbers that do.
+    fn machine_candidates(&self, ty: MachineInt) -> Vec<Value> {
+        let mut values = machine_sample(ty);
+        values.extend(
+            self.ints
+                .iter()
+                .chain(&self.randoms)
+                .copied()
+                .filter(|value| in_range(ty, *value)),
+        );
+        values.sort_unstable();
+        values.dedup();
+        values
+            .into_iter()
+            .map(|value| machine_of(ty, value))
+            .collect()
     }
 
     /// Some values of a type. Fewer than all of them is fine: the search
@@ -657,6 +851,7 @@ impl<'a> Search<'a> {
             Type::U8 => self.bytes.iter().copied().map(Value::U8).collect(),
             Type::Nat => [0, 1, 2, 3, 255, 256, 257].map(Value::Nat).to_vec(),
             Type::Int => self.ints.iter().copied().map(Value::Int).collect(),
+            Type::Machine(machine) => self.machine_candidates(*machine),
             Type::Tuple(_) | Type::Struct(_) if depth < 3 => self.products(ty, depth),
             Type::Enum(_) if depth < 3 => {
                 let Some(variants) = case_variants(&self.scene.ctx, ty) else {
@@ -669,9 +864,11 @@ impl<'a> Search<'a> {
                     let fields: Vec<Vec<Value>> = payload
                         .iter()
                         .map(|field| match field {
-                            Type::Bool | Type::U8 | Type::Enum(_) | Type::Struct(_) => {
-                                self.candidates(field, depth + 1)
-                            }
+                            Type::Bool
+                            | Type::U8
+                            | Type::Machine(_)
+                            | Type::Enum(_)
+                            | Type::Struct(_) => self.candidates(field, depth + 1),
                             _ => Vec::new(),
                         })
                         .collect();
@@ -865,6 +1062,7 @@ fn term_children(term: &Term) -> Vec<&Term> {
         | Term::U8(_)
         | Term::Nat(_)
         | Term::Int(_)
+        | Term::Machine(..)
         | Term::Proof(_)
         | Term::Fn(_)
         | Term::Absurd(..) => Vec::new(),
@@ -897,6 +1095,7 @@ fn term_with_children(term: &Term, children: Vec<Term>) -> Term {
         | Term::U8(_)
         | Term::Nat(_)
         | Term::Int(_)
+        | Term::Machine(..)
         | Term::Proof(_)
         | Term::Fn(_)
         | Term::Absurd(..) => term.clone(),
@@ -955,9 +1154,10 @@ fn rewrites(term: &Term, local: &dyn Fn(&Term) -> Vec<Term>) -> Vec<Term> {
     out
 }
 
-/// What one node of a claim may become: a neighbouring literal, a sibling
-/// comparison or operation, swapped sides, `<=` made strict or a strict
-/// `<=` relaxed, another variable, a negation.
+/// What one node of a claim may become: a neighbouring literal, the other
+/// end of a machine range, a sibling comparison or operation, the same
+/// primitive at a neighbouring machine type, swapped sides, `<=` made
+/// strict or a strict `<=` relaxed, another variable, a negation.
 fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<Term> {
     let mut out = Vec::new();
     match term {
@@ -968,6 +1168,38 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
         Term::Int(value) => {
             out.push(Term::Int(value.add(&Integer::from(1i64))));
             out.push(Term::Int(value.sub(&Integer::from(1i64))));
+            // The bound of a range for the other bound: a claim about the
+            // range of a machine type then names the wrong end.
+            if let Some(value) = value.to_i128() {
+                for ty in MachineInt::ALL {
+                    let (lo, hi) = machine_range(ty);
+                    if value == lo {
+                        out.push(int128(hi));
+                    }
+                    if value == hi {
+                        out.push(int128(lo));
+                    }
+                }
+            }
+        }
+        // A machine literal moves to a neighbour within its range, and from
+        // one end of the range to the other.
+        Term::Machine(ty, value) => {
+            if let Some(value) = value.to_i128() {
+                let (lo, hi) = machine_range(*ty);
+                if value < hi {
+                    out.push(lit(*ty, value + 1));
+                }
+                if value > lo {
+                    out.push(lit(*ty, value - 1));
+                }
+                if value == lo {
+                    out.push(lit(*ty, hi));
+                }
+                if value == hi {
+                    out.push(lit(*ty, lo));
+                }
+            }
         }
         Term::Nat(number) => {
             if let Some(number) = number.to_u64() {
@@ -1007,9 +1239,34 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
                 // `<` is not a primitive of its own; it is handled below.
                 Prim::NatAdd | Prim::Succ | Prim::ToNat | Prim::OfNat | Prim::IntNeg => None,
                 Prim::IntLe => None,
+                // The machine primitives have several siblings each, below.
+                Prim::View(_) | Prim::Wrap(_) | Prim::Cast(..) => None,
             };
             if let Some(sibling) = sibling {
                 out.push(Term::Prim(sibling, arguments.clone()));
+            }
+            // The same primitive at a neighbouring type, and a cast turned
+            // around. A view or a cast so changed expects an argument of
+            // another type, and a wrap or a cast so changed has another
+            // result type: in a proof the kernel must notice, and in a
+            // claim the oracle finds the equation ill typed and leaves it.
+            let retyped: Vec<Prim> = match prim {
+                Prim::View(ty) => neighbours(*ty).into_iter().map(Prim::View).collect(),
+                Prim::Wrap(ty) => neighbours(*ty).into_iter().map(Prim::Wrap).collect(),
+                Prim::Cast(from, to) => {
+                    let mut casts: Vec<Prim> = neighbours(*to)
+                        .into_iter()
+                        .map(|other| Prim::Cast(*from, other))
+                        .collect();
+                    if from != to {
+                        casts.push(Prim::Cast(*to, *from));
+                    }
+                    casts
+                }
+                _ => Vec::new(),
+            };
+            for prim in retyped {
+                out.push(Term::Prim(prim, arguments.clone()));
             }
             if let [left, right] = arguments.as_slice() {
                 out.push(Term::Prim(*prim, vec![right.clone(), left.clone()]));
@@ -1303,11 +1560,118 @@ fn axiom_with_terms(axiom: &Axiom, terms: Vec<Term>) -> Axiom {
         Axiom::IntRemUpperNeg(..) => Axiom::IntRemUpperNeg(take(), take()),
         Axiom::IntRemNonneg(..) => Axiom::IntRemNonneg(take(), take()),
         Axiom::IntRemNonpos(..) => Axiom::IntRemNonpos(take(), take()),
+        Axiom::ViewLower(ty, _) => Axiom::ViewLower(*ty, take()),
+        Axiom::ViewUpper(ty, _) => Axiom::ViewUpper(*ty, take()),
+        Axiom::WrapView(ty, _) => Axiom::WrapView(*ty, take()),
+        Axiom::ViewWrap(ty, _) => Axiom::ViewWrap(*ty, take()),
+        Axiom::WrapPeriod(ty, _) => Axiom::WrapPeriod(*ty, take()),
+        Axiom::CastDef(from, to, _) => Axiom::CastDef(*from, *to, take()),
+    }
+}
+
+/// The machine types an axiom is instantiated at, in the order the axiom
+/// carries them; empty for the axioms that carry none. The inverse is
+/// `axiom_with_machine_types`, and a new axiom with a type parameter needs
+/// an arm in each.
+fn machine_types(axiom: &Axiom) -> Vec<MachineInt> {
+    match axiom {
+        Axiom::NatAddZero(_)
+        | Axiom::NatAddSucc(..)
+        | Axiom::NatSuccInjective(..)
+        | Axiom::NatSuccNotZero(_)
+        | Axiom::ToNatBound(_)
+        | Axiom::OfToNat(_)
+        | Axiom::ToOfNat(_)
+        | Axiom::OfNatWrap(_)
+        | Axiom::WrappingAddModel(..)
+        | Axiom::WrappingSubModel(..)
+        | Axiom::Reflect(..)
+        | Axiom::IntAddAssoc(..)
+        | Axiom::IntAddComm(..)
+        | Axiom::IntAddZero(_)
+        | Axiom::IntAddNeg(_)
+        | Axiom::IntSubDef(..)
+        | Axiom::IntMulAssoc(..)
+        | Axiom::IntMulComm(..)
+        | Axiom::IntMulOne(_)
+        | Axiom::IntMulAdd(..)
+        | Axiom::IntLeRefl(_)
+        | Axiom::IntLeTrans(..)
+        | Axiom::IntLeAntisymm(..)
+        | Axiom::IntLeAdd(..)
+        | Axiom::IntLeMul(..)
+        | Axiom::IntLeTotal(..)
+        | Axiom::IntLtIrrefl(_)
+        | Axiom::IntDivRem(..)
+        | Axiom::IntDivZero(_)
+        | Axiom::IntRemLowerPos(..)
+        | Axiom::IntRemUpperPos(..)
+        | Axiom::IntRemLowerNeg(..)
+        | Axiom::IntRemUpperNeg(..)
+        | Axiom::IntRemNonneg(..)
+        | Axiom::IntRemNonpos(..) => Vec::new(),
+        Axiom::ViewLower(ty, _)
+        | Axiom::ViewUpper(ty, _)
+        | Axiom::WrapView(ty, _)
+        | Axiom::ViewWrap(ty, _)
+        | Axiom::WrapPeriod(ty, _) => vec![*ty],
+        Axiom::CastDef(from, to, _) => vec![*from, *to],
+    }
+}
+
+/// The same axiom at the same terms, instantiated at other machine types:
+/// the inverse of `machine_types`. An axiom that carries no type is
+/// returned as it is.
+fn axiom_with_machine_types(axiom: &Axiom, types: &[MachineInt]) -> Axiom {
+    match axiom {
+        Axiom::ViewLower(_, x) => Axiom::ViewLower(types[0], x.clone()),
+        Axiom::ViewUpper(_, x) => Axiom::ViewUpper(types[0], x.clone()),
+        Axiom::WrapView(_, x) => Axiom::WrapView(types[0], x.clone()),
+        Axiom::ViewWrap(_, n) => Axiom::ViewWrap(types[0], n.clone()),
+        Axiom::WrapPeriod(_, n) => Axiom::WrapPeriod(types[0], n.clone()),
+        Axiom::CastDef(_, _, x) => Axiom::CastDef(types[0], types[1], x.clone()),
+        Axiom::NatAddZero(_)
+        | Axiom::NatAddSucc(..)
+        | Axiom::NatSuccInjective(..)
+        | Axiom::NatSuccNotZero(_)
+        | Axiom::ToNatBound(_)
+        | Axiom::OfToNat(_)
+        | Axiom::ToOfNat(_)
+        | Axiom::OfNatWrap(_)
+        | Axiom::WrappingAddModel(..)
+        | Axiom::WrappingSubModel(..)
+        | Axiom::Reflect(..)
+        | Axiom::IntAddAssoc(..)
+        | Axiom::IntAddComm(..)
+        | Axiom::IntAddZero(_)
+        | Axiom::IntAddNeg(_)
+        | Axiom::IntSubDef(..)
+        | Axiom::IntMulAssoc(..)
+        | Axiom::IntMulComm(..)
+        | Axiom::IntMulOne(_)
+        | Axiom::IntMulAdd(..)
+        | Axiom::IntLeRefl(_)
+        | Axiom::IntLeTrans(..)
+        | Axiom::IntLeAntisymm(..)
+        | Axiom::IntLeAdd(..)
+        | Axiom::IntLeMul(..)
+        | Axiom::IntLeTotal(..)
+        | Axiom::IntLtIrrefl(_)
+        | Axiom::IntDivRem(..)
+        | Axiom::IntDivZero(_)
+        | Axiom::IntRemLowerPos(..)
+        | Axiom::IntRemUpperPos(..)
+        | Axiom::IntRemLowerNeg(..)
+        | Axiom::IntRemUpperNeg(..)
+        | Axiom::IntRemNonneg(..)
+        | Axiom::IntRemNonpos(..) => axiom.clone(),
     }
 }
 
 /// Every axiom, instantiated at copies of one term: the stock a sibling
 /// axiom is chosen from. One line per axiom, matching `axiom_with_terms`.
+/// The machine schemas stand at one type each; a sibling drawn from here
+/// takes the types of the axiom it replaces when that one carries any.
 fn every_axiom_at(t: &Term) -> Vec<Axiom> {
     let t = || t.clone();
     vec![
@@ -1347,6 +1711,12 @@ fn every_axiom_at(t: &Term) -> Vec<Axiom> {
         Axiom::IntRemUpperNeg(t(), t()),
         Axiom::IntRemNonneg(t(), t()),
         Axiom::IntRemNonpos(t(), t()),
+        Axiom::ViewLower(U16, t()),
+        Axiom::ViewUpper(I8, t()),
+        Axiom::WrapView(U64, t()),
+        Axiom::ViewWrap(I32, t()),
+        Axiom::WrapPeriod(U32, t()),
+        Axiom::CastDef(I16, U16, t()),
     ]
 }
 
@@ -1585,6 +1955,10 @@ impl<'a> Material<'a> {
             Term::int(0),
             Term::int(1),
             Term::int(-1),
+            lit(U16, 0),
+            lit(I8, -1),
+            lit(I32, i128::from(i32::MAX)),
+            lit(U64, i128::from(u64::MAX)),
         ];
         for (id, ty) in &vars {
             if !matches!(ty, Type::Proof(_)) {
@@ -1652,9 +2026,10 @@ impl<'a> Material<'a> {
     /// A computation rule aimed at the false claim.
     fn computed(&self, rng: &mut Rng) -> Proof {
         let side = match self.target {
-            // Evaluation decides a comparison of integers as a whole.
+            // Evaluation decides a comparison of integers as a whole, and an
+            // equation of integers or of machine integers.
             Term::Prim(Prim::IntLe, _) => return Proof::Evaluate(self.target.clone()),
-            Term::Eq(Type::Int, _, _) if rng.below(2) == 0 => {
+            Term::Eq(Type::Int | Type::Machine(_), _, _) if rng.below(2) == 0 => {
                 return Proof::Evaluate(self.target.clone());
             }
             Term::Eq(_, left, right) => {
@@ -1683,16 +2058,15 @@ impl<'a> Material<'a> {
 
     /// The axiom about other terms, or with two of its terms exchanged, or
     /// a sibling axiom of the same arity about the same terms. `Reflect`
-    /// also has a flag to flip. Nothing here names an axiom: the stock of
-    /// siblings is `every_axiom_at`.
+    /// also has a flag to flip, and a machine schema a type to move to a
+    /// neighbouring one. Nothing here names an axiom: the stock of siblings
+    /// is `every_axiom_at`.
     fn change_axiom(&self, axiom: &Axiom, rng: &mut Rng) -> Axiom {
         let mut terms: Vec<Term> = axiom.terms().into_iter().cloned().collect();
         let arity = terms.len();
-        let choice = rng.below(if matches!(axiom, Axiom::Reflect(..)) {
-            4
-        } else {
-            3
-        });
+        let own_types = machine_types(axiom);
+        let has_extra = matches!(axiom, Axiom::Reflect(..)) || !own_types.is_empty();
+        let choice = rng.below(if has_extra { 4 } else { 3 });
         match choice {
             // One term perturbed, or replaced by any other.
             0 => {
@@ -1715,20 +2089,42 @@ impl<'a> Material<'a> {
                 }
                 axiom_with_terms(axiom, terms)
             }
-            // A sibling: another axiom of the same arity at the same terms.
+            // A sibling: another axiom of the same arity at the same terms,
+            // and at the same machine types when both carry any.
             2 => {
                 let siblings: Vec<Axiom> = every_axiom_at(&Term::int(0))
                     .into_iter()
                     .filter(|other| other.terms().len() == arity && other.name() != axiom.name())
                     .collect();
                 match rng.pick(&siblings) {
-                    Some(sibling) => axiom_with_terms(sibling, terms),
+                    Some(sibling) => {
+                        let wanted = machine_types(sibling).len();
+                        let sibling = if own_types.is_empty() || wanted == 0 {
+                            sibling.clone()
+                        } else {
+                            let types: Vec<MachineInt> = (0..wanted)
+                                .map(|place| own_types[place % own_types.len()])
+                                .collect();
+                            axiom_with_machine_types(sibling, &types)
+                        };
+                        axiom_with_terms(&sibling, terms)
+                    }
                     None => axiom_with_terms(axiom, terms),
                 }
             }
             _ => match axiom {
                 Axiom::Reflect(comparison, flag) => Axiom::Reflect(comparison.clone(), !flag),
-                _ => unreachable!("only Reflect has a fourth choice"),
+                // One type parameter moved to a neighbouring type: the
+                // instance is then ill typed, or an axiom about another
+                // type, which the oracle can judge.
+                _ => {
+                    let mut types = own_types;
+                    let place = rng.below(types.len());
+                    types[place] = *rng
+                        .pick(&neighbours(types[place]))
+                        .expect("every type has a neighbour");
+                    axiom_with_machine_types(axiom, &types)
+                }
             },
         }
     }
@@ -1794,6 +2190,7 @@ impl<'a> Material<'a> {
                     Type::U8 => Type::Bool,
                     Type::Nat => Type::Int,
                     Type::Int => Type::Nat,
+                    Type::Machine(machine) => Type::machine(neighbours(*machine)[0]),
                     _ => Type::Nat,
                 },
                 body: body.clone(),
@@ -3101,6 +3498,271 @@ fn hand_built(world: &World) -> Vec<Triple> {
         let claim = Term::implies(ile(ilit(0), n.clone()), motive(n));
         add("int_induction", scene, claim, proof);
     }
+
+    // The machine integer models: each schema at an unsigned and a signed
+    // type. The bounds and periods in the claims are written from the
+    // test's own table, not read from the kernel's.
+    let (view, wrap, cast) = (Term::view, Term::wrap, Term::cast);
+    let eq_at = |ty: MachineInt, left: Term, right: Term| Term::eq(Type::machine(ty), left, right);
+    let min_of = |ty: MachineInt| int128(machine_range(ty).0);
+    let max_of = |ty: MachineInt| int128(machine_range(ty).1);
+    let period_of = |ty: MachineInt| int128(1i128 << shape(ty).0);
+    for ty in [U16, I32] {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(ty));
+        let claim = ile(min_of(ty), view(ty, x.clone()));
+        add(
+            &format!("view_lower_{}", ty.name()),
+            scene,
+            claim,
+            ax(Axiom::ViewLower(ty, x)),
+        );
+    }
+    for ty in [U64, I8] {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(ty));
+        let claim = ile(view(ty, x.clone()), max_of(ty));
+        add(
+            &format!("view_upper_{}", ty.name()),
+            scene,
+            claim,
+            ax(Axiom::ViewUpper(ty, x)),
+        );
+    }
+    for ty in [U32, I16] {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(ty));
+        let claim = eq_at(ty, wrap(ty, view(ty, x.clone())), x.clone());
+        add(
+            &format!("wrap_view_{}", ty.name()),
+            scene,
+            claim,
+            ax(Axiom::WrapView(ty, x)),
+        );
+    }
+    for ty in [U16, I64] {
+        // The round trip on Int, under its two premises as hypotheses.
+        let mut scene = Scene::new(&world.definitions);
+        let n = scene.declare(Type::Int);
+        let lower = scene.assume(ile(min_of(ty), n.clone()));
+        let upper = scene.assume(ile(n.clone(), max_of(ty)));
+        let proof = Proof::implies_elim(
+            Proof::implies_elim(ax(Axiom::ViewWrap(ty, n.clone())), Proof::hyp(lower)),
+            Proof::hyp(upper),
+        );
+        let claim = int_eq(view(ty, wrap(ty, n.clone())), n);
+        add(&format!("view_wrap_{}", ty.name()), scene, claim, proof);
+    }
+    {
+        // The same axiom stated whole, so that its premises are attacked.
+        let mut scene = Scene::new(&world.definitions);
+        let n = scene.declare(Type::Int);
+        let claim = Term::implies(
+            ile(min_of(I8), n.clone()),
+            Term::implies(
+                ile(n.clone(), max_of(I8)),
+                int_eq(view(I8, wrap(I8, n.clone())), n.clone()),
+            ),
+        );
+        add(
+            "view_wrap_implication_i8",
+            scene,
+            claim,
+            ax(Axiom::ViewWrap(I8, n)),
+        );
+    }
+    for ty in [U8, I32] {
+        let mut scene = Scene::new(&world.definitions);
+        let n = scene.declare(Type::Int);
+        let claim = eq_at(
+            ty,
+            wrap(ty, iadd(n.clone(), period_of(ty))),
+            wrap(ty, n.clone()),
+        );
+        add(
+            &format!("wrap_period_{}", ty.name()),
+            scene,
+            claim,
+            ax(Axiom::WrapPeriod(ty, n)),
+        );
+    }
+    for (from, to) in [(U16, I8), (I8, U64)] {
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(from));
+        let claim = eq_at(
+            to,
+            cast(from, to, x.clone()),
+            wrap(to, view(from, x.clone())),
+        );
+        add(
+            &format!("cast_def_{}_{}", from.name(), to.name()),
+            scene,
+            claim,
+            ax(Axiom::CastDef(from, to, x)),
+        );
+    }
+    for ty in [U16, I32] {
+        // cast(T, T)(x) == x, derived: cast_def, then wrap_view.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::machine(ty));
+        let proof = Chain::new(Type::machine(ty), cast(ty, ty, x.clone()))
+            .step(ax(Axiom::CastDef(ty, ty, x.clone())))
+            .step(ax(Axiom::WrapView(ty, x.clone())))
+            .finish();
+        let claim = eq_at(ty, cast(ty, ty, x.clone()), x);
+        add(&format!("cast_identity_{}", ty.name()), scene, claim, proof);
+    }
+
+    // Machine integers: evaluation of closed casts, wraps, and views.
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = cast(U16, I8, lit(U16, 300));
+        let claim = eq_at(I8, term.clone(), lit(I8, 44));
+        add(
+            "evaluate_cast_to_signed",
+            scene,
+            claim,
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = cast(I8, U64, lit(I8, -1));
+        let claim = eq_at(U64, term.clone(), lit(U64, i128::from(u64::MAX)));
+        add(
+            "evaluate_cast_to_unsigned",
+            scene,
+            claim,
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = cast(I16, U8, lit(I16, -1));
+        let claim = eq_at(U8, term.clone(), Term::U8(255));
+        add("literal_cast", scene, claim, Proof::Literal(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = wrap(U32, ilit(-1));
+        let claim = eq_at(U32, term.clone(), lit(U32, i128::from(u32::MAX)));
+        add(
+            "evaluate_wrap_unsigned",
+            scene,
+            claim,
+            Proof::Evaluate(term),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = wrap(I8, ilit(200));
+        let claim = eq_at(I8, term.clone(), lit(I8, -56));
+        add("evaluate_wrap_signed", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = view(I16, lit(I16, -5));
+        let claim = int_eq(term.clone(), ilit(-5));
+        add("evaluate_view", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let term = view(U8, cast(I8, U8, lit(I8, -1)));
+        let claim = int_eq(term.clone(), ilit(255));
+        add("evaluate_view_of_cast", scene, claim, Proof::Evaluate(term));
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = ile(view(U64, lit(U64, i128::from(u64::MAX))), max_of(U64));
+        add(
+            "evaluate_view_le_true",
+            scene,
+            claim.clone(),
+            Proof::Evaluate(claim),
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let comparison = ile(view(I8, lit(I8, -128)), ilit(-129));
+        let claim = prelude.not_prop(comparison.clone());
+        add(
+            "evaluate_view_le_false",
+            scene,
+            claim,
+            Proof::Evaluate(comparison),
+        );
+    }
+
+    // Machine integers with Int arithmetic: view is bounded, and the bound
+    // moves with the arithmetic.
+    {
+        // view(x) < 256, which is view(x) + 1 <= 256: from view(x) <= 255 by
+        // adding one to both sides and evaluating 255 + 1.
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::U8);
+        let v = view(U8, x.clone());
+        let shifted = Proof::implies_elim(
+            ax(Axiom::IntLeAdd(v.clone(), ilit(255), ilit(1))),
+            ax(Axiom::ViewUpper(U8, x)),
+        );
+        let sum = Proof::Evaluate(iadd(ilit(255), ilit(1)));
+        let proof = Proof::transport(sum, |hole| ile(iadd(v.clone(), ilit(1)), hole), shifted);
+        let claim = Term::int_lt(v, ilit(256));
+        add("view_lt_256", scene, claim, proof);
+    }
+    {
+        // 0 <= view(x) + 32768 for x : i16, from -32768 <= view(x).
+        let mut scene = Scene::new(&world.definitions);
+        let x = scene.declare(Type::Machine(I16));
+        let v = view(I16, x.clone());
+        let shifted = Proof::implies_elim(
+            ax(Axiom::IntLeAdd(ilit(-32768), v.clone(), ilit(32768))),
+            ax(Axiom::ViewLower(I16, x)),
+        );
+        let sum = Proof::Evaluate(iadd(ilit(-32768), ilit(32768)));
+        let proof = Proof::transport(sum, |hole| ile(hole, iadd(v.clone(), ilit(32768))), shifted);
+        let claim = ile(ilit(0), iadd(v, ilit(32768)));
+        add("view_shifted_nonneg_i16", scene, claim, proof);
+    }
+    {
+        // An equation at a machine type carries a bound across.
+        let mut scene = Scene::new(&world.definitions);
+        let (x, y) = (
+            scene.declare(Type::Machine(I32)),
+            scene.declare(Type::Machine(I32)),
+        );
+        let eq = scene.assume(eq_at(I32, x.clone(), y.clone()));
+        let proof = Proof::transport(
+            Proof::hyp(eq),
+            |hole| ile(view(I32, hole), max_of(I32)),
+            ax(Axiom::ViewUpper(I32, x)),
+        );
+        add(
+            "transport_machine",
+            scene,
+            ile(view(I32, y), max_of(I32)),
+            proof,
+        );
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = Term::forall(Type::Machine(I16), |x| {
+            eq_at(I16, wrap(I16, view(I16, x.clone())), x)
+        });
+        let proof = Proof::forall_intro(Type::Machine(I16), |x| ax(Axiom::WrapView(I16, x)));
+        add("forall_machine", scene, claim, proof);
+    }
+    {
+        let scene = Scene::new(&world.definitions);
+        let claim = Term::exists(Type::Machine(U32), |x| int_eq(view(U32, x), ilit(7)));
+        let instance = int_eq(view(U32, lit(U32, 7)), ilit(7));
+        let proof = Proof::ExistsIntro {
+            prop: claim.clone(),
+            witness: lit(U32, 7),
+            proof: Box::new(Proof::Evaluate(instance)),
+        };
+        add("exists_machine", scene, claim, proof);
+    }
     out
 }
 
@@ -3339,7 +4001,7 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
             return Term::int(*rng.pick(&edge).unwrap());
         }
         let sub = |rng: &mut Rng| integer(rng, world, depth - 1);
-        match rng.below(8) {
+        match rng.below(9) {
             0 => Term::int_add(sub(rng), sub(rng)),
             1 => Term::int_sub(sub(rng), sub(rng)),
             2 => Term::int_mul(sub(rng), sub(rng)),
@@ -3347,6 +4009,10 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
             4 => Term::call(Term::Fn(world.int_double), vec![sub(rng)]),
             5 => Term::int_div(sub(rng), sub(rng)),
             6 => Term::int_rem(sub(rng), sub(rng)),
+            7 => {
+                let (ty, value) = machine(rng, world, depth - 1);
+                Term::view(ty, value)
+            }
             _ => {
                 let (no, yes) = (sub(rng), sub(rng));
                 Term::case(
@@ -3382,6 +4048,108 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
     }
     assert!(valued > 100, "{valued} terms had a value");
     assert!(overflowed > 0, "{overflowed} terms overflowed i128");
+
+    // And for the machine types: a closed term of a machine type is a
+    // literal at an edge of its range, a wrap of an integer, a cast of a
+    // value of another type, or a round trip. The kernel's value is a
+    // literal of the type; the oracle's is the same number, or nothing when
+    // an integer inside went past `i128`.
+    fn machine(rng: &mut Rng, world: &World, depth: usize) -> (MachineInt, Term) {
+        let ty = *rng.pick(&MachineInt::ALL).unwrap();
+        if depth == 0 {
+            let sample = machine_sample(ty);
+            return (ty, lit(ty, *rng.pick(&sample).unwrap()));
+        }
+        match rng.below(3) {
+            0 => (ty, Term::wrap(ty, integer(rng, world, depth - 1))),
+            1 => {
+                let (from, value) = machine(rng, world, depth - 1);
+                (ty, Term::cast(from, ty, value))
+            }
+            _ => {
+                let (inner, value) = machine(rng, world, depth - 1);
+                (inner, Term::wrap(inner, Term::view(inner, value)))
+            }
+        }
+    }
+    let (mut valued, mut overflowed) = (0, 0);
+    let mut types_seen = Vec::new();
+    for _ in 0..300 {
+        let (ty, term) = machine(&mut rng, &world, 4);
+        let Ok(Term::Eq(found_ty, _, value)) =
+            infer_proof(&mut ctx, &Proof::Evaluate(term.clone()))
+        else {
+            panic!("the kernel does not evaluate {term}");
+        };
+        assert_eq!(found_ty, Type::machine(ty), "{term}");
+        let Some((found, expected)) = value.machine_value() else {
+            panic!("{term} evaluates to {value}");
+        };
+        assert_eq!(found, ty);
+        let expected = expected.to_i128().expect("a machine value fits in i128");
+        let mut oracle = Oracle::new(&scene);
+        match oracle.value(&term) {
+            Some(found) => {
+                valued += 1;
+                types_seen.push(ty);
+                assert_eq!(found, machine_of(ty, expected), "{term}");
+            }
+            None => overflowed += 1,
+        }
+    }
+    assert!(valued > 100, "{valued} machine terms had a value");
+    assert!(overflowed > 0, "{overflowed} machine terms overflowed i128");
+    for ty in MachineInt::ALL {
+        assert!(
+            types_seen.contains(&ty),
+            "no term of {} had a value",
+            ty.name()
+        );
+    }
+}
+
+/// The oracle's table of the machine types, and its reduction into a range,
+/// were written from the names of the types. They must agree with the
+/// kernel's `MachineInt` on the ends of every range and on `wrap` at a
+/// sample of arguments, or one of the two is wrong. A cross-check only:
+/// nothing in the oracle calls the kernel's table.
+#[test]
+fn the_oracle_reduces_into_a_range_as_the_kernel_table_does() {
+    let mut rng = Rng(SEED ^ 4);
+    let mut compared = 0;
+    for ty in MachineInt::ALL {
+        let (lo, hi) = machine_range(ty);
+        assert_eq!(Integer::from(lo), ty.min(), "{}", ty.name());
+        assert_eq!(Integer::from(hi), ty.max(), "{}", ty.name());
+        assert_eq!(shape(ty), (ty.bits(), ty.signed()));
+        let period = 1i128 << shape(ty).0;
+        let mut arguments = machine_sample(ty);
+        arguments.extend([lo - 2, lo - 1, hi + 1, hi + 2]);
+        for shift in [period, -period, 2 * period, -2 * period] {
+            arguments.extend([shift - 1, shift, shift + 1]);
+        }
+        arguments.extend((0..24).map(|_| {
+            let wide = i128::from(rng.next()) << rng.below(64);
+            if rng.below(2) == 0 { wide } else { -wide }
+        }));
+        arguments.extend([i128::MIN, i128::MAX]);
+        for argument in arguments {
+            let reduced = machine_wrap(ty, argument);
+            assert!(
+                in_range(ty, reduced),
+                "wrap[{}]({argument}) = {reduced}",
+                ty.name()
+            );
+            assert_eq!(
+                Integer::from(reduced),
+                ty.wrap(&Integer::from(argument)),
+                "wrap[{}]({argument})",
+                ty.name()
+            );
+            compared += 1;
+        }
+    }
+    assert!(compared > 8 * 40, "{compared}");
 }
 
 /// The oracle reads the prelude's orderings by what they mean. The kernel
@@ -3523,6 +4291,63 @@ fn the_oracle_decides_what_it_should_and_no_more() {
     let nonneg = Term::int_le(Term::int(0), n.clone());
     let witness = refute(&scene, &nonneg, &found).expect("some witness makes n negative");
     assert!(matches!(witness.get(&n_id(&n)), Some(Value::Int(value)) if *value < 0));
+    // A variable of a machine type is tried at both ends of its range and
+    // around zero: the bounds of the type hold of every witness, a bound
+    // off by one does not, and the round trip holds. An equation between
+    // two machine types is ill typed, not false.
+    let m = scene.declare(Type::Machine(I16));
+    let found = witnesses(&scene, &m, &mut Rng(SEED));
+    let v = Term::view(I16, m.clone());
+    for claim in [
+        Term::int_le(int128(-32768), v.clone()),
+        Term::int_le(v.clone(), int128(32767)),
+        Term::eq(Type::Machine(I16), Term::wrap(I16, v.clone()), m.clone()),
+        Term::eq(
+            Type::Machine(U16),
+            Term::wrap(U16, Term::int(1)),
+            Term::wrap(I16, Term::int(1)),
+        ),
+    ] {
+        assert!(refute(&scene, &claim, &found).is_none(), "{claim}");
+    }
+    type Refuting = fn(i128) -> bool;
+    let refuting: [(Term, Refuting); 4] = [
+        (Term::int_le(int128(-32767), v.clone()), |value| {
+            value == -32768
+        }),
+        (Term::int_le(v.clone(), int128(32766)), |value| {
+            value == 32767
+        }),
+        (Term::int_le(Term::int(0), v.clone()), |value| value < 0),
+        (Term::int_le(v.clone(), Term::int(0)), |value| value > 0),
+    ];
+    for (claim, expected) in refuting {
+        let witness = refute(&scene, &claim, &found).unwrap_or_else(|| panic!("{claim}"));
+        assert!(
+            matches!(witness.get(&n_id(&m)), Some(Value::Machine(I16, value)) if expected(*value)),
+            "{claim} at {}",
+            describe_witness(witness)
+        );
+    }
+    // A quantifier over a machine type is settled by its sample: refuted at
+    // an end of the range, proved by a witness in it, and otherwise open.
+    let all_nonneg = Term::forall(Type::Machine(I8), |x| {
+        Term::int_le(Term::int(0), Term::view(I8, x))
+    });
+    let some_min = Term::exists(Type::Machine(U32), |x| {
+        Term::eq(Type::Int, Term::view(U32, x), int128(u32::MAX.into()))
+    });
+    let round = Term::forall(Type::Machine(U64), |x| {
+        Term::eq(
+            Type::Machine(U64),
+            Term::wrap(U64, Term::view(U64, x.clone())),
+            x,
+        )
+    });
+    assert!(refute(&scene, &all_nonneg, &found).is_some());
+    assert!(refute(&scene, &prelude.not_prop(some_min), &found).is_some());
+    assert!(refute(&scene, &round, &found).is_none());
+    assert!(refute(&scene, &prelude.not_prop(round), &found).is_none());
     // An inconsistent context has no witness, so nothing is false in it.
     scene.assume(prelude.u8_lt_prop(Term::U8(9), x));
     assert!(witnesses(&scene, &prelude.falsehood_prop(), &mut Rng(SEED)).is_empty());
