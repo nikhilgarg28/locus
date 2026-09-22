@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 80,
-  "savedAt": "2026-09-22T17:42:12.000Z",
-  "nextTask": 193,
-  "nextId": 309,
+  "rev": 81,
+  "savedAt": "2026-09-22T17:42:38.000Z",
+  "nextTask": 194,
+  "nextId": 310,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -7962,6 +7962,17 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Lane: Elaborator. Wave 9.\nDepends on: E7 (LOC-173).\nUnblocks: R4 (LOC-189).\nCovers: LOC-8.\n\nScope. Target language: Found proofs are stored. A text format for kernel proofs and certificates with a version, names for definitions, and one entry per obligation keyed by a hash of the claim and its available facts as kernel terms. A file beside each source file. locus check reads, searches on a miss, writes, and drops entries nothing asked for; locus check --locked never searches.\n\nTests.\n- Round trip: every proof the corpus produces is written, read back, and accepted; the file is byte-identical on a second run.\n- Reformatting a source file, adding comments, and editing an unrelated function leave every entry in use, counted by a test.\n- The file as hostile input: entries swapped between obligations, a proof edited by hand, a truncated file, random bytes. Each is a miss or a reported error, never an accepted false claim and never a panic; the reader is added to the fuzz tests.\n- --locked with a missing entry fails and names the obligation; with a complete file it runs no search, asserted by a counter.\n- A file written with the search deliberately weakened by a test hook still checks, which is what surviving an upgrade means.\n\nDone when. A reviewer or CI checks a crate with the kernel alone, and a change to the automation cannot break a build that has its proofs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:41:03.000Z",
    "updated": "2026-09-21T22:41:03.000Z"
+  },
+  {
+   "id": "t309",
+   "n": 193,
+   "title": "Decide how a fully promised function whose body is not a kernel term enters the logic",
+   "status": "todo",
+   "priority": 3,
+   "project": "p89",
+   "created": "2026-09-22T17:42:38.000Z",
+   "updated": "2026-09-22T17:42:38.000Z",
+   "notes": "Found by E6 on 22 September. A function promising terminates, no_panic, and no_io is lowered as a kernel function with a defining equation, which is what lets it appear in propositions and be unfolded. An operator that may panic is a statement of the check IR, not a term, so such a function cannot contain one (L0236), yet the target example midpoint is fully promised and uses - / +. Functions in propositions already says a function is known by its contract, and its equation is visible only where its body is expressible as a kernel term; Termination says a recursive function enters the logic as a function symbol known by its contract alone. What is missing is the kernel form for that: a declared function symbol with a signature and no body, or the same through a top-level variable of function type. Until decided, E7 checks such a function as an ordinary ExecFn with its promises and refuses its use in a proposition with a message that says why. To discuss with the vision edits."
   }
  ]
 }
