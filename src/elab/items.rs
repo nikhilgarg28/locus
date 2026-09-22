@@ -690,7 +690,9 @@ impl Env<'_> {
                 .stmts
                 .iter()
                 .find_map(|stmt| match stmt {
-                    Stmt::Let { value, .. } | Stmt::Expr(value) => self.called_by_constant(value),
+                    Stmt::Let { value, .. } | Stmt::Expr(value) | Stmt::Assign { value, .. } => {
+                        self.called_by_constant(value)
+                    }
                 })
                 .or_else(|| {
                     block
