@@ -124,8 +124,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 62,
-  "savedAt": "2026-09-22T01:49:13.000Z",
+  "rev": 63,
+  "savedAt": "2026-09-22T02:05:21.000Z",
   "nextTask": 193,
   "nextId": 309,
   "taskPrefix": "LOC",
@@ -2406,10 +2406,14 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Random programs, three ways",
     "",
-    "tests/random_programs.rs generates random well-typed programs as typed trees, declares each through the real Session so that it is lowered, checked, and erased, and runs it in the check-IR interpreter, the erased interpreter, and as compiled Rust in both overflow configurations. Loops are bounded by construction. A disagreement is printed with its seed and shrunk. The fast run is 300 programs; the extended run is 10,000."
+    "tests/random_programs.rs generates random well-typed programs as typed trees, declares each through the real Session so that it is lowered, checked, and erased, and runs it in the check-IR interpreter, the erased interpreter, and as compiled Rust in both overflow configurations. Loops are bounded by construction. A disagreement is printed with its seed and shrunk. The fast run is 300 programs; the extended run is 10,000.",
+    "",
+    "## Arithmetic is found outside the kernel",
+    "",
+    "src/arith is the procedure that finds linear certificates: it collects facts that each carry a kernel proof, eliminates variables, and emits a Proof::Linear that the kernel checks; it also checks the proof itself before returning it. It is not trusted, and a wrong answer from it is a proof the kernel rejects or a certificate it refuses. When it fails it reports a counterexample it has verified against the facts it collected."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-22T00:04:53.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "kernel-contract",
@@ -7137,23 +7141,23 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t273",
    "n": 157,
    "title": "S4 · Items: the closed attribute set, pub and its restricted forms, impl blocks, variants with named fields, long paths, const",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Syntax. Wave 5.\nDepends on: S3 (LOC-156).\nUnblocks: S5 (LOC-158), E2 (LOC-168), E9 (LOC-175), O1 (LOC-182), O2 (LOC-183).\nCovers: LOC-13, LOC-90, LOC-96, LOC-100, LOC-101, LOC-18.\n\nScope. Parse #[terminates], #[terminates(decreases = e)], #[no_panic], #[no_alloc], #[no_io], #[derive(...)], and the file-level #![...]; doc comments are kept for the printer. pub, pub(crate), pub(super), and pub(in path) on items and fields. Inherent impl blocks, enum variants with named fields, paths of any length. What the elaborator does not handle yet is answered by one uniform diagnostic, parsed but not yet checked, that names the task.\n\nTests.\n- AST snapshot tests for each item form.\n- An unknown attribute is rejected and the message lists the closed set.\n- The item skeletons of the three target examples parse.\n- The fuzz vocabulary gains the new tokens.\n\nDone when. The parser is finished for items, so later lanes never edit parser.rs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September. Attributes as a closed set (L0120 unknown, L0121 shape or place), file-level #![...], doc comments as tokens kept on declarations, pub and its restricted forms (L0122 misplaced), inherent impl blocks with self parameters, variants with named fields, paths of any length, type arguments in the AST. The elaborator reports each unchecked thing once (L0290) naming its commit. tests/corpus/target holds the three target examples marked parse-only: midpoint and percent parse clean; lock has four parser diagnostics, all S5's (let mut, assignment). Nesting test passes at 560 KB; Type and Pattern boxes their paths to keep it so. The parser is finished for items.\n\nLane: Syntax. Wave 5.\nDepends on: S3 (LOC-156).\nUnblocks: S5 (LOC-158), E2 (LOC-168), E9 (LOC-175), O1 (LOC-182), O2 (LOC-183).\nCovers: LOC-13, LOC-90, LOC-96, LOC-100, LOC-101, LOC-18.\n\nScope. Parse #[terminates], #[terminates(decreases = e)], #[no_panic], #[no_alloc], #[no_io], #[derive(...)], and the file-level #![...]; doc comments are kept for the printer. pub, pub(crate), pub(super), and pub(in path) on items and fields. Inherent impl blocks, enum variants with named fields, paths of any length. What the elaborator does not handle yet is answered by one uniform diagnostic, parsed but not yet checked, that names the task.\n\nTests.\n- AST snapshot tests for each item form.\n- An unknown attribute is rejected and the message lists the closed set.\n- The item skeletons of the three target examples parse.\n- The fuzz vocabulary gains the new tokens.\n\nDone when. The parser is finished for items, so later lanes never edit parser.rs.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T01:04:23.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t274",
    "n": 158,
    "title": "S5 · Statements and expressions: let mut, assignment, return, Rust's loop forms, references, the never type",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Syntax. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: M2 (LOC-178).\nCovers: LOC-1, LOC-93, LOC-92, LOC-127.\n\nScope. Parse let mut, assignment to a variable or field path, return, loop, while, while let, for pattern in range, break with a value, continue, & and &mut in types and arguments, and ! as a type. Rust's rule against struct literals in condition position is kept. The state-passing loop still parses until M3 removes it.\n\nTests.\n- The three target examples are added verbatim under tests/corpus/target, marked parse-only. Later commits raise each file's marking to check and then to run; the marking is the visible progress of the whole plan.\n- Fuzz and stack-depth tests cover the new forms.\n\nDone when. Every program in Target examples parses. The syntax lane is done.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t275",
@@ -7225,12 +7229,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t281",
    "n": 165,
    "title": "K7 · The arithmetic procedure: finds certificates for linear goals, machine ranges, and division by a literal",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p266",
-   "notes": "Lane: Kernel. Wave 5.\nDepends on: K4 (LOC-162), K6 (LOC-164).\nUnblocks: E7 (LOC-173).\nCovers: LOC-123, LOC-72.\n\nScope. Outside the kernel and untrusted. Turns the goal and the facts in scope into linear constraints over Int, asks for the range of every machine view and the quotient and remainder facts for every division by a literal as axiom instances, eliminates variables, and emits a certificate for K6. Its effort is limited by counts (variables eliminated, constraints generated, size of the certificate), never by a clock, so that the same file is accepted or rejected on every machine.\n\nTests.\n- Finds all seven obligations from Target examples.\n- Random small linear problems in which every variable carries the hypotheses -8 \u003c= x and x \u003c= 8, so that brute force over that range decides exactly the problem posed: a false one is never accepted, asserted through the kernel, and the share of true ones found is printed and must be at least 95 percent within the fragment.\n- At the budget, the diagnostic says the procedure gave up, names the budget, and lists the constraints it had. The same input gives the same outcome on every run.\n\nDone when. Overflow obligations at 32 and 64 bits are dischargeable; this answers LOC-72.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
+   "notes": "Landed 21 September as src/arith (untrusted): collects hypotheses, And parts, proof-typed variables, view ranges, and division facts, each with its kernel proof; Fourier-Motzkin with multiplier bookkeeping, then branch and bound on int_le_total when the rational point is fractional; budgets are counts only; every returned proof is checked by the kernel before it is returned. All seven target obligations found with certificates matching the contract's sizes; random box problems: 97 to 98 percent of true goals found, no false goal ever proved, verified counterexamples for the rest. Deviation: prove takes the Prelude as a parameter. Limits for E7: exact-result equations of operators must be supplied as hypotheses; proof fields of struct variables are not read.\n\nLane: Kernel. Wave 5.\nDepends on: K4 (LOC-162), K6 (LOC-164).\nUnblocks: E7 (LOC-173).\nCovers: LOC-123, LOC-72.\n\nScope. Outside the kernel and untrusted. Turns the goal and the facts in scope into linear constraints over Int, asks for the range of every machine view and the quotient and remainder facts for every division by a literal as axiom instances, eliminates variables, and emits a certificate for K6. Its effort is limited by counts (variables eliminated, constraints generated, size of the certificate), never by a clock, so that the same file is accepted or rejected on every machine.\n\nTests.\n- Finds all seven obligations from Target examples.\n- Random small linear problems in which every variable carries the hypotheses -8 \u003c= x and x \u003c= 8, so that brute force over that range decides exactly the problem posed: a false one is never accepted, asserted through the kernel, and the share of true ones found is printed and must be at least 95 percent within the fragment.\n- At the budget, the diagnostic says the procedure gave up, names the budget, and lists the constraints it had. The same input gives the same outcome on every run.\n\nDone when. Overflow obligations at 32 and 64 bits are dischargeable; this answers LOC-72.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-22T01:13:10.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t282",
@@ -7258,12 +7262,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t284",
    "n": 168,
    "title": "E2 · Promises: terminates, no_panic, no_alloc, no_io, checked and never inferred",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: E3 (LOC-169), E6 (LOC-172), E8 (LOC-174), O2 (LOC-183), E10 (LOC-190).\nCovers: LOC-13, LOC-73, LOC-14.\n\nScope. A function keeps a promise only if everything it calls makes it. terminates forbids loops and, until recursion arrives, any call cycle. #![...] sets a default for the file. A function may appear in a proposition exactly when it promises terminates, no_panic, and no_io and takes no &mut. math fn stays for one commit as another spelling of the three.\n\nTests.\n- A generated matrix of caller promises against callee promises, 16 by 16, accepted or rejected with the missing promise named.\n- A function mentioned in a proposition without a promise is rejected, naming the promise.\n- The file default applies and an explicit list on a function adds to it.\n\nDone when. The specification author states what a function may not do, and the checker holds them to it.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t285",
@@ -7335,12 +7339,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t291",
    "n": 175,
    "title": "E9 · Variants with named fields, const as a Rust const, separate type and value namespaces",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Elaborator. Wave 6.\nDepends on: S4 (LOC-157).\nUnblocks: R4 (LOC-189).\nCovers: LOC-100, LOC-101, LOC-96.\n\nScope. The remaining small parity items that touch only the elaborator and the printer.\n\nTests.\n- Corpus files for each, run and compiled.\n- A type and a value of one name coexist as in Rust.\n\nDone when. Small, independent, and a good filler for an idle lane.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t292",
@@ -7423,12 +7427,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t299",
    "n": 183,
    "title": "O2 · Visibility, the export boundary, and locus build",
-   "status": "backlog",
+   "status": "todo",
    "priority": 2,
    "project": "p266",
    "notes": "Lane: Ownership. Wave 7.\nDepends on: S4 (LOC-157), E2 (LOC-168).\nUnblocks: O4 (LOC-185).\nCovers: LOC-90, LOC-137, LOC-18, LOC-19, LOC-135.\n\nScope. Private by default. The restricted forms of pub mean what they mean in Rust. A function that takes evidence, directly or inside a parameter type Rust could construct, may be visible no further than the generated root; plain pub on it is an error that offers a narrower visibility or a validated type. locus build writes the root module with the markers and one module per file; LOC-135 must be decided first.\n\nTests.\n- A hand-written Rust crate compiled against the generated module: calling an evidence-taking function, naming a marker constructor, and building a struct with private fields are each rejected by rustc with the expected error code; calling a plain pub function works and runs.\n- The marker replay attack is written out as a test and fails to compile.\n- Evidence hidden in a pub field of a pub struct is caught.\n\nDone when. The guarantee at the boundary with Rust rests on what is exported and is tested from the Rust side.\n\nAs for every commit: tools/check.sh passes (fmt, clippy with warnings denied, the fast tests), and the atlas is updated in the same commit: the Language status rows, this task, the tasks it covers, and the Kernel contract or Architecture if the trusted base changed.",
    "created": "2026-09-21T22:14:21.000Z",
-   "updated": "2026-09-21T22:27:28.000Z"
+   "updated": "2026-09-22T02:05:21.000Z"
   },
   {
    "id": "t300",
