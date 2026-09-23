@@ -78,12 +78,19 @@ def roadmap(data):
 
 PLAN_LANES = ["Harness", "Syntax", "Kernel", "Elaborator", "Mutation", "Ownership", "Robustness"]
 
+# A planned project: its document in the Plan group, and its lanes in column order.
+PLAN_PROJECTS = {
+    "Core build": ("build-plan", PLAN_LANES),
+    "Reconciliation": ("reconciliation-plan", ["Syntax", "Kernel", "Elaborator", "Generated", "Data", "References", "Robustness"]),
+}
 
-def plan(data):
-    """The Core build tasks are the only record of what depends on what. A task's
+
+def plan(data, name="Core build"):
+    """A planned project's tasks are the only record of what depends on what. A task's
     title starts with its key, and its notes have the lines "Lane: X." and
     "Depends on: K1 (LOC-n), ...". Everything else about the order is derived here."""
-    project = next(p for p in data["projects"] if p["name"] == "Core build")
+    doc_id, PLAN_LANES = PLAN_PROJECTS[name]
+    project = next(p for p in data["projects"] if p["name"] == name)
     prefix = data["meta"].get("taskPrefix", "LOC")
     tasks = {}
     for task in data["tasks"]:
@@ -128,15 +135,17 @@ def plan(data):
             lines.insert(at + 1, "Unblocks: %s." % ", ".join(ref(k) for k in unblocks))
         tasks[key]["notes"] = "\n".join(lines)
 
-    columns = PLAN_LANES[:-1]
-    table = ["| Wave | Harness and robustness | " + " | ".join(columns[1:]) + " |", "|---" * (len(columns) + 1) + "|"]
+    merged = "Harness" in PLAN_LANES and PLAN_LANES[-1] == "Robustness"
+    columns = PLAN_LANES[:-1] if merged else PLAN_LANES
+    heads = (["Harness and robustness"] + columns[1:]) if merged else columns
+    table = ["| Wave | " + " | ".join(heads) + " |", "|---" * (len(columns) + 1) + "|"]
     for n in range(1, max(wave.values()) + 1):
         cells = []
         for column in columns:
-            mine = [k for k in order if wave[k] == n and (lane[k] == column or (column == "Harness" and lane[k] == "Robustness"))]
+            mine = [k for k in order if wave[k] == n and (lane[k] == column or (merged and column == "Harness" and lane[k] == "Robustness"))]
             cells.append(", ".join(mine))
         table.append("| %d | %s |" % (n, " | ".join(cells)))
-    listing = ["## The commits", "", "One task each, in the Core build project, where the scope, the tests, and the condition for done are written. This list and the table of waves are written by python3 tools/atlas.py plan from the tasks, which are the only record of the order.", ""]
+    listing = ["## The commits", "", "One task each, in the %s project, where the scope, the tests, and the condition for done are written. This list and the table of waves are written by python3 tools/atlas.py plan from the tasks, which are the only record of the order." % name, ""]
     for name in PLAN_LANES:
         listing += ["### " + name, ""]
         for key in order:
@@ -144,7 +153,7 @@ def plan(data):
                 title = tasks[key]["title"].split(" · ", 1)[1]
                 listing.append("- **%s** %s-%d. %s. After: %s." % (key, prefix, tasks[key]["n"], title, ", ".join(deps[key]) or "nothing"))
         listing.append("")
-    doc = find(data, "build-plan")
+    doc = find(data, doc_id)
     body = doc["body"]
     start = next(i for i, l in enumerate(body) if l.startswith("| Wave |"))
     end = start
@@ -263,7 +272,7 @@ def main():
         (out / "roadmap.md").write_text(roadmap(data), encoding="utf-8")
         print("wrote %d files to %s" % (len(data["docs"]) + 1, out))
     elif command == "plan":
-        summary = plan(data)
+        summary = plan(data, sys.argv[2] if len(sys.argv) > 2 else "Core build")
         store(text, match, data)
         print(summary)
     elif command == "tasks":
