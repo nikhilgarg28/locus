@@ -1,11 +1,12 @@
-//! The proofs file: found proofs stored beside the source.
+//! The lockfile: found proofs stored in `Locus.lock`.
 //!
-//! `locus check` writes the proofs it finds to `<source>.proofs`, one entry
-//! per obligation, and reads them back on the next run, so that a checked
-//! file is checked again by the kernel alone. The file is untrusted input:
-//! an entry is a hint, found by a key and handed to the kernel exactly as a
-//! freshly found proof is, and it can cost a search when it is stale or
-//! wrong and never make a false claim pass.
+//! `locus check` writes the proofs it finds to `Locus.lock` in the directory
+//! of the file it checked, one entry per obligation under one table per
+//! file, and reads them back on the next run, so that a checked file is
+//! checked again by the kernel alone. The file is untrusted input: an entry
+//! is a hint, found by a key and handed to the kernel exactly as a freshly
+//! found proof is, and it can cost a search when it is stale or wrong and
+//! never make a false claim pass.
 //!
 //! An obligation is keyed by the text `text::print_key` gives it: the
 //! context, entry by entry, and the claim, all as kernel terms with names
@@ -15,25 +16,44 @@
 //! it, and editing other functions leave every entry in use. The hash finds
 //! an entry and carries no authority.
 //!
-//! The format, version 1:
+//! The format, version 2, is TOML (`lock.rs`):
 //!
-//! ~~~text
-//! locus-proofs 1
+//! ~~~toml
+//! version = 2
 //!
-//! obligation 9f86d081884c7d65 step 1
-//! implies_elim(h0, refl($1))
+//! [[file]]
+//! path = "lock.lc"
 //!
-//! obligation ... run 1
-//! ...
+//!   [[file.obligation]]
+//!   key = "3e5398446530a8a5"
+//!   at = "run 2"
+//!   claim = "fn:within_limit($10.0)"
+//!   steps = '''
+//! t1 = fn:within_limit(#0.0)
+//! s1 = transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), t1, ...)
+//! '''
 //! ~~~
 //!
-//! The header names the version; a file with another version is refused
-//! whole. Each entry is a key line, `obligation <key> <function> <ordinal>`,
-//! where the function and the ordinal of the obligation within it are for
-//! the reader and not part of the key, and one line holding the proof in the
-//! text form of `text.rs`. Entries are written in the order of their
-//! labels, and an entry nothing asked for in a run is dropped when the file
-//! is written, so a run on an unchanged source writes the same bytes.
+//! `path` is relative to the lockfile's directory, with forward slashes;
+//! the files are in path order. `key` finds the entry. `at`, the function
+//! and the ordinal of the obligation within it, is for the reader and not
+//! part of the key. `claim` is what the stored proof concludes, in the text
+//! form, so that a stale entry can say what it proves and the obligation
+//! can say what it wants. `steps` is the proof as named steps (`steps.rs`).
+//! The obligations of a file are in the order the run met them, which is
+//! the order of the items as they are elaborated, dependencies first and
+//! otherwise as in the source, and of the obligations within each. An entry
+//! nothing asked for in a run is dropped when the file is written, an
+//! entry that was used is rewritten in the writer's own form, and the
+//! entries of other files are kept as they were, so a run on an unchanged
+//! source writes the same bytes. The writer owns the file: it carries no
+//! comments and is rewritten whole.
+//!
+//! Version 1 wrote one file beside each source, `<source>.proofs`, with the
+//! proofs as trees (`v1.rs`). A run that finds such a file for the source
+//! it checks, and no entry for the source in the lockfile, reads it, uses
+//! its entries as it would the lockfile's, and after a successful check
+//! writes them into the lockfile and deletes it.
 //!
 //! The store is handed to the elaborator for one file by
 //! `elab::elaborate_with_store`, which installs it in a thread-local slot
@@ -42,21 +62,17 @@
 //! means no store: every obligation is searched and nothing is written,
 //! which is how the tests that exercise the search itself run.
 
+mod lock;
+mod steps;
 pub mod text;
+pub mod v1;
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
+pub use lock::{FILE_NAME, FORMAT_VERSION, Lockfile, MAX_FILE};
 pub use text::{Names, ParseError, PrintError};
-
-/// The version of the file format, in its header line.
-pub const FORMAT_VERSION: u32 = 1;
-
-const HEADER: &str = "locus-proofs";
-
-/// The most bytes a proofs file may be.
-pub use crate::limits::MAX_PROOF_FILE_BYTES as MAX_FILE;
 
 /// The key of an obligation: the FNV-1a hash of its key text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -74,7 +90,8 @@ impl Key {
         Self(hash)
     }
 
-    fn parse(text: &str) -> Option<Self> {
+    /// Sixteen hex digits, as the key is written.
+    pub fn parse(text: &str) -> Option<Self> {
         if text.len() != 16 || !text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return None;
         }
@@ -89,19 +106,67 @@ impl fmt::Display for Key {
 }
 
 /// Where an obligation arose, for the reader of the file: the function and
-/// the obligation's ordinal within it, from 1.
+/// the obligation's ordinal within it, from 1. Written as `at = "run 2"`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Label {
     pub function: String,
     pub ordinal: usize,
 }
 
+impl Label {
+    /// Reads `function ordinal`; anything else is a label with that text
+    /// as its function and no ordinal, since the label is only shown.
+    pub fn parse(text: &str) -> Self {
+        let text = text.trim();
+        match text.rsplit_once(' ') {
+            Some((function, ordinal)) if !function.is_empty() => Self {
+                function: function.to_string(),
+                ordinal: ordinal.parse().unwrap_or(0),
+            },
+            _ => Self {
+                function: text.to_string(),
+                ordinal: 0,
+            },
+        }
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.function, self.ordinal)
+    }
+}
+
+/// One stored proof.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub key: Key,
+    pub label: Label,
+    /// What the proof concludes, in the text form; empty when unknown, as
+    /// for an entry read from a version-1 file, until the entry is used.
+    pub claim: String,
+    /// The proof, as a block of steps.
+    pub steps: String,
+}
+
+/// An entry as the store holds it.
 #[derive(Clone, Debug)]
-struct Entry {
-    label: Label,
-    proof: String,
+struct Held {
+    entry: Entry,
     /// Asked for in this run: looked up and accepted, or found and recorded.
     used: bool,
+    /// When the run first asked for it, from 0: the order entries are
+    /// written in.
+    sequence: Option<usize>,
+}
+
+/// What a lookup fixed about the obligation it was for, until the
+/// obligation is accepted, refused, or recorded.
+#[derive(Clone, Debug)]
+struct Pending {
+    label: Label,
+    claim: String,
+    sequence: usize,
 }
 
 /// What a run did with the store, for a report and for the tests.
@@ -123,18 +188,36 @@ pub struct Stats {
     pub unprintable: usize,
 }
 
-/// The proofs of one source file.
+/// An obligation of this run that no stored proof met, in the order the
+/// run met them: a miss, or a stale entry with what it concluded and what
+/// the obligation wanted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Miss {
+    pub label: Label,
+    /// For a stale entry: the claim it stored and the claim wanted, when
+    /// they differ. An entry that did not read as a proof, or that
+    /// claimed the right thing and was still rejected, has `None`.
+    pub stale: Option<(String, String)>,
+}
+
+/// The proofs of one source file, and what the run does with them.
 #[derive(Clone, Debug)]
 pub struct ProofStore {
-    entries: BTreeMap<Key, Entry>,
-    /// The file as it was read, to know whether writing would change it.
-    read: Option<String>,
+    entries: BTreeMap<Key, Held>,
+    pending: HashMap<Key, Pending>,
+    /// The claim of the obligation last keyed (`text::print_key`).
+    claim: Option<String>,
+    /// The canonical text of the proof last read (`text::parse_proof`).
+    canonical: Option<String>,
+    /// How many obligations the run has asked for, for the sequence.
+    asked: usize,
     /// Never search: a miss is an error.
     locked: bool,
     /// Whether the search may run at all. Off, a miss is simply unsolved;
     /// this is the test hook that stands in for a weaker future search.
     search: bool,
     stats: Stats,
+    misses: Vec<Miss>,
     /// The item obligations are being asked for, and how many it has asked.
     item: String,
     ordinal: usize,
@@ -154,94 +237,32 @@ impl ProofStore {
     pub fn new() -> Self {
         Self {
             entries: BTreeMap::new(),
-            read: None,
+            pending: HashMap::new(),
+            claim: None,
+            canonical: None,
+            asked: 0,
             locked: false,
             search: true,
             stats: Stats::default(),
+            misses: Vec::new(),
             item: String::new(),
             ordinal: 0,
             names: None,
         }
     }
 
-    /// Reads a file. A header of another version, or none, refuses the
-    /// whole file; a malformed entry is skipped with a warning, and a
-    /// truncated last entry is dropped with one. What is returned is a
-    /// store and the warnings, never a panic, on any text.
-    pub fn parse(file: &str) -> Result<(Self, Vec<String>), String> {
-        if file.len() > MAX_FILE {
-            return Err(format!(
-                "MAX_PROOF_FILE_BYTES limit of {MAX_FILE} was exceeded"
-            ));
-        }
+    /// A store holding `entries`, as read from a file: none used yet. An
+    /// entry whose key appears twice is kept once, the first.
+    pub fn with_entries(entries: impl IntoIterator<Item = Entry>) -> Self {
         let mut store = Self::new();
-        let mut warnings = Vec::new();
-        let mut lines = file.lines().enumerate().peekable();
-        let header = loop {
-            match lines.next() {
-                Some((_, line)) if line.trim().is_empty() => continue,
-                Some((_, line)) => break line,
-                None => return Err("the proofs file is empty".into()),
-            }
-        };
-        match header.split_whitespace().collect::<Vec<_>>().as_slice() {
-            [HEADER, version] if version.parse::<u32>() == Ok(FORMAT_VERSION) => {}
-            [HEADER, version] => {
-                return Err(format!(
-                    "the proofs file is version {version}, and this locus reads version {FORMAT_VERSION}"
-                ));
-            }
-            _ => return Err("the proofs file does not start with `locus-proofs 1`".into()),
+        for entry in entries {
+            store.entries.entry(entry.key).or_insert(Held {
+                entry,
+                used: false,
+                sequence: None,
+            });
         }
-        while let Some((number, line)) = lines.next() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            let key_line = match fields.as_slice() {
-                ["obligation", key, function, ordinal] => Key::parse(key).and_then(|key| {
-                    Some((
-                        key,
-                        Label {
-                            function: (*function).to_string(),
-                            ordinal: ordinal.parse().ok()?,
-                        },
-                    ))
-                }),
-                _ => None,
-            };
-            let Some((key, label)) = key_line else {
-                warnings.push(format!(
-                    "line {}: not an obligation line; skipped",
-                    number + 1
-                ));
-                continue;
-            };
-            let Some((_, proof)) = lines.next_if(|(_, next)| !next.trim().is_empty()) else {
-                warnings.push(format!(
-                    "line {}: the obligation has no proof; the file may be truncated",
-                    number + 1
-                ));
-                continue;
-            };
-            if store.entries.contains_key(&key) {
-                warnings.push(format!(
-                    "line {}: obligation {key} appears twice; the first is kept",
-                    number + 1
-                ));
-                continue;
-            }
-            store.entries.insert(
-                key,
-                Entry {
-                    label,
-                    proof: proof.trim().to_string(),
-                    used: false,
-                },
-            );
-        }
-        store.read = Some(file.to_string());
-        Ok((store, warnings))
+        store
     }
 
     /// Never search: a miss is an error the elaborator reports.
@@ -264,6 +285,11 @@ impl ProofStore {
         self.stats
     }
 
+    /// The obligations no stored proof met, in the order they were met.
+    pub fn misses(&self) -> &[Miss] {
+        &self.misses
+    }
+
     /// The number of entries, read or recorded.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -273,21 +299,35 @@ impl ProofStore {
         self.entries.is_empty()
     }
 
+    /// Every entry, read or recorded, in key order.
+    pub fn entries(&self) -> Vec<&Entry> {
+        self.entries.values().map(|held| &held.entry).collect()
+    }
+
     /// The number of entries asked for in this run.
     pub fn used(&self) -> usize {
-        self.entries.values().filter(|entry| entry.used).count()
+        self.entries.values().filter(|held| held.used).count()
+    }
+
+    /// The entries asked for in this run, in the order they were asked
+    /// for: what is written.
+    pub fn used_entries(&self) -> Vec<&Entry> {
+        let mut used: Vec<&Held> = self.entries.values().filter(|held| held.used).collect();
+        used.sort_by(|a, b| {
+            a.sequence
+                .cmp(&b.sequence)
+                .then_with(|| a.entry.label.cmp(&b.entry.label))
+                .then_with(|| a.entry.key.cmp(&b.entry.key))
+        });
+        used.into_iter().map(|held| &held.entry).collect()
     }
 
     /// The labels of the entries asked for, in the order they are written.
     pub fn used_labels(&self) -> Vec<Label> {
-        let mut labels: Vec<Label> = self
-            .entries
-            .values()
-            .filter(|entry| entry.used)
+        self.used_entries()
+            .into_iter()
             .map(|entry| entry.label.clone())
-            .collect();
-        labels.sort();
-        labels
+            .collect()
     }
 
     /// The next obligation of `item`: its label.
@@ -303,27 +343,67 @@ impl ProofStore {
         }
     }
 
+    /// Keeps the claim of the obligation about to be looked up, which
+    /// `text::print_key` printed.
+    pub fn expect_claim(&mut self, claim: String) {
+        self.claim = Some(claim);
+    }
+
+    /// Keeps the canonical text of the proof just read, which
+    /// `text::parse_proof` printed; `None` when it could not be printed.
+    pub fn read_as(&mut self, canonical: Option<String>) {
+        self.canonical = canonical;
+    }
+
     /// The stored proof text of an obligation, if there is one. Whether it
     /// is accepted is for the caller to decide with `accept` or `refuse`;
     /// the ordinal of the obligation is consumed either way.
     pub fn lookup(&mut self, key: Key, item: &str) -> Option<String> {
         let label = self.label(item);
+        let claim = self.claim.take().unwrap_or_default();
+        self.canonical = None;
+        let sequence = self.asked;
+        self.asked += 1;
+        self.pending.insert(
+            key,
+            Pending {
+                label: label.clone(),
+                claim,
+                sequence,
+            },
+        );
         match self.entries.get_mut(&key) {
-            Some(entry) => {
-                entry.label = label;
-                Some(entry.proof.clone())
+            Some(held) => {
+                held.entry.label = label;
+                if held.sequence.is_none() {
+                    held.sequence = Some(sequence);
+                }
+                Some(held.entry.steps.clone())
             }
             None => {
                 self.stats.misses += 1;
+                self.misses.push(Miss { label, stale: None });
                 None
             }
         }
     }
 
-    /// The stored proof was accepted by the kernel: the entry stays.
+    /// The stored proof was accepted by the kernel: the entry stays, with
+    /// the claim the obligation wanted, which it proved, and in the
+    /// writer's own text.
     pub fn accept(&mut self, key: Key) {
-        if let Some(entry) = self.entries.get_mut(&key) {
-            entry.used = true;
+        let pending = self.pending.remove(&key);
+        let canonical = self.canonical.take();
+        if let Some(held) = self.entries.get_mut(&key) {
+            held.used = true;
+            if let Some(pending) = pending
+                && !pending.claim.is_empty()
+            {
+                held.entry.claim = pending.claim;
+            }
+            if let Some(canonical) = canonical {
+                held.entry.steps = canonical;
+            }
         }
         self.stats.hits += 1;
     }
@@ -331,7 +411,27 @@ impl ProofStore {
     /// The stored proof was not accepted: it is dropped, and the obligation
     /// is a miss.
     pub fn refuse(&mut self, key: Key) {
-        self.entries.remove(&key);
+        let pending = self.pending.get(&key);
+        let dropped = self.entries.remove(&key);
+        let label = pending
+            .map(|pending| pending.label.clone())
+            .or_else(|| dropped.as_ref().map(|held| held.entry.label.clone()))
+            .unwrap_or_else(|| Label {
+                function: self.item.clone(),
+                ordinal: self.ordinal,
+            });
+        let stale = match (pending, dropped) {
+            (Some(pending), Some(held))
+                if !held.entry.claim.is_empty()
+                    && !pending.claim.is_empty()
+                    && held.entry.claim != pending.claim =>
+            {
+                Some((held.entry.claim, pending.claim.clone()))
+            }
+            _ => None,
+        };
+        self.misses.push(Miss { label, stale });
+        self.canonical = None;
         self.stats.stale += 1;
         self.stats.misses += 1;
     }
@@ -347,18 +447,31 @@ impl ProofStore {
     }
 
     /// Records the proof the search found for the obligation just looked
-    /// up, which missed. The label is the one the lookup gave it.
-    pub fn record(&mut self, key: Key, proof: String) {
-        let label = Label {
-            function: self.item.clone(),
-            ordinal: self.ordinal,
+    /// up, which missed, with the label and the claim the lookup fixed.
+    pub fn record(&mut self, key: Key, steps: String) {
+        let pending = self.pending.remove(&key);
+        let (label, claim, sequence) = match pending {
+            Some(pending) => (pending.label, pending.claim, Some(pending.sequence)),
+            None => (
+                Label {
+                    function: self.item.clone(),
+                    ordinal: self.ordinal,
+                },
+                String::new(),
+                None,
+            ),
         };
         self.entries.insert(
             key,
-            Entry {
-                label,
-                proof,
+            Held {
+                entry: Entry {
+                    key,
+                    label,
+                    claim,
+                    steps,
+                },
                 used: true,
+                sequence,
             },
         );
         self.stats.recorded += 1;
@@ -381,37 +494,13 @@ impl ProofStore {
         self.names.as_ref()
     }
 
-    /// The file: the entries asked for in this run, in the order of their
-    /// labels, and nothing else.
-    pub fn render(&self) -> String {
-        let mut entries: Vec<(&Key, &Entry)> = self
-            .entries
-            .iter()
-            .filter(|(_, entry)| entry.used)
-            .collect();
-        entries.sort_by(|(key, a), (other, b)| a.label.cmp(&b.label).then(key.cmp(other)));
-        let mut out = format!("{HEADER} {FORMAT_VERSION}\n");
-        for (key, entry) in entries {
-            out.push('\n');
-            out.push_str(&format!(
-                "obligation {key} {} {}\n{}\n",
-                entry.label.function, entry.label.ordinal, entry.proof
-            ));
-        }
-        out
-    }
-
-    /// The file to write, when writing would change it: `None` when the
-    /// rendering is what was read, or when nothing was read and there is
-    /// nothing to write.
-    pub fn changed(&self) -> Option<String> {
-        let rendered = self.render();
-        match &self.read {
-            Some(read) if *read == rendered => None,
-            Some(_) => Some(rendered),
-            None if self.used() == 0 => None,
-            None => Some(rendered),
-        }
+    /// A lockfile holding this store's used entries alone, under `path`:
+    /// the text `Lockfile::put` would write for a lockfile that had
+    /// nothing else.
+    pub fn render(&self, path: &str) -> String {
+        let mut lockfile = Lockfile::new();
+        lockfile.put(path, self);
+        lockfile.render()
     }
 }
 

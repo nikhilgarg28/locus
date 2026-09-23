@@ -1,8 +1,9 @@
-//! The proofs file (E11): every proof the corpus produces is written, read
-//! back over a fresh elaboration, and accepted by the kernel; the file is
-//! stable under a second run, under reformatting, and under edits elsewhere;
-//! a hostile file costs a search or a report and never a false claim; and
-//! the reader is total on random and mutated text.
+//! The lockfile (E11, P12): every proof the corpus produces is written to
+//! `Locus.lock`, read back over a fresh elaboration, and accepted by the
+//! kernel; the file is byte-identical under a second run, under
+//! reformatting, and under edits elsewhere; a hostile file costs a search
+//! or a report and never a false claim; a piece a proof uses twice is
+//! written once; and the reader is total on random and mutated text.
 //!
 //! The randomized tests take a fixed seed, so a run is reproducible, and
 //! `LOCUS_EXTENDED` (any value) multiplies their case counts by 100.
@@ -24,11 +25,12 @@ use locus::kernel::{
 use locus::parser::parse;
 use locus::source::SourceMap;
 use locus::store::text::{Names, parse_proof, parse_term, parse_type, print_proof, print_term};
-use locus::store::{Key, ProofStore, Stats};
+use locus::store::{Entry, Key, Lockfile, ProofStore, Stats, v1};
 use rng::{Rng, case_seed};
 
-const SEED: u64 = 0x4C4F_4355_5300_0011;
+const SEED: u64 = 0x4C4F_4355_5300_0012;
 const MUTATED_PROOFS: u64 = 3_000;
+const MUTATED_FILES: u64 = 60;
 const RANDOM_TEXTS: u64 = 2_000;
 const EXTENDED_FACTOR: u64 = 100;
 
@@ -93,27 +95,85 @@ fn run(name: &str, text: &str, store: ProofStore) -> (Elaborated, ProofStore) {
     elaborate_with_store_and_options(source, &parsed.program, store, &options)
 }
 
-fn read(text: &str) -> ProofStore {
-    let (store, warnings) = ProofStore::parse(text).unwrap();
+/// The store of `path` in a lockfile that reads without a warning.
+fn read(text: &str, path: &str) -> ProofStore {
+    let (mut lockfile, warnings) = Lockfile::parse(text).unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
-    store
+    lockfile.take(path)
+}
+
+/// A lockfile holding `entries` under `path`.
+fn file_of(path: &str, entries: Vec<Entry>) -> String {
+    let mut lockfile = Lockfile::new();
+    lockfile.insert(path, entries);
+    lockfile.render()
+}
+
+/// The entries of `path` in a rendered lockfile, by key.
+fn entries(rendered: &str, path: &str) -> BTreeMap<String, Entry> {
+    read(rendered, path)
+        .entries()
+        .into_iter()
+        .map(|entry| (entry.key.to_string(), entry.clone()))
+        .collect()
 }
 
 fn lock() -> String {
     fs::read_to_string(root().join("examples/lock.lc")).unwrap()
 }
 
-/// The lines of a rendered file that hold proofs, by the key line before
-/// each.
-fn entries(rendered: &str) -> BTreeMap<String, String> {
-    let lines: Vec<&str> = rendered.lines().collect();
-    let mut entries = BTreeMap::new();
+/// The number of step lines in a block, and the number of uses of each
+/// step name in the lines after its own.
+fn steps_of(block: &str) -> (usize, BTreeMap<String, usize>) {
+    let lines: Vec<&str> = block.lines().collect();
+    let mut uses = BTreeMap::new();
     for (index, line) in lines.iter().enumerate() {
-        if line.starts_with("obligation ") {
-            entries.insert((*line).to_string(), lines[index + 1].to_string());
+        let name = line.split(" = ").next().unwrap().to_string();
+        let count = lines[index + 1..]
+            .iter()
+            .map(|later| {
+                later
+                    .split(|c: char| !c.is_ascii_alphanumeric())
+                    .filter(|word| *word == name)
+                    .count()
+            })
+            .sum();
+        uses.insert(name, count);
+    }
+    (lines.len(), uses)
+}
+
+/// Expand a writer-produced block into the version-1 tree spelling.
+fn expanded_tree(block: &str) -> String {
+    let mut lines: Vec<(String, String)> = block
+        .lines()
+        .map(|line| {
+            let (name, body) = line.split_once(" = ").unwrap();
+            (name.to_string(), body.to_string())
+        })
+        .collect();
+    for index in (0..lines.len()).rev() {
+        let (name, body) = lines[index].clone();
+        for later in &mut lines[index + 1..] {
+            later.1 = later
+                .1
+                .split_inclusive(|c: char| !c.is_ascii_alphanumeric())
+                .map(|piece| {
+                    let (word, rest) = piece.split_at(
+                        piece
+                            .find(|c: char| !c.is_ascii_alphanumeric())
+                            .unwrap_or(piece.len()),
+                    );
+                    if word == name {
+                        format!("{body}{rest}")
+                    } else {
+                        piece.to_string()
+                    }
+                })
+                .collect();
         }
     }
-    entries
+    lines.pop().unwrap().1
 }
 
 #[test]
@@ -121,6 +181,7 @@ fn entries(rendered: &str) -> BTreeMap<String, String> {
 fn every_found_proof_is_written_read_back_and_accepted() {
     let mut files = 0;
     let mut proofs = 0;
+    let (mut nodes, mut lines, mut shared) = (0, 0, 0);
     for path in corpus_files() {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         let text = fs::read_to_string(&path).unwrap();
@@ -132,29 +193,47 @@ fn every_found_proof_is_written_read_back_and_accepted() {
         let found = store.stats();
         assert_eq!(found.stale, 0, "{name}");
         assert_eq!(found.unprintable, 0, "{name}: a proof could not be written");
-        let rendered = store.render();
+        let rendered = store.render(&name);
         if let Some(names) = store.names() {
-            // Each proof, printed over its own context, reads back as the
-            // same proof, which the kernel accepts again.
+            // Each proof, printed over its own context as a block of
+            // steps, reads back as the same proof, which the kernel accepts
+            // again.
             for hole in first.holes.iter().filter(|hole| hole.found.is_some()) {
                 let found = hole.found.as_ref().unwrap();
                 let printed = print_proof(&found.proof, &found.context, names)
                     .unwrap_or_else(|error| panic!("{name}: {error}"));
+                assert!(
+                    printed.lines().last().unwrap().starts_with('s'),
+                    "{printed}"
+                );
                 let back = parse_proof(&printed, &found.context, names)
                     .unwrap_or_else(|error| panic!("{name}: {printed}: {error}"));
                 assert_eq!(back, found.proof, "{name}: {printed}");
                 let mut ctx = found.context.clone();
                 check_proof(&mut ctx, &back, &found.claim).unwrap();
+                let (count, uses) = steps_of(&printed);
+                nodes += hole.proof_size;
+                lines += count;
+                shared += uses.values().filter(|uses| **uses > 1).count();
                 proofs += 1;
             }
         } else {
             assert!(first.holes.iter().all(|hole| hole.found.is_none()));
         }
+        // Every entry has a claim, and every claim reads as a term over
+        // the context of some hole.
+        for entry in store.entries() {
+            assert!(!entry.claim.is_empty(), "{name}: {}", entry.label);
+        }
 
         // Read back, with the search forbidden: every obligation is met by
         // its entry, no entry is left over, and the file is rewritten byte
         // for byte.
-        let (second, store) = run(&name, &text, read(&rendered).locked(true).searching(false));
+        let (second, store) = run(
+            &name,
+            &text,
+            read(&rendered, &name).locked(true).searching(false),
+        );
         assert!(second.is_success(), "{name}: {:?}", second.diagnostics);
         // An obligation whose search failed has nothing stored and misses
         // again: the elaborator makes such attempts and withdraws them, as
@@ -170,7 +249,7 @@ fn every_found_proof_is_written_read_back_and_accepted() {
             store.len(),
             "{name}: an entry was not asked for"
         );
-        assert_eq!(store.render(), rendered, "{name}");
+        assert_eq!(store.render(&name), rendered, "{name}");
         for hole in &second.holes {
             assert!(hole.solved, "{name}");
             assert!(!SEARCHED.contains(&hole.tier), "{name}: {}", hole.tier);
@@ -186,23 +265,128 @@ fn every_found_proof_is_written_read_back_and_accepted() {
             .count();
         assert!(stored <= again.hits, "{name}: {stored} > {}", again.hits);
         assert_eq!(stored == 0, again.hits == 0, "{name}");
+        // Found again from nothing: the same bytes. The examples and the
+        // target files stand for the corpus here, as the fast run is
+        // timed.
+        if !path.to_string_lossy().contains("corpus/accept") {
+            let (_, store) = run(&name, &text, ProofStore::new());
+            assert_eq!(store.render(&name), rendered, "{name}: found differently");
+        }
         files += 1;
     }
     assert!(files >= 30, "{files} files");
     assert!(proofs >= 60, "{proofs} proofs");
+    println!(
+        "corpus proofs: {proofs} proofs of {nodes} tree nodes written as {lines} steps, {shared} \
+         of them used more than once"
+    );
+}
+
+#[test]
+fn a_piece_used_twice_is_written_once_and_named_in_first_use_order() {
+    // The examples' lock, `run 2`: the template `within_limit(#0.0)` is
+    // transported along three times and written once; and the target's
+    // lock, `remaining 3`, where an equation's proof is used twice.
+    let (_, store) = run("lock.lc", &lock(), ProofStore::new());
+    let entry = store
+        .entries()
+        .into_iter()
+        .find(|entry| entry.label.to_string() == "run 2")
+        .unwrap();
+    let (count, uses) = steps_of(&entry.steps);
+    assert_eq!(count, 2, "{}", entry.steps);
+    assert_eq!(uses["t1"], 3, "{}", entry.steps);
+    assert!(
+        entry
+            .steps
+            .starts_with("t1 = fn:within_limit(view[u8](#0.0))\ns1 = ")
+    );
+    assert_eq!(entry.claim, "fn:within_limit(view[u8]($11.0))");
+
+    let target = fs::read_to_string(root().join("tests/corpus/target/lock.lc")).unwrap();
+    let (_, store) = run("lock.lc", &target, ProofStore::new());
+    let entry = store
+        .entries()
+        .into_iter()
+        .find(|entry| entry.label.to_string() == "remaining 3")
+        .unwrap();
+    let (count, uses) = steps_of(&entry.steps);
+    assert!(count >= 6, "{}", entry.steps);
+    let proofs_used_twice = uses
+        .iter()
+        .filter(|(name, uses)| name.starts_with('s') && **uses >= 2)
+        .count();
+    assert!(proofs_used_twice >= 2, "{uses:?}\n{}", entry.steps);
+    assert_eq!(
+        entry
+            .steps
+            .matches("transport(h0, (#0 ==[u32] $4), refl($4))")
+            .count(),
+        1,
+        "{}",
+        entry.steps
+    );
+    // Every step is used after it is written, and the names are given in
+    // the order the steps are written.
+    for (index, line) in entry.steps.lines().enumerate() {
+        let name = line.split(" = ").next().unwrap();
+        let (kind, number) = name.split_at(1);
+        let earlier = entry
+            .steps
+            .lines()
+            .take(index)
+            .filter(|line| line.starts_with(kind))
+            .count();
+        assert_eq!(number.parse::<usize>().unwrap(), earlier + 1, "{name}");
+        if index + 1 < count {
+            assert!(
+                uses[name] >= 2,
+                "{name} is a step used {} times",
+                uses[name]
+            );
+        }
+    }
+}
+
+#[test]
+fn the_lockfile_is_no_larger_than_the_sidecars_it_replaced() {
+    // Compare the same current certificates in both formats. Language
+    // changes add obligations, so an old eight-file byte count is not a
+    // valid baseline for a lockfile containing the expanded corpus.
+    let (mut lockfiles, mut sidecars) = (0usize, 0usize);
+    for directory in ["examples", "tests/corpus/target"] {
+        let path = root().join(directory).join("Locus.lock");
+        let text =
+            fs::read_to_string(&path).unwrap_or_else(|_| panic!("{directory} has no Locus.lock"));
+        let (mut lockfile, warnings) = Lockfile::parse(&text).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!lockfile.is_empty());
+        let paths: Vec<_> = lockfile.paths().map(str::to_owned).collect();
+        for path in paths {
+            let store = lockfile.take(&path);
+            sidecars += "locus-proofs 1\n".len();
+            for entry in store.entries() {
+                let tree = expanded_tree(&entry.steps);
+                sidecars += format!("\nobligation {} {}\n{tree}\n", entry.key, entry.label).len();
+            }
+        }
+        lockfiles += text.len();
+    }
+    println!("lockfiles: {lockfiles} bytes; equivalent tree sidecars: {sidecars} bytes");
+    assert!(lockfiles <= sidecars, "{lockfiles} > {sidecars}");
 }
 
 #[test]
 fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
     let original = lock();
     let (_, store) = run("lock.lc", &original, ProofStore::new());
-    let rendered = store.render();
+    let rendered = store.render("lock.lc");
     let total = store.stats().recorded;
     assert_eq!(total, 8);
     let again = |edited: &str| -> (Stats, String) {
-        let (elaborated, store) = run("lock.lc", edited, read(&rendered));
+        let (elaborated, store) = run("lock.lc", edited, read(&rendered, "lock.lc"));
         assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
-        (store.stats(), store.render())
+        (store.stats(), store.render("lock.lc"))
     };
     let all_in_use = |edited: &str| {
         let (stats, text) = again(edited);
@@ -260,7 +444,7 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
     assert_eq!(stats.misses, 2);
     assert_eq!(stats.searches, 2);
     assert_eq!(stats.recorded, 2);
-    let (before, after) = (entries(&rendered), entries(&text));
+    let (before, after) = (entries(&rendered, "lock.lc"), entries(&text, "lock.lc"));
     assert_eq!(before.len(), 8);
     assert_eq!(after.len(), 8);
     let kept = before
@@ -272,15 +456,16 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
         before
             .iter()
             .filter(|(key, _)| after.contains_key(*key))
-            .all(|(key, proof)| after[key] == *proof)
+            .all(|(key, entry)| after[key] == *entry)
     );
-    let replaced: Vec<&String> = after
-        .keys()
-        .filter(|key| !before.contains_key(*key))
+    let replaced: Vec<&Entry> = after
+        .iter()
+        .filter(|(key, _)| !before.contains_key(*key))
+        .map(|(_, entry)| entry)
         .collect();
     assert_eq!(replaced.len(), 2);
     assert!(
-        replaced.iter().all(|key| key.contains(" run ")),
+        replaced.iter().all(|entry| entry.label.function == "run"),
         "{replaced:?}"
     );
 }
@@ -290,44 +475,27 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
 fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
     let source = lock();
     let (_, store) = run("lock.lc", &source, ProofStore::new());
-    let rendered = store.render();
-    let lines: Vec<String> = rendered.lines().map(str::to_string).collect();
-    let proofs_at: Vec<usize> = (0..lines.len())
-        .filter(|&index| lines[index].starts_with("obligation "))
-        .map(|index| index + 1)
-        .collect();
-    assert_eq!(proofs_at.len(), 8);
-    let file = |lines: &[String]| lines.join("\n") + "\n";
-    // Whatever was accepted was accepted by the kernel: every hit is a
-    // proof the kernel accepts again, over its context, of its claim.
-    let accepted_by_the_kernel = |elaborated: &Elaborated| {
-        for hole in elaborated.holes.iter().filter(|hole| hole.tier == "stored") {
-            let found = hole.found.as_ref().unwrap();
-            let mut ctx = found.context.clone();
-            check_proof(&mut ctx, &found.proof, &found.claim).unwrap();
-        }
-    };
+    let rendered = store.render("lock.lc");
+    let written: Vec<Entry> = store.used_entries().into_iter().cloned().collect();
+    assert_eq!(written.len(), 8);
 
     // Entries swapped between obligations: two proofs of other claims. The
     // kernel refuses both, the search runs for both, and the file is
     // written right again; under `--locked` they are errors that name the
-    // obligation.
-    let mut swapped = lines.clone();
-    let step_proofs: Vec<usize> = proofs_at
-        .iter()
-        .copied()
-        .filter(|&at| lines[at - 1].contains(" step "))
-        .collect();
-    assert!(step_proofs.len() >= 2);
-    swapped.swap(step_proofs[0], step_proofs[1]);
-    assert_ne!(lines[step_proofs[0]], lines[step_proofs[1]]);
-    let (elaborated, store) = run("lock.lc", &source, read(&file(&swapped)));
+    // obligation, and say what the entry proves and what is wanted.
+    let mut swapped = written.clone();
+    let (first, second) = (swapped[1].key, swapped[2].key);
+    swapped[1].key = second;
+    swapped[2].key = first;
+    assert_ne!(written[1].claim, written[2].claim);
+    let swapped = file_of("lock.lc", swapped);
+    let (elaborated, store) = run("lock.lc", &source, read(&swapped, "lock.lc"));
     assert!(elaborated.is_success());
     accepted_by_the_kernel(&elaborated);
     let stats = store.stats();
     assert_eq!((stats.hits, stats.stale, stats.searches), (6, 2, 2));
-    assert_eq!(store.render(), rendered);
-    let (elaborated, store) = run("lock.lc", &source, read(&file(&swapped)).locked(true));
+    assert_eq!(store.render("lock.lc"), rendered);
+    let (elaborated, store) = run("lock.lc", &source, read(&swapped, "lock.lc").locked(true));
     assert!(!elaborated.is_success());
     assert_eq!(store.stats().searches, 0);
     assert!(elaborated.diagnostics.iter().all(|diagnostic| {
@@ -339,53 +507,158 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
             .iter()
             .any(|diagnostic| diagnostic.message.starts_with("`step` needs a proof of `"))
     );
-
-    // A proof edited by hand to prove something else, and proofs of
-    // nothing at all: each is refused, and the obligation is searched.
-    let evaluations: Vec<usize> = proofs_at
+    // `step` stops at its first obligation that fails, so one stale entry
+    // is met: it says what it proves and what was wanted.
+    let stale: Vec<(String, String)> = store
+        .misses()
         .iter()
-        .copied()
-        .filter(|&at| lines[at - 1].ends_with(" run 1") || lines[at - 1].ends_with(" step 4"))
+        .filter_map(|miss| miss.stale.clone())
+        .collect();
+    assert_eq!(
+        stale,
+        [(written[2].claim.clone(), written[1].claim.clone())]
+    );
+    assert_eq!(store.misses().len(), 1);
+    assert_eq!(store.misses()[0].label.to_string(), "step 2");
+
+    // A proof edited by hand to prove something else, proofs of nothing at
+    // all, and blocks that do not read: each is refused, and the
+    // obligation is searched. A block that reads as the right proof, in
+    // some other form, is a hit and is written in the writer's form.
+    let evaluations: Vec<usize> = (0..written.len())
+        .filter(|&index| {
+            matches!(
+                written[index].label.to_string().as_str(),
+                "run 1" | "step 4"
+            )
+        })
         .collect();
     assert_eq!(evaluations.len(), 2);
-    for (edit, count) in [
-        ("evaluate(int_le(view[u8](0), view[u8](2)))", 2),
-        ("omitted", 2),
-        ("h0", 2),
-        ("refl(", 2),
-        ("axiom(int_le_refl, view[u8](0))", 2),
-        ("evaluate(int_le(view[u8](0), view[u8](3))) extra", 2),
+    for (edit, stale) in [
+        ("s1 = evaluate(int_le(view[u8](0), view[u8](2)))", 2),
+        ("s1 = omitted", 2),
+        ("s1 = h0", 2),
+        ("s1 = refl(", 2),
+        ("s1 = axiom(int_le_refl, view[u8](0))", 2),
+        ("s1 = evaluate(int_le(view[u8](0), view[u8](3))) extra", 2),
+        // A term where the proof is wanted, and the reverse.
+        ("t1 = evaluate(int_le(view[u8](0), view[u8](3)))", 2),
+        ("t1 = view[u8](0)\ns1 = t1", 2),
+        (
+            "s1 = evaluate(int_le(view[u8](0), view[u8](3)))\nt1 = s1",
+            2,
+        ),
+        // A later step, an unknown one, a cycle, a duplicate name, a line
+        // that is not a step, and no step at all.
+        (
+            "s1 = s2\ns2 = evaluate(int_le(view[u8](0), view[u8](3)))",
+            2,
+        ),
+        ("s1 = s7", 2),
+        ("s1 = implies_elim(s1, h0)", 2),
+        (
+            "t1 = view[u8](0)\nt1 = view[u8](3)\ns1 = evaluate(int_le(t1, t1))",
+            2,
+        ),
+        ("evaluate(int_le(view[u8](0), view[u8](3)))\ns1 = s0", 2),
+        (
+            "s1 = evaluate(int_le(view[u8](0), view[u8](3)))\nnot a step",
+            2,
+        ),
+        ("", 2),
+        ("t1 = view[u8](0)", 2),
+        // Native IntLe is a different proposition from the held Bool
+        // comparison in these obligations, even when both are true.
+        (
+            "t1 = view[u8](0)\nt2 = view[u8](3)\ns1 = evaluate(int_le(t1, t2))",
+            2,
+        ),
+        (
+            "s3 = int_le(view[u8](0), view[u8](3))\ns9 = evaluate(s3)",
+            2,
+        ),
+        (
+            "t3 = int_le(view[u8](0), view[u8](3))\ns9 = evaluate(t3)",
+            2,
+        ),
+        ("evaluate(int_le(view[u8](0), view[u8](3)))", 2),
     ] {
-        let mut edited = lines.clone();
+        let mut edited = written.clone();
         for &at in &evaluations {
-            edited[at] = edit.to_string();
+            edited[at].steps = edit.to_string();
         }
-        let (elaborated, store) = run("lock.lc", &source, read(&file(&edited)));
+        let (elaborated, store) = run(
+            "lock.lc",
+            &source,
+            read(&file_of("lock.lc", edited), "lock.lc"),
+        );
         assert!(elaborated.is_success(), "{edit}");
         accepted_by_the_kernel(&elaborated);
         let stats = store.stats();
-        assert_eq!(stats.stale, count, "{edit}");
-        assert_eq!(stats.hits, 8 - count, "{edit}");
-        assert_eq!(store.render(), rendered, "{edit}");
+        assert_eq!(stats.stale, stale, "{edit:?}");
+        assert_eq!(stats.hits, 8 - stale, "{edit:?}");
+        assert_eq!(store.render("lock.lc"), rendered, "{edit:?}");
     }
+
+    // Alternate DAG names, an extra proof alias, whitespace, and the
+    // legacy tree all replay and canonicalize to the writer's form.
+    for style in 0..3 {
+        let mut edited = written.clone();
+        for &at in &evaluations {
+            let block = &written[at].steps;
+            edited[at].steps = match style {
+                0 => expanded_tree(block),
+                1 => format!("  {block}  \n\n"),
+                _ => {
+                    let last = block.lines().last().unwrap().split_once(" = ").unwrap().0;
+                    format!("{block}\ns999 = {last}")
+                }
+            };
+        }
+        let (elaborated, store) = run(
+            "lock.lc",
+            &source,
+            read(&file_of("lock.lc", edited), "lock.lc"),
+        );
+        assert!(elaborated.is_success());
+        accepted_by_the_kernel(&elaborated);
+        assert_eq!((store.stats().hits, store.stats().stale), (8, 0));
+        assert_eq!(store.render("lock.lc"), rendered);
+    }
+
+    // The entries under another file's path: the source misses every one,
+    // and the other file's entries are kept as they are.
+    let moved = file_of("other.lc", written.clone());
+    let (elaborated, store) = run("lock.lc", &source, read(&moved, "lock.lc"));
+    assert!(elaborated.is_success());
+    assert_eq!(store.stats().hits, 0);
+    assert_eq!(store.stats().searches, 8);
+    let (mut lockfile, _) = Lockfile::parse(&moved).unwrap();
+    let _ = lockfile.take("lock.lc");
+    lockfile.put("lock.lc", &store);
+    let both = lockfile.render();
+    assert_eq!(entries(&both, "lock.lc"), entries(&rendered, "lock.lc"));
+    assert_eq!(entries(&both, "other.lc"), entries(&moved, "other.lc"));
+    assert_eq!(read(&both, "other.lc").entries().len(), 8);
 
     // The file truncated at every length: read without a panic, and what
     // survives is used or refused, never more.
     let mut truncations = 0;
     let mut used = 0;
-    for length in (0..=rendered.len()).step_by(if extended() { 1 } else { 3 }) {
+    let mut refused = 0;
+    for length in (0..=rendered.len()).step_by(if extended() { 1 } else { 7 }) {
         let Some(prefix) = rendered.get(..length) else {
             continue;
         };
-        match ProofStore::parse(prefix) {
-            Err(problem) => assert!(length < "locus-proofs 1".len(), "{length}: {problem}"),
-            Ok((store, _)) => {
-                let (elaborated, store) = run("lock.lc", &source, store);
+        match Lockfile::parse(prefix) {
+            Err(_) => refused += 1,
+            Ok((mut lockfile, _)) => {
+                let (elaborated, store) = run("lock.lc", &source, lockfile.take("lock.lc"));
                 assert!(elaborated.is_success(), "{length}");
                 accepted_by_the_kernel(&elaborated);
                 let stats = store.stats();
                 assert_eq!(stats.hits + stats.misses, 8, "{length}");
-                assert_eq!(store.render(), rendered, "{length}");
+                assert_eq!(store.render("lock.lc"), rendered, "{length}");
                 used += stats.hits;
             }
         }
@@ -393,16 +666,195 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
     }
     assert!(truncations > 100, "{truncations}");
     assert!(used > 0);
+    assert!(refused > 0);
 
-    // Random bytes, bare and behind the header: read without a panic.
+    // Random bytes, bare and behind a valid head: read without a panic.
     let mut rng = Rng::new(SEED);
+    let head = "version = 2\n\n[[file]]\npath = \"lock.lc\"\n\n  [[file.obligation]]\n";
     for _ in 0..cases(RANDOM_TEXTS) {
         let length = rng.range(0..300);
         let bytes: Vec<u8> = (0..length).map(|_| rng.below(256) as u8).collect();
         let text = String::from_utf8_lossy(&bytes).to_string();
-        let _ = ProofStore::parse(&text);
-        let _ = ProofStore::parse(&format!("locus-proofs 1\n\n{text}"));
-        let _ = ProofStore::parse(&format!("locus-proofs 1\n\nobligation {text}"));
+        let _ = Lockfile::parse(&text);
+        let _ = Lockfile::parse(&format!("version = 2\n{text}"));
+        let _ = Lockfile::parse(&format!("{head}{text}"));
+        let _ = Lockfile::parse(&format!(
+            "{head}  key = \"{text}\"\n  steps = '''\n{text}\n'''\n"
+        ));
+    }
+    println!(
+        "hostile lockfiles: {truncations} truncations ({refused} refused as files), {} random texts \
+         in 4 framings",
+        cases(RANDOM_TEXTS)
+    );
+}
+
+#[test]
+fn the_lockfile_reader_refuses_other_versions_and_skips_what_it_cannot_read() {
+    // The pinned TOML parser bounds its own nesting before building an
+    // attacker-controlled deeply recursive value (ordinary files are flat).
+    let nested = format!(
+        "version = 2\nunused = {}0{}\n",
+        "[".repeat(81),
+        "]".repeat(81)
+    );
+    let error = Lockfile::parse(&nested).unwrap_err();
+    assert!(error.contains("recursion"), "{error}");
+
+    for (text, why) in [
+        ("", "no `version`"),
+        ("version = 7\n", "version 7"),
+        ("version = \"2\"\n", "not a number"),
+        ("[[file]]\npath = \"a.lc\"\n", "no `version`"),
+        ("not a lockfile\n", "not a TOML lockfile"),
+        (
+            "version = 2\n[[file]]\npath = \"a.lc\"\n  [[file.obligation]]\n  key = \"x\"\n  steps = '''\n",
+            "not a TOML lockfile",
+        ),
+    ] {
+        let problem = Lockfile::parse(text)
+            .err()
+            .unwrap_or_else(|| panic!("{text:?} was read"));
+        assert!(problem.contains(why), "{text:?}: {problem}");
+    }
+    let (lockfile, warnings) = Lockfile::parse("version = 2\n").unwrap();
+    assert!(lockfile.is_empty() && warnings.is_empty());
+    assert_eq!(lockfile.render(), "version = 2\n");
+    assert!(lockfile.changed().is_none());
+
+    let text = "version = 2\nfile = 3\n";
+    let (lockfile, warnings) = Lockfile::parse(text).unwrap();
+    assert!(lockfile.is_empty());
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    let text = r#"version = 2
+
+[[file]]
+path = "a.lc"
+
+  [[file.obligation]]
+  key = "0123456789abcdef"
+  at = "f 1"
+  claim = "true"
+  steps = "s1 = omitted"
+
+  [[file.obligation]]
+  key = "not sixteen hex digits"
+  steps = "s1 = omitted"
+
+  [[file.obligation]]
+  key = "0123456789abcdef"
+  steps = "s1 = h0"
+
+  [[file.obligation]]
+  key = "0123456789abcde0"
+  at = 7
+
+  [[file.obligation]]
+  key = "0123456789abcde1"
+  at = "odd"
+  steps = '''
+s1 = h0
+'''
+
+[[file]]
+path = "a.lc"
+
+[[file]]
+name = "b.lc"
+
+[[file]]
+path = "c.lc"
+obligation = "none"
+"#;
+    let (mut lockfile, warnings) = Lockfile::parse(text).unwrap();
+    assert_eq!(warnings.len(), 6, "{warnings:#?}");
+    assert_eq!(lockfile.paths().collect::<Vec<_>>(), ["a.lc", "c.lc"]);
+    let store = lockfile.take("a.lc");
+    let entries = store.entries();
+    assert_eq!(entries.len(), 2);
+    let by_function = |function: &str| {
+        *entries
+            .iter()
+            .find(|entry| entry.label.function == function)
+            .unwrap()
+    };
+    assert_eq!(by_function("f").label.to_string(), "f 1");
+    assert_eq!(by_function("f").claim, "true");
+    assert_eq!(by_function("f").steps, "s1 = omitted");
+    assert_eq!(by_function("odd").label.ordinal, 0);
+    assert_eq!(by_function("odd").steps, "s1 = h0");
+    // What was read is written in the writer's layout, and reads again.
+    let mut written = Lockfile::new();
+    written.insert(
+        "a.lc",
+        vec![by_function("f").clone(), by_function("odd").clone()],
+    );
+    let rendered = written.render();
+    assert!(rendered.starts_with("version = 2\n\n[[file]]\npath = \"a.lc\"\n\n  [[file.obligation]]\n  key = \"0123456789abcdef\"\n  at = \"f 1\"\n  claim = \"true\"\n  steps = '''\ns1 = omitted\n'''\n"), "{rendered}");
+    let (again, warnings) = Lockfile::parse(&rendered).unwrap();
+    assert!(warnings.is_empty());
+    assert_eq!(again.render(), rendered);
+    assert!(again.changed().is_none());
+
+    // A path or a block the literal forms cannot hold is escaped, and
+    // reads back as it was.
+    let odd = Entry {
+        key: Key::of("odd"),
+        label: locus::store::Label {
+            function: "f\"g".into(),
+            ordinal: 1,
+        },
+        claim: "a\\b\"c".into(),
+        steps: "s1 = '''\u{7}".into(),
+    };
+    let rendered = file_of("dir/we\"ird\\.lc", vec![odd.clone()]);
+    let (mut again, warnings) = Lockfile::parse(&rendered).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}\n{rendered}");
+    let store = again.take("dir/we\"ird\\.lc");
+    assert_eq!(store.entries(), [&odd]);
+}
+
+#[test]
+fn version_1_entries_are_used_and_then_written_as_the_lockfile_writes_them() {
+    // The proofs of the examples' lock as version 1 wrote them, keyed as
+    // they are now: every entry is a hit, gets its claim, and is written
+    // in the steps form, byte for byte as a fresh run writes it.
+    let source = lock();
+    let (_, store) = run("lock.lc", &source, ProofStore::new());
+    let rendered = store.render("lock.lc");
+    let mut sidecar = String::from("locus-proofs 1\n");
+    for entry in store.used_entries() {
+        let tree = expanded_tree(&entry.steps);
+        sidecar.push_str(&format!(
+            "\nobligation {} {}\n{tree}\n",
+            entry.key, entry.label
+        ));
+    }
+    let (entries, warnings) = v1::parse(&sidecar).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(entries.len(), 8);
+    assert!(entries.iter().all(|entry| entry.claim.is_empty()));
+    let (elaborated, store) = run("lock.lc", &source, ProofStore::with_entries(entries));
+    assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
+    let stats = store.stats();
+    assert_eq!((stats.hits, stats.searches, stats.stale), (8, 0, 0));
+    assert_eq!(store.render("lock.lc"), rendered);
+
+    // The version-1 reader on its own input, hostile or not.
+    assert!(v1::parse("").is_err());
+    assert!(v1::parse("locus-proofs 2\n").is_err());
+    let (entries, warnings) =
+        v1::parse("locus-proofs 1\n\nobligation zz f 1\nh0\n\nobligation 0123456789abcdef f 2\n")
+            .unwrap();
+    assert!(entries.is_empty());
+    assert_eq!(warnings.len(), 3, "{warnings:?}");
+    let mut rng = Rng::new(SEED ^ 7);
+    for _ in 0..cases(RANDOM_TEXTS / 4) {
+        let length = rng.range(0..300);
+        let bytes: Vec<u8> = (0..length).map(|_| rng.below(256) as u8).collect();
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        let _ = v1::parse(&text);
+        let _ = v1::parse(&format!("locus-proofs 1\n\nobligation {text}"));
     }
 }
 
@@ -410,10 +862,10 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
 fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
     let source = lock();
     let (_, store) = run("lock.lc", &source, ProofStore::new());
-    let rendered = store.render();
+    let rendered = store.render("lock.lc");
 
     // Complete: no search, every obligation stored.
-    let (elaborated, store) = run("lock.lc", &source, read(&rendered).locked(true));
+    let (elaborated, store) = run("lock.lc", &source, read(&rendered, "lock.lc").locked(true));
     assert!(elaborated.is_success());
     let stats = store.stats();
     assert_eq!(stats.searches, 0);
@@ -421,13 +873,15 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
     assert!(elaborated.holes.iter().all(|hole| hole.tier == "stored"));
 
     // One entry removed: the obligation is named, and nothing is searched.
-    let missing: String = rendered
-        .split("\n\n")
-        .filter(|entry| !entry.contains(" run 1\n"))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    assert_ne!(missing, rendered);
-    let (elaborated, store) = run("lock.lc", &source, read(&missing).locked(true));
+    let kept: Vec<Entry> = store
+        .used_entries()
+        .into_iter()
+        .filter(|entry| entry.label.to_string() != "run 1")
+        .cloned()
+        .collect();
+    assert_eq!(kept.len(), 7);
+    let missing = file_of("lock.lc", kept);
+    let (elaborated, store) = run("lock.lc", &source, read(&missing, "lock.lc").locked(true));
     assert!(!elaborated.is_success());
     assert_eq!(store.stats().searches, 0);
     let messages: Vec<&str> = elaborated
@@ -439,10 +893,17 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
         messages,
         ["`run` needs a proof of `0 <= 3` at line 56, and the proofs file has none"]
     );
+    assert_eq!(store.misses().len(), 1);
+    assert_eq!(store.misses()[0].label.to_string(), "run 1");
+    assert!(store.misses()[0].stale.is_none());
 
     // Surviving an upgrade: with every tier made to fail, the complete
     // file still checks, and an empty store does not.
-    let (elaborated, store) = run("lock.lc", &source, read(&rendered).searching(false));
+    let (elaborated, store) = run(
+        "lock.lc",
+        &source,
+        read(&rendered, "lock.lc").searching(false),
+    );
     assert!(elaborated.is_success());
     assert_eq!(store.stats().searches, 0);
     let (elaborated, store) = run("lock.lc", &source, ProofStore::new().searching(false));
@@ -466,6 +927,10 @@ fn keys_are_fnv1a_over_the_key_text() {
     assert_eq!(Key::of("").to_string(), "cbf29ce484222325");
     assert_eq!(Key::of("a").to_string(), "af63dc4c8601ec8c");
     assert_eq!(Key::of("foobar").to_string(), "85944171f73967e8");
+    assert_eq!(Key::parse("85944171f73967e8"), Some(Key::of("foobar")));
+    assert_eq!(Key::parse("85944171F73967E8"), Some(Key::of("foobar")));
+    assert_eq!(Key::parse("85944171f73967e"), None);
+    assert_eq!(Key::parse("85944171f73967eg"), None);
 }
 
 /// A context with one declaration of each kind, and the names for them.
@@ -686,6 +1151,40 @@ fn every_term_and_proof_form_round_trips() {
         let back =
             parse_term(&printed, &ctx, &names).unwrap_or_else(|error| panic!("{printed}: {error}"));
         assert_eq!(&back, term, "{printed}");
+        // As the one step of a proof, and shared: a term used twice is one
+        // step, and a leaf is not.
+        let twice = Proof::ImpliesElim(
+            Box::new(Proof::OfTerm(term.clone())),
+            Box::new(Proof::Refl(term.clone())),
+        );
+        let printed = print_proof(&twice, &ctx, &names).unwrap();
+        let back = parse_proof(&printed, &ctx, &names)
+            .unwrap_or_else(|error| panic!("{printed}: {error}"));
+        assert_eq!(back, twice, "{printed}");
+        let (count, uses) = steps_of(&printed);
+        let leaf = printed.lines().count() == 1;
+        if leaf {
+            assert_eq!(count, 1);
+        } else {
+            assert!(count >= 2, "{printed}");
+            let last_term = printed
+                .lines()
+                .rev()
+                .find(|line| line.starts_with('t'))
+                .unwrap()
+                .split_once(" = ")
+                .unwrap()
+                .0;
+            assert_eq!(uses[last_term], 2, "{printed}");
+            let conclusion = printed.lines().last().unwrap().split_once(" = ").unwrap().1;
+            assert_eq!(
+                conclusion,
+                format!("implies_elim(of_term({last_term}), refl({last_term}))")
+            );
+            for (name, uses) in uses.iter().filter(|(_, uses)| **uses > 0) {
+                assert!(*uses >= 2, "unnecessary step {name}: {printed}");
+            }
+        }
     }
 
     let a = Term::view(MachineInt::U8, x.clone());
@@ -867,9 +1366,31 @@ fn every_term_and_proof_form_round_trips() {
             rules.push(proof.rule_name());
         }
         let printed = print_proof(proof, &ctx, &names).unwrap();
+        assert!(
+            printed.lines().last().unwrap().starts_with('s'),
+            "{printed}"
+        );
         let back = parse_proof(&printed, &ctx, &names)
             .unwrap_or_else(|error| panic!("{printed}: {error}"));
         assert_eq!(&back, proof, "{printed}");
+        // Used twice, a composite proof is one step; a leaf is inline.
+        let twice = Proof::ImpliesElim(Box::new(proof.clone()), Box::new(proof.clone()));
+        let printed = print_proof(&twice, &ctx, &names).unwrap();
+        let back = parse_proof(&printed, &ctx, &names)
+            .unwrap_or_else(|error| panic!("{printed}: {error}"));
+        assert_eq!(back, twice, "{printed}");
+        let leaf = matches!(proof, Proof::Hyp(_) | Proof::Omitted);
+        let last = printed.lines().last().unwrap();
+        let shared = last.split_once(" = ").unwrap().1;
+        assert_eq!(
+            shared.starts_with("implies_elim(s") && shared.ends_with(')') && {
+                let inner = &shared["implies_elim(".len()..shared.len() - 1];
+                let (a, b) = inner.split_once(", ").unwrap();
+                a == b
+            },
+            !leaf,
+            "{printed}"
+        );
     }
     assert_eq!(rules.len(), 31, "every rule is listed: {rules:?}");
 }
@@ -882,6 +1403,7 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
     let stranger = Term::Free(locus::kernel::VarId::fresh());
     assert!(print_term(&stranger, &ctx, &names).is_err());
     assert!(print_proof(&Proof::hyp(locus::kernel::HypId::fresh()), &ctx, &names).is_err());
+    assert!(print_proof(&Proof::Refl(stranger), &ctx, &names).is_err());
     let unnamed = Names::new();
     assert!(
         print_term(
@@ -933,6 +1455,10 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
         "   ",
         "\u{0}",
         "é",
+        // Step names are for blocks; a bare term names none.
+        "t1",
+        "s1",
+        "t1 = 1",
     ] {
         assert!(parse_term(text, &ctx, &names).is_err(), "{text:?}");
     }
@@ -956,8 +1482,52 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
         "construct(Small, 0, (), ())",
         "omitted()",
         "int_induction(1, omitted, |1, 1| omitted)",
+        "s1",
+        // Blocks: a later step, an unknown one, a cycle, a name twice, a
+        // line that is not a step, the wrong kind, a term last, and a
+        // bare expression among steps.
+        "s1 = s2\ns2 = h0",
+        "s1 = implies_elim(h0, s9)",
+        "s1 = implies_elim(s1, h0)",
+        "t1 = t1",
+        "t1 = 1\nt1 = 2\ns1 = refl(t1)",
+        "t1 = 1\nrefl(t1)",
+        "t1 = 1\ns1 = refl(t1)\n)",
+        "t1 = h0\ns1 = t1",
+        "s1 = h0\nt1 = s1\ns2 = of_term(t1)",
+        "s1 = h0\nt1 = 1",
+        "t1 = 1",
+        "t1 = 1\ns1 = refl(t1) extra",
+        "s1 == h0",
+        "s1 => h0",
+        "h1 = h0",
+        "s1 = h0\n\u{0}",
     ] {
         assert!(parse_proof(text, &ctx, &names).is_err(), "{text:?}");
+    }
+    // Blocks that read: whitespace, blank lines, any numbering, and
+    // steps in either kind.
+    for (text, expected) in [
+        ("s1 = h0", "h0"),
+        ("  s7 =h0  \n\n", "h0"),
+        ("t1 = $0\ns1 = refl(t1)", "refl($0)"),
+        (
+            "t2 = $0\nt1 = ($0 ==[u8] t2)\ns1 = of_term(t1)",
+            "of_term(($0 ==[u8] $0))",
+        ),
+        ("s1 = h0\ns2 = implies_elim(s1, s1)", "implies_elim(h0, h0)"),
+        (
+            "t1 = 1\ns1 = refl(t1)\nt2 = (t1, t1) : (u8, u8)\ns2 = implies_elim(s1, of_term(t2))",
+            "implies_elim(refl(1), of_term((1, 1) : (u8, u8)))",
+        ),
+    ] {
+        let proof =
+            parse_proof(text, &ctx, &names).unwrap_or_else(|error| panic!("{text:?}: {error}"));
+        assert_eq!(
+            proof,
+            parse_proof(expected, &ctx, &names).unwrap(),
+            "{text:?}"
+        );
     }
     // Deep nesting is refused by count, not by the stack, and so is a text
     // over the size limit.
@@ -975,6 +1545,63 @@ fn what_the_text_cannot_hold_is_refused_by_the_printer_and_the_reader() {
     assert!(parse_term(&format!("{long}n"), &ctx, &names).is_err());
     let huge = " ".repeat(locus::store::text::MAX_TEXT + 1);
     assert!(parse_term(&huge, &ctx, &names).is_err());
+    let huge_block = format!("t1 = 1\n{huge}\ns1 = refl(t1)");
+    let error = parse_proof(&huge_block, &ctx, &names).unwrap_err();
+    assert!(error.message.contains("MAX_PROOF_TEXT_BYTES"), "{error}");
+    for postfix in [".0", "()"] {
+        let term = format!("$1{}", postfix.repeat(locus::kernel::MAX_DEPTH));
+        let error = parse_term(&term, &ctx, &names).unwrap_err();
+        assert!(error.message.contains("MAX_KERNEL_DEPTH"), "{error}");
+    }
+
+    // A block whose steps nest, one inside the next, is as deep as the
+    // tree it names; one that doubles is as large.
+    let chain = |depth: usize| {
+        let mut block = String::from("t1 = int_neg($1)\n");
+        for index in 2..=depth {
+            block.push_str(&format!("t{index} = int_neg(t{})\n", index - 1));
+        }
+        block.push_str(&format!("s1 = of_term(t{depth})"));
+        block
+    };
+    assert!(parse_proof(&chain(200), &ctx, &names).is_ok());
+    let error = parse_proof(&chain(300), &ctx, &names).unwrap_err();
+    assert!(error.message.contains("MAX_KERNEL_DEPTH"), "{error}");
+    let doubling = |lines: usize| {
+        let mut block = String::from("t1 = int_add($1, $1)\n");
+        for index in 2..=lines {
+            block.push_str(&format!(
+                "t{index} = int_add(t{}, t{})\n",
+                index - 1,
+                index - 1
+            ));
+        }
+        block.push_str(&format!("s1 = of_term(t{lines})"));
+        block
+    };
+    assert!(parse_proof(&doubling(15), &ctx, &names).is_ok());
+    // Each alias is individually bounded, but all retained expansions
+    // must also fit the one block's allocation budget.
+    let mut retained = doubling(15);
+    for index in 2..=40 {
+        retained.push_str(&format!("\ns{index} = s1"));
+    }
+    let error = parse_proof(&retained, &ctx, &names).unwrap_err();
+    assert!(
+        error.message.contains("MAX_PROOF_EXPANDED_NODES"),
+        "{error}"
+    );
+
+    let error = parse_proof(&doubling(25), &ctx, &names).unwrap_err();
+    assert!(
+        error.message.contains("MAX_PROOF_EXPANDED_NODES"),
+        "{error}"
+    );
+    let error = parse_proof(&doubling(2_000), &ctx, &names).unwrap_err();
+    assert!(
+        error.message.contains("MAX_PROOF_EXPANDED_NODES"),
+        "{error}"
+    );
 }
 
 /// The pieces a mutation inserts: every token the text form uses.
@@ -1068,6 +1695,15 @@ const PIECES: &[&str] = &[
     "\u{0}",
     "é",
     "\n",
+    // The steps form.
+    "t1",
+    "t2",
+    "s1",
+    "s2",
+    " = ",
+    "=",
+    "\nt1 = ",
+    "\ns1 = ",
 ];
 
 #[test]
@@ -1101,7 +1737,7 @@ fn the_reader_never_panics_on_random_or_mutated_text() {
     assert!(seeds.len() >= 60, "{} seeds", seeds.len());
 
     // Mutations of a seed: bytes deleted, pieces inserted, spans
-    // duplicated, characters swapped, digits changed.
+    // duplicated, characters swapped, digits changed, lines swapped.
     let (mut parsed, mut accepted) = (0, 0);
     for index in 0..cases(MUTATED_PROOFS) {
         let seed = case_seed(SEED, index);
@@ -1110,7 +1746,7 @@ fn the_reader_never_panics_on_random_or_mutated_text() {
         let mut chars: Vec<char> = text.chars().collect();
         for _ in 0..rng.range(1..5) {
             let at = rng.range(0..chars.len() + 1);
-            match rng.below(5) {
+            match rng.below(6) {
                 0 if at < chars.len() => {
                     let end = (at + rng.range(1..8)).min(chars.len());
                     chars.drain(at..end);
@@ -1128,6 +1764,19 @@ fn the_reader_never_panics_on_random_or_mutated_text() {
                     let other = rng.range(0..chars.len());
                     let at = at.min(chars.len() - 1);
                     chars.swap(at, other);
+                }
+                4 => {
+                    let mut lines: Vec<String> = chars
+                        .iter()
+                        .collect::<String>()
+                        .lines()
+                        .map(str::to_string)
+                        .collect();
+                    if lines.len() >= 2 {
+                        let (a, b) = (rng.range(0..lines.len()), rng.range(0..lines.len()));
+                        lines.swap(a, b);
+                        chars = lines.join("\n").chars().collect();
+                    }
                 }
                 _ if at < chars.len() && chars[at].is_ascii_digit() => {
                     chars[at] = char::from(b'0' + rng.below(10) as u8);
@@ -1151,6 +1800,10 @@ fn the_reader_never_panics_on_random_or_mutated_text() {
     }
     assert!(parsed > 0, "no mutation parsed");
     assert!(accepted > 0, "no mutation was still a proof");
+    println!(
+        "mutated blocks: {} cases, {parsed} read as proofs, {accepted} still proofs",
+        cases(MUTATED_PROOFS)
+    );
 
     // Random bytes, as terms, types, and proofs.
     let (ctx, names) = declared();
@@ -1166,6 +1819,103 @@ fn the_reader_never_panics_on_random_or_mutated_text() {
         let _ = parse_term(&text, &ctx, &names);
         let _ = parse_type(&text, &ctx, &names);
         let _ = parse_proof(&text, &ctx, &names);
+    }
+
+    // Mutations of a whole lockfile: the examples' lock with pieces of
+    // TOML and of the text form inserted, deleted, and swapped; each reads
+    // as a lockfile or a reason, and what it holds is used or refused.
+    let source = lock();
+    let (_, store) = run("lock.lc", &source, ProofStore::new());
+    let rendered = store.render("lock.lc");
+    let toml_pieces: &[&str] = &[
+        "[[file]]",
+        "[[file.obligation]]",
+        "path = \"lock.lc\"",
+        "key = \"",
+        "at = \"",
+        "claim = \"",
+        "steps = '''",
+        "'''",
+        "\"",
+        "'",
+        "\n",
+        "  ",
+        "version = 2",
+        "version = 3",
+        "[",
+        "]",
+        "=",
+        "#",
+        "\\",
+        "\u{0}",
+        "é",
+        "t1",
+        "s1",
+        " = ",
+        "\nt1 = ",
+        "\ns1 = ",
+        "h0",
+        "refl(",
+        ")",
+    ];
+    let (mut files, mut refused, mut hits, mut stale) = (0, 0, 0, 0);
+    for index in 0..cases(MUTATED_FILES) {
+        let mut rng = Rng::new(case_seed(SEED ^ 2, index));
+        let mut chars: Vec<char> = rendered.chars().collect();
+        for _ in 0..rng.range(1..6) {
+            let at = rng.range(0..chars.len() + 1);
+            match rng.below(4) {
+                0 if at < chars.len() => {
+                    let end = (at + rng.range(1..12)).min(chars.len());
+                    chars.drain(at..end);
+                }
+                1 => {
+                    let piece: Vec<char> = rng.choose(toml_pieces).chars().collect();
+                    chars.splice(at..at, piece);
+                }
+                2 if chars.len() >= 2 => {
+                    let other = rng.range(0..chars.len());
+                    let at = at.min(chars.len() - 1);
+                    chars.swap(at, other);
+                }
+                _ if at < chars.len() && chars[at].is_ascii_alphanumeric() => {
+                    chars[at] = rng
+                        .choose(&['0', '9', 'a', 'f', 'x', 's', 't', '1'])
+                        .to_owned();
+                }
+                _ => {}
+            }
+        }
+        let mutated: String = chars.into_iter().collect();
+        match Lockfile::parse(&mutated) {
+            Err(_) => refused += 1,
+            Ok((mut lockfile, _)) => {
+                let (elaborated, store) = run("lock.lc", &source, lockfile.take("lock.lc"));
+                assert!(elaborated.is_success(), "{mutated}");
+                accepted_by_the_kernel(&elaborated);
+                let stats = store.stats();
+                assert_eq!(stats.hits + stats.misses, 8, "{mutated}");
+                assert_eq!(store.render("lock.lc"), rendered, "{mutated}");
+                hits += stats.hits;
+                stale += stats.stale;
+            }
+        }
+        files += 1;
+    }
+    assert!(
+        refused > 0 && hits > 0 && stale > 0,
+        "{refused} {hits} {stale}"
+    );
+    println!("mutated lockfiles: {files} cases, {refused} refused, {hits} hits, {stale} stale");
+}
+
+/// Every hit is a proof the kernel accepts again, over its context, of its
+/// claim.
+fn accepted_by_the_kernel(elaborated: &Elaborated) {
+    for hole in elaborated.holes.iter().filter(|hole| hole.tier == "stored") {
+        let found = hole.found.as_ref().unwrap();
+        let mut ctx = found.context.clone();
+        check_proof(&mut ctx, &found.proof, &found.claim).unwrap();
     }
 }
 
@@ -1208,6 +1958,9 @@ fn nesting_at_the_limit_fits_a_small_stack_and_beyond_it_is_refused() {
                 if let Ok(proof) = proof {
                     let printed = print_proof(&proof, &ctx, &names).unwrap();
                     assert_eq!(parse_proof(&printed, &ctx, &names).unwrap(), proof);
+                    let last = printed.lines().last().unwrap().split_once(" = ").unwrap().0;
+                    let aliased = format!("{printed}\ns999 = {last}");
+                    assert_eq!(parse_proof(&aliased, &ctx, &names).unwrap(), proof);
                 }
             })
             .unwrap();

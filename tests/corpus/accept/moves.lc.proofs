@@ -1,4 +1,0 @@
-locus-proofs 1
-
-obligation d040803bc7029b82 with_evidence 1
-transport(transport(h0, (#0 ==[struct:Token] $2), refl($2)), (int_eq_b(view[u8](#0.0), view[u8]($0)) ==[bool] true), transport(transport(projection(struct:Token { $0 }.0), (#0 ==[u8] struct:Token { $0 }.0), refl(struct:Token { $0 }.0)), (int_eq_b(view[u8](#0), view[u8]($0)) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8]($0), view[u8]($0))), refl(view[u8]($0)))))

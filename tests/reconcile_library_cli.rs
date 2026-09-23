@@ -135,3 +135,57 @@ fn checked_logical_library_is_directly_usable_from_cli() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+#[test]
+#[doc = "spec: 1.20:1"]
+fn checked_libraries_replay_from_entry_lockfile_and_stale_proofs_are_rechecked() {
+    let dir = scratch("lockfile");
+    let source = dir.join("client.lc");
+    let library = dir.join("helpers.lc");
+    fs::write(&library, "logic fn twice(n: Int) -> Int { n + n }\n").unwrap();
+    fs::write(
+        &source,
+        "fn run() -> u8 { let proof = prove!(twice(3) == 6); 7 }\n",
+    )
+    .unwrap();
+    let check = |locked: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
+        command
+            .arg("check")
+            .arg(&source)
+            .arg("--stats")
+            .arg("--library")
+            .arg(&library)
+            .env_remove("LOCUS_PROOFS")
+            .env_remove("LOCUS_SEARCH");
+        if locked {
+            command.arg("--locked").env("LOCUS_SEARCH", "none");
+        }
+        command.output().unwrap()
+    };
+    let first = check(false);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let lock_path = dir.join("Locus.lock");
+    let original = fs::read_to_string(&lock_path).unwrap();
+    let (lock, warnings) = locus::store::Lockfile::parse(&original).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(lock.entries("client.lc") > 0);
+    assert!(!dir.join("client.lc.proofs").exists());
+    let replay = check(true);
+    assert!(
+        replay.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    assert!(String::from_utf8_lossy(&replay.stdout).contains(", 0 searched"));
+    assert_eq!(fs::read_to_string(&lock_path).unwrap(), original);
+    fs::write(&library, "logic fn twice(n: Int) -> Int { n + n + 1 }\n").unwrap();
+    let stale = check(true);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("L0230"));
+    assert_eq!(fs::read_to_string(&lock_path).unwrap(), original);
+}

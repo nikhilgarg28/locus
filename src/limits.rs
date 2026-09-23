@@ -42,6 +42,7 @@ limits! {
     MAX_GENERIC_TYPE_DEPTH: usize = 64; "source generic type expansion nesting"; "L0281 names the nesting ceiling";
     MAX_PROOF_FILE_BYTES: usize = 64 << 20; "one stored-proof file"; "store reader returns a named size error";
     MAX_PROOF_TEXT_BYTES: usize = 4 << 20; "one stored term or proof text"; "ParseError names text-size ceiling";
+    MAX_PROOF_EXPANDED_NODES: usize = 1 << 20; "one expanded stored-proof tree and total retained named-step nodes"; "ParseError names MAX_PROOF_EXPANDED_NODES";
     MAX_PROOF_DIGITS: usize = 4096; "decimal digits in one stored integer"; "ParseError names integer-digit ceiling";
     MAX_INTERPRETER_CALL_DEPTH: usize = 200; "calls in either reference interpreter"; "RunError::TooDeep names call-depth ceiling";
     DEFAULT_RUN_FUEL: u64 = 10_000_000; "CLI interpreter step allowance; API callers supply fuel"; "RunError::OutOfFuel; CLI reports step allowance";

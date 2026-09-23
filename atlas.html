@@ -131,8 +131,8 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 135,
-  "savedAt": "2026-09-23T04:35:37.000Z",
+  "rev": 140,
+  "savedAt": "2026-09-23T04:53:57.000Z",
   "nextTask": 233,
   "nextId": 351,
   "taskPrefix": "LOC",
@@ -262,7 +262,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Requires Rust 1.91 or newer (validated with 1.91.1). The only dependency is the diagnostic renderer.",
     "",
     "```text prose shell-commands",
-    "cargo run -- check tests/corpus/target/lock.lc            # types and proofs; writes lock.lc.proofs",
+    "cargo run -- check tests/corpus/target/lock.lc            # types and proofs; updates Locus.lock in the source directory",
     "cargo run -- check tests/corpus/target/lock.lc --holes    # every obligation, and the tier that filled it",
     "cargo run -- check tests/corpus/target/lock.lc --stats    # per function: time to elaborate and to check",
     "cargo run -- check tests/corpus/target/lock.lc --locked   # the stored proofs alone, no search",
@@ -288,7 +288,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "A decision is written into the Vision and gets tasks in the Plan. Finished work is written into Now and closes its tasks. Nothing about the future is written under Now, and nothing under Vision claims to exist."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-23T04:01:59.000Z"
+   "updated": "2026-09-23T04:43:11.000Z"
   },
   {
    "id": "language",
@@ -628,7 +628,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "## 20. Found proofs are stored",
     "",
     "\u003c!-- spec: 1.20:1 legality-rule -->",
-    "`locus check file.lc` writes `file.lc.proofs` beside the source, one entry per obligation keyed by a hash of the claim and its context as kernel terms in a text that names definitions and numbers context positions, so that renaming, reformatting, and edits elsewhere leave an entry valid. A stored proof is checked by the kernel like any found proof and carries no authority: a stale or edited entry costs a search and never passes a false claim. `--locked` searches for nothing, so a missing or stale entry is an error naming the function, the line, and the claim; `--no-store`, or `LOCUS_PROOFS=off`, neither reads nor writes the file; `LOCUS_SEARCH=none` disables every tier, under which a complete file still checks. The examples and the target files are committed with their proofs files (`tests/store.rs`, `tests/cli.rs`, `tests/acceptance.rs`). Checking is deterministic: the proofs, the diagnostics, and the Rust are byte for byte the same on a second run.",
+    "`locus check file.lc` stores found proofs in `Locus.lock` in the source directory. Version 2 is TOML: each `[[file]]` table names a source by its relative path with forward slashes, and each obligation records its key, function/ordinal label, claimed conclusion, and named proof steps. The key hashes the claim and its context as kernel terms with stable declaration names and numbered context positions; it finds a candidate and grants no authority. Every candidate is parsed and checked against the current obligation, so a stale or edited entry costs a search and never passes a false claim. `--locked` searches for nothing and never writes or migrates storage; a missing or stale entry is an error naming the function, line, and claim. `--no-store`, or `LOCUS_PROOFS=off`, neither reads nor writes storage; `LOCUS_SEARCH=none` disables every tier, under which a complete lockfile still checks. A successful unlocked check replaces only the checked source's entries with the canonical entries used during that run, drops unused entries for that source, and preserves other source tables. Files are written in path order and obligations in encounter order. If no table exists for a source but its version-1 `\u003csource>.proofs` sidecar exists, checking may read it; only after a successful unlocked check writes its entries into `Locus.lock` is that sidecar deleted. A lockfile table takes precedence when both forms exist. Examples and target files have committed directory lockfiles. Identical inputs produce identical canonical proofs, diagnostics, and Rust; changing the source filename changes its table path, while reformatting and local renaming do not change obligation keys (`tests/store.rs`, `tests/cli.rs`, `tests/acceptance.rs`).",
     "",
     "## 21. Diagnostics",
     "",
@@ -706,7 +706,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "Physical Vec, arrays and parameter slices may contain Logical elements, including Int, Bool and evidence. They emit Vec\u003cErased>, [Erased; N] or borrowed marker slices while retaining lengths and ordinary argument effects, using Rust's zero-sized-element storage behavior. Mixed payloads erase their logical leaves while retaining runtime fields. Reading a logical element produces a logical value, never a runtime bool or integer (`tests/logical_containers.rs`)."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-23T02:54:56.000Z"
+   "updated": "2026-09-23T04:43:11.000Z"
   },
   {
    "id": "architecture",
@@ -828,7 +828,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "A hole tries stored evidence, exact facts, checked computation, closed evaluation and bounded linear arithmetic. Every successful tier produces an explicit proof checked by the kernel. Implicit unfolding, arbitrary rewrite search and general induction search are not performed. Diagnostics can suggest the missing explicit step without silently taking it.",
     "",
-    "Stored proof keys include the context and claim with stable declaration names, including qualified method names. The file is untrusted input: parsing never makes a proof authoritative. Locked checking disables search and accepts only certificates that recheck against the current obligation. Malformed, stale or malicious stored proofs are rejected or searched again according to the selected mode.",
+    "Stored proof keys include the context and claim with stable declaration names, including qualified method names. Version-2 `Locus.lock` is one TOML file per source directory: relative source-path tables hold obligation keys, readable function/ordinal labels, conclusions, and named proof steps. The reader and step expansion are untrusted; parsing never makes a proof authoritative. Locked checking disables search and accepts only certificates that recheck against the current obligation, without changing storage. Successful unlocked checking canonicalizes the checked source's used entries and preserves unrelated source tables. Legacy version-1 `\u003csource>.proofs` input is migrated only when no lockfile table exists for that source, after a successful check and write. Malformed, stale or malicious stored proofs are rejected or searched again according to the selected mode. The TOML parser and lock/step readers are outside the proof kernel; they retain explicit resource bounds.",
     "",
     "Diagnostics retain source spans and suggested fixes. SourceBundle maps library spans to original files. Golden tests compare rendered diagnostics and public CLI output; negative corpus directives pin codes and locations. Search costs and proof sizes are measurements, never limits expressed as wall-clock time.",
     "",
@@ -853,7 +853,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "An executable known-bug case uses `//~ known: LOC-NNN reason` with pinned error directives. The task must exist and remain open in the Atlas. A changed failure remains a test failure, and acceptance reports an unexpected pass naming the marker to remove. Rust tests can use `tests/common/known_bug.rs::known_bug` with a literal task, reason, expected failure text and a Result. Harness panics and timeouts are not accepted as known compiler rejections. The formerly reported E9 struct-literal fold failure now passes and lives in `tests/corpus/accept/fold_struct_literal.lc`; it is not kept as a false known bug. Synthetic tests exercise the expected-failure lifecycle without asserting that a currently fixed bug remains open."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-23T04:01:59.000Z"
+   "updated": "2026-09-23T04:43:11.000Z"
   },
   {
    "id": "kernel-contract",
@@ -2016,6 +2016,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "| `MAX_GENERIC_INSTANCES` | 256 | distinct source generic instances per unit | L0281 names the instance ceiling |",
     "| `MAX_GENERIC_TYPE_DEPTH` | 64 | source generic type expansion nesting | L0281 names the nesting ceiling |",
     "| `MAX_PROOF_FILE_BYTES` | 67108864 | one stored-proof file | store reader returns a named size error |",
+    "| `MAX_PROOF_EXPANDED_NODES` | 1048576 | one expanded stored-proof tree and total retained named-step nodes | ParseError names MAX_PROOF_EXPANDED_NODES |",
     "| `MAX_PROOF_TEXT_BYTES` | 4194304 | one stored term or proof text | ParseError names text-size ceiling |",
     "| `MAX_PROOF_DIGITS` | 4096 | decimal digits in one stored integer | ParseError names integer-digit ceiling |",
     "| `MAX_INTERPRETER_CALL_DEPTH` | 200 | calls in either reference interpreter | RunError::TooDeep names call-depth ceiling |",
@@ -2024,13 +2025,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "| `MAX_COUNTEREXAMPLE_ATOMS` | 4 | diagnostic counterexample enumeration variables | Counterexample::TooManyAtoms; explicit omission note; no proof is inferred |",
     "",
     "\u003c!-- spec: 2.40:3 informative -->",
-    "The constants and machine-readable inventory are src/limits.rs::ALL. tests/limits.rs compares every name/value with this table and refuses separate resource-limit constants elsewhere in src. Arithmetic API callers may supply smaller Budget counts; kernel certificate ceilings still apply. Interpreter API callers supply fuel; the CLI uses DEFAULT_RUN_FUEL. MAX_KERNEL_DEPTH is an inclusive root-depth bound, while recursive parser/evaluator/interpreter guards refuse entry when their active depth reaches the ceiling. Stored integers count decimal digits without the minus sign. Exhausting a heuristic does not refute its goal: a successful certificate is accepted only after kernel checking, and an unresolved search reports the bound it encountered. Counterexample enumeration can decline large atom sets; this never proves a proposition. Fact-display truncation and explanation cutoffs are explicitly reported.",
+    "The constants and machine-readable inventory are src/limits.rs::ALL. tests/limits.rs compares every name/value with this table and refuses separate resource-limit constants elsewhere in src. Arithmetic API callers may supply smaller Budget counts; kernel certificate ceilings still apply. Interpreter API callers supply fuel; the CLI uses DEFAULT_RUN_FUEL. MAX_KERNEL_DEPTH is an inclusive root-depth bound, while recursive parser/evaluator/interpreter guards refuse entry when their active depth reaches the ceiling. Stored integers count decimal digits without the minus sign. Exhausting a heuristic does not refute its goal: a successful certificate is accepted only after kernel checking, and an unresolved search reports the bound it encountered. Counterexample enumeration can decline large atom sets; this never proves a proposition. Fact-display truncation and explanation cutoffs are explicitly reported. The pinned toml 1.1.6 reader also imposes its own nesting limit of 80; exceeding it refuses the lockfile with a TOML recursion-limit error. This dependency-owned bound is tested separately from the Locus constant registry.",
     "",
     "\u003c!-- spec: 2.40:4 informative -->",
     "This inventory is about implementation resource bounds. Machine integer ranges, u64 buffer-length semantics, grammar arities, operator precedences, Unicode escape syntax, file-format versions, and allocator/address-space exhaustion are not adjustable search budgets. Host allocation failure is outside the resource-limit recovery guarantee. Counts bound specific traversals or retained results, not all possible memory or wall-clock use of arbitrary programs. New hardcoded limits must enter this inventory and receive boundary tests."
    ],
    "created": "2026-09-21T19:19:39.000Z",
-   "updated": "2026-09-23T02:54:56.000Z"
+   "updated": "2026-09-23T04:48:55.000Z"
   },
   {
    "id": "positioning",
@@ -3907,96 +3908,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "body": [
     "# Generated status",
     "",
-    "Generated from a successful complete gate. Source edits invalidate this record until the extended gate refreshes it. Counts are measurements, not promises.",
+    "**STALE — current measurements are unavailable.**",
     "",
-    "Measured at 2026-09-23T04:34:55.214457+00:00; source fingerprint `ccbf415a87659966490844e1805561e8b36297ca94aeb11da52f6b3f08b569ca`.",
-    "",
-    "| Measurement | Value |",
-    "|---|---|",
-    "| Fast tests passed | 849 |",
-    "| Extended tests passed | 849 |",
-    "| Corpus files | 262 |",
-    "| Fast suite / advisory target | 221s / 120s |",
-    "| Kernel proof constructors / axiom constructors | 30 / 34 |",
-    "| Operative paragraphs / citations | 310 / 465 |",
-    "",
-    "## Target proof measurements",
-    "",
-    "| Workload | Search tiers | Locked replay hits |",
-    "|---|---|---|",
-    "| tests/corpus/target/library_buffer_model.lc | arithmetic: 23, computed: 8, evaluation: 3, exact: 3, stored: 3 | 40 |",
-    "| tests/corpus/target/library_finite_map.lc | computed: 2, exact: 2 | 4 |",
-    "| tests/corpus/target/library_integer.lc | arithmetic: 9, computed: 3, evaluation: 1, exact: 2 | 15 |",
-    "| tests/corpus/target/library_relations.lc | arithmetic: 2, computed: 1 | 3 |",
-    "| tests/corpus/target/library_runtime_list.lc | arithmetic: 9, computed: 2, evaluation: 1, exact: 2 | 14 |",
-    "| tests/corpus/target/library_seq_ops.lc | arithmetic: 12, computed: 3, evaluation: 2, exact: 2 | 19 |",
-    "| tests/corpus/target/lock.lc | arithmetic: 6, computed: 3, evaluation: 2 | 11 |",
-    "| tests/corpus/target/logical_mutual_trees.lc | arithmetic: 1, computed: 2 | 3 |",
-    "| tests/corpus/target/midpoint.lc | arithmetic: 5, evaluation: 1 | 6 |",
-    "| tests/corpus/target/percent.lc | computed: 1 | 1 |",
-    "",
-    "## Trusted-base source inventory",
-    "",
-    "Physical source lines, including comments and blanks. Mixed files are counted whole; this conservative count is distinct from the proof-kernel size.",
-    "",
-    "| File | Lines | Scope |",
-    "|---|---|---|",
-    "| src/kernel/buffer.rs | 337 | kernel acceptance and primitive meaning |",
-    "| src/kernel/check.rs | 1953 | kernel acceptance and primitive meaning |",
-    "| src/kernel/context.rs | 241 | kernel acceptance and primitive meaning |",
-    "| src/kernel/defs.rs | 545 | kernel acceptance and primitive meaning |",
-    "| src/kernel/depth.rs | 288 | kernel acceptance and primitive meaning |",
-    "| src/kernel/eval.rs | 278 | kernel acceptance and primitive meaning |",
-    "| src/kernel/generics.rs | 222 | kernel acceptance and primitive meaning |",
-    "| src/kernel/int.rs | 230 | kernel acceptance and primitive meaning |",
-    "| src/kernel/linear.rs | 330 | kernel acceptance and primitive meaning |",
-    "| src/kernel/machine.rs | 149 | kernel acceptance and primitive meaning |",
-    "| src/kernel/measured.rs | 117 | kernel acceptance and primitive meaning |",
-    "| src/kernel/nat.rs | 316 | kernel acceptance and primitive meaning |",
-    "| src/kernel/ops.rs | 391 | kernel acceptance and primitive meaning |",
-    "| src/kernel/quantifiers.rs | 182 | kernel acceptance and primitive meaning |",
-    "| src/kernel/recursive.rs | 706 | kernel acceptance and primitive meaning |",
-    "| src/kernel/term.rs | 2472 | kernel acceptance and primitive meaning |",
-    "| src/typed/lower.rs | 2834 | typed lowering, layout, permissions and native boundary |",
-    "| src/typed/layout.rs | 249 | typed lowering, layout, permissions and native boundary |",
-    "| src/typed/shared.rs | 1064 | typed lowering, layout, permissions and native boundary |",
-    "| src/typed/buffer.rs | 487 | typed lowering, layout, permissions and native boundary |",
-    "| src/typed/trusted.rs | 88 | typed lowering, layout, permissions and native boundary |",
-    "| src/typed/tree.rs | 693 | typed lowering, layout, permissions and native boundary |",
-    "| src/exec/check.rs | 728 | check IR acceptance and native contracts |",
-    "| src/exec/buffer.rs | 136 | check IR acceptance and native contracts |",
-    "| src/exec/ir.rs | 265 | check IR acceptance and native contracts |",
-    "| src/erased/check.rs | 724 | erasure, independent layout checker, cleanup and Rust generation |",
-    "| src/erased/erase.rs | 994 | erasure, independent layout checker, cleanup and Rust generation |",
-    "| src/erased/cleanup.rs | 670 | erasure, independent layout checker, cleanup and Rust generation |",
-    "| src/erased/rust.rs | 1335 | erasure, independent layout checker, cleanup and Rust generation |",
-    "| src/erased/tree.rs | 314 | erasure, independent layout checker, cleanup and Rust generation |",
-    "| src/elab/items.rs | 2027 | mixed: Rust export/forgery boundary; remainder elaboration untrusted |",
-    "| src/build.rs | 102 | Rust crate/marker privacy boundary |",
-    "",
-    "## Benchmark history",
-    "",
-    "Epoch `ab5fbc391857def786082ef852326ff20dfe7afc458a910a80ea2c0e3d8bb430`; 2 real records; 0.02 observed days.",
-    "",
-    "Headline index: 100.05 (first record = 100; lower is faster).",
-    "",
-    "The two-week observation window is still open; no historical samples are fabricated.",
-    "",
-    "| Workload | Median history | Latest assessment |",
-    "|---|---|---|",
-    "| tests/corpus/target/library_buffer_model.lc | █▁ | stable |",
-    "| tests/corpus/target/library_finite_map.lc | █▁ | stable |",
-    "| tests/corpus/target/library_integer.lc | ▁█ | stable |",
-    "| tests/corpus/target/library_relations.lc | ▁█ | stable |",
-    "| tests/corpus/target/library_runtime_list.lc | ▁█ | stable |",
-    "| tests/corpus/target/library_seq_ops.lc | █▁ | stable |",
-    "| tests/corpus/target/lock.lc | █▁ | stable |",
-    "| tests/corpus/target/logical_mutual_trees.lc | █▁ | stable |",
-    "| tests/corpus/target/midpoint.lc | ▁█ | stable |",
-    "| tests/corpus/target/percent.lc | █▁ | stable |"
+    "Run `tools/check.sh --extended` to measure this source and regenerate status. Previous raw records remain in the benchmark data branch; obsolete counts are not displayed as current results."
    ],
    "created": "2026-09-23T04:03:42.000Z",
-   "updated": "2026-09-23T04:34:55.000Z"
+   "updated": "2026-09-23T04:49:37.000Z"
   },
   {
    "id": "development-workflow",
@@ -4028,7 +3945,7 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Raw benchmark records",
     "",
-    "`cargo run --release -- bench` runs `tests/corpus/target` by default. Pass files/directories to choose workloads, `--library FILE` to supply checked declarations, `--samples N` to choose the repetitions (default five), or `--no-record` to inspect raw JSON without updating history. Every workload has an empty-store search pass and a fresh parsed-store locked replay pass per repetition. Benchmarking never rewrites source proof sidecars.",
+    "`cargo run --release -- bench` runs `tests/corpus/target` by default. Pass files/directories to choose workloads, `--library FILE` to supply checked declarations, `--samples N` to choose the repetitions (default five), or `--no-record` to inspect raw JSON without updating history. Every workload has an empty-store search pass and a fresh parsed-`Locus.lock` locked replay pass per repetition. Both passes use isolated in-memory stores; benchmarking neither reads nor rewrites on-disk `Locus.lock` files or legacy sidecars.",
     "",
     "Per obligation, samples record attempted search tiers in integer nanoseconds, proof-tree nodes, serialized certificate bytes, stored-proof hits, and an independent kernel recheck (`kernel_recheck_ns`, not the time spent checking the obligation during compilation). Per file they record parse, frontend elaboration, lowering, checking and erasure time. The elaboration field is the residual frontend duration after subtracting measured lowering/checking/erasure spans; it includes search and name/type work. Total excludes the additional per-obligation serialization/recheck measurement pass and excludes file I/O and per-library preflight parsing. Phase times describe instrumented boundaries, not CPU profiling. Fast-suite duration comes from the current extended gate, or the last complete local gate for standalone runs; it is null when no gate sample exists.",
     "",
@@ -4048,9 +3965,15 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
     "",
     "## Mechanization boundary",
     "",
-    "[Formal core](formal-core.md) covers the check IR and its lowering/erasure obligations. The check-IR interpreter, erased interpreter and compiled Rust are compared; a disagreement identifies a defect to investigate, never an automatic winner. No Lean proof is claimed. Its eventual fixed-axiom, no-hidden-sorry, rule-index and reproducible validation deliverables are specified there and intentionally deferred."
+    "[Formal core](formal-core.md) covers the check IR and its lowering/erasure obligations. The check-IR interpreter, erased interpreter and compiled Rust are compared; a disagreement identifies a defect to investigate, never an automatic winner. No Lean proof is claimed. Its eventual fixed-axiom, no-hidden-sorry, rule-index and reproducible validation deliverables are specified there and intentionally deferred.",
+    "",
+    "## Reusable checked proofs",
+    "",
+    "`locus check path/file.lc` records the proofs it uses in `path/Locus.lock`. Commit this TOML file alongside the sources. A subsequent `locus check path/file.lc --locked` requires every obligation to replay through the kernel with no search and no writes. `--no-store` bypasses storage for search experiments. The lockfile groups entries by relative source path; checking one file preserves entries belonging to neighboring files.",
+    "",
+    "Older `\u003csource>.proofs` files are read only when that source has no table in `Locus.lock`. A successful unlocked check writes canonical named proof steps into the lockfile before deleting the migrated sidecar. `--locked` can read a legacy sidecar but leaves migration for an unlocked check. Stored claims and labels help diagnose stale entries; neither substitutes for kernel checking."
    ],
-   "updated": "2026-09-23T04:07:15.000Z"
+   "updated": "2026-09-23T04:43:11.000Z"
   }
  ],
  "features": [
@@ -7820,12 +7743,12 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "id": "t350",
    "n": 232,
    "title": "P12 · Locus.lock: one TOML file per crate with proofs as named steps",
-   "status": "doing",
+   "status": "done",
    "priority": 2,
    "project": "p310",
    "created": "2026-09-23T00:51:44.000Z",
-   "updated": "2026-09-23T00:51:44.000Z",
-   "notes": "When: now. After: nothing.\n\nScope. The stored proofs of E11 move from one sidecar per source to one Locus.lock at the root of what locus check was given (the crate root, or the directory of a single file), written and read with the toml crate, the first dependency of the compiler. The file has version = 2, then [[file]] tables in path order, each with path and [[file.obligation]] tables in order of position with key (the hash of the obligation as E11 defines it), at (the function and ordinal, reader-only), claim (the conclusion the stored proof proves, in the text form), and steps, a multi-line literal string of named steps: tN = term and sN = proof, one per line, a line may refer to earlier names, shared subterms and subproofs written once (hash-consed by the writer), the last line the conclusion. The reader parses each line, resolves names, expands the DAG into the tree the kernel checks, and hands it to the kernel as before: nothing trusted changes. A stale entry now reports \"the stored proof concludes X, the obligation wants Y\" using the claim field. The writer numbers steps in first-use order and rewrites the file whole; comments are not preserved. Migration: a run that finds version-1 sidecars reads them, writes Locus.lock, and deletes them, once. --locked, --no-store, LOCUS_PROOFS=off, LOCUS_SEARCH=none, --holes and --stats keep their meaning.\n\nWhy. Fifty sidecars in a crate are clutter, and the tree form repeats every shared subproof; a DAG of named steps is smaller, readable, and diff-friendly, and a single lockfile is what a reviewer and CI expect. Decided with Nikhil on 22 September; recorded under Found proofs are stored.\n\nTests.\n- E11's round trip, reformatting, hostile-input, --locked, and weakened-search tests pass over the new file; the file is byte-identical on a second run; sharing is asserted on the lock's run entry (a subproof written once, referred to twice).\n- The size of Locus.lock for the examples is at most that of the eight sidecars together.\n- Migration from the committed sidecars, and the sidecars gone from the repository.\n- The toml reader fed random bytes and mutated files never panics and is a miss or an error; a step naming a later or unknown step, a cycle, and a wrong claim are misses.\n\nDone when. The repository has one Locus.lock, committed, and every proof the corpus finds round-trips through it."
+   "updated": "2026-09-23T04:53:57.000Z",
+   "notes": "When: now. After: nothing.\n\nScope. The stored proofs of E11 move from one sidecar per source to one Locus.lock at the root of what locus check was given (the crate root, or the directory of a single file), written and read with the toml crate, the first dependency of the compiler. The file has version = 2, then [[file]] tables in path order, each with path and [[file.obligation]] tables in order of position with key (the hash of the obligation as E11 defines it), at (the function and ordinal, reader-only), claim (the conclusion the stored proof proves, in the text form), and steps, a multi-line literal string of named steps: tN = term and sN = proof, one per line, a line may refer to earlier names, shared subterms and subproofs written once (hash-consed by the writer), the last line the conclusion. The reader parses each line, resolves names, expands the DAG into the tree the kernel checks, and hands it to the kernel as before: nothing trusted changes. A stale entry now reports \"the stored proof concludes X, the obligation wants Y\" using the claim field. The writer numbers steps in first-use order and rewrites the file whole; comments are not preserved. Migration: a run that finds version-1 sidecars reads them, writes Locus.lock, and deletes them, once. --locked, --no-store, LOCUS_PROOFS=off, LOCUS_SEARCH=none, --holes and --stats keep their meaning.\n\nWhy. Fifty sidecars in a crate are clutter, and the tree form repeats every shared subproof; a DAG of named steps is smaller, readable, and diff-friendly, and a single lockfile is what a reviewer and CI expect. Decided with Nikhil on 22 September; recorded under Found proofs are stored.\n\nTests.\n- E11's round trip, reformatting, hostile-input, --locked, and weakened-search tests pass over the new file; the file is byte-identical on a second run; sharing is asserted on the lock's run entry (a subproof written once, referred to twice).\n- The size of Locus.lock for the examples is at most that of the eight sidecars together.\n- Migration from the committed sidecars, and the sidecars gone from the repository.\n- The toml reader fed random bytes and mutated files never panics and is a miss or an error; a step naming a later or unknown step, a cycle, and a wrong claim are misses.\n\nDone when. The repository has one Locus.lock, committed, and every proof the corpus finds round-trips through it.\n\nImplementation accepted. P12 is integrated with the reconciled language, bounded readers, JSON diagnostics, explicit library bundles and in-memory benchmark replay. All 36 committed v1 sidecars were migrated through successful checking to three directory lockfiles (examples, acceptance corpus and target corpus): 123522 bytes became 104046 bytes. All 36 sources then passed --locked with LOCUS_SEARCH=none and byte-identical lockfiles. The current single-file check command uses its source directory as the lockfile root; a shared crate root remains for future multi-file checking, so this repository intentionally has three lockfiles rather than one. Claim text is display metadata; authority comes only from checking the stored certificate against the current obligation. The expanded-tree and cumulative named-step node budgets are centralized and tested, including a 1 MiB stack boundary. tools/check.sh passed: 857 tests, 0 ignored, fmt and all-target clippy clean; fast tests took 203s against the advisory 120s target. Historical full-suite measurements are correctly marked stale after the source change; no new full extended-gate result is claimed."
   }
  ],
  "measurements": {

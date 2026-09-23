@@ -2,7 +2,7 @@
 use crate::{
     elab, measurement,
     source::{SourceBundle, SourceMap},
-    store::ProofStore,
+    store::{Lockfile, ProofStore},
 };
 use std::{
     collections::BTreeMap,
@@ -163,7 +163,7 @@ fn one(
         parse_ns + elaborate_total_ns,
         stats.hits,
         stats.searches,
-        store.render().len()
+        store.render(&path.to_string_lossy()).len()
     );
     Ok((text, store))
 }
@@ -211,7 +211,15 @@ pub fn command(
                 ordinal,
                 ProofStore::new(),
             )?;
-            let (replay, _) = ProofStore::parse(&store.render()).map_err(|e| e.to_string())?;
+            let name = path.to_string_lossy();
+            let (mut lockfile, warnings) = Lockfile::parse(&store.render(&name))?;
+            if !warnings.is_empty() {
+                return Err(format!(
+                    "benchmark emitted an invalid lockfile: {}",
+                    warnings.join("; ")
+                ));
+            }
+            let replay = lockfile.take(&name);
             let (warm, _) = one(
                 path,
                 libraries,

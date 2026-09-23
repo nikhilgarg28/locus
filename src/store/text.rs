@@ -16,15 +16,33 @@
 //!   precedence: `(a ==[u8] b)`, `(p => q)`, `(a, b) : (u8, u8)`,
 //!   `absurd(p, T)`, `for(lo, hi, p, (S), init, body)`, and so on.
 //!
+//! A proof is written as a block of named steps, one per line, `tN = term`
+//! or `sN = proof`, the last line the conclusion: a piece that occurs more
+//! than once is a step and is named where it is used, so the block is the
+//! proof as a DAG (`steps.rs`). A line may name earlier steps only. A proof
+//! also reads as one bare expression, which is how version 1 of the proofs
+//! file wrote it.
+//!
 //! What is read is never trusted: the parser builds any kernel term the
 //! text describes, well formed or not, and the caller hands the result to
 //! the kernel's `check_proof`. The parser never panics on any input: the
-//! text is bounded in length, a literal in digits, and nesting by the
-//! kernel's own `MAX_DEPTH`.
+//! text is bounded in length, a literal in digits, nesting by the kernel's
+//! own `MAX_DEPTH`, and the tree a block of steps expands to by
+//! `MAX_NODES`, all as counts.
+//!
+//! Two things here talk to the store installed for the elaborator (`super`):
+//! `print_key` tells it the claim of the obligation it just keyed, and
+//! `parse_proof` tells it the canonical text of the proof it just read. The
+//! elaborator's hole solver keys, looks up, reads, and then accepts or
+//! records, so the store pairs each with the entry in hand; that is how an
+//! entry gets its `claim` and how a migrated or hand-edited entry is
+//! rewritten in the writer's own form when it is used.
 
 use std::collections::HashMap;
 use std::fmt::{self, Write};
 use std::hash::Hash;
+
+use super::steps::{self, Kind, Sharing, Steps};
 
 use crate::kernel::{
     Axiom, Binding, CmpOp, Context, EnumId, FnId, ForLoop, HypId, HypRef, Integer, MAX_DEPTH,
@@ -36,6 +54,11 @@ pub use crate::limits::MAX_PROOF_TEXT_BYTES as MAX_TEXT;
 
 /// The most digits a literal may have.
 pub use crate::limits::MAX_PROOF_DIGITS as MAX_DIGITS;
+
+/// The most nodes a proof may have once its steps are expanded into the
+/// tree the kernel checks: a step is copied at each use, so a block of
+/// steps can name a tree far larger than its text.
+pub use crate::limits::MAX_PROOF_EXPANDED_NODES as MAX_NODES;
 
 // --- Names ---------------------------------------------------------------------
 
@@ -180,6 +203,10 @@ struct Printer<'a> {
     positions: Positions,
     names: &'a Names,
     out: String,
+    /// In the steps form: every composite term and proof is interned as it
+    /// is printed and stands in the text as a placeholder for its id, and
+    /// the block is written from the pieces afterwards (`steps.rs`).
+    sharing: Option<Sharing>,
 }
 
 type Printed = Result<(), PrintError>;
@@ -287,6 +314,27 @@ impl Printer<'_> {
     // --- Terms ---
 
     fn term(&mut self, term: &Term) -> Printed {
+        if self.sharing.is_some() && !steps::leaf_term(term) {
+            return self.interned(Kind::Term, |printer| printer.term_inner(term));
+        }
+        self.term_inner(term)
+    }
+
+    /// Prints a composite piece into a buffer of its own, interns it, and
+    /// leaves its placeholder in the text.
+    fn interned(&mut self, kind: Kind, print: impl FnOnce(&mut Self) -> Printed) -> Printed {
+        let outer = std::mem::take(&mut self.out);
+        let printed = print(self);
+        let body = std::mem::replace(&mut self.out, outer);
+        printed?;
+        if let Some(sharing) = &mut self.sharing {
+            let id = sharing.intern(kind, body);
+            self.out.push_str(&steps::placeholder(id));
+        }
+        Ok(())
+    }
+
+    fn term_inner(&mut self, term: &Term) -> Printed {
         match term {
             Term::Boxed(value) => self.boxed_term(value),
             Term::Buffer {
@@ -533,6 +581,13 @@ impl Printer<'_> {
     }
 
     fn proof(&mut self, proof: &Proof) -> Printed {
+        if self.sharing.is_some() && !steps::leaf_proof(proof) {
+            return self.interned(Kind::Proof, |printer| printer.proof_inner(proof));
+        }
+        self.proof_inner(proof)
+    }
+
+    fn proof_inner(&mut self, proof: &Proof) -> Printed {
         let rule = proof.rule_name();
         match proof {
             Proof::CaseKnown { term, equation } => self.case_known(term, equation),
@@ -870,6 +925,7 @@ fn printer<'a>(ctx: &Context, names: &'a Names) -> Printer<'a> {
         positions: Positions::of(ctx),
         names,
         out: String::new(),
+        sharing: None,
     }
 }
 
@@ -887,11 +943,15 @@ pub fn print_term(term: &Term, ctx: &Context, names: &Names) -> Result<String, P
     Ok(printer.out)
 }
 
-/// The text of a proof.
+/// The text of a proof: a block of named steps, `t1 = ...` and `s1 = ...`
+/// one per line, the last line the conclusion, with every piece that is
+/// used more than once written once (`steps.rs`).
 pub fn print_proof(proof: &Proof, ctx: &Context, names: &Names) -> Result<String, PrintError> {
     let mut printer = printer(ctx, names);
+    printer.sharing = Some(Sharing::default());
     printer.proof(proof)?;
-    Ok(printer.out)
+    let sharing = printer.sharing.take().unwrap_or_default();
+    Ok(sharing.block(&printer.out))
 }
 
 /// The text an obligation is keyed by: every entry of the context, in
@@ -921,7 +981,12 @@ pub fn print_key(claim: &Term, ctx: &Context, names: &Names) -> Result<String, P
         printer.push("\n");
     }
     printer.push("claim ");
+    let start = printer.out.len();
     printer.term(claim)?;
+    // The store keeps the claim, to write beside the proof of this
+    // obligation and to report a stale entry against.
+    let text = printer.out[start..].to_string();
+    super::with_current(|store| store.expect_claim(text));
     printer.push("\n");
     Ok(printer.out)
 }
@@ -1072,15 +1137,22 @@ fn lex(text: &str) -> Result<Vec<(usize, Tok<'_>)>, ParseError> {
 /// What reads the arguments of a rule, after its opening parenthesis.
 type Rule<'a> = fn(&mut Parser<'a>) -> Parsed<Proof>;
 
-struct Parser<'a> {
+pub(super) struct Parser<'a> {
     tokens: Vec<(usize, Tok<'a>)>,
     at: usize,
     positions: Positions,
     names: &'a Names,
+    /// The steps a line may name: the earlier lines of its block.
+    steps: &'a Steps,
     depth: usize,
+    /// The nodes built so far, a step's whole tree at each use, and the
+    /// deepest nesting reached: the size and depth of what is read.
+    nodes: usize,
+    node_limit: usize,
+    deepest: usize,
 }
 
-type Parsed<T> = Result<T, ParseError>;
+pub(super) type Parsed<T> = Result<T, ParseError>;
 
 impl<'a> Parser<'a> {
     fn peek(&self) -> Tok<'a> {
@@ -1143,17 +1215,81 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// One more level of nesting, bounded by the kernel's depth limit.
-    fn nested<T>(&mut self, parse: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
+    /// One more level of nesting, bounded by the kernel's depth limit, and
+    /// one more node, bounded by `MAX_NODES`.
+    fn enter(&mut self) -> Parsed<()> {
         if self.depth >= MAX_DEPTH {
             return self.error(format!(
                 "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
             ));
         }
+        self.charge_nodes(1)?;
         self.depth += 1;
+        self.deepest = self.deepest.max(self.depth);
+        Ok(())
+    }
+
+    fn charge_nodes(&mut self, count: usize) -> Parsed<()> {
+        if count > self.node_limit.saturating_sub(self.nodes) {
+            return self.error(format!(
+                "MAX_PROOF_EXPANDED_NODES limit of {MAX_NODES} was exceeded"
+            ));
+        }
+        self.nodes += count;
+        Ok(())
+    }
+
+    pub(super) fn with_node_limit(mut self, limit: usize) -> Self {
+        self.node_limit = limit.min(MAX_NODES);
+        self
+    }
+
+    fn nested<T>(&mut self, parse: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
+        self.enter()?;
         let result = parse(self);
         self.depth -= 1;
         result
+    }
+
+    // The two are functions of their own so that the copy of a step's
+    // tree lives in a frame that is not on the recursion path.
+
+    fn term_step(&mut self, name: &str) -> Parsed<Term> {
+        let step = self.step(name, Kind::Term)?;
+        Ok(step.term().clone())
+    }
+
+    fn proof_step(&mut self, name: &str) -> Parsed<Proof> {
+        let step = self.step(name, Kind::Proof)?;
+        Ok(step.proof().clone())
+    }
+
+    /// A use of the step named `name`, of the kind the text asks for: its
+    /// tree is copied in, and its size and depth are charged as if it had
+    /// been written out.
+    fn step(&mut self, name: &str, kind: Kind) -> Parsed<&'a steps::Step> {
+        let Some(step) = self.steps.get(name) else {
+            return self.error(format!("no earlier step is named `{name}`"));
+        };
+        if step.kind() != kind {
+            return self.error(format!(
+                "`{name}` is a {}, and a {} is expected here",
+                step.kind().noun(),
+                kind.noun()
+            ));
+        }
+        // The step's root is the node being read, already counted and at
+        // the current depth; the rest of its tree is charged.
+        let (size, depth) = (step.size.saturating_sub(1), step.depth.saturating_sub(1));
+        self.charge_nodes(size)?;
+        if self.depth.saturating_add(depth) > MAX_DEPTH {
+            return self.error(format!(
+                "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
+            ));
+        }
+        self.deepest = self.deepest.max(self.depth + depth);
+        self.bump();
+        Ok(step)
     }
 
     /// `open item, item, ... close`, possibly empty.
@@ -1331,21 +1467,41 @@ impl<'a> Parser<'a> {
     // nesting bound is `MAX_DEPTH` levels, each of several frames, on a
     // stack that may be 2 MiB.
 
-    fn term(&mut self) -> Parsed<Term> {
+    pub(super) fn term(&mut self) -> Parsed<Term> {
         self.nested(|parser| {
+            // Isolate this subtree from earlier siblings when counting
+            // postfix wrappers, which do not recurse through the parser.
+            let enclosing_deepest = parser.deepest;
+            parser.deepest = parser.depth;
             let mut term = parser.atom()?;
             loop {
+                let function_depth = parser.deepest;
                 if parser.eat(".") {
                     let index = parser.index()?;
+                    parser.postfix_node(function_depth)?;
                     term = Term::Proj(Box::new(term), index);
                 } else if parser.peek() == Tok::Punct("(") {
                     let arguments = parser.terms()?;
+                    parser.postfix_node(function_depth)?;
                     term = Term::Call(Box::new(term), arguments);
                 } else {
+                    parser.deepest = parser.deepest.max(enclosing_deepest);
                     return Ok(term);
                 }
             }
         })
+    }
+
+    fn postfix_node(&mut self, previous_depth: usize) -> Parsed<()> {
+        let depth = previous_depth.saturating_add(1);
+        if depth > MAX_DEPTH {
+            return self.error(format!(
+                "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
+            ));
+        }
+        self.charge_nodes(1)?;
+        self.deepest = self.deepest.max(depth);
+        Ok(())
     }
 
     /// `(t, ..., t)`
@@ -1410,6 +1566,7 @@ impl<'a> Parser<'a> {
                 self.bump();
                 self.parenthesized()
             }
+            Tok::Ident(word) if steps::is_step_name(word) => self.term_step(word),
             Tok::Ident(word) => {
                 self.bump();
                 self.keyword_term(word)
@@ -1703,14 +1860,10 @@ impl<'a> Parser<'a> {
         self.list("[", "]", Self::arm)
     }
 
-    fn proof(&mut self) -> Parsed<Proof> {
-        // Avoid an extra large Result<Proof> frame at every recursive level.
-        if self.depth >= MAX_DEPTH {
-            return self.error(format!(
-                "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
-            ));
-        }
-        self.depth += 1;
+    pub(super) fn proof(&mut self) -> Parsed<Proof> {
+        // Keep the small recursion frame needed at MAX_KERNEL_DEPTH, while
+        // charging proof nodes just like the generic nested parser does.
+        self.enter()?;
         let result = self.proof_inner();
         self.depth -= 1;
         result
@@ -1759,6 +1912,9 @@ impl<'a> Parser<'a> {
             || (word.starts_with('h') && word[1..].bytes().all(|byte| byte.is_ascii_digit()))
         {
             return self.leaf_proof();
+        }
+        if steps::is_step_name(word) {
+            return self.proof_step(word);
         }
         let Some((_, rule)) = Self::RULES.iter().find(|(known, _)| *known == word) else {
             return self.error(format!("`{word}` is not a proof rule"));
@@ -2261,7 +2417,12 @@ impl AxiomHead {
     }
 }
 
-fn parser<'a>(text: &'a str, ctx: &Context, names: &'a Names) -> Parsed<Parser<'a>> {
+pub(super) fn parser<'a>(
+    text: &'a str,
+    ctx: &Context,
+    names: &'a Names,
+    steps: &'a Steps,
+) -> Parsed<Parser<'a>> {
     if text.len() > MAX_TEXT {
         return Err(ParseError {
             at: MAX_TEXT,
@@ -2273,33 +2434,70 @@ fn parser<'a>(text: &'a str, ctx: &Context, names: &'a Names) -> Parsed<Parser<'
         at: 0,
         positions: Positions::of(ctx),
         names,
+        steps,
         depth: 0,
+        nodes: 0,
+        node_limit: MAX_NODES,
+        deepest: 0,
     })
 }
 
-fn whole<'a, T>(
+/// Reads one whole text as `parse` reads it, and reports what the parser
+/// counted: the nodes built and the deepest nesting.
+pub(super) fn whole<'a, T>(
     mut parser: Parser<'a>,
     parse: impl FnOnce(&mut Parser<'a>) -> Parsed<T>,
-) -> Parsed<T> {
+) -> Parsed<(T, usize, usize)> {
     let value = parse(&mut parser)?;
     if parser.peek() != Tok::End {
         return parser.error("expected the end of the text");
     }
-    Ok(value)
+    Ok((value, parser.nodes, parser.deepest))
+}
+
+/// Reads a bare text, one that names no steps.
+fn bare<T>(
+    text: &str,
+    ctx: &Context,
+    names: &Names,
+    parse: impl for<'b> FnOnce(&mut Parser<'b>) -> Parsed<T>,
+) -> Parsed<T> {
+    let none = Steps::default();
+    let parser = parser(text, ctx, names, &none)?;
+    whole(parser, parse).map(|(value, _, _)| value)
 }
 
 /// Reads a type, over the context's positions and the names.
 pub fn parse_type(text: &str, ctx: &Context, names: &Names) -> Parsed<Type> {
-    whole(parser(text, ctx, names)?, |parser| parser.ty())
+    bare(text, ctx, names, |parser| parser.ty())
 }
 
 /// Reads a term. What comes back is not checked: it is whatever the text
 /// says, for the kernel to judge.
 pub fn parse_term(text: &str, ctx: &Context, names: &Names) -> Parsed<Term> {
-    whole(parser(text, ctx, names)?, |parser| parser.term())
+    bare(text, ctx, names, |parser| parser.term())
 }
 
-/// Reads a proof, with the same caveat.
+/// Reads a proof, with the same caveat: a block of steps, or one bare
+/// expression. The tree of the proof read is what the kernel is handed;
+/// the block is a way of writing it and nothing more.
 pub fn parse_proof(text: &str, ctx: &Context, names: &Names) -> Parsed<Proof> {
-    whole(parser(text, ctx, names)?, |parser| parser.proof())
+    // Bound the whole block, not only each separately parsed line.
+    if text.len() > MAX_TEXT {
+        return Err(ParseError {
+            at: MAX_TEXT,
+            message: format!("MAX_PROOF_TEXT_BYTES limit of {MAX_TEXT} was exceeded"),
+        });
+    }
+    let proof = if steps::is_block(text) {
+        steps::parse_block(text, ctx, names)?
+    } else {
+        bare(text, ctx, names, |parser| parser.proof())?
+    };
+    // The store rewrites the entry it is reading in the writer's own form.
+    if super::with_current(|_| ()).is_some() {
+        let canonical = print_proof(&proof, ctx, names).ok();
+        super::with_current(|store| store.read_as(canonical));
+    }
+    Ok(proof)
 }

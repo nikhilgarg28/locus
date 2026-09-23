@@ -1,4 +1,0 @@
-locus-proofs 1
-
-obligation f0e158c2e7eb666e self_referential 1
-transport(transport(h1, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true), transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_eq_b(view[u8](wrapping_add[u8](#0, 1)), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8](wrapping_add[u8]($0, 1)), view[u8](wrapping_add[u8]($0, 1)))), refl(view[u8](wrapping_add[u8]($0, 1))))))

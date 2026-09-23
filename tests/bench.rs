@@ -127,3 +127,44 @@ fn benchmark_driver_refuses_oversized_sparse_sources_before_reading() {
     );
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+#[doc = "spec: 1.20:1"]
+fn benchmark_search_and_replay_do_not_read_or_rewrite_disk_lockfiles() {
+    let directory =
+        std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("bench_lockfile_isolation");
+    std::fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("sample.lc");
+    let lock = directory.join("Locus.lock");
+    let legacy = directory.join("sample.lc.proofs");
+    std::fs::write(
+        &source,
+        "fn run() -> u8 { let proof = prove!(1 == 1); 7 }\n",
+    )
+    .unwrap();
+    std::fs::write(&lock, "deliberately invalid on-disk lockfile\n").unwrap();
+    std::fs::write(&legacy, "legacy sentinel\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_locus"))
+        .arg("bench")
+        .arg(&source)
+        .args(["--samples", "1", "--no-record"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("\"pass\":\"search\""), "{text}");
+    assert!(text.contains("\"pass\":\"replay\""), "{text}");
+    assert!(text.contains("\"store_hit\":true"), "{text}");
+    assert_eq!(
+        std::fs::read_to_string(&lock).unwrap(),
+        "deliberately invalid on-disk lockfile\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&legacy).unwrap(),
+        "legacy sentinel\n"
+    );
+}

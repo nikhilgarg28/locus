@@ -574,24 +574,27 @@ fn an_author_is_told_why() {
 }
 
 #[test]
+#[doc = "spec: 1.20:1"]
 fn a_crate_can_be_checked_by_the_kernel_alone() {
-    // Every example and target file with a committed proofs file checks
-    // under `--locked`, which runs no search, and checks with the search
-    // disabled altogether, which is what a proof written by a weaker search
-    // amounts to. The proofs file is left as it was.
+    // Every example and target file checks under `--locked` with the
+    // committed `Locus.lock` of its directory, which runs no search, and
+    // checks with the search disabled altogether, which is what a proof
+    // written by a weaker search amounts to. The lockfile is left as it
+    // was.
     let directory = scratch("locked");
     let mut checked = 0;
     for source in ["examples", "tests/corpus/target"] {
+        let lock = root().join(source).join("Locus.lock");
+        assert!(lock.exists(), "{source} has no committed Locus.lock");
+        let copies = directory.join(source.replace('/', "_"));
+        std::fs::create_dir_all(&copies).unwrap();
+        let copied_lock = copies.join("Locus.lock");
+        std::fs::copy(&lock, &copied_lock).unwrap();
+        let before = read(&copied_lock);
         for (name, _) in files_in(source) {
             let path = root().join(&name);
-            let proofs = root().join(format!("{name}.proofs"));
-            assert!(proofs.exists(), "{name} has no committed proofs file");
-            let file = path.file_name().unwrap();
-            let copy = directory.join(file);
-            let copied_proofs = directory.join(format!("{}.proofs", file.to_string_lossy()));
+            let copy = copies.join(path.file_name().unwrap());
             std::fs::copy(&path, &copy).unwrap();
-            std::fs::copy(&proofs, &copied_proofs).unwrap();
-            let before = read(&copied_proofs);
             let (code, stdout, stderr) = run_locus(
                 &["check", copy.to_str().unwrap(), "--locked", "--stats"],
                 &[],
@@ -599,8 +602,8 @@ fn a_crate_can_be_checked_by_the_kernel_alone() {
             assert_eq!(code, Some(0), "{name} --locked:\n{stderr}");
             let used = stdout
                 .lines()
-                .find(|line| line.starts_with("proofs file: "))
-                .unwrap_or_else(|| panic!("{name}: no proofs file line:\n{stdout}"));
+                .find(|line| line.starts_with("Locus.lock: "))
+                .unwrap_or_else(|| panic!("{name}: no Locus.lock line:\n{stdout}"));
             assert!(
                 used.contains("0 found and recorded") && used.contains(", 0 searched"),
                 "{name}: {used}"
@@ -610,11 +613,7 @@ fn a_crate_can_be_checked_by_the_kernel_alone() {
                 &[("LOCUS_SEARCH", "none")],
             );
             assert_eq!(code, Some(0), "{name} with no search:\n{stderr}");
-            assert_eq!(
-                read(&copied_proofs),
-                before,
-                "{name}: the proofs file changed"
-            );
+            assert_eq!(read(&copied_lock), before, "{name}: the lockfile changed");
             checked += 1;
         }
     }
@@ -635,14 +634,17 @@ fn checking_is_deterministic() {
         let path = target(name);
         let mut runs = Vec::new();
         for pass in 0..2 {
-            let copy = directory.join(format!("{name}_{pass}.lc"));
+            // A directory of its own, so that the lockfile is the file's alone.
+            let copies = directory.join(format!("{name}_{pass}"));
+            std::fs::create_dir_all(&copies).unwrap();
+            let copy = copies.join(format!("{name}.lc"));
             std::fs::copy(&path, &copy).unwrap();
             let (code, holes, stderr) =
                 run_locus(&["check", copy.to_str().unwrap(), "--holes"], &[]);
             assert_eq!(code, Some(0), "{stderr}");
             let (code, rust, _) = run_locus(&["rust", copy.to_str().unwrap()], &[]);
             assert_eq!(code, Some(0));
-            let proofs = read(&directory.join(format!("{name}_{pass}.lc.proofs")));
+            let proofs = read(&copies.join("Locus.lock"));
             // The listing of holes carries timings, which are the one thing
             // in it that may differ between runs.
             let holes: Vec<String> = holes
@@ -656,8 +658,8 @@ fn checking_is_deterministic() {
             runs.push((holes, stderr, rust, proofs));
         }
         assert_eq!(runs[0], runs[1], "{name} checked differently twice");
-        // Reformatting and renaming leave the proofs file the same: the key
-        // is the obligation, not the text.
+        // Independent checks of the same relative source path produce the
+        // same lockfile. Obligation keys do not depend on the parent path.
         assert!(!runs[0].3.is_empty());
         files += 1;
     }
@@ -694,7 +696,7 @@ fn checking_is_deterministic() {
     assert!(clocks.is_empty(), "a clock in the checker: {clocks:?}");
     println!(
         "criterion: checking is deterministic: {files} files give the same holes, diagnostics, \
-         Rust, and proofs file twice; evidence of another claim is rejected; no clock in the \
+         Rust, and lockfile twice; evidence of another claim is rejected; no clock in the \
          checker"
     );
 }

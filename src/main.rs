@@ -3,6 +3,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use locus::diagnostic::{self, Diagnostic, Level};
@@ -13,7 +14,7 @@ use locus::lexer;
 use locus::parser;
 use locus::preview::Previews;
 use locus::source::{SourceBundle, SourceMap, Span};
-use locus::store::ProofStore;
+use locus::store::{self, Lockfile, ProofStore};
 
 const HELP: &str = "Locus
 
@@ -22,9 +23,10 @@ Usage: locus <command> <file.lc> [arguments]
   check   Check types and proofs; --holes lists every `_` and how it was filled,
           --stats what each function cost to elaborate and to check, and the
           obligations counted by the tier that filled them. The proofs found
-          are stored in <file.lc>.proofs beside the source and used again on
+          are stored in Locus.lock in the source directory and used again on
           the next run; --locked never searches, so a missing or stale entry
-          is an error, and --no-store neither reads nor writes the file
+          is an error, and --no-store neither reads nor writes the file.
+          Legacy <file.lc>.proofs files migrate after a successful unlocked check
   bench   Measure checking/search/replay counts and timings as JSON
   explain Explain a diagnostic code: locus explain L0230
   audit   Check files/directories, then list trust, divergence, panic and classical sites
@@ -75,11 +77,181 @@ impl StoreOptions {
     }
 }
 
-/// The path of the proofs file: the source's path with `.proofs` appended.
+/// The lockfile of a source: `Locus.lock` in the source's directory, and
+/// the name the source has in it, its file name.
+fn lock_path(source: &Path) -> (PathBuf, String) {
+    let directory = source.parent().unwrap_or(Path::new(""));
+    let name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    (directory.join(store::FILE_NAME), name)
+}
+
+/// The path of a version-1 proofs file: the source's path with `.proofs`
+/// appended.
 fn proofs_path(source: &OsString) -> OsString {
     let mut path = source.clone();
     path.push(".proofs");
     path
+}
+
+/// A version-1 proofs file to move into the lockfile: its path and how
+/// many entries it held.
+struct Migration {
+    sidecar: OsString,
+    entries: usize,
+}
+
+/// The lockfile of the source, read, with the store to check the source
+/// with taken out of it, and the version-1 proofs file to migrate when the
+/// lockfile has no entry for the source and there is one.
+struct Opened {
+    lockfile: Lockfile,
+    store: ProofStore,
+    migration: Option<Migration>,
+}
+
+/// Opens the store of `source`: `Ok(None)` when a file could not be read
+/// for a reason other than not being there, after reporting it.
+fn open_store(
+    source: &OsString,
+    lock: &Path,
+    name: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+    span: Span,
+) -> io::Result<Option<Opened>> {
+    let mut lockfile = match read_store_text(lock) {
+        Ok(text) => match Lockfile::parse(&text) {
+            Ok((lockfile, warnings)) => {
+                for warning in warnings {
+                    diagnostics.push(Diagnostic::warning(
+                        "L0402",
+                        format!("{}: {warning}", lock.display()),
+                        span,
+                    ));
+                }
+                lockfile
+            }
+            Err(problem) => {
+                diagnostics.push(Diagnostic::warning("L0402", format!("{}: {problem}; every proof of `{name}` is searched for and the file is rewritten with them",lock.display()),span));
+                Lockfile::new()
+            }
+        },
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Lockfile::new(),
+        Err(error) => {
+            diagnostics.push(Diagnostic::error(
+                "L0401",
+                format!("cannot read {}: {error}", lock.display()),
+                span,
+            ));
+            return Ok(None);
+        }
+    };
+    let sidecar = proofs_path(source);
+    if lockfile.has(name) {
+        if fs::metadata(&sidecar).is_ok() {
+            diagnostics.push(Diagnostic::warning(
+                "L0402",
+                format!(
+                    "{} is ignored: {} already holds `{name}`; delete it",
+                    sidecar.to_string_lossy(),
+                    lock.display()
+                ),
+                span,
+            ));
+        }
+        let store = lockfile.take(name);
+        return Ok(Some(Opened {
+            lockfile,
+            store,
+            migration: None,
+        }));
+    }
+    match read_store_text(Path::new(&sidecar)) {
+        Ok(text) => match store::v1::parse(&text) {
+            Ok((entries, warnings)) => {
+                for warning in warnings {
+                    diagnostics.push(Diagnostic::warning(
+                        "L0402",
+                        format!("{}: {warning}", sidecar.to_string_lossy()),
+                        span,
+                    ));
+                }
+                let migration = Migration {
+                    sidecar,
+                    entries: entries.len(),
+                };
+                Ok(Some(Opened {
+                    lockfile,
+                    store: ProofStore::with_entries(entries),
+                    migration: Some(migration),
+                }))
+            }
+            Err(problem) => {
+                diagnostics.push(Diagnostic::warning(
+                    "L0402",
+                    format!("{}: {problem}; it is not read", sidecar.to_string_lossy()),
+                    span,
+                ));
+                Ok(Some(Opened {
+                    lockfile,
+                    store: ProofStore::new(),
+                    migration: None,
+                }))
+            }
+        },
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Some(Opened {
+            lockfile,
+            store: ProofStore::new(),
+            migration: None,
+        })),
+        Err(error) => {
+            diagnostics.push(Diagnostic::error(
+                "L0401",
+                format!("cannot read {}: {error}", sidecar.to_string_lossy()),
+                span,
+            ));
+            Ok(None)
+        }
+    }
+}
+
+/// Under `--locked`, an obligation a stale entry fails is reported by the
+/// elaborator as a miss. This adds to that report what the entry
+/// concluded and what the obligation wanted, when the store knows: the
+/// misses of a function are reported in the order they were met, so the
+/// reports of a function and the store's misses for it pair up whenever
+/// they are equally many.
+fn note_stale_claims(diagnostics: &mut [Diagnostic], store: &ProofStore) {
+    let mut by_function: BTreeMap<&str, Vec<&store::Miss>> = BTreeMap::new();
+    for miss in store.misses() {
+        by_function
+            .entry(miss.label.function.as_str())
+            .or_default()
+            .push(miss);
+    }
+    for (function, misses) in by_function {
+        let prefix = format!("`{function}` needs a proof of `");
+        let reports: Vec<usize> = diagnostics
+            .iter()
+            .enumerate()
+            .filter(|(_, diagnostic)| {
+                diagnostic.code == "L0230" && diagnostic.message.starts_with(&prefix)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        if reports.len() != misses.len() {
+            continue;
+        }
+        for (index, miss) in reports.into_iter().zip(misses) {
+            if let Some((stored, wanted)) = &miss.stale {
+                diagnostics[index].notes.push(format!(
+                    "the stored proof concludes `{stored}`, the obligation wants `{wanted}`"
+                ));
+            }
+        }
+    }
 }
 
 /// The size of the certificate the arithmetic tier found, for a report:
@@ -292,46 +464,31 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
         return Ok(1);
     }
     if matches!(command, "check" | "run" | "rust" | "audit") {
-        // The proofs file beside the source, for `check`: read before
+        // The directory lockfile, for `check`: read before
         // elaboration, written after it when it changed, unless `--locked`,
         // under which nothing is searched and nothing is written.
         let mut pending = Vec::new();
         let options = StoreOptions::from(&flags);
-        let store_path = proofs_path(path);
-        let store = if command == "check" && options.enabled {
-            let store = match fs::read_to_string(&store_path) {
-                Ok(text) => match ProofStore::parse(&text) {
-                    Ok((store, warnings)) => {
-                        for warning in warnings {
-                            pending.push(Diagnostic::warning(
-                                "L0402",
-                                format!("{}: {warning}", store_path.to_string_lossy()),
-                                driver_span,
-                            ));
-                        }
-                        store
-                    }
-                    Err(problem) => {
-                        pending.push(Diagnostic::warning("L0402", format!("{}: {problem}; every proof is searched for and the file is rewritten", store_path.to_string_lossy()), driver_span));
-                        ProofStore::new()
-                    }
-                },
-                Err(error) if error.kind() == io::ErrorKind::NotFound => ProofStore::new(),
-                Err(error) => {
-                    emit_driver(
-                        format,
-                        Level::Error,
-                        "L0401",
-                        &format!("cannot read {}: {error}", store_path.to_string_lossy()),
-                    )?;
-                    return Ok(1);
-                }
+        let (lock, name) = lock_path(Path::new(path));
+        let (mut lockfile, store, migration) = if command == "check" && options.enabled {
+            let Some(opened) = open_store(path, &lock, &name, &mut pending, driver_span)? else {
+                emit_diagnostics(&sources, &pending, format)?;
+                return Ok(1);
             };
-            Some(store.locked(options.locked).searching(options.search))
+            (
+                opened.lockfile,
+                Some(
+                    opened
+                        .store
+                        .locked(options.locked)
+                        .searching(options.search),
+                ),
+                opened.migration,
+            )
         } else {
-            None
+            (Lockfile::new(), None, None)
         };
-        let (elaborated, store) = match store {
+        let (mut elaborated, store) = match store {
             Some(store) => {
                 let (elaborated, store) = elab::elaborate_with_store_and_options(
                     source,
@@ -346,6 +503,11 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
                 None,
             ),
         };
+        if let Some(store) = &store
+            && options.locked
+        {
+            note_stale_claims(&mut elaborated.diagnostics, store);
+        }
         pending.extend(elaborated.diagnostics.iter().map(|d| bundle.diagnostic(d)));
         if command == "check" && flags.contains(&"--stats") {
             writeln!(
@@ -390,7 +552,7 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
                 let stats = store.stats();
                 writeln!(
                     output,
-                    "proofs file: {} used, {} found and recorded, {} stale, {} searched, {} unwritable",
+                    "Locus.lock: {} used, {} found and recorded, {} stale, {} searched, {} unwritable",
                     stats.hits, stats.recorded, stats.stale, stats.searches, stats.unprintable
                 )?;
             }
@@ -449,19 +611,63 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
             emit_diagnostics(&sources, &pending, format)?;
             return Ok(1);
         }
-        if let Some(store) = &store
-            && !options.locked
-            && let Some(text) = store.changed()
-            && let Err(error) = fs::write(&store_path, text)
-        {
-            output.flush()?;
-            pending.push(Diagnostic::error(
-                "L0401",
-                format!("cannot write {}: {error}", store_path.to_string_lossy()),
-                driver_span,
-            ));
-            emit_diagnostics(&sources, &pending, format)?;
-            return Ok(1);
+        if let Some(store) = &store {
+            if options.locked {
+                if let Some(migration) = &migration {
+                    store_notice(
+                        &mut output,
+                        format,
+                        &format!(
+                            "{} was read, and is moved into {} by a run without `--locked`",
+                            migration.sidecar.to_string_lossy(),
+                            lock.display()
+                        ),
+                    )?;
+                }
+            } else {
+                lockfile.put(&name, store);
+                if let Some(text) = lockfile.changed()
+                    && let Err(error) = fs::write(&lock, text)
+                {
+                    output.flush()?;
+                    pending.push(Diagnostic::error(
+                        "L0401",
+                        format!("cannot write {}: {error}", lock.display()),
+                        driver_span,
+                    ));
+                    emit_diagnostics(&sources, &pending, format)?;
+                    return Ok(1);
+                }
+                if let Some(migration) = &migration {
+                    let deleted = match fs::remove_file(&migration.sidecar) {
+                        Ok(()) => true,
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => true,
+                        Err(error) => {
+                            pending.push(Diagnostic::warning(
+                                "L0402",
+                                format!(
+                                    "cannot delete {}: {error}",
+                                    migration.sidecar.to_string_lossy()
+                                ),
+                                driver_span,
+                            ));
+                            false
+                        }
+                    };
+                    store_notice(
+                        &mut output,
+                        format,
+                        &format!(
+                            "{} proof(s) of {} were moved into {}, {} of them in use, and the file is {}",
+                            migration.entries,
+                            migration.sidecar.to_string_lossy(),
+                            lock.display(),
+                            store.used().saturating_sub(store.stats().recorded),
+                            if deleted { "deleted" } else { "left in place" }
+                        ),
+                    )?;
+                }
+            }
         }
         // Warnings, when the file is accepted with some.
         output.flush()?;
@@ -890,6 +1096,26 @@ fn read_source(path: &OsString) -> io::Result<String> {
     // extra byte lets the lexer report the same source-limit diagnostic.
     fs::File::open(path)?
         .take(locus::limits::MAX_SOURCE_BYTES as u64 + 1)
+        .read_to_string(&mut text)?;
+    Ok(text)
+}
+
+/// Informational migration output is not a warning. Keep JSON stderr strictly
+/// diagnostic; text mode retains the original P12 `note:` presentation.
+fn store_notice(
+    output: &mut impl Write,
+    format: DiagnosticFormat,
+    message: &str,
+) -> io::Result<()> {
+    match format {
+        DiagnosticFormat::Text => writeln!(io::stderr(), "note: {message}"),
+        DiagnosticFormat::Json => writeln!(output, "{message}"),
+    }
+}
+fn read_store_text(path: &Path) -> io::Result<String> {
+    let mut text = String::new();
+    fs::File::open(path)?
+        .take(locus::limits::MAX_PROOF_FILE_BYTES as u64 + 1)
         .read_to_string(&mut text)?;
     Ok(text)
 }

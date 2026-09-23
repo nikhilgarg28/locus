@@ -289,7 +289,7 @@ fn json_driver_and_resource_failures_are_golden_and_never_plain_text() {
             &text,
         );
     }
-    fs::write(dir.join("ok.lc.proofs"), "invalid").unwrap();
+    fs::write(dir.join("Locus.lock"), "invalid").unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_locus"))
         .current_dir(&dir)
         .args(["check", "ok.lc", "--error-format=json"])
@@ -474,4 +474,71 @@ fn bounded_explanations_report_depth_and_display_truncation() {
         "{:?}",
         checked.diagnostics
     );
+}
+
+#[test]
+#[doc = "spec: 1.21:1"]
+fn lockfile_migration_keeps_json_stderr_pure_and_locked_bytes_unchanged() {
+    let dir = workspace();
+    fs::copy(
+        root().join("examples/increment.lc"),
+        dir.join("increment.lc"),
+    )
+    .unwrap();
+    let sidecar = dir.join("increment.lc.proofs");
+    let legacy = r#"locus-proofs 1
+
+obligation 94ca9d97d558fcd0 increment 1
+transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_eq_b(view[u8](#0), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8](wrapping_add[u8]($0, 1)), view[u8](wrapping_add[u8]($0, 1)))), refl(view[u8](wrapping_add[u8]($0, 1)))))
+"#;
+    fs::write(&sidecar, legacy).unwrap();
+    let run = |locked: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
+        command
+            .current_dir(&dir)
+            .args(["check", "increment.lc", "--error-format=json"])
+            .env_remove("LOCUS_PROOFS");
+        if locked {
+            command.arg("--locked");
+        }
+        command.output().unwrap()
+    };
+    let locked = run(true);
+    assert!(
+        locked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&locked.stderr)
+    );
+    assert!(locked.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&locked.stdout).contains("was read"));
+    assert_eq!(fs::read_to_string(&sidecar).unwrap(), legacy);
+    assert!(!dir.join("Locus.lock").exists());
+    let migrated = run(false);
+    assert!(
+        migrated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+    assert!(migrated.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&migrated.stdout).contains("were moved"));
+    assert!(!sidecar.exists());
+    let lock = fs::read_to_string(dir.join("Locus.lock")).unwrap();
+    assert!(lock.starts_with("version = 2"));
+    let replay = run(true);
+    assert!(replay.status.success());
+    assert!(replay.stderr.is_empty());
+    assert_eq!(fs::read_to_string(dir.join("Locus.lock")).unwrap(), lock);
+    fs::write(&sidecar, legacy).unwrap();
+    let ignored = run(true);
+    assert!(ignored.status.success());
+    let diagnostics = String::from_utf8(ignored.stderr).unwrap();
+    schema(&diagnostics);
+    assert!(diagnostics.contains("L0402") && diagnostics.contains("ignored"));
+    golden(
+        &root().join("tests/diagnostics/driver/legacy_ignored.jsonl"),
+        &diagnostics,
+    );
+    assert_eq!(fs::read_to_string(&sidecar).unwrap(), legacy);
+    assert_eq!(fs::read_to_string(dir.join("Locus.lock")).unwrap(), lock);
+    fs::remove_dir_all(dir).unwrap();
 }

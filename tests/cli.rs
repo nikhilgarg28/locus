@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn example(name: &str) -> PathBuf {
@@ -354,117 +354,380 @@ fn scratch(name: &str) -> PathBuf {
     directory
 }
 
+/// `locus check <source> <flags>` under `env`: the exit code, stdout, and
+/// stderr.
+fn check(source: &Path, flags: &[&str], env: &[(&str, &str)]) -> (Option<i32>, String, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
+    command.arg("check").arg(source).args(flags);
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    let output = command.output().unwrap();
+    (
+        output.status.code(),
+        String::from_utf8(output.stdout).unwrap(),
+        String::from_utf8(output.stderr).unwrap(),
+    )
+}
+
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap()
+}
+
 #[test]
-fn check_stores_the_proofs_beside_the_source_and_locked_never_searches() {
+fn check_stores_the_proofs_in_a_lockfile_and_locked_never_searches() {
     let directory = scratch("cli_store");
     let source = directory.join("lock.lc");
     std::fs::copy(example("lock.lc"), &source).unwrap();
-    let proofs = directory.join("lock.lc.proofs");
-    let check = |flags: &[&str], env: &[(&str, &str)]| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
-        command.arg("check").arg(&source).args(flags);
-        for (name, value) in env {
-            command.env(name, value);
-        }
-        let output = command.output().unwrap();
-        (
-            output.status.code(),
-            String::from_utf8(output.stdout).unwrap(),
-            String::from_utf8(output.stderr).unwrap(),
-        )
-    };
+    let lock = directory.join("Locus.lock");
+    let check_lock = |flags: &[&str], env: &[(&str, &str)]| check(&source, flags, env);
 
     // `--locked` with no file: an error naming the function, the line, and
     // the claim, and no file is written.
-    let (code, _, stderr) = check(&["--locked"], &[]);
+    let (code, _, stderr) = check_lock(&["--locked"], &[]);
     assert_eq!(code, Some(1));
     assert!(
         stderr.contains("`step` needs a proof of `lock.failures < 3` at line 34"),
         "{stderr}"
     );
     assert!(stderr.contains("the proofs file has none"), "{stderr}");
-    assert!(!proofs.exists());
+    assert!(!lock.exists());
 
-    // A plain check writes the file; a second run uses every entry, searches
-    // for nothing, and leaves the bytes as they are.
-    let (code, stdout, _) = check(&["--stats"], &[]);
-    assert_eq!(code, Some(0), "{stdout}");
-    assert!(stdout.contains("proofs file: 0 used, 8 found and recorded, 0 stale, 8 searched"));
-    let written = std::fs::read_to_string(&proofs).unwrap();
-    assert!(written.starts_with("locus-proofs 1\n"), "{written}");
-    assert_eq!(written.matches("\nobligation ").count(), 8, "{written}");
-    let (code, stdout, _) = check(&["--stats", "--locked"], &[]);
+    // A plain check writes the file, in the file's directory; a second run
+    // uses every entry, searches for nothing, and leaves the bytes as they
+    // are.
+    let (code, stdout, _) = check_lock(&["--stats"], &[]);
     assert_eq!(code, Some(0), "{stdout}");
     assert!(
-        stdout.contains("proofs file: 8 used, 0 found and recorded, 0 stale, 0 searched"),
+        stdout.contains("Locus.lock: 0 used, 8 found and recorded, 0 stale, 8 searched"),
+        "{stdout}"
+    );
+    let written = read(&lock);
+    assert!(
+        written.starts_with(
+            "version = 2\n\n[[file]]\npath = \"lock.lc\"\n\n  [[file.obligation]]\n  key = \""
+        ),
+        "{written}"
+    );
+    assert_eq!(
+        written.matches("\n  [[file.obligation]]\n").count(),
+        8,
+        "{written}"
+    );
+    assert_eq!(written.matches("\n[[file]]\n").count(), 1, "{written}");
+    assert_eq!(written.matches("\n  claim = \"").count(), 8, "{written}");
+    assert_eq!(written.matches("\n  steps = '''\n").count(), 8, "{written}");
+    assert!(written.contains("\n  at = \"run 2\"\n"), "{written}");
+    assert!(written.contains("\ns1 = "), "{written}");
+    let (code, stdout, _) = check_lock(&["--stats", "--locked"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(
+        stdout.contains("Locus.lock: 8 used, 0 found and recorded, 0 stale, 0 searched"),
         "{stdout}"
     );
     assert!(stdout.contains("obligations: 8 (8 stored)"), "{stdout}");
-    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
-    let (code, stdout, _) = check(&["--holes"], &[]);
+    assert_eq!(read(&lock), written);
+    let (code, stdout, _) = check_lock(&["--holes"], &[]);
     assert_eq!(code, Some(0));
     assert_eq!(stdout.matches("filled (stored,").count(), 8, "{stdout}");
-    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+    assert_eq!(read(&lock), written);
 
     // Surviving an upgrade: with the search disabled altogether, the file
-    // still checks; without the file, nothing does.
-    let (code, stdout, _) = check(&["--stats"], &[("LOCUS_SEARCH", "none")]);
+    // still checks; without an entry, nothing does, and no entry is
+    // written for the file that failed.
+    let (code, stdout, _) = check_lock(&["--stats"], &[("LOCUS_SEARCH", "none")]);
     assert_eq!(code, Some(0), "{stdout}");
     assert!(stdout.contains("0 searched"), "{stdout}");
     let fresh = directory.join("fresh.lc");
     std::fs::copy(example("lock.lc"), &fresh).unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_locus"))
-        .arg("check")
-        .arg(&fresh)
-        .env("LOCUS_SEARCH", "none")
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let (code, _, stderr) = check(&fresh, &[], &[("LOCUS_SEARCH", "none")]);
+    assert_eq!(code, Some(1));
     assert!(stderr.contains("cannot show"), "{stderr}");
-    assert!(!directory.join("fresh.lc.proofs").exists());
+    assert_eq!(read(&lock), written);
 
     // `--no-store` and `LOCUS_PROOFS=off` neither read nor write.
-    let (code, stdout, _) = check(&["--holes", "--no-store"], &[]);
+    let (code, stdout, _) = check_lock(&["--holes", "--no-store"], &[]);
     assert_eq!(code, Some(0));
     assert!(!stdout.contains("stored"), "{stdout}");
-    let (code, stdout, _) = check(&["--holes"], &[("LOCUS_PROOFS", "off")]);
+    let (code, stdout, _) = check_lock(&["--holes"], &[("LOCUS_PROOFS", "off")]);
     assert_eq!(code, Some(0));
     assert!(!stdout.contains("stored"), "{stdout}");
-    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
+    assert_eq!(read(&lock), written);
 
-    // A stale entry: the file is a hint. One proof swapped for another's
-    // is refused by the kernel, searched for again, and rewritten; under
-    // `--locked` it is an error.
-    let mut lines: Vec<String> = written.lines().map(str::to_string).collect();
-    let proofs_at: Vec<usize> = (0..lines.len())
-        .filter(|&index| lines[index].starts_with("obligation "))
-        .map(|index| index + 1)
-        .collect();
-    lines.swap(proofs_at[1], proofs_at[2]);
-    std::fs::write(&proofs, lines.join("\n") + "\n").unwrap();
-    let (code, _, stderr) = check(&["--locked"], &[]);
-    assert_eq!(code, Some(1));
-    assert!(stderr.contains("the proofs file has none"), "{stderr}");
-    let (code, stdout, _) = check(&["--stats"], &[]);
+    // A second file in the directory gets a table of its own, in path
+    // order, and each file's check leaves the other's entries as they are.
+    let other = directory.join("increment.lc");
+    std::fs::copy(example("increment.lc"), &other).unwrap();
+    let (code, stdout, _) = check(&other, &["--stats"], &[]);
     assert_eq!(code, Some(0), "{stdout}");
     assert!(
-        stdout.contains("proofs file: 6 used, 2 found and recorded, 2 stale, 2 searched"),
+        stdout.contains("Locus.lock: 0 used, 1 found and recorded, 0 stale, 1 searched"),
         "{stdout}"
     );
-    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
-
-    // A file that is not a proofs file at all is reported and replaced.
-    std::fs::write(&proofs, "not a proofs file\n").unwrap();
-    let (code, _, stderr) = check(&[], &[]);
-    assert_eq!(code, Some(0));
+    let both = read(&lock);
+    assert_eq!(both.matches("\n[[file]]\n").count(), 2, "{both}");
     assert!(
-        stderr.contains("does not start with `locus-proofs 1`"),
+        both.starts_with("version = 2\n\n[[file]]\npath = \"increment.lc\"\n"),
+        "{both}"
+    );
+    assert!(both.ends_with(&written["version = 2\n".len()..]), "{both}");
+    let (code, stdout, _) = check_lock(&["--stats", "--locked"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(stdout.contains("Locus.lock: 8 used, "), "{stdout}");
+    assert_eq!(read(&lock), both);
+    let (code, stdout, _) = check(&other, &["--stats", "--locked"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(stdout.contains("Locus.lock: 1 used, "), "{stdout}");
+    assert_eq!(read(&lock), both);
+    std::fs::write(&lock, &written).unwrap();
+
+    // A stale entry: the file is a hint. The keys of two entries swapped,
+    // each is a proof of the other's claim: the kernel refuses both, they
+    // are searched for again, and the file is rewritten; under `--locked`
+    // they are errors, which say what the entry proves and what is wanted.
+    let keys: Vec<&str> = written
+        .lines()
+        .filter(|line| line.starts_with("  key = "))
+        .collect();
+    assert_eq!(keys.len(), 8);
+    let swapped = written
+        .replacen(keys[1], "  key = SWAP", 1)
+        .replacen(keys[2], keys[1], 1)
+        .replacen("  key = SWAP", keys[2], 1);
+    assert_ne!(swapped, written);
+    std::fs::write(&lock, &swapped).unwrap();
+    let (code, _, stderr) = check_lock(&["--locked"], &[]);
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("the proofs file has none"), "{stderr}");
+    assert!(
+        stderr.contains("the stored proof concludes `")
+            && stderr.contains("the obligation wants `"),
         "{stderr}"
     );
-    assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
-    std::fs::write(&proofs, "locus-proofs 7\n").unwrap();
-    let (code, _, stderr) = check(&["--locked"], &[]);
+    let (code, stdout, _) = check_lock(&["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stdout}");
+    assert!(
+        stdout.contains("Locus.lock: 6 used, 2 found and recorded, 2 stale, 2 searched"),
+        "{stdout}"
+    );
+    assert_eq!(read(&lock), written);
+
+    // A file that is not a lockfile at all is reported and replaced; one
+    // of another version is refused; an entry that does not read is
+    // skipped with a warning and the rest are used.
+    std::fs::write(&lock, "not a lockfile\n").unwrap();
+    let (code, _, stderr) = check_lock(&[], &[]);
+    assert_eq!(code, Some(0));
+    assert!(stderr.contains("not a TOML lockfile"), "{stderr}");
+    assert!(
+        stderr.contains("every proof of `lock.lc` is searched for"),
+        "{stderr}"
+    );
+    assert_eq!(read(&lock), written);
+    std::fs::write(&lock, "version = 7\n").unwrap();
+    let (code, _, stderr) = check_lock(&["--locked"], &[]);
     assert_eq!(code, Some(1));
     assert!(stderr.contains("version 7"), "{stderr}");
+    let damaged = written.replacen("  key = \"", "  key = \"x", 1);
+    std::fs::write(&lock, &damaged).unwrap();
+    let (code, stdout, stderr) = check_lock(&["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("obligation 1: the key is not sixteen hex digits; skipped"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.contains("Locus.lock: 7 used, 1 found and recorded, 0 stale, 1 searched"),
+        "{stdout}"
+    );
+    assert_eq!(read(&lock), written);
+}
+
+/// The proofs of `examples/lock.lc` and `examples/increment.lc` as version
+/// 1 wrote them, beside the source.
+const LOCK_V1: &str = r#"locus-proofs 1
+
+obligation 35247a4dabb8c29f remaining 1
+transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term(proof(transport(definition(fn:within_limit(view[u8]($0))), #0, of_term($1))))))
+
+obligation b8664f10c935e577 remaining 2
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8](wrapping_sub[u8](3, $0)), 3i)), transport(literal(view[u8](3)), int_le(view[u8](wrapping_sub[u8](3, $0)), #0), of_term(proof(of_term(fn:u8_sub_le(3, $0, proof(transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term(proof(transport(definition(fn:within_limit(view[u8]($0))), #0, of_term($1)))))))))))))
+
+obligation caccac166ef12c6d run 1
+evaluate(int_le_b(view[u8](0), 3i))
+
+obligation f33fdca3e029212e run 2
+transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), fn:within_limit(view[u8](#0.0)), transport(transport(h3, (#0 ==[struct:Lock] $9), refl($9)), fn:within_limit(view[u8](#0.0)), transport(h3, fn:within_limit(view[u8](#0.0)), of_term(proof(of_term($10))))))
+
+obligation dc7d5edece1e24a6 step 1
+implies_elim(axiom(cmp_reify[true], int_lt_b(view[u8]($0.0), 3i)), transport(literal(view[u8](3)), int_le(int_add(view[u8]($0.0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)))
+
+obligation 31cc4b9cf32e493f step 2
+implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)
+
+obligation 6e6562c5899c19df step 3
+transport(transport(projection(struct:Lock { $0.0, false }.0), (#0 ==[u8] struct:Lock { $0.0, false }.0), refl(struct:Lock { $0.0, false }.0)), fn:within_limit(view[u8](#0)), of_term(proof(of_term($1))))
+
+obligation 92c9d08d31eddf30 step 4
+evaluate(int_le_b(view[u8](0), 3i))
+"#;
+const INCREMENT_V1: &str = r#"locus-proofs 1
+
+obligation 94ca9d97d558fcd0 increment 1
+transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_eq_b(view[u8](#0), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8](wrapping_add[u8]($0, 1)), view[u8](wrapping_add[u8]($0, 1)))), refl(view[u8](wrapping_add[u8]($0, 1)))))
+"#;
+
+#[test]
+fn a_version_1_proofs_file_is_moved_into_the_lockfile_once() {
+    let directory = scratch("cli_migrate");
+    let source = directory.join("lock.lc");
+    std::fs::copy(example("lock.lc"), &source).unwrap();
+    let sidecar = directory.join("lock.lc.proofs");
+    std::fs::write(&sidecar, LOCK_V1).unwrap();
+    let other = directory.join("increment.lc");
+    std::fs::copy(example("increment.lc"), &other).unwrap();
+    let other_sidecar = directory.join("increment.lc.proofs");
+    std::fs::write(&other_sidecar, INCREMENT_V1).unwrap();
+    let lock = directory.join("Locus.lock");
+
+    // Under `--locked` the file is read, and nothing is moved.
+    let (code, stdout, stderr) = check(&other, &["--locked", "--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("Locus.lock: 1 used, 0 found and recorded, 0 stale, 0 searched"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("increment.lc.proofs was read, and is moved into")
+            && stderr.contains("by a run without `--locked`"),
+        "{stderr}"
+    );
+    assert!(other_sidecar.exists());
+    assert!(!lock.exists());
+
+    // A plain check moves it: every entry is used and gets its claim, the
+    // lockfile is written, and the file is deleted. The next run reads the
+    // lockfile alone. A fresh search establishes the same claims.
+    let (code, stdout, stderr) = check(&source, &["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("Locus.lock: 8 used, 0 found and recorded, 0 stale, 0 searched"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("note: 8 proof(s) of ")
+            && stderr.contains("lock.lc.proofs were moved into ")
+            && stderr.contains("Locus.lock, 8 of them in use, and the file is deleted"),
+        "{stderr}"
+    );
+    assert!(!sidecar.exists());
+    let written = read(&lock);
+    assert!(written.contains("path = \"lock.lc\"") && !written.contains("increment.lc"));
+    assert_eq!(written.matches("\n  [[file.obligation]]\n").count(), 8);
+    assert!(
+        written.contains("\n  claim = ") && written.contains("fn:within_limit("),
+        "{written}"
+    );
+    assert!(written.contains("\nt1 = "), "{written}");
+    let (code, stdout, stderr) = check(&source, &["--stats", "--locked"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("Locus.lock: 8 used, "), "{stdout}");
+    assert!(!stderr.contains("moved"), "{stderr}");
+    assert_eq!(read(&lock), written);
+    let fresh = scratch("cli_migrate_fresh");
+    let fresh_source = fresh.join("lock.lc");
+    std::fs::copy(example("lock.lc"), &fresh_source).unwrap();
+    let (code, _, stderr) = check(&fresh_source, &[], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // A newer proof search may choose a different checked derivation for
+    // the same claim. Migration preserves valid old proofs; it need not
+    // replace them with the proof today's search would choose.
+    let fresh_bytes = read(&fresh.join("Locus.lock"));
+    let claims = |text: &str| {
+        let (mut lock, warnings) = locus::store::Lockfile::parse(text).unwrap();
+        assert!(warnings.is_empty());
+        let store = lock.take("lock.lc");
+        store
+            .entries()
+            .iter()
+            .map(|entry| {
+                (
+                    entry.key.to_string(),
+                    entry.label.to_string(),
+                    entry.claim.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(claims(&fresh_bytes), claims(&written));
+    let (code, _, stderr) = check(&fresh_source, &["--locked"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(read(&fresh.join("Locus.lock")), fresh_bytes);
+
+    // The second file's own check moves its file into the same lockfile,
+    // which keeps the first file's entries.
+    let (code, _, stderr) = check(&other, &[], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("note: 1 proof(s) of ")
+            && stderr.contains("increment.lc.proofs were moved"),
+        "{stderr}"
+    );
+    assert!(!other_sidecar.exists());
+    let both = read(&lock);
+    assert_eq!(both.matches("\n[[file]]\n").count(), 2, "{both}");
+    assert!(both.ends_with(&written["version = 2\n".len()..]), "{both}");
+
+    // A version-1 file beside a source the lockfile already holds is
+    // ignored, and left where it is.
+    std::fs::write(&sidecar, LOCK_V1).unwrap();
+    let (code, _, stderr) = check(&source, &["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("lock.lc.proofs is ignored")
+            && stderr.contains("already holds `lock.lc`; delete it"),
+        "{stderr}"
+    );
+    assert!(sidecar.exists());
+    assert_eq!(read(&lock), both);
+    std::fs::remove_file(&sidecar).unwrap();
+
+    // One that does not read is reported and left, and the proofs are
+    // searched for.
+    let third = directory.join("preserve.lc");
+    std::fs::copy(example("preserve.lc"), &third).unwrap();
+    let third_sidecar = directory.join("preserve.lc.proofs");
+    std::fs::write(&third_sidecar, "locus-proofs 7\n").unwrap();
+    let (code, stdout, stderr) = check(&third, &["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("version 7") && stderr.contains("it is not read"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.contains("Locus.lock: 0 used, 4 found and recorded, 0 stale, 4 searched"),
+        "{stdout}"
+    );
+    assert!(third_sidecar.exists());
+    assert_eq!(read(&lock).matches("\n[[file]]\n").count(), 3);
+
+    // One whose entries are all of other obligations: none is used, the
+    // proofs are searched for, and the file is still deleted.
+    let fourth = directory.join("propositions.lc");
+    std::fs::copy(example("propositions.lc"), &fourth).unwrap();
+    let fourth_sidecar = directory.join("propositions.lc.proofs");
+    std::fs::write(&fourth_sidecar, LOCK_V1).unwrap();
+    let (code, stdout, stderr) = check(&fourth, &["--stats"], &[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("note: 8 proof(s) of ")
+            && stderr.contains("Locus.lock, 0 of them in use, and the file is deleted"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.contains("Locus.lock: 0 used, 5 found and recorded, 0 stale, 5 searched"),
+        "{stdout}"
+    );
+    assert!(!fourth_sidecar.exists());
+    assert_eq!(read(&lock).matches("\n[[file]]\n").count(), 4);
 }

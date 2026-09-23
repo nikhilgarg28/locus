@@ -1,4 +1,0 @@
-locus-proofs 1
-
-obligation 0499dc88946f99da withdraw 1
-implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8]($0.1), view[u8]($0.1))), refl(view[u8]($0.1)))
