@@ -124,10 +124,10 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
  "meta": {
   "title": "Locus Atlas",
   "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
-  "rev": 103,
-  "savedAt": "2026-09-22T23:44:20.000Z",
-  "nextTask": 194,
-  "nextId": 310,
+  "rev": 104,
+  "savedAt": "2026-09-23T00:03:12.000Z",
+  "nextTask": 205,
+  "nextId": 322,
   "taskPrefix": "LOC",
   "groups": [
    "Now",
@@ -4275,6 +4275,13 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "notes": "Completed 22 September: 41 commits in 12 waves, 549 tests, four milestones reached. Followed by the discussion of the vision edits and a plan for them.\n\n"
   },
   {
+   "id": "p310",
+   "name": "Process",
+   "status": "active",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "description": "Engineering practices borrowed from Rue (rue-lang.dev) after reading its site, tutorial, agent instructions, formal core, and ADRs on 22 September 2026. Each task says when it fits: now, with the reconciliation, or later. The rule behind all of them: the specification, the tests, the formal core, and the compiler are views of one language that must agree, and each agreement is checked by a machine, not remembered by a person."
+  },
+  {
    "id": "p2",
    "name": "Core Language",
    "status": "planned",
@@ -6550,6 +6557,127 @@ table.t td .note{color:var(--muted);font-size:13px;margin-right:6px} table.t tr:
    "created": "2026-09-22T17:42:38.000Z",
    "updated": "2026-09-22T23:44:20.000Z",
    "notes": "Resolved 22 September by the Vision: an ordinary fn never enters the logic, whatever it promises; a logic fn does and is checked pure and total; the interim rule stays in the code until the reconciliation replaces it (Build plan, After the core build).\n\nFound by E6 on 22 September. A function promising terminates, no_panic, and no_io is lowered as a kernel function with a defining equation, which is what lets it appear in propositions and be unfolded. An operator that may panic is a statement of the check IR, not a term, so such a function cannot contain one (L0236), yet the target example midpoint is fully promised and uses - / +. Functions in propositions already says a function is known by its contract, and its equation is visible only where its body is expressible as a kernel term; Termination says a recursive function enters the logic as a function symbol known by its contract alone. What is missing is the kernel form for that: a declared function symbol with a signature and no body, or the same through a top-level variable of function type. Until decided, E7 checks such a function as an ordinary ExecFn with its promises and refuses its use in a proposition with a message that says why. To discuss with the vision edits."
+  },
+  {
+   "id": "t311",
+   "n": 194,
+   "title": "P1 · Paragraph IDs, categories, and a traceability gate for the Kernel contract and Language, as built",
+   "status": "todo",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: now. After: nothing.\n\nScope. Every paragraph of the Kernel contract and of Language, as built carries an identifier in the form chapter.section:paragraph and a category: normative, legality-rule, syntax, dynamic-semantics, informative, example. A paragraph without a category is informative; normativity is opted into, never inherited. Tests cite paragraphs: a corpus file with //~ spec: 7.2:3 or a Rust test with a spec attribute. A gate in the suite fails when a normative paragraph has no focused test citing it (a focused test is a corpus file under forty lines or one Rust test), when a citation names a paragraph that no longer exists, or when a behaviour-asserting test cites only an informative paragraph. The existing contract test, which checks that every kernel name appears in the contract, becomes one of the gate's rules.\n\nWhy. The document a reviewer reads and the tests the machine runs become the same artifact; today the kernel-contract test covers names only, and R4 had to rewrite Language, as built by hand because nothing tied its sentences to the code. Rue's spec (docs/spec, crates/rue-spec) does this with a rule() marker per paragraph and a 100 percent coverage gate.\n\nTests. The gate itself on a scratch copy of the atlas with a paragraph removed, a citation dangling, and an informative paragraph cited by an asserting test; the count of normative paragraphs and of citations printed by the extended gate.\n\nDone when. tools/check.sh fails on an uncovered normative paragraph, and the atlas shows the IDs in the rendered documents."
+  },
+  {
+   "id": "t312",
+   "n": 195,
+   "title": "P2 · Executable known-bug markers in the corpus",
+   "status": "todo",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: now. After: nothing.\n\nScope. A corpus file may carry //~ known: LOC-NN with a reason. The runner expects the file to fail as pinned; if it passes, the suite fails, naming the marker to remove. The same marker on a Rust test through a small attribute or helper. The task number must be an open task in the atlas, checked by the meta test that reads atlas.html.\n\nWhy. A skipped or ignored test outlives its bug. Rue's known_bug = \"RUE-NN\" on CLI cases is an executable xfail: an unexpected pass is a failure, so a fixed bug cannot leave a stale marker.\n\nDone when. One real known bug from the discussion note (the fold! of a struct literal that projection reduction does not match, found by E9) is pinned this way, and removing the workaround in the code makes the marker fail loudly."
+  },
+  {
+   "id": "t313",
+   "n": 196,
+   "title": "P3 · A reason on every trusted site, and locus audit",
+   "status": "todo",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: now, and again when trusted declarations arrive. After: nothing.\n\nScope. locus audit lists, for a file or a crate, everything a reviewer must take on trust: every function that does not promise terminates (a source of divergence), every panic ending and operator without evidence in a function without no_panic, every use of classical reasoning in the theory and, when the surface can invoke it, in source, and later every foreign or trusted declaration. Where the language gives the programmer a way to assert something the compiler does not check (trusted declarations in the Interop project, a lemma admitted without proof if that is ever allowed), the reason is a mandatory string literal in the grammar between the keyword and the item, kept in the tree so that a formatter cannot separate it and the audit prints it beside the site.\n\nWhy. The one part of the language the compiler cannot check is where a stated reason earns a reviewer's trust, and for code written by an agent the cost of stating it is nothing. Rue's checked \"reason\" { } (ADR-0095) makes it grammar rather than a lint. Positioning already promises the audit command.\n\nTests. The audit over the examples is a golden; a trusted site without a reason is a rejected corpus file once the grammar exists.\n\nDone when. locus audit exists and its output for the target examples is committed as a golden; the reason clause is designed in the Vision for the declarations that will need it."
+  },
+  {
+   "id": "t314",
+   "n": 197,
+   "title": "P4 · An appendix of every limit, each with its diagnostic",
+   "status": "todo",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: now. After: P1.\n\nScope. One appendix of the Kernel contract lists every count the checker and the elaborator enforce: nesting depth and steps in the kernel, evaluation steps and depth, the certificate limits, the arithmetic procedure's budgets, the parser's depth, the stored-proof reader's limits, the diagnostic and source-size ceilings, with the rule that exceeding a limit is a diagnosable failure that names the limit and never wraps, truncates, or drops silently. A test reads the appendix and compares the names and values with the constants in the code, as the contract test does for axioms.\n\nWhy. Limits as counts are a principle of the language; today they are scattered through source and task notes. Rue's Appendix C states each limit and the rule against silent wrapping.\n\nDone when. The appendix exists, the test passes, and every limit constant in src has a row."
+  },
+  {
+   "id": "t315",
+   "n": 198,
+   "title": "P5 · The gate says that it ran",
+   "status": "todo",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: now. After: nothing.\n\nScope. tools/check.sh and its extended form end with one line that says the whole gate ran and how long the fast suite took; tests/acceptance.rs asserts on that line rather than on counts, and a run cut short by a resource limit or a killed process cannot print it. The fast-suite time is recorded on each run so that the two-minute criterion is a series and not a single measurement.\n\nWhy. A harness killed by memory or a timeout can still print a plausible summary. Rue's testing doc calls this \"read the banner, not the tally\".\n\nDone when. Killing the suite midway leaves no banner, and the acceptance test fails."
+  },
+  {
+   "id": "t316",
+   "n": 199,
+   "title": "P6 · Preview gates: incomplete features merge behind a flag",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: with the reconciliation, before its first cross-cutting commit. After: nothing.\n\nScope. locus check --preview name enables a named, unfinished feature; the elaborator gates each new construct with a call that reports \"x requires preview feature name\" without the flag; corpus files declare //~ preview: name and are expected to fail without the flag and to pass with it (or to fail as pinned with it, while the feature is partial); the golden runner and the meta test understand the directive; stabilisation removes the gate and the directive in one commit. The list of previews is a closed enum, each naming the atlas task that owns it.\n\nWhy. The Vision migration (logic fn, Bool, named-arm props, the removal of Ghost) cuts across the whole elaborator, unlike the core build's 41 independent commits. Gates let the new language grow beside the built one on main while every commit keeps the suite green. Rue's ADR-0005.\n\nDone when. The first reconciliation commit lands behind a gate with its corpus files marked, and the built language's tests are untouched."
+  },
+  {
+   "id": "t317",
+   "n": 200,
+   "title": "P7 · Diagnostics as a versioned JSON surface, and locus explain",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: with the reconciliation. After: nothing.\n\nScope. locus check --error-format json prints one JSON array per diagnostic on stderr with a fixed key set and a schema version: severity, code, message, spans (with one primary), notes, helps, suggestions, and Locus's own fields: the claim, the claim after computing, the facts considered, the counterexample, and the suggested explicit form, each null when absent. Diagnostics are sorted by file and offset before rendering, so the order is deterministic. locus explain L0230 prints a long-form explanation of a code with its causes, an example, and the paragraph of Language, as built it rests on (P1). Error codes get ranges by origin: lexer and parser, elaborator, lowering and checker, driver, internal.\n\nWhy. Positioning asks for diagnostics as data with the claim, the facts, the gap, and the failing case; the consumer is an agent writing the implementation file. Changing a field is then a consumer-visible break, documented as such. Rue's --error-format json and rue explain.\n\nTests. The JSON for every rejected corpus file is a golden beside the text golden; a schema test checks the key set; explain has a golden per code and the meta test requires one.\n\nDone when. Every code has a JSON golden and an explanation."
+  },
+  {
+   "id": "t318",
+   "n": 201,
+   "title": "P8 · Code blocks in the atlas are checked by the suite",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: with the reconciliation. After: P6.\n\nScope. Every fenced code block in the Now documents (Language, as built; Overview; Architecture where it shows source; the Kernel contract where it shows terms) carries a mode: check, run with expected values, reject with a code, or prose. A tool exports the blocks with their modes, and a test checks each against the compiler, with previews declared where a block shows a gated feature. Vision documents are exempt until their feature lands, when the block moves to Now or gains a mode.\n\nWhy. The atlas is the only documentation; R4 had to rewrite Language, as built because nothing had tied its examples to the code, and Target examples were prose until the build made them tests. Rue checks every tutorial fence (check, compile-fail E####, skip) in CI.\n\nDone when. Language, as built has no unchecked code block, and editing one to lie fails the suite."
+  },
+  {
+   "id": "t319",
+   "n": 202,
+   "title": "P9 · The status numbers are generated, not typed",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: with the reconciliation. After: P5.\n\nScope. The counts the atlas shows (tests, corpus files, obligations by tier for the target examples, kernel rules and axioms, trusted-base lines by file, stored-proof hits, the fast-suite time) are produced by tools/check.sh --extended as one JSON record, and a tool writes them into the atlas status section from that record; the Overview cites them from there. Nothing in those numbers is typed by hand.\n\nWhy. Numbers typed by a person drift; the core build's were typed by me at each landing. Rue's homepage field report is derived from the repository at build time.\n\nDone when. The extended gate updates the numbers and a stale number is impossible."
+  },
+  {
+   "id": "t320",
+   "n": 203,
+   "title": "P10 · A formal core for the check IR, lowering, and erasure, with three-way agreement",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: later, after the reconciliation. After: P1.\n\nScope. A document in the Now group states the trusted parts outside the kernel as a small calculus: the typing rules of the check IR (lets, facts, calls, matches, loops with state, return and panic endings, operations that may panic, promises), the lowering of the typed tree to it (versions, joins, loop state, write-backs), and erasure, each rule citing the paragraph of Language, as built it implements (P1) and the Architecture section that motivated it. The erased interpreter is named as the executable oracle of the calculus, the check-IR interpreter as the reference for the IR, and the rule of agreement is stated: prose, calculus, and the two interpreters must agree, a disagreement is a defect in whichever is wrong, and a report names the pair that disagrees, never a winner. The Lean deliverables are listed for the day mechanisation starts: a fixed axiom set, a trust report with the sorry count and printed axioms, a generated index from rule to Lean declaration to paragraph, and a validation procedure a reader can run in half an hour.\n\nWhy. Positioning names lowering, the checker, and erasure as trusted and says a sound kernel cannot establish that the program checked and the program run agree; the erasure theorem is the long-term answer and this document is its statement. Rue keeps a prose spec, a core calculus, a Lean mechanisation, and the compiler as four views (docs/formal, ADR-0097).\n\nDone when. The calculus covers every form of the check IR and every lowering rule in Architecture, and the differential tests are described as its oracle."
+  },
+  {
+   "id": "t321",
+   "n": 204,
+   "title": "P11 · Measurement: locus bench, with epochs and flags against noise",
+   "status": "backlog",
+   "priority": 3,
+   "project": "p310",
+   "created": "2026-09-23T00:03:12.000Z",
+   "updated": "2026-09-23T00:03:12.000Z",
+   "notes": "When: later, after the reconciliation. After: P9.\n\nScope. locus bench runs the corpus and records, per obligation, the search time by tier, the proof size in nodes, the kernel checking time, the certificate size, and the stored-proof hit; per file the elaboration, lowering, and erasure times and the fast-suite time; all as raw integer samples in one record per run, content-addressed and appended to a data branch, never overwritten. An epoch pins the workload set, the machine class, and the toolchain; a change to a pinned input turns the epoch. A workload is flagged when its median moves by more than k times the pooled dispersion of the run and the trailing window, and a series that stops advancing for more than a few commits fails the gate. The atlas shows the per-workload sparklines and the headline index, derived at build time from the raw records (P9).\n\nWhy. Principles says to measure proof construction time, proof size, checking time, and rechecking cost before large proofs are normal; the one exit criterion the core build missed was a time bound measured once by hand. Rue's ADR-0067 and ADR-0072 give the method: raw samples kept, pins made explicit, flags against noise rather than percentages, and a real program as the workload.\n\nDone when. Two weeks of records exist for the target examples and one deliberate slowdown is flagged."
   }
  ]
 }
