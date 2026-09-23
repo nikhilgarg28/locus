@@ -21,9 +21,10 @@ fn room_after_clamp(n: u8) -> u8 {
 
 // Two `_`, one `prove!`, and the conversion of the lemma's claim to the one
 // stated, by computing.
-//~ proofs: 4
-//~ run: headroom(250, Proved) => (5, Proved)
-//~ run: clamp(255) => (250, Proved)
+//~ proofs: 6
+//~ run: headroom(250, Erased) => (5, Erased)
+//~ run: clamp(255) => (250, Erased)
 //~ run: room_after_clamp(0) => 255
 //~ run: room_after_clamp(255) => 5
-//~ rust: fn headroom(n: u8, small: Proved) -> (u8, Proved) {
+//~ rust: fn headroom(n: u8, _small: Erased) -> (u8, Erased) {
+//~ spec: 1.4:1

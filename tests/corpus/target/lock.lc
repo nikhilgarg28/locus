@@ -1,41 +1,31 @@
-// The lock with 32-bit counts, from Target examples, as written there. It
-// parses whole after S5, `step`, `event_at`, and `remaining` check, run,
-// and compile since E7, `#[derive(Clone, Copy)]` has its meaning since O1,
-// and `run` checks, runs, and compiles since M4: `ok` is tracked evidence,
-// `let mut` of a proof type, stale after `lock = next` and refreshed by
-// `ok = still`, carried by the `for` as loop state typed over the `lock`
-// the body sees. The whole file now runs three ways. `Debug` is added to
-// the derives Target examples writes, since the compiled harness prints
-// the values a run line asks for; the printer emits the list as
-// written, so nothing else would give `Lock` and `Event` a `Debug`. `step`
-// and `remaining` take evidence, so they are `pub(crate)`, never plain `pub` (O2).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub enum Event { Wrong, Right }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Lock { failures: u32, open: bool }
 
-#[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u32) -> Prop {
-    prop!(failures <= 3)
+prop within_limit(failures: Int) {
+    Bounds => {
+        prop!(failures <= 3)
+    }
 }
 
 #[terminates] #[no_panic] #[no_io]
-pub(crate) fn step(
+pub(super) fn step(
     lock: Lock,
-    bounded: @within_limit(lock.failures),
+    bounded: @within_limit(lock.failures as Int),
     event: Event,
-) -> (next: Lock, @within_limit(next.failures)) {
+) -> (next: Lock, @within_limit(next.failures as Int)) {
     match event {
         Event::Right => {
             let next = Lock { failures: 0, open: true };
-            (next, fold!(within_limit, prove!(next.failures <= 3)))             // computed: 0 <= 3
+            (next, within_limit::Bounds @ prove!((next.failures as Int) <= 3))             // computed: 0 <= 3
         }
         Event::Wrong => {
             if lock.failures < 3 {
                 let fits = prove!(lock.failures as Int + 1 <= u32::MAX as Int); // arithmetic, from lock.failures < 3
                 let next = Lock { failures: lock.failures + 1, open: false };   // the obligation of + is fits: exact
-                (next, fold!(within_limit, prove!(next.failures <= 3)))         // arithmetic
+                (next, within_limit::Bounds @ prove!((next.failures as Int) <= 3))         // arithmetic
             } else {
                 (Lock { failures: lock.failures, open: false }, bounded)        // computed: the field is lock.failures
             }
@@ -48,11 +38,12 @@ fn event_at(attempt: u32, correct: u32) -> Event {
     if attempt == correct { Event::Right } else { Event::Wrong }
 }
 
-// A loop, so no promise to terminate can be made, and run cannot appear in a proposition.
+// This loop has no termination proof in the initial implementation.
+// run is an ordinary fn and is never called inside a proposition.
 #[no_panic] #[no_io]
-pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
+pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures as Int)) {
     let mut lock = Lock { failures: 0, open: false };
-    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(lock.failures <= 3)); // computed
+    let mut ok: @within_limit(lock.failures as Int) = within_limit::Bounds @ prove!((lock.failures as Int) <= 3); // computed
     for attempt in 0..attempts {
         let (next, still) = step(lock, ok, event_at(attempt, correct));
         lock = next;        // ok is now invalid
@@ -62,20 +53,21 @@ pub fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failu
 }
 
 #[terminates] #[no_panic] #[no_io]
-pub(crate) fn remaining(failures: u32, bounded: @within_limit(failures)) -> (left: u32, @(left <= 3)) {
-    let small = unfold!(within_limit, bounded);                                 // failures <= 3
+pub(super) fn remaining(failures: u32, bounded: @within_limit(failures as Int)) -> (left: u32, @((left as Int) <= 3)) {
+    let small = logic {
+        let within_limit::Bounds @ small = bounded;
+        small
+    };                                                                        // model(failures) <= 3
     let left = 3 - failures;                                                    // the obligation of -: arithmetic, from small
-    (left, prove!(left <= 3))                                                   // arithmetic
+    (left, prove!((left as Int) <= 3))                                                   // arithmetic
 }
 
 //~ proofs: 11
-//~ run: run(0, 9) => (Lock { failures: 0, open: false }, Proved)
-//~ run: run(2, 9) => (Lock { failures: 2, open: false }, Proved)
-//~ run: run(3, 2) => (Lock { failures: 0, open: true }, Proved)
-//~ run: run(300, 9) => (Lock { failures: 3, open: false }, Proved)
-//~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
-//~ run: step(Lock { failures: 3, open: true }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
+//~ run: run(0, 9) => (Lock { failures: 0, open: false }, Erased)
+//~ run: run(2, 9) => (Lock { failures: 2, open: false }, Erased)
+//~ run: run(3, 2) => (Lock { failures: 0, open: true }, Erased)
+//~ run: run(300, 9) => (Lock { failures: 3, open: false }, Erased)
+//~ run: step(Lock { failures: 2, open: false }, Erased, Right) => (Lock { failures: 0, open: true }, Erased)
+//~ run: step(Lock { failures: 3, open: true }, Erased, Wrong) => (Lock { failures: 3, open: false }, Erased)
 //~ run: event_at(4294967295, 4294967295) => Right
-//~ run: remaining(3, Proved) => (0, Proved)
-//~ rust: let mut ok = Proved;
-//~ rust: let (next, still) = step(lock, ok, event_at(attempt, correct));
+//~ run: remaining(3, Erased) => (0, Erased)

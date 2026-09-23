@@ -1,0 +1,14 @@
+L0101: Unclosed delimiter
+
+An opening parenthesis, bracket or brace has no matching closing delimiter. The diagnostic labels the opening position as well as the recovery point. Close the original delimiter before adding punctuation to later declarations.
+
+Example from `tests/corpus/reject/unclosed_parenthesis.lc`; the full file is a regression test.
+
+```locus
+// A parenthesis that is never closed.
+fn first(n: u8) -> u8 {
+    (n
+}
+```
+
+Language, as built: [1.0:2](../../atlas.html#/doc/language/spec-1.0:2).

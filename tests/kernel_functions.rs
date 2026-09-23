@@ -51,6 +51,7 @@ fn call(id: FnId, arguments: Vec<Term>) -> Term {
 // --- The stated gate conditions ---------------------------------------------
 
 #[test]
+#[doc = "spec: 2.5:2, 2.18:4, 2.19:4"]
 fn an_explicit_unfolding_step_checks() {
     let mut definitions = Definitions::new();
     let is_three = declare_is_three(&mut definitions);
@@ -119,6 +120,7 @@ fn a_function_valued_definition_gives_equality_at_a_function_type() {
 }
 
 #[test]
+#[doc = "spec: 2.4:11"]
 fn pointwise_agreement_does_not_prove_function_equality() {
     let mut definitions = Definitions::new();
     let first = declare_successor(&mut definitions);
@@ -263,6 +265,7 @@ fn a_call_computes_by_its_defining_equation_and_literal_steps() {
 }
 
 #[test]
+#[doc = "spec: 2.5:2, 2.18:1"]
 fn a_lemma_is_a_function_returning_a_proof() {
     // math fn add_one_cong(a: u8, b: u8, h: @[a == b])
     //     -> @[a.wrapping_add(1) == b.wrapping_add(1)]
@@ -328,6 +331,7 @@ fn a_lemma_is_a_function_returning_a_proof() {
 }
 
 #[test]
+#[doc = "spec: 2.3:1, 2.4:1"]
 fn a_dependent_result_type_is_instantiated_at_the_call() {
     // math fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)])
     let mut definitions = Definitions::new();
@@ -410,6 +414,7 @@ fn functions_are_values_and_may_be_parameters() {
 }
 
 #[test]
+#[doc = "spec: 2.1:5, 2.3:1, 2.4:1, 2.4:4"]
 fn declarations_are_acyclic_and_calls_are_checked() {
     let mut definitions = Definitions::new();
     // A body can only name functions that already exist, so it cannot name
@@ -463,6 +468,7 @@ fn declarations_are_acyclic_and_calls_are_checked() {
 }
 
 #[test]
+#[doc = "spec: 2.20:1"]
 fn rewrite_replaces_every_closed_occurrence() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -494,6 +500,7 @@ fn rewrite_replaces_every_closed_occurrence() {
 }
 
 #[test]
+#[doc = "spec: 2.20:2"]
 fn unfold_and_fold_reach_calls_under_binders() {
     let mut definitions = Definitions::new();
     let is_three = declare_is_three(&mut definitions);
@@ -543,6 +550,7 @@ fn unfold_and_fold_reach_calls_under_binders() {
 }
 
 #[test]
+#[doc = "spec: 2.4:5"]
 fn a_function_that_needs_a_ghost_to_compute_has_no_runtime_form() {
     // math fn narrow(n: Int) -> u8 { wrap[u8](n) }: a fine logical function,
     // but a call to it would turn an erased number into a byte.

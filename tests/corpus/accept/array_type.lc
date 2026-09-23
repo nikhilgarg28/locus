@@ -1,0 +1,4 @@
+// An array type.
+fn first(items: [u8; 4]) -> u8 { 1 }
+
+//~ run: first([1, 2, 3, 4]) => 1

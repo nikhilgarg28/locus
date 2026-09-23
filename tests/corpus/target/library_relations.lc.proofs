@@ -1,0 +1,10 @@
+locus-proofs 1
+
+obligation f2e6b6c2be478077 contains_head 1
+refl(enum:__LocusMaybe2::1($0))
+
+obligation ac8572fed1b9aebc reachable_ordered 1
+implies_elim(axiom(cmp_reify[true], int_le_b($0, $1)), linear(int_le($0, $1), 1, [(implies_elim(axiom(cmp_reflect[true], int_eq_b($0, $1)), of_term($4)), 1)]))
+
+obligation 68e0d17a06c9f99d reachable_ordered 2
+implies_elim(axiom(cmp_reify[true], int_le_b($0, $1)), linear(int_le($0, $1), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b($0, $4)), case_proof(of_term($5), (int_le_b($0, $4) ==[bool] true), [|2, 0| of_term(#1)])), 1), (implies_elim(axiom(cmp_reflect[true], int_le_b($4, $1)), of_term($8)), 1)]))

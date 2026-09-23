@@ -69,7 +69,7 @@ impl Env<'_> {
         parameter: &ast::Parameter,
     ) -> Elab<(Written, Passing)> {
         match &parameter.ty.kind {
-            ast::TypeKind::Ref { mutable, inner } => {
+            ast::TypeKind::Ref { mutable, inner, .. } => {
                 if parameter.mutable {
                     return self.fail(
                         "L0260",
@@ -80,7 +80,14 @@ impl Env<'_> {
                         parameter.span,
                     );
                 }
-                let written = self.written(inner)?;
+                let written = if let ast::TypeKind::Slice(element) = &inner.kind {
+                    Written {
+                        ty: self.collection_type(element, inner.span)?,
+                        ghost: false,
+                    }
+                } else {
+                    self.written(inner)?
+                };
                 Ok((
                     written,
                     if *mutable {
@@ -131,6 +138,8 @@ impl Env<'_> {
                 continue;
             }
             let exit = Binder::new(&param.name, param.ty.clone());
+            self.session
+                .register_binding_layout(exit.id, self.session.binding_layout(param.id));
             let declared = self.ctx.declare_with(exit.id, exit.ty.clone(), false);
             self.kernel(declared, span)?;
             self.labels.insert(exit.id, param.name.clone());
@@ -559,5 +568,51 @@ impl Env<'_> {
         let value = Term::proj(Term::var(result), lent.len());
         let ty = self.type_of(&value, span)?;
         Ok((lends, ty))
+    }
+}
+
+impl Env<'_> {
+    pub(super) fn shared_reference(
+        &mut self,
+        inner: &ast::Expr,
+        mutable: bool,
+        span: Span,
+    ) -> Elab<Value> {
+        if mutable {
+            return self.fail(
+                "L0285",
+                "mutable references may only be lent for one call",
+                span,
+            );
+        }
+        if self.total {
+            return self.lending(|env| env.infer(inner));
+        }
+        self.require_preview(
+            crate::preview::Feature::HeapViews,
+            "stored shared references",
+            span,
+        )?;
+        if let ast::ExprKind::Subscript { value, index } = &inner.kind {
+            return self.buffer_shared_index(value, index, span);
+        }
+        let result = self.lending(|env| env.infer(inner));
+        let value = result?;
+        if self.place_of(&value.expr).is_none()
+            && !matches!(value.expr, Expr::Deref(_) | Expr::BoxDeref { .. })
+        {
+            return self.fail(
+                "L0286",
+                "a stored shared reference must borrow a local, a field, or an existing reference",
+                span,
+            );
+        }
+        Ok(Value::new(
+            Expr::Shared {
+                value: Box::new(value.expr),
+                lifetime: None,
+            },
+            value.ty,
+        ))
     }
 }

@@ -1,0 +1,52 @@
+L0116: Rust syntax outside the implemented language
+
+This spelling resembles a Rust feature that Locus does not implement. Rust-like syntax is not a promise that every Rust construct is accepted. Rewrite using an implemented construct; imports, arbitrary trait implementations and compound assignment need their own language support.
+
+Example from `tests/corpus/reject/rust_not_yet.lc`; the full file is a regression test.
+
+```locus
+// Pasted Rust either parses or is told, construct by construct, that it is
+// not in Locus yet. One construct is one error, and the rest is still read.
+#[derive(Debug)]
+pub struct Counter {
+    count: u8,
+}
+
+pub fn visible() -> u8 { 1 }
+
+use std::fmt;
+
+impl Counter {
+    fn get(&self) -> u8 { self.count }
+}
+
+impl fmt::Debug for Counter { }
+
+fn assigned(n: u8) -> u8 {
+    let mut total = n;
+    total += 1;
+    total = 2;
+    total
+}
+
+fn borrowed(n: &u8) -> u8 { *n }
+
+fn raw(n: *mut u8) -> u8 { 1 }
+
+fn looped(n: u8) -> u8 {
+    while n < 3 { };
+    let r = 0..=n;
+    return n;
+}
+
+fn lifetimes<'a>() -> u8 { 1 }
+
+fn literals() -> u8 {
+    let letter = 'x';
+    let half = 0.5;
+    let bytes = b"raw";
+    1
+}
+```
+
+Language, as built: [1.24:1](../../atlas.html#/doc/language/spec-1.24:1).

@@ -1,0 +1,8 @@
+error[L0152]: a proposition arm states its body with `=> { ... }`
+ --> tests/corpus/reject/legacy_prop_arm.lc:3:5
+  |
+3 |     Intro //~ error: L0152 states its body
+  |     ^^^^^
+  |
+  = note: declare witnesses inside the arm and supply evidence after `@` when constructing it
+  = help: write a computed proposition body

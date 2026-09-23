@@ -182,6 +182,7 @@ impl Search<'_> {
             return Some(fact.proof.clone());
         }
         if self.depth >= self.budget.depth {
+            self.spent.depth_exhausted = true;
             return None;
         }
         self.depth += 1;

@@ -1,0 +1,5 @@
+error[L0100]: a trusted declaration needs a nonempty reason string before `fn`
+ --> tests/corpus/reject/trusted_reason.lc:1:9
+  |
+1 | trusted fn invalid() -> u8 { 0 }
+  |         ^^

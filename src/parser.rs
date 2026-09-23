@@ -5,8 +5,8 @@ use crate::diagnostic::{Applicability, Diagnostic, Suggestion};
 use crate::lexer::{Literal, Token, TokenKind as K, lex};
 use crate::source::{SourceFile, Span};
 
-const MAX_DEPTH: usize = 64;
-const MAX_EXPRESSION_CHAIN: usize = 128;
+use crate::limits::MAX_EXPRESSION_CHAIN;
+use crate::limits::MAX_PARSER_DEPTH as MAX_DEPTH;
 type ParseResult<T> = Result<T, ()>;
 
 /// Rust's precedence table (the Reference, "Expression precedence"), as
@@ -16,6 +16,7 @@ type ParseResult<T> = Result<T, ()>;
 /// minimum: `right` is `left + 1` for the left-associative operators and
 /// `left` for `=>`, which is right-associative. The comparisons are not
 /// associative: a comparison whose operand is a comparison is an error.
+const EVIDENCE: u8 = 0;
 const IMPLIES: (u8, u8) = (1, 1);
 const OR: (u8, u8) = (2, 3);
 const AND: (u8, u8) = (4, 5);
@@ -35,9 +36,11 @@ const OPERAND: u8 = 21;
 /// What `Parser::operator` found after an operand.
 #[derive(Clone, Copy)]
 enum Operator {
+    Subscript,
     Call,
     Member,
     Cast,
+    Evidence,
     /// A binary operator, with the binding power of its right operand.
     Binary(BinaryOp, u8),
 }
@@ -83,7 +86,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
         in_impl: false,
         in_method: false,
         closers: None,
-        diagnostics: lexed.diagnostics,
+        diagnostics: lexed.diagnostics.into(),
     }
     .program()
 }
@@ -118,14 +121,14 @@ struct Parser<'a> {
     /// first `for` header or attribute that asks, so that the lookahead is
     /// not a rescan.
     closers: Option<Vec<Option<usize>>>,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: crate::limits::DiagnosticBuffer,
 }
 
 impl Parser<'_> {
     fn program(mut self) -> Parsed {
         let mut program = Program::default();
         self.file_header(&mut program);
-        while !self.at(K::Eof) {
+        while !self.at(K::Eof) && !self.diagnostics.overflowed() {
             self.step();
             if self.eat(K::Error).is_some() {
                 continue;
@@ -143,7 +146,7 @@ impl Parser<'_> {
             .sort_by_key(|diagnostic| diagnostic.labels[0].span.start);
         Parsed {
             program,
-            diagnostics: self.diagnostics,
+            diagnostics: self.diagnostics.into_vec(),
             stats: ParseStats {
                 tokens: self.tokens.len(),
                 steps: self.steps,
@@ -233,7 +236,7 @@ impl Parser<'_> {
                     "syntax nesting exceeds the parser limit",
                     self.current().span,
                 )
-                .note("split deeply nested expressions or types into smaller definitions"),
+                .note(format!("MAX_PARSER_DEPTH limit of {MAX_DEPTH}; split deeply nested expressions or types into smaller definitions")),
             );
             return Err(());
         }
@@ -288,7 +291,7 @@ impl Parser<'_> {
     }
 
     fn name(&mut self) -> ParseResult<Name> {
-        if self.current().kind.is_rust_keyword() {
+        if self.current().kind.is_keyword() {
             return self.keyword_as_name();
         }
         let token = self.expect(K::Name)?;
@@ -298,9 +301,7 @@ impl Parser<'_> {
         })
     }
 
-    /// `prop` is an ordinary identifier except where a declaration can
-    /// begin, and `forall` and `exists` are except before `(` inside a
-    /// formula.
+    /// `forall` and `exists` are contextual names before `(` in a formula.
     fn at_word(&self, word: &str) -> bool {
         self.at(K::Name) && self.source.slice(self.current().span) == Some(word)
     }
@@ -317,9 +318,11 @@ impl Parser<'_> {
 
     fn declaration_start(&self) -> bool {
         matches!(self.current().kind, K::Fn | K::Const | K::Struct | K::Enum)
+            || (self.at(K::Logic) && self.peek(1) == K::Fn)
+            || (self.at(K::Prop) && self.peek(1) != K::Bang)
             || self.at_keyword("pub")
             || self.at_keyword("impl")
-            || (self.at_word("prop") && self.peek(1) == K::Name)
+            || self.at_word("trusted")
     }
 
     /// A doc comment or an attribute, which begin an item as well.
@@ -397,9 +400,20 @@ impl Parser<'_> {
     /// the declaration forms. Inside an `impl` block, only a function.
     fn declaration(&mut self) -> ParseResult<Declaration> {
         let start = self.current().span;
-        let (doc, attributes) = self.outer_attributes()?;
+        let (doc, mut attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
-        if self.in_impl && !matches!(self.current().kind, K::Fn) {
+        if self.at_word("trusted") {
+            let (kind, attribute, end) = self.trusted_function()?;
+            attributes.push(attribute);
+            return Ok(Declaration {
+                doc,
+                attributes,
+                visibility,
+                kind,
+                span: start.through(end),
+            });
+        }
+        if self.in_impl && !matches!(self.current().kind, K::Fn | K::Logic) {
             return self.fail("an `impl` block holds functions: `fn`");
         }
         if !self.declaration_start() {
@@ -565,12 +579,23 @@ impl Parser<'_> {
     fn item(&mut self, visible: Option<Span>) -> ParseResult<(DeclarationKind, Span)> {
         let start = self.bump();
         match start.kind {
-            K::Fn => self.function(),
+            K::Fn => self.function(false),
+            K::Logic => {
+                self.expect(K::Fn)?;
+                self.function(true)
+            }
             K::Struct => {
                 let name = self.name()?;
-                self.no_generics()?;
+                let generics = self.generic_parameters()?;
                 let (fields, end) = self.struct_fields()?;
-                Ok((DeclarationKind::Struct { name, fields }, end.span))
+                Ok((
+                    DeclarationKind::Struct {
+                        generics,
+                        name,
+                        fields,
+                    },
+                    end.span,
+                ))
             }
             K::Enum => self.enum_declaration(),
             K::Const => {
@@ -590,9 +615,58 @@ impl Parser<'_> {
         }
     }
 
-    fn function(&mut self) -> ParseResult<(DeclarationKind, Span)> {
+    /// A checked header with a deliberately trusted native specification.
+    fn trusted_function(&mut self) -> ParseResult<(DeclarationKind, Attribute, Span)> {
+        let start = self.bump().span;
+        if !self.at(K::String) {
+            return self.fail("a trusted declaration needs a nonempty reason string before `fn`");
+        }
+        let token = self.bump();
+        let reason = self.string(token);
+        if reason.trim().is_empty() {
+            return self.fail("a trusted declaration's reason cannot be empty");
+        }
+        self.expect(K::Fn)?;
         let name = self.name()?;
-        self.no_generics()?;
+        let generics = self.generic_parameters()?;
+        let (self_param, parameters) = self.parameter_list(true, false)?;
+        self.expect(K::Arrow)?;
+        let result = self.ty()?;
+        self.expect(K::Equal)?;
+        let implementation = self.path()?;
+        let end = self
+            .semicolon(implementation.span, "trusted declaration")?
+            .span;
+        let body = Block {
+            statements: Vec::new(),
+            tail: None,
+            span: implementation.span,
+        };
+        let attribute = Attribute {
+            kind: AttributeKind::Trusted {
+                reason,
+                implementation,
+            },
+            span: start.through(end),
+        };
+        Ok((
+            DeclarationKind::Function {
+                logical: false,
+                generics,
+                name,
+                self_param,
+                parameters,
+                result,
+                body,
+            },
+            attribute,
+            end,
+        ))
+    }
+
+    fn function(&mut self, logical: bool) -> ParseResult<(DeclarationKind, Span)> {
+        let name = self.name()?;
+        let generics = self.generic_parameters()?;
         // `self` is a name in the signature and the body of a method: a
         // parameter's type or the result type may speak of it (O4).
         let method = self.in_impl && self.at(K::LParen) && self.self_param_follows();
@@ -613,6 +687,8 @@ impl Parser<'_> {
         let end = body.span;
         Ok((
             DeclarationKind::Function {
+                logical,
+                generics,
                 name,
                 self_param,
                 parameters,
@@ -637,7 +713,33 @@ impl Parser<'_> {
         if !self.at_named() {
             return self.fail("expected the type an `impl` block is for");
         }
-        let target = self.path()?;
+        let first = self.path()?;
+        let (target, model) = if first.text() == "Model" && self.at(K::Less) {
+            let opening = self.bump();
+            let source = self.ty()?;
+            self.close_angle(opening)?;
+            self.expect(K::For)?;
+            let target = self.ty()?;
+            let path = match &target.kind {
+                TypeKind::Named(name) => Path {
+                    segments: vec![name.clone()],
+                    span: name.span,
+                },
+                TypeKind::Path { path, .. } => *path.clone(),
+                _ => return self.fail("a Model destination is a named logical type"),
+            };
+            let span = first.span.through(target.span);
+            (
+                path,
+                Some(crate::ast::ModelImpl {
+                    source,
+                    target,
+                    span,
+                }),
+            )
+        } else {
+            (first, None)
+        };
         self.no_generics()?;
         if self.at(K::For) {
             self.diagnostics.push(Diagnostic::error(
@@ -653,7 +755,14 @@ impl Parser<'_> {
         self.in_impl = saved;
         let methods = methods?;
         let end = self.close(K::RBrace, opening)?;
-        Ok((DeclarationKind::Impl { target, methods }, end.span))
+        Ok((
+            DeclarationKind::Impl {
+                model,
+                target,
+                methods,
+            },
+            end.span,
+        ))
     }
 
     /// The methods of an `impl` block, each recovered on its own.
@@ -674,6 +783,65 @@ impl Parser<'_> {
         Ok(methods)
     }
 
+    #[inline(never)]
+    fn generic_parameters(&mut self) -> ParseResult<Vec<GenericParameter>> {
+        let Some(opening) = self.eat(K::Less) else {
+            return Ok(Vec::new());
+        };
+        let mut parameters = Vec::new();
+        // Preserve a focused declaration error for an invalid generic token.
+        if self.at(K::Error) {
+            self.diagnostics.push(Diagnostic::error(
+                "L0116",
+                "generic parameters are not in Locus yet",
+                opening.span,
+            ));
+            return Err(());
+        }
+        if self.at_angle_close() {
+            return self.fail("a generic parameter list cannot be empty");
+        }
+        while !self.at_angle_close() && !self.at(K::Eof) {
+            self.step();
+            let lifetime = self.at(K::Lifetime);
+            let name = if lifetime {
+                self.lifetime_name()?
+            } else {
+                self.name()?
+            };
+            let mut end = name.span;
+            let mut bounds = Vec::new();
+            if self.eat(K::Colon).is_some() {
+                if lifetime {
+                    return self.fail("lifetime bounds are not supported yet");
+                }
+                loop {
+                    self.step();
+                    if !self.at_named() {
+                        return self.fail("expected a generic bound such as `Logical`");
+                    }
+                    let bound = self.path()?;
+                    end = bound.span;
+                    bounds.push(bound);
+                    if self.eat(K::Plus).is_none() {
+                        break;
+                    }
+                }
+            }
+            parameters.push(GenericParameter {
+                lifetime,
+                span: name.span.through(end),
+                name,
+                bounds,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        self.close_angle(opening)?;
+        Ok(parameters)
+    }
+
     /// `<` after the name an item declares.
     fn no_generics(&mut self) -> ParseResult<()> {
         if self.at(K::Less) {
@@ -690,7 +858,7 @@ impl Parser<'_> {
     #[inline(never)]
     fn enum_declaration(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
-        self.no_generics()?;
+        let generics = self.generic_parameters()?;
         let opening = self.expect(K::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(K::RBrace) && !self.at(K::Eof) {
@@ -713,11 +881,19 @@ impl Parser<'_> {
             }
         }
         let end = self.close(K::RBrace, opening)?;
-        Ok((DeclarationKind::Enum { name, variants }, end.span))
+        Ok((
+            DeclarationKind::Enum {
+                generics,
+                name,
+                variants,
+            },
+            end.span,
+        ))
     }
 
     fn prop(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
+        let generics = self.generic_parameters()?;
         let parameters = if self.at(K::LParen) {
             self.parameters()?
         } else {
@@ -741,6 +917,14 @@ impl Parser<'_> {
             } else {
                 None
             };
+            let body = if self.eat(K::Implies).is_some() {
+                let body = self.block()?;
+                end = body.span;
+                Some(body)
+            } else {
+                None
+            };
+            let has_body = body.is_some();
             variants.push(PropVariant {
                 span: name.span.through(end),
                 doc,
@@ -748,14 +932,16 @@ impl Parser<'_> {
                 shape,
                 fields,
                 target,
+                body,
             });
-            if self.eat(K::Comma).is_none() {
+            if self.eat(K::Comma).is_none() && !has_body {
                 break;
             }
         }
         let end = self.close(K::RBrace, opening)?;
         Ok((
             DeclarationKind::Prop {
+                generics,
                 name,
                 parameters,
                 variants,
@@ -967,6 +1153,7 @@ impl Parser<'_> {
         let start = self.current();
         match start.kind {
             K::Fn => self.function_type(start),
+            K::Logic => self.logical_function_type(),
             K::Name | K::Keyword if self.at_named() => self.named_type(false),
             K::At => {
                 self.bump();
@@ -977,7 +1164,7 @@ impl Parser<'_> {
                 })
             }
             K::Hash => self.hash_syntax(),
-            K::LBracket => self.no_arrays("array and slice types", start.span),
+            K::LBracket => self.collection_type(),
             K::And | K::AndAnd => self.reference_type(),
             K::Bang => {
                 self.bump();
@@ -1043,7 +1230,7 @@ impl Parser<'_> {
     #[inline(never)]
     fn named_type(&mut self, after_as: bool) -> ParseResult<Type> {
         let mut path = self.path()?;
-        if after_as || !self.at(K::Less) {
+        if !self.at(K::Less) || (after_as && !self.cast_type_arguments_follow()?) {
             return Ok(match path.single() {
                 Some(_) => Type {
                     span: path.span,
@@ -1062,7 +1249,7 @@ impl Parser<'_> {
         let mut arguments = Vec::new();
         while !self.at_angle_close() && !self.at(K::Eof) {
             self.step();
-            arguments.push(self.ty()?);
+            arguments.push(self.type_argument()?);
             if self.eat(K::Comma).is_none() {
                 break;
             }
@@ -1077,19 +1264,85 @@ impl Parser<'_> {
         })
     }
 
-    /// `&T` or `&mut T`. The lexer reads `&&` as one token, so `&&T` is a
-    /// reference to a reference, as it is in Rust.
+    // A closed generic argument list after a cast is a type application.
+    // Without a closing angle before the next delimiter, `<` is comparison,
+    // preserving `x as Int < 3`. Lookahead is bounded by parser's chain limit.
+    fn cast_type_arguments_follow(&mut self) -> ParseResult<bool> {
+        let mut angles = 0usize;
+        for (index, token) in self
+            .tokens
+            .iter()
+            .skip(self.position)
+            .take(MAX_EXPRESSION_CHAIN + 1)
+            .enumerate()
+        {
+            if index == MAX_EXPRESSION_CHAIN {
+                return self.chain_limit();
+            }
+            match token.kind {
+                K::Less => angles += 1,
+                K::Greater => {
+                    angles = angles.saturating_sub(1);
+                    if angles == 0 {
+                        return Ok(true);
+                    }
+                }
+                K::ShiftRight => {
+                    angles = angles.saturating_sub(2);
+                    if angles == 0 {
+                        return Ok(true);
+                    }
+                }
+                K::Eof | K::Semicolon | K::Equal | K::LBrace | K::RBrace => return Ok(false),
+                _ => {}
+            }
+        }
+        Ok(false)
+    }
+
+    fn lifetime_name(&mut self) -> ParseResult<Name> {
+        let token = self.expect(K::Lifetime)?;
+        Ok(Name {
+            text: self.source.slice(token.span).unwrap_or_default().into(),
+            span: token.span,
+        })
+    }
+
+    fn type_argument(&mut self) -> ParseResult<Type> {
+        if self.at(K::Lifetime) {
+            let name = self.lifetime_name()?;
+            Ok(Type {
+                span: name.span,
+                kind: TypeKind::Lifetime(name),
+            })
+        } else {
+            self.ty()
+        }
+    }
+
+    /// `&'a T` or `&'a mut T`; elided lifetimes remain absent in the AST.
     #[inline(never)]
     fn reference_type(&mut self) -> ParseResult<Type> {
         let start = self.bump();
+        let lifetime = if start.kind == K::And && self.at(K::Lifetime) {
+            Some(self.lifetime_name()?)
+        } else {
+            None
+        };
         let mutable = start.kind == K::And && self.eat(K::Mut).is_some();
         let inner = if start.kind == K::AndAnd {
             let span = Span::new(start.span.file, start.span.start + 1, start.span.end);
+            let lifetime = if self.at(K::Lifetime) {
+                Some(self.lifetime_name()?)
+            } else {
+                None
+            };
             let mutable = self.eat(K::Mut).is_some();
             let inner = self.ty()?;
             Type {
                 span: span.through(inner.span),
                 kind: TypeKind::Ref {
+                    lifetime,
                     mutable,
                     inner: Box::new(inner),
                 },
@@ -1100,6 +1353,7 @@ impl Parser<'_> {
         Ok(Type {
             span: start.span.through(inner.span),
             kind: TypeKind::Ref {
+                lifetime,
                 mutable,
                 inner: Box::new(inner),
             },
@@ -1143,7 +1397,7 @@ impl Parser<'_> {
 
     #[inline(never)]
     fn no_type<T>(&mut self) -> ParseResult<T> {
-        if self.current().kind.is_rust_keyword() {
+        if self.current().kind.is_keyword() {
             return self.keyword_as_name();
         }
         if self.at_doc_comment() {
@@ -1193,19 +1447,47 @@ impl Parser<'_> {
         })
     }
 
-    /// Brackets are Rust's arrays, which Locus does not have yet.
-    fn no_arrays<T>(&mut self, what: &str, span: Span) -> ParseResult<T> {
-        self.diagnostics.push(Diagnostic::error(
-            "L0116",
-            format!("{what} are not in Locus yet"),
-            span,
-        ));
-        Err(())
+    /// The capitalized `Fn` is a name, not the `fn` item keyword.
+    #[inline(never)]
+    fn logical_function_type(&mut self) -> ParseResult<Type> {
+        let start = self.expect(K::Logic)?;
+        if !self.at_word("Fn") {
+            return self.fail("expected `Fn` after `logic` in a callable type");
+        }
+        self.bump();
+        let (parameters, _) = self.type_fields()?;
+        self.expect(K::Arrow)?;
+        let result = self.ty()?;
+        Ok(Type {
+            span: start.span.through(result.span),
+            kind: TypeKind::LogicalFunction {
+                parameters,
+                result: Box::new(result),
+            },
+        })
+    }
+
+    fn collection_type(&mut self) -> ParseResult<Type> {
+        let start = self.expect(K::LBracket)?;
+        let element = Box::new(self.ty()?);
+        let kind = if self.eat(K::Semicolon).is_some() {
+            TypeKind::Array {
+                element,
+                length: Box::new(self.expression()?),
+            }
+        } else {
+            TypeKind::Slice(element)
+        };
+        let end = self.close(K::RBracket, start)?;
+        Ok(Type {
+            kind,
+            span: start.span.through(end.span),
+        })
     }
 
     /// A keyword before `:` was meant as a name, and `name` says so.
     fn at_name_or_keyword(&self) -> bool {
-        self.at(K::Name) || self.current().kind.is_rust_keyword()
+        self.at(K::Name) || self.current().kind.is_keyword()
     }
 
     fn type_field(&mut self) -> ParseResult<TypeField> {
@@ -1226,7 +1508,42 @@ impl Parser<'_> {
     }
 
     fn pattern(&mut self) -> ParseResult<Pattern> {
-        self.nested(Self::pattern_inner)
+        self.nested(Self::pattern_with_at)
+    }
+
+    #[inline(never)]
+    fn pattern_with_at(&mut self) -> ParseResult<Pattern> {
+        let left = self.pattern_inner()?;
+        let Some(at) = self.eat(K::At) else {
+            return Ok(left);
+        };
+        let right = self.nested(Self::pattern_inner)?;
+        if self.at(K::At) {
+            return self.chained_at(at.span);
+        }
+        let span = left.span.through(right.span);
+        let kind = match left.kind {
+            PatternKind::Name { name, mutable } => PatternKind::Binding {
+                name,
+                mutable,
+                pattern: Box::new(right),
+                at_span: at.span,
+            },
+            PatternKind::Variant { .. } | PatternKind::Struct { .. } => PatternKind::Evidence {
+                constructor: Box::new(left),
+                evidence: Box::new(right),
+                at_span: at.span,
+            },
+            _ => {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0151",
+                    "the left of `@` must be a binding name or a proposition constructor",
+                    left.span,
+                ));
+                return Err(());
+            }
+        };
+        Ok(Pattern { kind, span })
     }
 
     fn pattern_inner(&mut self) -> ParseResult<Pattern> {
@@ -1296,7 +1613,7 @@ impl Parser<'_> {
             // The second `mut` was meant as the name.
             return self.mut_pattern();
         }
-        if self.at(K::Name) || self.current().kind.is_rust_keyword() {
+        if self.at(K::Name) || self.current().kind.is_keyword() {
             let name = self.name()?;
             return Ok(Pattern {
                 span: start.span.through(name.span),
@@ -1337,7 +1654,7 @@ impl Parser<'_> {
 
     #[inline(never)]
     fn no_pattern<T>(&mut self) -> ParseResult<T> {
-        if self.current().kind.is_rust_keyword() {
+        if self.current().kind.is_keyword() {
             return self.keyword_as_name();
         }
         if self.at_doc_comment() {
@@ -1443,7 +1760,8 @@ impl Parser<'_> {
         let first = self.first_segment()?;
         let mut span = first.span;
         let mut segments = vec![first];
-        while self.eat(K::PathSep).is_some() {
+        while self.at(K::PathSep) && self.peek(1) != K::Less {
+            self.bump();
             self.step();
             let segment = self.name()?;
             span = span.through(segment.span);
@@ -1685,8 +2003,10 @@ impl Parser<'_> {
         }
         match kind {
             K::LParen if minimum <= OPERAND => return Ok(Some(Operator::Call)),
+            K::LBracket if minimum <= OPERAND => return Ok(Some(Operator::Subscript)),
             K::Dot if minimum <= OPERAND => return Ok(Some(Operator::Member)),
             K::As => return Ok((CAST >= minimum).then_some(Operator::Cast)),
+            K::At => return Ok((minimum == EVIDENCE).then_some(Operator::Evidence)),
             // After a whole expression, `=` can only be an assignment, whose
             // place the statement has just read. After an operand it may end
             // the proposition of a proof type, as in `bounded:
@@ -1718,10 +2038,40 @@ impl Parser<'_> {
     fn extend(&mut self, left: Expr, operator: Operator) -> ParseResult<Expr> {
         match operator {
             Operator::Call => self.call(left),
+            Operator::Subscript => self.subscript(left),
             Operator::Member => self.member(left),
             Operator::Cast => self.cast(left),
+            Operator::Evidence => self.evidence(left),
             Operator::Binary(operator, right_bp) => self.binary(left, operator, right_bp),
         }
+    }
+
+    #[inline(never)]
+    fn evidence(&mut self, constructor: Expr) -> ParseResult<Expr> {
+        let at = self.expect(K::At)?;
+        if matches!(constructor.kind, ExprKind::Evidence { .. }) {
+            return self.chained_at(at.span);
+        }
+        let evidence = self.expression_bp(EVIDENCE + 1)?;
+        if self.at(K::At) {
+            return self.chained_at(at.span);
+        }
+        Ok(Expr {
+            span: constructor.span.through(evidence.span),
+            kind: ExprKind::Evidence {
+                constructor: Box::new(constructor),
+                evidence: Box::new(evidence),
+                at_span: at.span,
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn chained_at<T>(&mut self, first: Span) -> ParseResult<T> {
+        self.diagnostics.push(Diagnostic::error("L0150", "`@` cannot be chained without parentheses", self.current().span)
+            .label(first, "the first `@` is here")
+            .note("parenthesize the nested construction or pattern, as in `Outer::Arm @ (Inner::Arm @ h)` or `whole @ (Pred::Arm @ h)`"));
+        Err(())
     }
 
     /// L0119: `=>` or a quantifier where no formula is being read.
@@ -1742,7 +2092,7 @@ impl Parser<'_> {
                 "expression chain exceeds the parser limit",
                 self.current().span,
             )
-            .note("split this expression using local bindings"),
+            .note(format!("MAX_EXPRESSION_CHAIN limit of {MAX_EXPRESSION_CHAIN}; split this expression using local bindings")),
         );
         Err(())
     }
@@ -1760,6 +2110,7 @@ impl Parser<'_> {
         Ok(Expr {
             span: expr.span.through(ty.span),
             kind: ExprKind::Cast {
+                source_hint: None,
                 expr: Box::new(expr),
                 as_span: token.span,
                 ty,
@@ -1838,26 +2189,20 @@ impl Parser<'_> {
 
     fn prefix(&mut self) -> ParseResult<Expr> {
         match self.current().kind {
-            K::Name if self.at_form() => self.form(),
+            K::Name | K::Prop if self.at_form() => self.form(),
+            K::Logic => self.logic_expression(),
+            K::Or | K::OrOr => self.closure_expression(),
             K::Name if self.at_quantifier() => self.quantifier(),
             K::Name | K::Keyword if self.at_named() => self.named(),
             K::Keyword if self.at_keyword("self") => self.self_expression(),
-            K::Star if self.in_method && self.at_star_self() => self.deref_self(),
+            K::Star => self.dereference(),
             K::Integer | K::String | K::True | K::False | K::Underscore | K::Error => self.atom(),
             K::OuterDoc | K::InnerDoc => self.misplaced_doc_comment(),
             K::Bang => self.not(),
             K::Minus => self.negate(),
             K::And | K::AndAnd => self.reference(),
             K::LParen => self.parenthesized(),
-            K::LBracket => {
-                // The whole literal, when its `]` is there.
-                let start = self.current().span;
-                let span = match self.closer_of(self.position) {
-                    Some(closer) => start.through(self.tokens[closer].span),
-                    None => start,
-                };
-                self.no_arrays("arrays", span)
-            }
+            K::LBracket => self.array_expression(),
             K::LBrace => self.block_expression(),
             K::If => self.if_expression(),
             K::Match => self.match_expression(),
@@ -1871,6 +2216,68 @@ impl Parser<'_> {
             K::Hash => self.hash_syntax(),
             _ => self.fail("expected an expression"),
         }
+    }
+
+    fn array_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::LBracket)?;
+        let mut elements = Vec::new();
+        while !self.at(K::RBracket) && !self.at(K::Eof) {
+            self.step();
+            elements.push(self.expression()?);
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        let end = self.close(K::RBracket, start)?;
+        Ok(Expr {
+            kind: ExprKind::Array(elements),
+            span: start.span.through(end.span),
+        })
+    }
+
+    fn subscript(&mut self, value: Expr) -> ParseResult<Expr> {
+        let start = self.expect(K::LBracket)?;
+        let index = self.expression()?;
+        let end = self.close(K::RBracket, start)?;
+        Ok(Expr {
+            span: value.span.through(end.span),
+            kind: ExprKind::Subscript {
+                value: Box::new(value),
+                index: Box::new(index),
+            },
+        })
+    }
+
+    #[inline(never)]
+    fn closure_expression(&mut self) -> ParseResult<Expr> {
+        let opening = self.bump();
+        let mut parameters = Vec::new();
+        if opening.kind == K::Or {
+            while !self.at(K::Or) && !self.at(K::Eof) {
+                self.step();
+                let name = self.name()?;
+                self.expect(K::Colon)?;
+                let ty = self.ty()?;
+                parameters.push(Parameter {
+                    mutable: false,
+                    span: name.span.through(ty.span),
+                    name,
+                    ty,
+                });
+                if self.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            self.expect(K::Or)?;
+        }
+        let body = self.unrestricted(Self::expression)?;
+        Ok(Expr {
+            span: opening.span.through(body.span),
+            kind: ExprKind::Closure {
+                parameters,
+                body: Box::new(body),
+            },
+        })
     }
 
     /// `name!(...)`: a built-in form, whose name is one of a closed list.
@@ -1957,15 +2364,52 @@ impl Parser<'_> {
     #[inline(never)]
     fn named(&mut self) -> ParseResult<Expr> {
         let mut path = self.path()?;
-        if self.at(K::LBrace) && !self.no_struct {
-            return self.struct_literal(path);
-        }
-        Ok(Expr {
-            span: path.span,
-            kind: match path.single() {
-                Some(_) => ExprKind::Name(path.segments.pop().expect("one segment")),
-                None => ExprKind::Path(Box::new(path)),
+        let arguments = if self.at(K::PathSep) && self.peek(1) == K::Less {
+            self.bump();
+            let opening = self.expect(K::Less)?;
+            let mut arguments = Vec::new();
+            if self.at_angle_close() {
+                return self.fail("a type argument list cannot be empty");
+            }
+            while !self.at_angle_close() && !self.at(K::Eof) {
+                self.step();
+                arguments.push(self.type_argument()?);
+                if self.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            let end = self.close_angle(opening)?;
+            path.span = path.span.through(end);
+            while self.eat(K::PathSep).is_some() {
+                self.step();
+                let segment = self.name()?;
+                path.span = path.span.through(segment.span);
+                path.segments.push(segment);
+            }
+            Some(arguments)
+        } else {
+            None
+        };
+        let callee = if self.at(K::LBrace) && !self.no_struct {
+            self.struct_literal(path)?
+        } else {
+            Expr {
+                span: path.span,
+                kind: match path.single() {
+                    Some(_) => ExprKind::Name(path.segments.pop().expect("one segment")),
+                    None => ExprKind::Path(Box::new(path)),
+                },
+            }
+        };
+        Ok(match arguments {
+            Some(arguments) => Expr {
+                span: callee.span,
+                kind: ExprKind::GenericApply {
+                    callee: Box::new(callee),
+                    arguments,
+                },
             },
+            None => callee,
         })
     }
 
@@ -2047,20 +2491,9 @@ impl Parser<'_> {
         })
     }
 
-    /// `*` directly before `self`, in a method.
-    fn at_star_self(&self) -> bool {
-        self.tokens.get(self.position + 1).is_some_and(|token| {
-            token.kind == K::Keyword && self.source.slice(token.span) == Some("self")
-        }) && self.peek(2) != K::PathSep
-    }
-
-    /// `*self`: the value behind the reference receiver of a method (O4).
-    /// The operand is read as an operand of a prefix operator, so that
-    /// `*self.f` is `*(self.f)` as it is in Rust, which the elaborator
-    /// then refuses. `*` before anything but `self` is still reported as
-    /// not in Locus yet.
+    /// Prefix dereference; the type checker determines the referent and permissions.
     #[inline(never)]
-    fn deref_self(&mut self) -> ParseResult<Expr> {
+    fn dereference(&mut self) -> ParseResult<Expr> {
         let start = self.bump();
         let value = self.expression_bp(OPERAND)?;
         Ok(Expr {
@@ -2094,6 +2527,16 @@ impl Parser<'_> {
         Ok(Expr {
             span: block.span,
             kind: ExprKind::Block(block),
+        })
+    }
+
+    #[inline(never)]
+    fn logic_expression(&mut self) -> ParseResult<Expr> {
+        let start = self.expect(K::Logic)?;
+        let block = self.block()?;
+        Ok(Expr {
+            span: start.span.through(block.span),
+            kind: ExprKind::Logic(block),
         })
     }
 
@@ -2734,7 +3177,9 @@ fn is_place(expr: &Expr) -> bool {
             expr: inner,
             ..
         } => matches!(inner.kind, ExprKind::Name(_)),
-        ExprKind::Member { value, .. } | ExprKind::Index { value, .. } => is_place(value),
+        ExprKind::Member { value, .. }
+        | ExprKind::Index { value, .. }
+        | ExprKind::Subscript { value, .. } => is_place(value),
         _ => false,
     }
 }
@@ -2765,10 +3210,21 @@ fn matching_delimiters(tokens: &[Token]) -> Vec<Option<usize>> {
 fn keyword_is_no_name(keyword: &str, span: Span) -> Diagnostic {
     Diagnostic::error(
         "L0115",
-        format!("`{keyword}` is a Rust keyword and cannot be used as a name"),
+        format!(
+            "`{keyword}` is a {} keyword and cannot be used as a name",
+            if matches!(keyword, "prop" | "logic") {
+                "Locus"
+            } else {
+                "Rust"
+            }
+        ),
         span,
     )
-    .note("Locus reserves every keyword of Rust, whether or not it uses it yet")
+    .note(if matches!(keyword, "prop" | "logic") {
+        "Locus reserves `prop` and `logic` in addition to every keyword of Rust"
+    } else {
+        "Locus reserves every keyword of Rust, whether or not it uses it yet"
+    })
     .suggest(Suggestion {
         message: format!("rename it, for example to `{keyword}_`"),
         span,
@@ -2856,4 +3312,68 @@ fn binary(kind: K) -> Option<(BinaryOp, (u8, u8))> {
         K::Percent => (BinaryOp::Rem, PRODUCT),
         _ => return None,
     })
+}
+
+/// A migration diagnostic for a legacy proposition arm. The parser retains
+/// legacy syntax while the named-proposition preview is being reconciled;
+/// the elaborator calls this when that preview is active. Only replacements
+/// whose body follows mechanically from the old syntax are offered as fixes.
+pub fn legacy_prop_migration(arm: &PropVariant, source: &SourceFile) -> Diagnostic {
+    let diagnostic = Diagnostic::error(
+        "L0152",
+        "a proposition arm states its body with `=> { ... }`",
+        arm.span,
+    )
+    .note("declare witnesses inside the arm and supply evidence after `@` when constructing it");
+    let text = |span| source.slice(span).unwrap_or_default();
+    let replacement = if arm.fields.is_empty() {
+        match &arm.target {
+            Some(target) if !matches!(target.kind, ExprKind::Call { .. }) => Some(format!(
+                "{} => {{ prop!({}) }}",
+                arm.name.text,
+                text(target.span)
+            )),
+            None => Some(format!("{} => {{ prop!(true) }}", arm.name.text)),
+            _ => None,
+        }
+    } else if arm.target.is_none() {
+        // Proof fields become the one computed arm body; other fields remain
+        // witnesses. A body depending on a proof binding needs a manual edit.
+        let mut witnesses = Vec::new();
+        let mut claims = Vec::new();
+        for (index, field) in arm.fields.iter().enumerate() {
+            match &field.ty.kind {
+                TypeKind::Proof(claim) => claims.push(format!("({})", text(claim.span))),
+                _ => witnesses.push(match &field.name {
+                    Some(_) => text(field.span).to_owned(),
+                    None => format!("witness_{index}: {}", text(field.ty.span)),
+                }),
+            }
+        }
+        let witness_text = match arm.shape {
+            VariantShape::Unit => String::new(),
+            VariantShape::Tuple => format!("({})", witnesses.join(", ")),
+            VariantShape::Struct => format!(" {{ {} }}", witnesses.join(", ")),
+        };
+        let body = if claims.is_empty() {
+            "true".to_owned()
+        } else {
+            claims.join(" && ")
+        };
+        Some(format!(
+            "{}{witness_text} => {{ prop!({body}) }}",
+            arm.name.text
+        ))
+    } else {
+        None
+    };
+    match replacement {
+        Some(replacement) => diagnostic.suggest(Suggestion {
+            message: "write a computed proposition body".into(),
+            span: arm.span,
+            replacement,
+            applicability: Applicability::MaybeIncorrect,
+        }),
+        None => diagnostic.note("an explicitly indexed conclusion needs a manual rewrite into witness conditions in the arm body"),
+    }
 }

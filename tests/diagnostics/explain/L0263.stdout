@@ -1,0 +1,19 @@
+L0263: Overlapping call borrows
+
+Arguments lend overlapping storage with incompatible permissions, such as two mutable borrows of the same field or an owner and its subfield. Use disjoint places or split the calls so the first loan ends before the next begins.
+
+Example from `tests/corpus/reject/overlapping_arguments.lc`; the full file is a regression test.
+
+```locus
+fn lend_then_move(a: &Token, b: Token) -> u8 {
+    a.id.wrapping_add(b.id)
+}
+
+fn twice_mutable(pair: Pair) -> Pair {
+    let mut copy = pair;
+    settle(&mut copy.lo, &mut copy.lo);
+    copy
+}
+```
+
+Language, as built: [1.13:1](../../atlas.html#/doc/language/spec-1.13:1).

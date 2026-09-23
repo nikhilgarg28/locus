@@ -1,0 +1,3 @@
+trusted "same native item, incorrect runtime type"
+fn wrong(xs: &Vec<u8>) -> (out: u8, @(out == 0)) = Vec::len;
+//~^ error: L0287 foreign result must preserve

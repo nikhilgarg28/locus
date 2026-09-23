@@ -77,6 +77,7 @@ fn count_up(theory: &Theory, n: Term) -> Term {
 // --- The stated gate conditions ---------------------------------------------
 
 #[test]
+#[doc = "spec: 2.9:1, 2.9:10, 2.9:2, 2.9:4"]
 fn the_bounded_count_example_checks_with_index_dependent_state() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::clone(&definitions));
@@ -211,6 +212,7 @@ fn an_empty_range_is_its_initial_state() {
 }
 
 #[test]
+#[doc = "spec: 2.9:5"]
 fn reversed_bounds_are_rejected_for_want_of_evidence() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(definitions);
@@ -364,6 +366,7 @@ fn iteration_nests_and_an_inner_state_may_mention_the_outer_index() {
 // --- Ghost rules and comparison ---------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.9:3"]
 fn an_executable_loop_cannot_take_its_bounds_or_state_from_ghosts() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(definitions);
@@ -410,6 +413,7 @@ fn an_executable_loop_cannot_take_its_bounds_or_state_from_ghosts() {
 }
 
 #[test]
+#[doc = "spec: 2.9:6"]
 fn the_ordering_proof_is_irrelevant_to_comparison() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(definitions);

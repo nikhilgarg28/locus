@@ -4,7 +4,7 @@
 // words `forall` and `exists` are names outside a formula.
 
 #[terminates] #[no_panic] #[no_io]
-fn nonzero(x: u8) -> Prop {
+logic fn nonzero(x: Int) -> Prop {
     prop!(x != 0)
 }
 
@@ -41,15 +41,16 @@ fn exists(forall: u8, prove: u8) -> u8 {
     def.wrapping_add(prove)
 }
 
-const general: Prop = prop!(forall (x: u8) { x <= 9 => prop!(exists (y: u8) { x < y }) });
+const general: Prop = prop!(forall (x: Int) { x <= 9 => prop!(exists (y: Int) { x < y }) });
 
 // Two `prove!` in `bump`, two in `named`; each counts as one proof.
-//~ proofs: 4
-//~ run: bump(9, Proved) => (10, Proved)
-//~ run: bump(0, Proved) => (1, Proved)
-//~ run: named(0) => (1, Proved)
-//~ run: named(7) => (7, Proved)
+//~ proofs: 5
+//~ run: bump(9, Erased) => (10, Erased)
+//~ run: bump(0, Erased) => (1, Erased)
+//~ run: named(0) => (1, Erased)
+//~ run: named(7) => (7, Erased)
 //~ run: exists(2, 3) => 5
-//~ rust: fn bump(n: u8, small: Proved) -> (u8, Proved) {
-//~ rust: (out, Proved)
+//~ rust: fn bump(n: u8, _small: Erased) -> (u8, Erased) {
+//~ rust: (out, Erased)
 //~ rust: fn exists(forall: u8, prove: u8) -> u8 {
+//~ spec: 1.7:3

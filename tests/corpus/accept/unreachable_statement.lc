@@ -42,3 +42,4 @@ fn after_panic(n: u8) -> u8 {
 //~ run: after_panic(0) => panic: zero
 //~ run: after_panic(1) => panic: not yet implemented
 //~ rust: fn after_return(n: u8) -> u8 {
+//~ spec: 1.10:2

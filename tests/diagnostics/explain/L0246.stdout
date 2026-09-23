@@ -1,0 +1,20 @@
+L0246: Tracked evidence invalidated by mutation
+
+This evidence is tied to the current generation of a mutable binding. A write changed the generation and the required proof was not re-established before use or a control-flow edge. Refresh the tracked proof after the write; an ordinary snapshot proof still describes its historical value.
+
+Example from `tests/corpus/reject/tracked_loop_edges.lc`; the full file is a regression test.
+
+```locus
+if n == 10 {
+            break;
+        } else {
+        }
+        let (m, still) = advance(n, ok);
+        n = m;
+        if n == 5 {
+            continue;
+        } else {
+        }
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

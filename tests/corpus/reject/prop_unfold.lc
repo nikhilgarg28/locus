@@ -1,0 +1,4 @@
+prop P { Yes => { prop!(true) } }
+fn bad(h: @P) -> @(true) {
+    unfold!(P, h) //~ error: L0277 opened by matching
+}

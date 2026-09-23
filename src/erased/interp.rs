@@ -38,6 +38,7 @@ use super::tree::{EBlock, EExpr, EPattern, EPlace, EStmt, Module};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
+    Buffer(Vec<Value>),
     Bool(bool),
     /// A machine integer with its type. An `i128` holds every value of
     /// every type up to 64 bits; the value is always within its type's
@@ -122,7 +123,11 @@ pub enum RunError {
 impl fmt::Display for RunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TooDeep => f.write_str("calls nested too deeply"),
+            Self::TooDeep => write!(
+                f,
+                "MAX_INTERPRETER_CALL_DEPTH limit of {} was exceeded",
+                crate::limits::MAX_INTERPRETER_CALL_DEPTH
+            ),
             Self::Trap => f.write_str("reached a trap"),
             Self::Stuck(why) => write!(f, "stuck: {why}"),
         }
@@ -176,7 +181,7 @@ enum Flow {
     Continue,
 }
 
-const MAX_CALL_DEPTH: usize = 200;
+use crate::limits::MAX_INTERPRETER_CALL_DEPTH as MAX_CALL_DEPTH;
 
 pub struct Interpreter<'m> {
     module: &'m Module,
@@ -437,6 +442,35 @@ impl<'m> Interpreter<'m> {
                 }
                 _ => return stuck("an assertion of something that is not a bool"),
             },
+            EExpr::BoxNew(value) => Value::Tuple(vec![value!(self.expr(value))]),
+            EExpr::BoxDeref(value) => match value!(self.expr(value)) {
+                Value::Tuple(mut fields) if fields.len() == 1 => fields.remove(0),
+                _ => return stuck("box dereference expects an owned box"),
+            },
+            EExpr::Shared { value, .. } | EExpr::Deref(value) => value!(self.expr(value)),
+            EExpr::Buffer { op, arguments, .. } => {
+                let values = match self.all(arguments)? {
+                    Ok(values) => values,
+                    Err(flow) => return Ok(flow),
+                };
+                let result = buffer_operation(*op, &values)?;
+                if matches!(
+                    op,
+                    crate::kernel::BufferOp::Set | crate::kernel::BufferOp::Push
+                ) {
+                    let Some(EExpr::Lend {
+                        mutable: true,
+                        place,
+                    }) = arguments.first()
+                    else {
+                        return stuck("buffer mutation without mutable receiver");
+                    };
+                    self.assign(place, result)?;
+                    Value::Tuple(Vec::new())
+                } else {
+                    result
+                }
+            }
             EExpr::Tuple(fields) => match self.all(fields)? {
                 Ok(values) => Value::Tuple(values),
                 Err(flow) => return Ok(flow),
@@ -731,4 +765,57 @@ pub(crate) fn compare(op: CompareOp, left: Value, right: Value) -> Result<bool, 
         _ => return stuck("a comparison of values that have none"),
     };
     Ok(result != negate)
+}
+
+/// Native contents operations, separate from logical Buffer term evaluation.
+pub(crate) fn buffer_operation(
+    op: crate::kernel::BufferOp,
+    arguments: &[Value],
+) -> Result<Value, Stop> {
+    use crate::kernel::BufferOp;
+    if op == BufferOp::Literal {
+        return Ok(Value::Buffer(arguments.to_vec()));
+    }
+    let Some(Value::Buffer(items)) = arguments.first() else {
+        return stuck("collection operation needs a buffer");
+    };
+    match op {
+        BufferOp::Length => Ok(Value::Int(MachineInt::U64, items.len() as i128)),
+        BufferOp::Get | BufferOp::Set => {
+            let Some(Value::Int(MachineInt::U64, index)) = arguments.get(1) else {
+                return stuck("collection index is not u64");
+            };
+            let index = usize::try_from(*index).map_err(|_| Stop::Panic {
+                message: "index out of bounds".into(),
+                lent: Vec::new(),
+            })?;
+            if index >= items.len() {
+                return Err(Stop::Panic {
+                    message: "index out of bounds".into(),
+                    lent: Vec::new(),
+                });
+            }
+            if op == BufferOp::Get {
+                Ok(items[index].clone())
+            } else {
+                let mut updated = items.clone();
+                updated[index] = arguments
+                    .get(2)
+                    .ok_or_else(|| Stop::from(RunError::Stuck("missing collection value".into())))?
+                    .clone();
+                Ok(Value::Buffer(updated))
+            }
+        }
+        BufferOp::Push => {
+            let mut updated = items.clone();
+            updated.push(
+                arguments
+                    .get(1)
+                    .ok_or_else(|| Stop::from(RunError::Stuck("missing pushed value".into())))?
+                    .clone(),
+            );
+            Ok(Value::Buffer(updated))
+        }
+        BufferOp::Literal => unreachable!(),
+    }
 }

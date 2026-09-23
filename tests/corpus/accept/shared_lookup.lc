@@ -1,0 +1,11 @@
+// The returned reference borrows the element; the element need not be Copy.
+struct Item { value: u8 }
+fn head<'a>(items: &'a [Item], present: @(0 < items.len())) -> &'a Item {
+    &items[0]
+}
+fn run() -> u8 {
+    let items: [Item; 1] = [Item { value: 31 }];
+    let item = head(&items, prove!(0 < items.len()));
+    item.value
+}
+//~ run: run() => 31

@@ -14,3 +14,4 @@ fn bare(n: u8) -> u8 {
     if n == 0 { return; } else { } //~ error: L0220 this `return` carries no value, and `bare` returns `u8`
     n
 }
+//~ spec: 1.11:3

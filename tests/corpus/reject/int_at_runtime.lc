@@ -1,21 +1,9 @@
-// `Int` is the integers of the logic and has no runtime form: it is a type
-// in a claim, a function of the logic, and a proof type, and nowhere a value
-// runs. A `let` of type `Int` is the exception, since it never runs either:
-// its value is a logic-only context (E8, `ghost_values.lc`).
-fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
-    0
-}
-
-fn result(n: u8) -> Int { //~ error: L0201 `Int` has no runtime form
-    n as Int
-}
-
-// `x as Int` speaks of `x` in a claim; outside one it names `Int` where a
-// value runs, and so does the `Int as u8` that would bring it back.
+// Logical values can pass through ordinary functions but cannot become data.
+fn parameter(n: Int) -> u8 { 0 }
+fn result(n: u8) -> Int { n as Int }
 fn back_again(n: u8) -> u8 {
-    (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
+    (n as Int) as u8 //~ error: L0272 logical data cannot be converted into a runtime value
 }
-
-#[terminates] #[no_panic] #[no_io] fn fine(n: u8) -> Int {
-    n as Int
+fn condition(n: Int) -> u8 {
+    if n > 0 { 1 } else { 0 } //~ error: L0272 a runtime if requires bool; logical Bool cannot choose runtime behavior
 }

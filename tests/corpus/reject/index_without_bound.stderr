@@ -1,0 +1,7 @@
+error[L0230]: cannot show `index < buffer::Length(xs)`
+ --> tests/corpus/reject/index_without_bound.lc:3:5
+  |
+3 |     xs[index] //~ error: L0230 cannot show
+  |     ^^^^^^^^^
+  |
+  = note: nothing known here speaks of the values in this claim

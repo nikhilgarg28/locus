@@ -130,6 +130,7 @@ impl Env<'_> {
                 ),
                 span,
             )
+            .claim(claim)
             .note("`--locked` never searches; run `locus check` without it to find the proof and store it"),
         );
         true

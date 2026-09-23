@@ -133,6 +133,7 @@ fn increment() -> ExecFn {
 // --- Accepted programs -------------------------------------------------------
 
 #[test]
+#[doc = "spec: 3.2:2"]
 fn a_dependent_result_and_a_caller_that_reuses_its_evidence() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -281,6 +282,7 @@ fn preserve(theory: Theory, use_the_fact: bool) -> ExecFn {
 }
 
 #[test]
+#[doc = "spec: 3.2:3"]
 fn each_branch_of_an_if_learns_the_condition() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -521,6 +523,7 @@ fn bounded_walk(world: &World, carry_the_invariant: bool) -> ExecFn {
 }
 
 #[test]
+#[doc = "spec: 3.2:4"]
 fn a_loop_invariant_is_state_evidence() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -748,6 +751,7 @@ fn a_ghost_cannot_reach_executable_data_or_control() {
 }
 
 #[test]
+#[doc = "spec: 3.2:1"]
 fn calls_and_bindings_are_checked() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -985,6 +989,7 @@ fn a_bounded_for_may_call_ordinary_functions_and_break_with_its_state() {
 }
 
 #[test]
+#[doc = "spec: 3.3:2"]
 fn a_for_inside_a_loop_takes_both_the_continue_and_the_break() {
     // fn twice_over(n: u8) -> u8 {
     //     loop () -> u8 {
@@ -1115,6 +1120,7 @@ fn a_for_checks_its_bounds_and_state_shape() {
 }
 
 #[test]
+#[doc = "spec: 3.2:5"]
 fn the_bounds_of_a_for_have_one_type_and_need_no_order_and_the_body_knows_them() {
     // fn f(n: i16) -> i16 { let done = for i in 5..n () { <have> continue() }; 0 }
     // over i16, with the lower bound past the upper one for small n: an

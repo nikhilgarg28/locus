@@ -1,0 +1,5 @@
+error[L0278]: a let cannot extract arbitrary witnesses from erased evidence; use a logical match and keep witnesses scoped inside its proof
+ --> tests/corpus/reject/prop_witness_escape.lc:3:9
+  |
+3 |     let Has::At(witness) @ body = h; //~ error: L0278 cannot extract arbitrary witnesses
+  |         ^^^^^^^^^^^^^^^^^^^^^^^

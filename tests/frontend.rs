@@ -96,7 +96,7 @@ fn lexer_preserves_large_literals_and_distinguishes_keywords() {
             K::Const,
             K::Name,
             K::Name,
-            K::Name,
+            K::Prop,
             K::Name,
             K::PathSep,
             K::DotDot,
@@ -233,6 +233,7 @@ fn grouped(expr: &Expr) -> String {
         }
         ExprKind::Member { value, name } => format!("{}.{}", grouped(value), name.text),
         ExprKind::Index { value, index, .. } => format!("{}.{index}", grouped(value)),
+        ExprKind::Subscript { value, index } => format!("{}[{}]", grouped(value), grouped(index)),
         ExprKind::Ref { mutable, expr } => {
             format!("(&{}{})", if *mutable { "mut " } else { "" }, grouped(expr))
         }
@@ -271,7 +272,7 @@ fn grouped_ty(ty: &Type) -> String {
                 .join(", ")
         ),
         TypeKind::Proof(claim) => format!("@({})", grouped(claim)),
-        TypeKind::Ref { mutable, inner } => {
+        TypeKind::Ref { mutable, inner, .. } => {
             format!(
                 "&{}{}",
                 if *mutable { "mut " } else { "" },
@@ -350,6 +351,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             parameters,
             result,
             body,
+            ..
         } => {
             let mut params: Vec<String> = self_param
                 .iter()
@@ -371,7 +373,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 body.statements.len() + usize::from(body.tail.is_some()),
             ));
         }
-        DeclarationKind::Struct { name, fields } => {
+        DeclarationKind::Struct { name, fields, .. } => {
             let fields: Vec<String> = fields
                 .iter()
                 .map(|field| {
@@ -390,7 +392,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 .collect();
             out.push_str(&format!("struct {} {{ {} }}", name.text, fields.join(", ")));
         }
-        DeclarationKind::Enum { name, variants } => {
+        DeclarationKind::Enum { name, variants, .. } => {
             let variants: Vec<String> = variants
                 .iter()
                 .map(|variant| {
@@ -420,6 +422,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             name,
             parameters,
             variants,
+            ..
         } => {
             let parameters: Vec<String> = parameters
                 .iter()
@@ -458,7 +461,9 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 grouped(value)
             ));
         }
-        DeclarationKind::Impl { target, methods } => {
+        DeclarationKind::Impl {
+            target, methods, ..
+        } => {
             let methods: Vec<String> = methods.iter().map(rendered_item).collect();
             out.push_str(&format!(
                 "impl {} {{ {} }}",
@@ -1033,6 +1038,8 @@ fn deeply_nested_input_reports_a_limit_instead_of_overflowing_the_stack() {
                 ("(", ")"),
                 ("(1, ", ")"),
                 ("{", "}"),
+                ("logic {", "}"),
+                ("P::Arm @ (", ")"),
                 ("{ let x = ", "; 1 }"),
                 ("!", ""),
                 ("prop!(p => ", ")"),
@@ -1257,8 +1264,8 @@ fn malformed_inputs_terminate_and_keep_valid_diagnostic_spans() {
     let alphabet = [
         "fn ", "def ", "const ", "let ", "@", "_", "[", "]", "#", "||", "(", ")", "{", "}", ";",
         "prove!(", "prop!(", "!", "forall ", "exists ", "=>", "=", "n", "0", "💡", "é", "\n", "/*",
-        "*/", "math ", "prop ", "struct ", "enum ", "match ", "loop ", "for ", "in ", "..", "::",
-        "break ", "continue", ",", ":", ".", "->",
+        "*/", "math ", "logic ", "prop ", "struct ", "enum ", "match ", "loop ", "for ", "in ",
+        "..", "::", "break ", "continue", ",", ":", ".", "->",
     ];
     let mut seed = 17u64;
     for length in 0..256 {
@@ -1311,12 +1318,22 @@ fn constants_and_math_functions_state_propositions() {
 }
 
 #[test]
-fn math_and_prop_are_keywords_only_where_a_declaration_can_begin() {
-    let parsed = parse_text(
-        "#[terminates] #[no_panic] #[no_io] fn prop(math: u8) -> u8 { let prop = math; prop }
-         fn math(prop: u8) -> u8 { prop }",
-    );
-    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
+fn prop_and_logic_are_reserved_but_math_remains_a_name() {
+    assert!(parse_text("fn math(x: u8) -> u8 { x }").is_success());
+    for word in ["prop", "logic"] {
+        for source in [
+            format!("fn {word}() -> u8 {{ 0 }}"),
+            format!("struct {word} {{ x: u8 }}"),
+            format!("fn f() -> u8 {{ let {word} = 0; 0 }}"),
+        ] {
+            let parsed = parse_text(&source);
+            assert!(
+                parsed.diagnostics.iter().any(|d| d.code == "L0115"),
+                "{source}: {:?}",
+                parsed.diagnostics
+            );
+        }
+    }
 }
 
 #[test]
@@ -1398,53 +1415,52 @@ fn proof_holes_and_wildcard_patterns_are_different_nodes() {
 }
 
 #[test]
-fn bracketed_formulas_spell_nothing() {
-    // `[x == y]` and `@[x == y]` spell nothing: brackets are Rust's arrays,
-    // which Locus does not have, and each is an ordinary syntax error.
-    for (text, code) in [
-        (
-            "#[terminates] #[no_panic] #[no_io] fn same(x: u8, y: u8) -> Prop { [x == y] }",
-            "L0116",
-        ),
-        ("fn f(n: u8) -> (out: u8, @[out == n]) { (n, _) }", "L0100"),
-        ("fn f(n: u8) -> u8 { let h: @[n == n] = _; n }", "L0100"),
-        ("prop P(n: u8) { Small: @[n < 10] }", "L0100"),
-        ("const c: Prop = [true];", "L0116"),
+fn brackets_are_arrays_and_proof_brackets_stay_invalid() {
+    for text in ["[x == y]", "[true]", "[]", "[n,]", "[n, m]"] {
+        assert!(
+            matches!(expression(text).kind, ExprKind::Array(_)),
+            "{text}"
+        );
+    }
+    for text in [
+        "fn f(n: u8) -> (out: u8, @[out == n]) { (n, _) }",
+        "fn f(n: u8) -> u8 { let h: @[n == n] = _; n }",
     ] {
         let parsed = parse_text(text);
         assert!(!parsed.is_success(), "{text}");
-        assert_eq!(
-            parsed.diagnostics[0].code, code,
-            "{text}: {:?}",
-            parsed.diagnostics
-        );
+        assert_eq!(parsed.diagnostics[0].code, "L0100");
     }
 }
 
 #[test]
-fn brackets_are_arrays_which_are_not_in_locus_yet() {
-    for text in ["[]", "[n,]", "[n, m]", "[n; 3]"] {
-        let parsed = parse_text(&format!("fn f() -> u8 {{ {text} }}"));
-        let error = parsed
-            .diagnostics
-            .iter()
-            .find(|d| d.code == "L0116")
-            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
-        assert_eq!(error.message, "arrays are not in Locus yet");
-    }
-    for text in [
-        "fn f(xs: [bool; 1]) -> () { () }",
-        "fn f(ys: [u8]) -> () { () }",
-    ] {
-        let parsed = parse_text(text);
-        let error = parsed
-            .diagnostics
-            .iter()
-            .find(|d| d.code == "L0116")
-            .unwrap_or_else(|| panic!("{text}: {:?}", parsed.diagnostics));
-        assert_eq!(error.message, "array and slice types are not in Locus yet");
-    }
-    assert!(parse_text("fn f(h: @(true)) -> () { () }").is_success());
+fn fixed_arrays_slices_and_subscripts_preserve_structure_and_spans() {
+    let parsed = parse_text(
+        "fn f(xs: &[u8], ys: [u16; 1 + 2]) -> u8 { let values = [1u8, 2u8,]; values[0usize] }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Function {
+        parameters, body, ..
+    } = &parsed.program.declarations[0].kind
+    else {
+        panic!()
+    };
+    assert!(
+        matches!(&parameters[0].ty.kind, TypeKind::Ref { inner, .. } if matches!(inner.kind, TypeKind::Slice(_)))
+    );
+    assert!(
+        matches!(&parameters[1].ty.kind, TypeKind::Array { length, .. } if matches!(length.kind, ExprKind::Binary { operator: BinaryOp::Add, .. }))
+    );
+    assert!(matches!(
+        body.tail.as_ref().unwrap().kind,
+        ExprKind::Subscript { .. }
+    ));
+    assert!(
+        matches!(expression("a[0][1].0").kind, ExprKind::Index { value, .. } if matches!(value.kind, ExprKind::Subscript { .. }))
+    );
+    let assigned = parse_text("fn set(xs: &mut [u8]) -> () { xs[0usize] = 2u8; () }");
+    assert!(assigned.is_success(), "{:#?}", assigned.diagnostics);
+    assert!(!parse_text("fn f(xs: [u8;]) -> () { () }").is_success());
+    assert!(!parse_text("fn f() -> () { let a = [1; 3]; () }").is_success());
 }
 
 #[test]
@@ -1669,7 +1685,7 @@ fn struct_and_enum_declarations_keep_fields_and_payloads() {
          enum Event { Wrong, Code(u8), Pair(first: u8, second: u8) }",
     );
     assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
-    let DeclarationKind::Struct { name, fields } = &parsed.program.declarations[0].kind else {
+    let DeclarationKind::Struct { name, fields, .. } = &parsed.program.declarations[0].kind else {
         panic!()
     };
     assert_eq!(name.text, "Lock");
@@ -1706,6 +1722,7 @@ fn prop_declarations_keep_parameters_payloads_and_targets() {
         name,
         parameters,
         variants,
+        ..
     } = &parsed.program.declarations[0].kind
     else {
         panic!()
@@ -2536,11 +2553,9 @@ fn references_and_the_never_type_parse_in_types_and_expressions() {
     // A reference is not a place, and `&mut x = y` is an invalid one.
     let parsed = parse_text("fn f(x: u8, y: u8) -> u8 { &mut x = y; x }");
     assert_eq!(parsed.diagnostics[0].code, "L0123");
-    // Dereference stays Rust's alone, in types and in expressions.
-    for text in [
-        "fn f(x: *const u8) -> u8 { 1 }",
-        "fn f(x: &u8) -> u8 { *x }",
-    ] {
+    // Raw-pointer types remain outside the core; shared dereferences parse.
+    {
+        let text = "fn f(x: *const u8) -> u8 { 1 }";
         let parsed = parse_text(text);
         assert_eq!(
             parsed.diagnostics[0].code, "L0116",
@@ -2766,7 +2781,7 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
 #[test]
 fn weak_keywords_and_the_words_of_locus_are_names() {
     let parsed = parse_text(
-        "fn union(raw: u8, safe: u8, auto: u8, default: u8) -> u8 { let macro_rules = raw; let math = safe; let prop = auto; macro_rules }
+        "fn union(raw: u8, safe: u8, auto: u8, default: u8) -> u8 { let macro_rules = raw; let math = safe; let claim = auto; macro_rules }
          fn forall(exists: u8, def: u8, prove: u8) -> u8 { let forall = exists; forall }",
     );
     assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
@@ -3085,9 +3100,6 @@ fn string_errors_point_at_the_offending_part() {
 #[test]
 fn literal_forms_of_rust_are_lexed_whole_and_reported_as_not_in_locus_yet() {
     for (text, what) in [
-        ("'a", "lifetimes and loop labels"),
-        ("'static", "lifetimes and loop labels"),
-        ("'_", "lifetimes and loop labels"),
         ("'x'", "character literals"),
         ("'1'", "character literals"),
         ("'_'", "character literals"),
@@ -3151,15 +3163,7 @@ fn literal_forms_of_rust_are_lexed_whole_and_reported_as_not_in_locus_yet() {
         .iter()
         .map(|diagnostic| diagnostic.message.split(" are").next().unwrap())
         .collect();
-    assert_eq!(
-        messages,
-        [
-            "lifetimes and loop labels",
-            "lifetimes and loop labels",
-            "character literals",
-            "character literals"
-        ]
-    );
+    assert_eq!(messages, ["character literals", "character literals"]);
 }
 
 #[test]
@@ -3266,11 +3270,6 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
         ),
         ("f(x)?", "L0116", "the `?` operator is not in Locus yet"),
         (
-            "*x",
-            "L0116",
-            "dereferences and raw pointers (`*`) are not in Locus yet",
-        ),
-        (
             "$x",
             "L0116",
             "`$` belongs to macros, which are not in Locus yet",
@@ -3368,21 +3367,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         (
             "fn f(x: impl T) -> u8 { 1 }",
             "`impl Trait` types are not in Locus yet",
-            0,
-        ),
-        (
-            "fn f<T>(x: T) -> T { x }",
-            "generic parameters are not in Locus yet",
-            0,
-        ),
-        (
-            "struct S<T> { x: T }",
-            "generic parameters are not in Locus yet",
-            0,
-        ),
-        (
-            "enum E<T> { A(T) }",
-            "generic parameters are not in Locus yet",
             0,
         ),
         (
@@ -3937,20 +3921,34 @@ fn quantifiers_and_implication_are_read_only_inside_a_formula() {
 }
 
 #[test]
-fn the_source_has_no_token_rust_lacks() {
-    // Every token kind the lexer produces is a token of Rust. The words of
-    // Locus lex as names; `=>` is Rust's fat arrow.
-    let lexed = lex_text("math prop def forall exists prove rewrite unfold fold old snapshot");
+fn locus_keywords_are_reserved_and_other_extension_words_remain_names() {
+    // Punctuation stays Rust-compatible; only prop and logic add keywords.
+    let lexed = lex_text("math def forall exists prove rewrite unfold fold old snapshot");
     assert!(
         lexed.tokens[..lexed.tokens.len() - 1]
             .iter()
             .all(|token| token.kind == K::Name)
     );
+    let words = lex_text("logic prop Bool Int Logical Model Exists ForAll");
+    assert_eq!(
+        kinds(&words),
+        [
+            K::Logic,
+            K::Prop,
+            K::Name,
+            K::Name,
+            K::Name,
+            K::Name,
+            K::Name,
+            K::Name,
+            K::Eof
+        ]
+    );
     let lexed = lex_text("prop!(a => b) @(c) prove!(d) x![y]");
     assert_eq!(
         kinds(&lexed),
         [
-            K::Name,
+            K::Prop,
             K::Bang,
             K::LParen,
             K::Name,
@@ -3974,4 +3972,280 @@ fn the_source_has_no_token_rust_lacks() {
             K::Eof
         ]
     );
+}
+
+#[test]
+fn logical_functions_blocks_and_callables_have_distinct_ast_nodes() {
+    let parsed = parse_text(
+        "logic fn lift(x: Int, f: logic Fn(n: Int) -> @(n == n)) -> Int { logic { x } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Function {
+        logical,
+        parameters,
+        body,
+        ..
+    } = &parsed.program.declarations[0].kind
+    else {
+        panic!()
+    };
+    assert!(*logical);
+    let TypeKind::LogicalFunction {
+        parameters: inputs,
+        result,
+    } = &parameters[1].ty.kind
+    else {
+        panic!()
+    };
+    assert_eq!(inputs[0].name.as_ref().unwrap().text, "n");
+    assert!(matches!(result.kind, TypeKind::Proof(_)));
+    assert!(matches!(
+        body.tail.as_ref().unwrap().kind,
+        ExprKind::Logic(_)
+    ));
+    assert!(matches!(
+        expression("logic { let n = 1; n }").kind,
+        ExprKind::Logic(_)
+    ));
+    assert!(!parse_text("fn f(g: logic fn(Int) -> Int) -> Int { 0 }").is_success());
+    assert!(!parse_text("struct logic {} fn f() -> Int { logic { 1 } }").is_success());
+}
+
+#[test]
+fn proposition_arms_keep_computed_bodies_and_all_witness_shapes() {
+    use locus::ast::VariantShape;
+    let parsed = parse_text(
+        "prop Member(value: Int) {
+            Empty => { prop!(false) }
+            At(index: Int, bound: Int) => { let p = prop!(index < bound); p }
+            Named { index: Int, bound: Int } => { prop!(index < bound) },
+        }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Prop { variants, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    assert_eq!(variants.len(), 3);
+    assert_eq!(variants[0].shape, VariantShape::Unit);
+    assert_eq!(variants[1].shape, VariantShape::Tuple);
+    assert_eq!(variants[2].shape, VariantShape::Struct);
+    assert!(
+        variants
+            .iter()
+            .all(|arm| arm.body.is_some() && arm.target.is_none())
+    );
+    assert_eq!(variants[1].body.as_ref().unwrap().statements.len(), 1);
+    assert!(!parse_text("prop P { Yes => prop!(true) }").is_success());
+}
+
+#[test]
+fn proof_construction_keeps_evidence_outside_witnesses() {
+    for text in [
+        "P::Unit @ h",
+        "P::Tuple(x, y) @ h",
+        "P::Named { x, y: z } @ h",
+    ] {
+        let expr = expression(text);
+        let ExprKind::Evidence {
+            constructor,
+            evidence,
+            at_span,
+        } = expr.kind
+        else {
+            panic!("{text}")
+        };
+        assert!(!matches!(constructor.kind, ExprKind::Evidence { .. }));
+        assert!(matches!(evidence.kind, ExprKind::Name(_)));
+        assert_eq!(at_span.end - at_span.start, 1);
+    }
+    let ExprKind::Evidence { evidence, .. } = expression("Outer::Wrap @ (Inner::Unit @ h)").kind
+    else {
+        panic!()
+    };
+    assert!(matches!(evidence.kind, ExprKind::Group(_)));
+    let parsed = parse_text("fn f() -> @P { P::A @ P::B @ h }");
+    assert!(
+        parsed
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "L0150" && d.message.contains("parentheses"))
+    );
+}
+
+#[test]
+fn proof_patterns_support_witness_shapes_and_rust_whole_value_bindings() {
+    let parsed = parse_text(
+        "fn f(p: @P) -> @P {
+            let P::Unit @ h = p;
+            let P::Tuple(x, _) @ h = p;
+            let P::Named { x, y: renamed } @ h = p;
+            let whole @ (P::Unit @ h) = p;
+            match p { P::Unit @ h => h, P::Tuple(x, _) @ h => h }
+        }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Function { body, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    for statement in &body.statements[..3] {
+        let StatementKind::Let { pattern, .. } = &statement.kind else {
+            panic!()
+        };
+        assert!(matches!(pattern.kind, PatternKind::Evidence { .. }));
+    }
+    let StatementKind::Let { pattern, .. } = &body.statements[3].kind else {
+        panic!()
+    };
+    let PatternKind::Binding { name, pattern, .. } = &pattern.kind else {
+        panic!()
+    };
+    assert_eq!(name.text, "whole");
+    assert!(matches!(pattern.kind, PatternKind::Group(_)));
+    let ExprKind::Match { arms, .. } =
+        expression("match x { whole @ Some(part) => whole, _ => x }").kind
+    else {
+        panic!()
+    };
+    assert!(matches!(arms[0].pattern.kind, PatternKind::Binding { .. }));
+    let parsed = parse_text("fn f(p: @P) -> @P { let whole @ P::A @ h = p; p }");
+    assert!(parsed.diagnostics.iter().any(|d| d.code == "L0150"));
+}
+
+#[test]
+fn legacy_proposition_migration_fixes_parse_as_named_arm_bodies() {
+    for text in [
+        "prop P { Intro: @(true) }",
+        "prop P { Intro }",
+        "prop P(n: Int) { Intro(x: Int, @(x == n)) }",
+        "prop P(n: Int) { Intro { x: Int, proof: @(x == n) } }",
+    ] {
+        let mut sources = SourceMap::default();
+        let file = sources.add("migration.lc", text);
+        let source = sources.get(file);
+        let parsed = parse(source);
+        assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+        let DeclarationKind::Prop { variants, .. } = &parsed.program.declarations[0].kind else {
+            panic!()
+        };
+        let diagnostic = locus::parser::legacy_prop_migration(&variants[0], source);
+        let fix = &diagnostic.suggestions[0];
+        let mut rewritten = text.to_owned();
+        rewritten.replace_range(fix.span.range(), &fix.replacement);
+        let migrated = parse_text(&rewritten);
+        assert!(
+            migrated.is_success(),
+            "{rewritten}: {:#?}",
+            migrated.diagnostics
+        );
+        let DeclarationKind::Prop { variants, .. } = &migrated.program.declarations[0].kind else {
+            panic!()
+        };
+        assert!(variants[0].body.is_some());
+        assert!(variants[0].target.is_none());
+    }
+}
+
+#[test]
+fn generic_declarations_keep_bounds_without_changing_function_mode() {
+    let parsed = parse_text(
+        "struct Pair<T, U> { first: T, second: U }
+         enum Maybe<T: Logical> { None, Some(T) }
+         fn identity<T>(x: T) -> T { x }
+         logic fn same<T: Logical + marker::Bound>(x: T) -> @P(x) { _ }
+         prop P<T: Logical>(x: T) { Same => { prop!(x == x) } }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Struct { generics, .. } = &parsed.program.declarations[0].kind else {
+        panic!()
+    };
+    assert_eq!(generics.len(), 2);
+    let DeclarationKind::Enum { generics, .. } = &parsed.program.declarations[1].kind else {
+        panic!()
+    };
+    assert_eq!(generics[0].bounds[0].text(), "Logical");
+    let DeclarationKind::Function {
+        logical, generics, ..
+    } = &parsed.program.declarations[2].kind
+    else {
+        panic!()
+    };
+    assert!(!logical);
+    assert!(generics[0].bounds.is_empty());
+    let DeclarationKind::Function {
+        logical, generics, ..
+    } = &parsed.program.declarations[3].kind
+    else {
+        panic!()
+    };
+    assert!(*logical);
+    assert_eq!(generics[0].bounds[1].text(), "marker::Bound");
+    let DeclarationKind::Prop { generics, .. } = &parsed.program.declarations[4].kind else {
+        panic!()
+    };
+    assert_eq!(generics[0].name.text, "T");
+}
+
+#[test]
+fn turbofish_keeps_type_arguments_on_calls_and_constructors() {
+    for text in ["identity::<u8>(x)", "Maybe::<Int>::Some(x)"] {
+        let ExprKind::Call { callee, .. } = expression(text).kind else {
+            panic!("{text}")
+        };
+        let ExprKind::GenericApply { arguments, .. } = callee.kind else {
+            panic!("{text}")
+        };
+        assert_eq!(arguments.len(), 1);
+    }
+    let ExprKind::GenericApply { callee, arguments } =
+        expression("Pair::<Int, Maybe<Int>> { first: x, second: y }").kind
+    else {
+        panic!()
+    };
+    assert_eq!(arguments.len(), 2);
+    assert!(matches!(callee.kind, ExprKind::Struct { .. }));
+    assert!(!parse_text("fn empty<>() -> u8 { 0 }").is_success());
+}
+
+#[test]
+fn lifetimes_are_scope_names_in_references_and_nominal_arguments() {
+    let lexed = lex_text("'a 'static '_ 'x'");
+    assert_eq!(
+        kinds(&lexed),
+        [K::Lifetime, K::Lifetime, K::Lifetime, K::Error, K::Eof]
+    );
+    assert_eq!(lexed.diagnostics.len(), 1);
+    let parsed = parse_text(
+        "struct Parser<'a, T> { bytes: &'a [T] } fn parse<'b>(p: Parser<'b, u8>, cell: &'b mut u8) -> &'b u8 { &cell }",
+    );
+    assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
+    let DeclarationKind::Struct {
+        generics, fields, ..
+    } = &parsed.program.declarations[0].kind
+    else {
+        panic!()
+    };
+    assert!(generics[0].lifetime && !generics[1].lifetime);
+    assert_eq!(generics[0].name.text, "'a");
+    assert!(
+        matches!(&fields[0].ty.kind, TypeKind::Ref { lifetime: Some(name), mutable: false, .. } if name.text == "'a")
+    );
+    let DeclarationKind::Function {
+        parameters, result, ..
+    } = &parsed.program.declarations[1].kind
+    else {
+        panic!()
+    };
+    assert!(
+        matches!(&parameters[0].ty.kind, TypeKind::Path { arguments, .. } if matches!(&arguments[0].kind, TypeKind::Lifetime(name) if name.text == "'b"))
+    );
+    assert!(
+        matches!(&result.kind, TypeKind::Ref { lifetime: Some(name), .. } if name.text == "'b")
+    );
+    assert!(!parse_text("fn bad(x: 'a) -> () { () }").is_success());
+}
+
+#[test]
+fn shared_dereference_parses_as_an_ordinary_prefix_operation() {
+    assert!(parse_text("fn f<'a>(x: &'a u8) -> u8 { *x }").is_success());
+    assert_eq!(grouped(&expression("*items[0] + 1")), "((*items[0]) + 1)");
 }

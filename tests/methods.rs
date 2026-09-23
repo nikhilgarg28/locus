@@ -130,18 +130,21 @@ fn run(n: u8) -> u8 {
         assert!(result.function(name).is_some(), "{name} is not declared");
     }
     let rust = print_module(result.session.erased());
-    // A method called by path, `Counter::bump(&mut c)`, is printed as the
-    // method call it is, `c.bump()`, like the one written that way.
-    assert_eq!(rust.matches("    c.bump();\n").count(), 2, "{rust}");
-    assert!(!rust.contains("Counter::bump("), "{rust}");
+    // Canonical paths retain the receiver borrow for both source spellings.
+    assert_eq!(
+        rust.matches("    Counter::bump(&mut c);\n").count(),
+        2,
+        "{rust}"
+    );
+    assert!(!rust.contains("c.bump("), "{rust}");
     for expected in [
         "impl Counter {\n",
         "    pub fn fresh() -> Counter {",
         "    pub fn get(&self) -> u8 {",
         "    pub fn bump(&mut self) -> () {",
         "    pub fn grown(mut self) -> Counter {",
-        "    let grown = c.grown();",
-        "    grown.get()",
+        "    let grown = Counter::grown(c);",
+        "    Counter::get(&grown)",
         "let mut c = Counter::fresh();",
     ] {
         assert!(rust.contains(expected), "missing {expected:?} in:\n{rust}");
@@ -154,10 +157,10 @@ fn a_method_of_the_logic_is_a_kernel_function_named_by_its_type() {
         "
 impl Counter {
     #[terminates] #[no_panic] #[no_io]
-    fn small(&self) -> Prop { prop!(self.count <= 3) }
+    logic fn small(&self) -> Prop { prop!(self.count <= 3) }
 
     #[terminates] #[no_panic] #[no_io]
-    fn get(&self) -> u8 { self.count }
+    logic fn get(&self) -> Int { self.count as Int }
 }
 
 fn opened(c: Counter, h: @(c.small())) -> @(c.count <= 3) {
@@ -179,10 +182,10 @@ fn through_get(c: Counter, h: @(c.count <= 3)) -> @(c.get() <= 3) {
             "{name} is not a function of the logic"
         );
     }
-    // `small` returns a `Prop` and has no runtime form; `get` runs.
+    // Both explicitly logical methods erase completely.
     let rust = print_module(result.session.erased());
     assert!(!rust.contains("fn small"), "{rust}");
-    assert!(rust.contains("    pub fn get(&self) -> u8 {"), "{rust}");
+    assert!(!rust.contains("fn get"), "{rust}");
 }
 
 #[test]
@@ -305,7 +308,7 @@ const SHAPES: &[(&str, &str, &str, &str, &str)] = &[
         "*self on self by value",
         "impl Counter { fn get(self) -> u8 { (*self).count } }",
         "L0266",
-        "type `Counter` cannot be dereferenced (E0614)",
+        "dereference requires a shared reference",
         "pub struct Counter { count: u8 }\nimpl Counter { pub fn get(self) -> u8 { (*self).count } }\n",
     ),
     (
@@ -327,7 +330,10 @@ fn every_refusal_that_quotes_rustc_is_rustc_s_too() {
                 .any(|(found, text)| found == code && text.contains(message)),
             "{name}: expected {code} `{message}`, found {diagnostics:#?}"
         );
-        let expected = &message[message.rfind('(').unwrap() + 1..message.len() - 1];
+        let expected = message
+            .rfind('(')
+            .map(|at| &message[at + 1..message.len() - 1])
+            .unwrap_or("E0614");
         let codes = rustc_codes(&name.replace(' ', "_").replace(['&', '*'], "x"), rust);
         assert_eq!(codes, [expected], "{name}");
     }
@@ -421,7 +427,7 @@ fn an_impl_block_is_for_the_type_even_when_a_function_shares_its_name() {
     let result = accepted(
         "
 #[terminates] #[no_panic] #[no_io]
-fn Counter(n: u8) -> Prop { prop!(n <= 3) }
+logic fn Counter(n: Int) -> Prop { prop!(n <= 3) }
 
 impl Counter {
     fn get(&self) -> u8 { self.count }

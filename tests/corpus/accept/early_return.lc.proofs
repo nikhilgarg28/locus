@@ -1,0 +1,7 @@
+locus-proofs 1
+
+obligation ec4b4a6d061d6e3a clamp 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($0), 3i)), linear(int_le(view[u8]($0), 3i), 1, [(transport(literal(view[u8](3)), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), h0)), 1)]))
+
+obligation 05600cc70252d68c clamp 2
+evaluate(int_le_b(view[u8](3), 3i))

@@ -1,0 +1,5 @@
+error[L0272]: a runtime if requires bool; logical Bool cannot choose runtime behavior
+ --> tests/corpus/reject/logic_runtime_condition.lc:1:30
+  |
+1 | fn wrong(b: Bool) -> u8 { if b { 1 } else { 0 } }
+  |                              ^

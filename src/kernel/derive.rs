@@ -20,7 +20,7 @@ use super::error::KernelError;
 use super::term::{FnId, Proof, ProofArm, Term, Type};
 
 /// Bounds the unfolding loops below in steps, never in time.
-const STEP_LIMIT: usize = 10_000;
+use crate::limits::MAX_DERIVED_STEPS as STEP_LIMIT;
 
 fn equation(ctx: &mut Context, eq: &Proof) -> Result<(Term, Term), KernelError> {
     match infer_proof(ctx, eq)? {
@@ -70,16 +70,24 @@ fn is_call_to(term: &Term, id: FnId) -> bool {
     matches!(term, Term::Call(callee, _) if **callee == Term::Fn(id)) && term.is_closed()
 }
 
-/// One round of unfolding at the top of a proposition: every closed call to
-/// `id`, outermost first, until none is left. `None` when there was none.
+/// Calls present before this unfolding step. Newly introduced recursive calls
+/// are left folded; expanding them again could diverge on symbolic arguments.
+fn original_calls(prop: &Term, id: FnId) -> Vec<Term> {
+    let calls = std::cell::RefCell::new(Vec::new());
+    prop.find(&|term| {
+        if is_call_to(term, id) && !calls.borrow().iter().any(|old| same(old, term)) {
+            calls.borrow_mut().push(term.clone());
+        }
+        false
+    });
+    calls.into_inner()
+}
+
 fn unfold_closed(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Option<Proof>, KernelError> {
     let mut prop = infer_proof(ctx, proof)?;
     let mut proof = proof.clone();
     let mut unfolded_any = false;
-    for _ in 0..STEP_LIMIT {
-        let Some(call) = prop.find(&|term| is_call_to(term, id)).cloned() else {
-            return Ok(unfolded_any.then_some(proof));
-        };
+    for call in original_calls(&prop, id) {
         let step = Proof::Definition(call.clone());
         let (_, body) = equation(ctx, &step)?;
         let template = prop.abstract_over(&|term| same(term, &call));
@@ -91,7 +99,7 @@ fn unfold_closed(ctx: &mut Context, id: FnId, proof: &Proof) -> Result<Option<Pr
         };
         unfolded_any = true;
     }
-    Err(KernelError::StepLimit)
+    Ok(unfolded_any.then_some(proof))
 }
 
 /// Unfolds at the top, then under `forall`, under `exists`, and in the
@@ -185,7 +193,7 @@ fn fold_closed(
     // steps backwards from the given proof.
     let mut steps = Vec::new();
     let mut prop = goal.clone();
-    while let Some(call) = prop.find(&|term| is_call_to(term, id)).cloned() {
+    for call in original_calls(&prop, id) {
         if steps.len() == STEP_LIMIT {
             return Err(KernelError::StepLimit);
         }
@@ -367,4 +375,142 @@ impl Chain {
     pub fn finish(self) -> Proof {
         self.proof
     }
+}
+
+/// Congruence for a call whose proof arguments depend on the replaced data.
+/// Quantifying those evidence slots keeps the equality motive well typed;
+/// directly replacing a data argument while retaining its old proof does not.
+/// This builder adds no kernel rule and its complete certificate is checked.
+pub fn rewrite_call_arguments(
+    ctx: &mut Context,
+    eq: &Proof,
+    call: &Term,
+) -> Result<Proof, KernelError> {
+    use super::{Mode, infer_term, telescope_entry};
+    let Term::Call(callee, original) = call else {
+        return Err(KernelError::NoComputationStep(call.clone()));
+    };
+    let Type::Fn(params, _result) = infer_term(ctx, callee, Mode::Logical)? else {
+        return Err(KernelError::NoComputationStep(call.clone()));
+    };
+    let return_type = infer_term(ctx, call, Mode::Logical)?;
+    if matches!(return_type, Type::Proof(_)) {
+        return Err(KernelError::EqualityAtProofType(return_type));
+    }
+    let (from, to) = equation(ctx, eq)?;
+    let telescope = Type::Tuple(params.clone());
+    let mut changed = Vec::new();
+    let mut evidence = Vec::new();
+    for (index, arg) in original.iter().enumerate() {
+        let ty = telescope_entry(&telescope, index, &changed).ok_or(KernelError::DanglingBound)?;
+        if let Type::Proof(_) = ty {
+            let old = match arg {
+                Term::Proof(p) => (**p).clone(),
+                _ => Proof::OfTerm(arg.clone()),
+            };
+            let rewritten = Proof::transport(
+                eq.clone(),
+                |hole| {
+                    let preceding: Vec<_> = original[..index]
+                        .iter()
+                        .map(|arg| arg.abstract_over(&|t| same(t, &from)).open(&hole))
+                        .collect();
+                    let Type::Proof(claim) = telescope_entry(&telescope, index, &preceding)
+                        .expect("checked proof parameter")
+                    else {
+                        unreachable!()
+                    };
+                    *claim
+                },
+                old,
+            );
+            let value = Term::proof(rewritten);
+            super::check::expect_type(ctx, &value, &ty, Mode::Logical)?;
+            evidence.push(value.clone());
+            changed.push(value);
+        } else {
+            changed.push(arg.abstract_over(&|t| same(t, &from)).open(&to));
+        }
+    }
+    if evidence.is_empty() {
+        return Err(KernelError::NoComputationStep(call.clone()));
+    }
+    // Recursive certificate construction keeps the fixed context explicit.
+    #[allow(clippy::too_many_arguments)]
+    fn motive(
+        telescope: &Type,
+        original: &[Term],
+        args: Vec<Term>,
+        from: &Term,
+        to: &Term,
+        callee: &Term,
+        left: &Term,
+        result: &Type,
+    ) -> Term {
+        let index = args.len();
+        if index == original.len() {
+            return Term::eq(
+                result.clone(),
+                left.clone(),
+                Term::call(callee.clone(), args),
+            );
+        }
+        let ty = super::telescope_entry(telescope, index, &args).expect("checked telescope");
+        if matches!(ty, Type::Proof(_)) {
+            Term::forall(ty, |proof| {
+                let mut args = args;
+                args.push(Term::proof(Proof::OfTerm(proof)));
+                motive(telescope, original, args, from, to, callee, left, result)
+            })
+        } else {
+            let mut args = args;
+            args.push(original[index].abstract_over(&|t| same(t, from)).open(to));
+            motive(telescope, original, args, from, to, callee, left, result)
+        }
+    }
+    fn reflexive(telescope: &Type, original: &[Term], args: Vec<Term>, left: &Term) -> Proof {
+        let index = args.len();
+        if index == original.len() {
+            return Proof::Refl(left.clone());
+        }
+        let ty = super::telescope_entry(telescope, index, &args).expect("checked telescope");
+        if matches!(ty, Type::Proof(_)) {
+            Proof::forall_intro(ty, |proof| {
+                let mut args = args;
+                args.push(Term::proof(Proof::OfTerm(proof)));
+                reflexive(telescope, original, args, left)
+            })
+        } else {
+            let mut args = args;
+            args.push(original[index].clone());
+            reflexive(telescope, original, args, left)
+        }
+    }
+    let initial = reflexive(&telescope, original, vec![], call);
+    let mut proof = Proof::transport(
+        eq.clone(),
+        |hole| {
+            motive(
+                &telescope,
+                original,
+                vec![],
+                &from,
+                &hole,
+                callee,
+                call,
+                &return_type,
+            )
+        },
+        initial,
+    );
+    for argument in evidence {
+        proof = Proof::forall_elim(proof, argument);
+    }
+    let expected = Term::eq(
+        return_type,
+        call.clone(),
+        Term::call((**callee).clone(), changed),
+    );
+    super::check::check_proof(ctx, &proof, &expected)?;
+    Ok(proof)
 }

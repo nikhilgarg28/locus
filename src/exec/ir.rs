@@ -77,6 +77,14 @@ pub struct Block {
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
+    BoxNew {
+        var: VarId,
+        equation: HypId,
+        value: Term,
+        logical_payload: bool,
+    },
+    /// A checked physical collection operation and its immutable snapshot equation.
+    Buffer(Box<BufferStmt>),
     /// `let var: ty = value`, for a pure, total value. The checker declares
     /// `var` and assumes `var == value` as `equation`; a proof has no
     /// equation. When an annotation is given, the value must have that type.
@@ -225,4 +233,33 @@ pub enum Tail {
         message: String,
         unreachable: Option<Proof>,
     },
+}
+
+/// Physical storage is independent of the immutable Buffer snapshot type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BufferStorage {
+    Array(usize),
+    Slice,
+    Vector,
+}
+
+/// Native operation. Arguments are runtime values, without proof terms:
+/// literal: elements; length: buffer; get: buffer,index:u64;
+/// set: buffer,index:u64,value; push: buffer,value.
+/// Indexing requires both bound proofs. Push learns available mathematical
+/// length only on normal return. Allocation/panic effects are checked here.
+#[derive(Clone, Debug)]
+pub struct BufferStmt {
+    pub var: VarId,
+    pub equation: HypId,
+    pub op: crate::kernel::BufferOp,
+    pub storage: BufferStorage,
+    pub element: Type,
+    /// Full logical payload, including source Bool whose kernel type is Bool.
+    /// The native factory derives this from its independently checked layout.
+    pub logical_payload: bool,
+    pub arguments: Vec<Term>,
+    pub bounds: Vec<Proof>,
+    /// Exactly one fresh fact for Push's length room; empty for other ops.
+    pub learned: Vec<HypId>,
 }

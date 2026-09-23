@@ -134,7 +134,7 @@ struct Lock {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 
@@ -200,7 +200,7 @@ fn count_up(mut n: u8, by: u8) -> u8 {
     n
 }
 
-//~ proofs: 15
+//~ proofs: 16
 //~ run: sum(&Pair { lo: 1, hi: 2 }) => 3
 //~ run: whole(&Pair { lo: 1, hi: 2 }) => Pair { lo: 1, hi: 2 }
 //~ run: id_of(&Token { id: 9 }) => 9
@@ -210,21 +210,21 @@ fn count_up(mut n: u8, by: u8) -> u8 {
 //~ run: twice(5) => 7
 //~ run: bump_lo(&mut Pair { lo: 1, hi: 2 } -> Pair { lo: 2, hi: 2 }) => ()
 //~ run: bumped(Pair { lo: 1, hi: 2 }) => Pair { lo: 2, hi: 3 }
-//~ run: settle(&mut 1 -> 5, &mut 5 -> 5, Proved) => Proved
-//~ run: settled(Pair { lo: 1, hi: 5 }, Proved) => (Pair { lo: 5, hi: 5 }, Proved)
+//~ run: settle(&mut 1 -> 5, &mut 5 -> 5, Erased) => Erased
+//~ run: settled(Pair { lo: 1, hi: 5 }, Erased) => (Pair { lo: 5, hi: 5 }, Erased)
 //~ run: touch(&mut Pair { lo: 1, hi: 2 } -> Pair { lo: 1, hi: 7 }) => 3
 //~ run: lo_from_touch(Pair { lo: 1, hi: 2 }) => Pair { lo: 3, hi: 7 }
 //~ run: read_before_touch(Pair { lo: 1, hi: 2 }) => (1, 3)
 //~ run: read_after_touch(Pair { lo: 1, hi: 2 }) => (3, 7)
-//~ run: bump_exact(&mut 41 -> 42, Proved) => Proved
-//~ run: exact_twice(40, Proved) => (42, Proved)
-//~ run: step(&mut Lock { failures: 1, open: false } -> Lock { failures: 2, open: false }, Proved, Wrong) => Proved
-//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 3, open: false }, Proved, Wrong) => Proved
-//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 0, open: true }, Proved, Right) => Proved
-//~ run: run(5, 9) => (Lock { failures: 3, open: false }, Proved)
-//~ run: run(5, 2) => (Lock { failures: 2, open: false }, Proved)
-//~ run: set(&mut Percent { value: 0, in_range: Proved } -> Percent { value: 7, in_range: Proved }, 7, Proved) => ()
-//~ run: set_to(42, Proved) => 42
+//~ run: bump_exact(&mut 41 -> 42, Erased) => Erased
+//~ run: exact_twice(40, Erased) => (42, Erased)
+//~ run: step(&mut Lock { failures: 1, open: false } -> Lock { failures: 2, open: false }, Erased, Wrong) => Erased
+//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 3, open: false }, Erased, Wrong) => Erased
+//~ run: step(&mut Lock { failures: 3, open: false } -> Lock { failures: 0, open: true }, Erased, Right) => Erased
+//~ run: run(5, 9) => (Lock { failures: 3, open: false }, Erased)
+//~ run: run(5, 2) => (Lock { failures: 2, open: false }, Erased)
+//~ run: set(&mut Percent { value: 0, in_range: Erased } -> Percent { value: 7, in_range: Erased }, 7, Erased) => ()
+//~ run: set_to(42, Erased) => 42
 //~ run: count_up(3, 4) => 7
 //~ rust: fn sum(pair: &Pair) -> u8 {
 //~ rust: pair.lo.wrapping_add(pair.hi)
@@ -235,12 +235,12 @@ fn count_up(mut n: u8, by: u8) -> u8 {
 //~ rust: bump(&mut count);
 //~ rust: bump(&mut pair.lo);
 //~ rust: bump_lo(&mut copy);
-//~ rust: fn settle(a: &mut u8, b: &mut u8, le: Proved) -> Proved {
+//~ rust: fn settle(a: &mut u8, b: &mut u8, _le: Erased) -> Erased {
 //~ rust: *a = *b;
-//~ rust: let done = settle(&mut copy.lo, &mut copy.hi, Proved);
+//~ rust: let _ = settle(&mut copy.lo, &mut copy.hi, Erased);
 //~ rust: pair.hi = 7_u8;
 //~ rust: copy.lo = touch(&mut copy);
 //~ rust: *counter = *counter + 1_u8;
 //~ rust: let _ = step(&mut lock, ok, event_at(attempt, correct));
-//~ rust: *percent = Percent { value: v, in_range: fits };
+//~ rust: *percent = Percent { value: v, in_range: Erased };
 //~ rust: fn count_up(mut n: u8, by: u8) -> u8 {

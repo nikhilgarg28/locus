@@ -21,6 +21,19 @@ pub fn same(left: &Term, right: &Term) -> bool {
         left.len() == right.len() && left.iter().zip(right).all(|(l, r)| same(l, r))
     };
     match (left, right) {
+        (
+            Term::Buffer {
+                op: lo,
+                element: le,
+                arguments: la,
+            },
+            Term::Buffer {
+                op: ro,
+                element: re,
+                arguments: ra,
+            },
+        ) => lo == ro && same_type(le, re) && all(la, ra),
+        (Term::Boxed(l), Term::Boxed(r)) => same(l, r),
         (Term::Proof(_), Term::Proof(_)) => true,
         (Term::Free(l), Term::Free(r)) => l == r,
         (Term::Bound(l), Term::Bound(r)) => l == r,
@@ -39,6 +52,18 @@ pub fn same(left: &Term, right: &Term) -> bool {
         (Term::Struct(li, lv), Term::Struct(ri, rv)) => li == ri && all(lv, rv),
         (Term::Proj(lt, li), Term::Proj(rt, ri)) => li == ri && same(lt, rt),
         (Term::Fn(l), Term::Fn(r)) => l == r,
+        (
+            Term::Lambda {
+                params: lp,
+                result: lr,
+                body: lb,
+            },
+            Term::Lambda {
+                params: rp,
+                result: rr,
+                body: rb,
+            },
+        ) => same_types(lp, rp) && same_type(lr, rr) && same(lb, rb),
         (Term::Call(lc, la), Term::Call(rc, ra)) => same(lc, rc) && all(la, ra),
         (Term::Variant(le, li, lp), Term::Variant(re, ri, rp)) => {
             le == re && li == ri && all(lp, rp)
@@ -81,6 +106,9 @@ pub fn same(left: &Term, right: &Term) -> bool {
 
 pub fn same_type(left: &Type, right: &Type) -> bool {
     match (left, right) {
+        (Type::Boxed(left), Type::Boxed(right)) | (Type::Buffer(left), Type::Buffer(right)) => {
+            same_type(left, right)
+        }
         (Type::Bool, Type::Bool)
         | (Type::U8, Type::U8)
         | (Type::Int, Type::Int)
@@ -102,6 +130,7 @@ pub(super) fn same_types(left: &[Type], right: &[Type]) -> bool {
 /// Checks that a type is well formed in the context.
 pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
     match ty {
+        Type::Boxed(element) | Type::Buffer(element) => type_ok(ctx, element),
         Type::Bool | Type::U8 | Type::Int | Type::Prop => Ok(()),
         // `u8` is `Type::U8` and nothing else, so that a type has one form.
         Type::Machine(MachineInt::U8) => Err(KernelError::MachineFormOfU8),
@@ -145,7 +174,24 @@ pub(super) fn check_telescope(ctx: &mut Context, fields: &[Type]) -> Result<(), 
 
 /// Infers the type of a term, rejecting ill-formed terms.
 pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
-    match term {
+    let found = match term {
+        Term::Boxed(value) => {
+            if mode == Mode::Executable {
+                return Err(KernelError::InvalidRecursion(
+                    "physical box allocation requires execution IR",
+                ));
+            }
+            let ty = term_type(ctx, value, Mode::Logical)?;
+            if matches!(ty, Type::Proof(_)) && !matches!(**value, Term::Proof(_)) {
+                return Err(KernelError::ProofExpected((**value).clone()));
+            }
+            Ok(Type::Boxed(Box::new(ty)))
+        }
+        Term::Buffer {
+            op,
+            element,
+            arguments,
+        } => super::buffer::infer(ctx, *op, element, arguments, mode),
         Term::Free(..) => type_of_free(ctx, term, mode),
         Term::Bound(_) => Err(KernelError::DanglingBound),
         Term::Bool(_) => Ok(Type::Bool),
@@ -161,6 +207,7 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
         Term::Proj(..) => type_of_proj(ctx, term, mode),
         Term::Proof(..) => type_of_proof(ctx, term, mode),
         Term::Fn(..) => type_of_fn(ctx, term, mode),
+        Term::Lambda { .. } => type_of_lambda(ctx, term, mode),
         Term::Call(..) => type_of_call(ctx, term, mode),
         Term::Variant(..) => type_of_variant(ctx, term, mode),
         Term::Case { .. } => type_of_case(ctx, term, mode),
@@ -168,7 +215,11 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
         Term::Exists(..) => type_of_exists(ctx, term, mode),
         Term::Absurd(..) => type_of_absurd(ctx, term, mode),
         Term::For(..) => type_of_for(ctx, term, mode),
+    }?;
+    if mode == Mode::Executable && ctx.definitions().is_erased_type(&found) {
+        return Err(KernelError::GhostTypeInExecutable(found));
     }
+    Ok(found)
 }
 
 #[inline(never)]
@@ -186,6 +237,37 @@ fn type_of_free(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
 /// A machine integer literal is runtime data in either mode. It is a term
 /// only when its value lies in the range of its type, and only at a type
 /// other than `u8`, whose literals are `Term::U8`.
+#[inline(never)]
+fn type_of_lambda(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
+    if mode == Mode::Executable {
+        return Err(KernelError::LogicalFunctionInExecutable);
+    }
+    let Term::Lambda {
+        params,
+        result,
+        body,
+    } = term
+    else {
+        unreachable!()
+    };
+    let signature = Type::Fn(params.clone(), Box::new(result.clone()));
+    type_ok(ctx, &signature)?;
+    let scope = ctx.len();
+    let mut values: Vec<Term> = Vec::new();
+    let mut fields = params.clone();
+    fields.push(result.clone());
+    for index in 0..params.len() {
+        let ty = field_type(&fields, index, |j| values[j].clone());
+        values.push(Term::Free(ctx.push_bound(ty)));
+    }
+    let expected = field_type(&fields, params.len(), |j| values[j].clone());
+    let body = body.instantiate(params.len(), |j| values[j].clone());
+    let checked = expect_type(ctx, &body, &expected, Mode::Logical);
+    ctx.truncate(scope);
+    checked?;
+    Ok(signature)
+}
+
 #[inline(never)]
 fn type_of_machine(term: &Term) -> Result<Type, KernelError> {
     let Term::Machine(ty, value) = term else {
@@ -301,6 +383,7 @@ fn type_of_proj(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
     let target_type = term_type(ctx, target, mode)?;
     let definitions = ctx.definitions();
     let fields = match &target_type {
+        Type::Boxed(element) => std::slice::from_ref(&**element),
         Type::Tuple(fields) => fields.as_slice(),
         Type::Struct(id) => definitions
             .struct_fields(*id)
@@ -429,7 +512,7 @@ fn type_of_case(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
             let ty = field_type(payload, index, |j| Term::Free(vars[j]));
             // A payload variable is executable exactly when the case
             // is and its field has a runtime representation.
-            let ghost = mode == Mode::Logical || ty.is_ghost();
+            let ghost = mode == Mode::Logical || ctx.definitions().is_erased_type(&ty);
             vars.push(ctx.push_local(ty, ghost));
         }
         // The arm knows which variant it has.
@@ -673,6 +756,7 @@ fn prim_signature(prim: Prim) -> (Vec<Type>, Type) {
         }
         Prim::IntNeg => (vec![Type::Int], Type::Int),
         Prim::IntLe => (vec![Type::Int, Type::Int], Type::Prop),
+        Prim::IntCmp(_) => (vec![Type::Int, Type::Int], Type::Bool),
         Prim::View(ty) => (vec![Type::machine(ty)], Type::Int),
         Prim::Wrap(ty) => (vec![Type::Int], Type::machine(ty)),
         Prim::Cast(from, to) => (vec![Type::machine(from)], Type::machine(to)),
@@ -715,6 +799,7 @@ pub fn evaluate_primitive(prim: Prim, arguments: &[Term]) -> Option<Term> {
         // A comparison of two values of a type is the comparison of their
         // numbers, which is what `cmp_reflect` states of the views.
         (Prim::Cmp(op, ty), [a, b]) => Term::Bool(op.holds(&machine(ty, a)?, &machine(ty, b)?)),
+        (Prim::IntCmp(op), [Term::Int(a), Term::Int(b)]) => Term::Bool(op.holds(a, b)),
         (Prim::IntAdd, [Term::Int(a), Term::Int(b)]) => Term::Int(a.add(b)),
         (Prim::IntSub, [Term::Int(a), Term::Int(b)]) => Term::Int(a.sub(b)),
         (Prim::IntMul, [Term::Int(a), Term::Int(b)]) => Term::Int(a.mul(b)),
@@ -762,7 +847,7 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         | Axiom::CastDef(ty, _, _)
         | Axiom::OpModel(_, ty, _)
         | Axiom::OpExact(_, ty, _) => Some(Type::machine(*ty)),
-        Axiom::CmpReflect(..) => None,
+        Axiom::CmpReflect(..) | Axiom::CmpReify(..) => None,
     };
     if let Some(expected) = &expected {
         for term in axiom.terms() {
@@ -880,15 +965,16 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
         // Reflection at every machine type: the comparison decides the
         // proposition of the same name about the views. Typing the
         // comparison types its operands at the type it carries.
-        Axiom::CmpReflect(comparison, flag) => {
+        Axiom::CmpReflect(comparison, flag) | Axiom::CmpReify(comparison, flag) => {
             expect_type(ctx, &comparison, &Type::Bool, Mode::Logical)?;
-            let claim = machine_comparison_claim(&comparison)
+            let claim = comparison_claim(&comparison)
                 .ok_or_else(|| KernelError::NoComputationStep(comparison.clone()))?;
             let observed = Term::eq(Type::Bool, comparison, Term::Bool(flag));
-            if flag {
-                Term::implies(observed, claim)
+            let claim = if flag { claim } else { prelude.not_prop(claim) };
+            if matches!(axiom, Axiom::CmpReify(..)) {
+                Term::implies(claim, observed)
             } else {
-                Term::implies(observed, prelude.not_prop(claim))
+                Term::implies(observed, claim)
             }
         }
     })
@@ -896,17 +982,21 @@ fn axiom_statement(ctx: &mut Context, axiom: &Axiom) -> Result<Term, KernelError
 
 /// The proposition a runtime comparison at a machine type decides, over
 /// the views of its operands.
-fn machine_comparison_claim(comparison: &Term) -> Option<Term> {
-    let Term::Prim(Prim::Cmp(op, ty), arguments) = comparison else {
+fn comparison_claim(comparison: &Term) -> Option<Term> {
+    let Term::Prim(prim, arguments) = comparison else {
         return None;
     };
     let [left, right] = arguments.as_slice() else {
         return None;
     };
-    Some(op.claim(
-        Term::view(*ty, left.clone()),
-        Term::view(*ty, right.clone()),
-    ))
+    match prim {
+        Prim::Cmp(op, ty) => Some(op.claim(
+            Term::view(*ty, left.clone()),
+            Term::view(*ty, right.clone()),
+        )),
+        Prim::IntCmp(op) => Some(op.claim(left.clone(), right.clone())),
+        _ => None,
+    }
 }
 
 /// The row an axiom about the table names, when it exists and the axiom
@@ -955,7 +1045,9 @@ fn check_fields(
                 };
                 proof_of(ctx, proof, prop)?;
             }
-            _ if expected.is_ghost() => expect_type(ctx, value, &expected, Mode::Logical)?,
+            _ if ctx.definitions().is_erased_type(&expected) => {
+                expect_type(ctx, value, &expected, Mode::Logical)?
+            }
             _ => expect_type(ctx, value, &expected, mode)?,
         }
     }
@@ -983,6 +1075,8 @@ pub(super) fn expect_type(
 /// The result is well formed in `ctx`.
 pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
     match proof {
+        Proof::BufferStep(term) => super::buffer::proof_step(ctx, term),
+        Proof::BufferBound { value, upper } => super::buffer::proof_bound(ctx, value, *upper),
         Proof::Hyp(HypRef::Free(id)) => ctx
             .hyp(*id)
             .cloned()
@@ -1002,6 +1096,7 @@ pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         Proof::Literal(..) => claim_of_literal(ctx, proof),
         Proof::Definition(..) => claim_of_definition(ctx, proof),
         Proof::CaseStep(..) => claim_of_case_step(ctx, proof),
+        Proof::CaseKnown { term, equation } => claim_of_case_known(ctx, term, equation),
         Proof::Construct { .. } => claim_of_construct(ctx, proof),
         Proof::CaseProof { .. } => claim_of_case_proof(ctx, proof),
         Proof::CaseData { .. } => claim_of_case_data(ctx, proof),
@@ -1014,6 +1109,8 @@ pub(super) fn proof_claim(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
         Proof::Evaluate(..) => claim_of_evaluate(ctx, proof),
         Proof::Axiom(axiom) => axiom_statement(ctx, axiom),
         Proof::IntInduction { .. } => claim_of_int_induction(ctx, proof),
+        Proof::DataInduction { .. } => claim_of_data_induction(ctx, proof),
+        Proof::PropInduction { .. } => claim_of_prop_induction(ctx, proof),
         Proof::Linear { .. } => claim_of_linear(ctx, proof),
     }
 }
@@ -1118,8 +1215,10 @@ fn claim_of_projection(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelE
     let Term::Proj(target, index) = term else {
         return Err(KernelError::NoComputationStep(term.clone()));
     };
-    let (Term::Tuple(_, values) | Term::Struct(_, values)) = &**target else {
-        return Err(KernelError::NoComputationStep(term.clone()));
+    let values: &[Term] = match &**target {
+        Term::Tuple(_, values) | Term::Struct(_, values) => values,
+        Term::Boxed(value) => std::slice::from_ref(&**value),
+        _ => return Err(KernelError::NoComputationStep(term.clone())),
     };
     let ty = term_type(ctx, term, Mode::Logical)?;
     if matches!(ty, Type::Proof(_)) {
@@ -1156,20 +1255,22 @@ fn claim_of_definition(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelE
     let Term::Call(callee, arguments) = term else {
         return Err(KernelError::NoComputationStep(term.clone()));
     };
-    let Term::Fn(id) = &**callee else {
-        return Err(KernelError::NoComputationStep(term.clone()));
-    };
     let ty = term_type(ctx, term, Mode::Logical)?;
     if matches!(ty, Type::Proof(_)) {
         return Err(KernelError::EqualityAtProofType(ty));
     }
     let definitions = ctx.definitions();
-    let decl = definitions
-        .function(*id)
-        .ok_or(KernelError::UnknownFunction)?;
-    let unfolded = decl
-        .body
-        .instantiate(arguments.len(), |j| arguments[j].clone());
+    let body = match &**callee {
+        Term::Fn(id) => {
+            &definitions
+                .function(*id)
+                .ok_or(KernelError::UnknownFunction)?
+                .body
+        }
+        Term::Lambda { body, .. } => body,
+        _ => return Err(KernelError::NoComputationStep(term.clone())),
+    };
+    let unfolded = body.instantiate(arguments.len(), |j| arguments[j].clone());
     Ok(Term::eq(ty, term.clone(), unfolded))
 }
 
@@ -1194,6 +1295,41 @@ fn claim_of_case_step(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelEr
         .body
         .instantiate(payload.len(), |j| payload[j].clone())
         .subst_hyps(&[&fact]);
+    Ok(Term::eq(ty, term.clone(), chosen))
+}
+
+#[inline(never)]
+fn claim_of_case_known(
+    ctx: &mut Context,
+    term: &Term,
+    equation: &Proof,
+) -> Result<Term, KernelError> {
+    let Term::Case {
+        scrutinee, arms, ..
+    } = term
+    else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let ty = term_type(ctx, term, Mode::Logical)?;
+    let scrutinee_type = term_type(ctx, scrutinee, Mode::Logical)?;
+    let claim = proof_claim(ctx, equation)?;
+    let Term::Eq(eq_type, actual, constructor) = &claim else {
+        return Err(KernelError::NotAnEquality(claim));
+    };
+    if !same_type(eq_type, &scrutinee_type) || !same(actual, scrutinee) {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    }
+    let Some((index, payload)) = known_constructor(constructor) else {
+        return Err(KernelError::NoComputationStep(term.clone()));
+    };
+    let arm = arms
+        .get(index)
+        .ok_or(KernelError::NoComputationStep(term.clone()))?;
+    let chosen = arm
+        .body
+        .instantiate(payload.len(), |j| payload[j].clone())
+        .subst_hyps(&[equation]);
+    expect_type(ctx, &chosen, &ty, Mode::Logical)?;
     Ok(Term::eq(ty, term.clone(), chosen))
 }
 
@@ -1537,6 +1673,170 @@ fn claim_of_int_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, Kern
     )?;
     // Only the non-negative integers are reached from 0 by successors.
     Ok(Term::implies(nonneg(target), motive.open(target)))
+}
+
+/// The induction schema for finite, strictly positive logical data.
+#[inline(never)]
+fn claim_of_data_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::DataInduction {
+        target,
+        motives,
+        arms,
+    } = proof
+    else {
+        unreachable!()
+    };
+    let Type::Enum(target_id) = term_type(ctx, target, Mode::Logical)? else {
+        return Err(KernelError::InvalidInduction(
+            "target must have a logical enum type",
+        ));
+    };
+    let definitions = ctx.definitions().clone();
+    let group = definitions
+        .logical_enum_group(target_id)
+        .ok_or(KernelError::InvalidInduction(
+            "target is not a logical enum",
+        ))?;
+    if motives.len() != group.len()
+        || !motives
+            .iter()
+            .zip(&group)
+            .all(|((id, _), expected)| id == expected)
+    {
+        return Err(KernelError::InvalidInduction(
+            "one motive per group member is required, in declaration order",
+        ));
+    }
+    for (id, motive) in motives {
+        let scope = ctx.len();
+        let var = ctx.push_bound(Type::Enum(*id));
+        let checked = expect_type(
+            ctx,
+            &motive.open(&Term::Free(var)),
+            &Type::Prop,
+            Mode::Logical,
+        );
+        ctx.truncate(scope);
+        checked?;
+    }
+    let expected_arms: usize = group
+        .iter()
+        .map(|id| definitions.enum_variants(*id).unwrap().len())
+        .sum();
+    expect_arm_count(arms, expected_arms)?;
+    let mut arm_index = 0;
+    for (id, motive) in motives {
+        for (variant, payload) in definitions.enum_variants(*id).unwrap().iter().enumerate() {
+            let arm = &arms[arm_index];
+            arm_index += 1;
+            check_arm_with(
+                ctx,
+                arm,
+                payload.len(),
+                |index, vars| field_type(payload, index, |j| Term::Free(vars[j])),
+                |vars| {
+                    payload
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, field)| {
+                            let Type::Enum(child) = field else {
+                                return None;
+                            };
+                            motives
+                                .iter()
+                                .find(|(id, _)| id == child)
+                                .map(|(_, motive)| motive.open(&Term::Free(vars[index])))
+                        })
+                        .collect()
+                },
+                |vars| {
+                    motive.open(&constructor_of_vars(
+                        &Type::Enum(*id),
+                        variant,
+                        vars,
+                        payload,
+                    ))
+                },
+            )?;
+        }
+    }
+    let motive = &motives.iter().find(|(id, _)| *id == target_id).unwrap().1;
+    Ok(motive.open(target))
+}
+
+#[inline(never)]
+fn claim_of_prop_induction(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelError> {
+    let Proof::PropInduction {
+        scrutinee,
+        motive,
+        arms,
+    } = proof
+    else {
+        unreachable!()
+    };
+    let claim = proof_claim(ctx, scrutinee)?;
+    let Term::PropApp(id, arguments) = &claim else {
+        return Err(KernelError::InvalidInduction(
+            "scrutinee must prove an inductive predicate",
+        ));
+    };
+    let definitions = ctx.definitions().clone();
+    let decl = definitions.prop(*id).ok_or(KernelError::UnknownProp)?;
+    if !decl.inductive {
+        return Err(KernelError::InvalidInduction(
+            "predicate is not declared inductive",
+        ));
+    }
+    if motive.binders as usize != decl.params.len() {
+        return Err(KernelError::InvalidInduction(
+            "motive must bind every header parameter exactly once",
+        ));
+    }
+    let scope = ctx.len();
+    let vars: Vec<_> = decl
+        .params
+        .iter()
+        .map(|ty| ctx.push_bound(ty.clone()))
+        .collect();
+    let checked = expect_type(
+        ctx,
+        &motive.body.instantiate(vars.len(), |i| Term::Free(vars[i])),
+        &Type::Prop,
+        Mode::Logical,
+    );
+    ctx.truncate(scope);
+    checked?;
+    expect_arm_count(arms, decl.variants.len())?;
+    for (arm, variant) in arms.iter().zip(&decl.variants) {
+        let telescope = &variant.telescope;
+        let body_index = telescope.len() - 1;
+        check_arm_with(
+            ctx,
+            arm,
+            telescope.len(),
+            |i, vars| field_type(telescope, i, |j| Term::Free(vars[j])),
+            |vars| {
+                let Type::Proof(body) = field_type(telescope, body_index, |j| Term::Free(vars[j]))
+                else {
+                    unreachable!("inductive arms end in evidence")
+                };
+                vec![super::recursive::strengthen_body(
+                    &definitions,
+                    *id,
+                    &body,
+                    motive,
+                )]
+            },
+            |vars| {
+                motive
+                    .body
+                    .instantiate(decl.params.len(), |i| Term::Free(vars[i]))
+            },
+        )?;
+    }
+    Ok(motive
+        .body
+        .instantiate(arguments.len(), |i| arguments[i].clone()))
 }
 
 /// Accepts `proof` as a proof of `expected`, which must be a proposition.

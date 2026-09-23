@@ -1,0 +1,10 @@
+locus-proofs 1
+
+obligation 3340f9299b247295 Percent::checked 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u32]($0), 100i)), linear(int_le(view[u32]($0), 100i), 1, [(transport(literal(view[u32](100u32)), int_le(view[u32]($0), #0), implies_elim(axiom(cmp_reflect[true], le[u32]($0, 100u32)), h0)), 1)]))
+
+obligation c3cee257f8d2bab0 Percent::set_twice 2
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u32]($1), 100i)), linear(int_le(view[u32]($1), 100i), 1, [(transport(literal(view[u32](100u32)), int_le(view[u32]($1), #0), implies_elim(axiom(cmp_reflect[true], le[u32]($1, 100u32)), of_term($4))), 1)]))
+
+obligation d4ee099e52608e0b Percent::set_twice 4
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u32]($2), 100i)), linear(int_le(view[u32]($2), 100i), 1, [(transport(literal(view[u32](100u32)), int_le(view[u32]($2), #0), implies_elim(axiom(cmp_reflect[true], le[u32]($2, 100u32)), of_term($6))), 1)]))

@@ -15,7 +15,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use locus::elab::{Elaborated, elaborate_with_store};
+use locus::elab::{Elaborated, Options, elaborate_with_store_and_options};
 use locus::kernel::theory;
 use locus::kernel::{
     Axiom, CmpOp, Context, Definitions, ForLoop, Integer, MachineInt, Op, Prim, Proof, ProofArm,
@@ -81,7 +81,16 @@ fn run(name: &str, text: &str, store: ProofStore) -> (Elaborated, ProofStore) {
     let source = sources.get(file);
     let parsed = parse(source);
     assert!(parsed.is_success(), "{name} does not parse");
-    elaborate_with_store(source, &parsed.program, store)
+    let mut options = Options::default();
+    for line in text.lines() {
+        if let Some(name) = line.trim().strip_prefix("//~ preview:") {
+            let feature = locus::preview::Feature::parse(name.trim()).unwrap();
+            if feature.status() == locus::preview::Status::Preview {
+                options.previews.enable(feature.name()).unwrap();
+            }
+        }
+    }
+    elaborate_with_store_and_options(source, &parsed.program, store, &options)
 }
 
 fn read(text: &str) -> ProofStore {
@@ -108,6 +117,7 @@ fn entries(rendered: &str) -> BTreeMap<String, String> {
 }
 
 #[test]
+#[doc = "spec: 1.20:1"]
 fn every_found_proof_is_written_read_back_and_accepted() {
     let mut files = 0;
     let mut proofs = 0;
@@ -188,7 +198,7 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
     let (_, store) = run("lock.lc", &original, ProofStore::new());
     let rendered = store.render();
     let total = store.stats().recorded;
-    assert_eq!(total, 5);
+    assert_eq!(total, 8);
     let again = |edited: &str| -> (Stats, String) {
         let (elaborated, store) = run("lock.lc", edited, read(&rendered));
         assert!(elaborated.is_success(), "{:?}", elaborated.diagnostics);
@@ -239,25 +249,25 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
 
     // A function edited before its obligations: `run` gains a binding, so
     // the contexts of its two obligations change and their entries alone
-    // miss. The other three entries stay in use and are written unchanged.
+    // miss. The other six entries stay in use and are written unchanged.
     let edited = original.replace(
         "    let mut lock = Lock { failures: 0, open: false };",
         "    let limit: u8 = 3;\n    let mut lock = Lock { failures: 0, open: false };",
     );
     assert_ne!(edited, original);
     let (stats, text) = again(&edited);
-    assert_eq!(stats.hits, 3);
+    assert_eq!(stats.hits, 6);
     assert_eq!(stats.misses, 2);
     assert_eq!(stats.searches, 2);
     assert_eq!(stats.recorded, 2);
     let (before, after) = (entries(&rendered), entries(&text));
-    assert_eq!(before.len(), 5);
-    assert_eq!(after.len(), 5);
+    assert_eq!(before.len(), 8);
+    assert_eq!(after.len(), 8);
     let kept = before
         .iter()
         .filter(|(key, _)| after.contains_key(*key))
         .count();
-    assert_eq!(kept, 3);
+    assert_eq!(kept, 6);
     assert!(
         before
             .iter()
@@ -276,6 +286,7 @@ fn reformatting_comments_and_unrelated_edits_leave_every_entry_in_use() {
 }
 
 #[test]
+#[doc = "spec: 1.20:1"]
 fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
     let source = lock();
     let (_, store) = run("lock.lc", &source, ProofStore::new());
@@ -285,7 +296,7 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
         .filter(|&index| lines[index].starts_with("obligation "))
         .map(|index| index + 1)
         .collect();
-    assert_eq!(proofs_at.len(), 5);
+    assert_eq!(proofs_at.len(), 8);
     let file = |lines: &[String]| lines.join("\n") + "\n";
     // Whatever was accepted was accepted by the kernel: every hit is a
     // proof the kernel accepts again, over its context, of its claim.
@@ -302,13 +313,19 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
     // written right again; under `--locked` they are errors that name the
     // obligation.
     let mut swapped = lines.clone();
-    swapped.swap(proofs_at[1], proofs_at[2]);
-    assert_ne!(lines[proofs_at[1]], lines[proofs_at[2]]);
+    let step_proofs: Vec<usize> = proofs_at
+        .iter()
+        .copied()
+        .filter(|&at| lines[at - 1].contains(" step "))
+        .collect();
+    assert!(step_proofs.len() >= 2);
+    swapped.swap(step_proofs[0], step_proofs[1]);
+    assert_ne!(lines[step_proofs[0]], lines[step_proofs[1]]);
     let (elaborated, store) = run("lock.lc", &source, read(&file(&swapped)));
     assert!(elaborated.is_success());
     accepted_by_the_kernel(&elaborated);
     let stats = store.stats();
-    assert_eq!((stats.hits, stats.stale, stats.searches), (3, 2, 2));
+    assert_eq!((stats.hits, stats.stale, stats.searches), (6, 2, 2));
     assert_eq!(store.render(), rendered);
     let (elaborated, store) = run("lock.lc", &source, read(&file(&swapped)).locked(true));
     assert!(!elaborated.is_success());
@@ -328,7 +345,7 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
     let evaluations: Vec<usize> = proofs_at
         .iter()
         .copied()
-        .filter(|&at| lines[at].contains("view[u8](3)"))
+        .filter(|&at| lines[at - 1].ends_with(" run 1") || lines[at - 1].ends_with(" step 4"))
         .collect();
     assert_eq!(evaluations.len(), 2);
     for (edit, count) in [
@@ -348,7 +365,7 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
         accepted_by_the_kernel(&elaborated);
         let stats = store.stats();
         assert_eq!(stats.stale, count, "{edit}");
-        assert_eq!(stats.hits, 5 - count, "{edit}");
+        assert_eq!(stats.hits, 8 - count, "{edit}");
         assert_eq!(store.render(), rendered, "{edit}");
     }
 
@@ -367,7 +384,7 @@ fn hostile_files_cost_a_search_or_a_report_and_never_pass_a_false_claim() {
                 assert!(elaborated.is_success(), "{length}");
                 accepted_by_the_kernel(&elaborated);
                 let stats = store.stats();
-                assert_eq!(stats.hits + stats.misses, 5, "{length}");
+                assert_eq!(stats.hits + stats.misses, 8, "{length}");
                 assert_eq!(store.render(), rendered, "{length}");
                 used += stats.hits;
             }
@@ -400,7 +417,7 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
     assert!(elaborated.is_success());
     let stats = store.stats();
     assert_eq!(stats.searches, 0);
-    assert_eq!(stats.hits, 5);
+    assert_eq!(stats.hits, 8);
     assert!(elaborated.holes.iter().all(|hole| hole.tier == "stored"));
 
     // One entry removed: the obligation is named, and nothing is searched.
@@ -420,7 +437,7 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
         .collect();
     assert_eq!(
         messages,
-        ["`run` needs a proof of `0u8 <= 3` at line 56, and the proofs file has none"]
+        ["`run` needs a proof of `0 <= 3` at line 56, and the proofs file has none"]
     );
 
     // Surviving an upgrade: with every tier made to fail, the complete
@@ -435,7 +452,11 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
         elaborated
             .diagnostics
             .iter()
-            .all(|diagnostic| diagnostic.message.starts_with("cannot show"))
+            .all(|diagnostic| diagnostic.code == "L0230"
+                && (diagnostic.message.starts_with("cannot show")
+                    || diagnostic.message.starts_with("this is evidence of"))),
+        "{:?}",
+        elaborated.diagnostics
     );
 }
 
@@ -517,6 +538,36 @@ fn every_term_and_proof_form_round_trips() {
     };
     let int = |value: i64| Term::Int(Integer::from(value));
     let mut terms = vec![
+        Term::Boxed(Box::new(Term::U8(3))),
+        Term::eq(
+            Type::Boxed(Box::new(Type::U8)),
+            Term::Boxed(Box::new(Term::U8(3))),
+            Term::Boxed(Box::new(Term::U8(3))),
+        ),
+        Term::Buffer {
+            op: locus::kernel::BufferOp::Literal,
+            element: Type::U8,
+            arguments: vec![Term::U8(3)],
+        },
+        Term::Buffer {
+            op: locus::kernel::BufferOp::Length,
+            element: Type::U8,
+            arguments: vec![x.clone()],
+        },
+        Term::proof(Proof::BufferStep(x.clone())),
+        Term::proof(Proof::BufferBound {
+            value: x.clone(),
+            upper: false,
+        }),
+        Term::proof(Proof::BufferBound {
+            value: x.clone(),
+            upper: true,
+        }),
+        Term::Lambda {
+            params: vec![Type::Int],
+            result: Type::Int,
+            body: Box::new(Term::int_add(Term::Bound(0), n.clone())),
+        },
         x.clone(),
         n.clone(),
         Term::Bound(7),
@@ -663,6 +714,19 @@ fn every_term_and_proof_form_round_trips() {
         Proof::Literal(a.clone()),
         Proof::Definition(Term::call(Term::Fn(le_trans), vec![])),
         Proof::CaseStep(Term::Bool(true)),
+        Proof::CaseKnown {
+            term: Term::Bool(true),
+            equation: Box::new(Proof::Refl(Term::Bool(true))),
+        },
+        Proof::BufferStep(Term::Bool(true)),
+        Proof::BufferBound {
+            value: Term::Bool(true),
+            upper: false,
+        },
+        Proof::BufferBound {
+            value: Term::Bool(true),
+            upper: true,
+        },
         Proof::Construct {
             prop: small,
             variant: 0,
@@ -707,6 +771,22 @@ fn every_term_and_proof_form_round_trips() {
         },
         Proof::Omitted,
         Proof::Evaluate(a.clone()),
+        Proof::PropInduction {
+            scrutinee: Box::new(h.clone()),
+            motive: locus::kernel::TermArm {
+                binders: 1,
+                body: Term::eq(Type::Int, Term::Bound(0), Term::Bound(0)),
+            },
+            arms: vec![arm(1, 1, Proof::Omitted)],
+        },
+        Proof::DataInduction {
+            target: Term::Variant(event, 0, vec![]),
+            motives: vec![(
+                event,
+                Term::eq(Type::Enum(event), Term::Bound(0), Term::Bound(0)),
+            )],
+            arms: vec![arm(0, 0, Proof::Omitted)],
+        },
         Proof::IntInduction {
             motive: Term::int_le(int(0), Term::Bound(0)),
             base: Box::new(Proof::Omitted),
@@ -770,6 +850,8 @@ fn every_term_and_proof_form_round_trips() {
             Term::cmp(CmpOp::Le, MachineInt::U8, x.clone(), x.clone()),
             false,
         ),
+        Axiom::CmpReify(Term::int_cmp(CmpOp::Le, n.clone(), n.clone()), true),
+        Axiom::CmpReify(Term::int_cmp(CmpOp::Eq, n.clone(), n.clone()), false),
     ];
     let mut seen: Vec<&str> = Vec::new();
     for axiom in axioms {
@@ -778,7 +860,7 @@ fn every_term_and_proof_form_round_trips() {
         }
         proofs.push(Proof::Axiom(axiom));
     }
-    assert_eq!(seen.len(), 33, "every axiom is listed");
+    assert_eq!(seen.len(), 34, "every axiom is listed");
     let mut rules: Vec<&str> = Vec::new();
     for proof in &proofs {
         if !rules.contains(&proof.rule_name()) {
@@ -789,7 +871,7 @@ fn every_term_and_proof_form_round_trips() {
             .unwrap_or_else(|error| panic!("{printed}: {error}"));
         assert_eq!(&back, proof, "{printed}");
     }
-    assert_eq!(rules.len(), 25, "every rule is listed: {rules:?}");
+    assert_eq!(rules.len(), 31, "every rule is listed: {rules:?}");
 }
 
 #[test]
@@ -1130,5 +1212,24 @@ fn nesting_at_the_limit_fits_a_small_stack_and_beyond_it_is_refused() {
             })
             .unwrap();
         handle.join().unwrap_or_else(|_| panic!("{form} {depth}"));
+    }
+}
+#[test]
+fn qualified_names_do_not_confuse_enum_variant_separators() {
+    let mut defs = Definitions::default();
+    let id = defs
+        .declare_fn(&Type::Fn(vec![], Box::new(Type::U8)), |_| Term::U8(7))
+        .unwrap();
+    let enum_id = defs.declare_enum(&[Type::Tuple(vec![])]).unwrap();
+    let mut names = Names::new();
+    names.function("View::__model_0", id);
+    names.enumeration("library::Event", enum_id);
+    let ctx = Context::with_definitions(Rc::new(defs));
+    for term in [
+        Term::call(Term::Fn(id), vec![]),
+        Term::Variant(enum_id, 0, vec![]),
+    ] {
+        let text = print_term(&term, &ctx, &names).unwrap();
+        assert_eq!(parse_term(&text, &ctx, &names).unwrap(), term);
     }
 }

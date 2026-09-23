@@ -68,6 +68,9 @@ pub(super) struct PropInfo {
 #[derive(Debug)]
 pub(super) struct PropVariantInfo {
     pub name: String,
+    /// Computed body of a named arm, over header parameters and witnesses.
+    /// Its final payload binder holds evidence of this body.
+    pub body: Option<Term>,
     /// Over the proposition's parameters when there is no conclusion, and
     /// over nothing but the earlier payload when there is one.
     pub payload: Vec<Binder>,
@@ -80,6 +83,10 @@ pub(super) struct PropVariantInfo {
 
 #[derive(Debug)]
 pub(super) struct FnInfo {
+    /// Checked logical declaration; independent of runtime promises.
+    pub logical: bool,
+    /// Surface result classification (kernel Bool alone cannot retain it).
+    pub result_logical: bool,
     pub reference: FnRef,
     pub name: String,
     pub params: Vec<Binder>,
@@ -89,18 +96,11 @@ pub(super) struct FnInfo {
     pub constant: bool,
     /// What the function promises: its attributes and the file's defaults.
     pub promises: Promises,
-    /// A parameter is `&mut`: the function writes what its caller can see.
-    pub takes_mut: bool,
     /// How each parameter is passed, in the order of `params`; a shorter
     /// list means the rest are by value. For a function with `&mut`
     /// parameters `result` is the tuple of their exit values followed by
     /// the declared result (`FnItem::exec_result`).
     pub passing: Vec<Passing>,
-    /// The function makes every promise of the logic and its body is still
-    /// not a kernel term: what it contains that is not one, and the line.
-    /// It is checked as an ordinary function with its promises, and is
-    /// known by its contract only, which nothing supports yet (LOC-193).
-    pub not_a_term: Option<(String, usize)>,
     /// `pub` or a restricted form, as written; private without one.
     pub visibility: Option<ast::Visibility>,
     /// The first parameter is `self`: a method of an `impl` block, whose
@@ -118,25 +118,6 @@ pub(super) const LOGICAL: Promises = Promises {
     no_alloc: false,
     no_io: true,
 };
-
-impl FnInfo {
-    /// Why the function may not appear in a proposition, or nothing: the
-    /// first of the three promises it does not make, or `&mut`.
-    pub fn logical_gap(&self) -> Option<String> {
-        Promise::ALL
-            .into_iter()
-            .find(|&promise| LOGICAL.makes(promise) && !self.promises.makes(promise))
-            .map(|promise| format!("it does not promise {}", promise.name()))
-            .or_else(|| self.takes_mut.then(|| "it takes `&mut`".to_string()))
-            .or_else(|| {
-                self.not_a_term.as_ref().map(|(what, line)| {
-                    format!(
-                        "its body is not a term of the logic (it contains {what} at line {line}); it is known by its contract only, which is not supported yet (LOC-193)"
-                    )
-                })
-            })
-    }
-}
 
 /// The first promise `made` makes that `callee` does not, in the order the
 /// promises are listed in.
@@ -162,8 +143,8 @@ pub(super) struct Local {
     /// The binding failed to elaborate. A use of it is a consequence of an
     /// error already reported, and is not reported again.
     pub poisoned: bool,
-    /// Declared `Ghost<T>`: a logical value of `ty`, which is `T`, with no
-    /// runtime form. It is named only where nothing runs (`types.rs`).
+    /// The source type is Logical even when the shared kernel representation
+    /// also serves runtime data (notably Bool versus bool).
     pub ghost: bool,
     /// For a binding declared `let mut`: its identity, which every version
     /// of it refers to. `id` is then the current version (`mutation.rs`).
@@ -205,10 +186,12 @@ impl Fact {
 }
 
 /// The loop a `break` or `continue` belongs to (`loops.rs`).
+#[derive(Clone)]
 pub(super) struct LoopTarget {
     /// The type a `break` supplies, once it is known: the type expected of
     /// a `loop`, or the type of its first `break value`.
     pub result: Option<Type>,
+    pub layout: Option<crate::typed::ErasureLayout>,
     /// Whether a `break` may carry a value: in a `loop`, and not in a
     /// `while` or a `for`, which produce none.
     pub valued: bool,
@@ -228,7 +211,10 @@ pub(super) struct LoopTarget {
 }
 
 /// The function a `return` leaves (`control.rs`).
+#[derive(Clone)]
 pub(super) struct ReturnTarget {
+    pub layout: crate::typed::ErasureLayout,
+    pub logical: bool,
     /// The declared result type, over the parameters' identities: what a
     /// `return` supplies, checked where the `return` stands.
     pub result: Type,
@@ -251,8 +237,15 @@ impl Mark {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct Env<'a> {
+    pub models: Vec<super::models::ModelEntry>,
+    pub quantifiers: Vec<crate::kernel::Quantifiers>,
+    pub closure_capture_boundary: Option<usize>,
+    pub explicit_model_depth: usize,
+    pub layout_hints: HashMap<Span, crate::typed::ErasureLayout>,
     pub source: &'a SourceFile,
+    pub previews: crate::preview::Previews,
     pub session: Session,
     pub prelude: Prelude,
     pub theory: Theory,
@@ -265,7 +258,8 @@ pub(super) struct Env<'a> {
     pub failed: HashSet<String>,
     /// `#![...]` at the top of the file: promised by every function in it.
     pub file_promises: Promises,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: crate::limits::DiagnosticBuffer,
+    pub normalization_exhausted: bool,
     pub holes: Vec<HoleReport>,
     pub items: Vec<ItemReport>,
 
@@ -277,6 +271,8 @@ pub(super) struct Env<'a> {
     /// Where a `return` goes: the ordinary function whose body this is,
     /// and nothing inside a constant or a function of the logic.
     pub returns: Option<ReturnTarget>,
+    /// A local callable replaced by a checked structural self reference.
+    pub recursion: Option<(Binder, Vec<usize>)>,
     /// The functions declared `-> !`, which never return: a call to one is
     /// never-typed (`exprs.rs`).
     pub never_fns: HashSet<crate::exec::ExecFnId>,
@@ -286,6 +282,8 @@ pub(super) struct Env<'a> {
     /// Inside a function of the logic, a proposition, or a proof type,
     /// where nothing may fail to return.
     pub total: bool,
+    pub in_constant: bool,
+    pub suppress_models: usize,
     /// The name of the item being elaborated, for messages.
     pub item_name: String,
     /// What the function being elaborated promises. Every call is checked
@@ -299,7 +297,6 @@ pub(super) struct Env<'a> {
     /// something in it is not a kernel term, an operator that may panic or
     /// a call of such a function: what it was and where. `items` then
     /// elaborates the function again as an ordinary one (LOC-193).
-    pub not_a_term: Option<(String, Span)>,
     /// The move analysis (`moves.rs`).
     pub moves: Moves,
     /// The `&mut` parameters of the function being elaborated: for each,
@@ -336,7 +333,7 @@ impl Env<'_> {
     /// nothing wrong that an earlier, better message should not have caught.
     pub fn internal<T>(&mut self, error: impl std::fmt::Display, span: Span) -> Elab<T> {
         self.diagnostics.push(
-            Diagnostic::error("L0299", format!("the checker rejected this: {error}"), span)
+            Diagnostic::error("L0300", format!("the checker rejected this: {error}"), span)
                 .note("this is a gap in the elaborator's own checks; the program was not accepted"),
         );
         Err(())
@@ -425,8 +422,8 @@ impl Env<'_> {
     }
 
     /// Makes `name` refer to an identity the context already holds, and
-    /// records what its type lets one conclude. `ghost` is a binding
-    /// declared `Ghost<T>`.
+    /// records what its type lets one conclude. `ghost` retains the source
+    /// type's logical classification.
     pub fn bind(&mut self, name: &str, id: VarId, ty: &Type, ghost: bool) {
         self.labels.insert(id, name.to_string());
         self.names.push(Local {
@@ -442,14 +439,11 @@ impl Env<'_> {
         self.learn_from(&Term::var(id), ty);
     }
 
-    /// Elaborates `inside` as a logic-only context, where nothing runs: the
-    /// argument of `snapshot!`, the value of a `let` of a logic-only type,
-    /// what stands in a `Ghost<T>` parameter or field, the arguments of a
-    /// proposition, of an evidence constructor, or of a call erasure
-    /// removes. A formula is one too (`logic.rs`). Every call in it must be
-    /// one a proposition admits (`L0209`), an operator that may panic is
-    /// refused (`L0236`), no loop stands there (`L0215`), and a local named
-    /// there is read, not moved (`moves.rs`).
+    /// Elaborates a logical context. Ordinary calls are rejected (L0209),
+    /// physical observations use immutable models, and modelled arithmetic
+    /// operates on logical Int. Naming physical data observes without moving.
+    /// Unsupported loops are rejected (L0215); recursive logical functions
+    /// use a separately checked structural or explicit measure.
     pub fn logical<T>(&mut self, place: &'static str, inside: impl FnOnce(&mut Self) -> T) -> T {
         let was_total = std::mem::replace(&mut self.total, true);
         let was_formula = self.formula.replace(place);
@@ -489,8 +483,7 @@ impl Env<'_> {
     }
 
     /// Declares a variable in the mirrored context and brings it into scope.
-    /// It is ghost in the kernel when asked to be, or when declared
-    /// `Ghost<T>`.
+    /// It is logical in the kernel when its source type or use requires it.
     pub fn declare(&mut self, binder: &Binder, ghost: bool, span: Span) -> Elab<()> {
         let result = self
             .ctx

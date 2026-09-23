@@ -305,6 +305,30 @@ pub enum CompareOp {
 
 #[derive(Clone, Debug)]
 pub enum Expr {
+    BoxNew {
+        value: Box<Expr>,
+        result: VarId,
+        equation: HypId,
+        logical_payload: bool,
+    },
+    BoxDeref {
+        value: Box<Expr>,
+        ty: Type,
+    },
+    /// A persistent shared borrow. The logic sees its immutable value.
+    Shared {
+        value: Box<Expr>,
+        lifetime: Option<String>,
+    },
+    /// Read through a persistent shared reference; permission is checked at use.
+    Deref(Box<Expr>),
+    /// Application of an erased logical callable (including a scoped self
+    /// callable while checking structural recursion).
+    LogicalApply {
+        callee: Term,
+        arguments: Vec<Expr>,
+        ty: Type,
+    },
     Var {
         id: VarId,
         name: String,
@@ -610,6 +634,7 @@ impl Expr {
             Self::Var { ty, .. }
             | Self::Field { ty, .. }
             | Self::CallMath { ty, .. }
+            | Self::LogicalApply { ty, .. }
             | Self::CallFn { ty, .. }
             | Self::If { ty, .. }
             | Self::Match { ty, .. }

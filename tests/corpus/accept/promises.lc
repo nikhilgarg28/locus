@@ -4,31 +4,31 @@
 // every function in it, and an attribute on a function adds to it.
 #![no_io]
 
-// With `terminates`, `no_panic`, and `no_io`, `double` may appear in a
-// proposition: it always returns and does nothing observable, so mentioning
-// it runs nothing and denotes one value. Its defining equation is known.
+// Promises constrain execution; they do not turn a runtime function into a
+// logical definition. A separate explicit logical definition has an equation.
 #[terminates] #[no_panic]
-fn double(n: u8) -> u8 {
-    n.wrapping_add(n)
+fn double(n: u8) -> (out: u8, @(out == n.wrapping_add(n))) {
+    (n.wrapping_add(n), _)
 }
 
-fn doubled(n: u8) -> (out: u8, @(out == double(n))) {
-    let out = double(n);
-    (out, _)
+logic fn sum_twice(n: Int) -> Int { n + n }
+
+fn doubled(n: u8) -> (out: u8, @(out == n.wrapping_add(n))) {
+    double(n)
 }
 
-fn back(n: u8, h: @(double(n) == 4)) -> @(n.wrapping_add(n) == 4) {
-    unfold!(double, h)
+logic fn back(n: Int, h: @(sum_twice(n) == 4)) -> @(n + n == 4) {
+    unfold!(sum_twice, h)
 }
 
-fn forth(n: u8, h: @(n.wrapping_add(n) == 4)) -> @(double(n) == 4) {
-    fold!(double, h)
+logic fn forth(n: Int, h: @(n + n == 4)) -> @(sum_twice(n) == 4) {
+    fold!(sum_twice, h)
 }
 
 // `no_panic` on `careful` adds to the file's `no_io`; `double` makes both.
 #[no_panic]
 fn careful(n: u8) -> u8 {
-    double(n)
+    double(n).0
 }
 
 // A function that promises nothing beyond the file's default calls anything.
@@ -39,7 +39,7 @@ fn run(n: u8) -> u8 {
 // A promise written twice, on the function and for the file, is one promise.
 #[terminates] #[no_panic] #[no_io]
 fn twice(n: u8) -> u8 {
-    double(n)
+    double(n).0
 }
 
 // A conditional and a `match` in a promised function.
@@ -57,27 +57,23 @@ fn level(mode: Mode) -> u8 {
     }
 }
 
-fn level_of_off() -> @(level(Mode::Off) == 0) {
-    _
-}
-
 // A constant is a value of the logic, and calls a function the way a
 // proposition does; one with a runtime form is computed by Rust itself,
 // so it is a proposition that mentions a call, not a value.
-const four_by_double: Prop = prop!(double(2) == 4);
+const four_by_double: Prop = prop!(sum_twice(2) == 4);
 
 fn four() -> (out: u8, @four_by_double) {
-    (4, fold!(four_by_double, prove!(double(2) == 4)))
+    (4, fold!(four_by_double, prove!(sum_twice(2) == 4)))
 }
 
-//~ proofs: 3
-//~ run: double(3) => 6
-//~ run: doubled(21) => (42, Proved)
+//~ proofs: 2
+//~ run: double(3) => (6, Erased)
+//~ run: doubled(21) => (42, Erased)
 //~ run: careful(4) => 8
 //~ run: run(100) => 200
 //~ run: twice(200) => 144
 //~ run: level(Mode::Off) => 0
 //~ run: level(Mode::On(3)) => 3
 //~ run: level(Mode::On(30)) => 10
-//~ run: four() => (4, Proved)
-//~ rust: fn double(n: u8) -> u8 {
+//~ run: four() => (4, Erased)
+//~ rust: fn double(n: u8) -> (u8, Erased) {

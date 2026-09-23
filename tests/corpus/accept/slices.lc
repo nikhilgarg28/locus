@@ -1,0 +1,29 @@
+// Parameter slices borrow storage; proofs observe its current contents.
+fn head(xs: &[u8], available: @(0 < xs.len())) -> u8 { xs[0] }
+fn size(xs: &[u8]) -> (out: u64, @(out as Int == xs.len())) { (xs.len(), _) }
+fn replace(xs: &mut [u8], i: u64, present: @(i < xs.len()), v: u8) -> @(xs.len() == old!(xs).len()) {
+    xs[i] = v;
+    _
+}
+fn literal() -> u8 { let xs: [u8; 3] = [1, 2, 3]; xs[1] }
+fn borrowed() -> u8 {
+    let mut xs: [u8; 3] = [1, 2, 3];
+    replace(&mut xs, 0, prove!(0 < xs.len()), 9);
+    head(&xs, prove!(0 < xs.len()))
+}
+#[no_panic]
+fn sum(xs: &[u32]) -> u32 {
+    let mut total: u32 = 0;
+    for index in 0..xs.len() {
+        total = total.wrapping_add(xs[index]);
+    }
+    total
+}
+//~ run: head(&[9, 8], Erased) => 9
+//~ run: size(&[1, 2, 3]) => (3, Erased)
+//~ run: replace(&mut [1, 2] -> [7, 2], 0, Erased, 7) => Erased
+//~ run: literal() => 2
+//~ run: borrowed() => 9
+//~ run: sum(&[1, 2, 3]) => 6
+//~ run: sum(&[]) => 0
+//~ run: sum(&[4294967295, 1]) => 0

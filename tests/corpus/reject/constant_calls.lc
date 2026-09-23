@@ -5,9 +5,11 @@ fn double(n: u8) -> u8 {
     n.wrapping_add(n)
 }
 
-const FOUR: u8 = double(2); //~ error: L0234 the value of `FOUR` calls `double`, and Rust computes a constant without calling a function
+const FOUR: u8 = double(2); //~ error: L0209 ordinary fn `double` cannot appear in the value of a constant
 
-const PAIR: (u8, u8) = (1, double(1)); //~ error: L0234 the value of `PAIR` calls `double`
+const PAIR: (u8, u8) = (1, double(1)); //~ error: L0209 ordinary fn `double` cannot appear in the value of a constant
 
 // A constant of a ghost type has no runtime form, and may.
-const four: Prop = prop!(double(2) == 4);
+logic fn logical_double(n: Int) -> Int { n + n }
+const four: Prop = prop!(logical_double(2) == 4);
+//~ spec: 1.9:5

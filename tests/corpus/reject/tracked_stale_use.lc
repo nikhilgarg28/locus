@@ -14,3 +14,4 @@ fn tracked_is_stale(h: @(2u8 <= 3)) -> u8 {
     x = 9;
     takes(x, now) //~ error: L0245 `now` speaks of `x`, which was assigned at line 14
 }
+//~ spec: 1.12:3, 1.21:2

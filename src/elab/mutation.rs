@@ -346,6 +346,13 @@ impl Env<'_> {
         value: &ast::Expr,
         span: Span,
     ) -> Elab<Stmt> {
+        if let ExprKind::Subscript {
+            value: receiver,
+            index,
+        } = &place.kind
+        {
+            return self.collection_assignment(receiver, index, value, span);
+        }
         let Some((root, parts)) = place_path(place) else {
             return self.internal("an assignment to something that is not a place", place.span);
         };
@@ -391,6 +398,23 @@ impl Env<'_> {
         // that gives the root a new version, a `&mut` call, leaves the
         // place to be read from the version current afterwards, so the
         // value is accepted against the type it has then.
+        let mut place_value = crate::typed::Expr::Var {
+            id: self.names[slot].id,
+            name: name.clone(),
+            ty: self.names[slot].ty.clone(),
+        };
+        let mut place_term = Term::var(self.names[slot].id);
+        for step in &steps {
+            place_term = Term::proj(place_term, step.index);
+            let field_ty = self.type_of(&place_term, place.span)?;
+            place_value = crate::typed::Expr::Field {
+                target: Box::new(place_value),
+                index: step.index,
+                name: step.name.clone(),
+                ty: field_ty,
+            };
+        }
+        self.expect_layout(value, &self.session.expression_layout(&place_value));
         let checked = self.expr(value, Some(&ty))?;
         let ty = self.place_type(slot, &steps, span)?;
         let value = self.coerce(checked, &ty, value.span)?;
@@ -602,6 +626,9 @@ impl Env<'_> {
                 Term::eq(found.clone(), Term::var(version), whole),
             ));
         }
+        self.record_historical_version(current, &name, span);
+        self.session
+            .register_binding_layout(version, self.session.binding_layout(current));
         self.names[slot].id = version;
         self.labels.insert(version, name.clone());
         self.learn_from(&Term::var(version), &found);
@@ -875,6 +902,10 @@ impl Env<'_> {
                 },
                 equation: HypId::fresh(),
             };
+            self.session.register_binding_layout(
+                join.version.id,
+                self.session.binding_layout(join.binding),
+            );
             self.names[slot].id = join.version.id;
             joins.push(join);
         }

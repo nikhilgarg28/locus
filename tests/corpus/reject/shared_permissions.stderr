@@ -1,0 +1,20 @@
+error[L0286]: shared reference escapes the block that owns its referent
+ --> tests/corpus/reject/shared_permissions.lc:2:4
+  |
+2 | fn local_escape<'a>(input: &'a u8) -> &'a u8 { //~ error: L0286 shared reference escapes the block
+  |    ^^^^^^^^^^^^
+error[L0286]: shared reference to `value` is used after an overlapping write or move; logical observations also require an available shared borrow
+ --> tests/corpus/reject/shared_permissions.lc:6:4
+  |
+6 | fn stale_observation() -> u8 { //~ error: L0286 is used after an overlapping write or move
+  |    ^^^^^^^^^^^^^^^^^
+error[L0286]: returned reference must originate from an input with lifetime 'a; a local or a different input lifetime cannot escape
+  --> tests/corpus/reject/shared_permissions.lc:13:4
+   |
+13 | fn wrong_lifetime<'a, 'b>(first: &'a u8, second: &'b u8) -> &'a u8 { //~ error: L0286 returned reference must originate from an inpu...
+   |    ^^^^^^^^^^^^^^
+error[L0285]: mutable references may only be lent for one call
+  --> tests/corpus/reject/shared_permissions.lc:18:21
+   |
+18 |     let reference = &mut value; //~ error: L0285 mutable references may only be lent for one call
+   |                     ^^^^^^^^^^

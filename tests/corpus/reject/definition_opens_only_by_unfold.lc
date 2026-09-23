@@ -2,7 +2,7 @@
 // hole does not unfold `within_limit` on its own. `small` is evidence of
 // the body, and `fold!(within_limit, small)` is the evidence of the call;
 // the diagnostic names the form each way.
-#[terminates] #[no_panic] #[no_io] fn within_limit(n: u8) -> Prop {
+#[terminates] #[no_panic] #[no_io] logic fn within_limit(n: Int) -> Prop {
     prop!(n <= 3)
 }
 

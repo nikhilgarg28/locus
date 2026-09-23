@@ -6,9 +6,15 @@
 //! `lower` is trusted. The typed tree itself is only a claim until its
 //! lowering is accepted.
 
+mod buffer;
+mod layout;
 mod lower;
+mod shared;
 mod tree;
+mod trusted;
 
+pub use layout::ErasureLayout;
+pub(crate) use layout::ErasureLayouts;
 pub(crate) use lower::visit_block as each_stmt;
 pub use lower::{
     FnRef, LowerError, Named, Session, block_leaves, is_pure, join_type, opened_part, opened_type,
@@ -19,3 +25,5 @@ pub use tree::{
     Binder, Block, Carried, CompareOp, Derive, EnumItem, Expr, FnItem, Join, Joined, Lend,
     MatchArm, PanicForm, Passing, Pattern, Place, Step, Stmt, StructItem, VariantItem,
 };
+
+pub use buffer::BufferFunction;

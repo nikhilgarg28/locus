@@ -13,6 +13,12 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
     let sub = |proof: &Proof| proof_is_classical(definitions, proof);
     let arms = |arms: &[ProofArm]| arms.iter().any(|arm| sub(&arm.body));
     match proof {
+        Proof::CaseKnown { term, equation } => {
+            term_is_classical(definitions, term) || proof_is_classical(definitions, equation)
+        }
+        Proof::BufferStep(term) | Proof::BufferBound { value: term, .. } => {
+            term_is_classical(definitions, term)
+        }
         Proof::ExcludedMiddle(_) => true,
         Proof::Hyp(_) | Proof::Omitted => false,
         Proof::OfTerm(inner)
@@ -48,6 +54,16 @@ pub fn proof_is_classical(definitions: &Definitions, proof: &Proof) -> bool {
             upper,
         } => term(looped) || sub(lower) || sub(upper),
         Proof::Axiom(axiom) => axiom.terms().into_iter().any(term),
+        Proof::PropInduction {
+            scrutinee,
+            arms: cases,
+            ..
+        } => sub(scrutinee) || arms(cases),
+        Proof::DataInduction {
+            target,
+            arms: cases,
+            ..
+        } => term(target) || arms(cases),
         Proof::IntInduction {
             base, step, target, ..
         } => sub(base) || sub(&step.body) || term(target),
@@ -65,7 +81,12 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
     };
     let sub = |term: &Term| term_is_classical(definitions, term);
     match term {
+        Term::Boxed(value) => term_is_classical(definitions, value),
+        Term::Buffer { arguments, .. } => arguments
+            .iter()
+            .any(|term| term_is_classical(definitions, term)),
         Term::Fn(id) => definitions.is_classical(*id),
+        Term::Lambda { body, .. } => sub(body),
         Term::Proof(proof) | Term::Absurd(proof, _) => proof_is_classical(definitions, proof),
         Term::Free(_)
         | Term::Bound(_)

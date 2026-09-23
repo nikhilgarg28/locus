@@ -33,11 +33,15 @@ impl Counter {
     }
 
     // `&self`: the receiver is lent, and a `Copy` field is read through it.
-    // With the three promises it is a function of the logic too, which
-    // `fold!` takes by path below.
+    // Its explicit postcondition connects the ordinary runtime call to
+    // the field observation; promises alone do not expose its definition.
     #[terminates] #[no_panic] #[no_io]
     fn get(&self) -> u8 {
         self.count
+    }
+
+    fn get_proven(&self) -> (out: u8, @(out == self.count)) {
+        (self.count, _)
     }
 
     // `*self` read: the whole value, which is `Copy` here.
@@ -78,7 +82,7 @@ impl Counter {
     // A method of the logic: it may appear in a proposition, as
     // `Counter::small(&c)` or `c.small()`.
     #[terminates] #[no_panic] #[no_io]
-    fn small(&self) -> Prop {
+    logic fn small(&self) -> Prop {
         prop!(self.count <= 3)
     }
 }
@@ -144,7 +148,8 @@ fn folded(c: Counter, h: @(c.small())) -> (out: u8, @(out <= 3)) {
     let small = unfold!(Counter::small, h);
     let again: @(c.small()) = fold!(Counter::small, small);
     let _ = again;
-    (c.get(), fold!(Counter::get, small))
+    let (out, same) = c.get_proven();
+    (out, prove!(out <= 3))
 }
 
 fn known(c: Counter, h: @Counter::small(&c)) -> @(c.count <= 3) {
@@ -158,15 +163,15 @@ fn by_path(c: Counter) -> u8 {
     Counter::get(&d)
 }
 
-//~ proofs: 2
+//~ proofs: 4
 //~ run: counting() => 5
 //~ run: slots() => 7
 //~ run: tokens() => 10
-//~ run: folded(Counter { count: 2 }, Proved) => (2, Proved)
+//~ run: folded(Counter { count: 2 }, Erased) => (2, Erased)
 //~ run: by_path(Counter { count: 2 }) => 3
 //~ run: Counter::fresh() => Counter { count: 0 }
 //~ run: Counter::bump(&mut Counter { count: 1 } -> Counter { count: 2 }) => ()
-//~ run: Counter::reset(&mut Counter { count: 9 } -> Counter { count: 0 }) => Proved
+//~ run: Counter::reset(&mut Counter { count: 9 } -> Counter { count: 0 }) => Erased
 //~ run: Counter::grown(Counter { count: 1 }) => Counter { count: 2 }
 //~ run: Slot::read(Full(4)) => 4
 //~ run: Token::consume(Token { id: 3 }) => 3
@@ -174,11 +179,11 @@ fn by_path(c: Counter) -> u8 {
 //~ rust: fn fresh() -> Counter {
 //~ rust: fn get(&self) -> u8 {
 //~ rust: fn bump(&mut self) -> () {
-//~ rust: fn reset(&mut self) -> Proved {
+//~ rust: fn reset(&mut self) -> Erased {
 //~ rust: *self = Counter { count: 0_u8 };
 //~ rust: fn grown(mut self) -> Counter {
 //~ rust: fn consume(self) -> u8 {
-//~ rust: c.bump();
-//~ rust: self.get().wrapping_add(self.get())
-//~ rust: d.bump();
-//~ rust: Slot::full(4_u8).read().wrapping_add(s.read())
+//~ rust: Counter::bump(&mut c);
+//~ rust: Counter::get(&*self).wrapping_add(Counter::get(&*self))
+//~ rust: Counter::bump(&mut d);
+//~ rust: Slot::read(Slot::full(4_u8)).wrapping_add(Slot::read(s))

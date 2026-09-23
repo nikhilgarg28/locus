@@ -1,8 +1,6 @@
-// A variant whose stated conclusion is a different proposition.
-prop Tiny(n: u8) {
-    Zero: @Tiny(0),
-}
-
-prop Small(n: u8) {
-    Zero: @Tiny(0), //~ error: L0225 a variant of `Small` proves `Small(...)`
+// Evidence for one named proposition is not evidence of another.
+prop Tiny(n: Int) { Below => { prop!(n < 3) } }
+prop Small(n: Int) { Below => { prop!(n < 3) } }
+logic fn wrong(n: Int, proof: @Tiny(n)) -> @Small(n) {
+    proof //~ error: L0230 this is evidence of `Tiny(n)`, and `Small(n)` is needed
 }

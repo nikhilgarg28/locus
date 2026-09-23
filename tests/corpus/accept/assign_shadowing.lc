@@ -52,3 +52,4 @@ fn both_assigned(n: u8, flag: bool) -> (u8, u8) {
 //~ run: both_assigned(3, true) => (5, 101)
 //~ run: both_assigned(3, false) => (3, 0)
 //~ rust: let mut x = 100_u8;
+//~ spec: 1.2:1

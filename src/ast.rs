@@ -135,6 +135,12 @@ pub struct Attribute {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AttributeKind {
+    /// Kept with the item; only the `trusted "reason" fn ... = Rust::item;`
+    /// declaration syntax constructs this, never a detachable attribute.
+    Trusted {
+        reason: String,
+        implementation: Path,
+    },
     /// `#[terminates]`, or `#[terminates(decreases = expression)]`.
     Terminates {
         decreases: Option<Expr>,
@@ -157,12 +163,13 @@ impl AttributeKind {
             Self::NoAlloc => "no_alloc",
             Self::NoIo => "no_io",
             Self::Derive(_) => "derive",
+            Self::Trusted { .. } => "trusted",
         }
     }
 
     /// A promise about an effect, as opposed to `derive`.
     pub fn is_promise(&self) -> bool {
-        !matches!(self, Self::Derive(_))
+        !matches!(self, Self::Derive(_) | Self::Trusted { .. })
     }
 }
 
@@ -211,6 +218,9 @@ pub struct Declaration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
     Function {
+        /// `logic fn` is an erased logical definition.
+        logical: bool,
+        generics: Vec<GenericParameter>,
         name: Name,
         /// The receiver of a method in an `impl` block.
         self_param: Option<SelfParam>,
@@ -219,14 +229,17 @@ pub enum DeclarationKind {
         body: Block,
     },
     Struct {
+        generics: Vec<GenericParameter>,
         name: Name,
         fields: Vec<Field>,
     },
     Enum {
+        generics: Vec<GenericParameter>,
         name: Name,
         variants: Vec<Variant>,
     },
     Prop {
+        generics: Vec<GenericParameter>,
         name: Name,
         parameters: Vec<Parameter>,
         variants: Vec<PropVariant>,
@@ -239,10 +252,31 @@ pub enum DeclarationKind {
     /// `impl Name { ... }`: methods and associated functions, each a
     /// `Function` declaration with its own doc, attributes, and visibility.
     Impl {
+        /// The compiler-known Model bridge; ordinary inherent impls have none.
+        model: Option<ModelImpl>,
         /// The type, by name or by path.
         target: Path,
         methods: Vec<Declaration>,
     },
+}
+
+/// `impl Model<Source> for Target`: a checked observational bridge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelImpl {
+    pub source: Type,
+    pub target: Type,
+    pub span: Span,
+}
+
+/// A type parameter, optionally constrained by named bounds, such as
+/// `T: Logical`. Bounds are checked by the elaborator, not the parser.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GenericParameter {
+    /// Lifetime parameters are checked scopes, never type specializations.
+    pub lifetime: bool,
+    pub name: Name,
+    pub bounds: Vec<Path>,
+    pub span: Span,
 }
 
 /// The receiver of a method: `self`, `mut self`, `&self`, or `&mut self`.
@@ -328,6 +362,8 @@ pub struct PropVariant {
     /// Every field has a name when the shape is `Struct`.
     pub fields: Vec<TypeField>,
     pub target: Option<Expr>,
+    /// The computed proposition after `=>`; absent only in legacy syntax.
+    pub body: Option<Block>,
     pub span: Span,
 }
 
@@ -340,6 +376,8 @@ pub struct Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Named(Name),
+    /// A nominal lifetime argument, written with its leading apostrophe.
+    Lifetime(Name),
     /// A type named by a path of two or more segments, or by a name with
     /// type arguments: `a::B`, `Option<T>`, `crate::a::Map<K, V>`. The path
     /// is boxed so that a `Type` stays the size it was: the parser keeps
@@ -349,6 +387,13 @@ pub enum TypeKind {
         arguments: Vec<Type>,
     },
     Unit,
+    /// Borrowed slice element type, `[T]`.
+    Slice(Box<Type>),
+    /// Fixed-size array type, `[T; n]`.
+    Array {
+        element: Box<Type>,
+        length: Box<Expr>,
+    },
     Group(Box<Type>),
     Tuple(Vec<TypeField>),
     Proof(Box<Expr>),
@@ -358,8 +403,14 @@ pub enum TypeKind {
         parameters: Vec<TypeField>,
         result: Box<Type>,
     },
+    /// `logic Fn(x: T) -> R`: an erased logical callable.
+    LogicalFunction {
+        parameters: Vec<TypeField>,
+        result: Box<Type>,
+    },
     /// `&T` or `&mut T`.
     Ref {
+        lifetime: Option<Name>,
         mutable: bool,
         inner: Box<Type>,
     },
@@ -386,6 +437,19 @@ pub enum PatternKind {
     Name {
         name: Name,
         mutable: bool,
+    },
+    /// `name @ pattern`: the whole value and a pattern of its parts.
+    Binding {
+        name: Name,
+        mutable: bool,
+        pattern: Box<Pattern>,
+        at_span: Span,
+    },
+    /// `P::Arm(witnesses) @ evidence`: proof of a named proposition arm.
+    Evidence {
+        constructor: Box<Pattern>,
+        evidence: Box<Pattern>,
+        at_span: Span,
     },
     Wildcard,
     Unit,
@@ -468,6 +532,7 @@ impl Expr {
         matches!(
             self.kind,
             ExprKind::Block(_)
+                | ExprKind::Logic(_)
                 | ExprKind::If { .. }
                 | ExprKind::Match { .. }
                 | ExprKind::Loop { .. }
@@ -490,6 +555,13 @@ pub enum ExprKind {
     Hole,
     Group(Box<Expr>),
     Tuple(Vec<Expr>),
+    /// Physical array literal, `[a, b, c]`.
+    Array(Vec<Expr>),
+    /// Physical indexed access, `items[index]`.
+    Subscript {
+        value: Box<Expr>,
+        index: Box<Expr>,
+    },
     /// `name!(arguments)`: a built-in form. `prop!` and `prove!` take one
     /// formula; the others take expressions.
     Form {
@@ -504,6 +576,14 @@ pub enum ExprKind {
         fields: Vec<ValueField>,
     },
     Block(Block),
+    /// `logic { ... }`: pure, total logical computation.
+    Logic(Block),
+    /// A named-arm constructor with evidence outside its witness arguments.
+    Evidence {
+        constructor: Box<Expr>,
+        evidence: Box<Expr>,
+        at_span: Span,
+    },
     If {
         condition: Box<Expr>,
         then_branch: Block,
@@ -574,12 +654,24 @@ pub enum ExprKind {
     /// `expr as Type`
     Cast {
         expr: Box<Expr>,
+        /// Filled by specialization for precise Model dependency ordering.
+        source_hint: Option<Box<Type>>,
         as_span: Span,
         ty: Type,
     },
     Call {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
+    },
+    /// An erased logical closure, `|x: T| body`.
+    Closure {
+        parameters: Vec<Parameter>,
+        body: Box<Expr>,
+    },
+    /// Explicit type arguments, `f::<T>` or `Enum::<T>::Variant`.
+    GenericApply {
+        callee: Box<Expr>,
+        arguments: Vec<Type>,
     },
     Member {
         value: Box<Expr>,

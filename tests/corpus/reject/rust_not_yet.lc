@@ -22,7 +22,7 @@ fn assigned(n: u8) -> u8 {
     total
 }
 
-fn borrowed(n: &u8) -> u8 { *n } //~ error: L0116 dereferences and raw pointers (`*`)
+fn borrowed(n: &u8) -> u8 { *n }
 
 fn raw(n: *mut u8) -> u8 { 1 } //~ error: L0116 dereferences and raw pointers (`*`)
 
@@ -32,8 +32,7 @@ fn looped(n: u8) -> u8 {
     return n;
 }
 
-fn lifetimes<'a>() -> u8 { 1 } //~ error: L0116 generic parameters
-//~^ error: L0005 lifetimes and loop labels
+fn lifetimes<'a>() -> u8 { 1 }
 
 fn literals() -> u8 {
     let letter = 'x'; //~ error: L0005 character literals

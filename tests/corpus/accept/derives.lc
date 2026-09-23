@@ -66,10 +66,10 @@ fn twice(c: Checked) -> (Checked, Checked) {
 
 //~ proofs: 1
 //~ run: sum(Point { x: 1, y: 2 }) => 3
-//~ run: value_of(Bounded { value: 7, fits: Proved }) => 14
+//~ run: value_of(Bounded { value: 7, fits: Erased }) => 14
 //~ run: level(On(4)) => 8
 //~ run: level(Off) => 0
-//~ run: classify(3) => Small(3, Proved)
+//~ run: classify(3) => Small(3, Erased)
 //~ run: twice(Checked::Large(200)) => (Large(200), Large(200))
 //~ rust: #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 //~ rust: #[derive(Clone, Debug)]

@@ -1,0 +1,1 @@
+struct Erased { value: u8 } //~ error: L0008 reserved for generated logical markers

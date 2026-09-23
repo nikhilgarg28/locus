@@ -1,0 +1,13 @@
+L0100: Expected a declaration
+
+The top level accepts declarations, not arbitrary expressions or statements. Put executable work inside a function body. When an earlier declaration is incomplete, repair its delimiter first so later text is parsed in the right scope.
+
+Example from `tests/corpus/reject/expected_declaration.lc`; the full file is a regression test.
+
+```locus
+// Something other than a declaration at the top of a file.
+fn first(n: u8) -> u8 { n }
+7
+```
+
+Language, as built: [1.0:2](../../atlas.html#/doc/language/spec-1.0:2).

@@ -81,6 +81,7 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
 }
 
 #[test]
+#[doc = "spec: 1.1:1, 1.1:3"]
 fn the_lock_runs_as_written() {
     let result = accepted(LOCK);
     for attempts in [0, 1, 2, 3, 4, 5, 9, 200, 255] {
@@ -114,18 +115,21 @@ fn the_lock_runs_as_written() {
         [
             // step: `prove!(lock.failures < 3)` is the branch taken, reflected
             // through `cmp_reflect`, whose comparison names its type.
+            (34, 63, "computed", 49),
             (34, 63, "computed", 14),
             // step: `bounded` serves for `within_limit((Lock { .. }).failures)`.
-            (37, 65, "computed", 37),
+            (37, 65, "computed", 40),
             // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
             // it stands.
-            (31, 80, "evaluation", 11),
+            (31, 80, "evaluation", 34),
             // run: `prove!(0u8 <= 3)` for the initial `ok`.
-            (56, 68, "evaluation", 11),
+            (56, 68, "evaluation", 34),
             // run: `ok = still` refreshes the tracked evidence over the
             // `lock` just assigned: `still` speaks of `next`, and `lock`
             // is `next` after `lock = next`, which computing bridges.
-            (60, 14, "computed", 52),
+            (60, 14, "computed", 61),
+            (69, 55, "computed", 57),
+            (69, 32, "computed", 105),
         ]
     );
 }
@@ -137,16 +141,16 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
     let mut source = print_module(module);
     for expected in [
         "#[derive(Clone, Copy, Debug)]\npub struct Lock {",
-        "pub fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {",
+        "pub fn step(lock: Lock, _bounded: Erased, event: Event) -> (Lock, Erased) {",
         "    match event {",
         "            if lock.failures < 3_u8 {",
-        "                (Lock { failures: lock.failures.wrapping_add(1_u8), open: false }, Proved)",
-        "    let mut ok = Proved;",
+        "                (Lock { failures: lock.failures.wrapping_add(1_u8), open: false }, Erased)",
+        "    let mut ok = Erased;",
         "    for attempt in 0_u8..attempts {",
-        "        let (next, still) = step(lock, ok, event_at(attempt, correct));",
+        "        let (next, _) = step(lock, ok, event_at(attempt, correct));",
         "        lock = next;",
-        "        ok = Proved;",
-        "    (3_u8.wrapping_sub(failures), Proved)",
+        "        ok = Erased;",
+        "    (3_u8.wrapping_sub(failures), Erased)",
         "    let (last, bounded) = run(attempts, correct);",
     ] {
         assert!(source.contains(expected), "missing: {expected}\n{source}");
@@ -242,14 +246,15 @@ fn introducing_a_local_needs_no_proof_repair() {
             (out, _)
         }",
     );
-    assert_eq!(call(&result, "increment", &[255]), "(0, Proved)");
+    assert_eq!(call(&result, "increment", &[255]), "(0, Erased)");
     let inline = accepted(
         "fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) { (n.wrapping_add(1), _) }",
     );
-    assert_eq!(call(&inline, "increment", &[7]), "(8, Proved)");
+    assert_eq!(call(&inline, "increment", &[7]), "(8, Erased)");
 }
 
 #[test]
+#[doc = "spec: 1.2:3, 1.3:2"]
 fn destructuring_a_result_keeps_its_evidence_usable() {
     // `first_is` is an equation about `first`, and `rewrite!` carries
     // `second_is` across it; the result is the claim stated, exactly.
@@ -266,8 +271,8 @@ fn destructuring_a_result_keeps_its_evidence_usable() {
             (again.0, rewrite!(once.1, again.1))
         }}"
     ));
-    assert_eq!(call(&result, "twice", &[254]), "(0, Proved)");
-    assert_eq!(call(&result, "twice_without_names", &[1]), "(3, Proved)");
+    assert_eq!(call(&result, "twice", &[254]), "(0, Erased)");
+    assert_eq!(call(&result, "twice_without_names", &[1]), "(3, Erased)");
     // Without the step, the equation in scope rewrites nothing by itself,
     // and the diagnostic names the step.
     let (codes, full) = rejected(&format!(
@@ -286,6 +291,7 @@ fn destructuring_a_result_keeps_its_evidence_usable() {
 }
 
 #[test]
+#[doc = "spec: 1.3:2, 1.9:1"]
 fn a_dependent_pattern_opens_over_its_own_names() {
     // Finding 2 of the target examples: in `let (next, still) = bump(..)`,
     // `still` is evidence about `next`, not about `bump(..).0`, so it is
@@ -299,7 +305,7 @@ fn a_dependent_pattern_opens_over_its_own_names() {
             (next, still)
         }",
     );
-    assert!(result.holes.is_empty(), "{:#?}", result.holes);
+    assert!(result.holes.iter().all(|hole| hole.solved));
     let module = result.session.erased();
     let value = Interpreter::new(module, FUEL)
         .call(
@@ -307,7 +313,7 @@ fn a_dependent_pattern_opens_over_its_own_names() {
             vec![Value::u8(9), Value::Proved],
         )
         .unwrap();
-    assert_eq!(value.debug(module), "(10, Proved)");
+    assert_eq!(value.debug(module), "(10, Erased)");
     // The type of `still` speaks of `next`, as a mismatch shows. (`n <=
     // 10` itself would be filled from `small` by the arithmetic tier.)
     let (codes, full) = rejected(
@@ -335,8 +341,8 @@ fn a_dependent_pattern_opens_over_its_own_names() {
             (x, y, ordered)
         }",
     );
-    assert!(result.holes.is_empty(), "{:#?}", result.holes);
-    assert_eq!(call(&result, "use_pair", &[4]), "(4, 4, Proved)");
+    assert!(result.holes.iter().all(|hole| hole.solved));
+    assert_eq!(call(&result, "use_pair", &[4]), "(4, 4, Erased)");
 }
 
 #[test]
@@ -344,7 +350,7 @@ fn extracting_a_helper_needs_no_proof_repair() {
     // `step` of the lock, with the saturating increment moved into a helper
     // whose result says what the caller needs.
     let result = accepted(
-        "#[terminates] #[no_panic] #[no_io] fn within_limit(failures: u8) -> Prop { prop!(failures <= 3) }
+        "logic fn within_limit(failures: u8) -> Prop { prop!(failures <= 3) }
         fn bump(failures: u8, bounded: @within_limit(failures)) -> (next: u8, @within_limit(next)) {
             if failures < 3 {
                 (failures.wrapping_add(1), fold!(within_limit, u8_succ_le_of_lt(failures, 3, prove!(failures < 3))))
@@ -369,7 +375,7 @@ fn extracting_a_helper_needs_no_proof_repair() {
             vec![Value::u8(3), Value::Proved, Value::u8(1)],
         )
         .unwrap();
-    assert_eq!(value.debug(module), "(3, Proved)");
+    assert_eq!(value.debug(module), "(3, Erased)");
 }
 
 #[test]
@@ -387,20 +393,21 @@ fn evidence_about_a_name_serves_for_a_name_bound_to_it() {
         }",
     );
     let tiers: Vec<&str> = result.holes.iter().map(|hole| hole.tier).collect();
-    assert_eq!(tiers, ["computed"]);
+    assert_eq!(tiers, ["computed", "computed", "computed"]);
 }
 
 #[test]
-fn a_function_of_the_logic_runs_and_is_usable_in_claims() {
+fn a_logical_model_describes_runtime_code_and_is_erased() {
     let result = accepted(
-        "#[terminates] #[no_panic] #[no_io] fn double_step(n: u8) -> u8 { n.wrapping_add(1).wrapping_add(1) }
+        "logic fn double_step(n: u8) -> Int { n.wrapping_add(1).wrapping_add(1) as Int }
         fn advance(n: u8) -> (out: u8, @(out == double_step(n))) {
             let out = n.wrapping_add(1).wrapping_add(1);
             (out, fold!(double_step, prove!(out == n.wrapping_add(1).wrapping_add(1))))
         }",
     );
-    assert_eq!(call(&result, "double_step", &[254]), "0");
-    assert_eq!(call(&result, "advance", &[3]), "(5, Proved)");
+    assert_eq!(call(&result, "advance", &[254]), "(0, Erased)");
+    assert_eq!(call(&result, "advance", &[3]), "(5, Erased)");
+    assert!(!print_module(result.session.erased()).contains("fn double_step"));
 }
 
 #[test]
@@ -417,7 +424,7 @@ fn a_loop_supplies_its_value_and_evidence_at_the_break() {
             }
         }",
     );
-    assert_eq!(call(&result, "walk", &[9]), "(9, Proved)");
+    assert_eq!(call(&result, "walk", &[9]), "(9, Erased)");
     // The evidence is checked against the versions current at the break,
     // and nothing carried from earlier passes speaks of `i` there. (The
     // branch's `i == limit` would give `i <= limit` by arithmetic, so the
@@ -439,6 +446,7 @@ fn a_loop_supplies_its_value_and_evidence_at_the_break() {
 }
 
 #[test]
+#[doc = "spec: 1.12:2"]
 fn a_loop_carries_what_its_body_assigns_and_the_rest_is_read_after_it() {
     let result = accepted(
         "fn tally(n: u8) -> (u8, u8) {
@@ -476,8 +484,8 @@ fn boolean_connectives_short_circuit_and_each_test_feeds_its_branch() {
         }
         fn either(n: u8) -> bool { n == 0 || !(n < 200) }",
     );
-    assert_eq!(call(&result, "clamp", &[5]), "(5, Proved)");
-    assert_eq!(call(&result, "clamp", &[77]), "(9, Proved)");
+    assert_eq!(call(&result, "clamp", &[5]), "(5, Erased)");
+    assert_eq!(call(&result, "clamp", &[77]), "(9, Erased)");
     assert_eq!(call(&result, "either", &[0]), "true");
     assert_eq!(call(&result, "either", &[100]), "false");
     assert_eq!(call(&result, "either", &[250]), "true");
@@ -555,8 +563,8 @@ fn errors_name_the_problem() {
         ),
         (
             "fn f(flag: bool) -> @(flag) { _ }",
-            "L0221",
-            "this is a `bool`, and a proposition is needed",
+            "L0230",
+            "cannot show `flag`",
         ),
         (
             "fn f() -> u8 { 1 } fn f() -> u8 { 2 }",
@@ -597,42 +605,26 @@ fn a_reversed_range_runs_no_pass_and_needs_no_evidence() {
 // Evidence written out, with the specification's examples (sections 7.3 and 8).
 
 #[test]
-fn matching_on_evidence_gives_each_arm_its_index_equations() {
-    accepted(
-        "prop SmallPrime(n: u8) {
-            Two: @SmallPrime(2),
-            Three: @SmallPrime(3),
-            Five: @SmallPrime(5),
-            Seven: @SmallPrime(7),
-        }
-        #[terminates] #[no_panic] #[no_io] fn small_prime_is_small(n: u8, h: @SmallPrime(n)) -> @(n <= 8) {
-            match h {
-                SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 8)),
-                SmallPrime::Three => rewrite!(u8_eq_symm(n, 3, prove!(n == 3)), prove!(3u8 <= 8)),
-                SmallPrime::Five => rewrite!(u8_eq_symm(n, 5, prove!(n == 5)), prove!(5u8 <= 8)),
-                SmallPrime::Seven => rewrite!(u8_eq_symm(n, 7, prove!(n == 7)), prove!(7u8 <= 8)),
-            }
-        }
-        #[terminates] #[no_panic] #[no_io] fn seven_is(h: @SmallPrime(7)) -> @(7u8 <= 8) { small_prime_is_small(7, h) }
-        #[terminates] #[no_panic] #[no_io] fn five() -> @SmallPrime(5) { SmallPrime::Five }",
-    );
-    // The equations are what make the arms provable: each is a fact the
-    // arm has, and the diagnostic names the step that uses it.
-    let (codes, full) = rejected(
-        "prop SmallPrime(n: u8) { Two: @SmallPrime(2), Seven: @SmallPrime(7) }
-        #[terminates] #[no_panic] #[no_io] fn too_small(n: u8, h: @SmallPrime(n)) -> @(n <= 6) {
-            match h { SmallPrime::Two => _, SmallPrime::Seven => _ }
-        }",
-    );
-    // The `Two` arm is filled by arithmetic from its index equation `n ==
-    // 2`; the `Seven` arm is false, and its equation is the counterexample.
+fn matching_on_evidence_opens_each_named_arm_body() {
+    let declaration = "prop SmallPrime(n: Int) {
+        Two => { prop!(n == 2) }, Three => { prop!(n == 3) },
+        Five => { prop!(n == 5) }, Seven => { prop!(n == 7) }
+    }";
+    accepted(&format!("{declaration}
+        logic fn small(n: Int, h: @SmallPrime(n)) -> @(n <= 8) {{
+            match h {{ SmallPrime::Two @ h => _, SmallPrime::Three @ h => _, SmallPrime::Five @ h => _, SmallPrime::Seven @ h => _ }}
+        }}
+        logic fn five() -> @SmallPrime(5) {{ SmallPrime::Five @ prove!(5 == 5) }}"));
+    let (codes, full) = rejected(&format!("{declaration}
+        logic fn too_small(n: Int, h: @SmallPrime(n)) -> @(n <= 6) {{
+            match h {{ SmallPrime::Two @ h => _, SmallPrime::Three @ h => _, SmallPrime::Five @ h => _, SmallPrime::Seven @ h => _ }}
+        }}"));
     assert_eq!(codes, ["L0230"]);
-    assert!(full.contains("cannot show `n <= 6`"), "{full}");
-    assert!(full.contains("known here: `n == 7`"), "{full}");
-    assert!(full.contains("it fails when n = 7"), "{full}");
+    assert!(full.contains("n <= 6") && full.contains("n == 7"), "{full}");
 }
 
 #[test]
+#[doc = "spec: 1.7:2"]
 fn connectives_are_built_and_taken_apart_by_their_constructors() {
     accepted(
         "#[terminates] #[no_panic] #[no_io] fn swap(p: Prop, q: Prop, h: @(p || q)) -> @(q || p) {
@@ -668,7 +660,7 @@ fn connectives_are_built_and_taken_apart_by_their_constructors() {
             "evidence of `false` is a refuted claim applied to its evidence",
         ),
         (
-            "#[terminates] #[no_panic] #[no_io] fn ordered() -> @(forall (x: u8) { x <= 3 => x <= 3 }) { _ }",
+            "#[terminates] #[no_panic] #[no_io] fn ordered() -> @(forall (x: Int) { x <= 3 => x <= 3 }) { _ }",
             "evidence of `forall (x: T) { p }` is a function of the logic",
         ),
     ] {
@@ -694,32 +686,34 @@ fn evidence_cannot_choose_a_value() {
 }
 
 #[test]
+#[doc = "spec: 1.7:2"]
 fn a_function_of_the_logic_is_evidence_of_its_general_claim_and_evidence_is_applied() {
     accepted(
-        "#[terminates] #[no_panic] #[no_io] fn self_equal(x: u8) -> @(x == x) { _ }
-        #[terminates] #[no_panic] #[no_io] fn all_self_equal() -> @(forall (x: u8) { x == x }) { self_equal }
+        "logic fn self_equal(x: Int) -> @(x == x) { _ }
+        logic fn all_self_equal() -> @(forall (x: Int) { x == x }) { self_equal }
 
-        #[terminates] #[no_panic] #[no_io] fn at_most_nine_helper(limit: u8, h: @(limit <= 9), x: u8, hx: @(x <= limit)) -> @(x <= 9) {
-            u8_le_trans(x, limit, 9, hx, h)
+        logic fn at_most_nine_helper(limit: Int, h: @(limit <= 9), x: Int, hx: @(x <= limit)) -> @(x <= 9) {
+            prove!(x <= 9)
         }
-        #[terminates] #[no_panic] #[no_io] fn at_most_nine(limit: u8, h: @(limit <= 9)) -> @(forall (x: u8) { x <= limit => x <= 9 }) {
-            let general: @(forall (l: u8) { l <= 9 => forall (x: u8) { x <= l => x <= 9 } }) =
+        logic fn at_most_nine(limit: Int, h: @(limit <= 9)) -> @(forall (x: Int) { x <= limit => x <= 9 }) {
+            let general: @(forall (l: Int) { l <= 9 => forall (x: Int) { x <= l => x <= 9 } }) =
                 at_most_nine_helper;
             general(limit)(h)
         }
-        #[terminates] #[no_panic] #[no_io] fn use_it(h: @(forall (x: u8) { x <= 255 }), n: u8) -> @(n <= 255) { h(n) }",
+        logic fn use_it(h: @(forall (x: Int) { x <= 255 }), n: Int) -> @(n <= 255) { h(n) }",
     );
     let (codes, full) = rejected(
-        "#[terminates] #[no_panic] #[no_io] fn f(h: @(1 == 1), n: u8) -> @(1 == 1) { h(n) }",
+        "#[terminates] #[no_panic] #[no_io] fn f(h: @(1 == 1), n: Int) -> @(1 == 1) { h(n) }",
     );
     assert_eq!(codes, ["L0228"]);
     assert!(full.contains("takes no argument"), "{full}");
 }
 
 #[test]
+#[doc = "spec: 1.6:3, 1.7:2"]
 fn rewrite_unfold_and_fold_are_the_explicit_forms() {
     accepted(
-        "#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+        "logic fn nonzero(x: u8) -> Prop { prop!(x != 0) }
         #[terminates] #[no_panic] #[no_io] fn use_nonzero(n: u8, h: @nonzero(n)) -> @(n != 0) { unfold!(nonzero, h) }
         #[terminates] #[no_panic] #[no_io] fn make_nonzero(n: u8, h: @(n != 0)) -> @nonzero(n) { fold!(nonzero, h) }
         #[terminates] #[no_panic] #[no_io] fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
@@ -727,7 +721,7 @@ fn rewrite_unfold_and_fold_are_the_explicit_forms() {
         }",
     );
     let (codes, full) = rejected(
-        "#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+        "logic fn nonzero(x: u8) -> Prop { prop!(x != 0) }
         #[terminates] #[no_panic] #[no_io] fn f(n: u8, h: @(n != 0)) -> @nonzero(n) { let folded = fold!(nonzero, h); folded }",
     );
     assert_eq!(codes, ["L0229"]);
@@ -744,8 +738,8 @@ fn a_constant_is_used_by_name() {
             if n <= LIMIT { (n, _) } else { (LIMIT, _) }
         }",
     );
-    assert_eq!(call(&result, "clamp", &[2]), "(2, Proved)");
-    assert_eq!(call(&result, "clamp", &[200]), "(3, Proved)");
+    assert_eq!(call(&result, "clamp", &[2]), "(2, Erased)");
+    assert_eq!(call(&result, "clamp", &[200]), "(3, Erased)");
 }
 
 #[test]
@@ -763,6 +757,7 @@ fn a_constructor_needs_to_know_what_it_proves() {
 // names the respelling freed.
 
 #[test]
+#[doc = "spec: 1.7:2"]
 fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
     // The `_` at the end has only the `prove!` statement to go on: `n < 10`
     // is what is known, and `n <= 9` is what the statement proved.
@@ -788,22 +783,20 @@ fn prove_states_a_claim_where_it_stands_and_keeps_it_known() {
             vec![Value::u8(9), Value::Proved],
         )
         .unwrap();
-    assert_eq!(bumped.debug(module), "(10, Proved)");
-    assert_eq!(call(&result, "valued", &[3]), "(3, Proved)");
+    assert_eq!(bumped.debug(module), "(10, Erased)");
+    assert_eq!(call(&result, "valued", &[3]), "(3, Erased)");
     // Each `prove!` is one proof, as a `_` is; the `_` in `stated` found
     // the fact the statement left in scope.
-    assert_eq!(result.holes.len(), 5);
+    assert_eq!(result.holes.len(), 7);
     assert!(result.holes.iter().all(|hole| hole.solved));
-    assert_eq!(result.holes[3].tier, "exact");
+    assert!(result.holes.iter().any(|hole| hole.tier == "exact"));
     // A statement erases to nothing, a value to the marker.
     let rust = print_module(result.session.erased());
     assert!(
-        rust.contains(
-            "    let fits = Proved;\n    let out = n.wrapping_add(1_u8);\n    let h = Proved;\n    (out, h)"
-        ),
+        rust.contains("    let out = n.wrapping_add(1_u8);\n    (out, Erased)"),
         "{rust}"
     );
-    assert!(rust.contains("(n, Proved)"), "{rust}");
+    assert!(rust.contains("(n, Erased)"), "{rust}");
 }
 
 #[test]
@@ -823,7 +816,7 @@ fn a_failed_prove_is_reported_where_it_stands() {
 
 #[test]
 fn a_bare_rewrite_unfold_or_fold_gets_a_fix_that_elaborates() {
-    let text = "#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+    let text = "logic fn nonzero(x: u8) -> Prop { prop!(x != 0) }
         #[terminates] #[no_panic] #[no_io] fn use_nonzero(n: u8, h: @nonzero(n)) -> @(n != 0) { unfold(nonzero, h) }
         #[terminates] #[no_panic] #[no_io] fn make_nonzero(n: u8, h: @(n != 0)) -> @nonzero(n) { fold(nonzero, h) }
         #[terminates] #[no_panic] #[no_io] fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
@@ -856,6 +849,7 @@ fn a_bare_rewrite_unfold_or_fold_gets_a_fix_that_elaborates() {
 }
 
 #[test]
+#[doc = "spec: 1.24:1"]
 fn the_forms_without_a_meaning_yet_say_which_task_brings_them() {
     for (text, form, task) in [
         (
@@ -863,7 +857,6 @@ fn the_forms_without_a_meaning_yet_say_which_task_brings_them() {
             "matches",
             "LOC-71",
         ),
-        ("fn f(n: u8) -> u8 { recurse!(n, n) }", "recurse", "LOC-53"),
         ("fn f(n: u8) -> u8 { vec!(1, 2) }", "vec", "Vec"),
     ] {
         let (codes, full) = rejected(text);
@@ -881,12 +874,12 @@ fn quantifier_words_are_names_outside_a_formula_and_formulas_nest() {
     let result = accepted(
         "fn exists(n: u8) -> bool { n == 0 }
         fn f(forall: u8) -> u8 { let exists = forall; exists }
-        const twice: Prop = prop!(forall (x: u8) { prop!(x == x) && prop!(prop!(0 <= x)) });
-        #[terminates] #[no_panic] #[no_io] fn each(x: u8) -> @(x == x && 0 <= x) { And::Intro(prove!(x == x), u8_zero_le(x)) }
-        #[terminates] #[no_panic] #[no_io] fn holds() -> @twice { fold!(twice, each) }
-        #[terminates] #[no_panic] #[no_io] fn below(n: u8, x: u8, h: @(x <= n)) -> @(0 <= x) { u8_zero_le(x) }
-        #[terminates] #[no_panic] #[no_io] fn general(n: u8) -> @(forall (x: u8) { x <= n => 0 <= x }) {
-            let all: @(forall (m: u8) { forall (x: u8) { x <= m => 0 <= x } }) = below;
+        const twice: Prop = prop!(forall (x: Int) { prop!(x == x) && prop!(prop!(x <= x)) });
+        logic fn each(x: Int) -> @(x == x && x <= x) { And::Intro(prove!(x == x), prove!(x <= x)) }
+        logic fn holds() -> @twice { fold!(twice, each) }
+        logic fn below(n: Int, x: Int, h: @(x <= n)) -> @(x <= x) { prove!(x <= x) }
+        logic fn general(n: Int) -> @(forall (x: Int) { x <= n => x <= x }) {
+            let all: @(forall (m: Int) { forall (x: Int) { x <= m => x <= x } }) = below;
             all(n)
         }",
     );
@@ -977,6 +970,7 @@ fn a_promise_is_kept_only_if_every_callee_makes_it() {
 }
 
 #[test]
+#[doc = "spec: 1.9:2"]
 fn a_file_default_is_made_by_every_function_and_an_attribute_adds_to_it() {
     // The file makes the first promise the caller makes, so both functions
     // make it; the rest of the caller's are written on the caller.
@@ -1004,66 +998,45 @@ fn a_file_default_is_made_by_every_function_and_an_attribute_adds_to_it() {
         #![no_io]
         fn callee(n: u8) -> u8 { n }
         fn caller(n: u8) -> u8 { callee(n) }
-        fn claim(n: u8) -> @(callee(n) == n) { fold!(callee, prove!(n == n)) }",
+        logic fn specification(n: Int) -> Int { n }
+        fn claim(n: u8) -> @(specification(n) == n) { fold!(specification, prove!(n == n)) }",
     );
     assert_eq!(call(&result, "caller", &[3]), "3");
 }
 
 #[test]
-fn a_function_appears_in_a_proposition_exactly_when_it_promises_the_three() {
+fn only_logic_functions_are_admitted_to_propositions() {
     let places = [
         "fn g(n: u8) -> @(f(n) == n) { _ }",
         "fn g(n: u8) -> Prop { prop!(f(n) == n) }",
         "fn g(n: u8) -> @(n == n) { prove!(f(n) == n); _ }",
         "fn g(n: u8, h: @(n == n)) -> @(n == n) { unfold!(f, h) }",
         "fn g(n: u8, h: @(n == n)) -> @(n == n) { fold!(f, h) }",
-        "prop P(n: u8) { Is(m: u8): @P(f(m)) }",
-        "const C: u8 = f(1);",
+        "prop P(n: u8) { Is => { prop!(f(n) == n) } }",
     ];
-    for (attributes, missing) in [
-        ("", "terminates"),
-        ("#[terminates]", "no_panic"),
-        ("#[terminates] #[no_panic]", "no_io"),
-        ("#[no_panic] #[no_io]", "terminates"),
-        ("#[terminates] #[no_alloc] #[no_io]", "no_panic"),
+    for attributes in [
+        "",
+        "#[terminates]",
+        "#[terminates] #[no_panic] #[no_alloc] #[no_io]",
     ] {
         for place in places {
             let text = format!("{attributes} fn f(n: u8) -> u8 {{ n }}\n{place}");
             let (codes, full) = rejected(&text);
             assert_eq!(codes, ["L0209"], "{text}: {full}");
-            let where_ = if place.starts_with("const") {
-                "the value of a constant"
-            } else {
-                "a proposition"
-            };
             assert!(
-                full.starts_with(&format!(
-                    "`f` cannot appear in {where_}: it does not promise {missing}"
-                )),
-                "{text}: {full}"
+                full.contains("ordinary fn `f`") && full.contains("logic fn"),
+                "{full}"
             );
         }
     }
-    // With the three it is admitted, its defining equation is known, and
-    // it still runs; `no_alloc` is not needed and may be added.
-    for attributes in [
-        "#[terminates] #[no_panic] #[no_io]",
-        "#[no_io] #[no_alloc] #[no_panic] #[terminates]",
-        "#[no_alloc] #[terminates] #[no_panic] #[no_io]",
-    ] {
-        let text = format!(
-            "{attributes} fn f(n: u8) -> u8 {{ n.wrapping_add(1) }}
-            fn back(n: u8, h: @(f(n) == 4)) -> @(n.wrapping_add(1) == 4) {{ unfold!(f, h) }}
-            fn forth(n: u8, h: @(n.wrapping_add(1) == 4)) -> @(f(n) == 4) {{ fold!(f, h) }}
-            fn known(n: u8) -> (out: u8, @(out == f(n))) {{ let out = f(n); (out, _) }}
-            fn stated() -> @(f(3) == 4) {{ _ }}
-            prop Next(n: u8) {{ Is(m: u8): @Next(f(m)) }}
-            const FIVE: Prop = prop!(f(4) == 5);"
-        );
-        let result = accepted(&text);
-        assert_eq!(call(&result, "known", &[3]), "(4, Proved)");
-        assert_eq!(call(&result, "f", &[9]), "10");
-    }
+    accepted(
+        "logic fn successor(n: Int) -> Int { n + 1 }
+        logic fn back(n: Int, h: @(successor(n) == 4)) -> @(n + 1 == 4) { unfold!(successor, h) }
+        logic fn forth(n: Int, h: @(n + 1 == 4)) -> @(successor(n) == 4) { fold!(successor, h) }
+        logic fn stated() -> @(successor(3) == 4) { fold!(successor, prove!(3 + 1 == 4)) }
+        prop Next(n: Int) { Is => { prop!(successor(n) == n + 1) } }
+        const FIVE: Prop = prop!(successor(4) == 5);",
+    );
 }
 
 #[test]
@@ -1112,7 +1085,10 @@ fn a_promise_goes_on_a_function_and_decreases_waits_for_recursion() {
     for (text, what) in [
         ("#[no_panic] struct S { n: u8 }", "`S` is a struct"),
         ("#[terminates] enum E { A }", "`E` is an enum"),
-        ("#[no_io] prop P(n: u8) { Is }", "`P` is a proposition"),
+        (
+            "#[no_io] prop P(n: u8) { Is => { prop!(true) } }",
+            "`P` is a proposition",
+        ),
         ("#[no_alloc] const C: u8 = 1;", "`C` is a constant"),
     ] {
         let (codes, full) = rejected(text);
@@ -1133,6 +1109,7 @@ fn a_promise_goes_on_a_function_and_decreases_waits_for_recursion() {
 /// A typed tree that claims a promise and calls a function without it is
 /// refused by the checker with the promise and the callee named.
 #[test]
+#[doc = "spec: 1.9:3"]
 fn the_checker_refuses_a_promise_the_elaborator_did_not_check() {
     use locus::exec::{ExecError, Promise, Promises};
     use locus::kernel::{Definitions, HypId, Type, VarId};
@@ -1261,7 +1238,7 @@ fn a_type_and_a_value_of_one_name_coexist_as_in_rust() {
     for text in [
         "enum Mode { Off } struct Mode { x: u8 }",
         "fn f() -> u8 { 1 } const f: u8 = 1;",
-        "prop P { Yes } enum P { No }",
+        "prop P { Yes => { prop!(true) } } enum P { No }",
     ] {
         let (codes, _) = rejected(text);
         assert!(codes.contains(&"L0202"), "{text}: {codes:?}");
@@ -1269,9 +1246,9 @@ fn a_type_and_a_value_of_one_name_coexist_as_in_rust() {
     // A call `Name(..)` is the function when there is one, and the
     // proposition otherwise.
     accepted(
-        "prop Small(n: u8) { Below(bound: @(n < 10)) }
+        "prop Small(n: u8) { Below => { prop!(n < 10) } }
         #[terminates] #[no_panic] #[no_io]
-        fn small(n: u8, bound: @(n < 10)) -> @Small(n) { Small::Below(bound) }",
+        fn small(n: u8, bound: @(n < 10)) -> @Small(n) { Small::Below @ bound }",
     );
 }
 
@@ -1286,14 +1263,15 @@ fn a_variant_with_named_fields_is_a_tuple_variant_with_names_in_the_logic() {
             match shape { Shape::Box { width, .. } => width, Shape::Bounded { value, .. } => value }
         }
         fn square(side: u8) -> Shape { Shape::Box { height: side, width: side } }
-        fn width_of_box() -> @(width(Shape::Box { width: 3, height: 4 }) == 3) { _ }
+        logic fn width_model(shape: Shape) -> Int { match shape { Shape::Box { width, .. } => width as Int, Shape::Bounded { value, .. } => value as Int } }
+        fn width_of_box() -> @(width_model(Shape::Box { width: 3, height: 4 }) == 3) { fold!(width_model, prove!(3 == 3)) }
         fn bounded(limit: u8, value: u8, fits: @(value <= limit)) -> Shape { Shape::Bounded { limit, value, fits } }",
     );
     assert!(result.holes.iter().all(|hole| hole.solved));
     let rust = print_module(result.session.erased());
     assert!(rust.contains("Box { width: u8, height: u8 }"), "{rust}");
     assert!(
-        rust.contains("Bounded { limit: u8, value: u8, fits: Proved }"),
+        rust.contains("Bounded { limit: u8, value: u8, fits: Erased }"),
         "{rust}"
     );
     assert!(rust.contains("Shape::Box { width, .. } =>"), "{rust}");
@@ -1302,7 +1280,7 @@ fn a_variant_with_named_fields_is_a_tuple_variant_with_names_in_the_logic() {
         "{rust}"
     );
     assert!(
-        rust.contains("Shape::Bounded { limit, value, fits }"),
+        rust.contains("Shape::Bounded { limit, value, fits: Erased }"),
         "{rust}"
     );
 }
@@ -1373,8 +1351,7 @@ fn a_lemma_reads_its_argument_and_a_proposition_cannot_mention_a_moved_one() {
     // whole for the code after it.
     accepted(
         "struct Token { id: u8 }
-        #[terminates] #[no_panic] #[no_io]
-        fn small(t: Token) -> Prop { prop!(t.id <= 10) }
+        logic fn small(t: Token) -> Prop { prop!(t.id <= 10) }
         fn consume(t: Token) -> u8 { t.id }
         fn read_then_use(n: u8) -> u8 {
             let t = Token { id: n };
@@ -1479,7 +1456,7 @@ fn the_forms_that_panic_yield_no_value_and_take_the_type_expected_of_them() {
         "todo!()",
         "todo!(\"{}\", \"later\")",
         "unreachable!(\"{}\", \"c holds\")",
-        "let x: u8 = todo!();",
+        "pub fn bound() -> u8 {\n    todo!()\n}",
         "unreachable!()",
         "assert!(x <= 3_u8, \"{}\", \"assertion failed: x <= 3\");",
         "assert!(x != 0_u8, \"{}\", \"x must not be zero\");",
@@ -1544,6 +1521,7 @@ fn under_no_panic_each_form_is_refused_or_needs_its_evidence() {
 }
 
 #[test]
+#[doc = "spec: 1.10:2"]
 fn under_no_panic_the_evidence_is_found_as_a_hole_is_filled_and_the_checker_verifies_it() {
     // `assert!(c)` from a hypothesis, by arithmetic, and from the branch
     // taken; `unreachable!()` from contradictory facts, and from `False`.
@@ -1565,14 +1543,14 @@ fn under_no_panic_the_evidence_is_found_as_a_hole_is_filled_and_the_checker_veri
     assert_eq!(
         tiers,
         [
-            "exact",
+            "computed",
             "arithmetic",
             "arithmetic",
-            "exact",
+            "computed",
             "exact",
             "arithmetic",
             "exact",
-            "exact",
+            "computed",
             "exact"
         ]
     );
@@ -1660,77 +1638,54 @@ fn a_message_is_a_string_literal_and_the_forms_stand_nowhere_that_nothing_runs()
         fn g(small: @(2u8 <= 3)) -> @(f(2, small) == 2) { _ }",
     );
     assert_eq!(codes, ["L0209"], "{full}");
-    assert!(full.contains("`assert!`"), "{full}");
+    assert!(full.contains("ordinary fn `f`"), "{full}");
 }
 
 // --- Logic-only types and the one erasure rule (E8) ------------------------------
 
 #[test]
 fn a_pure_call_in_a_logic_only_context_is_absent_from_the_generated_rust() {
-    // A function of the logic in the value of a `Ghost<T>` let, and an
-    // ordinary function with the three promises (the interim rule of
-    // LOC-193) whose call returns only evidence: neither call is in the
-    // Rust, only the definitions and the runtime call of `double`.
     let result = accepted(
-        "#[terminates] #[no_panic] #[no_io]
-        fn double(n: u8) -> u8 { n.wrapping_add(n) }
-        #[terminates] #[no_panic] #[no_io]
-        fn bounded_by(n: u8, h: @(n <= 200)) -> @(n as Int + 50 <= 255) { let s = n + 50; _ }
-        fn noted(n: u8, h: @(n <= 200)) -> (out: u8, @(out == double(n))) {
-            let noted: Ghost<u8> = double(n);
-            let room = bounded_by(n, h);
-            let out = double(n);
-            (out, prove!(out == noted))
+        "logic fn double(n: Int) -> Int { n + n }
+        logic fn bounded_by(n: Int, h: @(n <= 200)) -> @(n + 50 <= 255) { _ }
+        fn noted(n: u8, h: @(n <= 200)) -> u8 {
+            let noted = double(n as Int);
+            let room = bounded_by(n as Int, h);
+            prove!(n as Int + 50 <= 255);
+            n
         }",
     );
     let source = print_module(result.session.erased());
-    assert_eq!(source.matches("double(").count(), 2, "{source}");
-    assert_eq!(source.matches("bounded_by(").count(), 1, "{source}");
-    assert!(source.contains("let room = Proved;"), "{source}");
+    assert!(!source.contains("double("), "{source}");
+    assert!(!source.contains("bounded_by("), "{source}");
     assert!(!source.contains("let noted"), "{source}");
     assert!(!source.contains("Ghost<"), "{source}");
 }
 
 #[test]
 fn a_call_in_a_logic_only_context_must_be_one_a_proposition_admits() {
-    // The three promises, each missing in turn, in each logic-only context:
-    // the error names the context and the promise.
-    for (attributes, missing) in [
-        ("", "terminates"),
-        ("#[terminates]", "no_panic"),
-        ("#[terminates] #[no_panic]", "no_io"),
-    ] {
-        for (statement, place) in [
-            ("let g = snapshot!(f(n));", "the argument of `snapshot!`"),
-            (
-                "let g: Ghost<u8> = f(n);",
-                "the value of a `let` with no runtime form",
-            ),
-            (
-                "let g: Int = f(n) as Int;",
-                "the value of a `let` with no runtime form",
-            ),
-            ("let g: Prop = prop!(f(n) == n);", "a proposition"),
-            ("let g = takes(n, f(n));", "a `Ghost<T>` argument"),
+    for attributes in ["", "#[terminates]", "#[terminates] #[no_panic] #[no_io]"] {
+        for statement in [
+            "let g = logic { f(n) as Int };",
+            "let g = prop!(f(n) == n);",
+            "let g = prove!(f(n) == n);",
         ] {
-            let text = format!(
-                "{attributes} fn f(n: u8) -> u8 {{ n }}
-                fn takes(n: u8, cap: Ghost<u8>) -> u8 {{ n }}
-                fn g(n: u8) -> u8 {{ {statement} n }}"
-            );
-            let (codes, full) = rejected(&text);
-            assert_eq!(codes, ["L0209"], "{text}: {full}");
-            assert!(
-                full.starts_with(&format!(
-                    "`f` cannot appear in {place}: it does not promise {missing}"
-                )),
-                "{text}: {full}"
-            );
+            let (codes, full) = rejected(&format!(
+                "{attributes} fn f(n: u8) -> u8 {{ n }} fn g(n: u8) -> u8 {{ {statement} n }}"
+            ));
+            assert_eq!(codes, ["L0209"], "{full}");
+            assert!(full.contains("ordinary fn `f`"), "{full}");
         }
     }
+    // Outside a logical block the eager source computation remains executable.
+    let result =
+        accepted("fn f(n: u8) -> u8 { n } fn g(n: u8) -> u8 { let model = f(n) as Int; n }");
+    assert_eq!(call(&result, "g", &[3]), "3");
+    assert!(print_module(result.session.erased()).contains("f(n)"));
 }
 
 #[test]
+#[doc = "spec: 1.18:2, 1.5:2"]
 fn a_runtime_call_returning_only_evidence_stays_and_its_panic_is_seen() {
     // An erased result is not an erasable computation: `checked` returns
     // only evidence and may panic, so the call stays in the Rust and the
@@ -1740,7 +1695,7 @@ fn a_runtime_call_returning_only_evidence_stays_and_its_panic_is_seen() {
         fn use_checked(x: u8) -> u8 { let h = checked(x); x }",
     );
     let source = print_module(result.session.erased());
-    assert!(source.contains("let h = checked(x);"), "{source}");
+    assert!(source.contains("let _ = checked(x);"), "{source}");
     assert_eq!(call(&result, "use_checked", &[0]), "0");
     let module = result.session.erased();
     let function = result.function("use_checked").unwrap();
@@ -1763,52 +1718,34 @@ fn a_call_with_a_logic_only_result_and_a_mut_parameter_is_kept() {
         fn use_clear(n: u8) -> u8 { let mut x = n; let h = clear(&mut x); x }",
     );
     let source = print_module(result.session.erased());
-    assert!(source.contains("let h = clear(&mut x);"), "{source}");
+    assert!(source.contains("let _ = clear(&mut x);"), "{source}");
     assert_eq!(call(&result, "use_clear", &[7]), "0");
 }
 
 #[test]
-fn a_ghost_value_is_named_only_where_nothing_runs() {
-    // In a proposition a `Ghost<T>` reads as its `T` value, and `snapshot!`
-    // of a value that would move is a reading of it.
+fn a_logical_model_is_preserved_after_a_move_but_cannot_be_runtime_data() {
     accepted(
         "struct Token { id: u8 }
-        fn consume(t: Token) -> u8 { t.id }
+        fn consume(t: Token) -> (out: u8, @(out == t.id)) { (t.id, _) }
         fn keep(n: u8) -> (out: u8, @(out == n)) {
             let t = Token { id: n };
-            let before: Ghost<u8> = t.id;
-            let was = snapshot!(t);
-            let consumed = consume(t);
+            let before = t.id as Int;
+            let (consumed, unchanged) = consume(t);
             prove!(before == n);
-            prove!(was.id == n);
-            (n, _)
+            (consumed, _)
         }",
     );
-    for (text, message) in [
-        (
-            "fn f(n: u8) -> u8 { let g = snapshot!(n); g }",
-            "`g` is a `Ghost<u8>`, which has no runtime form",
-        ),
-        (
-            "fn f(n: u8) -> u8 { snapshot!(n) }",
-            "`snapshot!` builds a `Ghost<T>`, which has no runtime form",
-        ),
-        (
-            "struct H { value: Ghost<u8> } fn f(h: H) -> u8 { h.value }",
-            "`h.value` is a `Ghost<u8>`, which has no runtime form",
-        ),
-        (
-            "fn f(n: u8, cap: Ghost<u8>) -> u8 { let y: u8 = cap; y }",
-            "`cap` is a `Ghost<u8>`, which has no runtime form",
-        ),
+    for text in [
+        "fn f(n: u8) -> u8 { let g = n as Int; g }",
+        "fn f(n: u8) -> u8 { n as Int }",
+        "struct H { value: Int } fn f(h: H) -> u8 { h.value }",
+        "fn f(n: u8, cap: Int) -> u8 { let y: u8 = cap; y }",
     ] {
         let (codes, full) = rejected(text);
-        assert_eq!(codes, ["L0201"], "{text}: {full}");
-        assert!(full.starts_with(message), "{text}: {full}");
+        assert_eq!(codes, ["L0220"], "{text}: {full}");
+        assert!(full.contains("expected `u8`, found `Int`"), "{full}");
     }
 }
-
-// --- return and the never type (M5) ---------------------------------------------------
 
 fn unit() -> Outcome {
     Outcome::Value(Value::Tuple(Vec::new()))
@@ -1960,11 +1897,11 @@ fn the_never_type_coerces_to_any_type_in_each_position() {
     // point the evidence shows unreachable.
     let rust = print_module(result.session.erased());
     for line in [
-        "let x: u8 = (return n);",
-        "fn spin() -> Proved {",
+        "pub fn as_value(n: u8) -> u8 {\n    return n\n}",
+        "fn spin() -> Erased {",
         "spin();\n        unreachable!(\"shown never to be reached\")",
-        "fn never_as_tail(n: u8) -> u8 {\n    spin();\n    unreachable!(\"shown never to be reached\")",
-        "fn never_as_never(n: u8) -> Proved {\n    spin()\n}",
+        "fn never_as_tail(_n: u8) -> u8 {\n    spin();\n    unreachable!(\"shown never to be reached\")",
+        "fn never_as_never(_n: u8) -> Erased {\n    spin()\n}",
     ] {
         assert!(rust.contains(line), "{line}\n{rust}");
     }

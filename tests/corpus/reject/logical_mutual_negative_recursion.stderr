@@ -1,0 +1,5 @@
+error[L0203]: recursive logical types must occur directly as positive enum payload fields
+ --> tests/corpus/reject/logical_mutual_negative_recursion.lc:2:18
+  |
+2 | enum Left { Next(logic Fn(Right) -> Int) } //~ error: L0203 recursive logical types must occur directly as positive enum payload fields
+  |                  ^^^^^^^^^^^^^^^^^^^^^^

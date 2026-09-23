@@ -1,0 +1,43 @@
+locus-proofs 1
+
+obligation 1d423e5df846de57 nat_from_int 1
+transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_le_b(0i, #0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(0i, int_sub($0, 1i))), linear(int_le(0i, int_sub($0, 1i)), 1, [(implies_elim(axiom(cmp_reflect[false], int_le_b($0, 0i)), h0), 1)])))
+
+obligation b731ee5082d392d9 nat_from_int 2
+transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_lt_b(#0, $0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_lt_b(int_sub($0, 1i), $0)), linear(int_le(int_add(int_sub($0, 1i), 1i), $0), 1, [])))
+
+obligation d284fa3582655d3e nat_from_to_int 1
+refl(enum:Nat::0())
+
+obligation a45a3cb33e081b09 nat_from_to_int 2
+linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i, fn:nat_to_int($2))), of_term($3)), 1), (implies_elim(axiom(cmp_reflect[true], int_le_b(int_add(1i, fn:nat_to_int($2)), 0i)), h1), 1)])
+
+obligation 88e02b5f41677a55 nat_from_to_int 3
+implies_elim(axiom(cmp_reify[true], int_eq_b(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2))), implies_elim(implies_elim(axiom(int_le_antisymm, int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)), linear(int_le(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)), 1, [])), linear(int_le(fn:nat_to_int($2), int_sub(int_add(1i, fn:nat_to_int($2)), 1i)), 1, [])))
+
+obligation 1da39ee5c334ad3f nat_from_to_int 4
+h2
+
+obligation 3b459a5023808d1f nat_nonnegative 1
+transport(transport(literal(int_le_b(0i, 0i)), (#0 ==[bool] int_le_b(0i, 0i)), refl(int_le_b(0i, 0i))), (#0 ==[bool] true), refl(true))
+
+obligation 9d8e0dd258133691 nat_nonnegative 2
+implies_elim(axiom(cmp_reify[true], int_le_b(0i, int_add(1i, fn:nat_to_int($2)))), linear(int_le(0i, int_add(1i, fn:nat_to_int($2))), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i, fn:nat_to_int($2))), of_term($3)), 1)]))
+
+obligation 75bee83c34410572 nat_to_from_int 1
+implies_elim(axiom(cmp_reify[true], int_eq_b(0i, $0)), implies_elim(implies_elim(axiom(int_le_antisymm, 0i, $0), linear(int_le(0i, $0), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i, $0)), of_term($1)), 1)])), linear(int_le($0, 0i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b($0, 0i)), h0), 1)])))
+
+obligation 4ec21f27e417989e nat_to_from_int 2
+transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_le_b(0i, #0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(0i, int_sub($0, 1i))), linear(int_le(0i, int_sub($0, 1i)), 1, [(implies_elim(axiom(cmp_reflect[false], int_le_b($0, 0i)), h0), 1)])))
+
+obligation 12e5e5cafab302ad nat_to_from_int 3
+of_term($4)
+
+obligation abe0b28d52e4c6a3 nat_to_from_int 4
+transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_lt_b(#0, $0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_lt_b(int_sub($0, 1i), $0)), linear(int_le(int_add(int_sub($0, 1i), 1i), $0), 1, [])))
+
+obligation 5e9d08be763be6a0 nat_to_from_int 5
+transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_eq_b(int_add(1i, fn:nat_to_int(fn:nat_from_int(#0))), $0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(int_add(1i, fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i)))), $0)), implies_elim(implies_elim(axiom(int_le_antisymm, int_add(1i, fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i)))), $0), linear(int_le(int_add(1i, fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i)))), $0), 1, [(implies_elim(axiom(cmp_reflect[true], int_eq_b(fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i))), int_sub($0, 1i))), transport(h1, (int_eq_b(fn:nat_to_int(fn:nat_from_int(#0)), #0) ==[bool] true), of_term($6))), 1)])), linear(int_le($0, int_add(1i, fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i))))), 1, [(implies_elim(axiom(cmp_reflect[true], int_eq_b(fn:nat_to_int(fn:nat_from_int(int_sub($0, 1i))), int_sub($0, 1i))), transport(h1, (int_eq_b(fn:nat_to_int(fn:nat_from_int(#0)), #0) ==[bool] true), of_term($6))), -1)]))))
+
+obligation 462d86564e572909 run 1
+transport(transport(h2, (#0 ==[enum:__LocusSeq0] $2), refl($2)), (int_eq_b(fn:__locus_seq_length_1(#0), 1i) ==[bool] true), transport(transport(h1, (#0 ==[enum:RuntimeList] $1), refl($1)), (int_eq_b(fn:__locus_seq_length_1(fn:__LocusSeq0::__model_0(#0)), 1i) ==[bool] true), transport(transport(h0, (#0 ==[box_type(enum:RuntimeList)] $0), refl($0)), (int_eq_b(fn:__locus_seq_length_1(fn:__LocusSeq0::__model_0(enum:RuntimeList::1(1, #0))), 1i) ==[bool] true), evaluate(int_eq_b(fn:__locus_seq_length_1(fn:__LocusSeq0::__model_0(enum:RuntimeList::1(1, boxed(enum:RuntimeList::0())))), 1i)))))

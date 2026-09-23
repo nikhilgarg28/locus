@@ -1,2 +1,0 @@
-// An array type.
-fn first(items: [u8; 4]) -> u8 { 1 } //~ error: L0116 array and slice types are not in Locus yet

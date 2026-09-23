@@ -1,0 +1,4 @@
+prop New { Yes => { prop!(true) } }
+prop Old {
+    Intro //~ error: L0152 states its body
+}

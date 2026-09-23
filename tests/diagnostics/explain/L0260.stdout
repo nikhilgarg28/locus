@@ -1,0 +1,32 @@
+L0260: Reference declaration has an unsupported shape
+
+The reference parameter or binding does not use a supported borrowing form. For example, mut on a reference parameter would make the reference binding writable rather than authorize mutation of the referent. State the intended & or &mut permission directly.
+
+Example from `tests/corpus/reject/reference_in_let.lc`; the full file is a regression test.
+
+```locus
+// Stored shared references require a borrow expression rather than a bare
+// referent value. Mutable references still last for one call.
+struct Holder {
+    inner: &u8,
+}
+
+fn longest(a: &u8, b: &u8) -> &u8 {
+    a
+}
+
+fn kept(n: u8) -> u8 {
+    let r: &u8 = n;
+    n
+}
+
+fn nested(n: &&mut u8) -> u8 {
+    n
+}
+
+fn rebound(mut n: &mut u8) -> u8 {
+    n
+}
+```
+
+Language, as built: [1.13:1](../../atlas.html#/doc/language/spec-1.13:1).

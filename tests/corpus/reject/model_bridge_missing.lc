@@ -1,0 +1,2 @@
+#[derive(Logical)] struct Observation { value: Int }
+fn observe(value: u8) -> Observation { value as Observation } //~ error: L0282

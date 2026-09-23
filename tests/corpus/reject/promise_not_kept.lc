@@ -16,3 +16,4 @@ fn quick(n: u8) -> u8 { n }
 fn strict(n: u8) -> u8 {
     quick(n) //~ error: L0232 `strict` promises no_panic and calls `quick`, which does not
 }
+//~ spec: 1.9:4

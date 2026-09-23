@@ -1,0 +1,42 @@
+L0241: Observation of a moved source
+
+A proposition cannot freshly observe a place after ownership has moved away. A snapshot taken before the move remains meaningful historical logical data. Create the model observation while the source is accessible, then state later claims about that snapshot.
+
+Example from `tests/corpus/reject/proposition_mentions_moved.lc`; the full file is a regression test.
+
+```locus
+// A proposition formed in a body cannot mention a local that was moved: the
+// code no longer has the value. Evidence obtained before the move stays
+// valid, being a value of its own; `snapshot!` (E8) keeps the value for a
+// later claim. The generated Rust has no counterpart to the proposition, so
+// this is a rule of Locus alone, not of rustc.
+struct Token {
+    id: u8,
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn afterwards(n: u8) -> u8 {
+    let t = Token { id: n };
+    let out = consume(t);
+    prove!(t.id == n);
+    out
+}
+
+// A lemma's argument is erased with the call, so it is a mention too.
+#[terminates] #[no_panic] #[no_io]
+logic fn id_of(t: &Token) -> Int {
+    t.id
+}
+
+fn in_a_claim(n: u8) -> (out: u8, @(out == n)) {
+    let t = Token { id: n };
+    let out = consume(t);
+    let claim = prop!(id_of(&t) == n);
+    (n, prove!(n == n))
+}
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

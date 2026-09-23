@@ -1,4 +1,2 @@
-// A variant whose stated conclusion gives the proposition too many arguments.
-prop Small(n: u8) {
-    Zero: @Small(0, 0), //~ error: L0208 `Small` takes 1 argument(s), and 2 were given
-}
+prop Small(n: Int) { Below => { prop!(n < 3) } }
+fn wrong() -> @Small(0, 0) { _ } //~ error: L0208 `Small` takes 1 argument(s), and 2 were given

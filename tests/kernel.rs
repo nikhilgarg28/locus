@@ -25,6 +25,7 @@ fn symmetry(eq: Proof, a: Term) -> Proof {
 // --- The four stated gate conditions ---------------------------------------
 
 #[test]
+#[doc = "spec: 2.1:13, 2.5:2"]
 fn a_true_equality_checks() {
     let mut ctx = Context::new();
     let goal = u8_eq(Term::U8(3), Term::U8(3));
@@ -54,6 +55,7 @@ fn reflexivity_does_not_compute() {
 }
 
 #[test]
+#[doc = "spec: 2.1:13, 2.5:2, 2.18:6, 2.19:4"]
 fn a_fact_in_scope_discharges_an_identical_goal_only() {
     let mut ctx = Context::new();
     let n = Term::var(ctx.declare(Type::U8).unwrap());
@@ -71,6 +73,7 @@ fn a_fact_in_scope_discharges_an_identical_goal_only() {
 }
 
 #[test]
+#[doc = "spec: 2.2:2, 2.2:5"]
 fn a_ghost_variable_is_rejected_in_an_executable_term() {
     let mut ctx = Context::new();
     let n = ctx.declare(Type::U8).unwrap();
@@ -108,6 +111,7 @@ fn ghost_and_executable_variables_mix_freely_inside_a_proposition() {
 }
 
 #[test]
+#[doc = "spec: 2.1:3, 2.1:6, 2.2:3, 2.4:10"]
 fn propositions_are_ghost_by_type() {
     let mut ctx = Context::new();
     let p = ctx.declare(Type::Prop).unwrap();
@@ -125,6 +129,7 @@ fn propositions_are_ghost_by_type() {
 // --- Transport ---------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.23:1"]
 fn symmetry_by_transport() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -136,6 +141,7 @@ fn symmetry_by_transport() {
 }
 
 #[test]
+#[doc = "spec: 2.23:1"]
 fn transitivity_by_transport() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -155,6 +161,7 @@ fn transitivity_by_transport() {
 }
 
 #[test]
+#[doc = "spec: 2.23:1"]
 fn congruence_by_transport() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -192,6 +199,7 @@ fn transport_rewrites_every_occurrence_the_template_names_and_no_other() {
 }
 
 #[test]
+#[doc = "spec: 2.18:6, 2.5:1, 2.5:2"]
 fn transport_checks_its_premise() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -212,6 +220,7 @@ fn transport_checks_its_premise() {
 }
 
 #[test]
+#[doc = "spec: 2.1:13, 2.5:2"]
 fn transport_needs_an_equality_and_a_propositional_template() {
     let mut ctx = Context::new();
     let a = Term::var(ctx.declare(Type::U8).unwrap());
@@ -257,6 +266,7 @@ fn equality_between_propositions_transports_a_proof() {
 // --- Implies and Forall ------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.1:13, 2.5:2"]
 fn implication_introduction_and_elimination() {
     let mut ctx = Context::new();
     let n = Term::var(ctx.declare(Type::U8).unwrap());
@@ -309,6 +319,7 @@ fn a_hypothesis_is_scoped_to_its_introduction() {
 }
 
 #[test]
+#[doc = "spec: 2.1:13, 2.5:2"]
 fn universal_introduction_and_elimination() {
     let mut ctx = Context::new();
     let all_self_equal = Term::forall(Type::U8, |x| u8_eq(x.clone(), x));
@@ -345,6 +356,7 @@ fn generalization_cannot_capture_a_context_variable() {
 }
 
 #[test]
+#[doc = "spec: 2.19:2, 2.1:10, 2.1:9"]
 fn bound_variable_names_do_not_matter() {
     let first = Term::forall(Type::U8, |x| u8_eq(x.clone(), x));
     let second = Term::forall(Type::U8, |y| u8_eq(y.clone(), y));
@@ -387,6 +399,7 @@ fn a_program_path_statement() {
 }
 
 #[test]
+#[doc = "spec: 2.1:11, 2.1:15"]
 fn nested_binders_in_proofs_line_up() {
     // forall a b, a == b => b == a, with the transport under two binders.
     let mut ctx = Context::new();
@@ -416,6 +429,7 @@ fn nested_binders_in_proofs_line_up() {
 // --- Ill-formed input --------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.1:2, 2.1:7, 2.22:1, 2.3:1, 2.4:1"]
 fn ill_formed_terms_are_rejected() {
     let mut ctx = Context::new();
     assert_eq!(

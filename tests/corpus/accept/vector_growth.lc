@@ -1,0 +1,18 @@
+// The proof observes distinct pre/post-call snapshots of the same storage.
+fn grow(xs: &mut Vec<u8>, value: u8) -> @(xs.len() == old!(xs).len() + 1) {
+    xs.push(value);
+    _
+}
+fn demo() -> u64 {
+    let mut xs: Vec<u8> = Vec::new();
+    grow(&mut xs, 7);
+    grow(&mut xs, 9);
+    xs.len()
+}
+fn first() -> u8 {
+    let xs: Vec<u8> = Vec::from([4, 5]);
+    xs[0]
+}
+//~ run: grow(&mut [1, 2] -> [1, 2, 7], 7) => Erased
+//~ run: demo() => 2
+//~ run: first() => 4

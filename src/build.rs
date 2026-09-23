@@ -5,7 +5,7 @@
 //! to a Rust reader: `Cargo.toml`, `src/lib.rs`, and one `src/<name>.rs` for
 //! each Locus file, named after the file. The root, `src/lib.rs`, holds the
 //! marker types and their private constructors, and a `pub mod` line for
-//! each module, so that every module sees the same `Proved` and evidence
+//! each module, so that every module sees the same `Erased` marker and evidence
 //! returned by one file can be taken by another; each module imports the
 //! markers from the root instead of defining its own. The markers are
 //! private to make where it counts: a module under the root can name a
@@ -18,7 +18,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::erased::print_root;
+use crate::erased::print_root_for_modules;
 use crate::lexer::{self, TokenKind};
 use crate::source::SourceMap;
 
@@ -82,9 +82,16 @@ pub fn write_crate(
     let manifest = directory.join("Cargo.toml");
     std::fs::write(&manifest, cargo_toml(name))?;
     written.push(manifest);
-    let names: Vec<String> = modules.iter().map(|(name, _)| name.clone()).collect();
     let root = source.join("lib.rs");
-    std::fs::write(&root, print_root(&names))?;
+    std::fs::write(
+        &root,
+        print_root_for_modules(
+            &modules
+                .iter()
+                .map(|module| (*module).clone())
+                .collect::<Vec<_>>(),
+        ),
+    )?;
     written.push(root);
     for (module, rust) in modules {
         let path = source.join(format!("{module}.rs"));

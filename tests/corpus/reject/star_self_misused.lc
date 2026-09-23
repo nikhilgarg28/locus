@@ -16,10 +16,11 @@ impl Counter {
     }
 
     fn by_value(self) -> u8 {
-        (*self).count //~ error: L0266 type `Counter` cannot be dereferenced (E0614)
+        (*self).count //~ error: L0266 dereference requires a shared reference
     }
 
     fn field(&self) -> u8 {
-        *self.count //~ error: L0266 `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+        *self.count //~ error: L0266 dereference requires a shared reference
     }
 }
+//~ spec: 1.14:1

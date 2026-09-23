@@ -2,3 +2,4 @@
 fn first(n: u8) -> (out: u8, @(out == n)) {
     (n, @(n == n)) //~ error: L0110 begins a proof type
 }
+//~ spec: 1.7:1

@@ -1,0 +1,5 @@
+error[L0287]: invalid collection operation: foreign result must preserve the native runtime shape, including evidence slots
+ --> tests/corpus/reject/trusted_shape.lc:2:4
+  |
+2 | fn wrong(xs: &Vec<u8>) -> (out: u8, @(out == 0)) = Vec::len;
+  |    ^^^^^

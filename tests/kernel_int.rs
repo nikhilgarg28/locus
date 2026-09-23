@@ -139,6 +139,7 @@ fn states(ctx: &mut Context, v: &Vars, build: &dyn Fn(&[Term]) -> Axiom, stateme
 // --- The type, its literals, and its primitives ----------------------------------
 
 #[test]
+#[doc = "spec: 2.11:1"]
 fn int_is_a_ghost_type_with_literals_of_any_size() {
     let (mut ctx, _) = setup();
     let huge: Integer = "-123456789012345678901234567890123456789012345678901234567890"
@@ -236,6 +237,7 @@ fn int_is_a_ghost_type_with_literals_of_any_size() {
 }
 
 #[test]
+#[doc = "spec: 2.11:17, 2.18:5"]
 fn the_literal_axiom_computes_one_primitive_on_literals() {
     let (mut ctx, _) = setup();
     for (term, value) in [
@@ -262,6 +264,7 @@ fn the_literal_axiom_computes_one_primitive_on_literals() {
 // --- The ring axioms ------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.11:4, 2.11:7"]
 fn addition_is_associative_and_commutative_with_zero_and_negation() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -389,6 +392,7 @@ fn addition_is_associative_and_commutative_with_zero_and_negation() {
 }
 
 #[test]
+#[doc = "spec: 2.11:4"]
 fn multiplication_is_associative_and_commutative_with_one_and_distributes() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -479,6 +483,7 @@ fn multiplication_is_associative_and_commutative_with_one_and_distributes() {
 // --- The order axioms -----------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.11:6"]
 fn the_order_is_reflexive_transitive_and_antisymmetric() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -567,6 +572,7 @@ fn the_order_is_reflexive_transitive_and_antisymmetric() {
 }
 
 #[test]
+#[doc = "spec: 2.11:6"]
 fn the_order_is_compatible_with_addition_and_multiplication() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -662,6 +668,7 @@ fn the_order_is_compatible_with_addition_and_multiplication() {
 }
 
 #[test]
+#[doc = "spec: 2.11:2, 2.11:6, 2.11:8"]
 fn the_order_is_total_and_discrete_and_strict_order_is_irreflexive() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -809,6 +816,7 @@ fn le_cancel(a: &Term, b: &Term, c: &Term) -> Proof {
 }
 
 #[test]
+#[doc = "spec: 2.11:18, 2.11:8"]
 fn facts_about_the_order_follow_from_the_axioms_alone() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -928,6 +936,7 @@ fn facts_about_the_order_follow_from_the_axioms_alone() {
 // --- Induction -------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.11:10, 2.11:9"]
 fn induction_over_the_non_negative_integers_checks_its_base_and_its_step() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -1088,6 +1097,7 @@ fn induction_over_the_non_negative_integers_checks_its_base_and_its_step() {
 // --- Evaluation ------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.10:4"]
 fn evaluation_computes_closed_integer_terms_and_decides_comparisons() {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let double = definitions
@@ -1401,11 +1411,11 @@ fn integer_terms_are_held_to_the_depth_and_step_limits() {
     assert_eq!(value.magnitude().bit_length(), (1 << 12) + 1);
     assert_eq!(
         infer_proof(&mut ctx, &Proof::Evaluate(squared(100))),
-        Err(KernelError::StepLimit)
+        Err(KernelError::EvaluationStepLimit)
     );
     assert_eq!(
         infer_proof(&mut ctx, &Proof::Evaluate(le(squared(100), lit(0)))),
-        Err(KernelError::StepLimit)
+        Err(KernelError::EvaluationStepLimit)
     );
 }
 
@@ -1450,10 +1460,11 @@ fn every_axiom() -> Vec<Axiom> {
         Axiom::OpModel(Op::Add, MachineInt::U8, vec![t(), t()]),
         Axiom::OpExact(Op::Add, MachineInt::U8, vec![t(), t()]),
         Axiom::CmpReflect(t(), true),
+        Axiom::CmpReify(t(), true),
     ]
 }
 
-const AXIOMS: usize = 33;
+const AXIOMS: usize = 34;
 
 fn axiom_index(axiom: &Axiom) -> usize {
     match axiom {
@@ -1490,6 +1501,7 @@ fn axiom_index(axiom: &Axiom) -> usize {
         Axiom::OpModel(..) => 30,
         Axiom::OpExact(..) => 31,
         Axiom::CmpReflect(..) => 32,
+        Axiom::CmpReify(..) => 33,
     }
 }
 
@@ -1511,6 +1523,15 @@ fn every_rule() -> Vec<Proof> {
         Proof::Literal(t()),
         Proof::Definition(t()),
         Proof::CaseStep(t()),
+        Proof::CaseKnown {
+            term: t(),
+            equation: p(),
+        },
+        Proof::BufferStep(t()),
+        Proof::BufferBound {
+            value: t(),
+            upper: false,
+        },
         Proof::CaseProof {
             scrutinee: p(),
             goal: t(),
@@ -1543,6 +1564,19 @@ fn every_rule() -> Vec<Proof> {
         Proof::Axiom(Axiom::IntLeRefl(t())),
         Proof::int_induction(|k| k, Proof::Omitted, |_, _, ih| ih, t()),
         Proof::linear(t(), 1, vec![(Proof::Omitted, 1)]),
+        Proof::PropInduction {
+            scrutinee: p(),
+            motive: locus::kernel::TermArm {
+                binders: 0,
+                body: t(),
+            },
+            arms: vec![],
+        },
+        Proof::DataInduction {
+            target: t(),
+            motives: vec![],
+            arms: vec![],
+        },
     ]
 }
 
@@ -1558,7 +1592,7 @@ fn construct_rule() -> Proof {
     }
 }
 
-const RULES: usize = 25;
+const RULES: usize = 30;
 
 fn rule_index(proof: &Proof) -> usize {
     match proof {
@@ -1587,10 +1621,15 @@ fn rule_index(proof: &Proof) -> usize {
         Proof::Axiom(_) => 22,
         Proof::IntInduction { .. } => 23,
         Proof::Linear { .. } => 24,
+        Proof::DataInduction { .. } => 25,
+        Proof::PropInduction { .. } => 26,
+        Proof::CaseKnown { .. } => 27,
+        Proof::BufferStep(_) => 28,
+        Proof::BufferBound { .. } => 29,
     }
 }
 
-const PRIMS: [Prim; 12] = [
+const PRIMS: [Prim; 15] = [
     Prim::IntAdd,
     Prim::IntSub,
     Prim::IntMul,
@@ -1603,6 +1642,9 @@ const PRIMS: [Prim; 12] = [
     Prim::Cast(MachineInt::U8, MachineInt::U8),
     Prim::Op(Op::Add, MachineInt::U8),
     Prim::Cmp(CmpOp::Le, MachineInt::U8),
+    Prim::IntCmp(CmpOp::Eq),
+    Prim::IntCmp(CmpOp::Lt),
+    Prim::IntCmp(CmpOp::Le),
 ];
 
 fn prim_index(prim: Prim) -> usize {
@@ -1619,6 +1661,9 @@ fn prim_index(prim: Prim) -> usize {
         Prim::Cast(..) => 9,
         Prim::Op(..) => 10,
         Prim::Cmp(..) => 11,
+        Prim::IntCmp(CmpOp::Eq) => 12,
+        Prim::IntCmp(CmpOp::Lt) => 13,
+        Prim::IntCmp(CmpOp::Le) => 14,
     }
 }
 
@@ -1781,6 +1826,7 @@ fn mentions(text: &str, name: &str) -> bool {
 }
 
 #[test]
+#[doc = "spec: 1.23:1, 2.1:13, 2.5:2, 2.24:1"]
 fn the_contract_names_every_axiom_rule_and_primitive() {
     let path = std::env::var_os("LOCUS_ATLAS")
         .map(std::path::PathBuf::from)
@@ -1819,4 +1865,139 @@ fn the_contract_reader_handles_escapes_and_whole_words() {
     assert!(!mentions("uses `int_induction(t)` here", "induction"));
     assert!(!mentions("the int_add_zero axiom", "add_zero"));
     assert!(mentions("int_le", "int_le"));
+}
+
+// Reconciliation L1: logical Boolean comparisons and reflection.
+#[test]
+#[doc = "spec: 2.26:1, 2.26:2"]
+fn int_boolean_comparisons_evaluate_at_boundaries_and_random_pairs() {
+    let (mut ctx, _) = setup();
+    let huge: Integer = "999999999999999999999999999999999999999999999999"
+        .parse()
+        .unwrap();
+    let mut values = vec![
+        huge.clone(),
+        huge.neg(),
+        Integer::from(i128::MIN),
+        Integer::from(i128::MAX),
+        Integer::from(-1i64),
+        Integer::zero(),
+        Integer::from(1i64),
+    ];
+    let mut rng = Rng::new(0x207);
+    values.extend((0..100).map(|_| Integer::from(rng.next_u64() as i64)));
+    for left in &values {
+        for right in &values {
+            for op in CmpOp::ALL {
+                let test = Term::int_cmp(op, Term::Int(left.clone()), Term::Int(right.clone()));
+                let expected = match op {
+                    CmpOp::Eq => left == right,
+                    CmpOp::Lt => left < right,
+                    CmpOp::Le => left <= right,
+                };
+                let claim = Term::eq(Type::Bool, test.clone(), Term::Bool(expected));
+                assert_eq!(
+                    check_proof(&mut ctx, &Proof::Evaluate(test), &claim),
+                    Ok(())
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[doc = "spec: 2.26:3, 2.26:4, 2.26:5"]
+fn int_comparison_reflection_checks_both_implication_directions_and_flags() {
+    let (mut ctx, prelude) = setup();
+    let a = Term::var(ctx.declare(Type::Int).unwrap());
+    let b = Term::var(ctx.declare(Type::Int).unwrap());
+    for op in CmpOp::ALL {
+        let test = Term::int_cmp(op, a.clone(), b.clone());
+        for flag in [false, true] {
+            let claim = op.claim(a.clone(), b.clone());
+            let claim = if flag { claim } else { prelude.not_prop(claim) };
+            let observed = Term::eq(Type::Bool, test.clone(), Term::Bool(flag));
+            for reify in [false, true] {
+                let (input, output) = if reify {
+                    (claim.clone(), observed.clone())
+                } else {
+                    (observed.clone(), claim.clone())
+                };
+                let axiom = if reify {
+                    Axiom::CmpReify(test.clone(), flag)
+                } else {
+                    Axiom::CmpReflect(test.clone(), flag)
+                };
+                assert_eq!(
+                    check_proof(
+                        &mut ctx,
+                        &ax(axiom.clone()),
+                        &Term::implies(input.clone(), output.clone())
+                    ),
+                    Ok(())
+                );
+                let h = ctx.assume(input).unwrap();
+                let proof = mp(ax(axiom), Proof::hyp(h));
+                assert_eq!(check_proof(&mut ctx, &proof, &output), Ok(()));
+                let wrong_flag = if reify {
+                    Axiom::CmpReify(test.clone(), !flag)
+                } else {
+                    Axiom::CmpReflect(test.clone(), !flag)
+                };
+                assert!(infer_proof(&mut ctx, &mp(ax(wrong_flag), Proof::hyp(h))).is_err());
+            }
+        }
+    }
+    let le = Term::int_cmp(CmpOp::Le, a.clone(), b.clone());
+    let h = ctx.assume(Term::holds(le)).unwrap();
+    let lt = Term::int_cmp(CmpOp::Lt, a, b);
+    assert!(
+        infer_proof(
+            &mut ctx,
+            &mp(ax(Axiom::CmpReflect(lt, true)), Proof::hyp(h))
+        )
+        .is_err()
+    );
+    assert!(infer_proof(&mut ctx, &ax(Axiom::CmpReflect(Term::Bool(true), true))).is_err());
+    assert!(
+        infer_term(
+            &mut ctx,
+            &Term::int_cmp(CmpOp::Eq, Term::U8(1), lit(1)),
+            Mode::Logical
+        )
+        .is_err()
+    );
+    assert!(
+        infer_term(
+            &mut ctx,
+            &Term::Prim(Prim::IntCmp(CmpOp::Le), vec![lit(1)]),
+            Mode::Logical
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn a_closed_boolean_formula_lifts_to_holds_without_a_new_proposition_form() {
+    let (mut ctx, _) = setup();
+    let comparison = Term::int_cmp(CmpOp::Le, add(lit(1), lit(1)), lit(3));
+    let formula = Term::case(
+        comparison,
+        Type::Bool,
+        vec![
+            (0, Box::new(|_, _| Term::Bool(false))),
+            (
+                0,
+                Box::new(|_, _| Term::int_cmp(CmpOp::Eq, lit(-3), lit(-3))),
+            ),
+        ],
+    );
+    assert_eq!(
+        check_proof(
+            &mut ctx,
+            &Proof::Evaluate(formula.clone()),
+            &Term::holds(formula)
+        ),
+        Ok(())
+    );
 }

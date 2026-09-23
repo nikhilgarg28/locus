@@ -1,9 +1,9 @@
 // A proposition that takes evidence as a parameter. When the evidence speaks
 // of an earlier parameter, that name is reported as unknown instead.
-prop Small(n: u8, bound: @(0 < 10)) { //~ error: L0225 evidence belongs in a variant
-    Is,
+prop Small(n: Int, bound: @(0 < 10)) { //~ error: L0225 evidence belongs in a variant
+    Is => { prop!(true) }
 }
 
-prop Smaller(n: u8, bound: @(n < 10)) { //~ error: L0204 unknown name `n`
-    Is,
+prop Smaller(n: Int, bound: @(n < 10)) { //~ error: L0204 unknown name `n`
+    Is => { prop!(true) }
 }

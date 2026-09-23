@@ -7,6 +7,8 @@
 
 pub mod arith;
 pub mod ast;
+pub mod audit;
+pub mod bench;
 pub mod build;
 pub mod diagnostic;
 pub mod elab;
@@ -14,7 +16,10 @@ pub mod erased;
 pub mod exec;
 pub mod kernel;
 pub mod lexer;
+pub mod limits;
+pub mod measurement;
 pub mod parser;
+pub mod preview;
 pub mod source;
 pub mod store;
 pub mod typed;

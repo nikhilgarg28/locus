@@ -1,20 +1,20 @@
 #[terminates] #[no_panic] #[no_io]
-fn same(x: u8, y: u8) -> Prop {
+logic fn same(x: Int, y: Int) -> Prop {
     prop!(x == y)
 }
 
 const equality_is_reflexive: Prop = prop!(
-    forall (n: u8) { n == n }
+    forall (n: Int) { n == n }
 );
 
 const equality_is_transitive: Prop = prop!(
-    forall (x: u8, y: u8, z: u8) {
+    forall (x: Int, y: Int, z: Int) {
         same(x, y) && same(y, z) => same(x, z)
     }
 );
 
-const some_byte_is_zero: Prop = prop!(
-    exists (n: u8) { n == 0 }
+const some_integer_is_zero: Prop = prop!(
+    exists (n: Int) { n == 0 }
 );
 
 // Evidence is an ordinary expression. `unfold!` opens the definition, and
@@ -50,4 +50,5 @@ fn increment(n: u8) -> (out: u8, @same(out, n.wrapping_add(1))) {
 
 // Only `increment` exists at runtime; the rest of the file is logic.
 //~ proofs: 5
-//~ run: increment(9) => (10, Proved)
+//~ run: increment(9) => (10, Erased)
+//~ spec: 1.7:3

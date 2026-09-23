@@ -1,0 +1,27 @@
+L0115: Reserved keyword used as a name
+
+A reserved Locus or Rust keyword was used where an identifier is required. Reserving Rust keywords keeps generated names unambiguous. Rename the binding, field or declaration rather than relying on raw identifier syntax.
+
+Example from `tests/corpus/reject/keyword_as_name.lc`; the full file is a regression test.
+
+```locus
+// Every keyword of Rust is reserved, the ones Locus has no use for included:
+// generated Rust could not spell these names. Found by the corpus runner.
+fn move(ref: u8) -> u8 { ref }
+
+fn fine(type: u8) -> u8 {
+    type
+}
+
+struct Point {
+    x: u8,
+    yield: u8,
+}
+
+fn binding() -> u8 {
+    let match = 1;
+    2
+}
+```
+
+Language, as built: [1.2:1](../../atlas.html#/doc/language/spec-1.2:1).

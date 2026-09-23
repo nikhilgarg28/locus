@@ -1,0 +1,5 @@
+error[L0203]: recursive logical types must occur directly as positive enum payload fields
+ --> tests/corpus/reject/logical_negative_recursion.lc:2:22
+  |
+2 | enum Negative { Step(logic Fn(Negative) -> Int) } //~ error: L0203
+  |                      ^^^^^^^^^^^^^^^^^^^^^^^^^

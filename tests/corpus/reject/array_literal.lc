@@ -1,8 +1,8 @@
 // An array literal, and an empty one.
 fn items() -> u8 {
-    [1, 2, 3] //~ error: L0116 arrays are not in Locus yet
+    [1, 2, 3] //~ error: L0272 logical and runtime positions
 }
 
 fn none() -> u8 {
-    [] //~ error: L0116 arrays are not in Locus yet
+    [] //~ error: L0284 an empty array needs an element type annotation
 }

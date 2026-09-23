@@ -1,0 +1,11 @@
+L0404: Unknown diagnostic explanation code
+
+The requested code is not in this compiler version’s diagnostic registry. Codes use the letter L followed by four digits. Check the exact code printed by the compiler; an obsolete code may have been replaced as documented by the diagnostic schema history.
+
+Driver/resource example; generated-input tests cover this case.
+
+```text
+locus explain L9998
+```
+
+Language, as built: [1.21:1](../../atlas.html#/doc/language/spec-1.21:1).

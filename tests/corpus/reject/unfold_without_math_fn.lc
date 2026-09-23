@@ -1,5 +1,5 @@
 // `unfold!` whose first argument is not the name of a function.
-#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
 
 #[terminates] #[no_panic] #[no_io] fn first(n: u8, h: @nonzero(n)) -> @(n != 0) {
     unfold!(n, h) //~ error: L0229 `unfold!` takes the name of a function first

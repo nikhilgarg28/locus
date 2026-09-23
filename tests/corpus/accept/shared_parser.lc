@@ -1,0 +1,16 @@
+// A parser keeps its input borrow and the evidence needed for a lookup.
+struct Parser<'a> {
+    input: &'a [u8],
+    present: @(0 < input.len()),
+}
+fn parser<'a>(input: &'a [u8], present: @(0 < input.len())) -> Parser<'a> {
+    Parser { input: &input, present }
+}
+fn first<'a>(parser: Parser<'a>) -> &'a u8 { &parser.input[0] }
+fn run() -> u8 {
+    let input: [u8; 2] = [21, 22];
+    let parser = parser(&input, prove!(0 < input.len()));
+    let first = first(parser);
+    *first
+}
+//~ run: run() => 21

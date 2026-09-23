@@ -1,16 +1,25 @@
 locus-proofs 1
 
-obligation add64ff5a8ada27d run 1
-evaluate(int_le(view[u8](0), view[u8](3)))
+obligation 35247a4dabb8c29f remaining 1
+transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term(proof(transport(definition(fn:within_limit(view[u8]($0))), #0, of_term($1))))))
 
-obligation 3e5398446530a8a5 run 2
-transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), fn:within_limit(#0.0), transport(transport(h3, (#0 ==[struct:Lock] $9), refl($9)), fn:within_limit(#0.0), transport(h3, fn:within_limit(#0.0), of_term(proof(of_term($10))))))
+obligation b8664f10c935e577 remaining 2
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8](wrapping_sub[u8](3, $0)), 3i)), transport(literal(view[u8](3)), int_le(view[u8](wrapping_sub[u8](3, $0)), #0), of_term(proof(of_term(fn:u8_sub_le(3, $0, proof(transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term(proof(transport(definition(fn:within_limit(view[u8]($0))), #0, of_term($1)))))))))))))
 
-obligation 936fef6b03d000c8 step 1
+obligation caccac166ef12c6d run 1
+evaluate(int_le_b(view[u8](0), 3i))
+
+obligation f33fdca3e029212e run 2
+transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), fn:within_limit(view[u8](#0.0)), transport(transport(h3, (#0 ==[struct:Lock] $9), refl($9)), fn:within_limit(view[u8](#0.0)), transport(h3, fn:within_limit(view[u8](#0.0)), of_term(proof(of_term($10))))))
+
+obligation dc7d5edece1e24a6 step 1
+implies_elim(axiom(cmp_reify[true], int_lt_b(view[u8]($0.0), 3i)), transport(literal(view[u8](3)), int_le(int_add(view[u8]($0.0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)))
+
+obligation 31cc4b9cf32e493f step 2
 implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)
 
-obligation a15f9d76bd69e629 step 2
-transport(transport(projection(struct:Lock { $0.0, false }.0), (#0 ==[u8] struct:Lock { $0.0, false }.0), refl(struct:Lock { $0.0, false }.0)), fn:within_limit(#0), of_term(proof(of_term($1))))
+obligation 6e6562c5899c19df step 3
+transport(transport(projection(struct:Lock { $0.0, false }.0), (#0 ==[u8] struct:Lock { $0.0, false }.0), refl(struct:Lock { $0.0, false }.0)), fn:within_limit(view[u8](#0)), of_term(proof(of_term($1))))
 
-obligation 913f1cc68c1b7fcb step 3
-evaluate(int_le(view[u8](0), view[u8](3)))
+obligation 92c9d08d31eddf30 step 4
+evaluate(int_le_b(view[u8](0), 3i))

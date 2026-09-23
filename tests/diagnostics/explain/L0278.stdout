@@ -1,0 +1,15 @@
+L0278: Proof destructuring would let a witness escape
+
+A proof’s witness remains scoped inside proof-producing elimination. An ordinary let cannot extract it as an independent logical value. Use a match whose branches construct evidence of a common outer claim, so proof irrelevance is preserved.
+
+Example from `tests/corpus/reject/prop_witness_escape.lc`; the full file is a regression test.
+
+```locus
+prop Has { At(witness: Int) => { prop!(true) } }
+fn bad(h: @Has) -> @(true) {
+    let Has::At(witness) @ body = h;
+    body
+}
+```
+
+Language, as built: [1.7:5](../../atlas.html#/doc/language/spec-1.7:5).

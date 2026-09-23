@@ -253,6 +253,7 @@ fn an_operator_under_no_panic_needs_its_evidence() {
 /// wrong proof for a premise the checker refuses the statement; and with
 /// the evidence a `learned` identity is required, one for the exact fact.
 #[test]
+#[doc = "spec: 3.2:7"]
 fn the_right_evidence_makes_the_exact_result_known() {
     let world = world();
     let (n_id, n) = var();
@@ -445,6 +446,7 @@ fn the_exact_fact_is_about_the_result_and_the_operands_as_written() {
 /// that promises nothing; a learned identity is required for it, and a
 /// claim it does not make is refused.
 #[test]
+#[doc = "spec: 3.2:7"]
 fn a_division_teaches_its_condition_to_what_follows() {
     let world = world();
     let (a_id, a) = var();

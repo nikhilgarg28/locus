@@ -1,4 +1,4 @@
-// A runtime `bool` where a proposition is needed.
-fn first(flag: bool) -> @(flag) { //~ error: L0221 this is a `bool`, and a proposition is needed
-    _
+// Runtime bool observations lift to propositions; truth still needs evidence.
+fn first(flag: bool) -> @(flag) {
+    _ //~ error: L0230 cannot show `flag`
 }

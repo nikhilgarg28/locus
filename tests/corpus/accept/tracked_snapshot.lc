@@ -38,6 +38,6 @@ fn captured(h: @(2u8 <= 3)) -> u8 {
 }
 
 //~ proofs: 5
-//~ run: snapshot_and_tracked(Proved) => 5
-//~ run: captured(Proved) => 0
-//~ rust: let mut now = Proved;
+//~ run: snapshot_and_tracked(Erased) => 5
+//~ run: captured(Erased) => 0
+//~ rust: let mut now = Erased;

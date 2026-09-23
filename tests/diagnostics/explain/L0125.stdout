@@ -1,0 +1,24 @@
+L0125: Misplaced mut marker
+
+mut qualifies an individual binding or a supported parameter; it is not an operator over an entire destructuring pattern. Attach it to each binding that is writable, and do not repeat it or put it on a proposition parameter.
+
+Example from `tests/corpus/reject/mut_misplaced.lc`; the full file is a regression test.
+
+```locus
+// `mut` goes before the name of a binding or of a function's parameter, in
+// Rust's words where Rust has them.
+fn f(pair: (u8, u8)) -> u8 {
+    let mut (a, b) = pair;
+    let mut mut c = a;
+    let (mut d, e) = pair;
+    d
+}
+
+prop Small(mut n: u8) {
+    Any: @(true),
+}
+
+const c: Prop = prop!(forall (mut n: u8) { n == n });
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

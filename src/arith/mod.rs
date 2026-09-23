@@ -74,13 +74,13 @@ pub struct Budget {
 impl Default for Budget {
     fn default() -> Self {
         Self {
-            eliminations: 1024,
-            derived: 16384,
+            eliminations: crate::limits::MAX_ARITHMETIC_ELIMINATIONS,
+            derived: crate::limits::MAX_ARITHMETIC_DERIVED,
             pairs: MAX_LINEAR_PAIRS,
             atoms: MAX_LINEAR_ATOMS,
-            bits: 256,
-            depth: 4,
-            branches: 64,
+            bits: crate::limits::MAX_ARITHMETIC_BITS,
+            depth: crate::limits::MAX_ARITHMETIC_DEPTH,
+            branches: crate::limits::MAX_ARITHMETIC_BRANCHES,
         }
     }
 }
@@ -88,6 +88,7 @@ impl Default for Budget {
 /// What a run and its nested runs have spent of the shared counts.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Spent {
+    depth_exhausted: bool,
     eliminations: usize,
     derived: usize,
     branches: usize,
@@ -97,7 +98,7 @@ pub(crate) struct Spent {
 #[derive(Clone, Debug)]
 pub enum Reason {
     /// The goal is not `int_le(s, t)`, `s ==[Int] t`, or `False`.
-    NotLinear(Term),
+    NotLinear(Box<Term>),
     /// Every atom was eliminated without a contradiction: the negated goal
     /// and the constraints are consistent over the rationals, so no
     /// certificate exists.
@@ -106,7 +107,7 @@ pub enum Reason {
     Budget { name: &'static str, limit: usize },
     /// The certificate found was refused by the kernel. This is a bug in
     /// the procedure, reported rather than trusted.
-    Rejected(KernelError),
+    Rejected(Box<KernelError>),
     /// The goal needs the prelude, which the context does not have.
     NoPrelude,
 }
@@ -130,11 +131,11 @@ impl fmt::Display for Reason {
 /// The bound of the box a counterexample is sought in when the procedure
 /// gave up on a budget and has no point of its own: every atom in
 /// `-BOX..=BOX`.
-pub const COUNTEREXAMPLE_BOX: i64 = 8;
+pub use crate::limits::COUNTEREXAMPLE_BOX;
 
 /// The most atoms the box is searched over; it has `(2 * BOX + 1)^atoms`
 /// points.
-pub const COUNTEREXAMPLE_ATOMS: usize = 4;
+pub use crate::limits::MAX_COUNTEREXAMPLE_ATOMS as COUNTEREXAMPLE_ATOMS;
 
 /// A counterexample, or why there is none to report.
 #[derive(Clone, Debug)]
@@ -149,6 +150,8 @@ pub enum Counterexample {
     /// None was sought: the procedure gave up before it had a point, and
     /// the problem has too many atoms for the box to be searched.
     NotSought,
+    /// Diagnostic enumeration was declined because its atom count is bounded.
+    TooManyAtoms,
 }
 
 /// The procedure gave up: the reason, the constraints it had, and a
@@ -192,6 +195,10 @@ impl fmt::Display for GaveUp {
                 "\nno counterexample within -{COUNTEREXAMPLE_BOX}..{COUNTEREXAMPLE_BOX}"
             ),
             Counterexample::NotSought => Ok(()),
+            Counterexample::TooManyAtoms => write!(
+                f,
+                "\ncounterexample enumeration omitted: MAX_COUNTEREXAMPLE_ATOMS limit of {COUNTEREXAMPLE_ATOMS} was exceeded"
+            ),
         }
     }
 }
@@ -231,7 +238,16 @@ pub fn prove(
         spent: &mut spent,
         depth: 0,
     };
-    search.prove_goal(goal)
+    let result = search.prove_goal(goal);
+    result.map_err(|mut failure| {
+        if spent.depth_exhausted && !matches!(failure.reason, Reason::Budget { .. }) {
+            failure.reason = Reason::Budget {
+                name: "depth",
+                limit: budget.depth,
+            };
+        }
+        failure
+    })
 }
 
 /// One run of the procedure, with the counts shared by its nested runs.
@@ -273,7 +289,7 @@ impl Search<'_> {
         let is_false = falsehood.as_ref().is_some_and(|f| f == goal);
         let sides = comparison(goal).map(|(l, r)| (l.clone(), r.clone()));
         if sides.is_none() && !is_false {
-            return Err(GaveUp::bare(Reason::NotLinear(goal.clone())));
+            return Err(GaveUp::bare(Reason::NotLinear(Box::new(goal.clone()))));
         }
 
         // The negated goal is read first, so that its atoms come first;
@@ -389,7 +405,7 @@ impl Search<'_> {
                 };
                 let found = match self.ctx.assume_with(id, case.clone()) {
                     Ok(()) => self.prove_goal(goal),
-                    Err(error) => Err(GaveUp::bare(Reason::Rejected(error))),
+                    Err(error) => Err(GaveUp::bare(Reason::Rejected(Box::new(error)))),
                 };
                 let body = found.clone().unwrap_or(Proof::Omitted);
                 outcome = Some(found);
@@ -452,7 +468,7 @@ impl Search<'_> {
             Ok(()) => Ok(proof),
             Err(error) => Err(GaveUp {
                 constraints,
-                ..GaveUp::bare(Reason::Rejected(error))
+                ..GaveUp::bare(Reason::Rejected(Box::new(error)))
             }),
         }
     }
@@ -516,7 +532,7 @@ impl Problem {
     fn searched_box(&self, negated: Option<&Form>) -> Counterexample {
         let n = self.atoms.len();
         if n > COUNTEREXAMPLE_ATOMS {
-            return Counterexample::NotSought;
+            return Counterexample::TooManyAtoms;
         }
         let mut point = vec![-COUNTEREXAMPLE_BOX; n];
         loop {

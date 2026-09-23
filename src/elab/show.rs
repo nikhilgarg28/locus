@@ -41,6 +41,8 @@ impl Env<'_> {
 
     fn type_at(&mut self, ty: &Type, bound: &mut Vec<String>) -> String {
         match ty {
+            Type::Boxed(element) => format!("Box<{}>", self.type_at(element, bound)),
+            Type::Buffer(element) => format!("Buffer<{}>", self.type_at(element, bound)),
             Type::Bool => "bool".into(),
             Type::U8 => "u8".into(),
             Type::Int => "Int".into(),
@@ -159,6 +161,15 @@ impl Env<'_> {
     fn term_at(&mut self, term: &Term, at: Level, bound: &mut Vec<String>) -> String {
         let prelude = self.prelude;
         match term {
+            Term::Boxed(value) => format!("box({})", self.term_at(value, Level::Implies, bound)),
+            Term::Buffer { op, arguments, .. } => format!(
+                "buffer::{op:?}({})",
+                arguments
+                    .iter()
+                    .map(|arg| self.term_at(arg, Level::Implies, bound))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Term::Free(id) => self.labels.get(id).cloned().unwrap_or_else(|| "_".into()),
             Term::Bound(index) => bound
                 .len()
@@ -172,13 +183,13 @@ impl Env<'_> {
             // `0i32 <= 3i32` is not mistaken for a claim about bytes.
             Term::Machine(ty, value) => format!("{value}{}", ty.name()),
             Term::Prim(prim, operands) => match (prim, operands.as_slice()) {
-                (Prim::Cmp(CmpOp::Eq, _), [a, b]) => {
+                (Prim::Cmp(CmpOp::Eq, _) | Prim::IntCmp(CmpOp::Eq), [a, b]) => {
                     self.binary("==", Level::Compare, at, a, b, bound)
                 }
-                (Prim::Cmp(CmpOp::Lt, _), [a, b]) => {
+                (Prim::Cmp(CmpOp::Lt, _) | Prim::IntCmp(CmpOp::Lt), [a, b]) => {
                     self.binary("<", Level::Compare, at, a, b, bound)
                 }
-                (Prim::Cmp(CmpOp::Le, _), [a, b]) => {
+                (Prim::Cmp(CmpOp::Le, _) | Prim::IntCmp(CmpOp::Le), [a, b]) => {
                     self.binary("<=", Level::Compare, at, a, b, bound)
                 }
                 // `a < b` over `Int` is `a + 1 <= b`; a view of a machine
@@ -340,6 +351,25 @@ impl Env<'_> {
                 }
             }
             Term::PropApp(id, arguments) => match arguments.as_slice() {
+                [Term::Lambda { params, body, .. }]
+                    if params.len() == 1
+                        && self
+                            .quantifiers
+                            .iter()
+                            .any(|pair| pair.forall_id() == *id || pair.exists_id() == *id) =>
+                {
+                    let word = if self.quantifiers.iter().any(|pair| pair.forall_id() == *id) {
+                        "forall"
+                    } else {
+                        "exists"
+                    };
+                    let name = format!("x{}", bound.len());
+                    let ty = self.type_at(&params[0], bound);
+                    bound.push(name.clone());
+                    let body = self.term_at(body, Level::Implies, bound);
+                    bound.pop();
+                    format!("{word} ({name}: {ty}) {{ {body} }}")
+                }
                 [] if *id == prelude.truth => "true".into(),
                 [] if *id == prelude.falsehood => "false".into(),
                 [p, q] if *id == prelude.and => self.binary("&&", Level::And, at, p, q, bound),
@@ -376,6 +406,7 @@ impl Env<'_> {
             }
             Term::Absurd(..) => "unreachable".into(),
             Term::For(_) => "for ... { ... }".into(),
+            Term::Lambda { .. } => "logic |...| { ... }".into(),
         }
     }
 }

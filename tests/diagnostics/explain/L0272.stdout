@@ -1,0 +1,18 @@
+L0272: Logical value used as runtime data
+
+A logical expression cannot decide physical control flow or fill a physical result slot. Erasing it must not change runtime behavior. Use an executable bool or data operation for runtime decisions and carry the logical result only through logical or proof positions.
+
+Example from `tests/corpus/reject/array_literal.lc`; the full file is a regression test.
+
+```locus
+// An array literal, and an empty one.
+fn items() -> u8 {
+    [1, 2, 3]
+}
+
+fn none() -> u8 {
+    []
+}
+```
+
+Language, as built: [1.5:4](../../atlas.html#/doc/language/spec-1.5:4).

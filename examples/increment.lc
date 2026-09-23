@@ -9,7 +9,7 @@ fn consume(n: u8) -> u8 {
 }
 
 //~ proofs: 1
-//~ run: increment(7) => (8, Proved)
-//~ run: increment(255) => (0, Proved)
+//~ run: increment(7) => (8, Erased)
+//~ run: increment(255) => (0, Erased)
 //~ run: consume(41) => 42
-//~ rust: fn increment(n: u8) -> (u8, Proved) {
+//~ rust: fn increment(n: u8) -> (u8, Erased) {

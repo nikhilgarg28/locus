@@ -34,11 +34,18 @@
 //! codes while this file is being written. When it lands, the meta test names
 //! the codes that still need a rejected file; write one for each, then bless.
 
+#[path = "common/diagnostic_inventory.rs"]
+mod diagnostic_inventory;
+use diagnostic_inventory::{codes_in, inventory_codes, source_codes};
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use locus::elab::elaborate;
+#[path = "common/corpus.rs"]
+mod runner;
+
+use locus::elab::{Options, elaborate_with_options};
 use locus::parser::parse;
 use locus::source::SourceMap;
 
@@ -61,7 +68,7 @@ fn rendered(name: &str, text: &str) -> String {
     let source = sources.get(file);
     let parsed = parse(source);
     let diagnostics = if parsed.is_success() {
-        elaborate(source, &parsed.program).diagnostics
+        elaborate_with_options(source, &parsed.program, &preview_options(text)).diagnostics
     } else {
         parsed.diagnostics
     };
@@ -69,6 +76,19 @@ fn rendered(name: &str, text: &str) -> String {
         .iter()
         .map(|diagnostic| format!("{}\n", diagnostic.render(&sources, false)))
         .collect()
+}
+
+fn preview_options(text: &str) -> Options {
+    let mut options = Options::default();
+    for (_, directive) in runner::directives(text) {
+        if let Ok(runner::Directive::Preview(feature)) = directive {
+            options
+                .previews
+                .enable(feature.name())
+                .expect("valid preview directive");
+        }
+    }
+    options
 }
 
 /// The files of a directory of the corpus with this extension, in order,
@@ -211,8 +231,14 @@ fn every_rejected_file_renders_as_its_golden() {
 fn the_binary_writes_what_the_goldens_are_made_from() {
     let mut failures = Vec::new();
     for (name, rejected) in files_with_goldens() {
+        let preview_args: Vec<String> = preview_options(&read(&name))
+            .previews
+            .iter()
+            .flat_map(|feature| ["--preview".to_string(), feature.name().to_string()])
+            .collect();
         let output = Command::new(env!("CARGO_BIN_EXE_locus"))
             .args(["check", &name])
+            .args(preview_args)
             .current_dir(root())
             .env("NO_COLOR", "1")
             .output()
@@ -248,31 +274,6 @@ fn the_binary_writes_what_the_goldens_are_made_from() {
     );
 }
 
-/// Every `"L0123"` in a Rust source text: a string literal that is exactly an
-/// error code.
-///
-/// This is a scan of the text and knows nothing of Rust. It misses a code
-/// that is not written whole in one literal under `src/`: one assembled with
-/// `format!` or `concat!`, or one that comes from another crate. It also
-/// takes any literal of this shape for a code, in a comment or in a test as
-/// much as in a call to `Diagnostic::error`; that errs towards asking for a
-/// rejected file, which is the safe side.
-fn codes_in(text: &str) -> BTreeSet<String> {
-    let bytes = text.as_bytes();
-    let mut codes = BTreeSet::new();
-    for start in 0..bytes.len().saturating_sub(6) {
-        let window = &bytes[start..start + 7];
-        if window[0] == b'"'
-            && window[1] == b'L'
-            && window[2..6].iter().all(u8::is_ascii_digit)
-            && window[6] == b'"'
-        {
-            codes.insert(text[start + 1..start + 6].to_string());
-        }
-    }
-    codes
-}
-
 /// The codes of the `//~ error:` and `//~ warning:` directives of a corpus
 /// file, read as `tests/corpus.rs` reads them: `^`s may follow `//~`, and
 /// the code is the first word after the key. That test rejects a malformed
@@ -288,6 +289,9 @@ fn codes_pinned_in(text: &str) -> BTreeSet<String> {
         };
         if matches!(key.trim(), "error" | "warning") {
             codes.extend(value.split_whitespace().next().map(str::to_string));
+        } else if key.trim() == "preview" {
+            // The corpus runner checks the gate diagnostic in the flag-off run.
+            codes.insert("L0255".into());
         }
     }
     codes
@@ -305,12 +309,37 @@ fn rust_files_under(directory: &Path, found: &mut Vec<PathBuf>) {
 }
 
 #[test]
+fn preview_inventory_tracks_the_registry_without_exempting_other_diagnostics() {
+    let gate = r#"Diagnostic::error("L0255", "preview required", span)"#;
+    let pinned = BTreeSet::<String>::new();
+    assert_eq!(
+        inventory_codes(gate, true, true)
+            .difference(&pinned)
+            .cloned()
+            .collect::<Vec<_>>(),
+        ["L0255"]
+    );
+    assert!(inventory_codes(gate, true, false).is_empty());
+    assert_eq!(
+        inventory_codes(gate, false, false),
+        BTreeSet::from(["L0255".into()])
+    );
+    assert_eq!(
+        inventory_codes(r#"error("L0286")"#, false, false),
+        BTreeSet::from(["L0286".into()])
+    );
+    assert!(
+        std::panic::catch_unwind(|| inventory_codes(r#"error("L0286")"#, true, false)).is_err()
+    );
+}
+
+#[test]
 fn every_error_code_in_the_source_has_a_rejected_file() {
     let mut sources = Vec::new();
     rust_files_under(&root().join("src"), &mut sources);
     let mut emitted = BTreeSet::new();
     for path in &sources {
-        emitted.extend(codes_in(&std::fs::read_to_string(path).unwrap()));
+        emitted.extend(source_codes(path, &std::fs::read_to_string(path).unwrap()));
     }
     let mut pinned = BTreeSet::new();
     for directory in [REJECT, ACCEPT] {

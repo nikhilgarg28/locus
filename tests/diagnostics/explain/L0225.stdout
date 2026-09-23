@@ -1,0 +1,19 @@
+L0225: Evidence in a proposition parameter list
+
+The parameters of a proposition describe what it is about. Evidence needed to establish it belongs in an arm body, rather than in the proposition’s parameter list. State the premise as part of the arm formula and supply its evidence after @.
+
+Example from `tests/corpus/reject/evidence_as_proposition_parameter.lc`; the full file is a regression test.
+
+```locus
+// A proposition that takes evidence as a parameter. When the evidence speaks
+// of an earlier parameter, that name is reported as unknown instead.
+prop Small(n: Int, bound: @(0 < 10)) {
+    Is => { prop!(true) }
+}
+
+prop Smaller(n: Int, bound: @(n < 10)) {
+    Is => { prop!(true) }
+}
+```
+
+Language, as built: [1.6:6](../../atlas.html#/doc/language/spec-1.6:6).

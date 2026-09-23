@@ -63,8 +63,8 @@ fn pair_first() -> u8 {
 
 // A constant of a ghost type mentions a call and has no runtime form.
 #[terminates] #[no_panic] #[no_io]
-fn double(n: u8) -> u8 {
-    n.wrapping_add(n)
+logic fn double(n: Int) -> Int {
+    n + n
 }
 
 const four_is_double: Prop = prop!(double(2) == 4);
@@ -73,7 +73,7 @@ fn known() -> @four_is_double {
     fold!(four_is_double, prove!(double(2) == 4))
 }
 
-//~ proofs: 2
+//~ proofs: 5
 //~ run: add_limit(4) => 7
 //~ run: level(Mode::On { level: 7 }) => 7
 //~ run: dim_level() => 3

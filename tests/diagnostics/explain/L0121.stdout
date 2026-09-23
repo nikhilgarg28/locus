@@ -1,0 +1,19 @@
+L0121: Invalid attribute arguments
+
+A recognized attribute has the wrong argument shape. For example, no_panic takes no arguments, derive takes a parenthesized trait list, and a termination measure uses its documented decreases form. Match the attribute grammar before checking its semantic promise.
+
+Example from `tests/corpus/reject/attribute_shape.lc`; the full file is a regression test.
+
+```locus
+// An attribute of the closed set in a shape it does not have.
+#[no_panic(always)]
+fn first(n: u8) -> u8 { n }
+
+#[derive]
+struct Lock { failures: u8 }
+
+#[terminates(fuel = 3)]
+fn second(n: u8) -> u8 { n }
+```
+
+Language, as built: [1.25:2](../../atlas.html#/doc/language/spec-1.25:2).

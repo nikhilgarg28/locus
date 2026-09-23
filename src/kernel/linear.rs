@@ -18,16 +18,16 @@ use super::int::Integer;
 use super::term::{Prim, Proof, Term, Type};
 
 /// The most pairs a certificate may have.
-pub const MAX_LINEAR_PAIRS: usize = 256;
+pub use crate::limits::MAX_LINEAR_PAIRS;
 
 /// The most atoms a linear form may have, after atoms that cancel are
 /// dropped.
-pub const MAX_LINEAR_ATOMS: usize = 256;
+pub use crate::limits::MAX_LINEAR_ATOMS;
 
 /// The most bits a literal read by the rule may have: a coefficient, or an
 /// `Int` literal inside a goal or a conclusion. The sums are not limited;
 /// they are bounded by these counts.
-pub const MAX_LINEAR_BITS: usize = 512;
+pub use crate::limits::MAX_LINEAR_BITS;
 
 /// Why a certificate was refused by the rule itself. A pair whose proof
 /// fails is refused by the ordinary checker with that proof's error, not
@@ -61,10 +61,19 @@ impl fmt::Display for LinearError {
             Self::NegativeCoefficient(c) => {
                 write!(f, "the coefficient {c} of an inequality is negative")
             }
-            Self::TooManyPairs(n) => write!(f, "{n} pairs exceed the limit of {MAX_LINEAR_PAIRS}"),
-            Self::TooManyAtoms(n) => write!(f, "{n} atoms exceed the limit of {MAX_LINEAR_ATOMS}"),
+            Self::TooManyPairs(n) => write!(
+                f,
+                "{n} pairs exceed MAX_LINEAR_PAIRS limit of {MAX_LINEAR_PAIRS}"
+            ),
+            Self::TooManyAtoms(n) => write!(
+                f,
+                "{n} atoms exceed MAX_LINEAR_ATOMS limit of {MAX_LINEAR_ATOMS}"
+            ),
             Self::LiteralTooLarge(n) => {
-                write!(f, "the literal {n} exceeds {MAX_LINEAR_BITS} bits")
+                write!(
+                    f,
+                    "the literal {n} exceeds MAX_LINEAR_BITS limit of {MAX_LINEAR_BITS} bits"
+                )
             }
             Self::Uncancelled(atom) => write!(f, "the atom {atom} does not cancel in the sum"),
             Self::NotNegative(c) => write!(f, "the sum is {c}, which is not negative"),

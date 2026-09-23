@@ -1,0 +1,27 @@
+L0218: Loop exit has the wrong shape
+
+A while or for loop does not return a break payload in this core, and continue cannot carry a result. Store a result in an appropriate mutable binding or use a loop expression whose exit type explicitly permits a value.
+
+Example from `tests/corpus/reject/break_in_for.lc`; the full file is a regression test.
+
+```locus
+// `break` with a value leaves a `while` or a `for`, which produce no value;
+// only a `loop` has the value of its `break`.
+fn first(n: u8) -> u8 {
+    let mut total: u8 = 0;
+    for i in 0..n {
+        break total
+    }
+}
+
+fn second(n: u8) -> u8 {
+    let mut k: u8 = 0;
+    while k < n {
+        k = k.wrapping_add(1);
+        break k
+    }
+    k
+}
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

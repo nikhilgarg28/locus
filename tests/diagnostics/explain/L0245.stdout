@@ -1,0 +1,55 @@
+L0245: Public Rust surface could forge an invariant
+
+A public field or construction path would let safe Rust create data with erased evidence or mutate invariant-dependent fields without rechecking them. Hide the fields behind checked constructors and methods. Erasure must not grant the Rust caller a way to manufacture a proven invariant.
+
+Example from `tests/corpus/reject/pub_evidence_field.lc`; the full file is a regression test.
+
+```locus
+// The export boundary, for a struct: a `pub` struct that carries evidence
+// has every field private. A `pub` evidence field could be written with a
+// marker, and a `pub` data field could be changed under the evidence that
+// speaks of it; either way the value no longer means what its type says.
+#[terminates] #[no_panic] #[no_io]
+logic fn within_limit(failures: Int) -> Prop {
+    prop!(failures <= 3)
+}
+
+pub struct Lock {
+    failures: u8,
+    pub bounded: @within_limit(failures),
+}
+
+pub struct Percent {
+    pub value: u8,
+    in_range: @(value <= 100),
+}
+
+// Evidence at depth: `Inner` is validated, so `Outer` may hold one in a
+// `pub` field; `Open` is not, so `Holder` may not.
+pub struct Inner {
+    value: u8,
+    in_range: @(value <= 100),
+}
+
+pub struct Outer {
+    pub inner: Inner,
+}
+
+struct Open {
+    value: u8,
+    pub in_range: @(value <= 100),
+}
+
+pub struct Holder {
+    pub open: Open,
+}
+
+// Not exported: a `pub(crate)` struct may carry evidence in a `pub` field,
+// since only the generated crate sees it.
+pub(crate) struct Carried {
+    pub failures: u8,
+    pub bounded: @within_limit(failures),
+}
+```
+
+Language, as built: [1.23:1](../../atlas.html#/doc/language/spec-1.23:1).

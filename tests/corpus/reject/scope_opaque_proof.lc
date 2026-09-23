@@ -1,0 +1,9 @@
+fn pick() -> u8 { 7 }
+fn leak() -> u8 {
+    let escaped = { //~ error: L0280 result type
+        let hidden = pick();
+        let claim = logic { prop!((hidden as Int) == (hidden as Int)) };
+        prove!(claim)
+    };
+    0
+}

@@ -2,3 +2,4 @@
 fn forever(n: u8) -> u8 { //~ error: L0203
     forever(n)
 }
+//~ spec: 1.2:2

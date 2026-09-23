@@ -16,3 +16,4 @@ fn wait(light: Light) -> u8 {
         And::Intro(hp, And::Intro(hq, hr)) => hp, //~ error: L0290 patterns inside a variant are names or `_` for now
     }
 }
+//~ spec: 1.4:2

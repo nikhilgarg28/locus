@@ -15,3 +15,4 @@ fn halfway(lo: u32, hi: u32, half: u32, mid: u32, sum: @(mid as Int == lo as Int
 {
     prove!(mid as Int == (lo as Int + hi as Int) / 2) //~ error: L0230 cannot show `mid == (lo + hi) / 2`
 }
+//~ spec: 1.21:2

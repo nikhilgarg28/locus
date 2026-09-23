@@ -1,0 +1,64 @@
+#[derive(Clone, Copy, Debug)]
+struct Item { key: u8 }
+impl Model<Item> for Int {
+    logic fn model(source: &Item) -> Self { source.key as Int }
+}
+impl Model<[Item]> for Seq<Int> {
+    logic fn model(source: &[Item]) -> Self {
+        let count = source.len();
+        let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
+            And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));
+        buffer_segment::<Item, Int>(&source, 0, count, bounds)
+    }
+}
+logic fn item_model_length(source: &[Item])
+    -> @(seq_length(source as Seq<Int>) == source.len())
+{
+    let count = source.len();
+    let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
+        And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));
+    let length = buffer_segment_length::<Item, Int>(&source, 0, count, bounds);
+    fold!(source as Seq<Int>, length)
+}
+struct NonEmpty<T> {
+    values: Vec<T>,
+    present: @(0 < values.len()),
+}
+fn append<T>(items: &mut Vec<T>, value: T) -> @(items.len() == old!(items).len() + 1) {
+    items.push(value);
+    prove!(items.len() == old!(items).len() + 1)
+}
+fn service<T>(items: &mut Vec<T>, value: T) -> @(items.len() == old!(items).len() + 1) {
+    let appended = append(&mut items, value);
+    appended
+}
+fn controller(items: &mut Vec<Item>, item: Item, valid: @(item as Int >= 0))
+    -> @(items.len() == old!(items).len() + 1)
+{
+    service(&mut items, item)
+}
+fn seal<T>(values: Vec<T>, present: @(0 < values.len())) -> NonEmpty<T> {
+    NonEmpty { values, present }
+}
+fn first<'a,T>(collection: &'a NonEmpty<T>) -> &'a T { &collection.values[0] }
+fn tick(counter: &mut u8) -> Int {
+    *counter = (*counter).wrapping_add(1);
+    7 as Int
+}
+fn run() -> u8 {
+    let mut items: Vec<Item> = Vec::new();
+    let before = items as Seq<Int>;
+    let before_length = item_model_length(&items);
+    let item = Item { key: 7 };
+    let valid: @(item as Int >= 0) = prove!(item as Int >= 0);
+    let added = controller(&mut items, item, valid);
+    let after = items as Seq<Int>;
+    let after_length = item_model_length(&items);
+    let model_growth = prove!(seq_length(after) == seq_length(before) + 1);
+    let exactly_one: @(items.len() == 1) = added;
+    let present = prove!(0 < items.len());
+    let checked = seal::<Item>(items, present);
+    let mut counter: u8 = 0;
+    let boxed = Box::new(tick(&mut counter));
+    first::<Item>(&checked).key.wrapping_add(counter)
+}

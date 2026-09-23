@@ -1,0 +1,19 @@
+L0280: Result type contains an escaping local
+
+A block or function result type still names a local symbolic value that is not available in the surrounding scope. Package the value and its dependent evidence together, or express the claim in terms of visible inputs. The compiler will not silently invent an existential package.
+
+Example from `tests/corpus/reject/scope_opaque_proof.lc`; the full file is a regression test.
+
+```locus
+fn pick() -> u8 { 7 }
+fn leak() -> u8 {
+    let escaped = {
+        let hidden = pick();
+        let claim = logic { prop!((hidden as Int) == (hidden as Int)) };
+        prove!(claim)
+    };
+    0
+}
+```
+
+Language, as built: [1.2:2](../../atlas.html#/doc/language/spec-1.2:2).

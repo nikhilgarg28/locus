@@ -1,0 +1,17 @@
+// Physical recursion uses Box. The observation is a separate finite logical
+// sequence; no allocation or runtime pointer survives in its result.
+pub enum RuntimeList { Empty, Cons(u8, Box<RuntimeList>) }
+
+pub logic fn runtime_list_contents(source: &RuntimeList) -> Seq<Nat> {
+    match source {
+        RuntimeList::Empty => Seq::Empty,
+        RuntimeList::Cons(head, tail) => Seq::Cons {
+            head: nat_from_int(head as Int),
+            tail: runtime_list_contents(&*tail),
+        },
+    }
+}
+
+impl Model<RuntimeList> for Seq<Nat> {
+    logic fn model(source: &RuntimeList) -> Self { runtime_list_contents(&source) }
+}

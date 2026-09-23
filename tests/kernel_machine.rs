@@ -271,6 +271,7 @@ fn i128_of(value: &Integer) -> i128 {
 // --- The type table and the literals ----------------------------------------------
 
 #[test]
+#[doc = "spec: 2.12:1, 2.12:2"]
 fn the_type_table_matches_rust() {
     for (ty, bits, signed, name, lo, hi) in [
         (U8, 8, false, "u8", 0, i128::from(u8::MAX)),
@@ -338,6 +339,7 @@ fn the_type_table_matches_rust() {
 }
 
 #[test]
+#[doc = "spec: 2.3:1, 2.4:1, 2.12:3"]
 fn literals_are_runtime_data_within_the_range_of_their_type() {
     let (mut ctx, _) = setup();
     for ty in ALL {
@@ -444,6 +446,7 @@ fn literals_are_runtime_data_within_the_range_of_their_type() {
 // --- The primitives ---------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.3:1, 2.4:1, 2.12:4"]
 fn view_and_wrap_are_ghost_and_cast_is_executable() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -553,6 +556,7 @@ fn view_and_wrap_are_ghost_and_cast_is_executable() {
 }
 
 #[test]
+#[doc = "spec: 2.12:10"]
 fn the_literal_axiom_computes_one_primitive_on_literals() {
     let (mut ctx, _) = setup();
     let n = Term::var(ctx.declare_ghost(Type::Int).unwrap());
@@ -632,6 +636,7 @@ fn the_literal_axiom_computes_one_primitive_on_literals() {
 // --- The axioms -------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.12:5, 2.12:6, 2.12:7"]
 fn view_lies_in_the_range_of_its_type() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -725,6 +730,7 @@ fn view_lies_in_the_range_of_its_type() {
 }
 
 #[test]
+#[doc = "spec: 2.12:6, 2.12:9"]
 fn wrap_of_view_is_the_identity() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -777,6 +783,7 @@ fn wrap_of_view_is_the_identity() {
 }
 
 #[test]
+#[doc = "spec: 2.12:6, 2.12:9"]
 fn view_of_wrap_is_the_identity_within_the_range() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -865,6 +872,7 @@ fn view_of_wrap_is_the_identity_within_the_range() {
 }
 
 #[test]
+#[doc = "spec: 2.12:6"]
 fn wrap_is_periodic_with_period_two_to_the_bits() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -955,6 +963,7 @@ fn wrap_is_periodic_with_period_two_to_the_bits() {
 }
 
 #[test]
+#[doc = "spec: 2.12:6"]
 fn cast_is_wrap_of_view_at_every_pair_of_types() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -1276,7 +1285,7 @@ fn random_integer(rng: &mut Rng) -> (Integer, bool, Vec<u64>) {
     let max_bits = *rng.choose(&[0, 8, 32, 64, 65, 100, 128, 200, 200, 200]);
     let bits = rng.below(max_bits + 1) as u32;
     let mut limbs: Vec<u64> = (0..bits / 64).map(|_| rng.next_u64()).collect();
-    if bits % 64 > 0 {
+    if !bits.is_multiple_of(64) {
         limbs.push(rng.next_u64() >> (64 - bits % 64));
     }
     let base = Integer::from(1u128 << 64);
@@ -1301,6 +1310,7 @@ fn independent_wrap(ty: MachineInt, negative: bool, limbs: &[u64]) -> i128 {
 }
 
 #[test]
+#[doc = "spec: 2.12:8"]
 fn wrap_of_random_integers_agrees_with_an_independent_reduction() {
     let (mut ctx, prelude) = setup();
     let mut wide = 0;

@@ -1,0 +1,2 @@
+logic fn wrong() -> u8 { 0 }
+//~^ error: L0270 must return a Logical type

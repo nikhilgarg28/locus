@@ -1,0 +1,20 @@
+// Logical elements erase; container length and ordinary-call effects survive.
+fn observed(counter: &mut u8) -> Int {
+    *counter = (*counter).wrapping_add(1);
+    7 as Int
+}
+fn run() -> u8 {
+    let mut counter: u8 = 0;
+    let mut values: Vec<Int> = Vec::from([observed(&mut counter)]);
+    values.push(observed(&mut counter));
+    values[0] = observed(&mut counter);
+    let snapshot = values[0];
+    counter
+}
+fn logical_flags() -> u64 {
+    let mut flags: Vec<Bool> = Vec::from([logic { true }]);
+    flags.push(logic { false });
+    flags.len()
+}
+//~ run: run() => 3
+//~ run: logical_flags() => 2

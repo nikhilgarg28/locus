@@ -1,0 +1,13 @@
+L0150: Evidence separators cannot be chained
+
+A named proposition constructor receives witnesses in its tuple or named fields, followed by one @ separator and its body evidence. Repeated unparenthesized @ tokens do not identify which constructor receives which proof. Parenthesize a nested construction explicitly.
+
+Example from `tests/corpus/reject/evidence_at_chain.lc`; the full file is a regression test.
+
+```locus
+fn bad() -> @P {
+    P::A @ P::B @ h
+}
+```
+
+Language, as built: [1.6:6](../../atlas.html#/doc/language/spec-1.6:6).

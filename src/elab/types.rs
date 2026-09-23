@@ -1,66 +1,50 @@
 //! Surface types to kernel types.
 //!
-//! `Ghost<T>` is the one type constructor of the core: a value of it is a
-//! logical value of type `T`, with no runtime form. The kernel has no
-//! runtime/ghost distinction beyond its modes, so `Ghost<T>` elaborates to
-//! the kernel type `T`, and what is `Ghost` is the binding: `written` says
-//! so for the type of a parameter, a field, or a `let`, which is where
-//! `Ghost<T>` stands, and the binder carries it (`typed::Binder::ghost`).
-//! Such a binding is named only where nothing runs (`exprs.rs`), and
-//! erasure makes it a marker, as evidence is.
+//! Logical classification belongs to the surface type. The kernel's Bool
+//! represents both runtime bool and logical Bool; an erasure shape retains
+//! their distinction through aggregates. Ghost is accepted only far enough
+//! to emit a migration diagnostic; it is never a type constructor.
 
 use crate::ast;
-use crate::diagnostic::Diagnostic;
 use crate::kernel::{MachineInt, Type, VarId};
 use crate::typed::Binder;
 
 use super::env::{Elab, Env, Global};
 
 /// A type as written where a binding is declared: its kernel type, and
-/// whether the binding is `Ghost<T>`, for `ty` the kernel type `T`.
+/// whether its kernel representation needs an explicit logical mode.
 pub(super) struct Written {
     pub ty: Type,
     pub ghost: bool,
 }
 
-/// Whether a value of the type is logical data with no runtime form: a
-/// proposition or an integer of the logic. Evidence is logic-only too, but
-/// a call that returns it is the ordinary way of establishing a fact, and
-/// is not elaborated where nothing runs.
-pub(super) fn logical_data(ty: &Type) -> bool {
-    matches!(ty, Type::Prop | Type::Int)
-}
-
 impl Env<'_> {
-    /// A type in a position that declares a binding, where `Ghost<T>` may
-    /// stand: a parameter, a field, or a `let`.
+    /// A type in a binding position, including its logical representation.
     pub fn written(&mut self, ty: &ast::Type) -> Elab<Written> {
         match &ty.kind {
             ast::TypeKind::Group(inner) => self.written(inner),
             ast::TypeKind::Path { path, arguments }
                 if path.single().is_some_and(|name| name.text == "Ghost") =>
             {
-                if arguments.len() != 1 {
-                    return self.fail(
-                        "L0200",
-                        "`Ghost` takes one type argument, `Ghost<T>`",
-                        ty.span,
-                    );
-                }
-                // `T` is the type of a logical value, so `Int` is fine in
-                // it, and `Ghost<Ghost<T>>` is `Ghost<T>`.
-                let was_total = std::mem::replace(&mut self.total, true);
-                let inner = self.written(&arguments[0]);
-                self.total = was_total;
+                let replacement = arguments.first().and_then(|inner| match &inner.kind {
+                    ast::TypeKind::Named(name)
+                        if crate::kernel::MachineInt::from_name(&name.text).is_some() =>
+                    {
+                        Some("Int".to_string())
+                    }
+                    ast::TypeKind::Named(name) if name.text == "bool" => Some("Bool".to_string()),
+                    _ => None,
+                });
+                self.migrate_logical_type(ty.span, replacement)
+            }
+            _ => {
+                let kernel_type = self.ty(ty)?;
+                let ghost = self.logical_spelling(ty) && !kernel_type.is_ghost();
                 Ok(Written {
-                    ty: inner?.ty,
-                    ghost: true,
+                    ty: kernel_type,
+                    ghost,
                 })
             }
-            _ => Ok(Written {
-                ty: self.ty(ty)?,
-                ghost: false,
-            }),
         }
     }
 
@@ -79,8 +63,15 @@ impl Env<'_> {
     /// A type in any other position, where `Ghost<T>` may not stand.
     pub fn ty(&mut self, ty: &ast::Type) -> Elab<Type> {
         match &ty.kind {
+            ast::TypeKind::Lifetime(_) => self.fail("L0201", "a lifetime is an argument of a nominal type, not a value type", ty.span),
+            ast::TypeKind::Array { element, length } => { self.array_length(length)?; self.collection_type(element,ty.span) },
+            ast::TypeKind::Slice(_) => self.fail("L0284", "slices are currently permitted only as reference parameters", ty.span),
             ast::TypeKind::Named(name) => match name.text.as_str() {
                 "bool" => Ok(Type::Bool),
+                "Bool" => {
+                    self.require_preview(crate::preview::Feature::LogicalSplit, "Bool", name.span)?;
+                    Ok(Type::Bool)
+                },
                 "Prop" => Ok(Type::Prop),
                 machine if MachineInt::from_name(machine).is_some() => {
                     Ok(Type::machine(MachineInt::from_name(machine).unwrap()))
@@ -88,19 +79,9 @@ impl Env<'_> {
                 // The integers of the logic have no runtime form: they are
                 // written where nothing runs, in a proposition, a function
                 // of the logic, or a proof type.
-                "Int" if self.total => Ok(Type::Int),
-                "Int" => {
-                    self.diagnostics.push(
-                        crate::diagnostic::Diagnostic::error(
-                            "L0201",
-                            "`Int` has no runtime form",
-                            name.span,
-                        )
-                        .note("`Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim"),
-                    );
-                    Err(())
-                }
-                "Nat" => {
+                "Int" => Ok(Type::Int),
+
+                "Nat" if !self.types.contains_key("Nat") => {
                     self.diagnostics.push(
                         crate::diagnostic::Diagnostic::error(
                             "L0201",
@@ -153,22 +134,25 @@ impl Env<'_> {
                     }
                 },
             },
+            ast::TypeKind::Path { path, arguments } if path.single().is_some_and(|name|name.text=="Box") => {
+                self.require_preview(crate::preview::Feature::HeapViews,"Box type",ty.span)?;
+                let [inner]=arguments.as_slice() else{return self.fail("L0201","Box requires one payload type",ty.span)};
+                Ok(Type::Boxed(Box::new(self.ty(inner)?)))
+            },
+            ast::TypeKind::Path { path, arguments } if path.single().is_some_and(|name| name.text == "Vec") => {
+                let [element] = arguments.as_slice() else { return self.fail("L0284", "Vec requires one runtime element type", ty.span); };
+                self.collection_type(element, ty.span)
+            },
+            ast::TypeKind::Path { path, arguments } if !arguments.is_empty() && arguments.iter().all(|a| matches!(a.kind,ast::TypeKind::Lifetime(_))) => {
+                if let Some(name) = path.single() { self.ty(&ast::Type { kind: ast::TypeKind::Named(name.clone()), span:ty.span }) }
+                else { self.fail("L0201","a lifetime application must name a type",ty.span) }
+            },
             ast::TypeKind::Path { path, .. }
                 if path.single().is_some_and(|name| name.text == "Ghost") =>
-            {
-                self.diagnostics.push(
-                    Diagnostic::error(
-                        "L0290",
-                        "`Ghost<T>` cannot stand here; as a result type, or inside another type, it is not in Locus yet",
-                        ty.span,
-                    )
-                    .note("`Ghost<T>` is the type of a `let`, a parameter, or a field: a logical value of type `T` that the program never computes"),
-                );
-                Err(())
-            }
+            { self.written(ty).map(|written| written.ty) }
             ast::TypeKind::Path { path, .. } if path.single().is_some() => self.fail(
                 "L0290",
-                "type arguments are written only on `Ghost<T>` in the core; `Option<T>`, `Vec<T>`, and the rest are not in Locus yet",
+                "this type application is not available; enable its preview or declare the generic type",
                 ty.span,
             ),
             ast::TypeKind::Path { .. } => self.fail(
@@ -197,6 +181,20 @@ impl Env<'_> {
             }
             // The type of a function of the logic: a value of it is applied
             // in a proposition, and nothing runs it.
+            ast::TypeKind::LogicalFunction { parameters, result } => {
+                self.require_preview(crate::preview::Feature::LogicalData, "logical callable type (LOC-225)", ty.span)?;
+                if parameters.iter().any(|field| !self.logical_spelling(&field.ty)) || !self.logical_spelling(result) {
+                    return self.fail("L0270", "a logical callable must take and return Logical types", ty.span);
+                }
+                let mark = self.mark();
+                let value = self.logical("a logical callable type", |env| {
+                    let binders = env.telescope(parameters.iter().map(|field| (field.name.as_ref(), &field.ty, field.span)), true)?;
+                    let result = env.ty(result)?;
+                    Ok(Type::function_over(&pairs(&binders), &result))
+                });
+                self.close(mark);
+                value
+            }
             ast::TypeKind::Function { parameters, result } => {
                 let mark = self.mark();
                 let signature = (|| {
@@ -212,39 +210,12 @@ impl Env<'_> {
                 self.close(mark);
                 signature
             }
-            // A reference is a parameter type, and nothing else, in this
-            // tier (`references.rs`).
-            ast::TypeKind::Ref { mutable, inner } => {
-                let (diagnostics, holes) = (self.diagnostics.len(), self.holes.len());
-                let shown = match self.ty(inner) {
-                    Ok(inner) => self.show_type(&inner),
-                    Err(()) => {
-                        // The inner type's own report stands: a reference
-                        // to a reference is reported once, at the inside.
-                        if self.diagnostics.len() > diagnostics {
-                            return Err(());
-                        }
-                        self.holes.truncate(holes);
-                        "T".into()
-                    }
-                };
-                let written = if *mutable {
-                    format!("&mut {shown}")
-                } else {
-                    format!("&{shown}")
-                };
-                self.diagnostics.push(
-                    crate::diagnostic::Diagnostic::error(
-                        "L0260",
-                        format!("`{written}` is written on a parameter only"),
-                        ty.span,
-                    )
-                    .note("a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet"),
-                );
-                Err(())
-            }
-            // The result type of a function is read before `ty` is asked
-            // (`items.rs`); anywhere else `!` is not stable Rust either.
+            ast::TypeKind::Ref { mutable:true, .. } => self.fail("L0285", "stored mutable references are not supported; lend &mut for one call", ty.span),
+            ast::TypeKind::Ref { inner, .. } => {
+                self.require_preview(crate::preview::Feature::HeapViews,"stored shared reference",ty.span)?;
+                if let ast::TypeKind::Slice(element) = &inner.kind { self.collection_type(element,inner.span) }
+                else { self.ty(inner) }
+            },
             ast::TypeKind::Never => self.fail(
                 "L0290",
                 "the never type `!` stands only as the result type of a function that never returns; anywhere else it is not in Locus, as it is not in stable Rust",
@@ -278,6 +249,8 @@ impl Env<'_> {
                 ty: written.ty,
                 ghost: written.ghost,
             };
+            self.session
+                .register_binding_layout(binder.id, self.written_layout(ty));
             if let Some(name) = name
                 && binders
                     .iter()

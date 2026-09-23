@@ -7,14 +7,14 @@ fn run(n: u8) -> u8 { n }
 #[terminates] #[no_panic]
 fn quiet(n: u8) -> u8 { n }
 
-fn about_run(n: u8) -> @(run(n) == n) { //~ error: L0209 `run` cannot appear in a proposition: it does not promise terminates
+fn about_run(n: u8) -> @(run(n) == n) { //~ error: L0209 ordinary fn `run` cannot appear in a proposition
     _
 }
 
 fn about_quiet(n: u8) -> Prop {
-    prop!(quiet(n) == n) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
+    prop!(quiet(n) == n) //~ error: L0209 ordinary fn `quiet` cannot appear in a proposition
 }
 
 fn unfolded(n: u8, h: @(n == n)) -> @(n == n) {
-    unfold!(quiet, h) //~ error: L0209 `quiet` cannot appear in a proposition: it does not promise no_io
+    unfold!(quiet, h) //~ error: L0209 ordinary fn `quiet` cannot appear in a proposition
 }

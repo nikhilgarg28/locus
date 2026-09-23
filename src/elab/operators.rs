@@ -13,6 +13,30 @@ use super::env::{Elab, Env, Global};
 use super::exprs::Value;
 
 impl Env<'_> {
+    fn reads_as_logical(&self, expr: &ast::Expr) -> bool {
+        if self.total {
+            return true;
+        }
+        match &expr.kind {
+            ExprKind::Logic(_) => true,
+            ExprKind::Group(inner) | ExprKind::Not(inner) => self.reads_as_logical(inner),
+            ExprKind::Name(name) => self
+                .lookup(&name.text)
+                .is_some_and(|local| local.ghost || local.ty.is_ghost()),
+            ExprKind::Call { callee, .. } => match &callee.kind {
+                ExprKind::Name(name) => {
+                    matches!(self.values.get(&name.text), Some(Global::Fn(info)) if info.result_logical)
+                }
+                _ => false,
+            },
+            ExprKind::Cast { ty, .. } => self.logical_spelling(ty),
+            ExprKind::Binary { left, right, .. } => {
+                self.reads_as_logical(left) || self.reads_as_logical(right)
+            }
+            _ => false,
+        }
+    }
+
     /// Whether an expression written outside a formula is a proposition, as
     /// `p || q` is when `p` is a `Prop`.
     pub(super) fn reads_as_prop(&self, expr: &ast::Expr) -> bool {
@@ -58,6 +82,20 @@ impl Env<'_> {
         inner: &ast::Expr,
         expected: Option<&Type>,
     ) -> Elab<Value> {
+        {
+            if self.reads_as_logical(inner) {
+                let value = self.check(inner, &Type::Bool)?;
+                return Ok(Value::new(
+                    Expr::Ghost(Box::new(Expr::Compare {
+                        op: CompareOp::Eq,
+                        ty: Type::Bool,
+                        left: Box::new(value.expr),
+                        right: Box::new(Expr::Bool(false)),
+                    })),
+                    Type::Bool,
+                ));
+            }
+        }
         let otherwise = ast::Expr {
             kind: ExprKind::Bool(true),
             span: expr.span,
@@ -82,6 +120,73 @@ impl Env<'_> {
         left: &ast::Expr,
         right: &ast::Expr,
     ) -> Elab<Value> {
+        if self.reads_as_logical(left) || self.reads_as_logical(right) {
+            let left = self.check(left, &Type::Bool)?;
+            let right = self.check(right, &Type::Bool)?;
+            // Logical boolean operations are eager. Put both operands in
+            // source order before the erased case, so runtime operands do
+            // not become conditional on an erased value.
+            let mut statements = Vec::new();
+            let mut values = Vec::new();
+            for (name, value) in [("logical_left", left), ("logical_right", right)] {
+                let mut binder = crate::typed::Binder::new(name, Type::Bool);
+                binder.ghost = true;
+                self.session
+                    .register_binding_layout(binder.id, crate::typed::ErasureLayout::Logical);
+                let equation = crate::kernel::HypId::fresh();
+                let term = self.term(&value, expr.span)?;
+                self.define(binder.id, equation, &term, true, expr.span)?;
+                self.facts.push(super::env::Fact::definition(
+                    crate::kernel::Proof::hyp(equation),
+                    crate::kernel::Term::eq(Type::Bool, crate::kernel::Term::var(binder.id), term),
+                ));
+                values.push(Expr::Var {
+                    id: binder.id,
+                    name: name.into(),
+                    ty: Type::Bool,
+                });
+                statements.push(crate::typed::Stmt::Let {
+                    pattern: crate::typed::Pattern::Bind {
+                        binder,
+                        equation,
+                        mutable: false,
+                    },
+                    value: super::calls::ghost_value(value.expr),
+                });
+            }
+            let right = crate::typed::Block {
+                stmts: Vec::new(),
+                tail: Some(Box::new(values.pop().unwrap())),
+            };
+            let constant = crate::typed::Block {
+                stmts: Vec::new(),
+                tail: Some(Box::new(Expr::Bool(*operator == BinaryOp::Or))),
+            };
+            let (then_block, else_block) = if *operator == BinaryOp::And {
+                (right, constant)
+            } else {
+                (constant, right)
+            };
+            let result = crate::kernel::VarId::fresh();
+            self.declare_result(result, &Type::Bool, expr.span)?;
+            let operation = Expr::Ghost(Box::new(Expr::If {
+                condition: Box::new(values.pop().unwrap()),
+                then_fact: crate::kernel::HypId::fresh(),
+                else_fact: crate::kernel::HypId::fresh(),
+                then_block,
+                else_block,
+                ty: Type::Bool,
+                result,
+                joined: None,
+            }));
+            return Ok(Value::new(
+                Expr::Block(crate::typed::Block {
+                    stmts: statements,
+                    tail: Some(Box::new(operation)),
+                }),
+                Type::Bool,
+            ));
+        }
         // Short-circuit evaluation is an `if`.
         let constant = ast::Expr {
             kind: ExprKind::Bool(*operator == BinaryOp::Or),
@@ -121,7 +226,10 @@ impl Env<'_> {
         };
         let ty = left_value.ty.clone();
         let equality = matches!(op, CompareOp::Eq | CompareOp::Ne);
-        if ty.as_machine().is_none() && !(equality && same_type(&ty, &Type::Bool)) {
+        if ty.as_machine().is_none()
+            && !(equality && same_type(&ty, &Type::Bool))
+            && !(same_type(&ty, &Type::Int))
+        {
             let shown = self.show_type(&ty);
             let (message, note) = if same_type(&ty, &Type::Bool) {
                 (
@@ -138,12 +246,20 @@ impl Env<'_> {
                 .push(Diagnostic::error("L0211", message, expr.span).note(note));
             return Err(());
         }
+        let logical = same_type(&ty, &Type::Int)
+            || super::reconcile::is_logical_expr(&left_value.expr)
+            || super::reconcile::is_logical_expr(&right_value.expr);
+        let value = Expr::Compare {
+            op,
+            ty,
+            left: Box::new(left_value.expr),
+            right: Box::new(right_value.expr),
+        };
         Ok(Value::new(
-            Expr::Compare {
-                op,
-                ty,
-                left: Box::new(left_value.expr),
-                right: Box::new(right_value.expr),
+            if logical {
+                Expr::Ghost(Box::new(value))
+            } else {
+                value
             },
             Type::Bool,
         ))

@@ -111,7 +111,7 @@ impl Env<'_> {
     /// kernel's `define_with` does, and returns the type. A `Ghost<T>`
     /// binding is declared ghost, as a binding of a ghost type is; the
     /// kernel would otherwise take it for executable, since its value is.
-    fn define(
+    pub(super) fn define(
         &mut self,
         id: VarId,
         equation: HypId,

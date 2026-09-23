@@ -1,0 +1,12 @@
+L0282: Model observation is missing or incompatible
+
+A cast to a logical model needs a checked, unambiguous Model implementation for the physical source shape. Array lengths, vector layouts and borrowed slices are checked distinctly. Define the correct logical observer and keep its source signature consistent with the implemented model.
+
+Example from `tests/corpus/reject/model_bridge_missing.lc`; the full file is a regression test.
+
+```locus
+#[derive(Logical)] struct Observation { value: Int }
+fn observe(value: u8) -> Observation { value as Observation }
+```
+
+Language, as built: [1.25:5](../../atlas.html#/doc/language/spec-1.25:5).

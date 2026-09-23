@@ -4,7 +4,7 @@
 // with the `pub` field is `pub(crate)`, so the struct itself passes; the
 // `pub` function taking it does not.
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 

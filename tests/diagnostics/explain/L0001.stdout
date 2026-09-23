@@ -1,0 +1,20 @@
+L0001: Unexpected character
+
+The lexer encountered a character that is not a Locus token. Backticks do not quote identifiers. Remove the character, use an ordinary identifier, or put text inside a string literal when a form accepts a message.
+
+Example from `tests/corpus/reject/unexpected_character.lc`; the full file is a regression test.
+
+```locus
+// A character that begins no token.
+fn first(n: u8) -> u8 {
+    `
+}
+
+// After an expression, the parser adds an error of its own.
+fn second(n: u8) -> u8 {
+    n `
+
+}
+```
+
+Language, as built: [1.0:2](../../atlas.html#/doc/language/spec-1.0:2).

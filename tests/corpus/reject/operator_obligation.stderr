@@ -32,7 +32,7 @@ error[L0235]: `/` on `i8` may panic, and `signed_halve` promises no_panic
    |       ^
    |
    = note: the pair must not be `i8::MIN / -1`, and nothing known here shows it
-   = note: known here: `b != 0i8`
+   = note: known here: `!(b == 0)`
    = note: it fails when a = -128, b = -1, which the arithmetic facts known here allow
    = note: a fact in scope stating `a as Int == -128 => b as Int != -1`, or `prove!(a as Int == -128 => b as Int != -1);` just before this, is what is needed
 error[L0235]: `-` on `i16` may overflow, and `negate` promises no_panic

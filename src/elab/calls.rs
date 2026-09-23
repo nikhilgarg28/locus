@@ -24,7 +24,7 @@ pub(super) enum Argument<'a> {
     Value(Box<Value>, Span),
 }
 
-/// What stands in a `Ghost<T>` position, as a `Ghost` value: wrapped once.
+/// Preserve the logical layout marker, wrapping an expression only once.
 pub(super) fn ghost_value(expr: Expr) -> Expr {
     match expr {
         ghost @ Expr::Ghost(_) => ghost,
@@ -37,9 +37,8 @@ impl Env<'_> {
     /// the identities `ids`: each argument's term replaces its parameter in
     /// the types that follow. On return `tys` no longer mentions `ids`. The
     /// values may be in any order they were found in: a variant's fields,
-    /// given by name. `ghosts` says which positions are
-    /// declared `Ghost<T>`: what stands there is elaborated where nothing
-    /// runs, and is a `Ghost` value.
+    /// given by name. `ghosts` retains logical source layouts for parameter
+    /// types which share their kernel representation with runtime types.
     pub fn arguments_by_ref(
         &mut self,
         arguments: &[&ast::Expr],
@@ -61,6 +60,7 @@ impl Env<'_> {
         }
         let mut exprs = Vec::new();
         for (index, argument) in arguments.iter().enumerate() {
+            self.expect_layout(argument, &self.session.binding_layout(ids[index]));
             let ghost = ghosts.get(index).copied().unwrap_or(false);
             let value = self.argument(argument, &tys[index].clone(), ghost)?;
             let term = self.term(&value, argument.span)?;
@@ -73,14 +73,30 @@ impl Env<'_> {
         Ok(exprs)
     }
 
-    /// A value for a position of type `ty`. A `Ghost<T>` position is a
-    /// logic-only context, and what stands in it is a `Ghost` value.
+    /// A value for a position of type `ty`. Logical positions retain their
+    /// erasure layout; eager runtime effects in argument expressions remain.
     pub(super) fn argument(&mut self, argument: &ast::Expr, ty: &Type, ghost: bool) -> Elab<Value> {
-        if !ghost {
-            return self.check(argument, ty);
+        let value = if (matches!(ty, Type::Int) || ghost && matches!(ty, Type::Bool))
+            && !untyped_literal(argument)
+        {
+            let value = self.infer(argument)?;
+            let value = self.logical_value(value, argument.span)?;
+            self.coerce(value, ty, argument.span)?
+        } else {
+            self.check(argument, ty)?
+        };
+        if !ghost && matches!(ty, Type::Bool) && super::reconcile::is_logical_expr(&value.expr) {
+            return self.fail(
+                "L0272",
+                "a runtime bool position cannot receive a logical Bool",
+                argument.span,
+            );
         }
-        let value = self.logical("a `Ghost<T>` argument", |env| env.check(argument, ty))?;
-        Ok(Value::new(ghost_value(value.expr), value.ty))
+        Ok(if ghost {
+            Value::new(ghost_value(value.expr), value.ty)
+        } else {
+            value
+        })
     }
 
     pub(super) fn call(
@@ -90,6 +106,12 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        if let Some(result) = self.box_constructor(callee, arguments, expected, span) {
+            return result;
+        }
+        if let Some(result) = self.vector_constructor(callee, arguments, expected, span) {
+            return result;
+        }
         match &callee.kind {
             // `Type::name(..)`: a function of an `impl` block, or a variant.
             ExprKind::Path(path) => match self.path_function(path) {
@@ -155,23 +177,21 @@ impl Env<'_> {
     /// a constant: it promises `terminates`, `no_panic`, and `no_io`, and
     /// takes no `&mut`. `L0209` names what is missing.
     pub(super) fn admit_to_formula(&mut self, info: &FnInfo, place: &str, span: Span) -> Elab<()> {
-        let Some(gap) = info.logical_gap() else {
+        if info.logical {
             return Ok(());
-        };
-        self.diagnostics.push(
-            crate::diagnostic::Diagnostic::error(
-                "L0209",
-                format!("`{}` cannot appear in {place}: {gap}", info.name),
-                span,
-            )
-            .note("a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value"),
-        );
+        }
+        let diagnostic = crate::diagnostic::Diagnostic::error("L0209", format!("ordinary fn `{}` cannot appear in {place}", info.name), span)
+            .note("write logic fn for pure, total logical computation; runtime promises never make an ordinary function logical");
+        self.diagnostics.push(diagnostic);
         Err(())
     }
 
     /// A call keeps the caller's promises only if the callee makes each of
     /// them. `L0232` names the first it does not.
     fn keep_promises(&mut self, info: &FnInfo, span: Span) -> Elab<()> {
+        if info.logical {
+            return Ok(());
+        }
         let Some(promise) = super::env::first_broken(self.promises, info.promises) else {
             return Ok(());
         };
@@ -223,7 +243,24 @@ impl Env<'_> {
             let (_, ty) = self.place_steps(slot, &parts, Access::Lend)?;
             (ty, None)
         } else {
-            let value = self.infer(receiver)?;
+            // Resolving a receiver's type must not commit moves, mutations,
+            // proof obligations, or helper declarations before its method's
+            // mode is known. The isolated probe is discarded completely.
+            let logical = if self.needs_receiver_mode() {
+                let mut probe = self.clone();
+                probe.moves.checked = false;
+                crate::store::without_store(|| probe.infer(receiver))
+                    .ok()
+                    .and_then(|value| probe.method_of(&value.ty, &name.text))
+                    .map(|method| method.logical)
+            } else {
+                None
+            };
+            let value = match logical {
+                Some(true) => self.ghost(|env| env.infer(receiver))?,
+                Some(false) => self.runtime_arguments(|env| env.infer(receiver))?,
+                None => self.infer(receiver)?,
+            };
             (value.ty.clone(), Some(value))
         };
         let Some(info) = self.method_of(&ty, &name.text) else {
@@ -332,7 +369,7 @@ impl Env<'_> {
 
     /// `call_fn` over arguments some of which were elaborated already: the
     /// receiver of a method that is not a place.
-    fn call_fn_with(
+    pub(super) fn call_fn_with(
         &mut self,
         info: &FnInfo,
         arguments: &[Argument<'_>],
@@ -365,7 +402,9 @@ impl Env<'_> {
         // stays, as `let _ = argument;` before the marker, since removing
         // the callee removes nothing an argument does (`erase.rs`).
         let erased = match info.reference {
-            FnRef::Math(id) => !self.session.program().definitions().is_executable(id),
+            FnRef::Math(id) => {
+                info.logical || !self.session.program().definitions().is_executable(id)
+            }
             FnRef::Exec(_) => false,
         };
         let mut exprs = Vec::new();
@@ -387,6 +426,13 @@ impl Env<'_> {
                 }
                 Argument::Written(argument) if passing.is_reference() => {
                     let (value, place) = self.lend_argument(argument, passing, &expected, info)?;
+                    if !super::layout::borrow_compatible(
+                        &expected,
+                        &self.session.expression_layout(&value.expr),
+                        &self.session.binding_layout(ids[index]),
+                    ) {
+                        return self.fail("L0272", "a borrowed argument must have the parameter's logical and runtime positions", argument.span);
+                    }
                     if passing == Passing::RefMut {
                         lent.push((index, place.slot, place.steps.clone()));
                     }
@@ -394,10 +440,13 @@ impl Env<'_> {
                     (value, argument.span)
                 }
                 Argument::Written(argument) => {
+                    self.expect_layout(argument, &self.session.binding_layout(ids[index]));
                     let value = if erased {
-                        self.ghost(|env| env.check(argument, &expected))?
+                        self.ghost(|env| env.argument(argument, &expected, ghosts[index]))?
                     } else {
-                        self.argument(argument, &expected, ghosts[index])?
+                        self.runtime_arguments(|env| {
+                            env.argument(argument, &expected, ghosts[index])
+                        })?
                     };
                     places.push(self.argument_place(argument, &value));
                     (value, argument.span)
@@ -412,25 +461,23 @@ impl Env<'_> {
         self.disjoint_arguments(&places, &exprs)?;
         let ty = tys.pop().expect("the result type was pushed");
         match info.reference {
-            FnRef::Math(id) => Ok(Value::new(
-                Expr::CallMath {
+            FnRef::Math(id) => {
+                let expr = Expr::CallMath {
                     id,
                     name: info.name.clone(),
                     arguments: exprs,
                     ty: ty.clone(),
-                },
-                ty,
-            )),
+                };
+                Ok(Value::new(
+                    if info.result_logical && !ty.is_ghost() {
+                        ghost_value(expr)
+                    } else {
+                        expr
+                    },
+                    ty,
+                ))
+            }
             FnRef::Exec(id) => {
-                // In the body of a function of the logic, a call of a
-                // function that is known by its contract only is not a
-                // term either: the caller is elaborated again as an
-                // ordinary function (LOC-193, `items`).
-                if self.total && self.formula.is_none() && info.not_a_term.is_some() {
-                    self.not_a_term
-                        .get_or_insert((format!("a call of `{}`", info.name), span));
-                    return Err(());
-                }
                 // A formula admits only functions of the logic, and a
                 // function of the logic promises what admits its callees.
                 if self.total {
@@ -447,14 +494,19 @@ impl Env<'_> {
                 // A call with `&mut` arguments assigns their roots from the
                 // tuple it returns, and its value is the tuple's last field.
                 let (lends, ty) = self.lend_write_backs(result, &lent, &ty, span)?;
+                let expr = Expr::CallFn {
+                    id,
+                    name: info.name.clone(),
+                    arguments: exprs,
+                    result,
+                    ty: ty.clone(),
+                    lends,
+                };
                 Ok(Value::new(
-                    Expr::CallFn {
-                        id,
-                        name: info.name.clone(),
-                        arguments: exprs,
-                        result,
-                        ty: ty.clone(),
-                        lends,
+                    if info.result_logical && !ty.is_ghost() {
+                        ghost_value(expr)
+                    } else {
+                        expr
                     },
                     ty,
                 ))
@@ -507,6 +559,9 @@ impl Env<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
+        if let Some(result) = self.collection_method(receiver, name, arguments, span) {
+            return result;
+        }
         let op = match name.text.as_str() {
             "wrapping_add" => Op::WrappingAdd,
             "wrapping_sub" => Op::WrappingSub,
@@ -523,24 +578,33 @@ impl Env<'_> {
             };
             return self.fail("L0208", format!("`{}` takes {count}", name.text), span);
         }
-        let (receiver_value, argument_values) = if untyped_literal(receiver)
-            && takes == 1
-            && !untyped_literal(&arguments[0])
-        {
-            let argument = self.infer(&arguments[0])?;
-            let receiver = self.check(receiver, &argument.ty.clone())?;
-            (receiver, vec![argument])
-        } else {
-            let receiver = match expected {
-                Some(expected) if untyped_literal(receiver) => self.check(receiver, expected)?,
-                _ => self.infer(receiver)?,
-            };
-            let mut values = Vec::new();
-            for argument in arguments {
-                values.push(self.check(argument, &receiver.ty.clone())?);
-            }
-            (receiver, values)
-        };
+        // Wrapping primitives have a checked logical interpretation at the
+        // original machine type. Observe their result after resolving the
+        // primitive; do not erase the receiver's width first.
+        self.suppress_models += 1;
+        let values = (|| {
+            let values =
+                if untyped_literal(receiver) && takes == 1 && !untyped_literal(&arguments[0]) {
+                    let argument = self.infer(&arguments[0])?;
+                    let receiver = self.check(receiver, &argument.ty.clone())?;
+                    (receiver, vec![argument])
+                } else {
+                    let receiver = match expected {
+                        Some(expected) if untyped_literal(receiver) => {
+                            self.check(receiver, expected)?
+                        }
+                        _ => self.infer(receiver)?,
+                    };
+                    let mut values = Vec::new();
+                    for argument in arguments {
+                        values.push(self.check(argument, &receiver.ty.clone())?);
+                    }
+                    (receiver, values)
+                };
+            Ok(values)
+        })();
+        self.suppress_models -= 1;
+        let (receiver_value, argument_values) = values?;
         let ty = receiver_value.ty.clone();
         let Some(machine) = ty.as_machine() else {
             let shown = self.show_type(&ty);

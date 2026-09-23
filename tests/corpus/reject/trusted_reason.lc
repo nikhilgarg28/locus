@@ -1,0 +1,2 @@
+trusted fn invalid() -> u8 { 0 }
+//~^ error: L0100 a trusted declaration needs a nonempty reason

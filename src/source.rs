@@ -92,3 +92,64 @@ impl SourceMap {
         &self.files[id.0]
     }
 }
+
+/// A compilation unit assembled from explicit library files and one entry
+/// file. Checking uses contiguous offsets; presentation maps every location
+/// back to the file that supplied it. The entry file is the last segment.
+#[derive(Debug)]
+pub struct SourceBundle {
+    pub file: FileId,
+    segments: Vec<(usize, usize, FileId)>,
+}
+impl SourceBundle {
+    pub fn join(sources: &mut SourceMap, files: &[FileId]) -> Self {
+        assert!(!files.is_empty(), "a source bundle needs an entry file");
+        if files.len() == 1 {
+            return Self {
+                file: files[0],
+                segments: Vec::new(),
+            };
+        }
+        let mut text = String::new();
+        let mut segments = Vec::new();
+        for &file in files {
+            let start = text.len();
+            text.push_str(sources.get(file).text());
+            segments.push((start, text.len(), file));
+            text.push('\n');
+        }
+        let name = sources.get(*files.last().unwrap()).name.clone();
+        let file = sources.add(name, text);
+        Self { file, segments }
+    }
+    pub fn span(&self, span: Span) -> Span {
+        if span.file != self.file || self.segments.is_empty() {
+            return span;
+        }
+        let index = self
+            .segments
+            .partition_point(|(start, _, _)| *start <= span.start)
+            .saturating_sub(1);
+        let (start, end, file) = self.segments[index];
+        // A recovery span crossing an input boundary is attributed to the
+        // input where it starts; no displayed range may leave that file.
+        Span::new(
+            file,
+            span.start.min(end) - start,
+            span.end.min(end).max(span.start.min(end)) - start,
+        )
+    }
+    pub fn diagnostic(
+        &self,
+        diagnostic: &crate::diagnostic::Diagnostic,
+    ) -> crate::diagnostic::Diagnostic {
+        let mut mapped = diagnostic.clone();
+        for label in &mut mapped.labels {
+            label.span = self.span(label.span);
+        }
+        for suggestion in &mut mapped.suggestions {
+            suggestion.span = self.span(suggestion.span);
+        }
+        mapped
+    }
+}

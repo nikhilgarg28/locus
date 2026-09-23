@@ -1,0 +1,37 @@
+locus-proofs 1
+
+obligation 004153a41182e981 advance 1
+implies_elim(axiom(cmp_reify[true], int_le_b(int_add(view[u8]($0), 1i), view[u8](255))), transport(transport(literal(view[u8](255)), (#0 ==[Int] view[u8](255)), refl(view[u8](255))), int_le(int_add(view[u8]($0), 1i), #0), linear(int_le(int_add(view[u8]($0), 1i), 255i), 1, [(transport(literal(view[u8](10)), int_le(int_add(view[u8]($0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u8]($0, 10)), h0)), 1)])))
+
+obligation 674828757b8cc128 advance 2
+transport(transport(literal(view[u8](1)), (#0 ==[Int] view[u8](1)), refl(view[u8](1))), int_le(0i, int_add(view[u8]($0), #0)), linear(int_le(0i, int_add(view[u8]($0), 1i)), 1, [(axiom(view_lower[u8], $0), 1)]))
+
+obligation 147c0d1bd5329a98 advance 3
+transport(transport(literal(view[u8](1)), (#0 ==[Int] view[u8](1)), refl(view[u8](1))), int_le(int_add(view[u8]($0), #0), 255i), transport(literal(view[u8](255)), int_le(int_add(view[u8]($0), 1i), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(int_add(view[u8]($0), 1i), view[u8](255))), of_term($2))))
+
+obligation 776938e76fbd0644 advance 4
+transport(transport(h3, (#0 ==[u8] $4), refl($4)), (int_le_b(view[u8](#0), 10i) ==[bool] true), transport(transport(h1, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 10i) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(view[u8](add[u8]($0, 1)), 10i)), linear(int_le(view[u8](add[u8]($0, 1)), 10i), 1, [(transport(literal(view[u8](10)), int_le(int_add(view[u8]($0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u8]($0, 10)), h0)), 1), (transport(transport(literal(view[u8](1)), ($3 ==[u8] wrap[u8](int_add(view[u8]($0), #0))), transport(transport(h1, (#0 ==[u8] $3), refl($3)), (#0 ==[u8] wrap[u8](int_add(view[u8]($0), view[u8](1)))), axiom(op_model[add, u8], $0, 1))), (view[u8]($3) ==[Int] view[u8](#0)), refl(view[u8]($3))), -1), (transport(literal(view[u8](1)), (view[u8]($3) ==[Int] int_add(view[u8]($0), #0)), h2), 1), (transport(transport(h1, (#0 ==[u8] wrap[u8](int_add(view[u8]($0), 1i))), transport(literal(view[u8](1)), ($3 ==[u8] wrap[u8](int_add(view[u8]($0), #0))), transport(transport(h1, (#0 ==[u8] $3), refl($3)), (#0 ==[u8] wrap[u8](int_add(view[u8]($0), view[u8](1)))), axiom(op_model[add, u8], $0, 1)))), (view[u8](add[u8]($0, 1)) ==[Int] view[u8](#0)), refl(view[u8](add[u8]($0, 1)))), 1)]))))
+
+obligation 9e6e4a210d466df3 count_to 1
+transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), view[u8]($0)) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(view[u8](0), view[u8]($0))), transport(transport(literal(view[u8](0)), (#0 ==[Int] view[u8](0)), refl(view[u8](0))), int_le(#0, view[u8]($0)), linear(int_le(0i, view[u8]($0)), 1, [(axiom(view_lower[u8], $0), 1)]))))
+
+obligation abf67ed3da5033bd count_to 2
+transport(transport(literal(view[u8](1)), (#0 ==[Int] view[u8](1)), refl(view[u8](1))), int_le(0i, int_add(view[u8]($5), #0)), linear(int_le(0i, int_add(view[u8]($5), 1i)), 1, [(transport(literal(view[u8](0)), int_le(#0, view[u8]($5)), h1), 1)]))
+
+obligation b37981ef137c830d count_to 3
+transport(transport(literal(view[u8](1)), (#0 ==[Int] view[u8](1)), refl(view[u8](1))), int_le(int_add(view[u8]($5), #0), 255i), linear(int_le(int_add(view[u8]($5), 1i), 255i), 1, [(h2, 1), (axiom(view_upper[u8], $0), 1)]))
+
+obligation b320f9b756943371 count_to 4
+transport(transport(h5, (#0 ==[u8] $7), refl($7)), (int_le_b(view[u8](#0), view[u8]($0)) ==[bool] true), transport(transport(h3, (#0 ==[u8] $6), refl($6)), (int_le_b(view[u8](#0), view[u8]($0)) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(view[u8](add[u8]($5, 1)), view[u8]($0))), linear(int_le(view[u8](add[u8]($5, 1)), view[u8]($0)), 1, [(h2, 1), (transport(transport(literal(view[u8](1)), ($6 ==[u8] wrap[u8](int_add(view[u8]($5), #0))), transport(transport(h3, (#0 ==[u8] $6), refl($6)), (#0 ==[u8] wrap[u8](int_add(view[u8]($5), view[u8](1)))), axiom(op_model[add, u8], $5, 1))), (view[u8]($6) ==[Int] view[u8](#0)), refl(view[u8]($6))), -1), (transport(literal(view[u8](1)), (view[u8]($6) ==[Int] int_add(view[u8]($5), #0)), h4), 1), (transport(transport(h3, (#0 ==[u8] wrap[u8](int_add(view[u8]($5), 1i))), transport(literal(view[u8](1)), ($6 ==[u8] wrap[u8](int_add(view[u8]($5), #0))), transport(transport(h3, (#0 ==[u8] $6), refl($6)), (#0 ==[u8] wrap[u8](int_add(view[u8]($5), view[u8](1)))), axiom(op_model[add, u8], $5, 1)))), (view[u8](add[u8]($5, 1)) ==[Int] view[u8](#0)), refl(view[u8](add[u8]($5, 1)))), 1)]))))
+
+obligation d18cf888d589d6ee stale_on_entry 1
+transport(transport(h0, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 10i) ==[bool] true), of_term(proof(of_term($1))))
+
+obligation e0e7b78e3a598db5 stale_on_entry 2
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($6), 10i)), linear(int_le(view[u8]($6), 10i), 1, [(transport(literal(view[u8](10)), int_le(int_add(view[u8]($6), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u8]($6, 10)), h3)), 1)]))
+
+obligation 28ccff138e238807 walk 2
+transport(transport(h2, (#0 ==[u8] $10), refl($10)), (int_le_b(view[u8](#0), 10i) ==[bool] true), transport(transport(h1, (#0 ==[u8] $8), refl($8)), (int_le_b(view[u8](#0), 10i) ==[bool] true), transport(h1, (int_le_b(view[u8](#0), 10i) ==[bool] true), of_term(proof(of_term($9))))))
+
+obligation ccb0de9a0612bc8c walk 3
+transport(transport(h2, (#0 ==[u8] $10), refl($10)), (int_le_b(view[u8](#0), 10i) ==[bool] true), transport(transport(h1, (#0 ==[u8] $8), refl($8)), (int_le_b(view[u8](#0), 10i) ==[bool] true), transport(h1, (int_le_b(view[u8](#0), 10i) ==[bool] true), of_term(proof(of_term($9))))))

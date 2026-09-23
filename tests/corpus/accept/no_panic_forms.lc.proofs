@@ -1,0 +1,28 @@
+locus-proofs 1
+
+obligation c97c4a7804b25573 absurd 1
+of_term($1)
+
+obligation 7c794ca78def8ebb apart 1
+implies_intro(($0 ==[u8] 4), linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term($1)), 1), (transport(literal(view[u8](4)), (view[u8]($0) ==[Int] #0), transport(#h0, (view[u8]($0) ==[Int] view[u8](#0)), refl(view[u8]($0)))), -1)]))
+
+obligation 18291207897a3f6d apart 2
+transport(transport(literal(view[u8](4)), (#0 ==[Int] view[u8](4)), refl(view[u8](4))), int_le(int_add(view[u8]($0), 1i), #0), linear(int_le(int_add(view[u8]($0), 1i), 4i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term($1)), 1)]))
+
+obligation f0fc89112e1aadef branch 1
+h0
+
+obligation ee44d52860fc013c dead_arm 1
+linear(prop:False(), 0, [(transport(literal(view[u8](3)), (int_le(view[u8]($0), #0) => prop:False()), implies_elim(axiom(cmp_reflect[false], le[u8]($0, 3)), h0)), 1), (implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term($1)), 1)])
+
+obligation 7894be476f9a593e dead_arm_named 1
+linear(prop:False(), 0, [(transport(literal(view[u8](4)), (int_le(int_add(view[u8]($0), 1i), #0) => prop:False()), implies_elim(axiom(cmp_reflect[false], lt[u8]($0, 4)), h0)), 1), (implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term($1)), 1)])
+
+obligation 1f2f24300e7563c9 debug 1
+transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), int_le(view[u8]($0), #0), linear(int_le(view[u8]($0), 3i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), 3i)), of_term($1)), 1)]))
+
+obligation 37269fae53cf1614 exact 1
+of_term(fn:u8_view_injective($0, 3, proof(transport(transport(literal(view[u8](3)), (#0 ==[Int] view[u8](3)), refl(view[u8](3))), (view[u8]($0) ==[Int] #0), implies_elim(implies_elim(axiom(int_le_antisymm, view[u8]($0), 3i), linear(int_le(view[u8]($0), 3i), 1, [(implies_elim(axiom(cmp_reflect[true], int_eq_b(view[u8]($0), 3i)), of_term($1)), 1)])), linear(int_le(3i, view[u8]($0)), 1, [(implies_elim(axiom(cmp_reflect[true], int_eq_b(view[u8]($0), 3i)), of_term($1)), -1)]))))))
+
+obligation bf6d43276443647b taught 2
+of_term($1)

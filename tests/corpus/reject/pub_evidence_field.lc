@@ -3,7 +3,7 @@
 // marker, and a `pub` data field could be changed under the evidence that
 // speaks of it; either way the value no longer means what its type says.
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 

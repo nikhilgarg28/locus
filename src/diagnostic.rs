@@ -1,5 +1,8 @@
 //! Compiler-owned diagnostics; the presentation crate is only an adapter.
 
+pub mod explain;
+mod json;
+
 use annotate_snippets::{AnnotationKind, Group, Renderer, Snippet};
 
 use crate::source::{SourceMap, Span};
@@ -33,6 +36,32 @@ pub enum Level {
     Warning,
 }
 
+/// Evidence considered while explaining a failed proof obligation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsideredFact {
+    pub name: Option<String>,
+    pub claim: String,
+}
+
+/// Optional proof-specific data, kept independently of human-readable notes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProofDetails {
+    pub claim: Option<String>,
+    pub claim_after_computing: Option<String>,
+    pub facts_considered: Option<Vec<ConsideredFact>>,
+    pub counterexample: Option<String>,
+    pub suggested_explicit_form: Option<String>,
+}
+
+/// Infrequently used structured context stays behind one pointer so ordinary
+/// diagnostics remain small enough to return as errors without boxing callers.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DiagnosticDetails {
+    pub suggestions: Vec<Suggestion>,
+    pub helps: Vec<String>,
+    pub proof: ProofDetails,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
     pub level: Level,
@@ -40,7 +69,7 @@ pub struct Diagnostic {
     pub message: String,
     pub labels: Vec<Label>,
     pub notes: Vec<String>,
-    pub suggestions: Vec<Suggestion>,
+    pub details: Box<DiagnosticDetails>,
 }
 
 impl Diagnostic {
@@ -67,7 +96,7 @@ impl Diagnostic {
                 primary: true,
             }],
             notes: Vec::new(),
-            suggestions: Vec::new(),
+            details: Box::default(),
         }
     }
 
@@ -82,6 +111,16 @@ impl Diagnostic {
 
     pub fn note(mut self, message: impl Into<String>) -> Self {
         self.notes.push(message.into());
+        self
+    }
+
+    pub fn claim(mut self, claim: impl Into<String>) -> Self {
+        self.details.proof.claim = Some(claim.into());
+        self
+    }
+
+    pub fn help(mut self, message: impl Into<String>) -> Self {
+        self.details.helps.push(message.into());
         self
     }
 
@@ -118,6 +157,9 @@ impl Diagnostic {
         for note in &self.notes {
             group = group.element(annotate_snippets::Level::NOTE.message(note));
         }
+        for help in &self.details.helps {
+            group = group.element(annotate_snippets::Level::HELP.message(help));
+        }
         for suggestion in &self.suggestions {
             group = group.element(annotate_snippets::Level::HELP.message(&suggestion.message));
         }
@@ -127,5 +169,35 @@ impl Diagnostic {
             Renderer::plain()
         };
         renderer.render(&[group]).to_string()
+    }
+}
+
+/// Sort mapped diagnostics by file name and byte offset, retaining emission
+/// order for ties. Call this after SourceBundle has restored original spans.
+pub fn sorted<'a>(sources: &SourceMap, diagnostics: &'a [Diagnostic]) -> Vec<&'a Diagnostic> {
+    let mut ordered: Vec<_> = diagnostics.iter().collect();
+    ordered.sort_by(|left, right| {
+        let key = |diagnostic: &Diagnostic| {
+            diagnostic
+                .labels
+                .iter()
+                .find(|label| label.primary)
+                .map(|label| (sources.get(label.span.file).name.as_str(), label.span.start))
+        };
+        key(left).cmp(&key(right))
+    });
+    ordered
+}
+
+// Preserve direct access to structured attachments while storing them together.
+impl std::ops::Deref for Diagnostic {
+    type Target = DiagnosticDetails;
+    fn deref(&self) -> &Self::Target {
+        &self.details
+    }
+}
+impl std::ops::DerefMut for Diagnostic {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.details
     }
 }

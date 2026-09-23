@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::kernel::MachineInt;
 use crate::kernel::{Prim, VarId};
 use crate::typed::{CompareOp, FnRef};
 
@@ -78,7 +79,8 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
             let params = function
                 .params
                 .iter()
-                .map(|(_, _, ty)| ty.clone())
+                .enumerate()
+                .map(|(i, (_, _, ty))| parameter_type(ty, function.passing_of(i)))
                 .collect();
             (function.reference, (params, function.result.clone()))
         })
@@ -96,7 +98,13 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
             .params
             .iter()
             .enumerate()
-            .map(|(index, (id, _, ty))| (*id, ty.clone(), function.passing_of(index).is_mutable()))
+            .map(|(index, (id, _, ty))| {
+                (
+                    *id,
+                    parameter_type(ty, function.passing_of(index)),
+                    function.passing_of(index).is_mutable(),
+                )
+            })
             .collect();
         checker.targets.clear();
         checker.result = function.result.clone();
@@ -113,7 +121,7 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
 fn expect(found: &Yield, expected: &EType, what: &str) -> Result<(), TypeError> {
     match found {
         None => Ok(()),
-        Some(found) if found == expected => Ok(()),
+        Some(found) if same_shape(found, expected) => Ok(()),
         Some(found) => fail(format!("{what} has type {found:?}, expected {expected:?}")),
     }
 }
@@ -122,7 +130,7 @@ fn expect(found: &Yield, expected: &EType, what: &str) -> Result<(), TypeError> 
 fn join(left: Yield, right: Yield, what: &str) -> Result<Yield, TypeError> {
     match (left, right) {
         (None, other) | (other, None) => Ok(other),
-        (Some(left), Some(right)) if left == right => Ok(Some(left)),
+        (Some(left), Some(right)) if same_shape(&left, &right) => Ok(Some(left)),
         (Some(left), Some(right)) => fail(format!("{what} disagree: {left:?} and {right:?}")),
     }
 }
@@ -186,7 +194,7 @@ impl Checker<'_> {
                         "{name} is bound to a value with no runtime form, which erasure leaves out"
                     ));
                 }
-                if found.is_some_and(|found| found != ty) {
+                if found.is_some_and(|found| !same_shape(found, ty)) {
                     return fail(format!("{name} is bound as {ty:?} to {found:?}"));
                 }
                 self.env.push((*id, ty.clone(), *mutable));
@@ -220,10 +228,12 @@ impl Checker<'_> {
         for (index, name) in &place.path {
             let fields = match &ty {
                 EType::Tuple(fields) => fields.clone(),
-                EType::Struct(id) => match self.module.structs.iter().find(|d| d.id == *id) {
-                    Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
-                    None => return fail("assignment into a struct that was not emitted"),
-                },
+                EType::Struct(id) | EType::StructApplied(id, _) => {
+                    match self.module.structs.iter().find(|d| d.id == *id) {
+                        Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                        None => return fail("assignment into a struct that was not emitted"),
+                    }
+                }
                 other => return fail(format!("assignment into a field of {other:?}")),
             };
             ty = match fields.get(*index) {
@@ -261,13 +271,22 @@ impl Checker<'_> {
         arguments: impl IntoIterator<Item = &'e EExpr>,
         expected: &[EType],
         what: &str,
+        passing: Option<&[crate::typed::Passing]>,
     ) -> Result<Option<()>, TypeError> {
         let mut yields = Some(());
         let mut count = 0;
         for (position, argument) in arguments.into_iter().enumerate() {
             count += 1;
             match (self.expr(argument)?, expected.get(position)) {
-                (Some(found), Some(expected)) if found != *expected => {
+                (Some(found), Some(expected))
+                    if !same_shape(&found, expected)
+                        && !slice_coercion(
+                            &found,
+                            expected,
+                            argument,
+                            passing.and_then(|p| p.get(position)).copied(),
+                        ) =>
+                {
                     return fail(format!(
                         "{what}: found {found:?} at {position}, expected {expected:?}"
                     ));
@@ -287,6 +306,70 @@ impl Checker<'_> {
 
     fn expr(&mut self, expr: &EExpr) -> Result<Yield, TypeError> {
         Ok(Some(match expr {
+            EExpr::Shared { value, lifetime } => {
+                EType::Ref(lifetime.clone(), Box::new(needed!(self.expr(value)?)))
+            }
+            EExpr::BoxNew(value) => EType::Boxed(Box::new(needed!(self.expr(value)?))),
+            EExpr::BoxDeref(value) => match needed!(self.expr(value)?) {
+                EType::Boxed(inner) => *inner,
+                other => return fail(format!("cannot unbox {other:?}")),
+            },
+            EExpr::Deref(value) => match needed!(self.expr(value)?) {
+                EType::Ref(_, inner) => *inner,
+                other => return fail(format!("cannot dereference {other:?}")),
+            },
+            EExpr::Buffer {
+                op,
+                storage,
+                element,
+                arguments,
+            } => {
+                let buffer = match storage {
+                    crate::exec::BufferStorage::Array(n) => {
+                        EType::Array(Box::new(element.clone()), *n)
+                    }
+                    crate::exec::BufferStorage::Slice => EType::Slice(Box::new(element.clone())),
+                    crate::exec::BufferStorage::Vector => EType::Buffer(Box::new(element.clone())),
+                };
+                let expected = match op {
+                    crate::kernel::BufferOp::Literal => vec![element.clone(); arguments.len()],
+                    crate::kernel::BufferOp::Length => vec![buffer.clone()],
+                    crate::kernel::BufferOp::Get => {
+                        vec![buffer.clone(), EType::Int(MachineInt::U64)]
+                    }
+                    crate::kernel::BufferOp::Set => {
+                        vec![buffer.clone(), EType::Int(MachineInt::U64), element.clone()]
+                    }
+                    crate::kernel::BufferOp::Push => vec![buffer.clone(), element.clone()],
+                };
+                let actual = needed!(self.values(arguments)?);
+                if actual != expected {
+                    return fail("native buffer argument types differ");
+                }
+                if matches!(
+                    op,
+                    crate::kernel::BufferOp::Set | crate::kernel::BufferOp::Push
+                ) && !matches!(arguments.first(), Some(EExpr::Lend { mutable: true, .. }))
+                {
+                    return fail("buffer mutation needs a mutable receiver");
+                }
+                match op {
+                    crate::kernel::BufferOp::Literal => {
+                        if matches!(storage, crate::exec::BufferStorage::Slice) {
+                            return fail("cannot construct an unsized slice");
+                        }
+                        if let crate::exec::BufferStorage::Array(n) = storage
+                            && *n != arguments.len()
+                        {
+                            return fail("array literal length differs");
+                        }
+                        buffer
+                    }
+                    crate::kernel::BufferOp::Length => EType::Int(MachineInt::U64),
+                    crate::kernel::BufferOp::Get => element.clone(),
+                    crate::kernel::BufferOp::Set | crate::kernel::BufferOp::Push => EType::unit(),
+                }
+            }
             EExpr::Var { id, name } => match self.env.iter().rev().find(|(var, _, _)| var == id) {
                 Some((_, ty, _)) => ty.clone(),
                 None => return fail(format!("{name} is not in scope")),
@@ -315,7 +398,12 @@ impl Checker<'_> {
                 };
                 let expected: Vec<EType> = decl.fields.iter().map(|(_, ty)| ty.clone()).collect();
                 let values = fields.iter().map(|(_, value)| value);
-                needed!(self.arguments(values, &expected, &format!("the fields of {name}"))?);
+                needed!(self.arguments(
+                    values,
+                    &expected,
+                    &format!("the fields of {name}"),
+                    None
+                )?);
                 EType::Struct(*id)
             }
             EExpr::Variant {
@@ -336,16 +424,23 @@ impl Checker<'_> {
                     payload,
                     &expected,
                     &format!("the payload of {}", variant.name),
+                    None,
                 )?);
                 EType::Enum(*id)
             }
             EExpr::Field { target, index, .. } => {
-                let fields = match needed!(self.expr(target)?) {
+                let mut target_ty = needed!(self.expr(target)?);
+                while let EType::Ref(_, inner) = target_ty {
+                    target_ty = *inner;
+                }
+                let fields = match target_ty {
                     EType::Tuple(fields) => fields,
-                    EType::Struct(id) => match self.module.structs.iter().find(|d| d.id == id) {
-                        Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
-                        None => return fail("projection from a struct that was not emitted"),
-                    },
+                    EType::Struct(id) | EType::StructApplied(id, _) => {
+                        match self.module.structs.iter().find(|d| d.id == id) {
+                            Some(decl) => decl.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                            None => return fail("projection from a struct that was not emitted"),
+                        }
+                    }
                     other => return fail(format!("projection from {other:?}")),
                 };
                 match fields.get(*index) {
@@ -411,7 +506,19 @@ impl Checker<'_> {
                 let Some((params, result)) = self.signatures.get(callee).cloned() else {
                     return fail(format!("{name} was not emitted"));
                 };
-                needed!(self.arguments(arguments, &params, &format!("the arguments of {name}"))?);
+                let passing = self
+                    .module
+                    .fns
+                    .iter()
+                    .find(|f| f.reference == *callee)
+                    .map(|f| f.passing.clone())
+                    .unwrap_or_default();
+                needed!(self.arguments(
+                    arguments,
+                    &params,
+                    &format!("the arguments of {name}"),
+                    Some(&passing)
+                )?);
                 result
             }
             // A lent place has the type of the place; a `&mut` one is
@@ -442,7 +549,9 @@ impl Checker<'_> {
                 let scrutinee = self.expr(scrutinee)?;
                 let enums = &self.module.enums;
                 let decl = match &scrutinee {
-                    Some(EType::Enum(id)) => enums.iter().find(|decl| decl.id == *id),
+                    Some(EType::Enum(id) | EType::EnumApplied(id, _)) => {
+                        enums.iter().find(|decl| decl.id == *id)
+                    }
                     Some(_) => return fail("a match on something that is not an enum"),
                     None => enums.iter().find(|decl| decl.name == *enum_name),
                 };
@@ -558,5 +667,58 @@ impl Checker<'_> {
         self.targets.pop();
         self.env.truncate(scope);
         expect(&yielded?, &EType::unit(), "the body of a loop")
+    }
+}
+
+fn slice_coercion(
+    found: &EType,
+    expected: &EType,
+    argument: &EExpr,
+    passing: Option<crate::typed::Passing>,
+) -> bool {
+    let Some(passing) = passing else {
+        return false;
+    };
+    let EExpr::Lend { mutable, .. } = argument else {
+        return false;
+    };
+    if !passing.is_reference() || (*mutable != (passing == crate::typed::Passing::RefMut)) {
+        return false;
+    }
+    if let EType::Ref(_, inner) = found
+        && passing == crate::typed::Passing::Ref
+        && (same_shape(inner, expected)
+            || matches!((&**inner,expected),(EType::Array(a,_)|EType::Buffer(a),EType::Slice(b)) if same_shape(a,b)))
+    {
+        return true;
+    }
+    match (found, expected) {
+        (EType::Array(a, _), EType::Slice(b)) | (EType::Buffer(a), EType::Slice(b)) => a == b,
+        _ => false,
+    }
+}
+
+// Lifetimes are checked by the typed permission checker, independently from
+// runtime shape. This checker still distinguishes a reference from its value.
+fn parameter_type(ty: &EType, passing: crate::typed::Passing) -> EType {
+    match ty {
+        EType::Ref(_, inner) if passing.is_reference() => (**inner).clone(),
+        _ => ty.clone(),
+    }
+}
+fn same_shape(left: &EType, right: &EType) -> bool {
+    match (left, right) {
+        (EType::Ref(_, a), EType::Ref(_, b)) => same_shape(a, b),
+        (EType::Tuple(a), EType::Tuple(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same_shape(a, b))
+        }
+        (
+            EType::Struct(a) | EType::StructApplied(a, _),
+            EType::Struct(b) | EType::StructApplied(b, _),
+        ) => a == b,
+        (EType::Enum(a) | EType::EnumApplied(a, _), EType::Enum(b) | EType::EnumApplied(b, _)) => {
+            a == b
+        }
+        _ => left == right,
     }
 }

@@ -13,7 +13,7 @@ struct Point {
 
 // A claim about a point's coordinates, named as the type it is about.
 #[terminates] #[no_panic] #[no_io]
-fn Point(x: u8, y: u8) -> Prop {
+logic fn Point(x: Int, y: Int) -> Prop {
     prop!(x <= y)
 }
 
@@ -54,6 +54,7 @@ fn is_on(mode: Mode) -> bool {
 }
 
 //~ proofs: 0
-//~ run: ordered(1, 2, Proved) => (Point { x: 1, y: 2 }, Proved)
+//~ run: ordered(1, 2, Erased) => (Point { x: 1, y: 2 }, Erased)
 //~ run: on_is_on() => true
 //~ run: is_on(Mode::Off) => false
+//~ spec: 1.2:2

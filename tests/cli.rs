@@ -63,6 +63,7 @@ fn missing_files_are_reported_without_panicking() {
 }
 
 #[test]
+#[doc = "spec: 1.22:3"]
 fn a_file_is_checked_run_and_printed_as_rust() {
     let locus = || Command::new(env!("CARGO_BIN_EXE_locus"));
     let output = locus()
@@ -74,7 +75,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
     assert!(
         String::from_utf8(output.stdout)
             .unwrap()
-            .contains("Checked 6 function(s); 5 proof(s) found and accepted by the kernel.")
+            .contains("Checked 6 function(s); 8 proof(s) found and accepted by the kernel.")
     );
     // Without the proofs file, so that the tiers themselves are seen.
     let output = locus()
@@ -118,6 +119,7 @@ fn a_file_is_checked_run_and_printed_as_rust() {
 }
 
 #[test]
+#[doc = "spec: 1.19:1"]
 fn build_writes_a_crate_that_compiles_and_is_the_same_twice() {
     let locus = || Command::new(env!("CARGO_BIN_EXE_locus"));
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli_build_lock");
@@ -284,6 +286,7 @@ fn stats_without_timings(stdout: &str) -> Vec<String> {
 }
 
 #[test]
+#[doc = "spec: 1.8:1, 1.8:2"]
 fn stats_count_the_obligations_by_tier() {
     // The target examples of the atlas predict, over the whole 32-bit lock
     // and midpoint, three exact, four computed, and seven arithmetic
@@ -316,23 +319,23 @@ fn stats_count_the_obligations_by_tier() {
         stats(corpus("target", "midpoint.lc")),
         [
             "obligations: 6 (1 evaluation, 5 arithmetic)",
-            "  12:20 arithmetic, 1 pairs",
-            "  12:20 arithmetic, 2 pairs",
-            "  12:26 evaluation",
-            "  13:18 arithmetic, 2 pairs",
-            "  13:18 arithmetic, 8 pairs",
-            "  14:11 arithmetic, 18 pairs",
+            "  5:20 arithmetic, 1 pairs",
+            "  5:20 arithmetic, 2 pairs",
+            "  5:26 evaluation",
+            "  6:18 arithmetic, 2 pairs",
+            "  6:18 arithmetic, 8 pairs",
+            "  7:11 arithmetic, 18 pairs",
             "Checked 1 function(s); 6 proof(s) found and accepted by the kernel.",
         ]
     );
     assert_eq!(
         stats(corpus("accept", "lock32_step.lc")),
         [
-            "obligations: 9 (1 exact, 1 computed, 1 evaluation, 6 arithmetic)",
+            "obligations: 9 (2 computed, 1 evaluation, 6 arithmetic)",
             "  34:40 evaluation",
             "  38:28 arithmetic, 1 pairs",
             "  39:59 arithmetic, 1 pairs",
-            "  39:59 exact",
+            "  39:59 computed",
             "  40:44 arithmetic, 4 pairs",
             "  42:65 computed",
             "  51:18 arithmetic, 1 pairs",
@@ -386,21 +389,21 @@ fn check_stores_the_proofs_beside_the_source_and_locked_never_searches() {
     // for nothing, and leaves the bytes as they are.
     let (code, stdout, _) = check(&["--stats"], &[]);
     assert_eq!(code, Some(0), "{stdout}");
-    assert!(stdout.contains("proofs file: 0 used, 5 found and recorded, 0 stale, 5 searched"));
+    assert!(stdout.contains("proofs file: 0 used, 8 found and recorded, 0 stale, 8 searched"));
     let written = std::fs::read_to_string(&proofs).unwrap();
     assert!(written.starts_with("locus-proofs 1\n"), "{written}");
-    assert_eq!(written.matches("\nobligation ").count(), 5, "{written}");
+    assert_eq!(written.matches("\nobligation ").count(), 8, "{written}");
     let (code, stdout, _) = check(&["--stats", "--locked"], &[]);
     assert_eq!(code, Some(0), "{stdout}");
     assert!(
-        stdout.contains("proofs file: 5 used, 0 found and recorded, 0 stale, 0 searched"),
+        stdout.contains("proofs file: 8 used, 0 found and recorded, 0 stale, 0 searched"),
         "{stdout}"
     );
-    assert!(stdout.contains("obligations: 5 (5 stored)"), "{stdout}");
+    assert!(stdout.contains("obligations: 8 (8 stored)"), "{stdout}");
     assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
     let (code, stdout, _) = check(&["--holes"], &[]);
     assert_eq!(code, Some(0));
-    assert_eq!(stdout.matches("filled (stored,").count(), 5, "{stdout}");
+    assert_eq!(stdout.matches("filled (stored,").count(), 8, "{stdout}");
     assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);
 
     // Surviving an upgrade: with the search disabled altogether, the file
@@ -446,7 +449,7 @@ fn check_stores_the_proofs_beside_the_source_and_locked_never_searches() {
     let (code, stdout, _) = check(&["--stats"], &[]);
     assert_eq!(code, Some(0), "{stdout}");
     assert!(
-        stdout.contains("proofs file: 3 used, 2 found and recorded, 2 stale, 2 searched"),
+        stdout.contains("proofs file: 6 used, 2 found and recorded, 2 stale, 2 searched"),
         "{stdout}"
     );
     assert_eq!(std::fs::read_to_string(&proofs).unwrap(), written);

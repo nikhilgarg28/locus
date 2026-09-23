@@ -61,10 +61,11 @@ fn maybe_reset(n: u8, small: @(n <= 3), reset: bool) -> u8 {
 }
 
 //~ proofs: 7
-//~ run: bump_within(2, Proved) => 3
-//~ run: bump_within(3, Proved) => 0
+//~ run: bump_within(2, Erased) => 3
+//~ run: bump_within(3, Erased) => 0
 //~ run: clamp(1) => 1
 //~ run: clamp(200) => 3
-//~ run: maybe_reset(2, Proved, true) => 0
-//~ run: maybe_reset(2, Proved, false) => 2
-//~ rust: let mut ok = Proved;
+//~ run: maybe_reset(2, Erased, true) => 0
+//~ run: maybe_reset(2, Erased, false) => 2
+//~ rust: let mut ok = Erased;
+//~ spec: 1.12:3

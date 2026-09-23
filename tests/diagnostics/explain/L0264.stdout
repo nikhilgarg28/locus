@@ -1,0 +1,26 @@
+L0264: Invalid old-value observation
+
+old! names the entry snapshot of a supported mutable parameter inside a proposition. It does not evaluate an arbitrary expression at an earlier time and cannot be used as runtime data. Name the parameter directly, or capture an explicit model snapshot at the desired point.
+
+Example from `tests/corpus/reject/old_outside_mut.lc`; the full file is a regression test.
+
+```locus
+// `old!(x)` names the value the `&mut` parameter `x` had at entry, in a
+// proposition: a result type, a proof type, `prove!`, or `prop!`. The code
+// has only the value `x` has now, and a value that is not a `&mut`
+// parameter is the same value throughout.
+fn in_code(counter: &mut u8) -> u8 {
+    counter = counter.wrapping_add(1);
+    old!(counter)
+}
+
+fn of_a_value(n: u8) -> @(n == old!(n)) {
+    prove!(n == n)
+}
+
+fn of_an_expression(counter: &mut u8) -> @(counter == old!(counter.wrapping_add(0))) {
+    prove!(counter == counter)
+}
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

@@ -29,3 +29,4 @@ fn destructure(n: u8) -> u8 {
     }
     last
 }
+//~ spec: 1.11:2

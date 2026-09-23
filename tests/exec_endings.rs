@@ -197,6 +197,7 @@ fn early_return(theory: Theory, use_the_fact: bool) -> ExecFn {
 }
 
 #[test]
+#[doc = "spec: 3.2:6"]
 fn a_return_inside_a_branch_supplies_the_result_type_at_that_point() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -509,6 +510,7 @@ fn a_panic_inside_a_branch_demands_nothing_without_the_promise() {
 }
 
 #[test]
+#[doc = "spec: 3.2:6"]
 fn under_no_panic_a_panic_needs_a_proof_that_it_is_unreachable() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -556,6 +558,7 @@ fn calls(promises: Promises, callee: ExecFnId) -> ExecFn {
 }
 
 #[test]
+#[doc = "spec: 3.2:10"]
 fn each_promise_is_kept_only_by_calling_functions_that_make_it() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());
@@ -600,6 +603,7 @@ fn each_promise_is_kept_only_by_calling_functions_that_make_it() {
 }
 
 #[test]
+#[doc = "spec: 3.2:10"]
 fn terminates_forbids_a_loop_wherever_it_stands() {
     let world = world();
     let mut program = Program::new((*world.definitions).clone());

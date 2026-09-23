@@ -17,3 +17,4 @@ fn set_whole(p: Percent, v: u8, fits: @(v <= 100)) -> Percent {
     copy = Percent { value: v, in_range: fits };
     copy
 }
+//~ spec: 1.12:1

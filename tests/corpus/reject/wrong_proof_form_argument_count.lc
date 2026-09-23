@@ -1,5 +1,5 @@
 // `unfold!` takes a function of the logic and evidence.
-#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
 
 #[terminates] #[no_panic] #[no_io] fn first(n: u8, h: @nonzero(n)) -> @(n != 0) {
     unfold!(nonzero) //~ error: L0208 `unfold!` takes two arguments

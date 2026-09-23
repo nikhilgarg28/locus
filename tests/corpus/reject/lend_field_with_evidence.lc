@@ -23,3 +23,4 @@ fn set_field(percent: &mut Percent, v: u8) -> () {
     assert!(v <= 100);
     helper(&mut percent.value); //~ error: L0233 lending `percent.value` alone would invalidate `percent.in_range`; lend the whole value
 }
+//~ spec: 1.13:1

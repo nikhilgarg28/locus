@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use crate::erased::{
     Outcome, Overflow, RunError, Stop, Value, operate, outcome, term_value, value_term,
 };
-use crate::kernel::{ForLoop, MachineInt, Prim, Term, VarId};
+use crate::kernel::{ForLoop, MachineInt, Prim, Term, Type, VarId};
 use crate::typed::FnRef;
 
 use super::check::Program;
@@ -51,6 +51,9 @@ pub struct Lending {
     /// the path by field position, and the position of the lend among the
     /// callee's `&mut` parameters.
     pub calls: HashMap<VarId, Vec<(usize, Vec<usize>, usize)>>,
+    /// Oracle-only runtime projections, needed when a kernel Bool is a
+    /// logical field inside an otherwise physical collection payload.
+    pub(crate) projections: HashMap<VarId, super::projection::ValueProjection>,
 }
 
 /// A call in progress of a function with `&mut` parameters: their current
@@ -66,7 +69,7 @@ enum Flow {
     Continue(Vec<Value>),
 }
 
-const MAX_CALL_DEPTH: usize = 200;
+use crate::limits::MAX_INTERPRETER_CALL_DEPTH as MAX_CALL_DEPTH;
 
 pub struct CheckInterpreter<'p> {
     program: &'p Program,
@@ -188,6 +191,15 @@ impl<'p> CheckInterpreter<'p> {
         if arity != arguments.len() {
             return stuck("a math function called with the wrong arity");
         }
+        // Logical definitions are checked computations, not runtime calls.
+        // Any executable effects of source arguments were already sequenced
+        // into statements by lowering; kernel terms themselves are pure.
+        if !self.program.definitions().is_executable(id) {
+            return Ok(match self.program.definitions().signature(id) {
+                Some(Type::Fn(_, result)) if matches!(*result, Type::Proof(_)) => Value::Proved,
+                _ => Value::Ghost,
+            });
+        }
         // The body is closed apart from its parameters.
         let saved_bound = std::mem::replace(&mut self.bound, arguments);
         let saved_free = std::mem::take(&mut self.free);
@@ -308,6 +320,53 @@ impl<'p> CheckInterpreter<'p> {
     fn stmt(&mut self, stmt: &Stmt) -> Result<Option<Flow>, Stop> {
         self.spend()?;
         match stmt {
+            Stmt::BoxNew {
+                var,
+                value,
+                logical_payload,
+                ..
+            } => {
+                let inner = if *logical_payload && !matches!(value, Term::Proof(_)) {
+                    Value::Ghost
+                } else {
+                    self.term(value)?
+                };
+                let value = Value::Tuple(vec![inner]);
+                self.note_version(*var, &value);
+                self.free.push((*var, value));
+            }
+            Stmt::Buffer(operation) => {
+                let mut values = self.terms(&operation.arguments)?;
+                if operation.logical_payload
+                    || self
+                        .program
+                        .definitions()
+                        .is_erased_type(&operation.element)
+                {
+                    let marker = if matches!(operation.element, Type::Proof(_)) {
+                        Value::Proved
+                    } else {
+                        Value::Ghost
+                    };
+                    match operation.op {
+                        crate::kernel::BufferOp::Literal => values.fill(marker),
+                        crate::kernel::BufferOp::Push => values[1] = marker,
+                        crate::kernel::BufferOp::Set => values[2] = marker,
+                        crate::kernel::BufferOp::Get | crate::kernel::BufferOp::Length => {}
+                    }
+                }
+                let mut value = crate::erased::buffer_operation(operation.op, &values)?;
+                if let Some(projection) = self
+                    .frames
+                    .last()
+                    .and_then(Option::as_ref)
+                    .and_then(|frame| frame.lending.projections.get(&operation.var))
+                {
+                    value = projection.apply(value)?;
+                }
+                self.note_version(operation.var, &value);
+                self.free.push((operation.var, value));
+            }
             Stmt::Let { var, value, .. } => {
                 let value = self.term(value)?;
                 self.note_version(*var, &value);
@@ -452,6 +511,8 @@ impl<'p> CheckInterpreter<'p> {
     fn term(&mut self, term: &Term) -> Result<Value, Stop> {
         self.spend()?;
         Ok(match term {
+            // Buffer terms are logical snapshots; physical operations have explicit IR.
+            Term::Boxed(_) | Term::Buffer { .. } => Value::Ghost,
             Term::Free(id) => match self.free.iter().rev().find(|(var, _)| var == id) {
                 Some((_, value)) => value.clone(),
                 None => return stuck("a variable that is not bound"),
@@ -476,7 +537,8 @@ impl<'p> CheckInterpreter<'p> {
             | Term::Forall(..)
             | Term::Exists(..)
             | Term::PropApp(..)
-            | Term::Fn(_) => Value::Ghost,
+            | Term::Fn(_)
+            | Term::Lambda { .. } => Value::Ghost,
             Term::Absurd(..) => return Err(RunError::Trap.into()),
             Term::Prim(prim, operands) => {
                 let operands = self.terms(operands)?;
@@ -497,6 +559,14 @@ impl<'p> CheckInterpreter<'p> {
                 _ => return stuck("projection from something that is not a product"),
             },
             Term::Call(callee, arguments) => {
+                // Kernel lambdas are logical-only, including their calls.
+                if let Term::Lambda { result, .. } = &**callee {
+                    return Ok(if matches!(result, Type::Proof(_)) {
+                        Value::Proved
+                    } else {
+                        Value::Ghost
+                    });
+                }
                 let Term::Fn(id) = &**callee else {
                     return stuck("a call through a function value");
                 };

@@ -113,7 +113,7 @@ fn viewed(a: u16, b: u16, h: @(a < b)) -> @(a as Int <= b as Int) {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn bound(a: i32) -> Prop {
+logic fn bound(a: Int) -> Prop {
     prop!(a as Int <= 2147483647)
 }
 
@@ -149,8 +149,8 @@ fn within(a: i32) -> @bound(a) {
 //~ run: count_u32(100000) => 704982704
 //~ run: count_i16(5) => 4
 //~ run: count_i16(-10) => 0
-//~ run: viewed(1, 2, Proved) => Proved
-//~ run: within(7) => Proved
+//~ run: viewed(1, 2, Erased) => Erased
+//~ run: within(7) => Erased
 //~ rust: fn negative() -> i8 {
 //~ rust: (-128_i8)
 //~ rust: ((a as u32) < b)

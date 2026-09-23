@@ -1,0 +1,19 @@
+L0202: Duplicate declaration or field
+
+Two declarations introduce the same name in a namespace that requires uniqueness, or two fields repeat a label. A let binding may shadow a previous let, but declaration and field lists are not shadowing scopes. Rename or remove the duplicate.
+
+Example from `tests/corpus/reject/duplicate_field.lc`; the full file is a regression test.
+
+```locus
+// Two fields with one name, in a struct and in a tuple type.
+struct Lock {
+    failures: u8,
+    failures: u8,
+}
+
+fn pair(n: u8) -> (out: u8, out: u8) {
+    (n, n)
+}
+```
+
+Language, as built: [1.2:1](../../atlas.html#/doc/language/spec-1.2:1).

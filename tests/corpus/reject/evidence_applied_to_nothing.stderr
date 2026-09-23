@@ -1,4 +1,4 @@
-error[L0228]: this is evidence of `1i32 == 1i32`, which takes no argument
+error[L0228]: this is evidence of `1 == 1`, which takes no argument
  --> tests/corpus/reject/evidence_applied_to_nothing.lc:3:7
   |
 3 |     h(n) //~ error: L0228 which takes no argument

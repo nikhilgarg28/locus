@@ -181,6 +181,7 @@ const INT_LEMMAS: [&str; 6] = [
 /// The names E5 exposes to source, exactly, in the order the table gives
 /// them. A change here is a rename the language sees.
 #[test]
+#[doc = "spec: 2.14:9"]
 fn the_lemma_names_are_stable() {
     let (definitions, _, theory) = setup();
     let mut expected: Vec<String> = INT_LEMMAS.iter().map(|name| name.to_string()).collect();
@@ -541,6 +542,7 @@ fn use_machine_family_at_literals(
 }
 
 #[test]
+#[doc = "spec: 2.12:11, 2.14:4, 2.14:5, 2.14:6, 2.14:7"]
 fn every_machine_lemma_is_used_once_at_every_type() {
     let (definitions, prelude, theory) = setup();
     for ty in MachineInt::ALL {
@@ -551,6 +553,7 @@ fn every_machine_lemma_is_used_once_at_every_type() {
 }
 
 #[test]
+#[doc = "spec: 1.7:4, 2.14:1, 2.14:3"]
 fn every_int_lemma_is_used_once() {
     let (definitions, prelude, theory) = setup();
     let mut s = Scene::new(&definitions, prelude);
@@ -709,6 +712,7 @@ fn a_lemma_is_refused_at_the_wrong_claim_or_argument() {
 
 /// Every lemma is a short proof, and the counts are reported.
 #[test]
+#[doc = "spec: 2.14:8"]
 fn every_lemma_is_short() {
     let (definitions, _, theory) = setup();
     let mut widest = 0;
@@ -767,6 +771,7 @@ fn kernel_cmp(ctx: &mut Context, op: CmpOp, ty: MachineInt, a: i128, b: i128) ->
 /// the native evaluation `literal` and `evaluate` are computed by; and the
 /// two rules themselves at a sample of the pairs.
 #[test]
+#[doc = "spec: 2.13:1, 2.13:2, 2.13:6, 2.13:7"]
 fn cmp_agrees_with_rust_on_every_pair_of_bytes() {
     let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
@@ -877,6 +882,7 @@ fn cmp_is_typed_at_its_type_in_either_mode_and_refused_otherwise() {
 /// strict comparison claimed for the weak one, and a comparison that is
 /// not `Prim::Cmp`.
 #[test]
+#[doc = "spec: 2.13:3, 2.13:4, 2.13:5"]
 fn cmp_reflect_is_used_both_ways_at_every_type_and_near_missed() {
     let (definitions, prelude, _) = setup();
     for ty in MachineInt::ALL {

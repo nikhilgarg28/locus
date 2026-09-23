@@ -1,0 +1,18 @@
+L0103: Chained comparison
+
+Comparisons are binary expressions. A spelling such as a < b < c does not implicitly mean two comparisons joined by conjunction. Write a < b && b < c inside the appropriate runtime or proposition context.
+
+Example from `tests/corpus/reject/chained_comparison.lc`; the full file is a regression test.
+
+```locus
+// Comparisons chained without parentheses: an error, as in Rust.
+fn between(a: u8, b: u8, c: u8) -> bool {
+    a < b < c
+}
+
+fn same(a: u8, b: u8, c: bool) -> bool {
+    a == b == c
+}
+```
+
+Language, as built: [1.6:1](../../atlas.html#/doc/language/spec-1.6:1).

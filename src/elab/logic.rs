@@ -12,9 +12,8 @@
 
 use crate::ast::{self, BinaryOp, ExprKind, Form};
 use crate::diagnostic::Diagnostic;
-use crate::kernel::{Term, Type, VarId, same_type};
+use crate::kernel::{Term, Type, same_type};
 use crate::source::Span;
-use crate::typed::Binder;
 
 use super::env::{Elab, Env, Global};
 use super::exprs::Value;
@@ -74,23 +73,18 @@ impl Env<'_> {
                 }
                 _ => self.operator_not_yet(expr),
             },
-            ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } => {
-                let universal = matches!(expr.kind, ExprKind::Forall { .. });
-                let mark = self.mark();
-                let quantified = self.quantified(parameters, body);
-                self.close(mark);
-                let (binders, mut term) = quantified?;
-                for binder in binders.iter().rev() {
-                    let body = term;
-                    let bind = |x: Term| body.replace_var(binder.id, &x);
-                    term = if universal {
-                        Term::forall(binder.ty.clone(), bind)
-                    } else {
-                        Term::exists(binder.ty.clone(), bind)
-                    };
-                }
-                Ok(term)
+            // Specialization already reported the malformed quantifier body.
+            // Do not turn that source error into a second lowering diagnostic.
+            ExprKind::Forall { body, .. } | ExprKind::Exists { body, .. }
+                if !body.statements.is_empty() || body.tail.is_none() =>
+            {
+                Err(())
             }
+            ExprKind::Forall { .. } | ExprKind::Exists { .. } => self.fail(
+                "L0290",
+                "quantifier could not be lowered to its library proposition",
+                expr.span,
+            ),
             // A declared proposition applied to its arguments.
             ExprKind::Call { callee, arguments } if self.prop_named(callee).is_some() => {
                 let info = self.prop_named(callee).unwrap();
@@ -103,53 +97,12 @@ impl Env<'_> {
             _ => {
                 let value = self.infer(expr)?;
                 if same_type(&value.ty, &Type::Bool) {
-                    self.diagnostics.push(
-                        crate::diagnostic::Diagnostic::error(
-                            "L0221",
-                            "this is a `bool`, and a proposition is needed",
-                            expr.span,
-                        )
-                        .note("a runtime boolean is not a claim; state one with a comparison, such as `... == true`"),
-                    );
-                    return Err(());
+                    return Ok(Term::holds(self.term(&value, expr.span)?));
                 }
                 let value = self.coerce(value, &Type::Prop, expr.span)?;
                 self.term(&value, expr.span)
             }
         }
-    }
-
-    fn quantified(
-        &mut self,
-        parameters: &[ast::Parameter],
-        body: &ast::Block,
-    ) -> Elab<(Vec<Binder>, Term)> {
-        let mut binders = Vec::new();
-        for parameter in parameters {
-            // A quantified variable exists only in the logic, where
-            // `Ghost<T>` is `T`.
-            let written = self.written(&parameter.ty)?;
-            let binder = Binder {
-                id: VarId::fresh(),
-                name: parameter.name.text.clone(),
-                ty: written.ty,
-                ghost: written.ghost,
-            };
-            // A quantified variable exists only in the logic.
-            self.declare(&binder, true, parameter.span)?;
-            binders.push(binder);
-        }
-        if !body.statements.is_empty() {
-            return self.fail(
-                "L0290",
-                "statements inside a quantifier are not supported yet",
-                body.statements[0].span,
-            );
-        }
-        let Some(tail) = body.tail.as_deref() else {
-            return self.fail("L0222", "a quantifier needs a formula to state", body.span);
-        };
-        Ok((binders, self.formula_inner(tail)?))
     }
 
     fn comparison(
@@ -163,6 +116,21 @@ impl Env<'_> {
         let l = self.term(&left_value, left.span)?;
         let r = self.term(&right_value, right.span)?;
         let prelude = self.prelude;
+        if same_type(&ty, &Type::Int) {
+            use crate::kernel::CmpOp;
+            let test = match operator {
+                BinaryOp::Equal | BinaryOp::NotEqual => Term::int_cmp(CmpOp::Eq, l, r),
+                BinaryOp::Less => Term::int_cmp(CmpOp::Lt, l, r),
+                BinaryOp::LessEqual => Term::int_cmp(CmpOp::Le, l, r),
+                BinaryOp::Greater => Term::int_cmp(CmpOp::Lt, r, l),
+                _ => Term::int_cmp(CmpOp::Le, r, l),
+            };
+            return Ok(Term::eq(
+                Type::Bool,
+                test,
+                Term::Bool(operator != BinaryOp::NotEqual),
+            ));
+        }
         // An ordering compares two `Int`: the values themselves, or the
         // views of two machine integers.
         let (l, r) = match (&operator, ty.as_machine()) {

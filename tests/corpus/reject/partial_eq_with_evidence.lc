@@ -18,3 +18,4 @@ struct Outer {
     tag: u8,
     inner: Inner,
 }
+//~ spec: 1.16:1

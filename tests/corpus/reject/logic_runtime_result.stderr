@@ -1,0 +1,5 @@
+error[L0270]: a logic fn must return a Logical type
+ --> tests/corpus/reject/logic_runtime_result.lc:1:21
+  |
+1 | logic fn wrong() -> u8 { 0 }
+  |                     ^^

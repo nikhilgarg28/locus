@@ -127,7 +127,7 @@ fn until(limit: u8) -> u8 {
 //~ run: choose(false, 5) => 2
 //~ run: split(Pair { left: Token { id: 1 }, right: Token { id: 2 }, tag: 4 }) => 7
 //~ run: shadow(9) => 9
-//~ run: with_evidence(3, Proved) => (9, Proved)
+//~ run: with_evidence(3, Erased) => (9, Erased)
 //~ run: peek(Full(Token { id: 5 })) => 6
 //~ run: peek(Empty) => 0
 //~ run: until(3) => 3

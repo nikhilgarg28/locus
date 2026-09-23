@@ -1,0 +1,36 @@
+// All members of a logical data cycle are checked and published together.
+#[derive(Logical)]
+enum Tree { Leaf, Branch(Forest) }
+#[derive(Logical)]
+enum Forest { Empty, Cons { tree: Tree, rest: Forest } }
+
+// Descent may cross another member of the group before reaching a smaller Tree.
+logic fn left_depth(tree: Tree) -> Int {
+    match tree {
+        Tree::Leaf => 0,
+        Tree::Branch(forest) => match forest {
+            Forest::Empty => 0,
+            Forest::Cons { tree, rest } => 1 + left_depth(tree),
+        },
+    }
+}
+
+logic fn depth_nonnegative(tree: Tree) -> @(left_depth(tree) >= 0) {
+    match tree {
+        Tree::Leaf => fold!(left_depth, prove!(0 >= 0)),
+        Tree::Branch(forest) => match forest {
+            Forest::Empty => fold!(left_depth, prove!(0 >= 0)),
+            Forest::Cons { tree, rest } => {
+                let smaller = depth_nonnegative(tree);
+                fold!(left_depth, prove!(1 + left_depth(tree) >= 0))
+            },
+        },
+    }
+}
+
+fn run() -> u8 {
+    let tree = Tree::Branch(Forest::Cons { tree: Tree::Leaf, rest: Forest::Empty });
+    let nonnegative = depth_nonnegative(tree);
+    7
+}
+//~ run: run() => 7

@@ -2,16 +2,17 @@ use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::process::ExitCode;
 
-use locus::diagnostic::Diagnostic;
+use locus::diagnostic::{self, Diagnostic, Level};
 use locus::elab;
 use locus::erased::{EType, Interpreter, Markers, Outcome, Value, print_module_with};
 use locus::kernel::Integer;
 use locus::lexer;
 use locus::parser;
-use locus::source::SourceMap;
+use locus::preview::Previews;
+use locus::source::{SourceBundle, SourceMap, Span};
 use locus::store::ProofStore;
 
 const HELP: &str = "Locus
@@ -24,6 +25,9 @@ Usage: locus <command> <file.lc> [arguments]
           are stored in <file.lc>.proofs beside the source and used again on
           the next run; --locked never searches, so a missing or stale entry
           is an error, and --no-store neither reads nor writes the file
+  bench   Measure checking/search/replay counts and timings as JSON
+  explain Explain a diagnostic code: locus explain L0230
+  audit   Check files/directories, then list trust, divergence, panic and classical sites
   run     Check, then interpret a function: locus run <file.lc> <function> [u8|true|false]...
   rust    Check, then print the generated Rust
   build   Check, then write a Rust crate: locus build <file.lc>... --out <dir> [--name <crate>]
@@ -32,12 +36,15 @@ Usage: locus <command> <file.lc> [arguments]
   parse   Validate syntax only
   ast     Print the syntax tree of a syntactically valid file
 
+  --error-format <text|json>  Render diagnostics as text (default) or schema-versioned JSON
+  --library <file.lc>  Include checked declarations (repeat for multiple libraries)
+  --preview <name>  Enable an unfinished feature (repeat for multiple features)
   -h, --help     Show this help
   -V, --version  Show the version
 ";
 
 /// Steps the interpreter may take before it reports that it ran out.
-const FUEL: u64 = 10_000_000;
+use locus::limits::DEFAULT_RUN_FUEL as FUEL;
 
 /// The tiers in the order they are tried, for the counts of `--stats`; a
 /// tier not listed here, such as the lemma a `for` from `0` is filled by,
@@ -92,17 +99,34 @@ fn pairs_of(hole: &elab::HoleReport) -> String {
 const PANICKED: u8 = 101;
 
 fn main() -> ExitCode {
-    match run(env::args_os().skip(1).collect()) {
+    let arguments: Vec<_> = env::args_os().skip(1).collect();
+    let format = if arguments.iter().any(|arg| arg == "--error-format=json")
+        || arguments
+            .windows(2)
+            .any(|args| args[0] == "--error-format" && args[1] == "json")
+    {
+        DiagnosticFormat::Json
+    } else {
+        DiagnosticFormat::Text
+    };
+    match run(arguments, format) {
         Ok(code) => ExitCode::from(code),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(io::stderr(), "error: {error}");
+            let _ = emit_driver(format, Level::Error, "L0401", &error.to_string());
             ExitCode::FAILURE
         }
     }
 }
 
-fn run(arguments: Vec<OsString>) -> io::Result<u8> {
+fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
+    let arguments = match format_arguments(arguments) {
+        Ok(arguments) => arguments,
+        Err(message) => {
+            emit_driver(format, Level::Error, "L0400", &message)?;
+            return Ok(2);
+        }
+    };
     let mut output = io::BufWriter::new(io::stdout().lock());
     if arguments.is_empty() || matches!(arguments[0].to_str(), Some("-h" | "--help")) {
         write!(output, "{HELP}")?;
@@ -114,9 +138,90 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         output.flush()?;
         return Ok(0);
     }
+    let (arguments, previews) = match preview_arguments(arguments) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            emit_driver(format, Level::Error, "L0400", &message)?;
+            return Ok(2);
+        }
+    };
+    let (arguments, libraries) = match library_arguments(arguments) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            emit_driver(format, Level::Error, "L0400", &message)?;
+            return Ok(2);
+        }
+    };
+    let elab_options = elab::Options {
+        previews,
+        ..elab::Options::default()
+    };
     let command = arguments[0].to_str().unwrap_or("");
+    if command == "bench" {
+        match locus::bench::command(&arguments[1..], &elab_options, &libraries) {
+            Ok(json) => {
+                writeln!(output, "{json}")?;
+                output.flush()?;
+                return Ok(0);
+            }
+            Err(message) => {
+                emit_driver(format, Level::Error, "L0400", &message)?;
+                return Ok(2);
+            }
+        }
+    }
+    if command == "explain" {
+        if arguments.len() != 2 || !libraries.is_empty() {
+            emit_driver(
+                format,
+                Level::Error,
+                "L0400",
+                "expected `locus explain L0230`",
+            )?;
+            return Ok(2);
+        }
+        let code = arguments[1].to_string_lossy();
+        let Some(explanation) = diagnostic::explain::explanation(&code) else {
+            emit_driver(
+                format,
+                Level::Error,
+                "L0404",
+                &format!("unknown diagnostic code `{code}`"),
+            )?;
+            return Ok(2);
+        };
+        write!(output, "{explanation}")?;
+        output.flush()?;
+        return Ok(0);
+    }
     if command == "build" {
-        return build(&arguments[1..]);
+        return build(&arguments[1..], &elab_options, &libraries, format);
+    }
+    if command == "audit"
+        && (arguments.len() > 2
+            || arguments
+                .get(1)
+                .is_some_and(|path| std::path::Path::new(path).is_dir()))
+    {
+        let inputs: Vec<_> = arguments[1..]
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect();
+        let files = locus::audit::source_paths(&inputs)?;
+        let mut status = 0;
+        for path in files {
+            writeln!(output, "{}:", path.display())?;
+            output.flush()?;
+            let mut args = vec![OsString::from("audit"), path.into_os_string()];
+            for library in &libraries {
+                args.extend([OsString::from("--library"), library.clone()]);
+            }
+            for feature in elab_options.previews.iter() {
+                args.extend([OsString::from("--preview"), OsString::from(feature.name())]);
+            }
+            status = status.max(run(args, format)?);
+        }
+        return Ok(status);
     }
     let flags: Vec<&str> = arguments
         .iter()
@@ -124,58 +229,73 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         .map(|flag| flag.to_str().unwrap_or(""))
         .collect();
     let well_formed = match command {
-        "tokens" | "parse" | "ast" | "rust" => arguments.len() == 2,
+        "tokens" | "parse" | "ast" | "rust" | "audit" => arguments.len() == 2,
         "check" => arguments.len() >= 2 && flags.iter().all(|flag| CHECK_FLAGS.contains(flag)),
         "run" => arguments.len() >= 3,
         _ => false,
     };
     if !well_formed {
-        writeln!(
-            io::stderr(),
-            "error: expected `locus <check|run|rust|tokens|parse|ast> <file.lc>`\nUse `locus --help` for available commands."
+        emit_driver(
+            format,
+            Level::Error,
+            "L0400",
+            "expected `locus <check|run|rust|tokens|parse|ast> <file.lc>`\nUse `locus --help` for available commands.",
         )?;
         return Ok(2);
     }
     let path = &arguments[1];
-    let text = match fs::read_to_string(path) {
+    if !source_size_allowed(path, 0, format)? {
+        return Ok(1);
+    }
+    let text = match read_source(path) {
         Ok(text) => text,
         Err(error) => {
-            writeln!(
-                io::stderr(),
-                "error: cannot read {}: {error}",
-                path.to_string_lossy()
+            emit_driver(
+                format,
+                Level::Error,
+                "L0401",
+                &format!("cannot read {}: {error}", path.to_string_lossy()),
             )?;
             return Ok(1);
         }
     };
     let mut sources = SourceMap::default();
-    let file = sources.add(path.to_string_lossy(), text);
-    let source = sources.get(file);
+    let Some(bundle) = load_bundle(&mut sources, path, text, &libraries, format)? else {
+        return Ok(1);
+    };
+    let driver_file = sources.add("<driver>", "");
+    let driver_span = Span::new(driver_file, 0, 0);
+    let source = sources.get(bundle.file);
     if command == "tokens" {
         let lexed = lexer::lex(source);
         for token in lexed.tokens {
+            let original_span = bundle.span(token.span);
+            if !libraries.is_empty() {
+                write!(output, "{}:", sources.get(original_span.file).name)?;
+            }
             writeln!(
                 output,
                 "{:>6}..{:<6} {:<14} {:?}",
-                token.span.start,
-                token.span.end,
+                original_span.start,
+                original_span.end,
                 format!("{:?}", token.kind),
                 source.slice(token.span).unwrap()
             )?;
         }
         output.flush()?;
-        emit_diagnostics(&sources, &lexed.diagnostics)?;
+        emit_bundle_diagnostics(&sources, &bundle, &lexed.diagnostics, format)?;
         return Ok(u8::from(!lexed.diagnostics.is_empty()));
     }
     let parsed = parser::parse(source);
     if !parsed.is_success() {
-        emit_diagnostics(&sources, &parsed.diagnostics)?;
+        emit_bundle_diagnostics(&sources, &bundle, &parsed.diagnostics, format)?;
         return Ok(1);
     }
-    if matches!(command, "check" | "run" | "rust") {
+    if matches!(command, "check" | "run" | "rust" | "audit") {
         // The proofs file beside the source, for `check`: read before
         // elaboration, written after it when it changed, unless `--locked`,
         // under which nothing is searched and nothing is written.
+        let mut pending = Vec::new();
         let options = StoreOptions::from(&flags);
         let store_path = proofs_path(path);
         let store = if command == "check" && options.enabled {
@@ -183,29 +303,26 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
                 Ok(text) => match ProofStore::parse(&text) {
                     Ok((store, warnings)) => {
                         for warning in warnings {
-                            writeln!(
-                                io::stderr(),
-                                "warning: {}: {warning}",
-                                store_path.to_string_lossy()
-                            )?;
+                            pending.push(Diagnostic::warning(
+                                "L0402",
+                                format!("{}: {warning}", store_path.to_string_lossy()),
+                                driver_span,
+                            ));
                         }
                         store
                     }
                     Err(problem) => {
-                        writeln!(
-                            io::stderr(),
-                            "warning: {}: {problem}; every proof is searched for and the file is rewritten",
-                            store_path.to_string_lossy()
-                        )?;
+                        pending.push(Diagnostic::warning("L0402", format!("{}: {problem}; every proof is searched for and the file is rewritten", store_path.to_string_lossy()), driver_span));
                         ProofStore::new()
                     }
                 },
                 Err(error) if error.kind() == io::ErrorKind::NotFound => ProofStore::new(),
                 Err(error) => {
-                    writeln!(
-                        io::stderr(),
-                        "error: cannot read {}: {error}",
-                        store_path.to_string_lossy()
+                    emit_driver(
+                        format,
+                        Level::Error,
+                        "L0401",
+                        &format!("cannot read {}: {error}", store_path.to_string_lossy()),
                     )?;
                     return Ok(1);
                 }
@@ -216,12 +333,20 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         };
         let (elaborated, store) = match store {
             Some(store) => {
-                let (elaborated, store) =
-                    elab::elaborate_with_store(source, &parsed.program, store);
+                let (elaborated, store) = elab::elaborate_with_store_and_options(
+                    source,
+                    &parsed.program,
+                    store,
+                    &elab_options,
+                );
                 (elaborated, Some(store))
             }
-            None => (elab::elaborate(source, &parsed.program), None),
+            None => (
+                elab::elaborate_with_options(source, &parsed.program, &elab_options),
+                None,
+            ),
         };
+        pending.extend(elaborated.diagnostics.iter().map(|d| bundle.diagnostic(d)));
         if command == "check" && flags.contains(&"--stats") {
             writeln!(
                 output,
@@ -287,16 +412,30 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
             let mut holes: Vec<&elab::HoleReport> = elaborated.holes.iter().collect();
             holes.sort_by_key(|hole| hole.span.start);
             for hole in holes {
-                let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
-                writeln!(output, "  {line}:{column} {}{}", hole.tier, pairs_of(hole))?;
+                let location = bundle.span(hole.span);
+                let original = sources.get(location.file);
+                let (line, column) = original.line_column(location.start).unwrap_or((0, 0));
+                if libraries.is_empty() {
+                    writeln!(output, "  {line}:{column} {}{}", hole.tier, pairs_of(hole))?;
+                } else {
+                    writeln!(
+                        output,
+                        "  {}:{line}:{column} {}{}",
+                        original.name,
+                        hole.tier,
+                        pairs_of(hole)
+                    )?;
+                }
             }
         } else if command == "check" && flags.contains(&"--holes") {
             for hole in &elaborated.holes {
-                let (line, column) = source.line_column(hole.span.start).unwrap_or((0, 0));
+                let location = bundle.span(hole.span);
+                let original = sources.get(location.file);
+                let (line, column) = original.line_column(location.start).unwrap_or((0, 0));
                 writeln!(
                     output,
                     "{}:{line}:{column}: {} ({}{}, {} proof nodes, {} us)",
-                    source.name,
+                    original.name,
                     if hole.solved { "filled" } else { "unsolved" },
                     hole.tier,
                     pairs_of(hole),
@@ -307,7 +446,7 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
         }
         if !elaborated.is_success() {
             output.flush()?;
-            emit_diagnostics(&sources, &elaborated.diagnostics)?;
+            emit_diagnostics(&sources, &pending, format)?;
             return Ok(1);
         }
         if let Some(store) = &store
@@ -316,18 +455,20 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
             && let Err(error) = fs::write(&store_path, text)
         {
             output.flush()?;
-            writeln!(
-                io::stderr(),
-                "error: cannot write {}: {error}",
-                store_path.to_string_lossy()
-            )?;
+            pending.push(Diagnostic::error(
+                "L0401",
+                format!("cannot write {}: {error}", store_path.to_string_lossy()),
+                driver_span,
+            ));
+            emit_diagnostics(&sources, &pending, format)?;
             return Ok(1);
         }
         // Warnings, when the file is accepted with some.
         output.flush()?;
-        emit_diagnostics(&sources, &elaborated.diagnostics)?;
+        emit_diagnostics(&sources, &pending, format)?;
         let module = elaborated.session.erased();
         match command {
+            "audit" => write!(output, "{}", locus::audit::render(&elaborated))?,
             "check" => writeln!(
                 output,
                 "Checked {} function(s); {} proof(s) found and accepted by the kernel.",
@@ -417,15 +558,43 @@ fn run(arguments: Vec<OsString>) -> io::Result<u8> {
     Ok(0)
 }
 
+/// Strip repeatable preview options before each command checks its own
+/// arguments. Feature names are validated before reading or writing files.
+fn preview_arguments(arguments: Vec<OsString>) -> Result<(Vec<OsString>, Previews), String> {
+    let mut arguments = arguments.into_iter();
+    let mut remaining = vec![arguments.next().expect("a command was provided")];
+    let mut previews = Previews::default();
+    while let Some(argument) = arguments.next() {
+        if argument == "--preview" {
+            let name = arguments.next().ok_or("`--preview` takes a feature name")?;
+            let name = name.to_str().ok_or("a preview name must be valid UTF-8")?;
+            if name.starts_with("--") {
+                return Err("`--preview` takes a feature name".into());
+            }
+            previews.enable(name).map_err(|error| error.to_string())?;
+        } else {
+            remaining.push(argument);
+        }
+    }
+    Ok((remaining, previews))
+}
+
 /// `locus build <file.lc>... --out <dir> [--name <crate>]`: checks every
 /// file, and writes the crate when all of them pass. The exit status is 2
 /// for a usage error, 1 when a file is rejected or cannot be read or
 /// written, and 0 when the crate is written.
-fn build(arguments: &[OsString]) -> io::Result<u8> {
+fn build(
+    arguments: &[OsString],
+    options: &elab::Options,
+    libraries: &[OsString],
+    format: DiagnosticFormat,
+) -> io::Result<u8> {
     let usage = |message: &str| -> io::Result<u8> {
-        writeln!(
-            io::stderr(),
-            "error: {message}\nUse `locus build <file.lc>... --out <dir> [--name <crate>]`."
+        emit_driver(
+            format,
+            Level::Error,
+            "L0400",
+            &format!("{message}\nUse `locus build <file.lc>... --out <dir> [--name <crate>]`."),
         )?;
         Ok(2)
     };
@@ -478,28 +647,35 @@ fn build(arguments: &[OsString]) -> io::Result<u8> {
                 "two files would both be the module `{module}`; a file's name is its module's"
             ));
         }
-        let text = match fs::read_to_string(path) {
+        if !source_size_allowed(path, 0, format)? {
+            return Ok(1);
+        }
+        let text = match read_source(path) {
             Ok(text) => text,
             Err(error) => {
-                writeln!(
-                    io::stderr(),
-                    "error: cannot read {}: {error}",
-                    path.to_string_lossy()
+                emit_driver(
+                    format,
+                    Level::Error,
+                    "L0401",
+                    &format!("cannot read {}: {error}", path.to_string_lossy()),
                 )?;
                 return Ok(1);
             }
         };
-        let file = sources.add(path.to_string_lossy(), text);
-        let source = sources.get(file);
+        let Some(bundle) = load_bundle(&mut sources, path, text, libraries, format)? else {
+            rejected = true;
+            continue;
+        };
+        let source = sources.get(bundle.file);
         let parsed = parser::parse(source);
         if !parsed.is_success() {
-            emit_diagnostics(&sources, &parsed.diagnostics)?;
+            emit_bundle_diagnostics(&sources, &bundle, &parsed.diagnostics, format)?;
             rejected = true;
             continue;
         }
-        let elaborated = elab::elaborate(source, &parsed.program);
+        let elaborated = elab::elaborate_with_options(source, &parsed.program, options);
         if !elaborated.is_success() {
-            emit_diagnostics(&sources, &elaborated.diagnostics)?;
+            emit_bundle_diagnostics(&sources, &bundle, &elaborated.diagnostics, format)?;
             rejected = true;
             continue;
         }
@@ -516,10 +692,11 @@ fn build(arguments: &[OsString]) -> io::Result<u8> {
     let written = match locus::build::write_crate(out, &crate_name, &modules) {
         Ok(written) => written,
         Err(error) => {
-            writeln!(
-                io::stderr(),
-                "error: cannot write the crate under {}: {error}",
-                out.display()
+            emit_driver(
+                format,
+                Level::Error,
+                "L0401",
+                &format!("cannot write the crate under {}: {error}", out.display()),
             )?;
             return Ok(1);
         }
@@ -538,11 +715,181 @@ fn build(arguments: &[OsString]) -> io::Result<u8> {
     Ok(0)
 }
 
-fn emit_diagnostics(sources: &SourceMap, diagnostics: &[Diagnostic]) -> io::Result<()> {
+fn emit_diagnostics(
+    sources: &SourceMap,
+    diagnostics: &[Diagnostic],
+    format: DiagnosticFormat,
+) -> io::Result<()> {
     let mut error_output = io::stderr().lock();
     let color = error_output.is_terminal() && env::var_os("NO_COLOR").is_none();
-    for diagnostic in diagnostics {
-        writeln!(error_output, "{}", diagnostic.render(sources, color))?;
+    for diagnostic in diagnostic::sorted(sources, diagnostics) {
+        let rendered = match format {
+            DiagnosticFormat::Json => diagnostic.render_json(sources),
+            DiagnosticFormat::Text if diagnostic.code.starts_with("L04") => format!(
+                "{}: {}",
+                if diagnostic.is_error() {
+                    "error"
+                } else {
+                    "warning"
+                },
+                diagnostic.message
+            ),
+            DiagnosticFormat::Text => diagnostic.render(sources, color),
+        };
+        writeln!(error_output, "{rendered}")?;
     }
     Ok(())
+}
+
+/// Libraries deliberately share the entry module's namespace. Duplicates are
+/// ordinary duplicate declarations, not shadowed imports or trusted preludes.
+fn library_arguments(arguments: Vec<OsString>) -> Result<(Vec<OsString>, Vec<OsString>), String> {
+    let mut remaining = Vec::new();
+    let mut libraries = Vec::new();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        if argument == "--library" {
+            let path = arguments.next().ok_or("`--library` takes a source path")?;
+            if path.to_string_lossy().starts_with("--") {
+                return Err("`--library` takes a source path".into());
+            }
+            libraries.push(path);
+        } else {
+            remaining.push(argument);
+        }
+    }
+    Ok((remaining, libraries))
+}
+fn load_bundle(
+    sources: &mut SourceMap,
+    path: &OsString,
+    text: String,
+    libraries: &[OsString],
+    format: DiagnosticFormat,
+) -> io::Result<Option<SourceBundle>> {
+    let mut files = Vec::new();
+    let mut assembled_bytes = text.len();
+    for library in libraries {
+        if !source_size_allowed(library, assembled_bytes.saturating_add(1), format)? {
+            return Ok(None);
+        }
+        let text = read_source(library).map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("cannot read {}: {error}", library.to_string_lossy()),
+            )
+        })?;
+        assembled_bytes = assembled_bytes.saturating_add(text.len()).saturating_add(1);
+        let file = sources.add(library.to_string_lossy(), text);
+        // Prevent an incomplete library from consuming the next file's tokens.
+        let parsed = parser::parse(sources.get(file));
+        if !parsed.is_success() {
+            emit_diagnostics(sources, &parsed.diagnostics, format)?;
+            return Ok(None);
+        }
+        files.push(file);
+    }
+    files.push(sources.add(path.to_string_lossy(), text));
+    Ok(Some(SourceBundle::join(sources, &files)))
+}
+fn emit_bundle_diagnostics(
+    sources: &SourceMap,
+    bundle: &SourceBundle,
+    diagnostics: &[Diagnostic],
+    format: DiagnosticFormat,
+) -> io::Result<()> {
+    let mapped: Vec<_> = diagnostics
+        .iter()
+        .map(|diagnostic| bundle.diagnostic(diagnostic))
+        .collect();
+    emit_diagnostics(sources, &mapped, format)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DiagnosticFormat {
+    Text,
+    Json,
+}
+
+fn format_arguments(arguments: Vec<OsString>) -> Result<Vec<OsString>, String> {
+    let mut remaining = Vec::new();
+    let mut arguments = arguments.into_iter();
+    let mut seen = false;
+    while let Some(argument) = arguments.next() {
+        let text = argument.to_string_lossy();
+        let value = if text == "--error-format" {
+            Some(
+                arguments
+                    .next()
+                    .ok_or("`--error-format` takes text or json")?,
+            )
+        } else {
+            text.strip_prefix("--error-format=").map(OsString::from)
+        };
+        if let Some(value) = value {
+            if seen {
+                return Err("`--error-format` is given twice".into());
+            }
+            seen = true;
+            if value != "text" && value != "json" {
+                return Err("`--error-format` takes text or json".into());
+            }
+        } else {
+            remaining.push(argument);
+        }
+    }
+    Ok(remaining)
+}
+fn emit_driver(
+    format: DiagnosticFormat,
+    level: Level,
+    code: &'static str,
+    message: &str,
+) -> io::Result<()> {
+    let mut sources = SourceMap::default();
+    let file = sources.add("<driver>", "");
+    let span = Span::new(file, 0, 0);
+    let diagnostic = match level {
+        Level::Error => Diagnostic::error(code, message, span),
+        Level::Warning => Diagnostic::warning(code, message, span),
+    };
+    emit_diagnostics(&sources, &[diagnostic], format)
+}
+
+/// Preflight regular-file size before allocating a source buffer. The parser
+/// also checks actual bytes, covering file races and non-regular streams.
+fn source_size_allowed(
+    path: &OsString,
+    prefix_bytes: usize,
+    format: DiagnosticFormat,
+) -> io::Result<bool> {
+    let Ok(metadata) = fs::metadata(path) else {
+        return Ok(true);
+    };
+    if metadata.len().saturating_add(prefix_bytes as u64) <= locus::limits::MAX_SOURCE_BYTES as u64
+    {
+        return Ok(true);
+    }
+    let mut sources = SourceMap::default();
+    let file = sources.add(path.to_string_lossy(), "");
+    let diagnostic = Diagnostic::error(
+        "L0010",
+        format!(
+            "MAX_SOURCE_BYTES limit of {} was exceeded",
+            locus::limits::MAX_SOURCE_BYTES
+        ),
+        Span::new(file, 0, 0),
+    );
+    emit_diagnostics(&sources, &[diagnostic], format)?;
+    Ok(false)
+}
+
+fn read_source(path: &OsString) -> io::Result<String> {
+    let mut text = String::new();
+    // A metadata race or a stream cannot force an unbounded allocation. The
+    // extra byte lets the lexer report the same source-limit diagnostic.
+    fs::File::open(path)?
+        .take(locus::limits::MAX_SOURCE_BYTES as u64 + 1)
+        .read_to_string(&mut text)?;
+    Ok(text)
 }

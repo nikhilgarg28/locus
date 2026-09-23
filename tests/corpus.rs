@@ -121,7 +121,7 @@ fn failures_of(text: &str) -> Vec<String> {
 #[test]
 fn a_file_whose_expectations_hold_has_no_failures() {
     let text = format!(
-        "{INCREMENT}//~ proofs: 1\n//~ run: increment(255) => (0, Proved)\n//~ rust: fn increment(n: u8) -> (u8, Proved) {{\n"
+        "{INCREMENT}//~ proofs: 1\n//~ run: increment(255) => (0, Erased)\n//~ rust: fn increment(n: u8) -> (u8, Erased) {{\n"
     );
     assert_eq!(failures_of(&text), Vec::<String>::new());
     let examined = examine("memory.lc", &text);
@@ -132,12 +132,12 @@ fn a_file_whose_expectations_hold_has_no_failures() {
 
 #[test]
 fn a_wrong_expected_value_is_a_failure_in_each_interpreter() {
-    let text = format!("{INCREMENT}//~ run: increment(1) => (3, Proved)\n");
+    let text = format!("{INCREMENT}//~ run: increment(1) => (3, Erased)\n");
     assert_eq!(
         failures_of(&text),
         in_each_interpreter(
             "4",
-            "`increment(1)` is `(2, Proved)`, expected `(3, Proved)`"
+            "`increment(1)` is `(2, Erased)`, expected `(3, Erased)`"
         )
     );
 }
@@ -269,20 +269,20 @@ fn an_error_in_a_file_that_expects_none_is_a_failure() {
 fn every_failure_in_a_file_is_reported() {
     let text = format!(
         "{INCREMENT}//~ proofs: 2
-//~ run: increment(1) => (2, Proved)
-//~ run: increment(true) => (2, Proved)
-//~ run: increment(1, 2) => (2, Proved)
+//~ run: increment(1) => (2, Erased)
+//~ run: increment(true) => (2, Erased)
+//~ run: increment(1, 2) => (2, Erased)
 //~ run: decrement(1) => 0
 //~ run: increment(1) => panic
 //~ run: increment(1)
 //~ rust: fn decrement
 //~ prooofs: 1
-//~^ run: increment(1) => (2, Proved)
+//~^ run: increment(1) => (2, Erased)
 "
     );
     let mut expected = vec![
         "10: a run line reads `f(arguments) => value`".to_string(),
-        "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, `warning`, and `parse-only`".to_string(),
+        "12: unknown directive `prooofs`; there are `proofs`, `run`, `rust`, `error`, `warning`, `preview`, `spec`, `known`, and `parse-only`".to_string(),
         "13: `^` belongs to `error` or `warning`, not `run`".to_string(),
         "4: 1 proof(s) were found, expected 2".to_string(),
         "6: `increment(true)`: expected a `u8`, found `true`".to_string(),
@@ -291,7 +291,7 @@ fn every_failure_in_a_file_is_reported() {
     ];
     expected.extend(in_each_interpreter(
         "9",
-        "`increment(1)` is `(2, Proved)`, expected `panic`",
+        "`increment(1)` is `(2, Erased)`, expected `panic`",
     ));
     expected.push("11: the generated Rust does not contain `fn decrement`".to_string());
     assert_eq!(failures_of(&text), expected);
@@ -338,7 +338,7 @@ fn pick(lock: Lock, event: Event, pair: (u8, (bool,)), unit: ()) -> Event { even
 #[test]
 fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
     let text = format!(
-        "{INCREMENT}//~ run: increment(1) => (2, Proved)\n//~ run: increment(2) => (3, Proved)\n"
+        "{INCREMENT}//~ run: increment(1) => (2, Erased)\n//~ run: increment(2) => (3, Erased)\n"
     );
     let compiled = [examine("memory.lc", &text).compiled.unwrap()];
     let failures = |output: &str| -> Vec<String> {
@@ -347,25 +347,25 @@ fn compiled_output_that_differs_is_a_failure_on_its_run_line() {
         assert!(report.inconclusive.is_empty());
         report.failures.iter().map(Failure::to_string).collect()
     };
-    assert_eq!(failures("(2, Proved)\n(3, Proved)\n"), Vec::<String>::new());
+    assert_eq!(failures("(2, Erased)\n(3, Erased)\n"), Vec::<String>::new());
     assert_eq!(
-        failures("(2, Proved)\n(4, Proved)\n"),
+        failures("(2, Erased)\n(4, Erased)\n"),
         [
-            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `(4, Proved)`, expected `(3, Proved)`"
+            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `(4, Erased)`, expected `(3, Erased)`"
         ]
     );
     assert_eq!(
-        failures("(2, Proved)\npanic: attempt to add with overflow\n"),
+        failures("(2, Erased)\npanic: attempt to add with overflow\n"),
         [
-            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `panic: attempt to add with overflow`, expected `(3, Proved)`"
+            "memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` is `panic: attempt to add with overflow`, expected `(3, Erased)`"
         ]
     );
     assert_eq!(
-        failures("(2, Proved)\n"),
+        failures("(2, Erased)\n"),
         ["memory.lc:5: compiled Rust, overflow checks on: `memory::increment(2)` was not answered"]
     );
     assert_eq!(
-        failures("(2, Proved)\n(3, Proved)\n7\n"),
+        failures("(2, Erased)\n(3, Erased)\n7\n"),
         ["the compiled program: overflow checks on: 1 answer(s) more than there are run lines"]
     );
     // The harness is one program: a module for the file, and the calls, each
@@ -532,7 +532,10 @@ fn plant(expr: &mut EExpr) {
         | EExpr::Trap
         | EExpr::Lend { .. }
         | EExpr::Panic { .. } => {}
-        EExpr::Tuple(exprs)
+        EExpr::Buffer {
+            arguments: exprs, ..
+        }
+        | EExpr::Tuple(exprs)
         | EExpr::Variant { payload: exprs, .. }
         | EExpr::Call {
             arguments: exprs, ..
@@ -543,7 +546,11 @@ fn plant(expr: &mut EExpr) {
         EExpr::Continue => {}
         EExpr::Break(inner) => inner.iter_mut().for_each(|inner| plant(inner)),
         EExpr::Struct { fields, .. } => fields.iter_mut().for_each(|(_, value)| plant(value)),
-        EExpr::Field { target: inner, .. }
+        EExpr::BoxNew(inner)
+        | EExpr::BoxDeref(inner)
+        | EExpr::Shared { value: inner, .. }
+        | EExpr::Deref(inner)
+        | EExpr::Field { target: inner, .. }
         | EExpr::Cast { expr: inner, .. }
         | EExpr::Assert {
             condition: inner, ..
@@ -665,7 +672,7 @@ const RETURNS_RUNS: &str = "\
 //~ run: with_a_wildcard(1) => (8, 8)
 //~ run: through_a_call(0) => 17
 //~ run: through_a_call(5) => 16
-//~ rust: let m: u8 = panic!(\"{}\", \"in a let\");
+//~ rust: panic!(\"{}\", \"in a let\")
 //~ rust: let m: u8 = if n == 0_u8 {
 //~ rust: return 7_u8
 //~ rust: break (return i.wrapping_add(100_u8))
@@ -674,7 +681,7 @@ const RETURNS_RUNS: &str = "\
 //~ rust: let (value, _): (u8, _) = match event {
 //~ rust: Event::Wrong => {
 //~ rust: ((return 4_u8), 0_u8)
-//~ rust: let (a, _): (u8, ()) = if n == 0_u8 {
+//~ rust: if n == 0_u8 {
 //~ rust: return (6_u8, 6_u8)
 ";
 
@@ -705,9 +712,7 @@ fn trees_that_panic_agree_with_their_compiled_rust_message_included() {
     // message with more `{` than `}` is indented as it would be without it.
     let rust = &right.compiled.as_ref().unwrap().rust;
     assert!(
-        rust.contains(
-            "\n}\n\npub fn after_three(n: u8) -> u8 {\n    let mut i = 0_u8;\n    loop {\n"
-        ),
+        rust.contains("pub fn after_three(n: u8) -> u8 {\n    let mut i = 0_u8;\n    loop {\n"),
         "{rust}"
     );
 

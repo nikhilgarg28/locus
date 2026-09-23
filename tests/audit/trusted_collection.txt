@@ -1,0 +1,9 @@
+Locus audit v1
+Contracts apply on normal return; trusted specifications and effects require review.
+divergence counted: termination is not promised
+divergence inspect: termination is not promised
+native __locus_buffer_0 Vector/Length: "Rust array/slice/Vec operation preserves element order and implements the checked immutable buffer equation on normal return"
+native __locus_buffer_1 Vector/Literal: "Rust array/slice/Vec operation preserves element order and implements the checked immutable buffer equation on normal return"
+panic __locus_buffer_1/statement[1]: allocation or capacity failure may prevent return
+trusted counted = Vec::len: "deliberately false example: reviewer must reject this specification"
+6 review item(s)

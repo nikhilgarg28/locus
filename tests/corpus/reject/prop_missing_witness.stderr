@@ -1,0 +1,5 @@
+error[L0275]: `P::At` requires 1 witness(es), but 0 were supplied; evidence follows `@`
+ --> tests/corpus/reject/prop_missing_witness.lc:3:5
+  |
+3 |     P::At @ prove!(true) //~ error: L0275 requires 1 witness
+  |     ^^^^^

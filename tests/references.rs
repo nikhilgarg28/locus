@@ -333,6 +333,7 @@ fn rustc_on(name: &str, source: &str) -> (bool, String) {
 }
 
 #[test]
+#[doc = "spec: 3.4:5"]
 fn every_aliasing_rejection_is_rustc_s_too() {
     for shape in SHAPES {
         let code = if shape.rustc_code == "E0596" {

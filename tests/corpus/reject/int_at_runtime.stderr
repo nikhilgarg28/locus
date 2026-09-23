@@ -1,21 +1,10 @@
-error[L0201]: `Int` has no runtime form
- --> tests/corpus/reject/int_at_runtime.lc:5:17
+error[L0272]: logical data cannot be converted into a runtime value
+ --> tests/corpus/reject/int_at_runtime.lc:5:16
   |
-5 | fn parameter(n: Int) -> u8 { //~ error: L0201 `Int` has no runtime form
-  |                 ^^^
+5 |     (n as Int) as u8 //~ error: L0272 logical data cannot be converted into a runtime value
+  |                ^^
+error[L0272]: a runtime if requires bool; logical Bool cannot choose runtime behavior
+ --> tests/corpus/reject/int_at_runtime.lc:8:8
   |
-  = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
-error[L0201]: `Int` has no runtime form
- --> tests/corpus/reject/int_at_runtime.lc:9:21
-  |
-9 | fn result(n: u8) -> Int { //~ error: L0201 `Int` has no runtime form
-  |                     ^^^
-  |
-  = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
-error[L0201]: `Int` has no runtime form
-  --> tests/corpus/reject/int_at_runtime.lc:16:11
-   |
-16 |     (n as Int) as u8 //~ error: L0201 `Int` has no runtime form
-   |           ^^^
-   |
-   = note: `Int` is the integers of the logic: it is written in a proposition, in a function that promises `terminates`, `no_panic`, and `no_io`, and in a proof type; at runtime a value has a machine integer type, `u8` to `i64`, and `x as Int` speaks of it in a claim
+8 |     if n > 0 { 1 } else { 0 } //~ error: L0272 a runtime if requires bool; logical Bool cannot choose runtime behavior
+  |        ^^^^^

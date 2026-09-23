@@ -55,6 +55,7 @@ fn sum_value(id: StructId, a: u8, b: u8) -> Term {
 // --- The stated gate conditions ---------------------------------------------
 
 #[test]
+#[doc = "spec: 2.1:7, 2.4:1, 2.23:3"]
 fn a_dependent_data_and_proof_result_checks() {
     // fn increment(n: u8) -> (out: u8, @[out == n.wrapping_add(1)]) {
     //     let out = n.wrapping_add(1);
@@ -112,6 +113,7 @@ fn returned_data_instantiates_a_later_proof_field() {
 }
 
 #[test]
+#[doc = "spec: 2.19:2, 2.19:3"]
 fn equal_data_with_different_proofs_is_equal_without_a_proof_step() {
     let mut definitions = Definitions::new();
     let sum = declare_sum(&mut definitions);
@@ -150,6 +152,7 @@ fn equal_data_with_different_proofs_is_equal_without_a_proof_step() {
 // --- Computation axioms -------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.1:7, 2.4:1, 2.5:2"]
 fn literal_arithmetic_is_an_explicit_step() {
     let mut ctx = Context::new();
     let one_plus_one = add_one(Term::U8(1));
@@ -202,6 +205,7 @@ fn a_false_literal_claim_stays_unprovable() {
 }
 
 #[test]
+#[doc = "spec: 2.1:7, 2.4:1, 2.5:2, 2.18:2"]
 fn projection_from_a_known_constructor_is_an_explicit_step() {
     let mut ctx = Context::new();
     let pair_type = Type::Tuple(vec![Type::U8, Type::Bool]);
@@ -236,6 +240,7 @@ fn projection_from_a_known_constructor_is_an_explicit_step() {
 }
 
 #[test]
+#[doc = "spec: 2.2:4"]
 fn the_let_axiom_is_declare_plus_assume() {
     let mut ctx = Context::new();
     let n = Term::var(ctx.declare(Type::U8).unwrap());
@@ -271,6 +276,7 @@ fn the_let_axiom_is_declare_plus_assume() {
 // --- Products and ghost rules -------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.4:6, 2.4:7, 2.4:8"]
 fn a_proof_field_is_a_logical_position_inside_executable_data() {
     let mut ctx = Context::new();
     let n = Term::var(ctx.declare(Type::U8).unwrap());
@@ -327,6 +333,7 @@ fn a_proof_field_cannot_be_projected_into_executable_data() {
 }
 
 #[test]
+#[doc = "spec: 2.1:7, 2.4:1, 2.4:9, 2.19:5"]
 fn a_proof_field_must_be_a_checked_proof_of_the_instantiated_claim() {
     let mut definitions = Definitions::new();
     let sum = declare_sum(&mut definitions);
@@ -359,6 +366,7 @@ fn a_proof_field_must_be_a_checked_proof_of_the_instantiated_claim() {
 }
 
 #[test]
+#[doc = "spec: 2.1:5, 2.3:1"]
 fn structs_are_nominal_and_tuples_are_structural() {
     let mut definitions = Definitions::new();
     let first = declare_sum(&mut definitions);
@@ -418,6 +426,7 @@ fn ill_formed_product_types_are_rejected() {
 }
 
 #[test]
+#[doc = "spec: 2.4:11"]
 fn equality_between_proofs_is_not_a_proposition() {
     let mut ctx = Context::new();
     let claim = u8_eq(Term::U8(1), Term::U8(1));
@@ -440,6 +449,7 @@ fn equality_between_proofs_is_not_a_proposition() {
 }
 
 #[test]
+#[doc = "spec: 2.1:4, 2.1:8"]
 fn a_later_field_may_depend_on_two_earlier_fields_under_a_quantifier() {
     // (a: u8, b: u8, @[forall x { a == x => b == x => a == b }]) exercises
     // telescope indices beneath another binder.
@@ -476,6 +486,7 @@ fn a_later_field_may_depend_on_two_earlier_fields_under_a_quantifier() {
 }
 
 #[test]
+#[doc = "spec: 2.18:3"]
 fn projection_computes_through_a_nested_dependent_product() {
     // (a: u8, inner: (b: u8, @[b == a])): the inner type mentions the outer
     // field. Projecting the inner product out of a literal value is typed by

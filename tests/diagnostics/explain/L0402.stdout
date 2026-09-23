@@ -1,0 +1,12 @@
+L0402: Proof store entry was not reusable
+
+The saved proof file contains invalid, stale or unsupported data. The store is only a cache: its entries must still be checked and may be replaced by fresh proof search. In locked mode a missing usable certificate remains an error; this warning does not authorize unchecked evidence.
+
+Driver/resource example; generated-input tests cover this case.
+
+```text
+printf invalid > program.lc.proofs
+locus check program.lc
+```
+
+Language, as built: [1.21:1](../../atlas.html#/doc/language/spec-1.21:1).

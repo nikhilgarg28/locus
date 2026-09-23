@@ -27,6 +27,9 @@
 //!                                        appear in the message.
 //! //~ warning: L0247 unreachable         a warning reported on this line, as
 //!                                        `error` is; the file is accepted
+//! //~ preview: logical-split          enable and exercise an unfinished feature
+//! //~ spec: 1.5:1                      focused rule citation (validated by spec.py)
+//! //~ known: LOC-123 reason             a pinned compiler rejection for an open bug
 //! //~ parse-only                         the file is parsed and nothing more
 //! ~~~
 //!
@@ -62,8 +65,8 @@
 //! rest of the batch is still compared.
 //!
 //! Values in a run line are written as the interpreters print them, which is
-//! also how Rust's `{:?}` prints them: `7`, `true`, `()`, `(1, Proved)`,
-//! `Lock { failures: 0, open: false }`, `Wrong`, `NonZero(7, Proved)`. An
+//! also how Rust's `{:?}` prints them: `7`, `true`, `()`, `(1, Erased)`,
+//! `Lock { failures: 0, open: false }`, `Wrong`, `NonZero(7, Erased)`. An
 //! argument may name its enum, as in `Event::Wrong`; a result is compared as
 //! text. A panic's message is written on one line, with `\n` for a newline
 //! and `\\` for a backslash. The operators panic since E6, and `=> panic`
@@ -92,7 +95,8 @@ use std::thread;
 use std::time::Duration;
 
 use locus::diagnostic::Diagnostic;
-use locus::elab::elaborate;
+use locus::elab::{Options, elaborate_with_options};
+use locus::preview::{Feature, Previews};
 use std::collections::HashMap;
 
 use locus::erased::{
@@ -292,6 +296,12 @@ pub fn judge(expected: &Expected, lent: &[String], seen: &Seen) -> Verdict {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Directive {
+    Spec(Vec<String>),
+    Known {
+        task: String,
+        reason: String,
+    },
+    Preview(Feature),
     Proofs(usize),
     /// A call and its outcome; `wrapping` is the outcome in a build
     /// without overflow checks, when the line gives one.
@@ -345,6 +355,50 @@ pub fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
             continue;
         }
         let directive = match key {
+            "spec" => {
+                let ids: Vec<_> = value.split([',', ' ']).filter(|s| !s.is_empty()).collect();
+                if ids.is_empty()
+                    || ids.iter().any(|id| {
+                        let parts: Vec<_> = id.split(['.', ':']).collect();
+                        parts.len() != 3
+                            || !id.contains('.')
+                            || !id.contains(':')
+                            || parts
+                                .iter()
+                                .any(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_digit()))
+                    })
+                {
+                    Err("a spec citation reads `chapter.section:paragraph`".into())
+                } else {
+                    Ok(Directive::Spec(
+                        ids.into_iter().map(str::to_owned).collect(),
+                    ))
+                }
+            }
+            "known" => match value.split_once(' ') {
+                Some((task, reason))
+                    if task.strip_prefix("LOC-").is_some_and(|n| {
+                        !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())
+                    }) && !reason.trim().is_empty() =>
+                {
+                    Ok(Directive::Known {
+                        task: task.into(),
+                        reason: reason.trim().into(),
+                    })
+                }
+                _ => Err("a known-bug marker needs `LOC-NNN` and a reason".into()),
+            },
+            "preview" => {
+                let mut previews = Previews::default();
+                previews
+                    .enable(value)
+                    .map_err(|error| error.to_string())
+                    .and_then(|()| {
+                        Feature::parse(value)
+                            .map(Directive::Preview)
+                            .map_err(|error| error.to_string())
+                    })
+            }
             "proofs" => value
                 .parse()
                 .map(Directive::Proofs)
@@ -392,7 +446,7 @@ pub fn directives(text: &str) -> Vec<(usize, Result<Directive, String>)> {
                 }
             }
             other => Err(format!(
-                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, `error`, `warning`, and `parse-only`"
+                "unknown directive `{other}`; there are `proofs`, `run`, `rust`, `error`, `warning`, `preview`, `spec`, `known`, and `parse-only`"
             )),
         };
         found.push((number, directive));
@@ -430,6 +484,7 @@ pub struct Compiled {
     pub file: String,
     pub module: String,
     pub rust: String,
+    pub debug_support: String,
     pub runs: Vec<CompiledRun>,
 }
 
@@ -589,8 +644,49 @@ pub fn examine_inner(name: &str, text: &str) -> Examined {
     let source = sources.get(file);
     let parsed = parse(source);
     let parse_only = is_parse_only(text);
-    let elaborated =
-        (parsed.is_success() && !parse_only).then(|| elaborate(source, &parsed.program));
+    let mut options = Options::default();
+    for (_, directive) in &found {
+        if let Directive::Preview(feature) = directive {
+            options
+                .previews
+                .enable(feature.name())
+                .expect("validated directive");
+        }
+    }
+    if parsed.is_success() && !parse_only {
+        // Every declared gate must be necessary, independently of the others.
+        // This catches stale directives as a feature is stabilized or a fixture changes.
+        for omitted in options.previews.iter() {
+            let mut without = Options::default();
+            for feature in options
+                .previews
+                .iter()
+                .filter(|feature| *feature != omitted)
+            {
+                without
+                    .previews
+                    .enable(feature.name())
+                    .expect("validated directive");
+            }
+            let unenabled = elaborate_with_options(source, &parsed.program, &without);
+            if !unenabled.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "L0255"
+                    && diagnostic
+                        .message
+                        .contains(&format!("`{}`", omitted.name()))
+            }) {
+                fail(
+                    0,
+                    format!(
+                        "preview `{}` must be rejected with L0255 when its flag is absent",
+                        omitted.name()
+                    ),
+                );
+            }
+        }
+    }
+    let elaborated = (parsed.is_success() && !parse_only)
+        .then(|| elaborate_with_options(source, &parsed.program, &options));
     let diagnostics = match &elaborated {
         Some(elaborated) => &elaborated.diagnostics,
         None => &parsed.diagnostics,
@@ -601,6 +697,40 @@ pub fn examine_inner(name: &str, text: &str) -> Examined {
         .map(|diagnostic| (line_of(source, diagnostic), diagnostic))
         .collect();
     let rejection = expects_rejection(text);
+    let known: Vec<_> = found
+        .iter()
+        .filter_map(|(at, directive)| match directive {
+            Directive::Known { task, reason } => Some((*at, task, reason)),
+            _ => None,
+        })
+        .collect();
+    if known.len() > 1 {
+        fail(
+            known[1].0,
+            "one known-bug marker is allowed per case".into(),
+        );
+    }
+    for (at, task, reason) in known {
+        if !rejection || parse_only {
+            fail(
+                at,
+                format!(
+                    "{task}: a known compiler bug needs pinned error directives and full checking"
+                ),
+            );
+        }
+        if !diagnostics
+            .iter()
+            .any(|d| d.level == locus::diagnostic::Level::Error)
+        {
+            fail(
+                at,
+                format!(
+                    "{task} unexpectedly passed; remove the known-bug marker ({reason}) and its error expectations"
+                ),
+            );
+        }
+    }
     for (line, why) in compare_errors(&found, reported) {
         fail(line, why);
     }
@@ -608,14 +738,23 @@ pub fn examine_inner(name: &str, text: &str) -> Examined {
         if rejection
             && !matches!(
                 directive,
-                Directive::Error { .. } | Directive::Warning { .. } | Directive::ParseOnly
+                Directive::Error { .. }
+                    | Directive::Warning { .. }
+                    | Directive::ParseOnly
+                    | Directive::Preview(_)
+                    | Directive::Spec(_)
+                    | Directive::Known { .. }
             )
         {
             fail(
                 *at,
                 "a file with an `error` directive is not run, so this expects nothing".into(),
             );
-        } else if parse_only && !matches!(directive, Directive::Error { .. } | Directive::ParseOnly)
+        } else if parse_only
+            && !matches!(
+                directive,
+                Directive::Error { .. } | Directive::ParseOnly | Directive::Spec(_)
+            )
         {
             fail(
                 *at,
@@ -694,6 +833,7 @@ pub fn examine_accepted(
         file: name.into(),
         module: module_name(name),
         rust,
+        debug_support: debug_support(module),
         runs: Vec::new(),
     };
     for (at, directive) in found {
@@ -781,14 +921,22 @@ pub fn examine_accepted(
                 let function = &module.fns[function];
                 let arguments: Vec<String> = arguments
                     .iter()
-                    .map(|value| rust_value(value, module, &compiled.module))
+                    .zip(&function.params)
+                    .map(|(value, (_, _, ty))| {
+                        rust_value_at_type(value, ty, module, &compiled.module)
+                    })
                     .collect();
                 compiled.runs.push(CompiledRun {
                     call: compiled_call(&compiled.module, function, &arguments),
                     ..run
                 });
             }
-            Directive::Error { .. } | Directive::Warning { .. } | Directive::ParseOnly => {}
+            Directive::Error { .. }
+            | Directive::Warning { .. }
+            | Directive::ParseOnly
+            | Directive::Preview(_)
+            | Directive::Spec(_)
+            | Directive::Known { .. } => {}
         }
     }
     Examined {
@@ -971,6 +1119,28 @@ impl<'a> Cursor<'a> {
     /// A value of a known type, so that `Wrong` needs no `Event::`.
     pub fn value(&mut self, ty: &EType, module: &Module) -> Result<Value, String> {
         match ty {
+            EType::Boxed(element) => Ok(Value::Tuple(vec![self.value(element, module)?])),
+            EType::Buffer(element) | EType::Array(element, _) | EType::Slice(element) => {
+                self.expect("[")?;
+                let mut values = Vec::new();
+                if !self.eat("]") {
+                    loop {
+                        values.push(self.value(element, module)?);
+                        if self.eat("]") {
+                            break;
+                        }
+                        self.expect(",")?;
+                        if self.eat("]") {
+                            break;
+                        }
+                    }
+                }
+                Ok(Value::Buffer(values))
+            }
+            EType::Ref(_, inner) => {
+                self.eat("&");
+                self.value(inner, module)
+            }
             EType::Bool => match self.word() {
                 "true" => Ok(Value::Bool(true)),
                 "false" => Ok(Value::Bool(false)),
@@ -996,18 +1166,18 @@ impl<'a> Cursor<'a> {
                 }
             }
             EType::Proved => match self.word() {
-                "Proved" => Ok(Value::Proved),
-                other => Err(format!("expected `Proved`, found `{other}`")),
+                "Erased" => Ok(Value::Proved),
+                other => Err(format!("expected `Erased`, found `{other}`")),
             },
             EType::Ghost => match self.word() {
-                "Ghost" => Ok(Value::Ghost),
-                other => Err(format!("expected `Ghost`, found `{other}`")),
+                "Erased" => Ok(Value::Ghost),
+                other => Err(format!("expected `Erased`, found `{other}`")),
             },
             EType::Tuple(tys) => {
                 self.expect("(")?;
                 Ok(Value::Tuple(self.values(tys, module, ")")?))
             }
-            EType::Struct(id) => {
+            EType::Struct(id) | EType::StructApplied(id, _) => {
                 let item = module
                     .structs
                     .iter()
@@ -1024,7 +1194,7 @@ impl<'a> Cursor<'a> {
                     .collect();
                 Ok(Value::Struct(*id, self.fields(&fields, module)?))
             }
-            EType::Enum(id) => {
+            EType::Enum(id) | EType::EnumApplied(id, _) => {
                 let item = module
                     .enums
                     .iter()
@@ -1175,6 +1345,7 @@ pub fn rust_value(value: &Value, module: &Module, path: &str) -> String {
     match value {
         // A bare number: the parameter's type fixes it, a negative one
         // included.
+        Value::Buffer(items) => format!("vec![{}]", all(items).join(", ")),
         Value::Bool(_) | Value::Int(..) => value.debug(module),
         Value::Proved | Value::Ghost => format!("{path}::{}", value.debug(module)),
         Value::Tuple(fields) => match all(fields).as_slice() {
@@ -1270,6 +1441,112 @@ pub fn main() {
     let from = std::env::args().nth(1).map_or(0, |from| from.parse().expect("an index"));
 "#;
 
+/// Observation-only trait implementations belong to the test harness, so
+/// target source need not add Debug merely to be compared with interpreters.
+fn debug_support(module: &Module) -> String {
+    use locus::typed::Derive;
+    fn lifetimes(types: impl Iterator<Item = EType>) -> String {
+        fn collect(t: &EType, names: &mut Vec<String>) {
+            match t {
+                EType::Ref(Some(l), inner) => {
+                    if l != "'_" && !names.contains(l) {
+                        names.push(l.clone());
+                    }
+                    collect(inner, names);
+                }
+                EType::Ref(None, t)
+                | EType::Boxed(t)
+                | EType::Buffer(t)
+                | EType::Array(t, _)
+                | EType::Slice(t) => collect(t, names),
+                EType::Tuple(fields) => {
+                    for t in fields {
+                        collect(t, names);
+                    }
+                }
+                EType::StructApplied(_, ls) | EType::EnumApplied(_, ls) => {
+                    for l in ls {
+                        if l != "'_" && !names.contains(l) {
+                            names.push(l.clone());
+                        }
+                    }
+                }
+                EType::Fn(args, out) => {
+                    for t in args {
+                        collect(t, names);
+                    }
+                    collect(out, names);
+                }
+                _ => {}
+            }
+        }
+        let mut names = Vec::new();
+        for ty in types {
+            collect(&ty, &mut names);
+        }
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", names.join(", "))
+        }
+    }
+    let mut out = String::new();
+    for item in &module.structs {
+        if item.derives.contains(&Derive::Debug) {
+            continue;
+        }
+        let ls = lifetimes(item.fields.iter().map(|(_, ty)| ty.clone()));
+        out.push_str(&format!("impl{ls} std::fmt::Debug for {}{ls} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ f.debug_struct({:?})", item.name, item.name));
+        for (name, _) in &item.fields {
+            out.push_str(&format!(".field({name:?}, &self.{name})"));
+        }
+        out.push_str(".finish() } }\n");
+    }
+    for item in &module.enums {
+        if item.derives.contains(&Derive::Debug) {
+            continue;
+        }
+        let ls = lifetimes(item.variants.iter().flat_map(|v| v.payload.iter().cloned()));
+        out.push_str(&format!("impl{ls} std::fmt::Debug for {}{ls} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ match self {{", item.name));
+        for variant in &item.variants {
+            let fields: Vec<_> = (0..variant.payload.len())
+                .map(|i| format!("field_{i}"))
+                .collect();
+            let pattern = match &variant.fields {
+                Some(names) => format!(
+                    " {{ {} }}",
+                    names
+                        .iter()
+                        .zip(&fields)
+                        .map(|(name, field)| format!("{name}: {field}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None if fields.is_empty() => String::new(),
+                None => format!("({})", fields.join(", ")),
+            };
+            out.push_str(&format!("Self::{}{pattern} => ", variant.name));
+            if fields.is_empty() {
+                out.push_str(&format!("f.write_str({:?}),", variant.name));
+            } else if let Some(names) = &variant.fields {
+                out.push_str(&format!("f.debug_struct({:?})", variant.name));
+                for (name, field) in names.iter().zip(&fields) {
+                    out.push_str(&format!(".field({name:?}, {field})"));
+                }
+                out.push_str(".finish(),");
+            } else {
+                out.push_str(&format!("f.debug_tuple({:?})", variant.name));
+                for field in &fields {
+                    out.push_str(&format!(".field({field})"));
+                }
+                out.push_str(".finish(),");
+            }
+        }
+        out.push_str("} } }\n");
+    }
+    out
+}
+
 /// One Rust program for every accepted file. Each file's Rust is a module,
 /// because names collide otherwise; the printer's header opens with inner
 /// attributes, which a module may begin with as a crate may, so what the
@@ -1284,8 +1561,9 @@ pub fn harness(compiled: &[Compiled]) -> String {
     // the path resolves from inside the module as it would from outside.
     let mut index = 0;
     for file in compiled {
-        source.push_str(&format!("\n// {}\nmod {} {{\n", file.file, file.module));
+        source.push_str(&format!("\n// {}\npub mod {} {{\n", file.file, file.module));
         source.push_str(&file.rust);
+        source.push_str(&file.debug_support);
         if !file.runs.is_empty() {
             source.push_str("\n#[allow(unused_imports)]\nuse crate::*;\n");
             source.push_str("\npub fn answers(from: usize) {\n");
@@ -1514,4 +1792,46 @@ pub fn files_in(directory: &str) -> Vec<(String, String)> {
             (format!("{directory}/{name}"), text)
         })
         .collect()
+}
+
+/// Physical array and slice inputs use an array expression; vector inputs
+/// own a Vec. The runtime comparison value itself only records contents.
+pub fn rust_value_at_type(value: &Value, ty: &EType, module: &Module, path: &str) -> String {
+    match (value, ty) {
+        (Value::Tuple(fields), EType::Boxed(inner)) if fields.len() == 1 => format!(
+            "Box::new({})",
+            rust_value_at_type(&fields[0], inner, module, path)
+        ),
+        (value, EType::Ref(_, inner)) => {
+            format!("&({})", rust_value_at_type(value, inner, module, path))
+        }
+        (
+            Value::Buffer(items),
+            EType::Array(element, _) | EType::Slice(element) | EType::Buffer(element),
+        ) => {
+            let items = items
+                .iter()
+                .map(|v| rust_value_at_type(v, element, module, path))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if matches!(ty, EType::Buffer(_)) {
+                format!("vec![{items}]")
+            } else {
+                format!("[{items}]")
+            }
+        }
+        (Value::Tuple(values), EType::Tuple(types)) => {
+            let entries: Vec<_> = values
+                .iter()
+                .zip(types)
+                .map(|(v, t)| rust_value_at_type(v, t, module, path))
+                .collect();
+            if entries.len() == 1 {
+                format!("({},)", entries[0])
+            } else {
+                format!("({})", entries.join(", "))
+            }
+        }
+        _ => rust_value(value, module, path),
+    }
 }

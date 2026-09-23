@@ -1,10 +1,4 @@
 locus-proofs 1
 
-obligation 3f502ee9b300d1d6 Percent::checked 1
-implies_elim(axiom(cmp_reflect[true], le[u32]($0, 100u32)), h0)
-
-obligation 636106b23c304e43 Percent::set_twice 2
-implies_elim(axiom(cmp_reflect[true], le[u32]($1, 100u32)), of_term($4))
-
-obligation c53d954da7e0d098 Percent::set_twice 4
-implies_elim(axiom(cmp_reflect[true], le[u32]($2, 100u32)), of_term($6))
+obligation 3340f9299b247295 Percent::checked 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u32]($0), 100i)), linear(int_le(view[u32]($0), 100i), 1, [(transport(literal(view[u32](100u32)), int_le(view[u32]($0), #0), implies_elim(axiom(cmp_reflect[true], le[u32]($0, 100u32)), h0)), 1)]))

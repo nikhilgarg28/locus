@@ -13,3 +13,4 @@
 #[terminates] #[no_panic] #[no_io] fn implied(p: Prop, q: Prop, hq: @q) -> @(p => q) {
     _ //~ error: L0230 cannot show `p => q`
 }
+//~ spec: 1.8:3

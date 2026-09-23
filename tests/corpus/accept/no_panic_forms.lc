@@ -64,15 +64,15 @@ fn debug(x: u8, small: @(x <= 3)) -> u8 {
 }
 
 //~ proofs: 11
-//~ run: bounded(3, Proved) => 4
-//~ run: apart(2, Proved) => 2
-//~ run: exact(3, Proved) => 3
+//~ run: bounded(3, Erased) => 4
+//~ run: apart(2, Erased) => 2
+//~ run: exact(3, Erased) => 3
 //~ run: branch(true) => 1
 //~ run: branch(false) => 0
-//~ run: dead_arm(1, Proved) => 1
-//~ run: dead_arm_named(3, Proved) => 3
-//~ run: taught(3, Proved) => (3, Proved)
-//~ run: debug(3, Proved) => 3
+//~ run: dead_arm(1, Erased) => 1
+//~ run: dead_arm_named(3, Erased) => 3
+//~ run: taught(3, Erased) => (3, Erased)
+//~ run: debug(3, Erased) => 3
 //~ rust: assert!(x <= 3_u8, "{}", "assertion failed: x <= 3");
 //~ rust: unreachable!()
 //~ rust: unreachable!("{}", "x is at most 3")

@@ -1,6 +1,6 @@
 // `rewrite`, `unfold`, and `fold` written as calls: the forms take `!` now,
 // and each is reported with the fix. A `fold` of one's own is a function.
-#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
 
 #[terminates] #[no_panic] #[no_io] fn use_nonzero(n: u8, h: @nonzero(n)) -> @(n != 0) {
     unfold(nonzero, h) //~ error: L0231 `unfold` is a built-in form, written `unfold!(...)`
@@ -15,3 +15,4 @@ fn fold(n: u8) -> u8 { n }
 fn folded(n: u8) -> u8 { fold(n) }
 
 fn prove(n: u8) -> u8 { n }
+//~ spec: 1.7:3

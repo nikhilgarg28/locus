@@ -66,6 +66,7 @@ impl Env<'_> {
             (None, Some(expected)) if expected.as_machine().is_some() => {
                 expected.as_machine().unwrap()
             }
+            (None, _) if self.total => return Ok(Value::new(Expr::Int(value), Type::Int)),
             (None, _) => MachineInt::I32,
         };
         if !ty.contains(&value) {
@@ -126,7 +127,20 @@ impl Env<'_> {
         as_span: Span,
     ) -> Elab<Value> {
         let to = self.ty(target)?;
-        let value = self.infer(inner)?;
+        if self.logical_spelling(target) {
+            return self.model_cast(inner, &to, as_span);
+        }
+        self.suppress_models += 1;
+        let value = self.infer(inner);
+        self.suppress_models -= 1;
+        let value = value?;
+        if value.ty.is_ghost() && to.as_machine().is_some() {
+            return self.fail(
+                "L0272",
+                "logical data cannot be converted into a runtime value",
+                as_span,
+            );
+        }
         let from = value.ty.clone();
         match (from.as_machine(), &to) {
             (Some(_), Type::Int) => {}

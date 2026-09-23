@@ -10,6 +10,7 @@
 //! tree into source for rustc, and is trusted.
 
 mod check;
+mod cleanup;
 mod erase;
 mod interp;
 mod rust;
@@ -17,11 +18,17 @@ mod tree;
 
 pub use check::{TypeError, check_module};
 pub use erase::{erase_enum, erase_fn, erase_struct, erase_type};
+pub(crate) use erase::{erase_enum_with_layout, erase_fn_with_layout, erase_struct_with_layout};
 pub use interp::{Interpreter, Outcome, Overflow, RunError, Value};
 pub(crate) use interp::{Stop, operate, outcome, term_value, value_term};
+pub(crate) use rust::print_root_for_modules;
 pub use rust::{
     MARKERS, Markers, Visibilities, print_items, print_module, print_module_with, print_root,
 };
 pub use tree::{
     EArm, EBlock, EEnum, EExpr, EFn, EPattern, EPlace, EStmt, EStruct, EType, EVariant, Module,
 };
+
+pub(crate) use interp::buffer_operation;
+
+pub(crate) use erase::type_with_layout;

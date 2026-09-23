@@ -35,7 +35,7 @@
 //! is a reading of the value, which asks that the local be live and leaves
 //! it so. Mentioning a moved local there is refused as a rule of the
 //! language (the claim would speak of a value the code no longer has), with
-//! `snapshot!` named as the way to keep the value: evidence obtained before
+//! a model observation named as the way to keep the value: evidence obtained before
 //! the move remains valid, being a value of its own.
 //!
 //! A lend, `&x` or `&mut x.f` as the argument of a call, reads the place
@@ -66,7 +66,7 @@ pub(super) struct Moved {
 }
 
 /// The state of the analysis that is not per local.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Moves {
     /// The test hook: `false` skips the analysis, so that the Rust printed
     /// for a program with a use after a move can be handed to rustc.
@@ -128,7 +128,7 @@ pub(super) struct MoveState(Vec<Vec<Moved>>);
 
 /// A loop's part of the state: what was moved at entry, which every back
 /// edge is compared with, and what each exit ended with.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct LoopMoves {
     entry: MoveState,
     exits: Vec<MoveState>,
@@ -187,6 +187,9 @@ impl Env<'_> {
     /// derived.
     pub(super) fn derives_trait(&self, ty: &Type, derive: Derive) -> bool {
         match ty {
+            Type::Boxed(element) | Type::Buffer(element) => {
+                derive != Derive::Copy && self.derives_trait(element, derive)
+            }
             Type::Bool
             | Type::U8
             | Type::Machine(_)
@@ -209,6 +212,9 @@ impl Env<'_> {
     /// so a type holding one has no equality at runtime.
     pub(super) fn logic_only_data(&self, ty: &Type) -> Option<String> {
         match ty {
+            Type::Boxed(element) | Type::Buffer(element) => self
+                .logic_only_data(element)
+                .map(|inner| format!("[]{inner}")),
             Type::Bool | Type::U8 | Type::Machine(_) => None,
             Type::Int | Type::Prop | Type::Proof(_) | Type::Fn(..) => Some(String::new()),
             Type::Tuple(fields) => fields.iter().enumerate().find_map(|(index, field)| {
@@ -333,6 +339,25 @@ impl Env<'_> {
         result
     }
 
+    /// Type resolution of a non-place method receiver must decide its mode
+    /// before evaluating ownership. A discarded probe disables this flag, so
+    /// nested receivers do not recursively probe again.
+    pub(super) fn needs_receiver_mode(&self) -> bool {
+        self.moves.checked && !self.total
+    }
+
+    /// A retained runtime call consumes its by-value arguments, even when
+    /// the call occurs inside an erased observation. Only the outer logical
+    /// operation reads without moving; nested runtime evaluation is ordinary.
+    pub(super) fn runtime_arguments<T>(&mut self, inside: impl FnOnce(&mut Self) -> T) -> T {
+        let ghost = std::mem::replace(&mut self.moves.ghost, 0);
+        let lend = std::mem::replace(&mut self.moves.lend, 0);
+        let result = inside(self);
+        self.moves.ghost = ghost;
+        self.moves.lend = lend;
+        result
+    }
+
     /// Before elaborating an expression that is a place rooted at a local,
     /// `x.f` or the value of a `let` or `match`: the local is not moved
     /// where it is named; `place_used` or the pattern says what is.
@@ -418,12 +443,49 @@ impl Env<'_> {
         self.use_place(slot, Vec::new(), &ty, span);
     }
 
+    pub(super) fn consume_value_place(&mut self, value: &Value, span: Span) {
+        if let Some((slot, path)) = self.place_of(&value.expr) {
+            self.use_place(slot, path, &value.ty, span);
+        }
+    }
+
+    fn shared_place(&self, slot: usize, path: &[usize]) -> bool {
+        let local = &self.names[slot];
+        let mut ty = local.ty.clone();
+        let mut expr = Expr::Var {
+            id: local.id,
+            name: local.name.clone(),
+            ty: ty.clone(),
+        };
+        for index in path {
+            ty = match &ty {
+                Type::Tuple(fields) => fields.get(*index).cloned(),
+                Type::Struct(id) => self
+                    .struct_by_id(*id)
+                    .and_then(|s| s.fields.get(*index).map(|f| f.ty.clone())),
+                _ => None,
+            }
+            .unwrap_or(Type::Prop);
+            expr = Expr::Field {
+                target: Box::new(expr),
+                index: *index,
+                name: None,
+                ty: ty.clone(),
+            };
+        }
+        matches!(
+            self.session.expression_layout(&expr),
+            crate::typed::ErasureLayout::Shared { .. }
+        )
+    }
+
     fn use_place(&mut self, slot: usize, path: Vec<usize>, ty: &Type, span: Span) {
         if self.reading() {
             self.read_place(slot, &path, span);
             return;
         }
-        if !self.read_place(slot, &path, span) || self.is_copy(ty) {
+        if !self.read_place(slot, &path, span) || self.is_copy(ty) || self.shared_place(slot, &path)
+        {
             return;
         }
         if self.behind_reference(slot) {
@@ -470,7 +532,7 @@ impl Env<'_> {
                 Diagnostic::error(
                     "L0241",
                     format!(
-                        "`{name}` was moved at line {line} and cannot be mentioned in a proposition afterwards; take `snapshot!({name})` before the move"
+                        "`{name}` was moved at line {line} and cannot be mentioned in a proposition afterwards; observe `{name}` with a model cast before the move"
                     ),
                     span,
                 )
@@ -508,6 +570,9 @@ impl Env<'_> {
         typed: &Pattern,
         span: Span,
     ) {
+        if self.reading() {
+            return;
+        }
         let Some((slot, path)) = place else {
             return;
         };
@@ -525,7 +590,12 @@ impl Env<'_> {
         match (&pattern.kind, typed) {
             (PatternKind::Group(inner), _) => self.move_parts(slot, path, inner, typed, span),
             (PatternKind::Name { .. }, Pattern::Bind { binder, .. }) => {
-                if !self.is_copy(&binder.ty) {
+                if !self.is_copy(&binder.ty)
+                    && !matches!(
+                        self.session.binding_layout(binder.id),
+                        crate::typed::ErasureLayout::Shared { .. }
+                    )
+                {
                     // Matching through a reference binds `Copy` parts only.
                     if self.behind_reference(slot) {
                         let _: Elab<()> = self.move_out_of_reference(slot, &path, span);
@@ -559,6 +629,9 @@ impl Env<'_> {
         payload: &[Binder],
         names: &[Option<&ast::Name>],
     ) {
+        if self.reading() {
+            return;
+        }
         let Some((slot, path)) = place else {
             return;
         };

@@ -1,0 +1,4 @@
+fn bad(p: u8) -> u8 {
+    let (a, b) @ evidence = p; //~ error: L0151 left of `@`
+    p
+}

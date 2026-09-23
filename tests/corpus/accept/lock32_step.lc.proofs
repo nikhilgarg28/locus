@@ -1,0 +1,28 @@
+locus-proofs 1
+
+obligation cded906090a26a31 remaining 1
+transport(transport(literal(view[u32](3u32)), (#0 ==[Int] view[u32](3u32)), refl(view[u32](3u32))), int_le(0i, int_sub(#0, view[u32]($0))), linear(int_le(0i, int_sub(3i, view[u32]($0))), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(view[u32]($0), 3i)), of_term($2)), 1)]))
+
+obligation da37b24b5bb58c1c remaining 2
+transport(transport(literal(view[u32](3u32)), (#0 ==[Int] view[u32](3u32)), refl(view[u32](3u32))), int_le(int_sub(#0, view[u32]($0)), 4294967295i), linear(int_le(int_sub(3i, view[u32]($0)), 4294967295i), 1, [(axiom(view_lower[u32], $0), 1)]))
+
+obligation 622846439bfb7e0d remaining 3
+transport(transport(h2, (#0 ==[u32] $4), refl($4)), (int_le_b(view[u32](#0), 3i) ==[bool] true), transport(transport(h0, (#0 ==[u32] $3), refl($3)), (int_le_b(view[u32](#0), 3i) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(view[u32](sub[u32](3u32, $0)), 3i)), linear(int_le(view[u32](sub[u32](3u32, $0)), 3i), 1, [(transport(transport(literal(view[u32](3u32)), ($3 ==[u32] wrap[u32](int_sub(#0, view[u32]($0)))), transport(transport(h0, (#0 ==[u32] $3), refl($3)), (#0 ==[u32] wrap[u32](int_sub(view[u32](3u32), view[u32]($0)))), axiom(op_model[sub, u32], 3u32, $0))), (view[u32]($3) ==[Int] view[u32](#0)), refl(view[u32]($3))), -1), (transport(literal(view[u32](3u32)), (view[u32]($3) ==[Int] int_sub(#0, view[u32]($0))), h1), 1), (transport(transport(h0, (#0 ==[u32] wrap[u32](int_sub(3i, view[u32]($0)))), transport(literal(view[u32](3u32)), ($3 ==[u32] wrap[u32](int_sub(#0, view[u32]($0)))), transport(transport(h0, (#0 ==[u32] $3), refl($3)), (#0 ==[u32] wrap[u32](int_sub(view[u32](3u32), view[u32]($0)))), axiom(op_model[sub, u32], 3u32, $0)))), (view[u32](sub[u32](3u32, $0)) ==[Int] view[u32](#0)), refl(view[u32](sub[u32](3u32, $0)))), 1), (axiom(view_lower[u32], $0), 1)]))))
+
+obligation 3dc8c148af1b8c5f step 1
+implies_elim(axiom(cmp_reify[true], int_le_b(int_add(view[u32]($0.0), 1i), view[u32](4294967295u32))), transport(transport(literal(view[u32](4294967295u32)), (#0 ==[Int] view[u32](4294967295u32)), refl(view[u32](4294967295u32))), int_le(int_add(view[u32]($0.0), 1i), #0), linear(int_le(int_add(view[u32]($0.0), 1i), 4294967295i), 1, [(transport(literal(view[u32](3u32)), int_le(int_add(view[u32]($0.0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u32]($0.0, 3u32)), h1)), 1)])))
+
+obligation 603c362c2715e6d1 step 2
+transport(transport(literal(view[u32](1u32)), (#0 ==[Int] view[u32](1u32)), refl(view[u32](1u32))), int_le(0i, int_add(view[u32]($0.0), #0)), linear(int_le(0i, int_add(view[u32]($0.0), 1i)), 1, [(axiom(view_lower[u32], $0.0), 1)]))
+
+obligation 90ec9863851da2e8 step 3
+transport(transport(literal(view[u32](1u32)), (#0 ==[Int] view[u32](1u32)), refl(view[u32](1u32))), int_le(int_add(view[u32]($0.0), #0), 4294967295i), transport(literal(view[u32](4294967295u32)), int_le(int_add(view[u32]($0.0), 1i), #0), implies_elim(axiom(cmp_reflect[true], int_le_b(int_add(view[u32]($0.0), 1i), view[u32](4294967295u32))), of_term($3))))
+
+obligation abcbf8cc4ba8bc3d step 4
+transport(transport(h4, (#0 ==[struct:Lock] $5), refl($5)), (int_le_b(view[u32](#0.0), 3i) ==[bool] true), transport(transport(h2, (#0 ==[u32] $4), refl($4)), (int_le_b(view[u32](struct:Lock { #0, false }.0), 3i) ==[bool] true), transport(transport(projection(struct:Lock { add[u32]($0.0, 1u32), false }.0), (#0 ==[u32] struct:Lock { add[u32]($0.0, 1u32), false }.0), refl(struct:Lock { add[u32]($0.0, 1u32), false }.0)), (int_le_b(view[u32](#0), 3i) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(view[u32](add[u32]($0.0, 1u32)), 3i)), linear(int_le(view[u32](add[u32]($0.0, 1u32)), 3i), 1, [(transport(literal(view[u32](3u32)), int_le(int_add(view[u32]($0.0), 1i), #0), implies_elim(axiom(cmp_reflect[true], lt[u32]($0.0, 3u32)), h1)), 1), (transport(transport(literal(view[u32](1u32)), ($4 ==[u32] wrap[u32](int_add(view[u32]($0.0), #0))), transport(transport(h2, (#0 ==[u32] $4), refl($4)), (#0 ==[u32] wrap[u32](int_add(view[u32]($0.0), view[u32](1u32)))), axiom(op_model[add, u32], $0.0, 1u32))), (view[u32]($4) ==[Int] view[u32](#0)), refl(view[u32]($4))), -1), (transport(literal(view[u32](1u32)), (view[u32]($4) ==[Int] int_add(view[u32]($0.0), #0)), h3), 1), (transport(transport(h2, (#0 ==[u32] wrap[u32](int_add(view[u32]($0.0), 1i))), transport(literal(view[u32](1u32)), ($4 ==[u32] wrap[u32](int_add(view[u32]($0.0), #0))), transport(transport(h2, (#0 ==[u32] $4), refl($4)), (#0 ==[u32] wrap[u32](int_add(view[u32]($0.0), view[u32](1u32)))), axiom(op_model[add, u32], $0.0, 1u32)))), (view[u32](add[u32]($0.0, 1u32)) ==[Int] view[u32](#0)), refl(view[u32](add[u32]($0.0, 1u32)))), 1)])))))
+
+obligation 05653e347ec10552 step 5
+transport(transport(projection(struct:Lock { $0.0, false }.0), (#0 ==[u32] struct:Lock { $0.0, false }.0), refl(struct:Lock { $0.0, false }.0)), fn:within_limit(view[u32](#0)), of_term(proof(of_term($1))))
+
+obligation 1bb0e5a60d206311 step 6
+transport(transport(h1, (#0 ==[struct:Lock] $3), refl($3)), (int_le_b(view[u32](#0.0), 3i) ==[bool] true), transport(transport(projection(struct:Lock { 0u32, true }.0), (#0 ==[u32] struct:Lock { 0u32, true }.0), refl(struct:Lock { 0u32, true }.0)), (int_le_b(view[u32](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u32](0u32), 3i))))

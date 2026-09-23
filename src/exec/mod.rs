@@ -6,11 +6,16 @@
 //! it while maintaining a kernel context, which is how a program path becomes
 //! the kernel statements of specification section 6.3. It is trusted.
 
+mod buffer;
 mod check;
 mod interp;
 mod ir;
+pub(crate) mod projection;
 
 pub use crate::erased::Overflow;
-pub use check::{ExecError, Program};
+pub use check::{ExecError, Program, TrustedContract};
 pub use interp::{CheckInterpreter, Lending};
-pub use ir::{Arm, Block, ExecFn, ExecFnId, ForStmt, OperateStmt, Promise, Promises, Stmt, Tail};
+pub use ir::{
+    Arm, Block, BufferStmt, BufferStorage, ExecFn, ExecFnId, ForStmt, OperateStmt, Promise,
+    Promises, Stmt, Tail,
+};

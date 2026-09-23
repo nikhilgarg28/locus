@@ -16,7 +16,7 @@ use super::term::{Axiom, Proof, ProofArm, Term, Type};
 /// arithmetic and nested quantifiers check at depth 800, and the worst shape
 /// found, a chain of transports, at 500 but not 600. The bound is about half
 /// of that worst case. Optimized builds have far more room.
-pub const MAX_DEPTH: usize = 256;
+pub use crate::limits::MAX_KERNEL_DEPTH as MAX_DEPTH;
 
 #[derive(Clone, Copy)]
 pub(super) enum Node<'a> {
@@ -60,9 +60,10 @@ pub(super) fn check_depth<'a>(
     Ok(())
 }
 
-fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
+pub(super) fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
     match node {
         Node::Type(ty) => match ty {
+            Type::Boxed(element) | Type::Buffer(element) => out.push(Node::Type(element)),
             Type::Bool
             | Type::U8
             | Type::Int
@@ -78,6 +79,13 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             }
         },
         Node::Term(term) => match term {
+            Term::Boxed(value) => out.push(Node::Term(value)),
+            Term::Buffer {
+                element, arguments, ..
+            } => {
+                out.push(Node::Type(element));
+                out.extend(arguments.iter().map(Node::Term));
+            }
             Term::Free(_)
             | Term::Bound(_)
             | Term::Bool(_)
@@ -108,6 +116,15 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             }
             Term::Proj(target, _) => out.push(Node::Term(target)),
             Term::Proof(proof) => out.push(Node::Proof(proof)),
+            Term::Lambda {
+                params,
+                result,
+                body,
+            } => {
+                out.extend(params.iter().map(Node::Type));
+                out.push(Node::Type(result));
+                out.push(Node::Term(body));
+            }
             Term::Call(callee, arguments) => {
                 out.push(Node::Term(callee));
                 out.extend(arguments.iter().map(Node::Term));
@@ -137,6 +154,13 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
         Node::Proof(proof) => {
             let arm = |arm: &'a ProofArm| Node::Proof(&arm.body);
             match proof {
+                Proof::CaseKnown { term, equation } => {
+                    out.push(Node::Term(term));
+                    out.push(Node::Proof(equation));
+                }
+                Proof::BufferStep(term) | Proof::BufferBound { value: term, .. } => {
+                    out.push(Node::Term(term))
+                }
                 Proof::Hyp(_) | Proof::Omitted => {}
                 Proof::OfTerm(term)
                 | Proof::Refl(term)
@@ -221,6 +245,24 @@ fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
                     out.push(Node::Proof(upper));
                 }
                 Proof::Axiom(axiom) => push_axiom(axiom, out),
+                Proof::PropInduction {
+                    scrutinee,
+                    motive,
+                    arms,
+                } => {
+                    out.push(Node::Proof(scrutinee));
+                    out.push(Node::Term(&motive.body));
+                    out.extend(arms.iter().map(arm));
+                }
+                Proof::DataInduction {
+                    target,
+                    motives,
+                    arms,
+                } => {
+                    out.push(Node::Term(target));
+                    out.extend(motives.iter().map(|(_, motive)| Node::Term(motive)));
+                    out.extend(arms.iter().map(arm));
+                }
                 Proof::IntInduction {
                     motive,
                     base,

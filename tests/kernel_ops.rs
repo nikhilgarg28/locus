@@ -365,6 +365,7 @@ fn rows_at(ty: MachineInt) -> Vec<Row> {
 // --- The table ----------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.17:1, 2.17:2, 2.17:3"]
 fn the_table_has_the_rows_it_says_and_no_others() {
     // Ten operations at each signed type, eight at each unsigned one, and
     // `Row::all` lists exactly those.
@@ -416,6 +417,7 @@ fn the_table_has_the_rows_it_says_and_no_others() {
 }
 
 #[test]
+#[doc = "spec: 2.4:1"]
 fn a_row_is_typed_at_its_type_in_both_modes_and_a_missing_row_is_rejected() {
     let (mut ctx, _) = setup();
     let vars: Vec<(MachineInt, Term, Term)> = ALL
@@ -548,6 +550,7 @@ fn a_row_is_typed_at_its_type_in_both_modes_and_a_missing_row_is_rejected() {
 }
 
 #[test]
+#[doc = "spec: 2.17:5"]
 fn the_literal_axiom_computes_one_row_on_literals() {
     let (mut ctx, _) = setup();
     let x = Term::var(ctx.declare(Type::machine(U16)).unwrap());
@@ -637,6 +640,7 @@ fn the_literal_axiom_computes_one_row_on_literals() {
 // --- Against Rust, at 8 bits ---------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.17:11, 2.17:4, 2.17:9"]
 fn every_pair_at_8_bits_agrees_with_rust_row_by_row() {
     let (mut ctx, prelude) = setup();
     let mut through_table = 0u64;
@@ -1126,6 +1130,7 @@ impl Vars {
 }
 
 #[test]
+#[doc = "spec: 2.17:6, 2.17:7, 2.17:8"]
 fn op_model_states_the_wrapped_meaning_of_every_row() {
     let (mut ctx, _) = setup();
     let v = Vars::new(&mut ctx);
@@ -1227,6 +1232,7 @@ fn op_model_states_the_wrapped_meaning_of_every_row() {
 }
 
 #[test]
+#[doc = "spec: 2.17:7"]
 fn op_exact_states_the_exact_result_under_its_premises_for_the_rows_that_overflow() {
     let (mut ctx, _) = setup();
     let v = Vars::new(&mut ctx);
@@ -1399,6 +1405,7 @@ fn op_exact_is_used_under_its_premises_and_follows_from_op_model_and_view_wrap()
 }
 
 #[test]
+#[doc = "spec: 2.17:10"]
 fn op_model_proves_a_closed_operation_equal_to_its_wrapped_meaning() {
     // A use at two types on literals: op_model, then evaluation of the
     // right-hand side, gives the value; and the same value by evaluating

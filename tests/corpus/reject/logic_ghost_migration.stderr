@@ -1,0 +1,8 @@
+error[L0271]: Ghost<T> has been replaced by a logical model type
+ --> tests/corpus/reject/logic_ghost_migration.lc:1:19
+  |
+1 | logic fn wrong(n: Ghost<u32>) -> Int { n }
+  |                   ^^^^^^^^^^
+  |
+  = note: use Int for a machine integer, Bool for bool, or a user-defined logical model; observe data with x as ModelType
+  = help: replace with Int

@@ -1,7 +1,7 @@
 //! Handwritten tokenizer. Locus source tokenizes as Rust: every Rust keyword
 //! is reserved and every Rust token is recognized, and there is no token Rust
-//! lacks. The words of Locus alone (`prop`, `forall`, `exists`) are names,
-//! which the parser reads in context. A literal
+//! lacks. `prop` and `logic` are reserved Locus keywords; `forall` and
+//! `exists` remain contextual names. A literal
 //! form Locus does not have yet is reported here and becomes an error token;
 //! an operator or a keyword it does not use yet is a token, and the parser
 //! reports it where it stands. Doc comments are tokens too, with their text,
@@ -16,6 +16,7 @@ use crate::source::{SourceFile, Span};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
     Name,
+    Lifetime,
     Integer,
     String,
     /// `/// text` or `/** text */`, which documents the item after it. The
@@ -25,6 +26,8 @@ pub enum TokenKind {
     InnerDoc,
     Underscore,
     Fn,
+    Prop,
+    Logic,
     Const,
     Let,
     If,
@@ -105,12 +108,15 @@ impl TokenKind {
     pub fn description(self) -> &'static str {
         match self {
             Self::Name => "an identifier",
+            Self::Lifetime => "a lifetime",
             Self::Integer => "an integer",
             Self::String => "a string",
             Self::OuterDoc => "a doc comment",
             Self::InnerDoc => "an inner doc comment (`//!`)",
             Self::Underscore => "`_`",
             Self::Fn => "`fn`",
+            Self::Prop => "`prop`",
+            Self::Logic => "`logic`",
             Self::Const => "`const`",
             Self::Let => "`let`",
             Self::If => "`if`",
@@ -188,7 +194,11 @@ impl TokenKind {
     }
 
     /// A strict or reserved keyword of Rust, which no name may be spelled as.
-    /// Every other word is a name, the words of Locus alone included.
+    /// Locus reserves `prop` and `logic` separately.
+    pub fn is_keyword(self) -> bool {
+        self.is_rust_keyword() || matches!(self, Self::Prop | Self::Logic)
+    }
+
     pub fn is_rust_keyword(self) -> bool {
         matches!(
             self,
@@ -308,12 +318,32 @@ impl Lexed {
 }
 
 pub fn lex(source: &SourceFile) -> Lexed {
+    if source.text().len() > crate::limits::MAX_SOURCE_BYTES {
+        let span = Span::new(source.id, 0, 0);
+        return Lexed {
+            tokens: vec![Token {
+                kind: TokenKind::Eof,
+                span,
+                literal: 0,
+            }],
+            literals: Vec::new(),
+            diagnostics: vec![Diagnostic::error(
+                "L0010",
+                format!(
+                    "MAX_SOURCE_BYTES limit of {} was exceeded ({} bytes)",
+                    crate::limits::MAX_SOURCE_BYTES,
+                    source.text().len()
+                ),
+                span,
+            )],
+        };
+    }
     Lexer {
         source,
         position: 0,
         tokens: Vec::new(),
         literals: Vec::new(),
-        diagnostics: Vec::new(),
+        diagnostics: crate::limits::DiagnosticBuffer::default(),
     }
     .run()
 }
@@ -323,7 +353,7 @@ struct Lexer<'a> {
     position: usize,
     tokens: Vec<Token>,
     literals: Vec<Literal>,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: crate::limits::DiagnosticBuffer,
 }
 
 /// What a backslash in a string literal stands for.
@@ -342,6 +372,9 @@ fn continues_name(character: char) -> bool {
 impl<'a> Lexer<'a> {
     fn run(mut self) -> Lexed {
         while let Some(character) = self.current() {
+            if self.diagnostics.overflowed() {
+                break;
+            }
             let start = self.position;
             if character.is_whitespace() {
                 self.advance();
@@ -377,7 +410,7 @@ impl<'a> Lexer<'a> {
         Lexed {
             tokens: self.tokens,
             literals: self.literals,
-            diagnostics: self.diagnostics,
+            diagnostics: self.diagnostics.into_vec(),
         }
     }
 
@@ -657,6 +690,13 @@ impl<'a> Lexer<'a> {
         let start = self.position;
         self.advance_while(continues_name);
         let spelling = &self.source.text()[start..self.position];
+        if spelling == "Erased" {
+            return self.invalid(
+                Diagnostic::error("L0008", "`Erased` is reserved for generated logical markers", self.span(start))
+                    .note("choose another source name; Locus supplies this zero-sized type when generating Rust"),
+                start,
+            );
+        }
         if !spelling.is_ascii() {
             self.diagnostics.push(
                 Diagnostic::error(
@@ -704,6 +744,8 @@ impl<'a> Lexer<'a> {
         }
         let kind = match spelling {
             "fn" => TokenKind::Fn,
+            "prop" => TokenKind::Prop,
+            "logic" => TokenKind::Logic,
             "const" => TokenKind::Const,
             "let" => TokenKind::Let,
             "if" => TokenKind::If,
@@ -903,7 +945,8 @@ impl<'a> Lexer<'a> {
         if second != Some('\'') && first.is_some_and(continues_name) {
             self.advance_while(continues_name);
             if self.current() != Some('\'') {
-                return self.not_yet("lifetimes and loop labels", start);
+                self.emit(TokenKind::Lifetime, start);
+                return;
             }
             // `'ab'`: a character literal with too much in it, and no lifetime.
             self.advance();

@@ -1,0 +1,5 @@
+prop Has { At(witness: Int) => { prop!(true) } }
+fn bad(h: @Has) -> @(true) {
+    let Has::At(witness) @ body = h; //~ error: L0278 cannot extract arbitrary witnesses
+    body
+}

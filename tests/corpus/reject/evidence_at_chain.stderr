@@ -1,0 +1,9 @@
+error[L0150]: `@` cannot be chained without parentheses
+ --> tests/corpus/reject/evidence_at_chain.lc:2:17
+  |
+2 |     P::A @ P::B @ h //~ error: L0150 cannot be chained
+  |          -      ^
+  |          |
+  |          the first `@` is here
+  |
+  = note: parenthesize the nested construction or pattern, as in `Outer::Arm @ (Inner::Arm @ h)` or `whole @ (Pred::Arm @ h)`

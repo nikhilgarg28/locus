@@ -75,6 +75,7 @@ fn truth(prelude: &Prelude) -> Proof {
 // --- The stated gate conditions ---------------------------------------------
 
 #[test]
+#[doc = "spec: 2.6:2, 2.6:3, 2.6:4, 2.6:6"]
 fn an_indexed_proposition_match_supplies_its_index_equation() {
     // h: @Small(n)  |-  n == 2 || n == 3
     let (mut definitions, prelude) = Definitions::with_prelude();
@@ -134,6 +135,7 @@ fn an_indexed_proposition_match_supplies_its_index_equation() {
 }
 
 #[test]
+#[doc = "spec: 2.6:7, 2.6:8"]
 fn a_match_on_a_proof_can_only_produce_a_proof() {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let light = declare_light(&mut definitions);
@@ -229,6 +231,7 @@ fn a_variant_always_concludes_its_own_proposition() {
 }
 
 #[test]
+#[doc = "spec: 2.19:6"]
 fn constructor_disjointness_and_injectivity_are_derived() {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let light = declare_light(&mut definitions);
@@ -315,6 +318,7 @@ fn constructor_disjointness_and_injectivity_are_derived() {
 // --- Case analysis on data -----------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.4:1, 2.5:2"]
 fn each_arm_of_a_case_on_data_learns_which_constructor_it_has() {
     // forall l: Light, l == Red || l == Green
     let (mut definitions, prelude) = Definitions::with_prelude();
@@ -403,6 +407,7 @@ fn if_is_case_on_bool_and_each_branch_learns_the_condition() {
 }
 
 #[test]
+#[doc = "spec: 2.4:1, 2.4:2, 2.4:3, 2.5:2"]
 fn a_payload_with_a_proof_field_gives_each_arm_its_evidence() {
     // enum Checked { None, Some(value: u8, @[value == 7]) }
     let (mut definitions, prelude) = Definitions::with_prelude();
@@ -498,6 +503,7 @@ fn a_payload_with_a_proof_field_gives_each_arm_its_evidence() {
 }
 
 #[test]
+#[doc = "spec: 2.1:14, 2.6:1, 2.6:3"]
 fn arms_must_match_the_declaration() {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let light = declare_light(&mut definitions);
@@ -545,6 +551,7 @@ fn arms_must_match_the_declaration() {
 // --- False, And, Exists, excluded middle --------------------------------------
 
 #[test]
+#[doc = "spec: 2.6:7, 2.6:9"]
 fn false_has_no_proofs_and_proves_anything() {
     let (definitions, prelude) = Definitions::with_prelude();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
@@ -584,6 +591,7 @@ fn false_has_no_proofs_and_proves_anything() {
 }
 
 #[test]
+#[doc = "spec: 2.6:9"]
 fn conjunction_is_a_single_variant_proposition() {
     let (definitions, prelude) = Definitions::with_prelude();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
@@ -622,6 +630,7 @@ fn conjunction_is_a_single_variant_proposition() {
 }
 
 #[test]
+#[doc = "spec: 2.7:1, 2.7:2"]
 fn an_existential_is_opened_only_to_prove_something_else() {
     let (definitions, _) = Definitions::with_prelude();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
@@ -697,6 +706,7 @@ fn an_existential_is_opened_only_to_prove_something_else() {
 }
 
 #[test]
+#[doc = "spec: 2.8:1, 2.8:2"]
 fn excluded_middle_is_available_and_its_use_is_recorded() {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let signature = Type::function(1, |params| match params {
@@ -792,6 +802,7 @@ fn comparison_covers_the_new_terms() {
 }
 
 #[test]
+#[doc = "spec: 2.4:1, 2.4:2, 2.5:2"]
 fn a_branch_of_a_math_function_knows_which_branch_it_is() {
     // math fn preserve(n: u8) -> (out: u8, @[out == n]) {
     //     if n == 0 { (0, _) } else { (n, _) }
@@ -911,4 +922,191 @@ fn a_branch_of_a_math_function_knows_which_branch_it_is() {
         infer_proof(&mut ctx, &Proof::CaseStep(reduced.clone())),
         Ok(u8_eq(reduced, Term::U8(2)))
     );
+}
+
+// Reconciliation L2: named arms are witnesses followed by exactly one body proof.
+#[test]
+#[doc = "spec: 2.27:1, 2.27:2"]
+fn named_arms_check_zero_one_and_two_witnesses_and_computed_bodies() {
+    let (mut definitions, prelude) = Definitions::with_prelude();
+    let zero = definitions
+        .declare_prop(
+            vec![],
+            vec![PropVariant::arm(unit(), |_| prelude.truth_prop())],
+        )
+        .unwrap();
+    let one = definitions
+        .declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(
+                Type::Tuple(vec![Type::Int, Type::Int]),
+                |p| Term::eq(Type::Int, p[0].clone(), p[1].clone()),
+            )],
+        )
+        .unwrap();
+    let two = definitions
+        .declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(
+                Type::Tuple(vec![Type::Int, Type::Int, Type::Int]),
+                |p| {
+                    prelude.and_prop(
+                        Term::int_le(p[1].clone(), p[0].clone()),
+                        Term::int_le(p[0].clone(), p[2].clone()),
+                    )
+                },
+            )],
+        )
+        .unwrap();
+    let reflexive = definitions
+        .declare_fn(&Type::Fn(vec![Type::Int], Box::new(Type::Prop)), |p| {
+            Term::eq(Type::Int, p[0].clone(), p[0].clone())
+        })
+        .unwrap();
+    let computed = definitions
+        .declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(Type::Tuple(vec![Type::Int]), |p| {
+                Term::call(Term::Fn(reflexive), p.to_vec())
+            })],
+        )
+        .unwrap();
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    let z = Proof::Construct {
+        prop: zero,
+        variant: 0,
+        params: vec![],
+        payload: vec![Term::proof(truth(&prelude))],
+    };
+    assert_eq!(infer_proof(&mut ctx, &z), Ok(Term::PropApp(zero, vec![])));
+    let n = Term::int(3);
+    let single = Proof::Construct {
+        prop: one,
+        variant: 0,
+        params: vec![n.clone()],
+        payload: vec![n.clone(), Term::proof(Proof::Refl(n.clone()))],
+    };
+    assert_eq!(
+        infer_proof(&mut ctx, &single),
+        Ok(Term::PropApp(one, vec![n.clone()]))
+    );
+    let (lo, hi) = (Term::int(0), Term::int(10));
+    let left = Term::int_le(lo.clone(), n.clone());
+    let right = Term::int_le(n.clone(), hi.clone());
+    let evidence = Proof::Construct {
+        prop: prelude.and,
+        variant: 0,
+        params: vec![left.clone(), right.clone()],
+        payload: vec![
+            Term::proof(Proof::Evaluate(left)),
+            Term::proof(Proof::Evaluate(right)),
+        ],
+    };
+    let pair = Proof::Construct {
+        prop: two,
+        variant: 0,
+        params: vec![n.clone()],
+        payload: vec![lo, hi, Term::proof(evidence)],
+    };
+    assert_eq!(
+        infer_proof(&mut ctx, &pair),
+        Ok(Term::PropApp(two, vec![n.clone()]))
+    );
+    let call = Term::call(Term::Fn(reflexive), vec![n.clone()]);
+    let folded = locus::kernel::derive::fold_claim(&call, Proof::Refl(n.clone()));
+    let call_evidence = Proof::Construct {
+        prop: computed,
+        variant: 0,
+        params: vec![n.clone()],
+        payload: vec![Term::proof(folded)],
+    };
+    assert_eq!(
+        infer_proof(&mut ctx, &call_evidence),
+        Ok(Term::PropApp(computed, vec![n]))
+    );
+}
+
+#[test]
+fn named_arm_evidence_is_mandatory_unique_and_checked_after_its_witnesses() {
+    let (mut definitions, prelude) = Definitions::with_prelude();
+    let predicate = definitions
+        .declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(
+                Type::Tuple(vec![Type::Int, Type::Int]),
+                |p| Term::eq(Type::Int, p[0].clone(), p[1].clone()),
+            )],
+        )
+        .unwrap();
+    let extra = Type::tuple(|prior| match prior {
+        [] => Some(Type::Int),
+        [_] => Some(Type::proof(prelude.truth_prop())),
+        _ => None,
+    });
+    assert!(matches!(
+        definitions.declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(extra, |_| prelude.truth_prop())]
+        ),
+        Err(KernelError::ProofParameter(_))
+    ));
+    assert!(
+        definitions
+            .declare_prop(vec![], vec![PropVariant::arm(unit(), |_| Term::Bool(true))])
+            .is_err()
+    );
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    for payload in [
+        vec![Term::int(3)],
+        vec![
+            Term::int(3),
+            Term::proof(Proof::Refl(Term::int(3))),
+            Term::proof(Proof::Refl(Term::int(3))),
+        ],
+        vec![Term::U8(3), Term::proof(Proof::Refl(Term::int(3)))],
+        vec![Term::int(4), Term::proof(Proof::Refl(Term::int(3)))],
+    ] {
+        assert!(
+            infer_proof(
+                &mut ctx,
+                &Proof::Construct {
+                    prop: predicate,
+                    variant: 0,
+                    params: vec![Term::int(3)],
+                    payload
+                }
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+#[doc = "spec: 2.27:3"]
+fn named_arm_matching_exposes_the_witness_and_exact_body_evidence() {
+    let (mut definitions, _) = Definitions::with_prelude();
+    let predicate = definitions
+        .declare_prop(
+            vec![Type::Int],
+            vec![PropVariant::arm(
+                Type::Tuple(vec![Type::Int, Type::Int]),
+                |p| Term::eq(Type::Int, p[0].clone(), p[1].clone()),
+            )],
+        )
+        .unwrap();
+    let mut ctx = Context::with_definitions(Rc::new(definitions));
+    let n = Term::var(ctx.declare(Type::Int).unwrap());
+    let p = Term::PropApp(predicate, vec![n.clone()]);
+    let evidence = ctx.assume(p).unwrap();
+    let goal = Term::exists(Type::Int, |w| Term::eq(Type::Int, n.clone(), w));
+    let proof = Proof::CaseProof {
+        scrutinee: Box::new(Proof::hyp(evidence)),
+        goal: goal.clone(),
+        arms: vec![Proof::arm(2, 0, |fields, _| Proof::ExistsIntro {
+            prop: goal.clone(),
+            witness: fields[0].clone(),
+            proof: Box::new(Proof::OfTerm(fields[1].clone())),
+        })],
+    };
+    assert_eq!(check_proof(&mut ctx, &proof, &goal), Ok(()));
 }

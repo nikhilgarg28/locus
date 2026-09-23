@@ -32,10 +32,10 @@ use crate::kernel::{
 };
 
 /// The most bytes of text one term or proof may be.
-pub const MAX_TEXT: usize = 4 << 20;
+pub use crate::limits::MAX_PROOF_TEXT_BYTES as MAX_TEXT;
 
 /// The most digits a literal may have.
-pub const MAX_DIGITS: usize = 4096;
+pub use crate::limits::MAX_PROOF_DIGITS as MAX_DIGITS;
 
 // --- Names ---------------------------------------------------------------------
 
@@ -78,7 +78,7 @@ impl<Id: Copy + Eq + Hash> Table<Id> {
 }
 
 /// The names of the declarations a term may mention. A name is an
-/// identifier, `[A-Za-z_][A-Za-z0-9_]*`; anything else is refused and the
+/// path of identifiers, `[A-Za-z_][A-Za-z0-9_]*(::identifier)*`; anything else is refused and the
 /// declaration stays unnamed, so a term that mentions it cannot be printed.
 #[derive(Clone, Debug, Default)]
 pub struct Names {
@@ -102,25 +102,25 @@ impl Names {
     }
 
     pub fn function(&mut self, name: &str, id: FnId) {
-        if is_identifier(name) {
+        if name.split("::").all(is_identifier) {
             self.fns.insert(name, id);
         }
     }
 
     pub fn structure(&mut self, name: &str, id: StructId) {
-        if is_identifier(name) {
+        if name.split("::").all(is_identifier) {
             self.structs.insert(name, id);
         }
     }
 
     pub fn enumeration(&mut self, name: &str, id: EnumId) {
-        if is_identifier(name) {
+        if name.split("::").all(is_identifier) {
             self.enums.insert(name, id);
         }
     }
 
     pub fn proposition(&mut self, name: &str, id: PropId) {
-        if is_identifier(name) {
+        if name.split("::").all(is_identifier) {
             self.props.insert(name, id);
         }
     }
@@ -250,6 +250,16 @@ impl Printer<'_> {
 
     fn ty(&mut self, ty: &Type) -> Printed {
         match ty {
+            Type::Boxed(element) => {
+                self.push("box_type(");
+                self.ty(element)?;
+                self.push(")");
+            }
+            Type::Buffer(element) => {
+                self.push("buffer(");
+                self.ty(element)?;
+                self.push(")");
+            }
             Type::Bool => self.push("bool"),
             Type::U8 => self.push("u8"),
             Type::Int => self.push("Int"),
@@ -278,6 +288,12 @@ impl Printer<'_> {
 
     fn term(&mut self, term: &Term) -> Printed {
         match term {
+            Term::Boxed(value) => self.boxed_term(value),
+            Term::Buffer {
+                op,
+                element,
+                arguments,
+            } => self.buffer_term(*op, element, arguments),
             Term::Free(id) => self.free_var(*id),
             Term::Bound(index) => self.number("#", index),
             Term::Bool(value) => self.number("", value),
@@ -294,6 +310,11 @@ impl Printer<'_> {
             Term::Proj(target, index) => self.projection(target, *index),
             Term::Proof(proof) => self.proof_term(proof),
             Term::Fn(id) => self.fn_name(*id),
+            Term::Lambda {
+                params,
+                result,
+                body,
+            } => self.lambda(params, result, body),
             Term::Call(callee, arguments) => self.call(callee, arguments),
             Term::Variant(id, index, payload) => self.variant(*id, *index, payload),
             Term::Case {
@@ -305,6 +326,46 @@ impl Printer<'_> {
             Term::Absurd(proof, ty) => self.absurd(proof, ty),
             Term::For(looped) => self.for_loop(looped),
         }
+    }
+
+    fn lambda(&mut self, params: &[Type], result: &Type, body: &Term) -> Printed {
+        self.push("lambda(");
+        self.types(params)?;
+        self.push(", ");
+        self.ty(result)?;
+        self.push(", ");
+        self.term(body)?;
+        self.push(")");
+        Ok(())
+    }
+
+    fn boxed_term(&mut self, value: &Term) -> Printed {
+        self.push("boxed(");
+        self.term(value)?;
+        self.push(")");
+        Ok(())
+    }
+
+    fn buffer_term(
+        &mut self,
+        op: crate::kernel::BufferOp,
+        element: &Type,
+        arguments: &[Term],
+    ) -> Printed {
+        let name = match op {
+            crate::kernel::BufferOp::Literal => "buffer_literal",
+            crate::kernel::BufferOp::Length => "buffer_length",
+            crate::kernel::BufferOp::Get => "buffer_get",
+            crate::kernel::BufferOp::Set => "buffer_set",
+            crate::kernel::BufferOp::Push => "buffer_push",
+        };
+        self.push(name);
+        self.push("(");
+        self.ty(element)?;
+        self.push(", ");
+        self.terms(arguments)?;
+        self.push(")");
+        Ok(())
     }
 
     fn free_var(&mut self, id: VarId) -> Printed {
@@ -462,9 +523,22 @@ impl Printer<'_> {
         Ok(())
     }
 
+    fn case_known(&mut self, term: &Term, equation: &Proof) -> Printed {
+        self.push("case_known(");
+        self.term(term)?;
+        self.push(", ");
+        self.proof(equation)?;
+        self.push(")");
+        Ok(())
+    }
+
     fn proof(&mut self, proof: &Proof) -> Printed {
         let rule = proof.rule_name();
         match proof {
+            Proof::CaseKnown { term, equation } => self.case_known(term, equation),
+            Proof::BufferStep(term) | Proof::BufferBound { value: term, .. } => {
+                self.on_term(rule, term)
+            }
             Proof::Hyp(HypRef::Free(id)) => self.free_hyp(*id),
             Proof::Hyp(HypRef::Bound(index)) => self.number("#h", index),
             Proof::OfTerm(term)
@@ -517,6 +591,16 @@ impl Printer<'_> {
                 Ok(())
             }
             Proof::Axiom(axiom) => self.axiom(axiom),
+            Proof::PropInduction {
+                scrutinee,
+                motive,
+                arms,
+            } => self.prop_induction(scrutinee, motive, arms),
+            Proof::DataInduction {
+                target,
+                motives,
+                arms,
+            } => self.data_induction(target, motives, arms),
             Proof::IntInduction {
                 motive,
                 base,
@@ -669,6 +753,45 @@ impl Printer<'_> {
         Ok(())
     }
 
+    fn prop_induction(
+        &mut self,
+        scrutinee: &Proof,
+        motive: &TermArm,
+        arms: &[ProofArm],
+    ) -> Printed {
+        self.push("prop_induction(");
+        self.proof(scrutinee)?;
+        let _ = write!(self.out, ", |{}| ", motive.binders);
+        self.term(&motive.body)?;
+        self.push(", ");
+        self.arms(arms)?;
+        self.push(")");
+        Ok(())
+    }
+
+    fn data_induction(
+        &mut self,
+        target: &Term,
+        motives: &[(EnumId, Term)],
+        arms: &[ProofArm],
+    ) -> Printed {
+        self.push("data_induction(");
+        self.term(target)?;
+        self.push(", [");
+        self.list(motives, |this, (id, motive)| {
+            this.push("(");
+            this.enum_name(*id)?;
+            this.push(", ");
+            this.term(motive)?;
+            this.push(")");
+            Ok(())
+        })?;
+        self.push("], ");
+        self.arms(arms)?;
+        self.push(")");
+        Ok(())
+    }
+
     fn axiom(&mut self, axiom: &Axiom) -> Printed {
         self.push("axiom(");
         self.push(axiom.name());
@@ -686,7 +809,7 @@ impl Printer<'_> {
             Axiom::OpModel(op, ty, _) | Axiom::OpExact(op, ty, _) => {
                 let _ = write!(self.out, "[{}, {}]", op.name(), ty.name());
             }
-            Axiom::CmpReflect(_, flag) => {
+            Axiom::CmpReflect(_, flag) | Axiom::CmpReify(_, flag) => {
                 let _ = write!(self.out, "[{flag}]");
             }
             _ => {}
@@ -884,9 +1007,13 @@ fn lex(text: &str) -> Result<Vec<(usize, Tok<'_>)>, ParseError> {
         if byte.is_ascii_digit()
             || (byte == b'-' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit))
         {
-            let end = digits_from(at + usize::from(byte == b'-'));
-            if end - at > MAX_DIGITS + 1 {
-                return Err(error(at, "the literal has too many digits"));
+            let digits_at = at + usize::from(byte == b'-');
+            let end = digits_from(digits_at);
+            if end - digits_at > MAX_DIGITS {
+                return Err(error(
+                    at,
+                    &format!("MAX_PROOF_DIGITS limit of {MAX_DIGITS} was exceeded"),
+                ));
             }
             let mut suffix_end = end;
             while suffix_end < bytes.len() && bytes[suffix_end].is_ascii_alphanumeric() {
@@ -1019,7 +1146,9 @@ impl<'a> Parser<'a> {
     /// One more level of nesting, bounded by the kernel's depth limit.
     fn nested<T>(&mut self, parse: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
         if self.depth >= MAX_DEPTH {
-            return self.error("nested too deeply");
+            return self.error(format!(
+                "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
+            ));
         }
         self.depth += 1;
         let result = parse(self);
@@ -1095,15 +1224,23 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn reference(&mut self) -> Parsed<&'a str> {
+    fn reference(&mut self) -> Parsed<String> {
         self.expect(":")?;
-        self.identifier()
+        let mut name = self.identifier()?.to_owned();
+        while self.peek() == Tok::Punct("::")
+            && matches!(self.tokens.get(self.at + 1), Some((_, Tok::Ident(_))))
+        {
+            self.bump();
+            name.push_str("::");
+            name.push_str(self.identifier()?);
+        }
+        Ok(name)
     }
 
     fn struct_id(&mut self) -> Parsed<StructId> {
         let at = self.offset();
         let name = self.reference()?;
-        self.names.structs.id(name).ok_or_else(|| ParseError {
+        self.names.structs.id(&name).ok_or_else(|| ParseError {
             at,
             message: format!("no struct is named `{name}`"),
         })
@@ -1112,7 +1249,7 @@ impl<'a> Parser<'a> {
     fn enum_id(&mut self) -> Parsed<EnumId> {
         let at = self.offset();
         let name = self.reference()?;
-        self.names.enums.id(name).ok_or_else(|| ParseError {
+        self.names.enums.id(&name).ok_or_else(|| ParseError {
             at,
             message: format!("no enum is named `{name}`"),
         })
@@ -1121,7 +1258,7 @@ impl<'a> Parser<'a> {
     fn prop_id(&mut self) -> Parsed<PropId> {
         let at = self.offset();
         let name = self.reference()?;
-        self.names.props.id(name).ok_or_else(|| ParseError {
+        self.names.props.id(&name).ok_or_else(|| ParseError {
             at,
             message: format!("no proposition is named `{name}`"),
         })
@@ -1130,7 +1267,7 @@ impl<'a> Parser<'a> {
     fn fn_id(&mut self) -> Parsed<FnId> {
         let at = self.offset();
         let name = self.reference()?;
-        self.names.fns.id(name).ok_or_else(|| ParseError {
+        self.names.fns.id(&name).ok_or_else(|| ParseError {
             at,
             message: format!("no function is named `{name}`"),
         })
@@ -1140,6 +1277,17 @@ impl<'a> Parser<'a> {
 
     fn ty(&mut self) -> Parsed<Type> {
         self.nested(Self::ty_inner)
+    }
+
+    fn container_type(&mut self, boxed: bool) -> Parsed<Type> {
+        self.expect("(")?;
+        let element = Box::new(self.ty()?);
+        self.expect(")")?;
+        Ok(if boxed {
+            Type::Boxed(element)
+        } else {
+            Type::Buffer(element)
+        })
     }
 
     fn ty_inner(&mut self) -> Parsed<Type> {
@@ -1152,6 +1300,8 @@ impl<'a> Parser<'a> {
             Tok::Ident(name) => {
                 self.bump();
                 match name {
+                    "box_type" => self.container_type(true),
+                    "buffer" => self.container_type(false),
                     "bool" => Ok(Type::Bool),
                     "Int" => Ok(Type::Int),
                     "Prop" => Ok(Type::Prop),
@@ -1273,21 +1423,31 @@ impl<'a> Parser<'a> {
         if self.eat(")") {
             return self.tuple_type(Vec::new());
         }
-        let first = self.term()?;
+        let first = Box::new(self.term()?);
         if self.eat("==[") {
-            return self.equation(first);
+            return self.equation(*first);
         }
         if self.eat("=>") {
-            let conclusion = self.term()?;
-            self.expect(")")?;
-            return Ok(Term::Implies(Box::new(first), Box::new(conclusion)));
+            return self.implication(first);
         }
-        let mut values = vec![first];
+        self.tuple_tail(first)
+    }
+
+    // Boxing the pending term bounds parser frames at MAX_DEPTH on a 1 MiB stack.
+    #[allow(clippy::boxed_local)]
+    fn tuple_tail(&mut self, first: Box<Term>) -> Parsed<Term> {
+        let mut values = vec![*first];
         while self.eat(",") {
             values.push(self.term()?);
         }
         self.expect(")")?;
         self.tuple_type(values)
+    }
+
+    fn implication(&mut self, first: Box<Term>) -> Parsed<Term> {
+        let conclusion = self.term()?;
+        self.expect(")")?;
+        Ok(Term::Implies(first, Box::new(conclusion)))
     }
 
     /// After `(left ==[`: the type, `]`, the right side, and `)`.
@@ -1323,6 +1483,10 @@ impl<'a> Parser<'a> {
 
     fn keyword_term(&mut self, word: &str) -> Parsed<Term> {
         match word {
+            "boxed" => self.boxed_term(),
+            "buffer_literal" | "buffer_length" | "buffer_get" | "buffer_set" | "buffer_push" => {
+                self.buffer_term(word)
+            }
             "true" => Ok(Term::Bool(true)),
             "false" => Ok(Term::Bool(false)),
             "forall" => self.quantifier(true),
@@ -1331,12 +1495,55 @@ impl<'a> Parser<'a> {
             "enum" => self.variant(),
             "prop" => self.prop_app(),
             "fn" => Ok(Term::Fn(self.fn_id()?)),
+            "lambda" => self.lambda(),
             "proof" => self.proof_term(),
             "case" => self.case(),
             "absurd" => self.absurd(),
             "for" => self.for_loop(),
             other => self.prim_term(other),
         }
+    }
+
+    fn lambda(&mut self) -> Parsed<Term> {
+        self.expect("(")?;
+        let params = self.types()?;
+        self.expect(",")?;
+        let result = self.ty()?;
+        self.expect(",")?;
+        let body = Box::new(self.term()?);
+        self.expect(")")?;
+        Ok(Term::Lambda {
+            params,
+            result,
+            body,
+        })
+    }
+
+    fn boxed_term(&mut self) -> Parsed<Term> {
+        self.expect("(")?;
+        let value = Box::new(self.term()?);
+        self.expect(")")?;
+        Ok(Term::Boxed(value))
+    }
+
+    fn buffer_term(&mut self, word: &str) -> Parsed<Term> {
+        let op = match word {
+            "buffer_literal" => crate::kernel::BufferOp::Literal,
+            "buffer_length" => crate::kernel::BufferOp::Length,
+            "buffer_get" => crate::kernel::BufferOp::Get,
+            "buffer_set" => crate::kernel::BufferOp::Set,
+            _ => crate::kernel::BufferOp::Push,
+        };
+        self.expect("(")?;
+        let element = self.ty()?;
+        self.expect(",")?;
+        let arguments = self.terms()?;
+        self.expect(")")?;
+        Ok(Term::Buffer {
+            op,
+            element,
+            arguments,
+        })
     }
 
     fn struct_value(&mut self) -> Parsed<Term> {
@@ -1453,6 +1660,9 @@ impl<'a> Parser<'a> {
             "int_rem" => Some(Prim::IntRem),
             "int_neg" => Some(Prim::IntNeg),
             "int_le" => Some(Prim::IntLe),
+            "int_eq_b" => Some(Prim::IntCmp(CmpOp::Eq)),
+            "int_lt_b" => Some(Prim::IntCmp(CmpOp::Lt)),
+            "int_le_b" => Some(Prim::IntCmp(CmpOp::Le)),
             _ => None,
         };
         if let Some(prim) = plain {
@@ -1494,18 +1704,31 @@ impl<'a> Parser<'a> {
     }
 
     fn proof(&mut self) -> Parsed<Proof> {
-        self.nested(Self::proof_inner)
+        // Avoid an extra large Result<Proof> frame at every recursive level.
+        if self.depth >= MAX_DEPTH {
+            return self.error(format!(
+                "MAX_KERNEL_DEPTH limit of {MAX_DEPTH} was exceeded"
+            ));
+        }
+        self.depth += 1;
+        let result = self.proof_inner();
+        self.depth -= 1;
+        result
     }
 
     /// A rule that has arguments, by name: what reads them, after the rule's
     /// opening parenthesis. `omitted` and the hypotheses are leaves.
-    const RULES: [(&'static str, Rule<'a>); 23] = [
+    const RULES: [(&'static str, Rule<'a>); 29] = [
+        ("buffer_step", Self::buffer_step),
+        ("buffer_lower", Self::buffer_lower),
+        ("buffer_upper", Self::buffer_upper),
         ("of_term", Self::of_term),
         ("refl", Self::refl),
         ("projection", Self::projection),
         ("literal", Self::literal_proof),
         ("definition", Self::definition),
         ("case_step", Self::case_step),
+        ("case_known", Self::case_known),
         ("excluded_middle", Self::excluded_middle),
         ("for_empty", Self::for_empty),
         ("evaluate", Self::evaluate),
@@ -1522,6 +1745,8 @@ impl<'a> Parser<'a> {
         ("for_step", Self::for_step),
         ("axiom", Self::axiom_proof),
         ("int_induction", Self::int_induction),
+        ("data_induction", Self::data_induction),
+        ("prop_induction", Self::prop_induction),
         ("linear", Self::linear),
     ];
 
@@ -1570,6 +1795,22 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn buffer_step(&mut self) -> Parsed<Proof> {
+        Ok(Proof::BufferStep(self.term()?))
+    }
+    fn buffer_lower(&mut self) -> Parsed<Proof> {
+        Ok(Proof::BufferBound {
+            value: self.term()?,
+            upper: false,
+        })
+    }
+    fn buffer_upper(&mut self) -> Parsed<Proof> {
+        Ok(Proof::BufferBound {
+            value: self.term()?,
+            upper: true,
+        })
+    }
+
     fn of_term(&mut self) -> Parsed<Proof> {
         Ok(Proof::OfTerm(self.term()?))
     }
@@ -1588,6 +1829,16 @@ impl<'a> Parser<'a> {
 
     fn definition(&mut self) -> Parsed<Proof> {
         Ok(Proof::Definition(self.term()?))
+    }
+
+    fn case_known(&mut self) -> Parsed<Proof> {
+        let term = self.term()?;
+        self.expect(",")?;
+        let equation = self.proof()?;
+        Ok(Proof::CaseKnown {
+            term,
+            equation: Box::new(equation),
+        })
     }
 
     fn case_step(&mut self) -> Parsed<Proof> {
@@ -1733,6 +1984,45 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn prop_induction(&mut self) -> Parsed<Proof> {
+        let scrutinee = Box::new(self.proof()?);
+        self.expect(",")?;
+        self.expect("|")?;
+        let binders = self.count()?;
+        self.expect("|")?;
+        let body = self.term()?;
+        self.expect(",")?;
+        let arms = self.arms()?;
+        Ok(Proof::PropInduction {
+            scrutinee,
+            motive: TermArm { binders, body },
+            arms,
+        })
+    }
+
+    fn data_induction(&mut self) -> Parsed<Proof> {
+        let target = self.term()?;
+        self.expect(",")?;
+        let motives = self.list("[", "]", |this| {
+            this.expect("(")?;
+            if this.identifier()? != "enum" {
+                return this.error("expected an enum motive");
+            }
+            let id = this.enum_id()?;
+            this.expect(",")?;
+            let motive = this.term()?;
+            this.expect(")")?;
+            Ok((id, motive))
+        })?;
+        self.expect(",")?;
+        let arms = self.arms()?;
+        Ok(Proof::DataInduction {
+            target,
+            motives,
+            arms,
+        })
+    }
+
     fn induction(&mut self) -> Parsed<Proof> {
         let motive = self.term()?;
         self.expect(",")?;
@@ -1852,7 +2142,7 @@ enum Params {
 
 /// Every axiom by name, with the shape of its parameters. Its terms are
 /// counted by `AxiomHead::arity`.
-const AXIOMS: [(&str, Params); 33] = [
+const AXIOMS: [(&str, Params); 34] = [
     ("int_add_assoc", Params::None),
     ("int_add_comm", Params::None),
     ("int_add_zero", Params::None),
@@ -1886,6 +2176,7 @@ const AXIOMS: [(&str, Params); 33] = [
     ("op_model", Params::Row),
     ("op_exact", Params::Row),
     ("cmp_reflect", Params::Flag),
+    ("cmp_reify", Params::Flag),
 ];
 
 enum AxiomParams {
@@ -1963,6 +2254,7 @@ impl AxiomHead {
             ("wrap_period", AxiomParams::Type(ty)) => Axiom::WrapPeriod(ty, next()?),
             ("cast_def", AxiomParams::Cast(from, to)) => Axiom::CastDef(from, to, next()?),
             ("cmp_reflect", AxiomParams::Flag(flag)) => Axiom::CmpReflect(next()?, flag),
+            ("cmp_reify", AxiomParams::Flag(flag)) => Axiom::CmpReify(next()?, flag),
             _ => return None,
         };
         Some(axiom)
@@ -1973,7 +2265,7 @@ fn parser<'a>(text: &'a str, ctx: &Context, names: &'a Names) -> Parsed<Parser<'
     if text.len() > MAX_TEXT {
         return Err(ParseError {
             at: MAX_TEXT,
-            message: "the text is too long".into(),
+            message: format!("MAX_PROOF_TEXT_BYTES limit of {MAX_TEXT} was exceeded"),
         });
     }
     Ok(Parser {

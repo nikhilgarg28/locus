@@ -1,6 +1,6 @@
 //! The order in which declarations are elaborated. An item is checked when it
 //! is declared, so everything it mentions must already exist. The core has
-//! no recursion, so a cycle is an error.
+//! explicitly checked recursion; mutually recursive logical enums form atomic groups.
 //!
 //! Dependencies are read off the syntax: every name an item writes that is
 //! also the name of an item in the namespace the position reads, types
@@ -30,6 +30,7 @@ pub(super) struct Unit<'a> {
     /// The type an `impl` block is for, when the declaration is one of its
     /// functions.
     pub owner: Option<&'a Path>,
+    pub model: Option<&'a ModelImpl>,
 }
 
 /// The units of a program, in source order: the declarations, with the
@@ -38,15 +39,21 @@ pub(super) fn units(program: &Program) -> Vec<Unit<'_>> {
     let mut units = Vec::new();
     for declaration in &program.declarations {
         match &declaration.kind {
-            DeclarationKind::Impl { target, methods } => {
+            DeclarationKind::Impl {
+                target,
+                model,
+                methods,
+            } => {
                 units.extend(methods.iter().map(|method| Unit {
                     declaration: method,
                     owner: Some(target),
+                    model: model.as_ref(),
                 }));
             }
             _ => units.push(Unit {
                 declaration,
                 owner: None,
+                model: None,
             }),
         }
     }
@@ -65,7 +72,10 @@ pub(super) fn unit_name(unit: &Unit<'_>) -> Option<String> {
 
 /// Indices into `units`, dependencies first, and the units that are part
 /// of a cycle.
-pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
+pub(super) fn dependency_order(
+    units: &[Unit<'_>],
+    quantifiers: &[super::generics::QuantifierNames],
+) -> (Vec<Vec<usize>>, Vec<usize>) {
     let names: Vec<Option<String>> = units.iter().map(unit_name).collect();
     let index_of: HashMap<(Namespace, &str), usize> = units
         .iter()
@@ -83,6 +93,20 @@ pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
             && let Some(name) = declared_name(unit.declaration)
         {
             methods.entry(&name.text).or_default().push(index);
+        }
+    }
+    let mut models: HashMap<String, Vec<usize>> = HashMap::new();
+    for (index, unit) in units.iter().enumerate() {
+        if let Some(model) = unit.model
+            && let Some(owner) = unit.owner
+        {
+            models.entry(owner.text()).or_default().push(index);
+            if let Some(source) = model_type_name(&model.source) {
+                models
+                    .entry(format!("{source}->{}", owner.text()))
+                    .or_default()
+                    .push(index);
+            }
         }
     }
     let edges: Vec<Vec<usize>> = units
@@ -105,6 +129,7 @@ pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
                         .copied()
                         .into_iter()
                         .collect::<Vec<usize>>(),
+                    Namespace::Model => models.get(name).into_iter().flatten().copied().filter(|found| *found != index).collect(),
                     Namespace::Method => methods
                         .get(name.as_str())
                         .into_iter()
@@ -119,9 +144,62 @@ pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
                         .collect(),
                 })
                 .collect();
+            if matches!(unit.declaration.kind, DeclarationKind::Enum { .. })
+                || matches!(unit.declaration.kind, DeclarationKind::Function { logical: true, .. })
+                || matches!(&unit.declaration.kind, DeclarationKind::Prop { variants, .. } if variants.iter().all(|variant| variant.body.is_some()))
+            {
+                edges.retain(|edge| *edge != index);
+            }
+            for pair in quantifiers {
+                let exists = index_of.get(&(Namespace::Type, pair.exists.as_str())).copied();
+                let forall = index_of.get(&(Namespace::Type, pair.forall.as_str())).copied();
+                if let (Some(exists), Some(forall)) = (exists, forall)
+                    && index != exists && index != forall && (edges.contains(&exists) || edges.contains(&forall)) {
+                        edges.extend([exists, forall]);
+                    }
+            }
             edges.sort_unstable();
             edges.dedup();
             edges
+        })
+        .collect();
+
+    // Collapse only checked logical-data components. Other declaration
+    // cycles retain the ordinary cycle diagnostic and are never forward
+    // declared in the kernel.
+    let mut representative: Vec<_> = (0..units.len()).collect();
+    let mut groups: Vec<Vec<usize>> = (0..units.len()).map(|i| vec![i]).collect();
+    for mut group in strongly_connected(&edges) {
+        if group.len() > 1
+            && group.iter().all(|index| {
+                matches!(units[*index].declaration.kind, DeclarationKind::Enum { .. })
+                    && super::logical_data::has_logical_derive(
+                        &units[*index].declaration.attributes,
+                    )
+            })
+        {
+            group.sort_unstable();
+            let first = group[0];
+            for &member in &group {
+                representative[member] = first;
+            }
+            groups[first] = group;
+        }
+    }
+    let grouped_edges: Vec<Vec<usize>> = (0..units.len())
+        .map(|index| {
+            if representative[index] != index {
+                return Vec::new();
+            }
+            let mut targets: Vec<_> = groups[index]
+                .iter()
+                .flat_map(|member| edges[*member].iter())
+                .map(|target| representative[*target])
+                .filter(|target| groups[index].len() == 1 || *target != index)
+                .collect();
+            targets.sort_unstable();
+            targets.dedup();
+            targets
         })
         .collect();
 
@@ -157,11 +235,71 @@ pub(super) fn dependency_order(units: &[Unit<'_>]) -> (Vec<usize>, Vec<usize>) {
     }
     let mut state = vec![State::New; edges.len()];
     let (mut order, mut cyclic) = (Vec::new(), Vec::new());
-    for node in 0..edges.len() {
-        visit(node, &edges, &mut state, &mut order, &mut cyclic);
+    for (node, &group) in representative.iter().enumerate() {
+        if group == node {
+            visit(node, &grouped_edges, &mut state, &mut order, &mut cyclic);
+        }
     }
     order.retain(|node| !cyclic.contains(node));
-    (order, cyclic)
+    (
+        order
+            .into_iter()
+            .map(|index| groups[index].clone())
+            .collect(),
+        cyclic,
+    )
+}
+
+/// Strongly connected components, found without recursive graph traversal.
+fn strongly_connected(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    let mut seen = vec![false; edges.len()];
+    let mut finished = Vec::new();
+    for start in 0..edges.len() {
+        if seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        let mut stack = vec![(start, 0)];
+        while let Some((node, next)) = stack.last_mut() {
+            if let Some(&target) = edges[*node].get(*next) {
+                *next += 1;
+                if !seen[target] {
+                    seen[target] = true;
+                    stack.push((target, 0));
+                }
+            } else {
+                finished.push(*node);
+                stack.pop();
+            }
+        }
+    }
+    let mut incoming = vec![Vec::new(); edges.len()];
+    for (source, targets) in edges.iter().enumerate() {
+        for &target in targets {
+            incoming[target].push(source);
+        }
+    }
+    seen.fill(false);
+    let mut groups = Vec::new();
+    for start in finished.into_iter().rev() {
+        if seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        let mut stack = vec![start];
+        let mut group = Vec::new();
+        while let Some(node) = stack.pop() {
+            group.push(node);
+            for &target in &incoming[node] {
+                if !seen[target] {
+                    seen[target] = true;
+                    stack.push(target);
+                }
+            }
+        }
+        groups.push(group);
+    }
+    groups
 }
 
 /// Which of Rust's two namespaces a name is read in; `Applied` is a call,
@@ -173,6 +311,7 @@ enum Namespace {
     Value,
     Applied,
     Method,
+    Model,
 }
 
 /// The namespace an item declares its name in. An `impl` block declares
@@ -284,6 +423,18 @@ impl Mentions<'_> {
             | PatternKind::Bool(_)
             | PatternKind::Integer(_) => {}
             PatternKind::Group(inner) => self.bind(inner),
+            PatternKind::Binding { name, pattern, .. } => {
+                self.bound.push(name.text.clone());
+                self.bind(pattern);
+            }
+            PatternKind::Evidence {
+                constructor,
+                evidence,
+                ..
+            } => {
+                self.bind(constructor);
+                self.bind(evidence);
+            }
             PatternKind::Tuple(patterns) => patterns.iter().for_each(|inner| self.bind(inner)),
             PatternKind::Struct { fields, .. } => {
                 fields.iter().for_each(|field| self.bind(&field.pattern));
@@ -355,6 +506,9 @@ impl Mentions<'_> {
                             .collect();
                         this.scoped(fields, |this| {
                             variant.fields.iter().for_each(|field| this.ty(&field.ty));
+                            if let Some(body) = &variant.body {
+                                this.block(body);
+                            }
                             // `: @Name(arguments)` names the proposition
                             // being declared, which is not a use of it.
                             if let Some(ExprKind::Call { arguments, .. }) =
@@ -382,14 +536,21 @@ impl Mentions<'_> {
                 self.type_name(&path.segments[0]);
                 arguments.iter().for_each(|argument| self.ty(argument));
             }
-            TypeKind::Unit => {}
-            TypeKind::Group(inner) => self.ty(inner),
+            TypeKind::Lifetime(_) | TypeKind::Unit => {}
+            TypeKind::Group(inner) | TypeKind::Slice(inner) => self.ty(inner),
+            TypeKind::Array { element, length } => {
+                self.ty(element);
+                self.expr(length);
+            }
             // A field's type may mention the fields before it.
             TypeKind::Tuple(fields) => self.fields(fields, |_| {}),
             TypeKind::Proof(proposition) => self.expr(proposition),
             TypeKind::Function {
                 parameters, result, ..
-            } => self.fields(parameters, |this| this.ty(result)),
+            }
+            | TypeKind::LogicalFunction { parameters, result } => {
+                self.fields(parameters, |this| this.ty(result))
+            }
             TypeKind::Ref { inner, .. } => self.ty(inner),
             TypeKind::Never => {}
         }
@@ -403,6 +564,15 @@ impl Mentions<'_> {
             | PatternKind::Bool(_)
             | PatternKind::Integer(_) => {}
             PatternKind::Group(inner) => self.pattern(inner),
+            PatternKind::Binding { pattern, .. } => self.pattern(pattern),
+            PatternKind::Evidence {
+                constructor,
+                evidence,
+                ..
+            } => {
+                self.pattern(constructor);
+                self.pattern(evidence);
+            }
             PatternKind::Tuple(patterns) => patterns.iter().for_each(|inner| self.pattern(inner)),
             PatternKind::Struct { path, fields, .. } => {
                 self.type_name(&path.segments[0]);
@@ -470,6 +640,10 @@ impl Mentions<'_> {
 
     fn expr(&mut self, expr: &Expr) {
         match &expr.kind {
+            ExprKind::Subscript { value, index } => {
+                self.expr(value);
+                self.expr(index);
+            }
             ExprKind::Name(name) => self.value_name(name),
             ExprKind::Path(path) => self.path(path),
             ExprKind::Integer(_)
@@ -486,12 +660,24 @@ impl Mentions<'_> {
                 inner.iter().for_each(|inner| self.expr(inner));
             }
             ExprKind::Cast {
-                expr: inner, ty, ..
+                expr: inner,
+                ty,
+                source_hint,
+                ..
             } => {
                 self.expr(inner);
                 self.ty(ty);
+                if let Some(target) = model_type_name(ty) {
+                    let dependency = source_hint
+                        .as_deref()
+                        .and_then(model_type_name)
+                        .map_or_else(|| target.clone(), |source| format!("{source}->{target}"));
+                    self.names.insert((Namespace::Model, dependency));
+                }
             }
-            ExprKind::Tuple(items) => items.iter().for_each(|item| self.expr(item)),
+            ExprKind::Array(items) | ExprKind::Tuple(items) => {
+                items.iter().for_each(|item| self.expr(item))
+            }
             ExprKind::Continue => {}
             ExprKind::Range { lower, upper, .. } => {
                 self.expr(lower);
@@ -504,7 +690,7 @@ impl Mentions<'_> {
                 self.type_name(&path.segments[0]);
                 fields.iter().for_each(|field| self.expr(&field.value));
             }
-            ExprKind::Block(block) => self.block(block),
+            ExprKind::Logic(block) | ExprKind::Block(block) => self.block(block),
             ExprKind::If {
                 condition,
                 then_branch,
@@ -540,6 +726,18 @@ impl Mentions<'_> {
                 self.expr(iterable);
                 self.with_pattern(pattern, |this| this.block(body));
             }
+            ExprKind::Closure { parameters, body } => {
+                let names: Vec<_> = parameters
+                    .iter()
+                    .map(|parameter| parameter.name.text.clone())
+                    .collect();
+                self.scoped(names, |this| {
+                    for parameter in parameters {
+                        this.ty(&parameter.ty);
+                    }
+                    this.expr(body);
+                });
+            }
             ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } => {
                 let names: Vec<String> = parameters
                     .iter()
@@ -552,7 +750,16 @@ impl Mentions<'_> {
                     this.block(body);
                 });
             }
-            ExprKind::Binary { left, right, .. } => {
+            ExprKind::GenericApply { callee, arguments } => {
+                self.expr(callee);
+                arguments.iter().for_each(|argument| self.ty(argument));
+            }
+            ExprKind::Evidence {
+                constructor: left,
+                evidence: right,
+                ..
+            }
+            | ExprKind::Binary { left, right, .. } => {
                 self.expr(left);
                 self.expr(right);
             }
@@ -571,5 +778,14 @@ impl Mentions<'_> {
             }
             ExprKind::Member { value, .. } | ExprKind::Index { value, .. } => self.expr(value),
         }
+    }
+}
+
+fn model_type_name(ty: &Type) -> Option<String> {
+    match &ty.kind {
+        TypeKind::Named(name) => Some(name.text.clone()),
+        TypeKind::Path { path, .. } => Some(path.text()),
+        TypeKind::Group(inner) | TypeKind::Ref { inner, .. } => model_type_name(inner),
+        _ => None,
     }
 }

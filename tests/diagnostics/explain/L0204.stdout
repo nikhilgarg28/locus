@@ -1,0 +1,19 @@
+L0204: Unknown value name
+
+The expression refers to a name that is not bound in its scope. Earlier fields and function parameters are available where their telescope permits them; later fields and unrelated local bindings are not. Correct the name or pass the required value explicitly.
+
+Example from `tests/corpus/reject/evidence_as_proposition_parameter.lc`; the full file is a regression test.
+
+```locus
+// A proposition that takes evidence as a parameter. When the evidence speaks
+// of an earlier parameter, that name is reported as unknown instead.
+prop Small(n: Int, bound: @(0 < 10)) {
+    Is => { prop!(true) }
+}
+
+prop Smaller(n: Int, bound: @(n < 10)) {
+    Is => { prop!(true) }
+}
+```
+
+Language, as built: [1.2:2](../../atlas.html#/doc/language/spec-1.2:2).

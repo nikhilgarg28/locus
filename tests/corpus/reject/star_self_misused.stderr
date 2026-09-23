@@ -12,17 +12,13 @@ error[L0266]: cannot assign to `self.count`, which is behind a `&` reference (E0
    |         ^^^^^^^^^^
    |
    = note: `self` is `&Counter`, read and never written; to write through it, take `&mut self`
-error[L0266]: type `Counter` cannot be dereferenced (E0614)
+error[L0266]: dereference requires a shared reference
   --> tests/corpus/reject/star_self_misused.lc:19:10
    |
-19 |         (*self).count //~ error: L0266 type `Counter` cannot be dereferenced (E0614)
+19 |         (*self).count //~ error: L0266 dereference requires a shared reference
    |          ^^^^^
-   |
-   = note: `self` is taken by value here, and is the value itself: write `self`; `*self` is the value behind a `&self` or `&mut self` receiver
-error[L0266]: `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+error[L0266]: dereference requires a shared reference
   --> tests/corpus/reject/star_self_misused.lc:23:9
    |
-23 |         *self.count //~ error: L0266 `*` is written on `self` alone, and `*self.count` reads as `*(self.count)`
+23 |         *self.count //~ error: L0266 dereference requires a shared reference
    |         ^^^^^^^^^^^
-   |
-   = note: a field of the receiver is read as `self.f` and written as `self.f = v`; `*self` is the whole value behind a `&self` or `&mut self` receiver

@@ -1,0 +1,3 @@
+fn bad() -> @P {
+    P::A @ P::B @ h //~ error: L0150 cannot be chained
+}

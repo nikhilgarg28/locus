@@ -1,0 +1,14 @@
+L0152: Legacy proposition arm syntax
+
+Every named proposition arm states a body using => { ... }. Old bare constructor declarations are not silently reinterpreted. Write an explicit body, including prop!(true) for an arm with no premises; the diagnostic supplies a migration suggestion when possible.
+
+Example from `tests/corpus/reject/legacy_prop_arm.lc`; the full file is a regression test.
+
+```locus
+prop New { Yes => { prop!(true) } }
+prop Old {
+    Intro
+}
+```
+
+Language, as built: [1.6:6](../../atlas.html#/doc/language/spec-1.6:6).

@@ -1,0 +1,4 @@
+locus-proofs 1
+
+obligation ba6877daab95f22b walk 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($0), view[u8]($0))), of_term(proof(of_term(fn:u8_le_refl($0)))))

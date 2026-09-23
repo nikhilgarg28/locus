@@ -1,7 +1,7 @@
 // An `impl` block is for a struct or an enum the file declares. Its
 // functions are skipped, and a mention of one is not reported again.
 #[terminates] #[no_panic] #[no_io]
-fn small(n: u8) -> Prop {
+logic fn small(n: Int) -> Prop {
     prop!(n <= 3)
 }
 
@@ -16,3 +16,4 @@ impl small { //~ error: L0200 `small` is a function, and an `impl` block is for 
 impl std::vec::Vec { //~ error: L0200 paths through modules are not in Locus yet
     fn get(&self) -> u8 { 1 }
 }
+//~ spec: 1.14:1

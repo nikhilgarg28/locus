@@ -1,0 +1,14 @@
+error[L0280]: result type `@claim` exposes a local value outside its scope
+ --> tests/corpus/reject/scope_opaque_proof.lc:3:19
+  |
+3 |       let escaped = { //~ error: L0280 result type
+  |  ___________________^
+4 | |         let hidden = pick();
+5 | |         let claim = logic { prop!((hidden as Int) == (hidden as Int)) };
+6 | |         prove!(claim)
+7 | |     };
+  | |_____^
+  |
+  = note: not available to the receiver: claim
+  = note: return a struct or tuple carrying the value or proposition alongside its evidence, or prove a claim about values already available outside this scope
+  = note: an ordinary call's result is not replaced by an invented equation for the function's body

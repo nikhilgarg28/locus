@@ -1,0 +1,15 @@
+L0226: Proof constructor needs an expected claim
+
+A proof constructor may leave proposition parameters implicit. Without an expected proof type, the compiler cannot determine which proposition instance it should establish. Annotate the binding or result with the intended @P(arguments) type.
+
+Example from `tests/corpus/reject/constructor_without_claim.lc`; the full file is a regression test.
+
+```locus
+// A constructor with nothing to say which claim it proves.
+#[terminates] #[no_panic] #[no_io] fn first(p: Prop, q: Prop, hp: @p) -> () {
+    let either = Or::Left(hp);
+    ()
+}
+```
+
+Language, as built: [1.7:1](../../atlas.html#/doc/language/spec-1.7:1).

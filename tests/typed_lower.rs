@@ -9,6 +9,7 @@ use locus::kernel::{HypId, KernelError, Op, Prim, Proof, Term, Type, VarId};
 use locus::typed::{Binder, Expr, FnItem, FnRef, LowerError};
 
 #[test]
+#[doc = "spec: 3.4:1"]
 fn a_nested_call_is_named_by_the_tree_and_sequenced_by_lowering() {
     let (mut session, _, _) = setup();
     let increment_id = exec_id(session.declare_fn(&increment(false)).unwrap());
@@ -320,6 +321,7 @@ fn bytes(pair: &Value) -> (u8, u8) {
 }
 
 #[test]
+#[doc = "spec: 3.4:2"]
 fn an_assignment_is_a_let_of_a_new_version() {
     let (mut session, _, _) = setup();
     for byte in [0, 7, 254, 255] {
@@ -340,6 +342,7 @@ fn an_assignment_is_a_let_of_a_new_version() {
 }
 
 #[test]
+#[doc = "spec: 3.4:3"]
 fn a_branch_that_assigns_joins_the_new_versions_in_declaration_order() {
     let (mut session, _, _) = setup();
     let item = branching_mutation();
@@ -374,6 +377,7 @@ fn a_branch_that_assigns_joins_the_new_versions_in_declaration_order() {
 }
 
 #[test]
+#[doc = "spec: 3.4:3"]
 fn the_join_must_name_exactly_the_bindings_the_arms_assign() {
     let (mut session, _, _) = setup();
     let n = Binder::new("n", Type::U8);
@@ -819,6 +823,7 @@ fn a_binding_that_shadows_inside_the_body_is_another_binding() {
 }
 
 #[test]
+#[doc = "spec: 3.4:4"]
 fn an_assignment_in_a_while_condition_is_carried() {
     // let mut x = n; let mut y = 0;
     // while { y = y + 1; y < 4 } { x = x + 1; } (x, y)
@@ -865,6 +870,7 @@ fn an_assignment_in_a_while_condition_is_carried() {
 }
 
 #[test]
+#[doc = "spec: 3.4:4"]
 fn a_loop_must_carry_exactly_what_it_assigns() {
     let (mut session, _, _) = setup();
     // The body assigns x, and the tree carries nothing.
@@ -1132,6 +1138,7 @@ fn stale_or_refreshed(theory: Theory, refresh: bool) -> FnItem {
 }
 
 #[test]
+#[doc = "spec: 3.4:2"]
 fn a_stale_use_of_tracked_evidence_is_rejected_by_the_checker_and_not_by_lowering() {
     let (mut session, _, theory) = setup();
     assert!(

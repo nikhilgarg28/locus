@@ -88,5 +88,5 @@ fn bounded_through(n: u8) -> u8 {
 //~ run: bounded(6) => 5
 //~ run: bounded_through(6) => 6
 //~ rust: for i in lo..=hi {
-//~ rust: for i in 0_u8..=255_u8 {
-//~ rust: for i in n..0_u8 {
+//~ rust: for _i in 0_u8..=255_u8 {
+//~ rust: for _i in n..0_u8 {

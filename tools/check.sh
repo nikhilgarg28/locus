@@ -40,7 +40,10 @@ done
 # module's source, and both the module and the VS Code grammar are run over
 # every .lc file when Node is present (the grammar test skips itself
 # without its npm dependencies).
+python3 tools/metrics.py invalidate
+source_fingerprint=$(python3 tools/metrics.py fingerprint)
 python3 tools/highlight.py check
+python3 tools/spec.py check
 if command -v node >/dev/null 2>&1; then
     node editors/highlight/test.js
     node editors/vscode/locus/test/tokenize.js
@@ -48,25 +51,33 @@ fi
 cargo fmt --check
 cargo clippy --locked --offline --all-targets -- -D warnings
 cargo test --locked --offline --no-run
+mkdir -p target
 started=$(date +%s)
-cargo test --locked --offline
+cargo test --locked --offline 2>&1 | tee target/check-fast.log
 elapsed=$(( $(date +%s) - started ))
+echo "LOCUS TEST RUN COMPLETE: fast" >> target/check-fast.log
 fast="fast tests: ${elapsed}s, limit ${FAST_LIMIT_SECONDS}s"
 if (( elapsed > FAST_LIMIT_SECONDS )); then
     fast="$fast: OVER THE LIMIT"
 fi
 echo "$fast"
+fast_elapsed=$elapsed
 if [[ -z "$extended" ]]; then
+    python3 tools/bench.py check
+    python3 tools/metrics.py check
+    python3 tools/gate.py fast "$fast_elapsed" "$FAST_LIMIT_SECONDS"
     exit 0
 fi
 
 # The extended runs, in release so that the counts are feasible. Everything
 # the tests print is kept, so that the summary below can quote it.
 export LOCUS_EXTENDED=1
+mkdir -p target
 log=target/check-extended.log
 started=$(date +%s)
 cargo test --locked --offline --release -- --nocapture 2>&1 | tee "$log"
 status=${PIPESTATUS[0]}
+echo "LOCUS TEST RUN COMPLETE: extended" >> "$log"
 elapsed=$(( $(date +%s) - started ))
 
 # One line per exit criterion of the Build plan. A criterion the acceptance
@@ -102,4 +113,11 @@ summary "^test edited_examples_give_an_ast_or_a_diagnostic_without_a_panic \.\.\
 summary "^criterion: the legacy is gone" "the legacy is gone"
 summary "^criterion: the suites are usable" "the suites are usable"
 echo "  $fast; extended suite ${elapsed}s in release"
+if (( status == 0 )); then
+    LOCUS_FAST_SECONDS="$fast_elapsed" target/release/locus bench --samples 5 > target/bench-latest.json
+    python3 tools/bench.py check
+    python3 tools/metrics.py collect --fast-log target/check-fast.log --extended-log "$log" --fast-seconds "$fast_elapsed" --source-fingerprint "$source_fingerprint" > target/status-record.json
+    python3 tools/metrics.py check --fresh
+    python3 tools/gate.py extended "$fast_elapsed" "$FAST_LIMIT_SECONDS"
+fi
 exit "$status"

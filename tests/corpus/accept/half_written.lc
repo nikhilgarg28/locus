@@ -36,8 +36,9 @@ fn settle(account: Account) -> u8 {
 //~ proofs: 1
 //~ run: available(Account { balance: 10, holds: 3 }) => 7
 //~ run: deposit(Account { balance: 10, holds: 3 }, 1) => panic: not yet implemented
-//~ run: withdraw(Account { balance: 10, holds: 3 }, 20) => (Account { balance: 10, holds: 3 }, Proved)
+//~ run: withdraw(Account { balance: 10, holds: 3 }, 20) => (Account { balance: 10, holds: 3 }, Erased)
 //~ run: withdraw(Account { balance: 10, holds: 3 }, 2) => panic: not yet implemented: the withdrawal itself
 //~ run: settle(Account { balance: 10, holds: 3 }) => panic: not yet implemented
-//~ rust: fn deposit(account: Account, amount: u8) -> Account {
-//~ rust: let cleared: Account = todo!();
+//~ rust: fn deposit(_account: Account, _amount: u8) -> Account {
+//~ rust: todo!()
+//~ spec: 1.10:1

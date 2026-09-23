@@ -38,8 +38,8 @@ error[L0224]: `Shape::Box` has no field `depth`
    |
 45 |         Shape::Box { depth, .. } => depth, //~ error: L0224 `Shape::Box` has no field `depth`
    |                      ^^^^^
-error[L0224]: `Small::Below` has named fields and is written `Small::Below { bound: .. }`
+error[L0224]: `Small::Below` has named fields and is written `Small::Below { limit: .. }`
   --> tests/corpus/reject/named_variant_fields.lc:55:5
    |
-55 |     Small::Below(prove!(5u8 < 10)) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { bound: .. }`
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+55 |     Small::Below(10) @ prove!(5 < 10) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { limit: .. }`
+   |     ^^^^^^^^^^^^^^^^

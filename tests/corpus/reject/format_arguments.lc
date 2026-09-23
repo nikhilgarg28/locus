@@ -8,3 +8,4 @@ fn asserted(n: u8) -> u8 {
     assert!(n <= 3, "n is {}, at most 3", n); //~ error: L0290 format arguments are not in Locus yet
     n
 }
+//~ spec: 1.10:1

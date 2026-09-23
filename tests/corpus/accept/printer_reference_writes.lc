@@ -1,0 +1,17 @@
+// Whole-place reads and writes are through the borrowed value; casts keep
+// their grouping before comparisons; an explicitly named method stays a path.
+struct Counter { value: u8 }
+impl Counter {
+    fn reset(&mut self) -> () { self = Counter { value: 0 }; }
+}
+fn advance(counter: &mut u8) -> () {
+    counter = counter.wrapping_add(1);
+}
+fn compare(n: u16) -> bool { (n as u8) < 4 }
+fn named(counter: &mut Counter) -> () { Counter::reset(&mut counter); }
+//~ run: advance(&mut 9 -> 10) => ()
+//~ run: compare(258) => true
+//~ rust: *counter = counter.wrapping_add(1_u8);
+//~ rust: *self = Counter { value: 0_u8 };
+//~ rust: (n as u8) < 4_u8
+//~ rust: Counter::reset(&mut *counter);

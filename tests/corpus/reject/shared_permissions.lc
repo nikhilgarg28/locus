@@ -1,0 +1,20 @@
+// Lifetimes constrain physical storage even when the final use is erased.
+fn local_escape<'a>(input: &'a u8) -> &'a u8 { //~ error: L0286 shared reference escapes the block
+    let local: u8 = 4;
+    &local
+}
+fn stale_observation() -> u8 { //~ error: L0286 is used after an overlapping write or move
+    let mut value: u8 = 5;
+    let reference = &value;
+    value = 6;
+    let observation = logic { (*reference) as Int };
+    value
+}
+fn wrong_lifetime<'a, 'b>(first: &'a u8, second: &'b u8) -> &'a u8 { //~ error: L0286 returned reference must originate from an input with lifetime 'a
+    &second
+}
+fn store_mut() -> u8 {
+    let mut value: u8 = 3;
+    let reference = &mut value; //~ error: L0285 mutable references may only be lent for one call
+    value
+}

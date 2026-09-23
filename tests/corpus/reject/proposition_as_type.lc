@@ -1,6 +1,6 @@
 // A proposition's name where a type is needed; its evidence is `@Small(n)`.
-prop Small(n: u8) {
-    Below(bound: @(n < 10)),
+prop Small(n: Int) {
+    Below => { prop!(n < 10) }
 }
 
 fn first(n: u8, small: Small) -> u8 { n } //~ error: L0200 is a proposition, not a type

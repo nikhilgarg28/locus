@@ -13,6 +13,6 @@ fn twice(n: u8) -> u8 {
 }
 
 //~ proofs: 1
-//~ run: claim_of(3) => (Ghost, Proved)
+//~ run: claim_of(3) => (Erased, Erased)
 //~ run: twice(200) => 144
-//~ rust: fn claim_of(n: u8) -> (Ghost, Proved) {
+//~ rust: fn claim_of(_n: u8) -> (Erased, Erased) {

@@ -14,7 +14,7 @@ pub enum Event { Wrong, Right }
 pub struct Lock { failures: u32, open: bool }
 
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u32) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 
@@ -53,12 +53,12 @@ pub(crate) fn remaining(failures: u32, bounded: @within_limit(failures)) -> (lef
 }
 
 //~ proofs: 9
-//~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
-//~ run: step(Lock { failures: 2, open: false }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
-//~ run: step(Lock { failures: 3, open: true }, Proved, Wrong) => (Lock { failures: 3, open: false }, Proved)
-//~ run: step(Lock { failures: 0, open: false }, Proved, Wrong) => (Lock { failures: 1, open: false }, Proved)
-//~ run: remaining(0, Proved) => (3, Proved)
-//~ run: remaining(3, Proved) => (0, Proved)
-//~ rust: pub(crate) fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {
+//~ run: step(Lock { failures: 2, open: false }, Erased, Right) => (Lock { failures: 0, open: true }, Erased)
+//~ run: step(Lock { failures: 2, open: false }, Erased, Wrong) => (Lock { failures: 3, open: false }, Erased)
+//~ run: step(Lock { failures: 3, open: true }, Erased, Wrong) => (Lock { failures: 3, open: false }, Erased)
+//~ run: step(Lock { failures: 0, open: false }, Erased, Wrong) => (Lock { failures: 1, open: false }, Erased)
+//~ run: remaining(0, Erased) => (3, Erased)
+//~ run: remaining(3, Erased) => (0, Erased)
+//~ rust: pub(crate) fn step(lock: Lock, _bounded: Erased, event: Event) -> (Lock, Erased) {
 //~ rust: failures: lock.failures + 1_u32,
 //~ rust: let left = 3_u32 - failures;

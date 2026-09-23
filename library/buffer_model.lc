@@ -1,0 +1,55 @@
+// Load after logical.lc. This is an ordinary checked observation of shared storage.
+pub logic fn buffer_segment<T, M: Logical>(source: &[T], start: Int, count: Int,
+    bounds: @(0 <= start && 0 <= count && start + count <= source.len())) -> Seq<M>
+{
+    if count <= 0 { Seq::Empty } else {
+        let head = source.get(start) as M;
+        let remaining = count - 1;
+        let smaller: @(0 <= remaining && remaining < count) = And::Intro(prove!(0 <= remaining), prove!(remaining < count));
+        let bounds: @(0 <= start + 1 && 0 <= remaining && start + 1 + remaining <= source.len()) =
+            And::Intro(And::Intro(prove!(0 <= start + 1), prove!(0 <= remaining)), prove!(start + 1 + remaining <= source.len()));
+        let tail = recurse!(smaller, buffer_segment::<T, M>(&source, start + 1, remaining, bounds));
+        Seq::Cons { head, tail }
+    }
+}
+impl Model<[u8]> for Seq<Int> {
+    logic fn model(source: &[u8]) -> Self {
+        let count = source.len();
+        let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
+            And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));
+        buffer_segment::<u8, Int>(&source, 0, count, bounds)
+    }
+}
+
+pub logic fn buffer_segment_length<T, M: Logical>(source: &[T], start: Int, count: Int,
+    bounds: @(0 <= start && 0 <= count && start + count <= source.len()))
+    -> @(seq_length(buffer_segment::<T, M>(&source, start, count, bounds)) == count)
+{
+    if count <= 0 {
+        let empty: @(seq_length(Seq::<M>::Empty) == count) =
+            fold!(seq_length::<M>, prove!(0 == count));
+        fold!(buffer_segment::<T, M>, empty)
+    } else {
+        let remaining = count - 1;
+        let smaller: @(0 <= remaining && remaining < count) = And::Intro(prove!(0 <= remaining), prove!(remaining < count));
+        let tail_bounds: @(0 <= start + 1 && 0 <= remaining && start + 1 + remaining <= source.len()) =
+            And::Intro(And::Intro(prove!(0 <= start + 1), prove!(0 <= remaining)), prove!(start + 1 + remaining <= source.len()));
+        let induction = recurse!(smaller, buffer_segment_length::<T, M>(&source, start + 1, remaining, tail_bounds));
+        let tail = buffer_segment::<T, M>(&source, start + 1, remaining, tail_bounds);
+        let exact_tail: @(seq_length(tail) == remaining) = induction;
+        let head = source.get(start) as M;
+        let step: @(seq_length(Seq::<M>::Cons { head, tail }) == count) =
+            fold!(seq_length::<M>, prove!(1 + seq_length(tail) == count));
+        fold!(buffer_segment::<T, M>, step)
+    }
+}
+
+pub logic fn buffer_model_length(source: &[u8])
+    -> @(seq_length(source as Seq<Int>) == source.len())
+{
+    let count = source.len();
+    let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
+        And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));
+    let length = buffer_segment_length::<u8, Int>(&source, 0, count, bounds);
+    fold!(source as Seq<Int>, length)
+}

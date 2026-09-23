@@ -1,0 +1,133 @@
+{
+  "policy": "Conservative whole-file count: mixed trusted/untrusted files count in full. Count is the current end-to-end compiler correctness boundary, larger than the logical proof kernel. Excludes diagnostic/error-only types, module reexports, proof-producing derive/theory, audit-only classical dependency discovery, proof search, parsers/store and both interpreters/projection. Rust toolchain, registered native implementations and explicit foreign specifications remain external assumptions. Limits metadata is resource policy, not a source of accepted evidence.",
+  "files": [
+    {
+      "path": "src/kernel/buffer.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/check.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/context.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/defs.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/depth.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/eval.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/generics.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/int.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/linear.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/machine.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/measured.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/nat.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/ops.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/quantifiers.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/recursive.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/kernel/term.rs",
+      "category": "kernel acceptance and primitive meaning"
+    },
+    {
+      "path": "src/typed/lower.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/typed/layout.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/typed/shared.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/typed/buffer.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/typed/trusted.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/typed/tree.rs",
+      "category": "typed lowering, layout, permissions and native boundary"
+    },
+    {
+      "path": "src/exec/check.rs",
+      "category": "check IR acceptance and native contracts"
+    },
+    {
+      "path": "src/exec/buffer.rs",
+      "category": "check IR acceptance and native contracts"
+    },
+    {
+      "path": "src/exec/ir.rs",
+      "category": "check IR acceptance and native contracts"
+    },
+    {
+      "path": "src/erased/check.rs",
+      "category": "erasure, independent layout checker, cleanup and Rust generation"
+    },
+    {
+      "path": "src/erased/erase.rs",
+      "category": "erasure, independent layout checker, cleanup and Rust generation"
+    },
+    {
+      "path": "src/erased/cleanup.rs",
+      "category": "erasure, independent layout checker, cleanup and Rust generation"
+    },
+    {
+      "path": "src/erased/rust.rs",
+      "category": "erasure, independent layout checker, cleanup and Rust generation"
+    },
+    {
+      "path": "src/erased/tree.rs",
+      "category": "erasure, independent layout checker, cleanup and Rust generation"
+    },
+    {
+      "path": "src/elab/items.rs",
+      "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted"
+    },
+    {
+      "path": "src/build.rs",
+      "category": "Rust crate/marker privacy boundary"
+    }
+  ]
+}

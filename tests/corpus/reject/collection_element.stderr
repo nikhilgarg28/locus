@@ -1,0 +1,5 @@
+error[L0284]: an empty Vec needs a Vec<T> type annotation
+ --> tests/corpus/reject/collection_element.lc:2:18
+  |
+2 |     let values = Vec::new(); //~ error: L0284 an empty Vec needs a Vec<T> type annotation
+  |                  ^^^^^^^^^^

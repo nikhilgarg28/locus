@@ -1,5 +1,5 @@
 error[L0208]: `Small` takes 1 argument(s), and 2 were given
- --> tests/corpus/reject/wrong_proposition_argument_count.lc:3:12
+ --> tests/corpus/reject/wrong_proposition_argument_count.lc:2:16
   |
-3 |     Zero: @Small(0, 0), //~ error: L0208 `Small` takes 1 argument(s), and 2 were given
-  |            ^^^^^^^^^^^
+2 | fn wrong() -> @Small(0, 0) { _ } //~ error: L0208 `Small` takes 1 argument(s), and 2 were given
+  |                ^^^^^^^^^^^

@@ -158,6 +158,7 @@ fn decided(ctx: &mut Context, prelude: &Prelude, claim: Term, holds: bool) {
 // --- The primitives -----------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.11:11, 2.11:12, 2.11:17"]
 fn quotient_and_remainder_are_ghost_primitives_computed_on_literals() {
     let (mut ctx, _) = setup();
     let n = Term::var(ctx.declare_ghost(Type::Int).unwrap());
@@ -213,6 +214,7 @@ fn quotient_and_remainder_are_ghost_primitives_computed_on_literals() {
 // --- The axioms ----------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.11:12, 2.11:13"]
 fn the_decomposition_holds_with_no_condition() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -377,6 +379,7 @@ fn bounded(
 }
 
 #[test]
+#[doc = "spec: 2.11:12, 2.11:14"]
 fn the_remainder_is_bounded_by_a_positive_divisor() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -428,6 +431,7 @@ fn the_remainder_is_bounded_by_a_positive_divisor() {
 }
 
 #[test]
+#[doc = "spec: 2.11:12, 2.11:14"]
 fn the_remainder_is_bounded_by_a_negative_divisor() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -463,6 +467,7 @@ fn the_remainder_is_bounded_by_a_negative_divisor() {
 }
 
 #[test]
+#[doc = "spec: 2.11:12, 2.11:14"]
 fn the_remainder_has_the_sign_of_the_dividend() {
     let (mut ctx, prelude) = setup();
     let v = vars(&mut ctx);
@@ -557,6 +562,7 @@ fn positive_over_positive() {
 }
 
 #[test]
+#[doc = "spec: 2.11:15"]
 fn negative_over_positive() {
     let (mut ctx, prelude) = setup();
     // Truncation gives -3 and -1. Flooring, and Euclid, would give -4 and 1.
@@ -667,6 +673,7 @@ fn nodes(proof: &Proof) -> usize {
 }
 
 #[test]
+#[doc = "spec: 2.11:16"]
 fn a_rem_zero_is_derived_from_the_decomposition_and_division_by_zero() {
     let (mut ctx, _) = setup();
     let v = vars(&mut ctx);
@@ -855,6 +862,7 @@ fn evaluation_agrees_with_integer_on_random_terms_over_every_primitive() {
 }
 
 #[test]
+#[doc = "spec: 2.11:17, 2.24:2"]
 fn evaluation_agrees_with_rust_on_random_i128_pairs() {
     let (mut ctx, prelude) = setup();
     let term = |value: i128| Term::Int(Integer::from(value));
@@ -950,7 +958,7 @@ fn a_huge_division_is_charged_and_hits_the_step_limit() {
             // 1 % huge: one bit of dividend, so a small charge.
             Ok(eq(divided, lit(1)))
         } else {
-            Err(KernelError::StepLimit)
+            Err(KernelError::EvaluationStepLimit)
         };
         assert_eq!(outcome, expected);
     }
@@ -960,7 +968,7 @@ fn a_huge_division_is_charged_and_hits_the_step_limit() {
             &mut ctx,
             &Proof::Evaluate(le(div(huge.clone(), huge), lit(1)))
         ),
-        Err(KernelError::StepLimit)
+        Err(KernelError::EvaluationStepLimit)
     );
     // A division of the same shape but a hundredth of the size is well
     // within the budget: 4097 bits times 129 digits.

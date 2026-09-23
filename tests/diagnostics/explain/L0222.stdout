@@ -1,0 +1,14 @@
+L0222: Malformed quantified predicate
+
+A quantifier needs a bound value type and a formula body. The surface form lowers to checked library predicates and logical callables. Supply the missing body and keep each binder scoped over its predicate rather than referring to a later or unbound variable.
+
+Example from `tests/corpus/reject/empty_quantifier.lc`; the full file is a regression test.
+
+```locus
+// A quantifier with nothing to state.
+const nothing: Prop = prop!(
+    forall (n: u8) { }
+);
+```
+
+Language, as built: [1.6:1](../../atlas.html#/doc/language/spec-1.6:1).

@@ -172,7 +172,29 @@ impl Env<'_> {
     }
 
     pub(super) fn expr(&mut self, expr: &ast::Expr, expected: Option<&Type>) -> Elab<Value> {
+        let value = self.expr_inner(expr, expected)?;
+        let value = self.check_value_layout(value, expr.span)?;
+        if self.total
+            && (!self.in_constant || self.formula != Some("the value of a constant"))
+            && self.suppress_models == 0
+            && expected.is_none_or(|ty| ty.as_machine().is_none())
+        {
+            self.logical_value(value, expr.span)
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn expr_inner(&mut self, expr: &ast::Expr, expected: Option<&Type>) -> Elab<Value> {
         match &expr.kind {
+            ExprKind::Array(fields) => self.array_literal(fields, expected, expr.span),
+            ExprKind::Subscript { value, index } => self.buffer_operation(crate::kernel::BufferOp::Get,value,&[(**index).clone()],expr.span),
+            ExprKind::GenericApply { .. } => {
+                self.require_preview(crate::preview::Feature::LogicalData, "generic application", expr.span)?;
+                self.fail("L0290", "generic application requires an instantiated declaration", expr.span)
+            },
+            ExprKind::Logic(block) => self.logic_block(block, expected),
+            ExprKind::Evidence { constructor, evidence, .. } => self.named_evidence(constructor, evidence, expected, expr.span),
             ExprKind::Error => Err(()),
             ExprKind::Group(inner) => self.expr(inner, expected),
             ExprKind::Unit => Ok(Value::new(Expr::unit(), unit_type())),
@@ -193,6 +215,7 @@ impl Env<'_> {
                 self.fail("L0290", "string literals are not in Locus yet", expr.span)
             }
             ExprKind::Name(name) => self.name(name, expected),
+            ExprKind::Closure { parameters, body } => self.logical_closure(parameters, body, expected, expr.span),
             ExprKind::Hole => match expected.map(|expected| self.at_current_exit(expected)) {
                 Some(expected) if matches!(*expected, Type::Proof(_)) => {
                     let Type::Proof(claim) = &*expected else {
@@ -281,6 +304,7 @@ impl Env<'_> {
                 expr: inner,
                 as_span,
                 ty,
+                ..
             } => self.cast(inner, ty, *as_span),
             ExprKind::Struct { path, fields } => match path.single() {
                 Some(name) => self.struct_literal(name, fields, expr.span),
@@ -323,7 +347,9 @@ impl Env<'_> {
             ExprKind::Block(block) => {
                 let entry = self.mutable_entry();
                 let mark = self.mark();
+                let result_scope = self.result_scope();
                 let result = self.block(block, expected);
+                let result = self.check_scope_result(&result_scope, result, block.span);
                 // The block's statements are spliced into the enclosing
                 // sequence, so what it assigned to an outer binding stays
                 // assigned, and the facts about the versions it made stay
@@ -405,20 +431,7 @@ impl Env<'_> {
                 expr.span,
             ),
             ExprKind::Return(value) => self.return_(expr, value.as_deref(), expected),
-            // A reference is an argument of a call, and nothing else, in
-            // this tier (`references.rs`).
-            ExprKind::Ref { mutable, .. } => {
-                let written = if *mutable { "&mut" } else { "&" };
-                self.diagnostics.push(
-                    crate::diagnostic::Diagnostic::error(
-                        "L0261",
-                        format!("`{written}` is written on the argument of a call only"),
-                        expr.span,
-                    )
-                    .note("a reference lasts for one call: `f(&x)` or `f(&mut x.f)` lends a place to a function whose parameter is `&T` or `&mut T`; a reference in a `let`, a field, or a result is not in Locus yet"),
-                );
-                Err(())
-            }
+            ExprKind::Ref { mutable, expr: inner } => self.shared_reference(inner,*mutable,expr.span),
         }
     }
 
@@ -427,8 +440,40 @@ impl Env<'_> {
     /// reference; a `&mut self` receiver is assigned through it as well
     /// (`mutation.rs`).
     fn deref(&mut self, inner: &ast::Expr, expected: Option<&Type>, span: Span) -> Elab<Value> {
-        let name = self.deref_target(inner, span)?;
-        self.name(name, expected)
+        if let ExprKind::Name(name) = &inner.kind
+            && self
+                .lookup(&name.text)
+                .is_some_and(|local| self.borrowed.contains(&local.binding.unwrap_or(local.id)))
+        {
+            return self.name(name, expected);
+        }
+        // Resolve the physical pointer before modeling its referent. In
+        // particular, the Bool model must not replace an &Bool operand with
+        // a logical marker before this dereference checks its provenance.
+        self.suppress_models += 1;
+        let value = self.lending(|env| env.infer(inner));
+        self.suppress_models -= 1;
+        let value = value?;
+        if let Type::Boxed(element) = &value.ty {
+            if !self.reading() && !self.is_copy(element) {
+                self.consume_value_place(&value, span);
+            }
+            return self.boxed_deref(value, span);
+        }
+        if !matches!(
+            self.session.expression_layout(&value.expr),
+            crate::typed::ErasureLayout::Shared { .. }
+        ) {
+            return self.fail("L0266", "dereference requires a shared reference", span);
+        }
+        if !self.reading() && !self.is_copy(&value.ty) {
+            return self.fail(
+                "L0286",
+                "cannot move a non-Copy value out of a shared reference",
+                span,
+            );
+        }
+        Ok(Value::new(Expr::Deref(Box::new(value.expr)), value.ty))
     }
 
     /// The `self` a `*self` is written on, when it is a reference
@@ -478,6 +523,7 @@ impl Env<'_> {
 
     fn name(&mut self, name: &ast::Name, expected: Option<&Type>) -> Elab<Value> {
         if let Some(slot) = self.names.iter().rposition(|local| local.name == name.text) {
+            self.check_closure_capture(slot, name.span)?;
             // A use of a value moves it, unless it is `Copy` or is read
             // where nothing runs (`moves.rs`).
             self.use_local(slot, name.span);
@@ -497,27 +543,16 @@ impl Env<'_> {
             }
             let ghost = local.ghost;
             let (id, ty) = (local.id, self.version_type(slot));
-            // A `Ghost<T>` value is named only where nothing runs.
-            if ghost && !self.reading() {
-                let shown = self.show_type(&ty);
-                self.diagnostics.push(
-                    crate::diagnostic::Diagnostic::error(
-                        "L0201",
-                        format!(
-                            "`{}` is a `Ghost<{shown}>`, which has no runtime form",
-                            name.text
-                        ),
-                        name.span,
-                    )
-                    .note("a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field"),
-                );
-                return Err(());
-            }
+            let expr = Expr::Var {
+                id,
+                name: name.text.clone(),
+                ty: ty.clone(),
+            };
             return Ok(Value::new(
-                Expr::Var {
-                    id,
-                    name: name.text.clone(),
-                    ty: ty.clone(),
+                if ghost {
+                    Expr::Ghost(Box::new(expr))
+                } else {
+                    expr
                 },
                 ty,
             ));

@@ -1,0 +1,4 @@
+prop P { Yes => { prop!(true) } }
+fn bad() -> @P {
+    P::Yes(prove!(true)) //~ error: L0276 evidence outside
+}

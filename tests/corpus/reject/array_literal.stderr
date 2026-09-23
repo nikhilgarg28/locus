@@ -1,10 +1,10 @@
-error[L0116]: arrays are not in Locus yet
+error[L0272]: logical and runtime positions in this value do not match the declared type
  --> tests/corpus/reject/array_literal.lc:3:5
   |
-3 |     [1, 2, 3] //~ error: L0116 arrays are not in Locus yet
+3 |     [1, 2, 3] //~ error: L0272 logical and runtime positions
   |     ^^^^^^^^^
-error[L0116]: arrays are not in Locus yet
+error[L0284]: an empty array needs an element type annotation
  --> tests/corpus/reject/array_literal.lc:7:5
   |
-7 |     [] //~ error: L0116 arrays are not in Locus yet
+7 |     [] //~ error: L0284 an empty array needs an element type annotation
   |     ^^

@@ -1,0 +1,5 @@
+error[L0277]: a declared proposition is opened by matching and closed with its constructor; fold! and unfold! apply to logic functions
+ --> tests/corpus/reject/prop_unfold.lc:3:13
+  |
+3 |     unfold!(P, h) //~ error: L0277 opened by matching
+  |             ^

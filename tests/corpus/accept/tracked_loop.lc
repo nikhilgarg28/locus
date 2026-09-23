@@ -77,11 +77,11 @@ fn stale_on_entry(start: u8, first: @(start <= 10)) -> u8 {
 }
 
 //~ proofs: 13
-//~ run: walk(0, Proved) => (10, Proved)
-//~ run: walk(7, Proved) => (10, Proved)
-//~ run: walk(10, Proved) => (10, Proved)
-//~ run: count_to(0) => (0, Proved)
-//~ run: count_to(9) => (9, Proved)
-//~ run: count_to(255) => (255, Proved)
-//~ run: stale_on_entry(3, Proved) => 55
-//~ rust: let (m, still) = advance(n, ok);
+//~ run: walk(0, Erased) => (10, Erased)
+//~ run: walk(7, Erased) => (10, Erased)
+//~ run: walk(10, Erased) => (10, Erased)
+//~ run: count_to(0) => (0, Erased)
+//~ run: count_to(9) => (9, Erased)
+//~ run: count_to(255) => (255, Erased)
+//~ run: stale_on_entry(3, Erased) => 55
+//~ rust: let (m, _) = advance(n, ok);

@@ -3,9 +3,8 @@
 //! what the code after an operator knows, with and without the promise.
 //! The corpus has the same programs run and compiled; this file looks at
 //! the tiers and the diagnostics, which the corpus does not see. The
-//! arithmetic tier of a hole (E7), and the interim rule for a function
-//! that makes every promise of the logic and has an operator in its body
-//! (LOC-193), are tested at the end.
+//! arithmetic tier of a hole and the explicit logic/runtime boundary
+//! are tested at the end.
 
 use locus::elab::{Elaborated, elaborate};
 use locus::erased::{Interpreter, Outcome, Overflow, Value, check_module};
@@ -70,7 +69,7 @@ fn next(n: u32, fits: @(n as Int + 1 <= u32::MAX as Int)) -> (m: u32, @(m as Int
 }
 ",
     );
-    assert_eq!(tiers(&result), ["arithmetic", "exact", "computed"]);
+    assert_eq!(tiers(&result), ["arithmetic", "computed", "computed"]);
     assert_eq!(
         run(
             &result,
@@ -102,7 +101,10 @@ fn ten_more(n: u8, room: @(n as Int + 10 <= 255)) -> (m: u8, @(m as Int == n as 
 }
 ",
     );
-    assert_eq!(tiers(&result), ["exact", "arithmetic", "exact", "computed"]);
+    assert_eq!(
+        tiers(&result),
+        ["exact", "arithmetic", "computed", "computed"]
+    );
 }
 
 #[test]
@@ -193,7 +195,7 @@ fn sum(a: u8, b: u8, fits: @(a as Int + b as Int <= 255)) -> u8 {{
         )
     };
     let result = accepted(&text("#[no_panic]"));
-    assert_eq!(tiers(&result), ["arithmetic", "exact", "computed"]);
+    assert_eq!(tiers(&result), ["arithmetic", "computed", "computed"]);
     let (codes, message) = rejected(&text(""));
     assert_eq!(codes, ["L0230"]);
     assert!(message.contains("cannot show `s == a + b`"), "{message}");
@@ -202,7 +204,7 @@ fn sum(a: u8, b: u8, fits: @(a as Int + b as Int <= 255)) -> u8 {{
 #[test]
 fn the_wrapped_result_is_known_in_every_function() {
     let result = accepted(
-        "fn sum(a: u8, b: u8) -> (s: u8, @(s == (a as Int + b as Int) as u8)) {
+        "fn sum(a: u8, b: u8) -> (s: u8, @(s == a.wrapping_add(b))) {
     let s = a + b;
     (s, _)
 }
@@ -273,16 +275,14 @@ fn halve(a: u8, b: u8) -> u8 {
 }
 
 #[test]
-fn an_operator_on_a_machine_type_is_refused_where_nothing_runs() {
-    let (codes, message) = rejected("fn p(a: u8, b: u8) -> Prop {\n    prop!(a + b <= 255)\n}\n");
-    assert_eq!(codes, ["L0236"]);
-    assert_eq!(
-        message,
-        "`+` on `u8` may panic, on overflow, so it is not a proposition write `a as Int + b as Int` for the exact sum, or `a.wrapping_add(b)` for the wrapped one"
-    );
+fn a_proposition_models_machine_operands_before_logical_arithmetic() {
+    let result = accepted("logic fn p(a: u8, b: u8) -> Prop { prop!(a + b <= 255) }");
+    assert!(matches!(
+        result.function("p"),
+        Some(locus::typed::FnRef::Math(_))
+    ));
     // In the body of a function that makes every promise of the logic the
-    // operator stands, and the function is checked as an ordinary one with
-    // its promises (LOC-193): here the obligation of `*` is what fails.
+    // operator is still runtime computation: its no_panic obligation fails.
     let (codes, message) =
         rejected("#[terminates] #[no_panic] #[no_io]\nfn f(a: u8, b: u8) -> u8 {\n    a * b\n}\n");
     assert_eq!(codes, ["L0235"]);
@@ -373,7 +373,7 @@ fn same(a: u8, b: u8, h: @(a == b)) -> @(a as Int + 1 == b as Int + 1) {
     );
     assert_eq!(
         tiers(&result),
-        ["arithmetic", "arithmetic", "arithmetic", "arithmetic"]
+        ["arithmetic", "computed", "arithmetic", "arithmetic"]
     );
 }
 
@@ -396,7 +396,7 @@ fn below(a: u8, b: u8, h: @(a as Int <= b as Int - 1)) -> @(a < b) {
 }
 ",
     );
-    assert_eq!(tiers(&result), ["arithmetic", "arithmetic", "arithmetic"]);
+    assert_eq!(tiers(&result), ["exact", "arithmetic", "arithmetic"]);
 }
 
 #[test]
@@ -484,10 +484,7 @@ fn an_unsolved_hole_shows_the_counterexample_of_the_arithmetic_procedure() {
     );
     assert_eq!(codes, ["L0230"]);
     assert!(!message.contains("it fails when"), "{message}");
-    assert!(
-        message.contains("u8_succ_le_of_lt(n, 10, small)"),
-        "{message}"
-    );
+    assert!(message.contains("stated with a lemma call"), "{message}");
 }
 
 #[test]
@@ -542,7 +539,7 @@ fn scaled(n: u8, small: @(n <= 50)) -> (m: u8, @(m as Int <= 250)) {
     assert_eq!(tiers(&first), ["arithmetic", "arithmetic", "arithmetic"]);
 }
 
-// --- LOC-193: a fully promised function whose body is not a term ------------------
+// --- Explicit declaration mode is independent of runtime promises ----------------
 
 #[test]
 fn a_fully_promised_function_with_an_operator_is_checked_as_an_ordinary_one() {
@@ -584,7 +581,7 @@ fn about(hi: u8, lo: u8, ordered: @(lo <= hi)) -> Prop {
     assert_eq!(codes, ["L0209"]);
     assert_eq!(
         message,
-        "`gap` cannot appear in a proposition: its body is not a term of the logic (it contains `-` at line 3); it is known by its contract only, which is not supported yet (LOC-193) a function appears in a proposition when it promises `terminates`, `no_panic`, and `no_io` and takes no `&mut`, so that mentioning it runs nothing and denotes one value"
+        "ordinary fn `gap` cannot appear in a proposition write logic fn for pure, total logical computation; runtime promises never make an ordinary function logical"
     );
     // Without the bound the obligation fails, as in any `no_panic` function.
     let (codes, _) = rejected(
@@ -594,28 +591,13 @@ fn about(hi: u8, lo: u8, ordered: @(lo <= hi)) -> Prop {
 }
 
 #[test]
-fn a_fully_promised_function_without_an_operator_stays_a_function_of_the_logic() {
-    // Its defining equation is known: the claim about it is `unfold!`ed,
-    // and a value with a cast is a term.
+fn promises_do_not_make_a_runtime_function_logical() {
+    let (codes, _) = rejected(
+        "#[terminates] #[no_panic] #[no_io] fn identity(n:u8)->u8 { n } fn claim(n:u8)->Prop {prop!(identity(n)==n)}",
+    );
+    assert_eq!(codes, ["L0209"]);
     let result = accepted(
-        "#[terminates] #[no_panic] #[no_io]
-fn twice(n: u8) -> u8 {
-    n.wrapping_add(n)
-}
-
-fn about(n: u8, h: @(twice(n) == 4)) -> @(n.wrapping_add(n) == 4) {
-    unfold!(twice, h)
-}
-
-#[terminates] #[no_panic] #[no_io]
-fn widened(n: u8) -> u16 {
-    n as u16
-}
-
-fn wide(n: u8, h: @(widened(n) == 7)) -> @(n as u16 == 7) {
-    unfold!(widened, h)
-}
-",
+        "logic fn twice(n:Int)->Int {n+n} fn about(n:Int,h:@(twice(n)==4))->@(n+n==4) {unfold!(twice,h)}",
     );
     assert!(tiers(&result).is_empty());
 }

@@ -1,7 +1,7 @@
 //! The built-in forms, `name!(...)`: `prop!` states a proposition, `prove!`
 //! states a claim where it stands and finds its evidence, `rewrite!`,
-//! `unfold!` and `fold!` are the explicit equality steps, `snapshot!`
-//! builds a `Ghost<T>` (E8), and the rest are not in Locus yet and say
+//! `unfold!` and `fold!` are explicit equality steps. The old `snapshot!`
+//! spelling reports a model-cast migration diagnostic. Unimplemented forms say
 //! which task brings them.
 //!
 //! The forms that mean what they mean in Rust and panic: `panic!`, `todo!`,
@@ -57,6 +57,7 @@ impl Env<'_> {
             Form::Assert | Form::DebugAssert => self.assert_form(form, arguments, name_span, span),
             Form::Snapshot => self.snapshot(arguments, expected, name_span, span),
             Form::Old => self.old_form(arguments, name_span, span),
+            Form::Recurse => self.measured_call(arguments, span),
             _ => self.form_not_yet(form, name_span),
         }
     }
@@ -272,9 +273,14 @@ impl Env<'_> {
             );
         }
         if self.total {
-            self.not_a_term
-                .get_or_insert((format!("`{}!`", form.name()), name_span));
-            return Err(());
+            return self.fail(
+                "L0270",
+                format!(
+                    "`{}!` is a runtime operation and cannot appear in logical computation",
+                    form.name()
+                ),
+                name_span,
+            );
         }
         Ok(())
     }
@@ -372,36 +378,41 @@ impl Env<'_> {
             .join(" ")
     }
 
-    /// `snapshot!(e)`: a `Ghost<T>` holding the logical value of `e: T`.
-    /// It stands only where nothing runs, which is where a `Ghost<T>` value
-    /// may be named, and `e` is elaborated as a logic-only context: every
-    /// call in it is one a proposition admits, and every name is read.
+    /// Diagnose the removed snapshot spelling and offer its model cast.
     fn snapshot(
         &mut self,
         arguments: &[ast::Expr],
-        expected: Option<&Type>,
-        name_span: Span,
+        _expected: Option<&Type>,
+        _name_span: Span,
         span: Span,
     ) -> Elab<Value> {
         let [argument] = arguments else {
             return self.fail("L0208", "`snapshot!` takes one value", span);
         };
-        if !self.reading() {
-            self.diagnostics.push(
-                Diagnostic::error(
-                    "L0201",
-                    "`snapshot!` builds a `Ghost<T>`, which has no runtime form",
-                    name_span,
-                )
-                .note("write it where nothing runs: `let g: Ghost<T> = snapshot!(x);` or `let g = snapshot!(x);`, in a `Ghost<T>` parameter or field, or in a proposition"),
-            );
-            return Err(());
+        let value = self.infer(argument)?;
+        let model = if value.ty.as_machine().is_some() {
+            Some("Int")
+        } else if matches!(value.ty, Type::Bool) {
+            Some("Bool")
+        } else {
+            None
+        };
+        let mut diagnostic = Diagnostic::error(
+            "L0271",
+            "snapshot! has been replaced by a model observation",
+            span,
+        );
+        if let Some(model) = model {
+            let replacement = format!("({}) as {model}", self.text(argument.span));
+            diagnostic = diagnostic.suggest(crate::diagnostic::Suggestion {
+                message: "observe the value through its model".into(),
+                span,
+                replacement,
+                applicability: crate::diagnostic::Applicability::MachineApplicable,
+            });
         }
-        let value = self.logical("the argument of `snapshot!`", |env| match expected {
-            Some(expected) => env.check(argument, expected),
-            None => env.infer(argument),
-        })?;
-        Ok(Value::new(Expr::Ghost(Box::new(value.expr)), value.ty))
+        self.diagnostics.push(diagnostic);
+        Err(())
     }
 
     /// `prove!(claim)`: the claim as a proposition, and evidence of it found

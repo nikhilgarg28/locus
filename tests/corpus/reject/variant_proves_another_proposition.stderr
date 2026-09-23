@@ -1,5 +1,7 @@
-error[L0225]: a variant of `Small` proves `Small(...)`
- --> tests/corpus/reject/variant_proves_another_proposition.lc:7:12
+error[L0230]: this is evidence of `Tiny(n)`, and `Small(n)` is needed
+ --> tests/corpus/reject/variant_proves_another_proposition.lc:5:5
   |
-7 |     Zero: @Tiny(0), //~ error: L0225 a variant of `Small` proves `Small(...)`
-  |            ^^^^^^^
+5 |     proof //~ error: L0230 this is evidence of `Tiny(n)`, and `Small(n)` is needed
+  |     ^^^^^
+  |
+  = note: known here: `proof: Tiny(n)`

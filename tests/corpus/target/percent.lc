@@ -1,76 +1,21 @@
-// A protected type, and a way in from Rust, from Target examples. It checks,
-// runs three ways, and compiles since O4, with these departures from the
-// text there: `new` takes evidence, so it is `pub(crate)` and never plain
-// `pub`, by O2's rule L0244 (the text has `pub(super)`, which modules will
-// bring); `Option<Percent>` waits for generics, so `checked` returns an
-// enum of the file's own, `Checked`; and `Debug` is derived, since the
-// compiled harness prints the values a run line asks for. `value`, `set`,
-// and `set_twice` are added for the Rust caller of tests/build.rs: `set`
-// replaces the whole value through `&mut self` (case 8 of How mutation is
-// checked), and `set_twice` completes one valid replacement and then panics
-// on its second input (case 11), so that a Rust caller that catches the
-// panic finds the first replacement, valid, and never a broken value.
-#[derive(Debug)]
-pub struct Percent { value: u32, in_range: @(value <= 100) }      // not Copy: it moves
-
-// What `checked` answers with, in place of `Option<Percent>`.
-#[derive(Debug)]
-pub enum Checked { Valid(Percent), Invalid }
+pub struct Percent { value: u32, in_range: @((value as Int) <= 100) }      // not Copy: it moves
 
 impl Percent {
-    // Callable from Locus, where evidence exists, and from the rest of the
-    // generated crate; not from Rust.
+    // Callable from Locus, where evidence exists.
     #[terminates] #[no_panic] #[no_io]
-    pub(crate) fn new(value: u32, in_range: @(value <= 100)) -> Percent {
+    pub(super) fn new(value: u32, in_range: @((value as Int) <= 100)) -> Percent {
         Percent { value, in_range }
     }
 
     // Callable from Rust: the check happens at runtime, and the evidence comes from the branch.
     #[terminates] #[no_panic] #[no_io]
-    pub fn checked(value: u32) -> Checked {
-        if value <= 100 { Checked::Valid(Percent::new(value, prove!(value <= 100))) } else { Checked::Invalid }   // computed, from the branch
-    }
-
-    // The field is private, so Rust reads the value through this.
-    #[terminates] #[no_panic] #[no_io]
-    pub fn value(&self) -> u32 {
-        self.value
-    }
-
-    // Replaces the whole value, or leaves it: no field is ever assigned alone.
-    #[no_io]
-    pub fn set(&mut self, value: u32) -> bool {
-        match Percent::checked(value) {
-            Checked::Valid(next) => { *self = next; true }
-            Checked::Invalid => false,
-        }
-    }
-
-    // One valid replacement completes, then the second input is checked and
-    // may panic: the caller finds `a`, valid, after `catch_unwind`.
-    #[no_io]
-    pub fn set_twice(&mut self, a: u32, b: u32) -> () {
-        assert!(a <= 100);
-        *self = Percent { value: a, in_range: prove!(a <= 100) };       // computed, from the check
-        assert!(b <= 100);
-        *self = Self { value: b, in_range: prove!(b <= 100) };          // computed, from the check
+    pub fn checked(value: u32) -> Option<Percent> {
+        if value <= 100 { Some(Percent::new(value, prove!((value as Int) <= 100))) } else { None }   // exact
     }
 }
 
-//~ proofs: 3
-//~ run: Percent::new(5, Proved) => Percent { value: 5, in_range: Proved }
-//~ run: Percent::checked(0) => Valid(Percent { value: 0, in_range: Proved })
-//~ run: Percent::checked(100) => Valid(Percent { value: 100, in_range: Proved })
-//~ run: Percent::checked(101) => Invalid
-//~ run: Percent::value(&Percent { value: 7, in_range: Proved }) => 7
-//~ run: Percent::set(&mut Percent { value: 3, in_range: Proved } -> Percent { value: 50, in_range: Proved }, 50) => true
-//~ run: Percent::set(&mut Percent { value: 3, in_range: Proved } -> Percent { value: 3, in_range: Proved }, 200) => false
-//~ run: Percent::set_twice(&mut Percent { value: 3, in_range: Proved } -> Percent { value: 9, in_range: Proved }, 5, 9) => ()
-//~ run: Percent::set_twice(&mut Percent { value: 3, in_range: Proved } -> Percent { value: 5, in_range: Proved }, 5, 200) => panic: assertion failed: b <= 100
-//~ run: Percent::set_twice(&mut Percent { value: 3, in_range: Proved } -> Percent { value: 3, in_range: Proved }, 200, 5) => panic: assertion failed: a <= 100
-//~ rust: impl Percent {
-//~ rust: pub(crate) fn new(value: u32, in_range: Proved) -> Percent {
-//~ rust: pub fn value(&self) -> u32 {
-//~ rust: pub fn set_twice(&mut self, a: u32, b: u32) -> () {
-//~ rust: *self = Percent { value: a, in_range: Proved };
-//~ rust: Checked::Valid(Percent::new(value, Proved))
+//~ proofs: 1
+//~ run: Percent::checked(0) => Some(Percent { value: 0, in_range: Erased })
+//~ run: Percent::checked(100) => Some(Percent { value: 100, in_range: Erased })
+//~ run: Percent::checked(101) => None
+//~ spec: 1.14:1

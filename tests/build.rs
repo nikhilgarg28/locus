@@ -13,7 +13,8 @@
 //!
 //! The protected type of Target examples, `Percent`, is the same boundary
 //! with an `impl` block (O4): `checked` is `pub` and answers with an enum
-//! of the file's own, `new` takes evidence and is `pub(crate)`, and the
+//! (`Option`, emitted as a concrete monomorphic enum), `new` takes evidence
+//! and is `pub(super)`, and the
 //! fields are private, so a Rust caller can hold a `Percent`, cannot make
 //! one, and can only change one through its methods. The panic test is
 //! case 11 of How mutation is checked: a method that completes one valid
@@ -33,9 +34,8 @@ pub struct Lock {
     open: bool,
 }
 
-#[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
-    prop!(failures <= 3)
+prop within_limit(failures: Int) {
+    Bounds => { prop!(failures <= 3) }
 }
 
 pub fn locked() -> Lock {
@@ -43,10 +43,10 @@ pub fn locked() -> Lock {
 }
 
 pub fn bounded_zero() -> @within_limit(0) {
-    fold!(within_limit, prove!(0u8 <= 3))
+    within_limit::Bounds @ prove!(0 <= 3)
 }
 
-pub(crate) fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) {
+pub(crate) fn step(lock: Lock, bounded: @within_limit(lock.failures as Int)) -> (next: Lock, @within_limit(next.failures as Int)) {
     (lock, bounded)
 }
 
@@ -64,22 +64,47 @@ pub struct Lock {
     open: bool,
 }
 
-#[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
-    prop!(failures <= 3)
+prop within_limit(failures: Int) {
+    Bounds => { prop!(failures <= 3) }
 }
 
 pub fn bounded_zero() -> @within_limit(0) {
-    fold!(within_limit, prove!(0u8 <= 3))
+    within_limit::Bounds @ prove!(0 <= 3)
 }
 
-pub fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) {
+pub fn step(lock: Lock, bounded: @within_limit(lock.failures as Int)) -> (next: Lock, @within_limit(next.failures as Int)) {
     (lock, bounded)
 }
 "#;
 
 /// The protected type, as `tests/corpus/target/percent.lc` has it.
-const PERCENT: &str = include_str!("corpus/target/percent.lc");
+const PERCENT: &str = concat!(
+    include_str!("corpus/target/percent.lc"),
+    r#"
+// Additional mutation methods exercise the same protected invariant from Rust.
+impl Percent {
+    #[terminates] #[no_panic] #[no_io]
+    pub fn value(&self) -> u32 { self.value }
+
+    #[no_io]
+    pub fn set(&mut self, value: u32) -> bool {
+        let checked: Option<Percent> = Percent::checked(value);
+        match checked {
+            Option::Some(next) => { *self = next; true }
+            Option::None => false,
+        }
+    }
+
+    #[no_io]
+    pub fn set_twice(&mut self, a: u32, b: u32) -> () {
+        assert!(a <= 100);
+        *self = Percent { value: a, in_range: prove!((a as Int) <= 100) };
+        assert!(b <= 100);
+        *self = Self { value: b, in_range: prove!((b as Int) <= 100) };
+    }
+}
+"#
+);
 
 fn workspace(name: &str) -> PathBuf {
     let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("build_{name}"));
@@ -103,9 +128,17 @@ fn build_crate_from(name: &str, file: &str, source: &str) -> PathBuf {
     let file = workspace.join(file);
     std::fs::write(&file, source).unwrap();
     let out = workspace.join("generated");
-    let output = Command::new(env!("CARGO_BIN_EXE_locus"))
-        .arg("build")
-        .arg(&file)
+    let mut command = Command::new(env!("CARGO_BIN_EXE_locus"));
+    command.arg("build").arg(&file);
+    for feature in [
+        locus::preview::Feature::LogicalData,
+        locus::preview::Feature::HeapViews,
+    ] {
+        if feature.status() == locus::preview::Status::Preview {
+            command.args(["--preview", feature.name()]);
+        }
+    }
+    let output = command
         .arg("--out")
         .arg(&out)
         .args(["--name", "generated"])
@@ -214,6 +247,7 @@ fn run(binary: PathBuf) -> String {
 }
 
 #[test]
+#[doc = "spec: 1.17:1"]
 fn a_plain_pub_function_is_called_from_rust_and_runs() {
     let (directory, rlib) = generated("total");
     let binary = compile_caller(
@@ -229,6 +263,7 @@ fn a_plain_pub_function_is_called_from_rust_and_runs() {
 }
 
 #[test]
+#[doc = "spec: 1.17:1"]
 fn an_evidence_taking_function_is_not_reachable_from_rust() {
     // `step` is `pub(crate)`: a function under the generated root can call
     // it, and a Rust caller in another crate cannot name it.
@@ -245,6 +280,7 @@ fn an_evidence_taking_function_is_not_reachable_from_rust() {
 }
 
 #[test]
+#[doc = "spec: 1.17:1"]
 fn the_marker_replay_attack_does_not_compile() {
     // The attack: obtain a marker honestly, from `bounded_zero`, and hand
     // it to a function that wants evidence about a lock with three
@@ -283,13 +319,14 @@ fn the_marker_replay_attack_does_not_compile() {
 }
 
 #[test]
+#[doc = "spec: 1.17:1"]
 fn the_marker_cannot_be_made_by_a_rust_caller() {
     let (directory, rlib) = generated("marker");
     // As a value: the constant of that name is private to the root.
     let stderr = compile_caller(
         &directory,
         "names_marker",
-        "fn main() {\n    let _: generated::Proved = generated::Proved;\n}\n",
+        "fn main() {\n    let _: generated::Erased = generated::Erased;\n}\n",
         &rlib,
     )
     .expect_err("the marker's constant is private");
@@ -298,7 +335,7 @@ fn the_marker_cannot_be_made_by_a_rust_caller() {
     let stderr = compile_caller(
         &directory,
         "builds_marker",
-        "fn main() {\n    let _ = generated::Proved { _private: () };\n}\n",
+        "fn main() {\n    let _ = generated::Erased { _private: () };\n}\n",
         &rlib,
     )
     .expect_err("the marker's field is private");
@@ -308,7 +345,7 @@ fn the_marker_cannot_be_made_by_a_rust_caller() {
     let stderr = compile_caller(
         &directory,
         "calls_marker",
-        "fn main() {\n    let _ = generated::Proved(());\n}\n",
+        "fn main() {\n    let _ = generated::Erased(());\n}\n",
         &rlib,
     )
     .expect_err("the marker has no constructor function");
@@ -317,15 +354,16 @@ fn the_marker_cannot_be_made_by_a_rust_caller() {
     let binary = compile_caller(
         &directory,
         "holds_marker",
-        "fn main() {\n    let held: generated::Proved = generated::lock::bounded_zero();\n    println!(\"{held:?}\");\n}\n",
+        "fn main() {\n    let held: generated::Erased = generated::lock::bounded_zero();\n    println!(\"{held:?}\");\n}\n",
         &rlib,
     )
     .unwrap_or_else(|stderr| panic!("a marker can be held:\n{stderr}"));
     let output = Command::new(binary).output().unwrap();
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Proved\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Erased\n");
 }
 
 #[test]
+#[doc = "spec: 1.17:1"]
 fn a_struct_with_a_private_field_cannot_be_built_or_opened_from_rust() {
     let (directory, rlib) = generated("private_field");
     let stderr = compile_caller(
@@ -354,9 +392,9 @@ fn the_generated_crate_has_the_plain_layout_and_is_the_same_twice() {
     assert!(manifest.contains("name = \"generated\""), "{manifest}");
     assert!(manifest.contains("edition = \"2024\""), "{manifest}");
     let root = read("src/lib.rs");
-    assert!(root.contains("pub struct Proved {"), "{root}");
+    assert!(root.contains("pub struct Erased {"), "{root}");
     assert!(
-        root.contains("const Proved: Proved = Proved { _private: () };"),
+        root.contains("const Erased: Erased = Erased { _private: () };"),
         "{root}"
     );
     assert!(root.contains("pub mod lock;"), "{root}");
@@ -365,14 +403,15 @@ fn the_generated_crate_has_the_plain_layout_and_is_the_same_twice() {
         module.starts_with("// Generated by Locus. Do not edit.\n"),
         "{module}"
     );
-    assert!(module.contains("use crate::{Ghost, Proved};"), "{module}");
-    assert!(!module.contains("struct Proved"), "{module}");
+    assert!(module.contains("use crate::Erased;"), "{module}");
+    assert!(!module.contains("struct Erased"), "{module}");
     assert!(
-        module.contains("\npub struct Lock {\n    pub failures: u8,\n    open: bool,\n}"),
+        module.contains("\npub struct Lock {\n    pub failures: u8,")
+            && module.contains("    open: bool,\n}"),
         "{module}"
     );
     assert!(
-        module.contains("\npub(crate) fn step(lock: Lock, bounded: Proved) -> (Lock, Proved) {"),
+        module.contains("\npub(crate) fn step(lock: Lock, _bounded: Erased) -> (Lock, Erased) {"),
         "{module}"
     );
     assert!(
@@ -398,7 +437,8 @@ fn checked_is_called_from_rust_and_answers_with_the_enum() {
     let binary = compile_caller(
         &directory,
         "calls_checked",
-        "use generated::percent::{Checked, Percent};\nfn main() {\n    for value in [42, 100, 101] {\n        match Percent::checked(value) {\n            Checked::Valid(percent) => println!(\"valid {}\", percent.value()),\n            Checked::Invalid => println!(\"invalid\"),\n        }\n    }\n}\n",
+        "use generated::percent::{Percent, __LocusOption0};\nfn main() {\n    for value in [42, 100, 101] {\n        let checked = Percent::checked(value);
+        match checked {\n            __LocusOption0::Some(percent) => println!(\"valid {}\", percent.value()),\n            __LocusOption0::None => println!(\"invalid\"),\n        }\n    }\n}\n",
         &rlib,
     )
     .unwrap_or_else(|stderr| panic!("rustc refused a call to `checked`:\n{stderr}"));
@@ -444,7 +484,7 @@ fn percent_cannot_be_built_or_opened_from_rust() {
     let stderr = compile_caller(
         &directory,
         "reads_percent",
-        "fn main() {\n    if let generated::percent::Checked::Valid(percent) = generated::percent::Percent::checked(5) {\n        println!(\"{}\", percent.value);\n    }\n}\n",
+        "fn main() {\n    if let generated::percent::__LocusOption0::Some(percent) = generated::percent::Percent::checked(5) {\n        println!(\"{}\", percent.value);\n    }\n}\n",
         &rlib,
     )
     .expect_err("a private field cannot be read");
@@ -452,6 +492,7 @@ fn percent_cannot_be_built_or_opened_from_rust() {
 }
 
 #[test]
+#[doc = "spec: 1.13:2"]
 fn a_panic_after_one_valid_replacement_leaves_the_new_valid_value() {
     // Case 11: `set_twice(5, 200)` replaces the value with 5, then panics
     // on 200. The caller catches the panic and reads the `Percent` it
@@ -462,7 +503,7 @@ fn a_panic_after_one_valid_replacement_leaves_the_new_valid_value() {
     let binary = compile_caller(
         &directory,
         "catches_set_twice",
-        "use generated::percent::{Checked, Percent};\nfn main() {\n    std::panic::set_hook(Box::new(|_| {}));\n    let mut percent = match Percent::checked(3) {\n        Checked::Valid(percent) => percent,\n        Checked::Invalid => unreachable!(),\n    };\n    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| percent.set_twice(5, 200)));\n    println!(\"panicked {} value {}\", outcome.is_err(), percent.value());\n    assert!(percent.value() <= 100);\n    println!(\"set {} value {}\", percent.set(200), percent.value());\n    println!(\"set {} value {}\", percent.set(7), percent.value());\n}\n",
+        "use generated::percent::{Percent, __LocusOption0};\nfn main() {\n    std::panic::set_hook(Box::new(|_| {}));\n    let mut percent = match Percent::checked(3) {\n        __LocusOption0::Some(percent) => percent,\n        __LocusOption0::None => unreachable!(),\n    };\n    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| percent.set_twice(5, 200)));\n    println!(\"panicked {} value {}\", outcome.is_err(), percent.value());\n    assert!(percent.value() <= 100);\n    println!(\"set {} value {}\", percent.set(200), percent.value());\n    println!(\"set {} value {}\", percent.set(7), percent.value());\n}\n",
         &rlib,
     )
     .unwrap_or_else(|stderr| panic!("rustc refused the caller:\n{stderr}"));
@@ -477,16 +518,18 @@ fn the_impl_block_is_printed_with_its_receivers_and_visibilities() {
     let directory = build_crate_from("percent_layout", "percent.lc", PERCENT);
     let module = std::fs::read_to_string(directory.join("src").join("percent.rs")).unwrap();
     for expected in [
-        "\npub struct Percent {\n    value: u32,\n    in_range: Proved,\n}",
-        "\npub enum Checked {\n    Valid(Percent),\n    Invalid,\n}",
+        "\npub struct Percent {",
+        "    value: u32,",
+        "    in_range: Erased,\n}",
+        "pub enum __LocusOption0 {\n    None,\n    Some(Percent),\n}",
         "\nimpl Percent {\n",
-        "\n    pub(crate) fn new(value: u32, in_range: Proved) -> Percent {",
-        "\n    pub fn checked(value: u32) -> Checked {",
+        "\n    pub(super) fn new(value: u32, _in_range: Erased) -> Percent {",
+        "\n    pub fn checked(value: u32) -> __LocusOption0 {",
         "\n    pub fn value(&self) -> u32 {",
         "\n    pub fn set(&mut self, value: u32) -> bool {",
         "\n    pub fn set_twice(&mut self, a: u32, b: u32) -> () {",
-        "\n        *self = Percent { value: a, in_range: Proved };",
-        "Checked::Valid(Percent::new(value, Proved))",
+        "\n        *self = Percent { value: a, in_range: Erased };",
+        "__LocusOption0::Some(Percent::new(value, Erased))",
     ] {
         assert!(
             module.contains(expected),

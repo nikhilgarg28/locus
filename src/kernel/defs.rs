@@ -18,17 +18,24 @@ use super::term::{EnumId, FnId, PropId, StructId, Term, Type, VarId, field_type}
 pub(super) struct StructDecl {
     /// A telescope, as in `Type::Tuple`.
     pub(super) fields: Vec<Type>,
+    pub(super) logical: bool,
 }
 
 #[derive(Clone, Debug)]
 pub(super) struct EnumDecl {
     /// One payload telescope per variant.
     pub(super) variants: Vec<Vec<Type>>,
+    pub(super) logical: bool,
+    pub(super) group: Vec<EnumId>,
 }
 
 /// A variant of a declared proposition, as given to `declare_prop`.
 #[derive(Clone, Debug)]
 pub enum PropVariant {
+    /// Header parameters followed by witnesses, and one computed body.
+    /// The body is under all telescope binders; the kernel adds its sole
+    /// evidence parameter itself. Proof-typed witnesses are rejected.
+    Arm { witnesses: Type, body: Term },
     /// No stated conclusion: the variant proves the proposition at its
     /// parameters. The telescope lists the parameters first and then the
     /// payload, so payload types may mention the parameters.
@@ -43,6 +50,21 @@ pub enum PropVariant {
 }
 
 impl PropVariant {
+    /// Build a named arm over a telescope containing the header parameters
+    /// first and the witnesses afterwards. The body receives all of them.
+    pub fn arm(witnesses: Type, body: impl FnOnce(&[Term]) -> Term) -> Self {
+        let arity = match &witnesses {
+            Type::Tuple(fields) => fields.len(),
+            _ => 0,
+        };
+        let vars: Vec<_> = (0..arity).map(|_| VarId::fresh()).collect();
+        let values: Vec<_> = vars.iter().copied().map(Term::Free).collect();
+        Self::Arm {
+            witnesses,
+            body: body(&values).close_over(&vars),
+        }
+    }
+
     /// Builds an indexed variant; `conclusion(payload)` receives the payload
     /// fields as terms.
     pub fn indexed(payload: Type, conclusion: impl FnOnce(&[Term]) -> Vec<Term>) -> Self {
@@ -76,6 +98,7 @@ pub(super) struct PropVariantDecl {
 pub(super) struct PropDecl {
     pub(super) params: Vec<Type>,
     pub(super) variants: Vec<PropVariantDecl>,
+    pub(super) inductive: bool,
 }
 
 /// The propositions the kernel itself refers to. Excluded middle is stated
@@ -129,10 +152,12 @@ pub(super) struct FnDecl {
 #[derive(Clone, Debug, Default)]
 pub struct Definitions {
     structs: Vec<StructDecl>,
-    enums: Vec<EnumDecl>,
-    props: Vec<PropDecl>,
-    fns: Vec<FnDecl>,
+    pub(super) enums: Vec<EnumDecl>,
+    pub(super) props: Vec<PropDecl>,
+    pub(super) fns: Vec<FnDecl>,
     prelude: Option<Prelude>,
+    pub(super) generics: Vec<super::generics::GenericTemplate>,
+    pub(super) quantifiers: Vec<super::quantifiers::Quantifiers>,
 }
 
 impl Definitions {
@@ -214,7 +239,11 @@ impl Definitions {
             check_telescope(&mut ctx, fields)?;
             payloads.push(fields.clone());
         }
-        self.enums.push(EnumDecl { variants: payloads });
+        self.enums.push(EnumDecl {
+            variants: payloads,
+            logical: false,
+            group: Vec::new(),
+        });
         Ok(EnumId(self.enums.len() - 1))
     }
 
@@ -238,6 +267,31 @@ impl Definitions {
         let mut decls = Vec::new();
         for variant in variants {
             decls.push(match variant {
+                PropVariant::Arm { witnesses, body } => {
+                    check_depth([(&witnesses).into(), (&body).into()])?;
+                    let Type::Tuple(mut telescope) = witnesses else {
+                        return Err(KernelError::NotAProduct(witnesses));
+                    };
+                    let prefix = telescope.get(..params.len()).unwrap_or(&[]);
+                    if !same_types(prefix, &params) {
+                        return Err(KernelError::FieldCount {
+                            expected: params.len(),
+                            found: prefix.len(),
+                        });
+                    }
+                    for witness in &telescope[params.len()..] {
+                        if matches!(witness, Type::Proof(_)) {
+                            return Err(KernelError::ProofParameter(witness.clone()));
+                        }
+                    }
+                    telescope.push(Type::proof(body));
+                    check_telescope(&mut ctx, &telescope)?;
+                    PropVariantDecl {
+                        with_params: true,
+                        telescope,
+                        conclusion: Vec::new(),
+                    }
+                }
                 PropVariant::Params(telescope) => {
                     check_depth([(&telescope).into()])?;
                     let Type::Tuple(telescope) = telescope else {
@@ -301,6 +355,7 @@ impl Definitions {
         self.props.push(PropDecl {
             params,
             variants: decls,
+            inductive: false,
         });
         Ok(PropId(self.props.len() - 1))
     }
@@ -316,6 +371,7 @@ impl Definitions {
         check_telescope(&mut ctx, fields)?;
         self.structs.push(StructDecl {
             fields: fields.clone(),
+            logical: false,
         });
         Ok(StructId(self.structs.len() - 1))
     }
@@ -343,7 +399,7 @@ impl Definitions {
         let mut vars = Vec::new();
         for index in 0..params.len() {
             let ty = field_type(&telescope, index, |j| Term::Free(vars[j]));
-            let ghost = ty.is_ghost();
+            let ghost = self.is_erased_type(&ty);
             vars.push(ctx.push_local(ty, ghost));
         }
         let arguments: Vec<Term> = vars.iter().copied().map(Term::Free).collect();
@@ -369,6 +425,78 @@ impl Definitions {
             executable,
         });
         Ok(FnId(self.fns.len() - 1))
+    }
+
+    /// Erasure classification that also knows checked nominal declarations.
+    /// Kernel bool remains mode-polymorphic; its surface Bool classification
+    /// is carried by the elaborator rather than inferred from this type.
+    pub fn is_erased_type(&self, ty: &Type) -> bool {
+        ty.is_ghost()
+            || match ty {
+                Type::Struct(_) | Type::Enum(_) => self.is_logical_type(ty),
+                Type::Fn(_, result) => self.is_erased_type(result),
+                _ => false,
+            }
+    }
+
+    /// Whether a kernel representation may satisfy a Logical bound. The
+    /// surface checker separately distinguishes logical Bool from bool.
+    pub fn is_logical_type(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Int | Type::Bool | Type::Prop | Type::Proof(_) => true,
+            Type::Fn(_, result) => self.is_logical_type(result),
+            Type::Struct(id) => self.structs.get(id.0).is_some_and(|decl| decl.logical),
+            Type::Enum(id) => self.enums.get(id.0).is_some_and(|decl| decl.logical),
+            Type::U8 | Type::Machine(_) | Type::Tuple(_) | Type::Boxed(_) | Type::Buffer(_) => {
+                false
+            }
+        }
+    }
+
+    /// Register an aggregate as logical only after checking every field.
+    /// This is checked derivation, never an unchecked user assertion.
+    pub fn mark_logical(&mut self, ty: &Type) -> Result<(), KernelError> {
+        let fields: Vec<&Type> = match ty {
+            Type::Struct(id) => self
+                .structs
+                .get(id.0)
+                .ok_or(KernelError::UnknownStruct)?
+                .fields
+                .iter()
+                .collect(),
+            Type::Enum(id) => self
+                .enums
+                .get(id.0)
+                .ok_or(KernelError::UnknownEnum)?
+                .variants
+                .iter()
+                .flatten()
+                .collect(),
+            _ if self.is_logical_type(ty) => return Ok(()),
+            _ => return Err(KernelError::NotLogicalType(ty.clone())),
+        };
+        if let Some(field) = fields
+            .into_iter()
+            .find(|field| !self.is_logical_type(field))
+        {
+            return Err(KernelError::NotLogicalType(field.clone()));
+        }
+        match ty {
+            Type::Struct(id) => self.structs[id.0].logical = true,
+            Type::Enum(id) => self.enums[id.0].logical = true,
+            _ => unreachable!("only checked aggregates reach registration"),
+        }
+        Ok(())
+    }
+
+    /// Restrict an accepted declaration to logical use. This only removes
+    /// runtime permission; the body has already been checked as a total term.
+    pub fn restrict_to_logic(&mut self, id: FnId) -> Result<(), KernelError> {
+        self.fns
+            .get_mut(id.0)
+            .ok_or(KernelError::UnknownFunction)?
+            .executable = false;
+        Ok(())
     }
 
     /// Whether the function's body uses excluded middle, directly or through

@@ -14,7 +14,7 @@ struct Lock {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 
@@ -76,12 +76,12 @@ fn attempts_left(attempts: u8, correct: u8) -> u8 {
     left
 }
 
-//~ proofs: 5
+//~ proofs: 8
 //~ run: attempts_left(2, 9) => 1
 //~ run: attempts_left(5, 9) => 0
 //~ run: attempts_left(3, 2) => 3
-//~ run: run(200, 9) => (Lock { failures: 3, open: false }, Proved)
-//~ run: step(Lock { failures: 2, open: false }, Proved, Right) => (Lock { failures: 0, open: true }, Proved)
+//~ run: run(200, 9) => (Lock { failures: 3, open: false }, Erased)
+//~ run: step(Lock { failures: 2, open: false }, Erased, Right) => (Lock { failures: 0, open: true }, Erased)
 //~ run: event_at(4, 4) => Right
 //~ rust: fn attempts_left(attempts: u8, correct: u8) -> u8 {
-//~ rust: fn step(lock: Lock, bounded: Proved, event: Event) -> (Lock, Proved) {
+//~ rust: fn step(lock: Lock, _bounded: Erased, event: Event) -> (Lock, Erased) {

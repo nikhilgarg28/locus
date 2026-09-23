@@ -1,0 +1,31 @@
+L0290: Recognized feature is not implemented
+
+The parser recognizes this form but the current elaborator has no checked implementation for it. This is an implementation boundary, not permission to forward arbitrary syntax to Rust. Rewrite with supported operations or wait for the corresponding language feature.
+
+Example from `tests/corpus/reject/bit_operators_not_yet.lc`; the full file is a regression test.
+
+```locus
+// The shifts and the bitwise operators parse with Rust's precedence and
+// have no meaning until after the core.
+fn shift_left(a: u8, b: u8) -> u8 {
+    a << b
+}
+
+fn shift_right(a: u8, b: u8) -> u8 {
+    a >> b
+}
+
+fn and(a: u8, b: u8) -> u8 {
+    a & b
+}
+
+fn xor(a: u8, b: u8) -> u8 {
+    a ^ b
+}
+
+fn or(a: u8, b: u8) -> u8 {
+    a | b
+}
+```
+
+Language, as built: [1.24:1](../../atlas.html#/doc/language/spec-1.24:1).

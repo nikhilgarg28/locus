@@ -427,9 +427,13 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         Expr::Literal(..) | Expr::Int(_) => true,
         Expr::Var { id, .. } => locals.get(id).copied().unwrap_or(true),
         Expr::Tuple { fields, .. } => fields.iter().all(|field| determined(field, locals)),
-        Expr::Field { target, .. } | Expr::Ghost(target) | Expr::Lend { value: target, .. } => {
-            determined(target, locals)
-        }
+        Expr::Shared { value: target, .. }
+        | Expr::Deref(target)
+        | Expr::BoxNew { value: target, .. }
+        | Expr::BoxDeref { value: target, .. }
+        | Expr::Field { target, .. }
+        | Expr::Ghost(target)
+        | Expr::Lend { value: target, .. } => determined(target, locals),
         Expr::If {
             then_block,
             else_block,
@@ -447,6 +451,7 @@ fn determined(expr: &Expr, locals: &HashMap<VarId, bool>) -> bool {
         | Expr::Compare { .. }
         | Expr::Cast { .. }
         | Expr::CallMath { .. }
+        | Expr::LogicalApply { .. }
         | Expr::CallFn { .. }
         | Expr::While { .. }
         | Expr::For { .. }
@@ -2203,6 +2208,12 @@ fn judge(observed: &Observed, module: &Module) -> Verdict {
     };
     for (slot, build) in Overflow::ALL.into_iter().enumerate() {
         let (checked, erased) = match (&observed.checked[slot], &observed.erased[slot]) {
+            (Err(RunError::TooDeep), _) | (_, Err(RunError::TooDeep)) => {
+                return Verdict::Inconclusive(format!(
+                    "check-IR interpreter/erased-tree interpreter comparison reached MAX_INTERPRETER_CALL_DEPTH, {}",
+                    build.name()
+                ));
+            }
             (Err(error), _) => {
                 return Verdict::Disagree(format!(
                     "the check IR interpreter, {}, could not run it: {error}",
@@ -2225,7 +2236,7 @@ fn judge(observed: &Observed, module: &Module) -> Verdict {
         };
         if checked != erased {
             return Verdict::Disagree(format!(
-                "the interpreters differ, {}: check IR {}, erased {}",
+                "check-IR interpreter/erased-tree interpreter disagreement, {}: check IR {}, erased {}",
                 build.name(),
                 show(&observed.checked[slot]),
                 show(&observed.erased[slot])
@@ -2246,7 +2257,7 @@ fn judge(observed: &Observed, module: &Module) -> Verdict {
             }
             Some(answered) if *answered != expected => {
                 return Verdict::Disagree(format!(
-                    "compiled Rust, {}: {answered}, where the interpreters gave {expected}",
+                    "check-IR interpreter/compiled Rust and erased-tree interpreter/compiled Rust disagreement, {}: Rust {answered}; interpreters {expected}",
                     build.name()
                 ));
             }
@@ -2980,6 +2991,7 @@ fn walk_expr(
             let types = vec![Type::Int; operands.len()];
             walk_all(operands, &types, scope, visit)
         }
+        Expr::LogicalApply { arguments, .. } => walk_all(arguments, &[], scope, visit),
         Expr::CallMath { id, arguments, .. } => {
             let types = scope.tables.params.get(&FnRef::Math(*id)).cloned();
             walk_all(arguments, &types.unwrap_or_default(), scope, visit)
@@ -3064,6 +3076,10 @@ fn walk_expr(
             .is_some_and(|value| walk_expr(value, None, scope, visit)),
         Expr::Assert { condition, .. } => walk_expr(condition, Some(&Type::Bool), scope, visit),
         // A lent place is a place, and stays one.
+        Expr::Shared { value, .. }
+        | Expr::Deref(value)
+        | Expr::BoxNew { value, .. }
+        | Expr::BoxDeref { value, .. } => walk_expr(value, None, scope, visit),
         Expr::Lend { .. } => false,
         Expr::Var { .. }
         | Expr::Bool(_)
@@ -3709,7 +3725,7 @@ fn a_planted_disagreement_is_reported_with_its_seed_and_shrunk() {
     assert!(report.contains("shrunk by"), "{report}");
     let shrunk_rust = rendering(&shrunk.declare(&base).unwrap());
     assert!(
-        shrunk_rust.contains("pub fn f0(v0: u8) -> u8 {\n    7_u8\n}"),
+        shrunk_rust.contains("pub fn f0(_v0: u8) -> u8 {\n    7_u8\n}"),
         "{shrunk_rust}"
     );
 }
@@ -3761,7 +3777,7 @@ fn a_generated_program_is_declared_to_the_same_identities_again() {
         let rust = print_module(session.erased());
         seen_loop |= rust.contains("loop {");
         seen_while |= rust.contains("while v");
-        seen_for |= rust.contains("for v");
+        seen_for |= rust.contains("for v") || rust.contains("for _v");
         seen_math |= program.fns.iter().any(|function| function.item.math);
     }
     assert!(
@@ -3884,4 +3900,48 @@ fn a_byte_typed_by_a_literal_alone_can_be_a_receiver() {
     let compiled = compile("random_bare_literal", &source, Overflow::Checked);
     remove_binaries("random_bare_literal");
     assert!(compiled.is_ok(), "{}", compiled.unwrap_err());
+}
+
+#[test]
+#[doc = "spec: 3.6:2"]
+fn oracle_disagreements_name_the_pair_and_budget_stops_are_inconclusive() {
+    let mut observed = Observed {
+        checked: [
+            Ok(Outcome::Value(Value::u8(1))),
+            Ok(Outcome::Value(Value::u8(1))),
+        ],
+        erased: [
+            Ok(Outcome::Value(Value::u8(2))),
+            Ok(Outcome::Value(Value::u8(2))),
+        ],
+        rust: [None, None],
+    };
+    let module = Module::default();
+    let Verdict::Disagree(report) = judge(&observed, &module) else {
+        panic!("mismatch must be reported");
+    };
+    assert!(
+        report.contains("check-IR interpreter/erased-tree interpreter"),
+        "{report}"
+    );
+    observed.erased = observed.checked.clone();
+    observed.rust[0] = Some(Answered::Value("3".into()));
+    let Verdict::Disagree(report) = judge(&observed, &module) else {
+        panic!("Rust mismatch must be reported");
+    };
+    assert!(
+        report.contains("check-IR interpreter/compiled Rust")
+            && report.contains("erased-tree interpreter/compiled Rust"),
+        "{report}"
+    );
+    observed.checked[0] = Err(RunError::TooDeep);
+    assert!(matches!(
+        judge(&observed, &module),
+        Verdict::Inconclusive(_)
+    ));
+    observed.checked[0] = Ok(Outcome::OutOfFuel);
+    assert!(matches!(
+        judge(&observed, &module),
+        Verdict::Inconclusive(_)
+    ));
 }

@@ -8,6 +8,7 @@ fn preserve(n: u8) -> (out: u8, @(out == n)) {
     }
 }
 
-//~ proofs: 2
-//~ run: preserve(0) => (0, Proved)
-//~ run: preserve(200) => (200, Proved)
+//~ proofs: 4
+//~ run: preserve(0) => (0, Erased)
+//~ run: preserve(200) => (200, Erased)
+//~ spec: 1.11:1

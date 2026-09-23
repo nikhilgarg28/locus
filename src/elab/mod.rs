@@ -11,35 +11,80 @@
 
 mod arithmetic;
 mod blocks;
+mod boxed;
 mod calls;
+mod closures;
+mod collections;
 mod control;
 mod data;
 mod env;
 mod explain;
 mod exprs;
 mod forms;
+mod generics;
 mod items;
+mod layout;
 mod literals;
 mod logic;
+mod logical_data;
 mod loops;
+mod models;
 mod moves;
 mod mutation;
 mod operators;
 mod order;
 mod patterns;
 mod proofs;
+mod quantifiers;
+mod reconcile;
 mod references;
+mod scope;
 mod show;
 mod solve;
 mod stored;
+mod trusted;
 mod types;
 
-pub use items::{Elaborated, FoundProof, HoleReport, ItemReport, elaborate, elaborate_with};
+pub use items::{
+    Elaborated, FoundProof, HoleReport, ItemReport, elaborate, elaborate_with,
+    elaborate_with_options,
+};
 pub use solve::certificate_pairs;
 
 use crate::ast;
 use crate::source::SourceFile;
 use crate::store::ProofStore;
+
+/// Options for one elaboration; never shared across independent checks.
+#[derive(Clone, Debug)]
+pub struct Options {
+    pub previews: crate::preview::Previews,
+    pub check_moves: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            previews: crate::preview::Previews::default(),
+            check_moves: true,
+        }
+    }
+}
+
+impl env::Env<'_> {
+    pub(super) fn require_preview(
+        &mut self,
+        feature: crate::preview::Feature,
+        construct: &str,
+        span: crate::source::Span,
+    ) -> env::Elab<()> {
+        self.previews
+            .require(feature, construct, span)
+            .map_err(|diagnostic| {
+                self.diagnostics.push(diagnostic);
+            })
+    }
+}
 
 /// `elaborate` with the proofs file of the source: each obligation is looked
 /// up in `store` before it is searched for, and what the search finds is
@@ -51,5 +96,14 @@ pub fn elaborate_with_store(
     program: &ast::Program,
     store: ProofStore,
 ) -> (Elaborated, ProofStore) {
-    crate::store::with_store(store, || elaborate(source, program))
+    elaborate_with_store_and_options(source, program, store, &Options::default())
+}
+
+pub fn elaborate_with_store_and_options(
+    source: &SourceFile,
+    program: &ast::Program,
+    store: ProofStore,
+    options: &Options,
+) -> (Elaborated, ProofStore) {
+    crate::store::with_store(store, || elaborate_with_options(source, program, options))
 }

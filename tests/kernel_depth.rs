@@ -33,6 +33,7 @@ fn nested_foralls(depth: usize) -> (Term, Proof) {
 }
 
 #[test]
+#[doc = "spec: 2.21:1, 2.21:2, 2.21:3, 2.23:2"]
 fn input_up_to_the_bound_is_checked_without_exhausting_the_stack() {
     let mut ctx = Context::new();
     let margin = 8;
@@ -50,6 +51,7 @@ fn input_up_to_the_bound_is_checked_without_exhausting_the_stack() {
 }
 
 #[test]
+#[doc = "spec: 2.21:1"]
 fn deeper_input_is_rejected_before_any_recursion() {
     let mut ctx = Context::new();
     assert_eq!(

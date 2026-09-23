@@ -1,0 +1,17 @@
+L0119: Formula syntax outside a formula
+
+Implication and quantified formula syntax are accepted in a proposition context. They are not runtime operators. Put the claim inside prop!(...) or a proof type, and use an executable Boolean expression for runtime branching.
+
+Example from `tests/corpus/reject/outside_formula.lc`; the full file is a regression test.
+
+```locus
+// Implication and the quantifiers are read only inside `prop!(...)`,
+// `prove!(...)`, and `@(...)`.
+#[terminates] #[no_panic] #[no_io] logic fn implies(p: Prop, q: Prop) -> Prop {
+    p => q
+}
+
+const reflexive: Prop = forall (n: u8) { n == n };
+```
+
+Language, as built: [1.6:1](../../atlas.html#/doc/language/spec-1.6:1).

@@ -1,33 +1,20 @@
-error[L0260]: `&u8` is written on a parameter only
- --> tests/corpus/reject/reference_in_let.lc:5:12
+error[L0272]: logical and runtime positions in this value do not match the declared type
+ --> tests/corpus/reject/reference_in_let.lc:8:5
   |
-5 |     inner: &u8, //~ error: L0260 `&u8` is written on a parameter only
-  |            ^^^
-  |
-  = note: a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet
-error[L0260]: `&u8` is written on a parameter only
- --> tests/corpus/reject/reference_in_let.lc:8:31
-  |
-8 | fn longest(a: &u8, b: &u8) -> &u8 { //~ error: L0260 `&u8` is written on a parameter only
-  |                               ^^^
-  |
-  = note: a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet
-error[L0260]: `&u8` is written on a parameter only
-  --> tests/corpus/reject/reference_in_let.lc:13:12
+8 |     a //~ error: L0272 logical and runtime positions
+  |     ^
+error[L0272]: logical and runtime positions in this value do not match the declared type
+  --> tests/corpus/reject/reference_in_let.lc:12:18
    |
-13 |     let r: &u8 = n; //~ error: L0260 `&u8` is written on a parameter only
-   |            ^^^
+12 |     let r: &u8 = n; //~ error: L0272 logical and runtime positions
+   |                  ^
+error[L0285]: stored mutable references are not supported; lend &mut for one call
+  --> tests/corpus/reject/reference_in_let.lc:16:15
    |
-   = note: a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet
-error[L0260]: `&mut u8` is written on a parameter only
-  --> tests/corpus/reject/reference_in_let.lc:17:15
-   |
-17 | fn nested(n: &&mut u8) -> u8 { //~ error: L0260 `&mut u8` is written on a parameter only
+16 | fn nested(n: &&mut u8) -> u8 { //~ error: L0285 stored mutable references are not supported; lend &mut for one call
    |               ^^^^^^^
-   |
-   = note: a reference lasts for one call: a parameter is `x: &T` or `x: &mut T`, and a reference in a field, a `let`, a result type, or inside another type is not in Locus yet
 error[L0260]: `mut n` is not written on a reference parameter: the value behind `&mut` is assigned through it, and the reference itself is never rebound
-  --> tests/corpus/reject/reference_in_let.lc:21:12
+  --> tests/corpus/reject/reference_in_let.lc:20:12
    |
-21 | fn rebound(mut n: &mut u8) -> u8 { //~ error: L0260 `mut n` is not written on a reference parameter
+20 | fn rebound(mut n: &mut u8) -> u8 { //~ error: L0260 `mut n` is not written on a reference parameter
    |            ^^^^^^^^^^^^^^

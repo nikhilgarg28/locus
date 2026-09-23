@@ -1,0 +1,13 @@
+locus-proofs 1
+
+obligation 0732c362ac2d11a4 __locus_map_empty_1 1
+h0
+
+obligation 4c3f3c42d89cee3c __locus_map_prepend_6 1
+h0
+
+obligation 2ea019ded842fe9d singleton 1
+refl(enum:__LocusSeq3::0())
+
+obligation 144f2abe0bd8cf77 singleton 2
+transport(transport(h0, (#0 ==[struct:__LocusFiniteMap0] $0), refl($0)), prop:__LocusKeyAbsent5($1.0, #0.0), transport(transport(h1, (#0 ==[struct:__LocusEntry2] $1), refl($1)), prop:__LocusKeyAbsent5(#0.0, fn:__locus_map_empty_1().0), transport(transport(projection(struct:__LocusEntry2 { 3i, 7i }.0), (#0 ==[Int] struct:__LocusEntry2 { 3i, 7i }.0), refl(struct:__LocusEntry2 { 3i, 7i }.0)), prop:__LocusKeyAbsent5(#0, fn:__locus_map_empty_1().0), transport(h0, prop:__LocusKeyAbsent5(3i, #0.0), of_term(proof(of_term($3)))))))

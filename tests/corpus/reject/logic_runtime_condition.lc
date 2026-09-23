@@ -1,0 +1,2 @@
+fn wrong(b: Bool) -> u8 { if b { 1 } else { 0 } }
+//~^ error: L0272 runtime if requires bool

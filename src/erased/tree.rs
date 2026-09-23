@@ -6,6 +6,13 @@ use crate::typed::{CompareOp, Derive, FnRef, PanicForm, Passing};
 /// A simple type: no propositions, no dependency.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EType {
+    Boxed(Box<EType>),
+    Buffer(Box<EType>),
+    Array(Box<EType>, usize),
+    Slice(Box<EType>),
+    Ref(Option<String>, Box<EType>),
+    StructApplied(StructId, Vec<String>),
+    EnumApplied(EnumId, Vec<String>),
     Bool,
     /// A machine integer type.
     Int(MachineInt),
@@ -162,6 +169,20 @@ pub enum EPattern {
 
 #[derive(Clone, Debug)]
 pub enum EExpr {
+    BoxNew(Box<EExpr>),
+    BoxDeref(Box<EExpr>),
+    Shared {
+        value: Box<EExpr>,
+        lifetime: Option<String>,
+    },
+    Deref(Box<EExpr>),
+    /// Native collection helper body; mutable receivers are explicit Lend expressions.
+    Buffer {
+        op: crate::kernel::BufferOp,
+        storage: crate::exec::BufferStorage,
+        element: EType,
+        arguments: Vec<EExpr>,
+    },
     Var {
         id: VarId,
         name: String,

@@ -1,0 +1,11 @@
+L0255: Preview feature is disabled
+
+The construct belongs to a feature still marked Preview in the compiler registry. Enable its named --preview option only while the registry lists it as unfinished. Once stabilized, old preview flags are rejected instead of preserving an alternate language mode.
+
+Driver/resource example; generated-input tests cover this case.
+
+```text
+locus check unfinished-feature.lc --preview feature-name
+```
+
+Language, as built: [1.24:1](../../atlas.html#/doc/language/spec-1.24:1).

@@ -1,10 +1,10 @@
 error[L0225]: a proposition's parameter is data or a `Prop`; evidence belongs in a variant
- --> tests/corpus/reject/evidence_as_proposition_parameter.lc:3:26
+ --> tests/corpus/reject/evidence_as_proposition_parameter.lc:3:27
   |
-3 | prop Small(n: u8, bound: @(0 < 10)) { //~ error: L0225 evidence belongs in a variant
-  |                          ^^^^^^^^^
+3 | prop Small(n: Int, bound: @(0 < 10)) { //~ error: L0225 evidence belongs in a variant
+  |                           ^^^^^^^^^
 error[L0204]: unknown name `n`
- --> tests/corpus/reject/evidence_as_proposition_parameter.lc:7:30
+ --> tests/corpus/reject/evidence_as_proposition_parameter.lc:7:31
   |
-7 | prop Smaller(n: u8, bound: @(n < 10)) { //~ error: L0204 unknown name `n`
-  |                              ^
+7 | prop Smaller(n: Int, bound: @(n < 10)) { //~ error: L0204 unknown name `n`
+  |                               ^

@@ -6,3 +6,4 @@ fn remaining(failures: u8, bounded: @(failures <= 3)) -> u8 {
 fn first(failures: u8, small: @(failures <= 9)) -> u8 {
     remaining(failures, small) //~ error: L0230 this is evidence of `failures <= 9`, and `failures <= 3` is needed
 }
+//~ spec: 1.7:5

@@ -2,6 +2,6 @@
 // proposition mentioning it, and it makes no promise that admits it there.
 fn self_equal(x: u8) -> @(x == x) { _ }
 
-#[terminates] #[no_panic] #[no_io] fn all_self_equal() -> @(forall (x: u8) { x == x }) {
-    self_equal //~ error: L0209 `self_equal` cannot appear in a proposition: it does not promise terminates
+#[terminates] #[no_panic] #[no_io] fn all_self_equal() -> @(forall (x: Int) { x == x }) {
+    self_equal //~ error: L0209 ordinary fn `self_equal` cannot appear in a proposition
 }

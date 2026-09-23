@@ -1,6 +1,6 @@
 // Implication and the quantifiers are read only inside `prop!(...)`,
 // `prove!(...)`, and `@(...)`.
-#[terminates] #[no_panic] #[no_io] fn implies(p: Prop, q: Prop) -> Prop {
+#[terminates] #[no_panic] #[no_io] logic fn implies(p: Prop, q: Prop) -> Prop {
     p => q //~ error: L0119 `=>` is implication only inside a formula
 }
 

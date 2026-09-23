@@ -1,5 +1,5 @@
 // `fold!` with nothing to say which claim it should produce.
-#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
 
 #[terminates] #[no_panic] #[no_io] fn first(n: u8, h: @(n != 0)) -> @nonzero(n) {
     let folded = fold!(nonzero, h); //~ error: L0229 `fold!` needs to know the claim it should produce

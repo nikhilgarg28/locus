@@ -31,7 +31,7 @@ fn not_a_place(n: u8) -> u8 {
 }
 
 fn held(n: u8) -> u8 {
-    let r = &n; //~ error: L0261 `&` is written on the argument of a call only
+    let r = &n;
     n
 }
 

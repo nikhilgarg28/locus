@@ -1,13 +1,12 @@
-// These functions promise `terminates`, `no_panic`, and `no_io`, so they may
-// appear in propositions: the first ones construct claims; the final two
-// transport or establish evidence.
+// Explicit `logic fn` definitions may appear in propositions. Ordinary
+// functions may transport evidence while retaining their runtime effects.
 #[terminates] #[no_panic] #[no_io]
-fn positive(n: u8) -> Prop {
+logic fn positive(n: Int) -> Prop {
     prop!(n > 0)
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn outside_range(n: u8) -> Prop {
+logic fn outside_range(n: Int) -> Prop {
     let above_zero: Prop = prop!(n > 0);
     let below_ten: Prop = prop!(n < 10);
     let inside = above_zero && below_ten;
@@ -15,12 +14,12 @@ fn outside_range(n: u8) -> Prop {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn either(p: Prop, q: Prop) -> Prop {
+logic fn either(p: Prop, q: Prop) -> Prop {
     p || q
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn implies(p: Prop, q: Prop) -> Prop {
+logic fn implies(p: Prop, q: Prop) -> Prop {
     prop!(p => q)
 }
 
@@ -37,21 +36,24 @@ fn reflexivity_claim(n: u8) -> (claim: Prop, @claim) {
 }
 
 // A declared proposition lists the only ways it can be proved.
-prop Small(n: u8) {
-    Zero: @Small(0),
-    Below(bound: @(n < 10)),
+prop Small(n: Int) {
+    Zero => { prop!(n == 0) }
+    Below { limit: Int } => { prop!(n < limit && limit <= 10) }
 }
 
-// The `Zero` arm knows `n == 0`, and the claim about `0` is evaluated; the
-// equation is turned round and the claim carried across it.
-#[terminates] #[no_panic] #[no_io]
-fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
+logic fn small_is_below_ten(n: Int, small: @Small(n)) -> @(n < 10) {
     match small {
-        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0u8 < 10)),
-        Small::Below(bound) => bound,
+        Small::Zero @ zero => prove!(n < 10),
+        Small::Below { limit } @ bound => {
+            match bound { And::Intro(lower, upper) => prove!(n < 10) }
+        },
     }
 }
 
-//~ proofs: 3
-//~ run: reflexivity_claim(5) => (Ghost, Proved)
-//~ rust: fn reflexivity_claim(n: u8) -> (Ghost, Proved) {
+logic fn five_is_small() -> @Small(5) {
+    Small::Below { limit: 10 } @ And::Intro(prove!(5 < 10), prove!(10 <= 10))
+}
+
+//~ proofs: 5
+//~ run: reflexivity_claim(5) => (Erased, Erased)
+//~ rust: fn reflexivity_claim(_n: u8) -> (Erased, Erased) {

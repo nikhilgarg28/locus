@@ -46,3 +46,4 @@ fn open(s: &Slot) -> u8 {
 fn tag_of(p: &Pair) -> u8 {
     p.tag
 }
+//~ spec: 1.13:1

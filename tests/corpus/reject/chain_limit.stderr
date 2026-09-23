@@ -4,4 +4,4 @@ error[L0108]: expression chain exceeds the parser limit
 3 | ...& true && true && true && true && true && true && true && true && true && true //~ error: L0108 expression chain exceeds
   |                                                                   ^^
   |
-  = note: split this expression using local bindings
+  = note: MAX_EXPRESSION_CHAIN limit of 128; split this expression using local bindings

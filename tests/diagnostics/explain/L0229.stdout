@@ -1,0 +1,17 @@
+L0229: Definition conversion lacks a valid target
+
+fold! or unfold! needs an appropriate checked definition and, when closing evidence, an expected claim. The selector must name the definition involved; a model selector must correspond to an available observation. Supply an explicit result annotation and the correct definition.
+
+Example from `tests/corpus/reject/fold_without_claim.lc`; the full file is a regression test.
+
+```locus
+// `fold!` with nothing to say which claim it should produce.
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
+
+#[terminates] #[no_panic] #[no_io] fn first(n: u8, h: @(n != 0)) -> @nonzero(n) {
+    let folded = fold!(nonzero, h);
+    folded
+}
+```
+
+Language, as built: [1.7:1](../../atlas.html#/doc/language/spec-1.7:1).

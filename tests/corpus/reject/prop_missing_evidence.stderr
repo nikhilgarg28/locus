@@ -1,0 +1,7 @@
+error[L0276]: `P::Yes` needs its evidence outside the witnesses: write `P::Yes(prove!(true)) @ evidence`
+ --> tests/corpus/reject/prop_missing_evidence.lc:3:5
+  |
+3 |     P::Yes(prove!(true)) //~ error: L0276 evidence outside
+  |     ^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: move the proof to the outside evidence slot

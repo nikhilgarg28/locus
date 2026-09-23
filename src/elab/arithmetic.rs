@@ -52,7 +52,7 @@ use std::time::Instant;
 
 use crate::arith::{self, Budget, Counterexample, GaveUp};
 use crate::ast::{self, BinaryOp};
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{ConsideredFact, Diagnostic};
 use crate::kernel::derive::symm_at;
 use crate::kernel::{
     Axiom, HypId, HypRef, MachineInt, Op, Panic, Prim, Proof, Row, Term, Type, VarId, check_proof,
@@ -201,75 +201,10 @@ impl Env<'_> {
                 operator_span,
             );
         }
-        if self.formula.is_some() {
-            return self.refuse_where_nothing_runs(op, machine, &operands, operator_span);
-        }
         if self.total {
-            // The body of a function of the logic, which is a kernel term
-            // and has no place for the operator's evidence: `items`
-            // elaborates the function again as an ordinary one, with its
-            // promises, under the interim rule of LOC-193.
-            self.not_a_term
-                .get_or_insert((format!("`{}`", op.symbol()), operator_span));
-            return Err(());
+            return self.fail("L0270", "machine arithmetic cannot execute in logic; observe operands through their logical model", operator_span);
         }
         self.operate_at_runtime(op, machine, operands, operator_span, span)
-    }
-
-    /// `L0236`: an operator on a machine type in a formula, where nothing
-    /// runs. The two things that can be written instead are named.
-    fn refuse_where_nothing_runs<T>(
-        &mut self,
-        op: Op,
-        ty: MachineInt,
-        operands: &[Operand],
-        operator_span: Span,
-    ) -> Elab<T> {
-        let texts: Vec<String> = operands
-            .iter()
-            .map(|operand| self.text(operand.span).to_string())
-            .collect();
-        let exact = match texts.as_slice() {
-            [a, b] => format!("{a} as Int {} {b} as Int", op.symbol()),
-            [a] => format!("-({a} as Int)"),
-            _ => unreachable!("one or two operands"),
-        };
-        let wrapped = match (op, texts.as_slice()) {
-            (Op::Add, [a, b]) => Some(format!("{a}.wrapping_add({b})")),
-            (Op::Sub, [a, b]) => Some(format!("{a}.wrapping_sub({b})")),
-            (Op::Mul, [a, b]) => Some(format!("{a}.wrapping_mul({b})")),
-            (Op::Neg, [a]) => Some(format!("{a}.wrapping_neg()")),
-            _ => None,
-        };
-        let how = match op.panic() {
-            Panic::Division => "may panic, on a zero divisor",
-            _ => "may panic, on overflow",
-        };
-        let place = self.formula.expect("refused in a formula");
-        let where_ = format!("so it is not {place}");
-        let what = match op.panic() {
-            Panic::Division => "quotient",
-            _ if op == Op::Neg => "negation",
-            _ if op == Op::Add => "sum",
-            _ if op == Op::Sub => "difference",
-            _ => "product",
-        };
-        let what = if op == Op::Rem { "remainder" } else { what };
-        let mut diagnostic = Diagnostic::error(
-            "L0236",
-            format!("`{}` on `{}` {how}, {where_}", op.symbol(), ty.name()),
-            operator_span,
-        );
-        diagnostic = match wrapped {
-            Some(wrapped) => diagnostic.note(format!(
-                "write `{exact}` for the exact {what}, or `{wrapped}` for the wrapped one"
-            )),
-            None => diagnostic.note(format!(
-                "write `{exact}` for the exact {what} on `Int`, which is total: `a / 0` is `0` and `a % 0` is `a`"
-            )),
-        };
-        self.diagnostics.push(diagnostic);
-        Err(())
     }
 
     /// The statement: the result is declared with its equation, the wrapped
@@ -471,6 +406,8 @@ impl Env<'_> {
         operator_span: Span,
     ) -> Elab<Proof> {
         let started = Instant::now();
+        let checkpoint = crate::measurement::checkpoint();
+        self.normalization_exhausted = false;
         // The proofs file first; the tiers on a miss (`stored.rs`).
         let found = self.stored_or(premise, |env| env.discharge(premise));
         let (proof, tier) = match found {
@@ -488,6 +425,7 @@ impl Env<'_> {
             tier,
             proof_size: proof.as_ref().map_or(0, super::solve::proof_size),
             micros: started.elapsed().as_micros(),
+            measurements: crate::measurement::since(checkpoint),
             found: proof.as_ref().map(|proof| FoundProof {
                 context: self.ctx.clone(),
                 claim: premise.clone(),
@@ -509,6 +447,7 @@ impl Env<'_> {
     /// premise says `view(1u8)` where a claim says `1`; computed, with
     /// names replaced; evaluation; then the arithmetic procedure.
     fn discharge(&mut self, premise: &Term) -> Option<(Proof, &'static str)> {
+        let exact_timer = crate::measurement::start("exact");
         let (goal, mut steps) = self.literal_views(premise);
         let stated: Vec<Fact> = self.facts.iter().rev().cloned().collect();
         for fact in stated {
@@ -518,6 +457,8 @@ impl Env<'_> {
                 return Some((self.back_to_stated(proof, steps)?, "exact"));
             }
         }
+        drop(exact_timer);
+        let computed_timer = crate::measurement::start("computed");
         let known = self.knowledge();
         let (normal, more) = self.normalize(&goal, &known.definitions);
         steps.extend(more);
@@ -531,6 +472,7 @@ impl Env<'_> {
                 break;
             }
         }
+        drop(computed_timer);
         let found = found
             .or_else(|| {
                 self.computed_from(&normal, &known)
@@ -544,7 +486,10 @@ impl Env<'_> {
         if let Some((proof, tier)) = found {
             return Some((self.back_to_stated(proof, steps)?, tier));
         }
-        let proof = self.by_arithmetic(&normal, &known).ok()?;
+        let proof = {
+            let _timer = crate::measurement::start("arithmetic");
+            self.by_arithmetic(&normal, &known).ok()?
+        };
         Some((self.back_to_stated(proof, steps)?, "arithmetic"))
     }
 
@@ -815,6 +760,18 @@ impl Env<'_> {
         let Err(Some(gave_up)) = self.by_arithmetic(normal, known) else {
             return None;
         };
+        let enumeration_limit = match &gave_up.counterexample {
+            Counterexample::TooManyAtoms => Some(format!(
+                "counterexample enumeration omitted: MAX_COUNTEREXAMPLE_ATOMS limit of {} was exceeded",
+                crate::limits::MAX_COUNTEREXAMPLE_ATOMS
+            )),
+            Counterexample::NoneInBox => Some(format!(
+                "counterexample search found none within -{}..{} (COUNTEREXAMPLE_BOX); this does not prove the claim",
+                crate::limits::COUNTEREXAMPLE_BOX,
+                crate::limits::COUNTEREXAMPLE_BOX
+            )),
+            _ => None,
+        };
         if let Counterexample::Found(assignment) = gave_up.counterexample {
             if assignment.is_empty() {
                 // A closed claim: false, unless it is `False` itself, which
@@ -873,10 +830,17 @@ impl Env<'_> {
             )));
         }
         match gave_up.reason {
-            arith::Reason::Budget { name, limit } => Some(ArithmeticFailure::Budget(format!(
-                "the arithmetic procedure ran out of its `{name}` budget of {limit} before it could decide this"
-            ))),
-            _ => None,
+            arith::Reason::Budget { name, limit } => {
+                let mut message = format!(
+                    "the arithmetic procedure ran out of its `{name}` budget of {limit} before it could decide this"
+                );
+                if let Some(note) = enumeration_limit {
+                    message.push_str("; ");
+                    message.push_str(&note);
+                }
+                Some(ArithmeticFailure::Budget(message))
+            }
+            _ => enumeration_limit.map(ArithmeticFailure::Budget),
         }
     }
 
@@ -966,10 +930,12 @@ impl Env<'_> {
             operator_span,
         )
         .note(format!("{condition}, and nothing known here shows it"));
+        diagnostic.details.proof.claim = Some(stated.clone());
         // The facts that speak of the operands, nearest first, as stated,
         // and a counterexample when the arithmetic procedure has one.
         let subjects = free_variables(premise);
         let mut shown: Vec<String> = Vec::new();
+        let mut omitted_facts = false;
         for fact in self.facts.clone().iter().rev() {
             // The result's own meaning says nothing about the premise.
             let theirs = free_variables(&fact.claim);
@@ -978,11 +944,30 @@ impl Env<'_> {
             }
             if theirs.iter().any(|variable| subjects.contains(variable)) {
                 let claim = self.show(&fact.claim);
-                if !shown.contains(&claim) && shown.len() < 6 {
-                    shown.push(claim);
+                if !shown.contains(&claim) {
+                    if shown.len() < crate::limits::MAX_DIAGNOSTIC_FACTS {
+                        shown.push(claim);
+                    } else {
+                        omitted_facts = true;
+                    }
                 }
             }
         }
+        if omitted_facts {
+            diagnostic = diagnostic.note(format!(
+                "additional facts omitted (MAX_DIAGNOSTIC_FACTS = {})",
+                crate::limits::MAX_DIAGNOSTIC_FACTS
+            ));
+        }
+        diagnostic.details.proof.facts_considered = Some(
+            shown
+                .iter()
+                .map(|claim| ConsideredFact {
+                    name: None,
+                    claim: claim.clone(),
+                })
+                .collect(),
+        );
         if !shown.is_empty() {
             let list: Vec<String> = shown.iter().map(|claim| format!("`{claim}`")).collect();
             diagnostic = diagnostic.note(format!("known here: {}", list.join(", ")));
@@ -991,8 +976,18 @@ impl Env<'_> {
         let known = self.knowledge();
         let (normal, _) = self.normalize(&goal, &known.definitions);
         let (normal, _) = self.literal_views(&normal);
+        let computed = self.show(&normal);
+        if computed != stated {
+            diagnostic.details.proof.claim_after_computing = Some(computed);
+        }
         if let Some(failure) = self.arithmetic_failure(&normal, &known) {
+            if let ArithmeticFailure::Counterexample(example) = &failure {
+                diagnostic.details.proof.counterexample = Some(example.clone());
+            }
             diagnostic = diagnostic.note(failure.note());
+        }
+        if self.normalization_exhausted {
+            diagnostic = diagnostic.note(format!("proof construction reached MAX_NORMALIZATION_STEPS ({}); supply a smaller explicit proof step", crate::limits::MAX_NORMALIZATION_STEPS));
         }
         diagnostic = diagnostic.note(format!(
             "a fact in scope stating `{stated}`, or `prove!({stated});` just before this, is what is needed"

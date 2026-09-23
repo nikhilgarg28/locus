@@ -4,7 +4,7 @@ enum Light {
     Red, //~ error: L0202 variant `Red` is declared twice
 }
 
-prop Small(n: u8) {
-    Below(bound: @(n < 10)),
-    Below(bound: @(n < 5)), //~ error: L0202 variant `Below` is declared twice
+prop Small(n: Int) {
+    Below => { prop!(n < 10) }
+    Below => { prop!(n < 5) } //~ error: L0202 variant `Below` is declared twice
 }

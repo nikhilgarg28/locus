@@ -1,0 +1,32 @@
+L0285: Unsupported stored reference type
+
+The reference or lifetime spelling is outside the supported shared-reference model. Stored mutable references are not implemented; lend &mut for a checked call instead. State named lifetimes for supported stored shared references and preserve their source ownership.
+
+Example from `tests/corpus/reject/reference_in_let.lc`; the full file is a regression test.
+
+```locus
+// Stored shared references require a borrow expression rather than a bare
+// referent value. Mutable references still last for one call.
+struct Holder {
+    inner: &u8,
+}
+
+fn longest(a: &u8, b: &u8) -> &u8 {
+    a
+}
+
+fn kept(n: u8) -> u8 {
+    let r: &u8 = n;
+    n
+}
+
+fn nested(n: &&mut u8) -> u8 {
+    n
+}
+
+fn rebound(mut n: &mut u8) -> u8 {
+    n
+}
+```
+
+Language, as built: [1.26:4](../../atlas.html#/doc/language/spec-1.26:4).

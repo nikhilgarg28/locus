@@ -10,6 +10,7 @@ use super::term::{HypId, Term, Type, VarId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KernelError {
+    InvalidBuffer(&'static str),
     UnknownVariable(VarId),
     UnknownHypothesis(HypId),
     /// A bound index with no enclosing binder: the term is not well formed.
@@ -46,6 +47,10 @@ pub enum KernelError {
     NotAProduct(Type),
     UnknownStruct,
     UnknownFunction,
+    UnknownGeneric,
+    InvalidRecursion(&'static str),
+    InvalidInduction(&'static str),
+    NotLogicalType(Type),
     UnknownEnum,
     UnknownProp,
     NoSuchVariant {
@@ -90,6 +95,7 @@ pub enum KernelError {
     NotAFunction(Type),
     /// A derived form exceeded its step budget.
     StepLimit,
+    EvaluationStepLimit,
     /// A proof field of a product value must be written as a proof.
     ProofExpected(Term),
     /// `OfTerm` needs a term whose type is a proof type.
@@ -126,6 +132,7 @@ impl From<LinearError> for KernelError {
 impl fmt::Display for KernelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidBuffer(message) => write!(f, "invalid buffer operation: {message}"),
             Self::UnknownVariable(id) => write!(f, "variable {id:?} is not in the context"),
             Self::UnknownHypothesis(id) => write!(f, "hypothesis {id:?} is not in the context"),
             Self::DanglingBound => f.write_str("bound variable without an enclosing binder"),
@@ -165,6 +172,10 @@ impl fmt::Display for KernelError {
             Self::NotAProduct(ty) => write!(f, "expected a tuple or struct type, found {ty}"),
             Self::UnknownStruct => f.write_str("struct is not declared"),
             Self::UnknownFunction => f.write_str("function is not declared"),
+            Self::UnknownGeneric => f.write_str("generic template is not declared"),
+            Self::InvalidRecursion(reason) => write!(f, "invalid logical recursion: {reason}"),
+            Self::InvalidInduction(reason) => write!(f, "invalid induction: {reason}"),
+            Self::NotLogicalType(ty) => write!(f, "{ty} does not satisfy the Logical bound"),
             Self::UnknownEnum => f.write_str("enum is not declared"),
             Self::UnknownProp => f.write_str("proposition is not declared"),
             Self::NoSuchVariant { index, variants } => {
@@ -194,17 +205,34 @@ impl fmt::Display for KernelError {
             }
             Self::NoPrelude => f.write_str("excluded middle needs the prelude declarations"),
             Self::DuplicateBinding => f.write_str("the identity is already bound in this context"),
-            Self::TooDeep => f.write_str("input is nested more deeply than the kernel accepts"),
+            Self::TooDeep => write!(
+                f,
+                "MAX_KERNEL_DEPTH limit of {} was exceeded",
+                crate::limits::MAX_KERNEL_DEPTH
+            ),
             Self::OmittedProof => f.write_str("an omitted proof proves nothing"),
             Self::EvaluationTooDeep => {
-                f.write_str("evaluation nested more deeply than the kernel allows")
+                write!(
+                    f,
+                    "MAX_EVALUATION_DEPTH limit of {} was exceeded",
+                    crate::limits::MAX_EVALUATION_DEPTH
+                )
             }
             Self::NotClosed(term) => write!(f, "evaluation met the free variable {term}"),
             Self::NotPlainData(ty) => {
                 write!(f, "evaluation offers only plain data, and {ty} is not")
             }
             Self::NotAFunction(ty) => write!(f, "expected a function type, found {ty}"),
-            Self::StepLimit => f.write_str("derived form exceeded its step budget"),
+            Self::StepLimit => write!(
+                f,
+                "MAX_DERIVED_STEPS limit of {} was exceeded",
+                crate::limits::MAX_DERIVED_STEPS
+            ),
+            Self::EvaluationStepLimit => write!(
+                f,
+                "MAX_EVALUATION_STEPS limit of {} was exceeded",
+                crate::limits::MAX_EVALUATION_STEPS
+            ),
             Self::ProofExpected(term) => {
                 write!(f, "a proof field must be given as a proof, found {term}")
             }

@@ -1,0 +1,27 @@
+L0231: Built-in proof form called like a function
+
+A compiler form such as rewrite or unfold is written with an exclamation mark: rewrite!(equation, evidence). These forms elaborate checked proof terms; omitting ! asks ordinary name resolution for a different callable.
+
+Example from `tests/corpus/reject/bare_proof_form.lc`; the full file is a regression test.
+
+```locus
+// `rewrite`, `unfold`, and `fold` written as calls: the forms take `!` now,
+// and each is reported with the fix. A `fold` of one's own is a function.
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
+
+#[terminates] #[no_panic] #[no_io] fn use_nonzero(n: u8, h: @nonzero(n)) -> @(n != 0) {
+    unfold(nonzero, h)
+}
+
+#[terminates] #[no_panic] #[no_io] fn moved(a: u8, b: u8, same: @(a == b), small: @(a <= 9)) -> @(b <= 9) {
+    rewrite(same, small)
+}
+
+fn fold(n: u8) -> u8 { n }
+
+fn folded(n: u8) -> u8 { fold(n) }
+
+fn prove(n: u8) -> u8 { n }
+```
+
+Language, as built: [1.7:1](../../atlas.html#/doc/language/spec-1.7:1).

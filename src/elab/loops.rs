@@ -76,6 +76,21 @@ impl Scan {
             | PatternKind::Bool(_)
             | PatternKind::Integer(_) => {}
             PatternKind::Group(inner) => self.declare(inner),
+            PatternKind::Binding { name, pattern, .. } => {
+                self.scopes
+                    .last_mut()
+                    .expect("a scope is open")
+                    .push(name.text.clone());
+                self.declare(pattern);
+            }
+            PatternKind::Evidence {
+                constructor,
+                evidence,
+                ..
+            } => {
+                self.declare(constructor);
+                self.declare(evidence);
+            }
             PatternKind::Tuple(parts) => parts.iter().for_each(|part| self.declare(part)),
             PatternKind::Struct { fields, .. } => {
                 fields.iter().for_each(|field| self.declare(&field.pattern));
@@ -104,10 +119,12 @@ impl Scan {
                         scan.declare(pattern);
                     }
                     StatementKind::Assign { place, value } => {
+                        scan.expr(place);
                         scan.expr(value);
                         let mut root = place;
-                        while let ExprKind::Member { value, .. } | ExprKind::Index { value, .. } =
-                            &root.kind
+                        while let ExprKind::Member { value, .. }
+                        | ExprKind::Index { value, .. }
+                        | ExprKind::Subscript { value, .. } = &root.kind
                         {
                             root = value;
                         }
@@ -130,7 +147,12 @@ impl Scan {
 
     fn expr(&mut self, expr: &ast::Expr) {
         match &expr.kind {
-            ExprKind::Block(block) | ExprKind::Loop { body: block, .. } => self.block(block),
+            // Closure bodies are logical code, checked independently; their
+            // local updates never become an enclosing runtime loop's state.
+            ExprKind::Closure { .. } => {}
+            ExprKind::Logic(block)
+            | ExprKind::Block(block)
+            | ExprKind::Loop { body: block, .. } => self.block(block),
             ExprKind::If {
                 condition,
                 then_branch,
@@ -178,6 +200,7 @@ impl Scan {
                 let mut root = &**inner;
                 while let ExprKind::Member { value, .. }
                 | ExprKind::Index { value, .. }
+                | ExprKind::Subscript { value, .. }
                 | ExprKind::Group(value) = &root.kind
                 {
                     root = value;
@@ -200,7 +223,8 @@ impl Scan {
             ExprKind::Break(inner) | ExprKind::Return(inner) => {
                 inner.iter().for_each(|inner| self.expr(inner));
             }
-            ExprKind::Tuple(items)
+            ExprKind::Array(items)
+            | ExprKind::Tuple(items)
             | ExprKind::Form {
                 arguments: items, ..
             } => {
@@ -209,7 +233,17 @@ impl Scan {
             ExprKind::Struct { fields, .. } => {
                 fields.iter().for_each(|field| self.expr(&field.value));
             }
-            ExprKind::Range { lower, upper, .. }
+            ExprKind::GenericApply { callee, .. } => self.expr(callee),
+            ExprKind::Evidence {
+                constructor: lower,
+                evidence: upper,
+                ..
+            }
+            | ExprKind::Subscript {
+                value: lower,
+                index: upper,
+            }
+            | ExprKind::Range { lower, upper, .. }
             | ExprKind::Binary {
                 left: lower,
                 right: upper,
@@ -290,6 +324,10 @@ impl Env<'_> {
                 ty: self.version_type(slot),
                 ghost: false,
             };
+            self.session.register_binding_layout(
+                inside.id,
+                self.session.binding_layout(self.names[slot].id),
+            );
             let declared = self.ctx.declare_with(inside.id, inside.ty.clone(), false);
             self.kernel(declared, span)?;
             self.names[slot].id = inside.id;
@@ -453,6 +491,7 @@ impl Env<'_> {
         let entry = self.mutable_entry();
         let target = LoopTarget {
             result: expected.cloned(),
+            layout: self.layout_hints.get(&span).cloned(),
             valued: true,
             entry: entry.clone(),
             exits: Vec::new(),
@@ -463,6 +502,8 @@ impl Env<'_> {
         let elaborated = self.in_loop(body, None, target, span, |env| env.loop_body(body))?;
         let never = elaborated.target.exits.is_empty();
         let (result, equation) = (VarId::fresh(), HypId::fresh());
+        self.session
+            .register_binding_layout(result, elaborated.target.layout.clone().unwrap_or_default());
         let fallback = expected.map_or_else(unit_type, |expected| {
             self.at_current_exit(expected).into_owned()
         });
@@ -501,6 +542,7 @@ impl Env<'_> {
         let entry = self.mutable_entry();
         let target = LoopTarget {
             result: None,
+            layout: None,
             valued: false,
             entry: entry.clone(),
             exits: Vec::new(),
@@ -510,6 +552,18 @@ impl Env<'_> {
         };
         let elaborated = self.in_loop(body, Some(condition), target, span, |env| {
             let condition_value = env.check(condition, &Type::Bool)?;
+            if !env.total
+                && env
+                    .session
+                    .expression_layout(&condition_value.expr)
+                    .is_logical()
+            {
+                return env.fail(
+                    "L0272",
+                    "a runtime while requires bool; logical Bool cannot choose runtime behavior",
+                    condition.span,
+                );
+            }
             let (tested, negated) = env.tested(&condition_value, condition.span)?;
             let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
             env.loop_exit();
@@ -595,6 +649,7 @@ impl Env<'_> {
         let entry = self.mutable_entry();
         let target = LoopTarget {
             result: None,
+            layout: None,
             valued: false,
             entry: entry.clone(),
             exits: Vec::new(),
@@ -645,7 +700,11 @@ impl Env<'_> {
         let Some(target) = self.loops.last() else {
             return self.fail("L0217", "`break` outside a loop", expr.span);
         };
-        let (valued, result) = (target.valued, target.result.clone());
+        let (valued, result, layout) =
+            (target.valued, target.result.clone(), target.layout.clone());
+        if let (Some(value), Some(layout)) = (value, &layout) {
+            self.expect_layout(value, layout);
+        }
         let value = match value {
             None => None,
             Some(_) if !valued => {
@@ -684,7 +743,13 @@ impl Env<'_> {
             self.arm_end(&target.entry, ty, false)
         };
         self.loop_exit();
+        let value_layout = value
+            .as_ref()
+            .map(|value| self.session.expression_layout(&value.expr));
         let target = self.loops.last_mut().expect("checked above");
+        if target.layout.is_none() {
+            target.layout = value_layout;
+        }
         if target.result.is_none()
             && !Env::mentions_arm_version(&target.entry, &exit.versions, &exit.ty)
         {

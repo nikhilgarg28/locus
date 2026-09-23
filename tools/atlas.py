@@ -207,7 +207,17 @@ def serve(port, open_browser):
                 self.send_header("Location", "/atlas.html")
                 self.end_headers()
             elif path == "/atlas.html":
-                self.reply(200, ATLAS.read_text(encoding="utf-8"), "text/html")
+                # A served snapshot never labels obsolete counts as current. This
+                # changes only the response, leaving concurrent Atlas edits alone.
+                import metrics
+                raw = ATLAS.read_text(encoding="utf-8")
+                match = BLOCK.search(raw)
+                data = json.loads(match.group(2))
+                doc = next((d for d in data['docs'] if d['id'] == 'generated-status'), None)
+                if doc is not None:
+                    doc['body'] = metrics.expected_body(data.get('measurements'), metrics.fingerprint(ATLAS.parent))
+                    raw = raw[:match.start(2)] + json.dumps(data, ensure_ascii=False).replace('<', '\\u003c') + raw[match.end(2):]
+                self.reply(200, raw, "text/html")
             elif path == "/__atlas/info" and self.ours():
                 self.reply(200, json.dumps({"atlas": True, "rev": revision_of(ATLAS.read_text(encoding="utf-8"))}))
             else:

@@ -15,3 +15,4 @@ fn binding() -> u8 {
     let match = 1; //~ error: L0115 `match` is a Rust keyword
     2
 }
+//~ spec: 1.0:2

@@ -1,5 +1,5 @@
-error[L0207]: a `fn(u8) -> u8` cannot be applied
+error[L0270]: a logical callable cannot return a runtime value
  --> tests/corpus/reject/fn_type.lc:4:5
   |
-4 |     f(n) //~ error: L0207 a `fn(u8) -> u8` cannot be applied
+4 |     f(n) //~ error: L0270 a logical callable cannot return a runtime value
   |     ^^^^

@@ -1,0 +1,4 @@
+fn wrong() -> u8 {
+    let values = Vec::new(); //~ error: L0284 an empty Vec needs a Vec<T> type annotation
+    0
+}

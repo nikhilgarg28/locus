@@ -1,85 +1,26 @@
-//! The Rust printer: the erased tree as Rust source. Trusted, together with
-//! the Rust toolchain beneath it.
+//! The erased tree printed as plain Rust, with cleanup for readability.
 //!
-//! The erased tree already has the shape of the source, so this is mostly a
-//! matter of spelling. Layout is left to rustfmt. `loop`, `while`, and
-//! `for i in lo..hi` are printed as they were written, with `break`,
-//! `break value`, and `continue` as they were written: what a loop carries
-//! in the check IR is, here, the variables the body assigns.
+//! Cleanup removes dead marker storage while retaining runtime calls,
+//! control transfers, evaluation order and runtime destruction scopes. Unused
+//! logical pattern names become wildcards; unused runtime names are prefixed
+//! without removing their bindings. Signatures and aggregate layouts remain.
 //!
-//! A struct or an enum derives exactly what its declaration derived, in the
-//! order written, and nothing else: a type without `Copy` moves in the
-//! generated Rust as it does in Locus, whose move analysis is what keeps
-//! rustc from finding a use after a move here. `Proved` and `Ghost`, the
-//! printer's own types, derive everything.
+//! Every logical position prints as the single private-constructible Erased
+//! marker. A module includes marker support only when its output uses it.
+//! There are no crate-wide lint allowances. A retained source construct that
+//! intentionally triggers a Rust lint receives a specific local allowance
+//! with an explanation (for example, literal arithmetic that must panic).
 //!
-//! A form that panics is printed as the form it was written as: `panic!()`,
-//! `todo!()`, `unreachable!()`, and with its argument `panic!("{}",
-//! "message")`, `todo!("{}", "message")`, `unreachable!("{}", "message")`,
-//! so that Rust's form ends with the message the interpreters end with. An
-//! assertion is printed as `assert!(condition, "{}", "message")`, or
-//! `debug_assert!`, with the whole message it panics with, which is
-//! `assertion failed: condition` in the source's spelling of the condition
-//! unless one was written; `assert!(condition)` alone would leave the
-//! message to rustc's spelling of the tokens. A message is an argument and
-//! never the format string, so its braces mean nothing to the form, and it
-//! is written as Rust's `{:?}` writes a string, which is a string literal
-//! for any text. Whatever follows a panic in evaluation order is still
-//! printed, as it is for a trap: the rest of a block, the other arguments of
-//! a call, the call itself. Rust warns that such code is unreachable, and
-//! the header allows exactly that on purpose, since the printer keeps the
-//! shape of the source and does not prune it.
+//! Reference parameters print as Rust references. Whole-place reads and
+//! writes dereference them; field accesses use Rust's automatic dereference.
+//! Lending a reference parameter again is an explicit reborrow. User methods
+//! print by their canonical Type::method path, with explicit receiver values
+//! or lends, so an explicitly named method retains its meaning.
 //!
-//! A `let` whose value contains a panic, a trap, or a transfer of control
-//! is printed with the type of its pattern, `let x: u8 = panic!(...)`,
-//! because Rust may have nothing else to infer the type of `x` from, and
-//! what follows may need it (E0282). Any other `let` is printed as the
-//! source wrote it.
-//!
-//! `let mut` and assignment are printed as written, `x = e;` and
-//! `x.f.0 = e;`, and `mut` only on a binding the function assigns to,
-//! which is what Rust's `unused_mut` demands. Rust also warns of a value
-//! that is assigned and never read, `unused_assignments`; the printer keeps
-//! the shape of the source and does not prune dead stores, so the header
-//! allows that lint as it allows unreachable code.
-//!
-//! A reference parameter is printed as declared, `lock: &mut Lock` or
-//! `lock: &Lock`, and a `mut` parameter as `mut n: u8`. The body reads and
-//! writes the value behind the reference: a mention of the parameter as a
-//! whole is `*lock`, and an assignment to the whole is `*lock = v;`, where
-//! Rust would otherwise see the reference itself; a field, `lock.failures`,
-//! and a method receiver need no `*`, since Rust dereferences there, and
-//! neither does a lend of a field, `&mut lock.failures`. A lend of the
-//! whole is a reborrow, `&mut *lock` or `&*lock`. An argument `&x` or
-//! `&mut x.f` of any other root is printed as written.
-//!
-//! Every integer literal is printed with its type as a suffix, `200_u8`,
-//! `-5_i32`, so that Rust never has to infer the type of a literal from its
-//! context and a literal standing alone, as the receiver of a method or as
-//! a whole `let`, has one (E0689). A negative literal is parenthesized, so
-//! that `(-5_i32).wrapping_add(1)` is the call on the literal and not on
-//! `5_i32`. A cast is parenthesized too, `(a as u8) < b`, which is what
-//! rustc asks for where a comparison follows an `as`, and which keeps a
-//! cast on the left of `<` from being read as the start of a generic
-//! argument list.
-//!
-//! The operators `+`, `-`, `*`, `/`, `%`, and unary minus are printed as
-//! written, with Rust's precedence: an operand that is itself an operator
-//! expression is parenthesized when it binds less tightly than the
-//! operator around it, or as tightly on the right, since they associate to
-//! the left; an operand that is a block-like expression, an `if`, a
-//! `match`, a block, or a loop, is parenthesized so that a statement
-//! beginning with one is not cut short; and an operator expression that is
-//! the target of a field access, the receiver of a method, or the operand
-//! of a cast is parenthesized, since those bind tighter. Casts and
-//! comparisons come already parenthesized. Unary minus prints `-x`, and
-//! `-(-x)` with the parentheses Rust's double-negation lint asks for; a
-//! negative literal is one literal and prints as such. Where rustc can see
-//! that an operation on literals overflows or divides by zero, it refuses
-//! to compile it by default (`arithmetic_overflow`, `unconditional_panic`,
-//! and for `-(-i64::MIN)` `overflowing_literals`); the header allows the
-//! three, because the panic is the meaning of the program as written, and
-//! what the interpreters and the compiled program are compared on.
+//! Integer literals carry their type; negative literals, casts and operator
+//! operands are parenthesized where needed to preserve grouping. A binding
+//! initialized by a diverging expression carries a type annotation because
+//! Rust may have no returned value from which to infer its type.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
@@ -87,15 +28,11 @@ use std::fmt::Write;
 use crate::kernel::{MachineInt, Op, Prim, VarId};
 use crate::typed::{CompareOp, Derive, Passing};
 
+use super::cleanup::{self, Visit};
 use super::interp::Value;
 use super::tree::{EBlock, EExpr, EFn, EPattern, EPlace, EStmt, EType, Module};
 
-const HEADER: &str = "\
-// Generated by Locus. Do not edit.
-#![allow(dead_code, unused_variables, unused_parens, unused_braces, unreachable_code, unused_comparisons, unused_assignments)]
-#![allow(arithmetic_overflow, unconditional_panic, overflowing_literals)]
-#![allow(clippy::all)]
-";
+const HEADER: &str = "// Generated by Locus. Do not edit.\n";
 
 /// The markers, defined once for all the generated modules (Target language:
 /// What is generated). Each is a struct with a private field, so that no
@@ -109,45 +46,21 @@ const HEADER: &str = "\
 /// from any function that returns evidence, and the guarantee rests on no
 /// exported function taking one, which the elaborator checks.
 pub const MARKERS: &str = "\
-/// The erasure of a proof. It occupies no space, and cannot be made outside
-/// the generated code.
+/// An erased logical value; construction is private to generated code.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Proved {
+pub struct Erased {
     _private: (),
 }
 
-/// The erasure of any other ghost value. It occupies no space, and cannot be
-/// made outside the generated code.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Ghost {
-    _private: (),
-}
+// The private value shares the marker type's readable spelling.
+#[allow(non_upper_case_globals, dead_code)]
+const Erased: Erased = Erased { _private: () };
 
-#[allow(non_upper_case_globals)]
-const Proved: Proved = Proved { _private: () };
-
-#[allow(non_upper_case_globals)]
-const Ghost: Ghost = Ghost { _private: () };
-
-impl std::fmt::Debug for Proved {
+impl std::fmt::Debug for Erased {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(\"Proved\")
+        f.write_str(\"Erased\")
     }
 }
-
-impl std::fmt::Debug for Ghost {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(\"Ghost\")
-    }
-}
-";
-
-/// What a module under the generated root begins with in place of the
-/// marker definitions. A module may use neither marker, so the import may
-/// be unused.
-const IMPORTED_MARKERS: &str = "\
-#[allow(unused_imports)]
-use crate::{Ghost, Proved};
 ";
 
 /// Where the markers are: defined in the module printed, which is what
@@ -245,19 +158,27 @@ pub fn print_module(module: &Module) -> String {
 /// The module as Rust source: the header, the markers or their import, and
 /// the items with the visibilities recorded for them.
 pub fn print_module_with(module: &Module, visibilities: &Visibilities, markers: Markers) -> String {
+    let module = cleanup::module(module);
+    let body = items(&module, visibilities);
     let mut source = String::from(HEADER);
-    source.push_str(match markers {
-        Markers::Here => MARKERS,
-        Markers::InRoot => IMPORTED_MARKERS,
-    });
-    source.push_str(&items(module, visibilities));
+    for name in ["Erased"] {
+        if mentions(&body, name) {
+            match markers {
+                Markers::Here => source.push_str(&marker_support(name)),
+                Markers::InRoot => {
+                    let _ = writeln!(source, "use crate::{name};");
+                }
+            }
+        }
+    }
+    source.push_str(&body);
     indent(&source)
 }
 
 /// The items alone, without the header and the markers: what a report of a
 /// program shows.
 pub fn print_items(module: &Module, visibilities: &Visibilities) -> String {
-    indent(&items(module, visibilities))
+    indent(&items(&cleanup::module(module), visibilities))
 }
 
 /// The root of a generated crate, `src/lib.rs`: the header, the markers, and
@@ -271,6 +192,51 @@ pub fn print_root(modules: &[String]) -> String {
     indent(&source)
 }
 
+/// Build roots only define support imported by one of their modules.
+pub(crate) fn print_root_for_modules(modules: &[(String, String)]) -> String {
+    let mut source = String::from(HEADER);
+    for name in ["Erased"] {
+        if modules.iter().any(|(_, body)| {
+            body.lines()
+                .any(|line| line == format!("use crate::{name};"))
+        }) {
+            source.push_str(&marker_support(name));
+        }
+    }
+    for (name, _) in modules {
+        let _ = writeln!(source, "\npub mod {name};");
+    }
+    indent(&source)
+}
+
+fn mentions(source: &str, name: &str) -> bool {
+    source
+        .split(|character: char| !character.is_alphanumeric() && character != '_')
+        .any(|word| word == name)
+}
+
+fn marker_support(name: &str) -> String {
+    format!(
+        r#"
+/// An erased logical value; construction is private to generated code.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct {name} {{
+    _private: (),
+}}
+
+// The private value shares the marker type's readable spelling.
+#[allow(non_upper_case_globals, dead_code)]
+const {name}: {name} = {name} {{ _private: () }};
+
+impl std::fmt::Debug for {name} {{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{
+        f.write_str("{name}")
+    }}
+}}
+"#
+    )
+}
+
 /// The items, before indentation.
 fn items(module: &Module, visibilities: &Visibilities) -> String {
     let mut printer = Printer {
@@ -281,10 +247,19 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
     for item in &module.structs {
         printer.derives(&item.derives);
         let visibility = visibilities.of_type(&item.name);
-        let _ = writeln!(printer.out, "{visibility}struct {} {{", item.name);
+        printer.private_item(&visibility);
+        let _ = writeln!(
+            printer.out,
+            "{visibility}struct {}{} {{",
+            item.name,
+            lifetime_parameters(item.fields.iter().map(|(_, ty)| ty))
+        );
         for (name, ty) in &item.fields {
             let ty = printer.ty(ty);
             let visibility = visibilities.of_field(&item.name, name);
+            if visibility != "pub " {
+                printer.out.push_str("    // Preserve this private source field even when runtime code never reads it.\n    #[allow(dead_code)]\n");
+            }
             let _ = writeln!(printer.out, "    {visibility}{name}: {ty},");
         }
         printer.out.push_str("}\n");
@@ -292,7 +267,13 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
     for item in &module.enums {
         printer.derives(&item.derives);
         let visibility = visibilities.of_type(&item.name);
-        let _ = writeln!(printer.out, "{visibility}enum {} {{", item.name);
+        printer.private_item(&visibility);
+        let _ = writeln!(
+            printer.out,
+            "{visibility}enum {}{} {{",
+            item.name,
+            lifetime_parameters(item.variants.iter().flat_map(|v| v.payload.iter()))
+        );
         for variant in &item.variants {
             let payload: Vec<String> = variant.payload.iter().map(|ty| printer.ty(ty)).collect();
             if let Some(fields) = &variant.fields {
@@ -398,8 +379,18 @@ fn tuple_of(items: &[String]) -> String {
 impl Printer<'_> {
     /// One function, or one method of an `impl` block, after a blank line.
     fn function(&mut self, function: &EFn, visibilities: &Visibilities) {
+        self.out.push('\n');
+        let native = function.body.stmts.iter().any(|stmt| matches!(stmt, EStmt::Let { value: EExpr::Buffer { .. }, .. } | EStmt::Expr(EExpr::Buffer { .. })) || matches!(stmt,EStmt::Let{value:EExpr::Shared{value,..},..} if matches!(**value,EExpr::Buffer{..})));
+        let visibility = if native {
+            String::new()
+        } else {
+            visibilities.of_value(&function.name)
+        };
+        self.private_item(&visibility);
+        for (lint, why) in required_lints(&function.body) {
+            let _ = writeln!(self.out, "// {why}\n#[allow({lint})]");
+        }
         let result = self.ty(&function.result);
-        let visibility = visibilities.of_value(&function.name);
         // A constant is a `const` item: its body is one expression, which
         // Rust computes at compile time (the elaborator saw that it can).
         if function.constant
@@ -427,7 +418,25 @@ impl Printer<'_> {
             .iter()
             .enumerate()
             .map(|(index, (_, name, ty))| {
+                let reference_ty = match ty {
+                    EType::Ref(lifetime, inner) if function.passing_of(index).is_reference() => {
+                        Some((lifetime, inner))
+                    }
+                    _ => None,
+                };
                 let ty = self.ty(ty);
+                if let Some((lifetime, inner)) = reference_ty {
+                    let lifetime = lifetime
+                        .as_ref()
+                        .map(|l| format!("{l} "))
+                        .unwrap_or_default();
+                    let mutable = if function.passing_of(index) == Passing::RefMut {
+                        "mut "
+                    } else {
+                        ""
+                    };
+                    return format!("{name}: &{lifetime}{mutable}{}", self.ty(inner));
+                }
                 match (function.receiver && index == 0, function.passing_of(index)) {
                     (true, Passing::Value) => "self".into(),
                     (true, Passing::MutValue) => "mut self".into(),
@@ -442,8 +451,15 @@ impl Printer<'_> {
             .collect();
         let _ = write!(
             self.out,
-            "\n{visibility}fn {}({}) -> {result} ",
+            "\n{visibility}fn {}{}({}) -> {result} ",
             function.method_name(),
+            lifetime_parameters(
+                function
+                    .params
+                    .iter()
+                    .map(|(_, _, ty)| ty)
+                    .chain(std::iter::once(&function.result))
+            ),
             params.join(", ")
         );
         let body = self.block(&function.body);
@@ -451,23 +467,9 @@ impl Printer<'_> {
         self.out.push('\n');
     }
 
-    /// The receiver of a method call, `receiver.name(rest)`: a lent place
-    /// is written bare, since Rust lends the receiver itself, and a
-    /// reference parameter lent whole is written bare too, as the target
-    /// of a field access is.
-    fn receiver(&mut self, receiver: &EExpr) -> String {
-        match receiver {
-            EExpr::Lend { place, .. } => {
-                let mut target = place.name.clone();
-                for (index, name) in &place.path {
-                    match name {
-                        Some(name) => target.push_str(&format!(".{name}")),
-                        None => target.push_str(&format!(".{index}")),
-                    }
-                }
-                target
-            }
-            other => self.through_reference(other),
+    fn private_item(&mut self, visibility: &str) {
+        if visibility != "pub " {
+            self.out.push_str("// This source item need not have a caller in this generated crate.\n#[allow(dead_code)]\n");
         }
     }
 
@@ -484,10 +486,27 @@ impl Printer<'_> {
 
     fn ty(&self, ty: &EType) -> String {
         match ty {
+            EType::Ref(lifetime, inner) => format!(
+                "&{}{}",
+                lifetime
+                    .as_ref()
+                    .map(|l| format!("{l} "))
+                    .unwrap_or_default(),
+                self.ty(inner)
+            ),
+            EType::StructApplied(id, args) => {
+                format!("{}<{}>", self.ty(&EType::Struct(*id)), args.join(", "))
+            }
+            EType::EnumApplied(id, args) => {
+                format!("{}<{}>", self.ty(&EType::Enum(*id)), args.join(", "))
+            }
+            EType::Boxed(element) => format!("Box<{}>", self.ty(element)),
+            EType::Buffer(element) => format!("Vec<{}>", self.ty(element)),
+            EType::Array(element, n) => format!("[{}; {n}]", self.ty(element)),
+            EType::Slice(element) => format!("[{}]", self.ty(element)),
             EType::Bool => "bool".into(),
             EType::Int(ty) => ty.name().into(),
-            EType::Proved => "Proved".into(),
-            EType::Ghost => "Ghost".into(),
+            EType::Proved | EType::Ghost => "Erased".into(),
             EType::Tuple(fields) => {
                 let fields: Vec<String> = fields.iter().map(|field| self.ty(field)).collect();
                 tuple_of(&fields)
@@ -529,6 +548,9 @@ impl Printer<'_> {
                         } else {
                             String::new()
                         };
+                    if contains_divergence(value) && !matches!(pattern, EPattern::Wildcard) {
+                        out.push_str("// A retained control transfer can make every later use of this binding unreachable.\n#[allow(unused_variables)]\n");
+                    }
                     let value = self.expr(value);
                     let _ = writeln!(out, "let {}{annotation} = {value};", pattern_of(pattern));
                 }
@@ -673,16 +695,54 @@ impl Printer<'_> {
         exprs.iter().map(|expr| self.expr(expr)).collect()
     }
 
+    fn buffer(
+        &mut self,
+        op: crate::kernel::BufferOp,
+        storage: crate::exec::BufferStorage,
+        arguments: &[EExpr],
+    ) -> String {
+        use crate::kernel::BufferOp;
+        let args = self.all(arguments);
+        match op {
+            BufferOp::Literal => match storage {
+                crate::exec::BufferStorage::Vector => format!("vec![{}]", args.join(", ")),
+                _ => format!("[{}]", args.join(", ")),
+            },
+            BufferOp::Length => format!("({}).len() as u64", args[0]),
+            BufferOp::Get => format!(
+                "({})[usize::try_from({}).expect(\"collection index does not fit usize\")]",
+                args[0], args[1]
+            ),
+            BufferOp::Set => format!(
+                "{{ let target = {}; let index = {}; let value = {}; target[usize::try_from(index).expect(\"collection index does not fit usize\")] = value; }}",
+                args[0], args[1], args[2]
+            ),
+            BufferOp::Push => format!(
+                "{{ let target = {}; let value = {}; target.push(value); }}",
+                args[0], args[1]
+            ),
+        }
+    }
+
     fn expr(&mut self, expr: &EExpr) -> String {
         match expr {
+            EExpr::Shared { value, .. } => format!("&({})", self.expr(value)),
+            EExpr::BoxNew(value) => format!("Box::new({})", self.expr(value)),
+            EExpr::BoxDeref(value) => format!("*({})", self.expr(value)),
+            EExpr::Deref(value) => format!("*({})", self.expr(value)),
+            EExpr::Buffer {
+                op,
+                storage,
+                arguments,
+                ..
+            } => self.buffer(*op, *storage, arguments),
             // A reference parameter mentioned as a whole is the value
             // behind it.
             EExpr::Var { id, name } if self.refs.contains(id) => format!("*{name}"),
             EExpr::Var { name, .. } => name.clone(),
             EExpr::Bool(value) => value.to_string(),
             EExpr::Literal(ty, value) => literal(*ty, *value),
-            EExpr::Proved => "Proved".into(),
-            EExpr::Ghost => "Ghost".into(),
+            EExpr::Proved | EExpr::Ghost => "Erased".into(),
             EExpr::Trap => "unreachable!(\"shown never to be reached\")".into(),
             EExpr::Panic { form, argument } => match argument {
                 Some(argument) => format!("{}!(\"{{}}\", {argument:?})", form.name()),
@@ -795,18 +855,8 @@ impl Printer<'_> {
                         .fns
                         .iter()
                         .any(|function| function.reference == *callee && function.constant);
-                let method = self
-                    .module
-                    .fns
-                    .iter()
-                    .find(|function| function.reference == *callee)
-                    .filter(|function| function.receiver && !arguments.is_empty());
                 if constant {
                     name.clone()
-                } else if let Some(method) = method {
-                    let receiver = self.receiver(&arguments[0]);
-                    let rest = self.all(&arguments[1..]).join(", ");
-                    format!("{receiver}.{}({rest})", method.method_name())
                 } else {
                     format!("{name}({})", self.all(arguments).join(", "))
                 }
@@ -880,12 +930,123 @@ impl Printer<'_> {
     }
 }
 
+/// Lints attached only to a function containing the construct that requires
+/// them. Source evaluation, including failing arithmetic, is kept intact.
+fn required_lints(block: &EBlock) -> Vec<(&'static str, &'static str)> {
+    #[derive(Default)]
+    struct Scan {
+        parens: bool,
+        arithmetic: bool,
+        assignments: bool,
+        divergence: bool,
+        comparisons: bool,
+        braces: bool,
+        self_assignment: bool,
+    }
+    impl Visit for Scan {
+        fn stmt(&mut self, stmt: &EStmt) {
+            self.assignments |= matches!(stmt, EStmt::Assign { .. });
+            if let EStmt::Assign { place, value } = stmt {
+                fn same_place(value: &EExpr, place: &EPlace, depth: usize) -> bool {
+                    match value {
+                        EExpr::Var { id, .. } => depth == 0 && *id == place.id,
+                        EExpr::Field { target, index, .. } if depth > 0 => {
+                            *index == place.path[depth - 1].0
+                                && same_place(target, place, depth - 1)
+                        }
+                        _ => false,
+                    }
+                }
+                self.self_assignment |= same_place(value, place, place.path.len());
+            }
+            if let EStmt::Let { value, .. } | EStmt::Expr(value) = stmt {
+                self.divergence |= contains_divergence(value);
+            }
+            cleanup::walk_stmt(self, stmt);
+        }
+        fn expr(&mut self, expr: &EExpr) {
+            match expr {
+                EExpr::Compare { .. } => {
+                    self.parens = true;
+                    self.comparisons = true;
+                }
+                EExpr::Cast { .. } | EExpr::Return(_) | EExpr::Break(Some(_)) => self.parens = true,
+                EExpr::Literal(_, value) if *value < 0 => self.parens = true,
+                EExpr::Operate { .. } => self.arithmetic = true,
+                EExpr::Block(_) => self.braces = true,
+                _ => {}
+            }
+            self.divergence |= matches!(
+                expr,
+                EExpr::Return(_)
+                    | EExpr::Break(_)
+                    | EExpr::Continue
+                    | EExpr::Panic { .. }
+                    | EExpr::Trap
+            );
+            cleanup::walk_expr(self, expr);
+        }
+    }
+    let mut scan = Scan::default();
+    scan.block(block);
+    let mut found = Vec::new();
+    if scan.self_assignment {
+        found.push((
+            "dead_code",
+            "Retain explicit self-assignments; Rust's dead_code lint also diagnoses these stores.",
+        ));
+    }
+    if scan.parens {
+        found.push((
+            "unused_parens",
+            "Parentheses preserve the source expression's grouping in every context.",
+        ));
+    }
+    if scan.comparisons {
+        found.push((
+            "unused_comparisons",
+            "Retain comparisons even when a machine type makes their result constant.",
+        ));
+    }
+    if scan.braces {
+        found.push((
+            "unused_braces",
+            "Retain expression block boundaries and their destruction scopes.",
+        ));
+    }
+    if scan.assignments {
+        found.push((
+            "unused_assignments",
+            "Retain runtime stores, including those whose old value is never read.",
+        ));
+    }
+    if scan.divergence {
+        found.push((
+            "unreachable_code",
+            "Retain source control transfers and any subsequent unreachable expressions.",
+        ));
+    }
+    if scan.arithmetic {
+        found.push((
+            "arithmetic_overflow, unconditional_panic, overflowing_literals",
+            "An operation that fails on literals still has the source's runtime panic behavior.",
+        ));
+    }
+    found
+}
+
 /// Whether the printed expression has Rust's type `!`: it is a transfer of
 /// control, a trap, or a panic, or a conditional or block that ends in one
 /// on every path. Where it does, a wildcard in the pattern of a `let` must
 /// be given some type, and `()` serves.
-fn diverges(expr: &EExpr) -> bool {
-    let block = |block: &EBlock| block.tail.as_deref().is_some_and(diverges);
+pub(super) fn diverges(expr: &EExpr) -> bool {
+    let block = |block: &EBlock| {
+        block.stmts.iter().any(|stmt| match stmt {
+            EStmt::Let { value, .. } | EStmt::Assign { value, .. } | EStmt::Expr(value) => {
+                diverges(value)
+            }
+        }) || block.tail.as_deref().is_some_and(diverges)
+    };
     match expr {
         EExpr::Trap
         | EExpr::Panic { .. }
@@ -899,6 +1060,20 @@ fn diverges(expr: &EExpr) -> bool {
         } => block(then_block) && block(else_block),
         EExpr::Match { arms, .. } => arms.iter().all(|arm| block(&arm.body)),
         EExpr::Block(inner) => block(inner),
+        EExpr::Loop { body, .. } => {
+            // Counting breaks in nested loops is conservative: it may miss
+            // a diverging outer loop, but never removes a reachable tail.
+            struct Breaks(bool);
+            impl Visit for Breaks {
+                fn expr(&mut self, expr: &EExpr) {
+                    self.0 |= matches!(expr, EExpr::Break(_));
+                    cleanup::walk_expr(self, expr);
+                }
+            }
+            let mut breaks = Breaks(false);
+            breaks.block(body);
+            !breaks.0
+        }
         _ => false,
     }
 }
@@ -930,13 +1105,20 @@ fn contains_divergence(expr: &EExpr) -> bool {
         | EExpr::Proved
         | EExpr::Ghost
         | EExpr::Lend { .. } => false,
-        EExpr::Tuple(exprs)
+        EExpr::Buffer {
+            arguments: exprs, ..
+        }
+        | EExpr::Tuple(exprs)
         | EExpr::Variant { payload: exprs, .. }
         | EExpr::Call {
             arguments: exprs, ..
         } => any(exprs),
         EExpr::Struct { fields, .. } => fields.iter().any(|(_, value)| contains_divergence(value)),
-        EExpr::Field { target, .. }
+        EExpr::BoxNew(target)
+        | EExpr::BoxDeref(target)
+        | EExpr::Shared { value: target, .. }
+        | EExpr::Deref(target)
+        | EExpr::Field { target, .. }
         | EExpr::Cast { expr: target, .. }
         | EExpr::Assert {
             condition: target, ..
@@ -1011,10 +1193,10 @@ impl Value {
             values.iter().map(|value| value.debug(module)).collect()
         };
         match self {
+            Self::Buffer(items) => format!("[{}]", all(items).join(", ")),
             Self::Bool(flag) => flag.to_string(),
             Self::Int(_, value) => value.to_string(),
-            Self::Proved => "Proved".into(),
-            Self::Ghost => "Ghost".into(),
+            Self::Proved | Self::Ghost => "Erased".into(),
             Self::Tuple(fields) => tuple_of(&all(fields)),
             Self::Struct(id, fields) => {
                 let Some(item) = module.structs.iter().find(|item| item.id == *id) else {
@@ -1102,5 +1284,52 @@ fn variant_of(name: &str, fields: Option<&[String]>, payload: &[String]) -> Stri
         }
         None if payload.is_empty() => name.to_string(),
         None => format!("{name}({})", payload.join(", ")),
+    }
+}
+
+fn lifetime_parameters<'a>(types: impl Iterator<Item = &'a EType>) -> String {
+    fn collect(ty: &EType, names: &mut Vec<String>) {
+        match ty {
+            EType::Ref(lifetime, inner) => {
+                if let Some(l) = lifetime
+                    && l != "'_"
+                    && !names.contains(l)
+                {
+                    names.push(l.clone());
+                }
+                collect(inner, names);
+            }
+            EType::Tuple(fields) => {
+                for f in fields {
+                    collect(f, names)
+                }
+            }
+            EType::Boxed(t) | EType::Buffer(t) | EType::Array(t, _) | EType::Slice(t) => {
+                collect(t, names)
+            }
+            EType::StructApplied(_, args) | EType::EnumApplied(_, args) => {
+                for l in args {
+                    if l != "'_" && !names.contains(l) {
+                        names.push(l.clone());
+                    }
+                }
+            }
+            EType::Fn(args, out) => {
+                for a in args {
+                    collect(a, names)
+                }
+                collect(out, names)
+            }
+            _ => {}
+        }
+    }
+    let mut names = Vec::new();
+    for ty in types {
+        collect(ty, &mut names)
+    }
+    if names.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", names.join(", "))
     }
 }

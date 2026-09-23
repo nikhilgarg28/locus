@@ -65,6 +65,9 @@ pub struct FnId(pub(super) usize);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
+    /// Immutable contents of a physical collection; layout and borrows are separate.
+    Boxed(Box<Type>),
+    Buffer(Box<Type>),
     Bool,
     U8,
     /// The integers of the logic. The type has no runtime representation,
@@ -92,13 +95,19 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn replace_predicate(&self, variable: VarId, predicate: PropId) -> Self {
+        self.rebind(Depth::default(), Rebind::Predicate(variable, predicate))
+    }
+
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
         match self {
             Self::Prop | Self::Proof(_) | Self::Int => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
-            Self::Bool
+            Self::Boxed(_)
+            | Self::Buffer(_)
+            | Self::Bool
             | Self::U8
             | Self::Machine(_)
             | Self::Tuple(_)
@@ -211,6 +220,11 @@ impl Type {
     }
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Type {
+        if let (Self::Struct(id), Rebind::SubstituteTypes(types)) = (self, op)
+            && let Some((_, replacement)) = types.iter().find(|(parameter, _)| parameter == id)
+        {
+            return replacement.clone();
+        }
         match self {
             Self::Bool
             | Self::U8
@@ -219,6 +233,8 @@ impl Type {
             | Self::Prop
             | Self::Struct(_)
             | Self::Enum(_) => self.clone(),
+            Self::Boxed(element) => Self::Boxed(Box::new(element.rebind(depth, op))),
+            Self::Buffer(element) => Self::Buffer(Box::new(element.rebind(depth, op))),
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
             Self::Tuple(fields) => Self::Tuple(rebind_telescope(fields, depth, op)),
             Self::Fn(params, result) => Self::Fn(
@@ -255,6 +271,8 @@ pub enum Prim {
     /// not a runtime comparison, and the only primitive order on `Int`:
     /// `a < b` is written `a + 1 <= b`.
     IntLe,
+    /// `Int, Int -> bool`: decidable equality and order on logical integers.
+    IntCmp(CmpOp),
     /// `T -> Int`: the mathematical value of a machine integer of type `T`.
     View(MachineInt),
     /// `Int -> T`: reduction into the range of `T`, modulo `2^bits`.
@@ -334,6 +352,9 @@ impl Prim {
             Self::IntRem => "int_rem",
             Self::IntNeg => "int_neg",
             Self::IntLe => "int_le",
+            Self::IntCmp(CmpOp::Eq) => "int_eq_b",
+            Self::IntCmp(CmpOp::Lt) => "int_lt_b",
+            Self::IntCmp(CmpOp::Le) => "int_le_b",
             Self::View(_) => "view",
             Self::Wrap(_) => "wrap",
             Self::Cast(..) => "cast",
@@ -450,6 +471,8 @@ pub enum Axiom {
     /// `c == false => (P => False)` when it is false. Reflection at every
     /// machine type; the type is read off the comparison.
     CmpReflect(Term, bool),
+    /// Reverse reflection: `P => c == true` or `!P => c == false`.
+    CmpReify(Term, bool),
 }
 
 impl Axiom {
@@ -489,6 +512,7 @@ impl Axiom {
             Self::OpModel(..) => "op_model",
             Self::OpExact(..) => "op_exact",
             Self::CmpReflect(..) => "cmp_reflect",
+            Self::CmpReify(..) => "cmp_reify",
         }
     }
 
@@ -527,6 +551,7 @@ impl Axiom {
             Self::OpModel(op, ty, xs) => Self::OpModel(*op, *ty, xs.iter().map(&f).collect()),
             Self::OpExact(op, ty, xs) => Self::OpExact(*op, *ty, xs.iter().map(&f).collect()),
             Self::CmpReflect(c, flag) => Self::CmpReflect(f(c), *flag),
+            Self::CmpReify(c, flag) => Self::CmpReify(f(c), *flag),
         }
     }
 
@@ -534,6 +559,7 @@ impl Axiom {
     pub fn terms(&self) -> Vec<&Term> {
         match self {
             Self::CmpReflect(a, _)
+            | Self::CmpReify(a, _)
             | Self::IntAddZero(a)
             | Self::IntAddNeg(a)
             | Self::IntMulOne(a)
@@ -572,6 +598,13 @@ impl Axiom {
 /// Data terms and propositions. A proposition is a term of type `Prop`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
+    /// Immutable contents of a physical box; allocation requires execution IR.
+    Boxed(Box<Term>),
+    Buffer {
+        op: super::buffer::BufferOp,
+        element: Type,
+        arguments: Vec<Term>,
+    },
     Free(VarId),
     Bound(u32),
     Bool(bool),
@@ -600,6 +633,13 @@ pub enum Term {
     Proof(Box<Proof>),
     /// A declared math function used as a value.
     Fn(FnId),
+    /// An erased logical closure. Parameters form a telescope; result and
+    /// body are under every parameter. Free variables are captured values.
+    Lambda {
+        params: Vec<Type>,
+        result: Type,
+        body: Box<Term>,
+    },
     /// Application of a term of function type.
     Call(Box<Term>, Vec<Term>),
     /// A value of a declared enum: the variant's index and its payload.
@@ -674,6 +714,11 @@ pub enum HypRef {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Proof {
+    BufferStep(Term),
+    BufferBound {
+        value: Term,
+        upper: bool,
+    },
     Hyp(HypRef),
     /// A term of type `@P`, such as a projection of a proof field, proves `P`.
     OfTerm(Term),
@@ -707,6 +752,10 @@ pub enum Proof {
     Definition(Term),
     /// Computation axiom: a case on a known constructor equals its arm.
     CaseStep(Term),
+    CaseKnown {
+        term: Term,
+        equation: Box<Proof>,
+    },
     /// A constructor of a declared proposition. `params` instantiates the
     /// proposition's parameters for a variant without a stated conclusion and
     /// is empty for a variant with one.
@@ -770,6 +819,20 @@ pub enum Proof {
     /// `Bound(0)`; `base` proves `motive[0]`; `step` binds `n` and the
     /// hypotheses `0 <= n` and `motive[n]`, in that order, and proves
     /// `motive[n + 1]`. Concludes `0 <= target => motive[target]`.
+    /// Induction over a finite logical enum group. Each motive binds one
+    /// value; arms bind constructor payloads and recursive-field hypotheses.
+    /// Induction over a strictly positive named predicate. Motive binders
+    /// correspond to header parameters; arms receive strengthened evidence.
+    PropInduction {
+        scrutinee: Box<Proof>,
+        motive: TermArm,
+        arms: Vec<ProofArm>,
+    },
+    DataInduction {
+        target: Term,
+        motives: Vec<(EnumId, Term)>,
+        arms: Vec<ProofArm>,
+    },
     IntInduction {
         motive: Term,
         base: Box<Proof>,
@@ -828,6 +891,11 @@ impl Depth {
 /// One traversal serves opening and closing of both kinds of binder.
 #[derive(Clone, Copy)]
 pub(super) enum Rebind<'a> {
+    /// Turn direct applications of an unchecked local predicate placeholder
+    /// into applications of its eventual checked declaration.
+    Predicate(VarId, PropId),
+    /// Simultaneous type substitution in an unchecked generic template.
+    SubstituteTypes(&'a [(StructId, Type)]),
     /// Replace the bound variable `index` binders out with a locally closed
     /// term. Other indices are left alone.
     OpenVar {
@@ -850,6 +918,23 @@ pub(super) enum Rebind<'a> {
 }
 
 impl Term {
+    /// Syntactic instantiation only; the result must still be kernel checked.
+    pub fn replace_predicate(&self, variable: VarId, predicate: PropId) -> Self {
+        self.rebind(Depth::default(), Rebind::Predicate(variable, predicate))
+    }
+
+    pub fn lambda_over(parameters: &[(VarId, Type)], result: &Type, body: Term) -> Self {
+        let Type::Fn(params, result) = Type::function_over(parameters, result) else {
+            unreachable!()
+        };
+        let ids: Vec<_> = parameters.iter().map(|(id, _)| *id).collect();
+        Self::Lambda {
+            params,
+            result: *result,
+            body: Box::new(body.close_over(&ids)),
+        }
+    }
+
     pub fn var(id: VarId) -> Self {
         Self::Free(id)
     }
@@ -905,6 +990,16 @@ impl Term {
     }
 
     /// The proposition `left <= right` over `Int`.
+    /// A decidable comparison in the logical integer domain.
+    pub fn int_cmp(op: CmpOp, left: Term, right: Term) -> Self {
+        Self::Prim(Prim::IntCmp(op), vec![left, right])
+    }
+
+    /// Lift a Boolean claim to a proposition; no new proposition former.
+    pub fn holds(value: Term) -> Self {
+        Self::eq(Type::Bool, value, Self::Bool(true))
+    }
+
     pub fn int_le(left: Term, right: Term) -> Self {
         Self::Prim(Prim::IntLe, vec![left, right])
     }
@@ -1232,6 +1327,9 @@ impl Term {
             | Self::Machine(..)
             | Self::Proof(_)
             | Self::Fn(_) => true,
+            Self::Lambda { params, body, .. } => body.closed_at(depth + params.len() as u32),
+            Self::Boxed(value) => value.closed_at(depth),
+            Self::Buffer { arguments, .. } => all(arguments),
             Self::Prim(_, arguments) => all(arguments),
             Self::Eq(_, left, right) => left.closed_at(depth) && right.closed_at(depth),
             Self::Implies(premise, conclusion) => {
@@ -1281,6 +1379,9 @@ impl Term {
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => None,
+            Self::Lambda { body, .. } => body.find(wanted),
+            Self::Boxed(value) => value.find(wanted),
+            Self::Buffer { arguments, .. } => first(arguments, wanted),
             Self::Variant(_, _, payload) => first(payload, wanted),
             Self::Case {
                 scrutinee, arms, ..
@@ -1338,6 +1439,25 @@ impl Term {
             | Self::Proof(_)
             | Self::Fn(_)
             | Self::Absurd(_, _) => self.clone(),
+            Self::Lambda {
+                params,
+                result,
+                body,
+            } => Self::Lambda {
+                params: params.clone(),
+                result: result.clone(),
+                body: boxed(body, depth + params.len() as u32),
+            },
+            Self::Boxed(value) => Self::Boxed(boxed(value, depth)),
+            Self::Buffer {
+                op,
+                element,
+                arguments,
+            } => Self::Buffer {
+                op: *op,
+                element: element.clone(),
+                arguments: each(arguments),
+            },
             Self::Variant(id, index, payload) => Self::Variant(*id, *index, each(payload)),
             Self::Case {
                 scrutinee,
@@ -1397,6 +1517,16 @@ impl Term {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Term {
         match self {
+            Self::Boxed(value) => Self::Boxed(Box::new(value.rebind(depth, op))),
+            Self::Buffer {
+                op: operation,
+                element,
+                arguments,
+            } => Self::Buffer {
+                op: *operation,
+                element: element.rebind(depth, op),
+                arguments: rebind_each(depth, op, arguments),
+            },
             Self::Free(..) => self.rebind_free(depth, op),
             Self::Bound(..) => self.rebind_bound(depth, op),
             Self::Bool(_) | Self::U8(_) | Self::Int(_) | Self::Machine(..) => self.clone(),
@@ -1409,6 +1539,22 @@ impl Term {
             Self::Proj(..) => self.rebind_proj(depth, op),
             Self::Proof(..) => self.rebind_proof(depth, op),
             Self::Fn(_) => self.clone(),
+            Self::Lambda {
+                params,
+                result,
+                body,
+            } => {
+                let Type::Fn(rebound, result) =
+                    Type::Fn(params.clone(), Box::new(result.clone())).rebind(depth, op)
+                else {
+                    unreachable!()
+                };
+                Self::Lambda {
+                    params: rebound,
+                    result: *result,
+                    body: Box::new(body.rebind(depth.under_vars(params.len() as u32), op)),
+                }
+            }
             Self::Call(..) => self.rebind_call(depth, op),
             Self::Variant(..) => self.rebind_variant(depth, op),
             Self::Case { .. } => self.rebind_case(depth, op),
@@ -1527,6 +1673,11 @@ impl Term {
         let Self::Call(callee, arguments) = self else {
             unreachable!("dispatched on this variant")
         };
+        if let Rebind::Predicate(variable, predicate) = op
+            && **callee == Self::Free(variable)
+        {
+            return Self::PropApp(predicate, rebind_each(depth, op, arguments));
+        }
         {
             Self::Call(
                 Box::new(callee.rebind(depth, op)),
@@ -1634,6 +1785,9 @@ impl Proof {
     /// The name the kernel contract gives the rule.
     pub fn rule_name(&self) -> &'static str {
         match self {
+            Self::BufferStep(_) => "buffer_step",
+            Self::BufferBound { upper: true, .. } => "buffer_upper",
+            Self::BufferBound { upper: false, .. } => "buffer_lower",
             Self::Hyp(_) => "hyp",
             Self::OfTerm(_) => "of_term",
             Self::Refl(_) => "refl",
@@ -1646,6 +1800,7 @@ impl Proof {
             Self::Literal(_) => "literal",
             Self::Definition(_) => "definition",
             Self::CaseStep(_) => "case_step",
+            Self::CaseKnown { .. } => "case_known",
             Self::Construct { .. } => "construct",
             Self::CaseProof { .. } => "case_proof",
             Self::CaseData { .. } => "case_data",
@@ -1658,6 +1813,8 @@ impl Proof {
             Self::Evaluate(_) => "evaluate",
             Self::Axiom(_) => "axiom",
             Self::IntInduction { .. } => "int_induction",
+            Self::DataInduction { .. } => "data_induction",
+            Self::PropInduction { .. } => "prop_induction",
             Self::Linear { .. } => "linear",
         }
     }
@@ -1815,6 +1972,11 @@ impl Proof {
 
     pub(super) fn rebind(&self, depth: Depth, op: Rebind<'_>) -> Proof {
         match self {
+            Self::BufferStep(term) => Self::BufferStep(term.rebind(depth, op)),
+            Self::BufferBound { value, upper } => Self::BufferBound {
+                value: value.rebind(depth, op),
+                upper: *upper,
+            },
             Self::Hyp(HypRef::Free(_)) => self.rebind_hyp(depth, op),
             Self::Hyp(HypRef::Bound(_)) => self.rebind_hyp_2(depth, op),
             Self::OfTerm(..) => self.rebind_of_term(depth, op),
@@ -1828,6 +1990,10 @@ impl Proof {
             Self::Literal(..) => self.rebind_literal(depth, op),
             Self::Definition(..) => self.rebind_definition(depth, op),
             Self::CaseStep(..) => self.rebind_case_step(depth, op),
+            Self::CaseKnown { term, equation } => Self::CaseKnown {
+                term: term.rebind(depth, op),
+                equation: Box::new(equation.rebind(depth, op)),
+            },
             Self::Construct { .. } => self.rebind_construct(depth, op),
             Self::CaseProof { .. } => self.rebind_case_proof(depth, op),
             Self::CaseData { .. } => self.rebind_case_data(depth, op),
@@ -1840,6 +2006,30 @@ impl Proof {
             Self::Evaluate(..) => self.rebind_evaluate(depth, op),
             Self::Axiom(..) => self.rebind_axiom(depth, op),
             Self::IntInduction { .. } => self.rebind_int_induction(depth, op),
+            Self::PropInduction {
+                scrutinee,
+                motive,
+                arms,
+            } => Self::PropInduction {
+                scrutinee: Box::new(scrutinee.rebind(depth, op)),
+                motive: TermArm {
+                    binders: motive.binders,
+                    body: motive.body.rebind(depth.under_vars(motive.binders), op),
+                },
+                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+            },
+            Self::DataInduction {
+                target,
+                motives,
+                arms,
+            } => Self::DataInduction {
+                target: target.rebind(depth, op),
+                motives: motives
+                    .iter()
+                    .map(|(id, motive)| (*id, motive.rebind(depth.under_vars(1), op)))
+                    .collect(),
+                arms: arms.iter().map(|arm| arm.rebind(depth, op)).collect(),
+            },
             Self::Linear { .. } => self.rebind_linear(depth, op),
         }
     }
@@ -2167,6 +2357,8 @@ impl ProofArm {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Boxed(element) => write!(f, "Box<{element}>"),
+            Self::Buffer(element) => write!(f, "Buffer<{element}>"),
             Self::Bool => f.write_str("bool"),
             Self::U8 => f.write_str("u8"),
             Self::Int => f.write_str("Int"),
@@ -2206,6 +2398,12 @@ fn write_list(f: &mut fmt::Formatter<'_>, terms: &[Term]) -> fmt::Result {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Boxed(value) => write!(f, "box({value})"),
+            Self::Buffer {
+                op,
+                element,
+                arguments,
+            } => write!(f, "buffer_{op:?}[{element}]({arguments:?})"),
             Self::Free(VarId(id)) => write!(f, "v{id}"),
             Self::Bound(index) => write!(f, "#{index}"),
             Self::Bool(value) => write!(f, "{value}"),
@@ -2233,6 +2431,11 @@ impl fmt::Display for Term {
             Self::Proj(target, index) => write!(f, "{target}.{index}"),
             Self::Proof(_) => f.write_str("<proof>"),
             Self::Fn(FnId(id)) => write!(f, "fn#{id}"),
+            Self::Lambda {
+                params,
+                result,
+                body,
+            } => write!(f, "lambda({:?}) -> {result} {{ {body} }}", params),
             Self::Call(callee, arguments) => {
                 write!(f, "{callee}(")?;
                 write_list(f, arguments)?;

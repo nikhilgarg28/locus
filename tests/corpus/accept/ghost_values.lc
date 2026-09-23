@@ -1,20 +1,9 @@
-// Logic-only types, and the one erasure rule (E8). `Ghost<T>` is a logical
-// value of type `T` that the program never computes: `snapshot!(x)` builds
-// one, a `let`, a parameter, or a field may be declared one, and in a
-// proposition it reads as its `T` value. `Int` is logic-only too. A `let`
-// of either is a logic-only context, elaborated where nothing runs, and
-// erases to nothing; a parameter or a field of either is the marker `Ghost`
-// in the generated Rust, as evidence is `Proved`.
-//
-// Two rules about calls, which must not be confused. An erased result: a
-// call whose result has no runtime form keeps the call, which may panic or
-// loop, and only its result vanishes. An erasable computation: a call is
-// removed only when its result has no runtime form and the callee
-// promises `terminates`, `no_panic`, and `no_io`.
+// Logical types erase by type. Ordinary calls retain their effects; only
+// explicitly logical computation erases. Observations preserve SSA values.
 
 // A snapshot names the value a claim speaks of, as it was.
 fn keep(x: u8) -> (out: u8, @(out == x)) {
-    let before = snapshot!(x);
+    let before = (x as Int);
     let out = x;
     (out, prove!(out == before))
 }
@@ -27,14 +16,14 @@ fn widened(n: u8) -> (out: u8, @(out as Int == n as Int)) {
 
 // A `Ghost<T>` parameter is the marker at runtime, and the value in the
 // claims about the other parameters.
-fn under(n: u8, cap: Ghost<u8>, h: @(n <= cap)) -> (out: u8, @(out <= cap)) {
+fn under(n: u8, cap: Int, h: @(n <= cap)) -> (out: u8, @(out <= cap)) {
     (n, h)
 }
 
 // What stands in a `Ghost<T>` position is a logical value: a snapshot, or
 // a value read where nothing runs.
 fn under_limit(n: u8, h: @(n <= 200)) -> u8 {
-    let (out, _) = under(n, snapshot!(200), h);
+    let (out, _) = under(n, (200 as Int), h);
     let (again, _) = under(out, 200, _);
     again
 }
@@ -42,12 +31,12 @@ fn under_limit(n: u8, h: @(n <= 200)) -> u8 {
 // A `Ghost<T>` field holds a historical value, with evidence about it.
 #[derive(Clone, Copy, Debug)]
 struct Historical {
-    value: Ghost<u8>,
+    value: Int,
     evidence: @(value != 0),
 }
 
 fn record(x: u8, h: @(x != 0)) -> Historical {
-    Historical { value: snapshot!(x), evidence: h }
+    Historical { value: (x as Int), evidence: h }
 }
 
 // The field is read in a proposition, where it is its `u8` value.
@@ -65,11 +54,11 @@ fn record_then_read(x: u8, h: @(x != 0)) -> u8 {
 #[derive(Clone, Copy, Debug)]
 enum Tagged {
     Plain,
-    Noted { at: Ghost<u8>, small: @(at <= 9) },
+    Noted { at: Int, small: @(at <= 9) },
 }
 
 fn note(x: u8, h: @(x <= 9)) -> Tagged {
-    Tagged::Noted { at: snapshot!(x), small: h }
+    Tagged::Noted { at: (x as Int), small: h }
 }
 
 fn noted(t: Tagged) -> u8 {
@@ -86,14 +75,14 @@ fn note_then_read(x: u8, h: @(x <= 9)) -> u8 {
 // A function of the logic in a logic-only context: the call is absent
 // from the generated Rust, and its defining equation serves the proof.
 #[terminates] #[no_panic] #[no_io]
-fn double(n: u8) -> u8 {
-    n.wrapping_add(n)
+logic fn double(n: Int) -> Int {
+    n + n
 }
 
-fn doubled_noted(n: u8) -> (out: u8, @(out == double(n))) {
-    let noted: Ghost<u8> = double(n);
-    let out = double(n);
-    (out, prove!(out == noted))
+fn doubled_noted(n: u8) -> (out: u8, @(out == n.wrapping_add(n))) {
+    let noted: Int = double(n);
+    let out = n.wrapping_add(n);
+    (out, prove!(out == n.wrapping_add(n)))
 }
 
 // Every promise of the logic and an operator in the body: by the interim
@@ -135,30 +124,28 @@ fn use_spin(x: u8) -> u8 {
 }
 
 //~ proofs: 11
-//~ run: keep(7) => (7, Proved)
-//~ run: widened(9) => (9, Proved)
-//~ run: under(3, Ghost, Proved) => (3, Proved)
-//~ run: under_limit(150, Proved) => 150
-//~ run: recorded(Historical { value: Ghost, evidence: Proved }) => Proved
-//~ run: record_then_read(5, Proved) => 5
+//~ run: keep(7) => (7, Erased)
+//~ run: widened(9) => (9, Erased)
+//~ run: under(3, Erased, Erased) => (3, Erased)
+//~ run: under_limit(150, Erased) => 150
+//~ run: recorded(Historical { value: Erased, evidence: Erased }) => Erased
+//~ run: record_then_read(5, Erased) => 5
 //~ run: noted(Tagged::Plain) => 0
-//~ run: noted(Noted { at: Ghost, small: Proved }) => 1
-//~ run: note_then_read(3, Proved) => 1
-//~ run: doubled_noted(21) => (42, Proved)
-//~ run: with_room(100, Proved) => 150
-//~ run: checked(0) => Proved
-//~ run: checked(1) => panic | Proved
+//~ run: noted(Noted { at: Erased, small: Erased }) => 1
+//~ run: note_then_read(3, Erased) => 1
+//~ run: doubled_noted(21) => (42, Erased)
+//~ run: with_room(100, Erased) => 150
+//~ run: checked(0) => Erased
+//~ run: checked(1) => panic | Erased
 //~ run: use_checked(0) => 0
 //~ run: use_checked(200) => panic | 200
-//~ rust: fn keep(x: u8) -> (u8, Proved) {
-//~ rust: fn under(n: u8, cap: Ghost, h: Proved) -> (u8, Proved) {
-//~ rust: let (out, _) = under(n, Ghost, h);
-//~ rust: let (again, _) = under(out, Ghost, Proved);
-//~ rust: value: Ghost,
-//~ rust: Historical { value: Ghost, evidence: h }
-//~ rust: Noted { at: Ghost, small: Proved },
-//~ rust: Tagged::Noted { at: Ghost, small: h }
-//~ rust: fn double(n: u8) -> u8 {
-//~ rust: let room = Proved;
-//~ rust: let h = checked(x);
-//~ rust: let h = spin_evidence(x);
+//~ rust: fn keep(x: u8) -> (u8, Erased) {
+//~ rust: fn under(n: u8, _cap: Erased, _h: Erased) -> (u8, Erased) {
+//~ rust: let (out, _) = under(n, Erased, Erased);
+//~ rust: let (again, _) = under(out, Erased, Erased);
+//~ rust: value: Erased,
+//~ rust: Historical { value: Erased, evidence: Erased }
+//~ rust: Noted { at: Erased, small: Erased },
+//~ rust: Tagged::Noted { at: Erased, small: Erased }
+//~ rust: let _ = checked(x);
+//~ rust: let _ = spin_evidence(x);

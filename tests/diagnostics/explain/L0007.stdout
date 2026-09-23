@@ -1,0 +1,14 @@
+L0007: Unknown string escape
+
+The string contains an escape sequence the lexer does not support. Use a supported escape such as \n, \t, \\ or \"; for a literal backslash, escape the backslash itself.
+
+Example from `tests/corpus/reject/bad_escape.lc`; the full file is a regression test.
+
+```locus
+// An escape Rust does not have.
+fn greeting() -> u8 {
+    "a\qb"
+}
+```
+
+Language, as built: [1.0:2](../../atlas.html#/doc/language/spec-1.0:2).

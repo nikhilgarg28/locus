@@ -1,24 +1,16 @@
-// A midpoint that cannot overflow, from Target examples, as written there.
-// The specification is stated over Int, where the sum of two u32 cannot
-// overflow; the code avoids the overflow the specification is free of. The
-// obligations of `-` and `+` and the claim are discharged by the arithmetic
-// procedure (E7); `2 != 0` by evaluation. With every promise of the logic
-// and operators in its body, `midpoint` is checked as an ordinary function
-// with its promises, by the interim rule of LOC-193. It takes evidence, so it is `pub(crate)` (O2).
 #[terminates] #[no_panic] #[no_io]
-pub(crate) fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
+pub(super) fn midpoint(lo: u32, hi: u32, ordered: @((lo as Int) <= (hi as Int)))
     -> (mid: u32, @(mid as Int == (lo as Int + hi as Int) / 2))
 {
-    let half = (hi - lo) / 2;          // the obligations of -: arithmetic, from ordered. 2 is not zero: evaluation
-    let mid = lo + half;               // the obligations of +: arithmetic
+    let half = (hi - lo) / 2;          // the obligation of -: arithmetic, from ordered. 2 is not zero: computed
+    let mid = lo + half;               // the obligation of +: arithmetic
     (mid, prove!(mid as Int == (lo as Int + hi as Int) / 2))   // arithmetic, with division by a literal
 }
 
 //~ proofs: 6
-//~ run: midpoint(0, 0, Proved) => (0, Proved)
-//~ run: midpoint(0, 1, Proved) => (0, Proved)
-//~ run: midpoint(3, 10, Proved) => (6, Proved)
-//~ run: midpoint(4294967294, 4294967295, Proved) => (4294967294, Proved)
-//~ run: midpoint(7, 7, Proved) => (7, Proved)
-//~ rust: pub(crate) fn midpoint(lo: u32, hi: u32, ordered: Proved) -> (u32, Proved) {
-//~ rust: let half = (hi - lo) / 2_u32;
+//~ run: midpoint(0, 0, Erased) => (0, Erased)
+//~ run: midpoint(0, 1, Erased) => (0, Erased)
+//~ run: midpoint(3, 10, Erased) => (6, Erased)
+//~ run: midpoint(4294967294, 4294967295, Erased) => (4294967294, Erased)
+//~ run: midpoint(7, 7, Erased) => (7, Erased)
+//~ spec: 1.15:2

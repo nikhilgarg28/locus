@@ -1,0 +1,4 @@
+prop P { At(index: Int) => { prop!(true) } }
+fn bad() -> @P {
+    P::At @ prove!(true) //~ error: L0275 requires 1 witness
+}

@@ -14,7 +14,7 @@
 //! A claim that fails for some byte the facts allow is refuted instead, and
 //! the byte is named: nothing would fill it.
 
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{ConsideredFact, Diagnostic};
 use crate::kernel::derive;
 use crate::kernel::{
     FnId, HypId, MachineInt, Prim, Proof, Term, Type, VarId, check_proof, infer_proof, same,
@@ -43,9 +43,23 @@ enum Cases {
 }
 
 /// The nesting of the check over the connectives.
-const STRUCTURAL_DEPTH: usize = 8;
+use crate::limits::MAX_EXPLANATION_DEPTH as STRUCTURAL_DEPTH;
 
 impl Env<'_> {
+    /// Give a superseded SSA identity a source-based label. The identity
+    /// remains valid historical data; only treating it as the current value
+    /// would be wrong. This is diagnostic metadata, never a logical rule.
+    pub(super) fn record_historical_version(&mut self, id: VarId, name: &str, change: Span) {
+        {
+            let line = self
+                .source
+                .line_column(change.start)
+                .map_or(0, |(line, _)| line);
+            self.labels
+                .insert(id, format!("{name} as it was before line {line}"));
+        }
+    }
+
     pub(super) fn report_unsolved(&mut self, goal: &Term, span: Span, given: Option<&Term>) {
         // The claim as stated, with the values written for its names put in
         // their fields; then the claim with names replaced too.
@@ -62,10 +76,12 @@ impl Env<'_> {
             }
             None => Diagnostic::error("L0230", format!("cannot show `{claim}`"), span),
         };
+        diagnostic.details.proof.claim = Some(claim.clone());
         let known = self.knowledge();
         let (normal, _) = self.normalize(goal, &known.definitions);
         let normal_text = self.show(&normal);
         if normal_text != claim {
+            diagnostic.details.proof.claim_after_computing = Some(normal_text.clone());
             diagnostic = diagnostic.note(format!("after computing, the claim is `{normal_text}`"));
         }
 
@@ -73,6 +89,7 @@ impl Env<'_> {
         // first, each once, under its name when it has one.
         let subjects = free_variables(&normal);
         let mut shown: Vec<(String, Option<String>)> = Vec::new();
+        let mut omitted_facts = false;
         for (index, fact) in known.facts.iter().rev() {
             let theirs = free_variables(&fact.claim);
             if !theirs.iter().any(|variable| subjects.contains(variable)) {
@@ -84,10 +101,21 @@ impl Env<'_> {
                 if seen_name.is_none() {
                     *seen_name = name;
                 }
-            } else if shown.len() < 6 {
+            } else if shown.len() < crate::limits::MAX_DIAGNOSTIC_FACTS {
                 shown.push((claim, name));
+            } else {
+                omitted_facts = true;
             }
         }
+        diagnostic.details.proof.facts_considered = Some(
+            shown
+                .iter()
+                .map(|(claim, name)| ConsideredFact {
+                    name: name.clone(),
+                    claim: claim.clone(),
+                })
+                .collect(),
+        );
         diagnostic = if shown.is_empty() {
             diagnostic.note("nothing known here speaks of the values in this claim")
         } else {
@@ -101,17 +129,33 @@ impl Env<'_> {
             diagnostic.note(format!("known here: {}", list.join(", ")))
         };
 
+        if omitted_facts {
+            diagnostic.notes.push(format!(
+                "additional facts omitted (MAX_DIAGNOSTIC_FACTS={})",
+                crate::limits::MAX_DIAGNOSTIC_FACTS
+            ));
+        }
+
         // What the arithmetic procedure says: values that break the claim,
         // after which nothing linear would fill it, or a budget that ran
         // out; then the form that bridges the facts and the claim.
-        let (linear, _) = self.literal_views(&normal);
+        let diagnostic_relation = self.diagnostic_relation(&normal);
+        let (linear, _) = self.literal_views(&diagnostic_relation);
         let failure = self.arithmetic_failure(&linear, &known);
         if let Some(failure) = &failure {
+            if let ArithmeticFailure::Counterexample(example) = failure {
+                diagnostic.details.proof.counterexample = Some(example.clone());
+            }
             diagnostic = diagnostic.note(failure.note());
         }
         let refuted = matches!(failure, Some(ArithmeticFailure::Counterexample(_)));
-        for note in self.bridge(&normal, &known, refuted) {
+        for note in self.bridge(&normal, &known, refuted, &mut diagnostic) {
             diagnostic = diagnostic.note(note);
+        }
+        // An arithmetic abstraction can admit a point that the full facts
+        // exclude. A checked solution establishes that it is no refutation.
+        if diagnostic.details.proof.suggested_explicit_form.is_some() {
+            diagnostic.details.proof.counterexample = None;
         }
         self.diagnostics.push(diagnostic);
     }
@@ -138,7 +182,13 @@ impl Env<'_> {
     /// that is missing. With `refuted`, the arithmetic procedure has
     /// already shown values that break the claim, and only a definition
     /// left closed can still be what is missing.
-    fn bridge(&mut self, normal: &Term, known: &Known, refuted: bool) -> Vec<String> {
+    fn bridge(
+        &mut self,
+        normal: &Term,
+        known: &Known,
+        refuted: bool,
+        diagnostic: &mut Diagnostic,
+    ) -> Vec<String> {
         let candidates = self.candidates(known);
         let (opened, _) = self.opened(normal, &known.definitions);
         let unfolds = self.program_calls(normal);
@@ -149,7 +199,8 @@ impl Env<'_> {
         let mut notes = Vec::new();
 
         // Unfolding without being asked.
-        if let Some(form) = self.by_unfolding(normal, &opened, &opened_candidates) {
+        if let Some((form, source)) = self.by_unfolding(normal, &opened, &opened_candidates) {
+            diagnostic.details.proof.suggested_explicit_form = Some(source);
             notes.push(form);
             return notes;
         }
@@ -161,17 +212,20 @@ impl Env<'_> {
         let cases = self.all_cases(&opened, &opened_candidates);
         if let Cases::Refuted(unknown, byte) = cases {
             let unknown = self.show(&unknown);
-            return vec![format!(
-                "it fails when `{unknown}` is {byte}, which the facts known here allow"
-            )];
+            let example =
+                format!("it fails when `{unknown}` is {byte}, which the facts known here allow");
+            diagnostic.details.proof.counterexample = Some(example.clone());
+            return vec![example];
         }
         // Rewriting by an equation in scope.
-        if let Some(form) = self.by_rewriting(normal, &candidates, &opened_candidates) {
+        if let Some((form, source)) = self.by_rewriting(normal, &candidates, &opened_candidates) {
+            diagnostic.details.proof.suggested_explicit_form = Some(source);
             notes.push(form);
             return notes;
         }
         // One lemma that takes the step from the facts to the claim.
-        if let Some(form) = self.by_lemma(normal, &opened, &opened_candidates) {
+        if let Some((form, source)) = self.by_lemma(normal, &opened, &opened_candidates) {
+            diagnostic.details.proof.suggested_explicit_form = Some(source);
             notes.push(form);
             return notes;
         }
@@ -192,7 +246,7 @@ impl Env<'_> {
             return notes;
         }
         // The connectives.
-        if let Some(form) = self.by_structure(&opened, &opened_candidates) {
+        if let Some(form) = self.by_structure(&opened, &opened_candidates, diagnostic) {
             notes.push(form);
             return notes;
         }
@@ -377,7 +431,7 @@ impl Env<'_> {
         normal: &Term,
         opened: &Term,
         candidates: &[Candidate],
-    ) -> Option<String> {
+    ) -> Option<(String, String)> {
         let (proof, inner) = match candidates
             .iter()
             .find(|candidate| same(&candidate.claim, opened))
@@ -394,8 +448,11 @@ impl Env<'_> {
         let folded = self.folded(normal, proof)?;
         check_proof(&mut self.ctx, &folded, normal).ok()?;
         let text = self.folded_text(normal, &inner);
-        Some(format!(
-            "this is `{text}`: a definition is opened only by `unfold!` and closed only by `fold!`"
+        Some((
+            format!(
+                "this is `{text}`: a definition is opened only by `unfold!` and closed only by `fold!`"
+            ),
+            text,
         ))
     }
 
@@ -423,10 +480,18 @@ impl Env<'_> {
         normal: &Term,
         candidates: &[Candidate],
         opened_candidates: &[Candidate],
-    ) -> Option<String> {
-        let equations: Vec<&Candidate> = candidates
+    ) -> Option<(String, String)> {
+        let equations: Vec<Candidate> = candidates
             .iter()
-            .filter(|candidate| matches!(&candidate.claim, Term::Eq(ty, ..) if !matches!(ty, Type::Prop)))
+            .filter_map(|candidate| {
+                let proof = self.rewrite_equation(candidate.proof.clone());
+                let claim = infer_proof(&mut self.ctx, &proof).ok()?;
+                matches!(&claim,Term::Eq(ty,..) if !matches!(ty,Type::Prop)).then(|| Candidate {
+                    claim,
+                    proof,
+                    text: candidate.text.clone(),
+                })
+            })
             .collect();
         for equation in &equations {
             let Term::Eq(ty, a, b) = &equation.claim else {
@@ -470,9 +535,12 @@ impl Env<'_> {
                         continue;
                     };
                     if check_proof(&mut self.ctx, &proof, normal).is_ok() {
-                        return Some(format!(
-                            "this follows from `{}` by `rewrite!({eq_text}, {})`: an equation in scope rewrites nothing by itself",
-                            target.text, target.text
+                        return Some((
+                            format!(
+                                "this follows from `{}` by `rewrite!({eq_text}, {})`: an equation in scope rewrites nothing by itself",
+                                target.text, target.text
+                            ),
+                            format!("rewrite!({eq_text}, {})", target.text),
                         ));
                     }
                 }
@@ -493,8 +561,11 @@ impl Env<'_> {
                 };
                 if check_proof(&mut self.ctx, &proof, normal).is_ok() {
                     let stated = self.show(&stated);
-                    return Some(format!(
-                        "this is `rewrite!({eq_text}, prove!({stated}))`: an equation in scope rewrites nothing by itself"
+                    return Some((
+                        format!(
+                            "this is `rewrite!({eq_text}, prove!({stated}))`: an equation in scope rewrites nothing by itself"
+                        ),
+                        format!("rewrite!({eq_text}, prove!({stated}))"),
                     ));
                 }
             }
@@ -573,7 +644,7 @@ impl Env<'_> {
         normal: &Term,
         opened: &Term,
         candidates: &[Candidate],
-    ) -> Option<String> {
+    ) -> Option<(String, String)> {
         let lemmas = self.builtin_lemmas();
         for (name, id) in lemmas {
             let Some(info) = self.fn_by_id(id) else {
@@ -660,11 +731,14 @@ impl Env<'_> {
             }
             let text = self.folded_text(normal, &format!("{name}({})", texts.join(", ")));
             let from: Vec<String> = from.iter().map(|text| format!("`{text}`")).collect();
-            return Some(if from.is_empty() {
-                format!("this is `{text}`")
-            } else {
-                format!("this follows from {} by `{text}`", from.join(" and "))
-            });
+            return Some((
+                if from.is_empty() {
+                    format!("this is `{text}`")
+                } else {
+                    format!("this follows from {} by `{text}`", from.join(" and "))
+                },
+                text,
+            ));
         }
         None
     }
@@ -672,7 +746,12 @@ impl Env<'_> {
     /// Whether taking the connectives apart, down to the facts, reaches
     /// the claim, and the constructor or form that states the outermost
     /// step.
-    fn by_structure(&mut self, goal: &Term, candidates: &[Candidate]) -> Option<String> {
+    fn by_structure(
+        &mut self,
+        goal: &Term,
+        candidates: &[Candidate],
+        diagnostic: &mut Diagnostic,
+    ) -> Option<String> {
         let prelude = self.prelude;
         let form = match goal {
             Term::PropApp(id, _) if *id == prelude.and => {
@@ -688,8 +767,8 @@ impl Env<'_> {
             Term::Implies(..) => {
                 "evidence of `p => q` is a function of the logic that takes evidence of `p` and returns evidence of `q`, named as a value"
             }
-            Term::Forall(..) => {
-                "evidence of `forall (x: T) { p }` is a function of the logic with `x` as a parameter, named as a value"
+            _ if self.universal(goal).is_some() => {
+                "evidence of `forall (x: T) { p }` is a function of the logic with `x` as a parameter, supplied to `ForAll::Each` or named as a value"
             }
             _ => return None,
         };
@@ -701,29 +780,50 @@ impl Env<'_> {
                 text: candidate.text.clone(),
             })
             .collect();
-        self.structurally(goal, &mut owned, 0)
-            .then(|| format!("a hole takes no connective apart; {form}"))
+        let mut exhausted = false;
+        let found = self.structurally(goal, &mut owned, 0, &mut exhausted);
+        if exhausted {
+            diagnostic.notes.push(format!("MAX_EXPLANATION_DEPTH budget of {STRUCTURAL_DEPTH} was exhausted; the structural explanation is incomplete"));
+        }
+        found.then(|| format!("a hole takes no connective apart; {form}"))
     }
 
-    fn structurally(&mut self, goal: &Term, candidates: &mut Vec<Candidate>, depth: usize) -> bool {
+    fn structurally(
+        &mut self,
+        goal: &Term,
+        candidates: &mut Vec<Candidate>,
+        depth: usize,
+        exhausted: &mut bool,
+    ) -> bool {
         if self.leaf(goal, candidates).is_some()
             || matches!(self.all_cases(goal, candidates), Cases::Holds)
         {
             return true;
         }
         if depth >= STRUCTURAL_DEPTH {
+            *exhausted = true;
             return false;
         }
         let prelude = self.prelude;
+        if let Some((quantifiers, Term::Lambda { body, .. })) = self.universal(goal) {
+            let scope = self.ctx.checkpoint();
+            let Ok(variable) = self.ctx.declare_ghost(quantifiers.element().clone()) else {
+                return false;
+            };
+            let instance = body.open(&Term::Free(variable));
+            let found = self.structurally(&instance, candidates, depth + 1, exhausted);
+            self.ctx.rollback(scope);
+            return found;
+        }
         match goal {
             Term::PropApp(id, _) if *id == prelude.truth => true,
             Term::PropApp(id, arguments) if *id == prelude.and => {
-                self.structurally(&arguments[0], candidates, depth + 1)
-                    && self.structurally(&arguments[1], candidates, depth + 1)
+                self.structurally(&arguments[0], candidates, depth + 1, exhausted)
+                    && self.structurally(&arguments[1], candidates, depth + 1, exhausted)
             }
             Term::PropApp(id, arguments) if *id == prelude.or => {
-                self.structurally(&arguments[0], candidates, depth + 1)
-                    || self.structurally(&arguments[1], candidates, depth + 1)
+                self.structurally(&arguments[0], candidates, depth + 1, exhausted)
+                    || self.structurally(&arguments[1], candidates, depth + 1, exhausted)
             }
             Term::Implies(premise, conclusion) => {
                 let scope = self.ctx.checkpoint();
@@ -741,7 +841,7 @@ impl Env<'_> {
                         });
                     },
                 );
-                let found = self.structurally(conclusion, candidates, depth + 1);
+                let found = self.structurally(conclusion, candidates, depth + 1, exhausted);
                 candidates.truncate(known);
                 self.ctx.rollback(scope);
                 found
@@ -752,7 +852,7 @@ impl Env<'_> {
                     return false;
                 };
                 let instance = body.open(&Term::Free(variable));
-                let found = self.structurally(&instance, candidates, depth + 1);
+                let found = self.structurally(&instance, candidates, depth + 1, exhausted);
                 self.ctx.rollback(scope);
                 found
             }
@@ -770,7 +870,7 @@ impl Env<'_> {
                     .collect();
                 refuted
                     .iter()
-                    .any(|premise| self.structurally(premise, candidates, depth + 1))
+                    .any(|premise| self.structurally(premise, candidates, depth + 1, exhausted))
             }
             _ => false,
         }
@@ -878,7 +978,16 @@ fn single_byte(test: &Term) -> Option<Term> {
 
 fn bytes_in(term: &Term, is_byte: bool, unknowns: &mut Vec<Term>) -> bool {
     match term {
-        Term::Bool(_) | Term::U8(_) => true,
+        Term::Bool(_) | Term::U8(_) | Term::Int(_) => true,
+        Term::Prim(
+            Prim::IntCmp(_) | Prim::IntAdd | Prim::IntSub | Prim::IntMul | Prim::IntNeg,
+            operands,
+        ) => operands
+            .iter()
+            .all(|operand| bytes_in(operand, false, unknowns)),
+        Term::Prim(Prim::View(MachineInt::U8), operands) => operands
+            .iter()
+            .all(|operand| bytes_in(operand, true, unknowns)),
         Term::Prim(Prim::Cmp(_, MachineInt::U8) | Prim::Op(_, MachineInt::U8), operands) => {
             operands
                 .iter()

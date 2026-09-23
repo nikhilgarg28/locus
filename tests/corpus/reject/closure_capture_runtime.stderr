@@ -1,0 +1,5 @@
+error[L0283]: a logical closure cannot capture runtime `value` without an explicit model observation
+ --> tests/corpus/reject/closure_capture_runtime.lc:1:65
+  |
+1 | fn capture(value: u8) -> logic Fn(x: Int) -> Int { |x: Int| x + value } //~ error: L0283
+  |                                                                 ^^^^^

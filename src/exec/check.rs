@@ -20,6 +20,7 @@ use super::ir::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
+    InvalidBuffer(&'static str),
     /// The kernel rejected a term, a type, or a proof.
     Kernel(KernelError),
     UnknownFunction,
@@ -73,6 +74,7 @@ impl From<KernelError> for ExecError {
 impl fmt::Display for ExecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidBuffer(reason) => write!(f, "invalid collection operation: {reason}"),
             Self::Kernel(error) => write!(f, "{error}"),
             Self::UnknownFunction => f.write_str("function is not declared"),
             Self::BadSignature => f.write_str("the signature and parameters do not match"),
@@ -135,6 +137,7 @@ impl std::error::Error for ExecError {}
 pub struct Program {
     definitions: Definitions,
     fns: Vec<ExecFn>,
+    trusted: Vec<TrustedContract>,
 }
 
 /// What the function being checked declares, as every point of its body
@@ -157,11 +160,21 @@ struct Target<'a> {
     result: &'a Type,
 }
 
+/// An explicitly assumed foreign contract, kept available to the audit.
+#[derive(Clone, Debug)]
+pub struct TrustedContract {
+    pub function: ExecFnId,
+    pub backend: ExecFnId,
+    pub reason: String,
+    pub implementation: String,
+}
+
 impl Program {
     pub fn new(definitions: Definitions) -> Self {
         Self {
             definitions,
             fns: Vec::new(),
+            trusted: Vec::new(),
         }
     }
 
@@ -196,6 +209,52 @@ impl Program {
         self.check_fn(&function)?;
         self.fns.push(function);
         Ok(ExecFnId(self.fns.len() - 1))
+    }
+
+    pub fn trusted_contracts(&self) -> &[TrustedContract] {
+        &self.trusted
+    }
+
+    /// The only unchecked function-contract boundary. It requires an already
+    /// checked runtime backend, a well-formed header and an attached reason.
+    /// No kernel function/axiom is declared: the guarantee is conditional on
+    /// this recorded foreign specification and holds only on normal return.
+    pub(crate) fn declare_trusted_adapter(
+        &mut self,
+        backend: ExecFnId,
+        signature: Type,
+        promises: Promises,
+        reason: String,
+        implementation: String,
+    ) -> Result<ExecFnId, ExecError> {
+        if reason.trim().is_empty() || implementation.trim().is_empty() {
+            return Err(ExecError::InvalidBuffer(
+                "trusted contracts require a reason and implementation",
+            ));
+        }
+        let mut function = self
+            .function(backend)
+            .cloned()
+            .ok_or(ExecError::UnknownFunction)?;
+        let mut ctx = Context::with_definitions(Rc::new(self.definitions.clone()));
+        check_type(&mut ctx, &signature)?;
+        let Type::Fn(params, _) = &signature else {
+            return Err(ExecError::BadSignature);
+        };
+        if params.len() != function.params.len() {
+            return Err(ExecError::BadSignature);
+        }
+        function.signature = signature;
+        function.promises = promises;
+        let id = ExecFnId(self.fns.len());
+        self.fns.push(function);
+        self.trusted.push(TrustedContract {
+            function: id,
+            backend,
+            reason,
+            implementation,
+        });
+        Ok(id)
     }
 
     fn check_fn(&self, function: &ExecFn) -> Result<(), ExecError> {
@@ -254,11 +313,11 @@ impl Program {
         match &block.tail {
             Tail::Value(value) => {
                 let expected = expected.ok_or(ExecError::FallsThrough)?;
-                expect(ctx, value, expected)
+                expect(ctx, value, expected, &self.definitions)
             }
             Tail::Break(value) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
-                expect(ctx, value, target.result)
+                expect(ctx, value, target.result, &self.definitions)
             }
             Tail::Continue(next) => {
                 let target = loops.last().ok_or(ExecError::NoEnclosingLoop)?;
@@ -269,7 +328,7 @@ impl Program {
             }
             // Whatever the block was expected to produce, it produces
             // nothing: control leaves the function.
-            Tail::Return(value) => expect(ctx, value, declared.result),
+            Tail::Return(value) => expect(ctx, value, declared.result, &self.definitions),
             Tail::Panic { unreachable, .. } => match unreachable {
                 Some(proof) => {
                     let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
@@ -289,6 +348,39 @@ impl Program {
         loops: &[Target<'_>],
     ) -> Result<(), ExecError> {
         match stmt {
+            Stmt::BoxNew {
+                var,
+                equation,
+                value,
+                logical_payload,
+            } => {
+                if declared.promises.no_alloc || declared.promises.no_panic {
+                    return Err(ExecError::InvalidBuffer(
+                        "box allocation violates a no_alloc/no_panic promise",
+                    ));
+                }
+                let element = infer_term(ctx, value, Mode::Logical)?;
+                if *logical_payload
+                    && !self.definitions.is_erased_type(&element)
+                    && element != Type::Bool
+                {
+                    return Err(ExecError::InvalidBuffer(
+                        "physical box payload cannot be silently erased",
+                    ));
+                }
+                if !*logical_payload && !self.definitions.is_erased_type(&element) {
+                    infer_term(ctx, value, Mode::Executable)?;
+                }
+                let ty = Type::Boxed(Box::new(element));
+                let snapshot = Term::Boxed(Box::new(value.clone()));
+                infer_term(ctx, &snapshot, Mode::Logical)?;
+                ctx.declare_with(*var, ty.clone(), false)?;
+                ctx.assume_with(*equation, Term::eq(ty, Term::Free(*var), snapshot))?;
+                Ok(())
+            }
+            Stmt::Buffer(operation) => {
+                super::buffer::check(ctx, operation, declared.promises, &self.definitions)
+            }
             Stmt::Let {
                 var,
                 equation,
@@ -401,7 +493,7 @@ impl Program {
                     expected: Type::U8,
                     found,
                 })?;
-                expect(ctx, hi, &Type::machine(index_type))?;
+                expect(ctx, hi, &Type::machine(index_type), &self.definitions)?;
                 let view = |x: &Term| Term::view(index_type, x.clone());
                 // The state is a tuple telescope formed outside the loop,
                 // as a `loop`'s is.
@@ -483,7 +575,7 @@ impl Program {
         }
         let prelude = self.definitions.prelude().ok_or(ExecError::NoPrelude)?;
         for argument in arguments {
-            expect(ctx, argument, &Type::machine(ty))?;
+            expect(ctx, argument, &Type::machine(ty), &self.definitions)?;
         }
         let premises = row.fits(&prelude, arguments);
         let exact_learned = row.panic() == Panic::Overflow && fits.is_some();
@@ -613,8 +705,13 @@ impl Program {
 
 /// A value is executable unless its type is ghost, as a function returning
 /// only a proof has.
-fn expect(ctx: &mut Context, value: &Term, expected: &Type) -> Result<(), ExecError> {
-    let mode = if expected.is_ghost() {
+fn expect(
+    ctx: &mut Context,
+    value: &Term,
+    expected: &Type,
+    definitions: &Definitions,
+) -> Result<(), ExecError> {
+    let mode = if definitions.is_erased_type(expected) {
         Mode::Logical
     } else {
         Mode::Executable

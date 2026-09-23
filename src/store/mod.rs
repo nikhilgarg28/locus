@@ -56,7 +56,7 @@ pub const FORMAT_VERSION: u32 = 1;
 const HEADER: &str = "locus-proofs";
 
 /// The most bytes a proofs file may be.
-pub const MAX_FILE: usize = 64 << 20;
+pub use crate::limits::MAX_PROOF_FILE_BYTES as MAX_FILE;
 
 /// The key of an obligation: the FNV-1a hash of its key text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -170,7 +170,9 @@ impl ProofStore {
     /// store and the warnings, never a panic, on any text.
     pub fn parse(file: &str) -> Result<(Self, Vec<String>), String> {
         if file.len() > MAX_FILE {
-            return Err(format!("the proofs file is larger than {MAX_FILE} bytes"));
+            return Err(format!(
+                "MAX_PROOF_FILE_BYTES limit of {MAX_FILE} was exceeded"
+            ));
         }
         let mut store = Self::new();
         let mut warnings = Vec::new();
@@ -432,4 +434,19 @@ pub fn with_store<R>(store: ProofStore, body: impl FnOnce() -> R) -> (R, ProofSt
 /// Applies `f` to the current store, if one is installed.
 pub fn with_current<R>(f: impl FnOnce(&mut ProofStore) -> R) -> Option<R> {
     CURRENT.with(|current| current.borrow_mut().as_mut().map(f))
+}
+
+/// Run an isolated compiler probe without reading, recording, or changing
+/// the installed proof store. Restoration also happens during unwinding.
+pub(crate) fn without_store<R>(body: impl FnOnce() -> R) -> R {
+    struct Restore(Option<ProofStore>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CURRENT.with(|current| {
+                current.replace(self.0.take());
+            });
+        }
+    }
+    let _restore = Restore(CURRENT.with(|current| current.replace(None)));
+    body()
 }

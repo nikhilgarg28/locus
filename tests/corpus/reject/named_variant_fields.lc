@@ -46,11 +46,11 @@ fn matched_unknown(shape: Shape) -> u8 {
     }
 }
 
-prop Small(n: u8) {
-    Below { bound: @(n < 10) },
+prop Small(n: Int) {
+    Below { limit: Int } => { prop!(n < limit) }
 }
 
 #[terminates] #[no_panic] #[no_io]
 fn proved_as_tuple() -> @Small(5) {
-    Small::Below(prove!(5u8 < 10)) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { bound: .. }`
+    Small::Below(10) @ prove!(5 < 10) //~ error: L0224 `Small::Below` has named fields and is written `Small::Below { limit: .. }`
 }

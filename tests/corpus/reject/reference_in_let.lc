@@ -1,23 +1,23 @@
-// A reference lasts for one call, so it is written on a parameter and
-// nowhere else in this tier: not in a field, a `let`, a result type, or
-// inside another type.
+// Stored shared references require a borrow expression rather than a bare
+// referent value. Mutable references still last for one call.
 struct Holder {
-    inner: &u8, //~ error: L0260 `&u8` is written on a parameter only
+    inner: &u8,
 }
 
-fn longest(a: &u8, b: &u8) -> &u8 { //~ error: L0260 `&u8` is written on a parameter only
-    a
+fn longest(a: &u8, b: &u8) -> &u8 {
+    a //~ error: L0272 logical and runtime positions
 }
 
 fn kept(n: u8) -> u8 {
-    let r: &u8 = n; //~ error: L0260 `&u8` is written on a parameter only
+    let r: &u8 = n; //~ error: L0272 logical and runtime positions
     n
 }
 
-fn nested(n: &&mut u8) -> u8 { //~ error: L0260 `&mut u8` is written on a parameter only
+fn nested(n: &&mut u8) -> u8 { //~ error: L0285 stored mutable references are not supported; lend &mut for one call
     n
 }
 
 fn rebound(mut n: &mut u8) -> u8 { //~ error: L0260 `mut n` is not written on a reference parameter
     n
 }
+//~ spec: 1.13:1

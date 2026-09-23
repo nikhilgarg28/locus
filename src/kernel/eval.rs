@@ -24,7 +24,7 @@ use super::term::{ForLoop, Prim, Proof, Term, Type};
 
 /// Counts evaluation steps, never time, so acceptance does not depend on
 /// the machine.
-pub(super) const STEP_LIMIT: usize = 2_000_000;
+use crate::limits::MAX_EVALUATION_STEPS as STEP_LIMIT;
 
 /// How deeply evaluation may nest. Measured in an unoptimized build on a
 /// 2 MiB thread stack, evaluation alone nests 500 levels in every shape
@@ -32,7 +32,7 @@ pub(super) const STEP_LIMIT: usize = 2_000_000;
 /// The bound is well under half of that, because evaluation can begin deep
 /// inside a proof that is itself nested up to the input depth bound, and the
 /// two share one stack.
-pub const MAX_EVAL_DEPTH: usize = 200;
+pub use crate::limits::MAX_EVALUATION_DEPTH as MAX_EVAL_DEPTH;
 
 pub(super) struct Evaluator<'d> {
     definitions: &'d Definitions,
@@ -52,7 +52,7 @@ impl<'d> Evaluator<'d> {
     pub(super) fn eval(&mut self, term: &Term) -> Result<Term, KernelError> {
         self.steps += 1;
         if self.steps > STEP_LIMIT {
-            return Err(KernelError::StepLimit);
+            return Err(KernelError::EvaluationStepLimit);
         }
         if self.depth >= MAX_EVAL_DEPTH {
             return Err(KernelError::EvaluationTooDeep);
@@ -65,9 +65,12 @@ impl<'d> Evaluator<'d> {
 
     fn eval_form(&mut self, term: &Term) -> Result<Term, KernelError> {
         match term {
-            Term::Bool(_) | Term::U8(_) | Term::Int(_) | Term::Machine(..) | Term::Fn(_) => {
-                Ok(term.clone())
-            }
+            Term::Bool(_)
+            | Term::U8(_)
+            | Term::Int(_)
+            | Term::Machine(..)
+            | Term::Fn(_)
+            | Term::Lambda { .. } => Ok(term.clone()),
             // A proof is never inspected, so its contents are dropped. Keeping
             // them would let a loop's state grow with every iteration, since
             // each state's proofs mention the state before it.
@@ -83,6 +86,28 @@ impl<'d> Evaluator<'d> {
             Term::Free(_) => Err(KernelError::NotClosed(term.clone())),
             Term::Bound(_) => Err(KernelError::DanglingBound),
             Term::Absurd(..) => Err(stuck(term)),
+            Term::Boxed(value) => Ok(Term::Boxed(Box::new(self.eval(value)?))),
+            Term::Buffer {
+                op,
+                element,
+                arguments,
+            } => {
+                let arguments = arguments
+                    .iter()
+                    .map(|value| self.eval(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let value = Term::Buffer {
+                    op: *op,
+                    element: element.clone(),
+                    arguments,
+                };
+                if *op == super::buffer::BufferOp::Literal {
+                    Ok(value)
+                } else {
+                    let reduced = super::buffer::step(&value).ok_or_else(|| stuck(&value))?;
+                    self.eval(&reduced)
+                }
+            }
             Term::Prim(..) => self.eval_prim(term),
             Term::Tuple(..) | Term::Struct(..) | Term::Variant(..) => self.eval_constructor(term),
             Term::Proj(..) => self.eval_proj(term),
@@ -118,7 +143,7 @@ impl<'d> Evaluator<'d> {
             };
             self.steps = self.steps.saturating_add(charge);
             if self.steps > STEP_LIMIT {
-                return Err(KernelError::StepLimit);
+                return Err(KernelError::EvaluationStepLimit);
             }
         }
         evaluate_primitive(*prim, &values).ok_or_else(|| stuck(term))
@@ -142,6 +167,7 @@ impl<'d> Evaluator<'d> {
             unreachable!("dispatched on this form")
         };
         match self.eval(target)? {
+            Term::Boxed(value) if *index == 0 => Ok(*value),
             Term::Tuple(_, values) | Term::Struct(_, values) => {
                 values.into_iter().nth(*index).ok_or_else(|| stuck(term))
             }
@@ -154,15 +180,19 @@ impl<'d> Evaluator<'d> {
         let Term::Call(callee, arguments) = term else {
             unreachable!("dispatched on this form")
         };
-        let Term::Fn(id) = self.eval(callee)? else {
-            return Err(stuck(term));
-        };
+        let callee = self.eval(callee)?;
         let values = self.eval_all(arguments)?;
-        let decl = self
-            .definitions
-            .function(id)
-            .ok_or(KernelError::UnknownFunction)?;
-        let body = decl.body.instantiate(values.len(), |j| values[j].clone());
+        let body = match callee {
+            Term::Fn(id) => self
+                .definitions
+                .function(id)
+                .ok_or(KernelError::UnknownFunction)?
+                .body
+                .clone(),
+            Term::Lambda { body, .. } => *body,
+            _ => return Err(stuck(term)),
+        };
+        let body = body.instantiate(values.len(), |j| values[j].clone());
         self.eval(&body)
     }
 
@@ -221,14 +251,28 @@ fn stuck(term: &Term) -> KernelError {
 /// Whether values of the type are first-order data with no proof, no
 /// proposition, and no function anywhere inside.
 pub(super) fn is_plain_data(definitions: &Definitions, ty: &Type) -> bool {
-    let all = |fields: &[Type]| fields.iter().all(|field| is_plain_data(definitions, field));
-    match ty {
-        Type::Bool | Type::U8 | Type::Int | Type::Machine(_) => true,
-        Type::Prop | Type::Proof(_) | Type::Fn(..) => false,
-        Type::Tuple(fields) => all(fields),
-        Type::Struct(id) => definitions.struct_fields(*id).is_some_and(all),
-        Type::Enum(id) => definitions
-            .enum_variants(*id)
-            .is_some_and(|variants| variants.iter().all(|payload| all(payload))),
+    fn visit(definitions: &Definitions, ty: &Type, active: &mut Vec<Type>) -> bool {
+        if active.contains(ty) {
+            return true;
+        }
+        active.push(ty.clone());
+        let result = match ty {
+            Type::Bool | Type::U8 | Type::Int | Type::Machine(_) => true,
+            Type::Prop | Type::Proof(_) | Type::Fn(..) => false,
+            Type::Boxed(element) | Type::Buffer(element) => visit(definitions, element, active),
+            Type::Tuple(fields) => fields.iter().all(|field| visit(definitions, field, active)),
+            Type::Struct(id) => definitions
+                .struct_fields(*id)
+                .is_some_and(|fields| fields.iter().all(|field| visit(definitions, field, active))),
+            Type::Enum(id) => definitions.enum_variants(*id).is_some_and(|variants| {
+                variants
+                    .iter()
+                    .flatten()
+                    .all(|field| visit(definitions, field, active))
+            }),
+        };
+        active.pop();
+        result
     }
+    visit(definitions, ty, &mut Vec::new())
 }

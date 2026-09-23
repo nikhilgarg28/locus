@@ -99,6 +99,7 @@ fn count_up(theory: &Theory, n: Term) -> Term {
 }
 
 #[test]
+#[doc = "spec: 2.10:2"]
 fn a_closed_term_evaluates_in_one_step() {
     let (mut definitions, _, theory) = setup();
     let successor = definitions
@@ -174,6 +175,7 @@ fn a_closed_term_evaluates_in_one_step() {
 }
 
 #[test]
+#[doc = "spec: 2.10:1, 2.10:3"]
 fn evaluation_is_for_closed_terms_of_plain_data() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
@@ -201,6 +203,7 @@ fn evaluation_is_for_closed_terms_of_plain_data() {
 }
 
 #[test]
+#[doc = "spec: 2.10:5"]
 fn the_evaluator_has_a_step_budget_not_a_time_limit() {
     let (definitions, _, theory) = setup();
     let mut ctx = Context::with_definitions(Rc::new(definitions));
@@ -222,7 +225,7 @@ fn the_evaluator_has_a_step_budget_not_a_time_limit() {
     let deep = Term::proj(nest(nest(nest(unit))), 0);
     assert_eq!(
         infer_proof(&mut ctx, &Proof::Evaluate(deep)),
-        Err(KernelError::StepLimit)
+        Err(KernelError::EvaluationStepLimit)
     );
 }
 
@@ -305,6 +308,7 @@ fn a_loop_unrolls_one_step_at_a_successor_bound() {
 }
 
 #[test]
+#[doc = "spec: 2.9:7, 2.9:8, 2.9:9"]
 fn unrolling_and_the_empty_range_compute_a_loop_symbolically() {
     // sum_below(0 + 1) == (0 + 0,): one successor step, then the empty range.
     let (definitions, _, theory) = setup();

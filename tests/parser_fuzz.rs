@@ -37,6 +37,8 @@ const STEP_FACTOR: usize = 4;
 /// Every spelling the lexer gives a token kind of its own.
 const TOKENS: &[&str] = &[
     "fn",
+    "logic",
+    "prop",
     "const",
     "let",
     "if",

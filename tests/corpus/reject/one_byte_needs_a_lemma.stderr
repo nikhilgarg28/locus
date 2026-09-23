@@ -5,7 +5,7 @@ error[L0230]: cannot show `n.wrapping_add(1) <= 10`
   |                         ^
   |
   = note: known here: `small: n < 10`
-  = note: this follows from `small` by `u8_succ_le_of_lt(n, 10, small)`
+  = note: this holds for every value of `n` the facts allow, and the step from the facts to it is stated with a lemma call, such as `u8_le_trans`, or a `prove!` stepping stone
 error[L0230]: cannot show `5 <= 255.wrapping_sub(n)`
   --> tests/corpus/reject/one_byte_needs_a_lemma.lc:11:27
    |

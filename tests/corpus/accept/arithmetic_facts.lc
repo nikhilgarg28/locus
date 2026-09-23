@@ -8,25 +8,25 @@
 // only the wrapped result is known, the one fact true in every build.
 
 // Without a promise `+` may panic, and the code after it knows the wrapped
-// sum: `s == (a as Int + b as Int) as u8` holds in both builds, which the
+// sum: `s == a.wrapping_add(b)` holds in both builds, which the
 // corpus runner checks against the Rust compiled both ways.
-fn wrapped_sum(a: u8, b: u8) -> (s: u8, @(s == (a as Int + b as Int) as u8)) {
+fn wrapped_sum(a: u8, b: u8) -> (s: u8, @(s == a.wrapping_add(b))) {
     let s = a + b;
     (s, _)
 }
 
 // The same for a difference, a product, and a negation, stated at other types.
-fn wrapped_difference(a: i16, b: i16) -> (d: i16, @(d == (a as Int - b as Int) as i16)) {
+fn wrapped_difference(a: i16, b: i16) -> (d: i16, @(d == a.wrapping_sub(b))) {
     let d = a - b;
     (d, _)
 }
 
-fn wrapped_product(a: u32, b: u32) -> (p: u32, @(p == (a as Int * b as Int) as u32)) {
+fn wrapped_product(a: u32, b: u32) -> (p: u32, @(p == a.wrapping_mul(b))) {
     let p = a * b;
     (p, _)
 }
 
-fn wrapped_negation(a: i8) -> (n: i8, @(n == (-(a as Int)) as i8)) {
+fn wrapped_negation(a: i8) -> (n: i8, @(n == a.wrapping_neg())) {
     let n = -a;
     (n, _)
 }
@@ -102,7 +102,7 @@ fn twice_then_one(n: u8, small: @(n <= 100)) -> u8 {
 // Arithmetic on `Int` is total and stands anywhere: in a proposition, a
 // proof type, and a function of the logic.
 #[terminates] #[no_panic] #[no_io]
-fn successor_claim(n: u8) -> Prop {
+logic fn successor_claim(n: Int) -> Prop {
     prop!(n as Int + 1 <= 256)
 }
 
@@ -111,27 +111,27 @@ fn stated(a: u8, b: u8, h: @(a as Int + b as Int <= 255)) -> @(a as Int + b as I
 }
 
 //~ proofs: 26
-//~ run: wrapped_sum(200, 100) => panic: attempt to add with overflow | (44, Proved)
-//~ run: wrapped_sum(200, 55) => (255, Proved)
-//~ run: wrapped_difference(-32768, 1) => panic: attempt to subtract with overflow | (32767, Proved)
-//~ run: wrapped_difference(5, 7) => (-2, Proved)
-//~ run: wrapped_product(65536, 65536) => panic: attempt to multiply with overflow | (0, Proved)
-//~ run: wrapped_product(65535, 65537) => (4294967295, Proved)
-//~ run: wrapped_negation(-128) => panic: attempt to negate with overflow | (-128, Proved)
-//~ run: wrapped_negation(-127) => (127, Proved)
-//~ run: quotient(7, 2) => (3, Proved)
+//~ run: wrapped_sum(200, 100) => panic: attempt to add with overflow | (44, Erased)
+//~ run: wrapped_sum(200, 55) => (255, Erased)
+//~ run: wrapped_difference(-32768, 1) => panic: attempt to subtract with overflow | (32767, Erased)
+//~ run: wrapped_difference(5, 7) => (-2, Erased)
+//~ run: wrapped_product(65536, 65536) => panic: attempt to multiply with overflow | (0, Erased)
+//~ run: wrapped_product(65535, 65537) => (4294967295, Erased)
+//~ run: wrapped_negation(-128) => panic: attempt to negate with overflow | (-128, Erased)
+//~ run: wrapped_negation(-127) => (127, Erased)
+//~ run: quotient(7, 2) => (3, Erased)
 //~ run: quotient(7, 0) => panic: attempt to divide by zero
-//~ run: remainder(-7, 2) => (-1, Proved)
+//~ run: remainder(-7, 2) => (-1, Erased)
 //~ run: remainder(-9223372036854775808, -1) => panic: attempt to calculate the remainder with overflow
 //~ run: remainder(7, 0) => panic: attempt to calculate the remainder with a divisor of zero
-//~ run: next(41, Proved) => (42, Proved)
-//~ run: ten_more(100, Proved) => (110, Proved)
-//~ run: scaled(50, Proved) => (250, Proved)
+//~ run: next(41, Erased) => (42, Erased)
+//~ run: ten_more(100, Erased) => (110, Erased)
+//~ run: scaled(50, Erased) => (250, Erased)
 //~ run: hundred_and_ten() => 110
-//~ run: halve(-7, 2, Proved) => -3
-//~ run: safe_quotient(7, 3, Proved) => 2
-//~ run: twice_then_one(100, Proved) => 201
-//~ rust: fn wrapped_sum(a: u8, b: u8) -> (u8, Proved) {
+//~ run: halve(-7, 2, Erased) => -3
+//~ run: safe_quotient(7, 3, Erased) => 2
+//~ run: twice_then_one(100, Erased) => 201
+//~ rust: fn wrapped_sum(a: u8, b: u8) -> (u8, Erased) {
 //~ rust: let s = a + b;
 //~ rust: let n = -a;
 //~ rust: let q = a / b;

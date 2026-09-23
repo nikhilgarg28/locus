@@ -1,0 +1,11 @@
+L0008: Reserved generated marker name
+
+Erased is reserved for the zero-sized marker used by generated Rust. User declarations cannot shadow that representation name. Rename the declaration; logical values are declared using logical types, not by constructing the backend marker.
+
+Example from `tests/corpus/reject/reserved_erased.lc`; the full file is a regression test.
+
+```locus
+struct Erased { value: u8 }
+```
+
+Language, as built: [1.5:4](../../atlas.html#/doc/language/spec-1.5:4).

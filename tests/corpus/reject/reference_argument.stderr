@@ -26,13 +26,6 @@ error[L0261]: a reference argument is a path to a local: `&x` or `&mut x.f`
    |           ^^^^^^^^^^^^^^^^^
    |
    = note: a reference lasts for one call, so what it points to is a place the caller holds
-error[L0261]: `&` is written on the argument of a call only
-  --> tests/corpus/reject/reference_argument.lc:34:13
-   |
-34 |     let r = &n; //~ error: L0261 `&` is written on the argument of a call only
-   |             ^^
-   |
-   = note: a reference lasts for one call: `f(&x)` or `f(&mut x.f)` lends a place to a function whose parameter is `&T` or `&mut T`; a reference in a `let`, a field, or a result is not in Locus yet
 error[L0261]: a reference argument is a path to a local: `&x` or `&mut x.f`
   --> tests/corpus/reject/reference_argument.lc:39:15
    |

@@ -97,7 +97,7 @@ fn braces(n: u8) -> u8 {
 //~ run: debug(200) => 200
 //~ run: debug(201) => panic: assertion failed: x <= 200
 //~ run: debug_named(7) => panic: not seven
-//~ run: taught(3) => (3, Proved)
+//~ run: taught(3) => (3, Erased)
 //~ run: taught(4) => panic: assertion failed: x <= 3
 //~ run: braces(0) => panic: say "hi" to {n}, }{ and {{ and \\ too
 //~ rust: panic!("{}", "zero")
@@ -106,7 +106,7 @@ fn braces(n: u8) -> u8 {
 //~ rust: todo!("{}", "the zero case")
 //~ rust: unreachable!()
 //~ rust: unreachable!("{}", "n is never zero")
-//~ rust: let x: u8 = todo!("{}", "the rest");
+//~ rust: todo!("{}", "the rest")
 //~ rust: assert!(x <= 3_u8, "{}", "assertion failed: x <= 3");
 //~ rust: assert!(x != 0_u8, "{}", "x must not be zero");
 //~ rust: debug_assert!(x <= 200_u8, "{}", "assertion failed: x <= 200");

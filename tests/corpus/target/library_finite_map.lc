@@ -1,0 +1,49 @@
+#[derive(Logical)] enum Maybe<T: Logical> { None, Some(T) }
+#[derive(Logical)] enum Seq<T: Logical> { Empty, Cons { head: T, tail: Seq<T> } }
+// Load after logical.lc. Representation equality is intentional: entry order
+// is part of a FiniteMap value. Extensional map equality is a separate claim.
+#[derive(Logical)]
+pub struct Entry<K: Logical, V: Logical> { key: K, value: V }
+
+pub prop KeyAbsent<K: Logical, V: Logical>(key: K, entries: Seq<Entry<K, V>>) {
+    Empty => { prop!(entries == Seq::Empty) }
+    Cons { head: Entry<K, V>, tail: Seq<Entry<K, V>> } => {
+        prop!(entries == Seq::Cons { head, tail } && key != head.key && KeyAbsent(key, tail))
+    }
+}
+
+pub prop UniqueKeys<K: Logical, V: Logical>(entries: Seq<Entry<K, V>>) {
+    Empty => { prop!(entries == Seq::Empty) }
+    Cons { head: Entry<K, V>, tail: Seq<Entry<K, V>> } => {
+        prop!(entries == Seq::Cons { head, tail } && KeyAbsent(head.key, tail) && UniqueKeys(tail))
+    }
+}
+
+#[derive(Logical)]
+pub struct FiniteMap<K: Logical, V: Logical> {
+    entries: Seq<Entry<K, V>>,
+    unique: @UniqueKeys(entries),
+}
+
+pub logic fn map_empty<K: Logical, V: Logical>() -> FiniteMap<K, V> {
+    let entries: Seq<Entry<K, V>> = Seq::Empty;
+    FiniteMap { entries, unique: UniqueKeys::Empty @ prove!(entries == Seq::Empty) }
+}
+
+// The caller supplies exactly the extra fact needed to extend the map.
+// Existing evidence is transported in the returned record's dependent field.
+pub logic fn map_prepend<K: Logical, V: Logical>(
+    map: FiniteMap<K, V>, entry: Entry<K, V>, fresh: @KeyAbsent(entry.key, map.entries)
+) -> FiniteMap<K, V> {
+    let entries: Seq<Entry<K, V>> = Seq::Cons { head: entry, tail: map.entries };
+    let unique: @UniqueKeys(entries) = UniqueKeys::Cons { head: entry, tail: map.entries } @
+        And::Intro(And::Intro(prove!(entries == Seq::Cons { head: entry, tail: map.entries }), fresh), map.unique);
+    FiniteMap { entries, unique }
+}
+logic fn singleton() -> FiniteMap<Int, Int> {
+    let map: FiniteMap<Int, Int> = map_empty();
+    let entry: Entry<Int, Int> = Entry { key: 3, value: 7 };
+    let empty: @(map.entries == Seq::Empty) = fold!(map_empty::<Int, Int>, prove!(Seq::<Entry<Int, Int>>::Empty == Seq::<Entry<Int, Int>>::Empty));
+    let absent: @KeyAbsent(3, map.entries) = KeyAbsent::Empty @ empty;
+    map_prepend(map, entry, absent)
+}

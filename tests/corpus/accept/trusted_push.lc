@@ -1,0 +1,15 @@
+// The reviewer accepts this specification against Rust Vec::push.
+trusted "Rust Vec::push appends one element on normal return; allocation can fail"
+fn append(items: &mut Vec<u8>, item: u8)
+    -> (@(items.len() == old!(items).len() + 1), @(true)) = Vec::push;
+fn grow(items: &mut Vec<u8>, item: u8) -> @(items.len() == old!(items).len() + 1) {
+    let (length, _) = append(&mut items, item);
+    length
+}
+fn run() -> u64 {
+    let mut items: Vec<u8> = Vec::new();
+    grow(&mut items, 7);
+    items.len()
+}
+//~ run: grow(&mut [1, 2] -> [1, 2, 7], 7) => Erased
+//~ run: run() => 1

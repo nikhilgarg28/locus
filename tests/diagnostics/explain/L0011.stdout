@@ -1,0 +1,13 @@
+L0011: Diagnostic count limit exceeded
+
+The compiler encountered more diagnostics than its deterministic reporting limit. The final retained diagnostic reports the ceiling. Fix the earlier root errors and run again; suppressing extra messages does not turn a rejected program into an accepted one.
+
+Driver/resource example; generated-input tests cover this case.
+
+```text
+# Repeated lexical errors exceed the diagnostic budget.
+python3 -c 'print("` " * 1001)' > many-errors.lc
+locus check many-errors.lc
+```
+
+Language, as built: [1.21:1](../../atlas.html#/doc/language/spec-1.21:1).

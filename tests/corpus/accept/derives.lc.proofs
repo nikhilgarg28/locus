@@ -1,0 +1,4 @@
+locus-proofs 1
+
+obligation adb5646d5fcd214e classify 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($0), 100i)), linear(int_le(view[u8]($0), 100i), 1, [(transport(literal(view[u8](100)), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 100)), h0)), 1)]))

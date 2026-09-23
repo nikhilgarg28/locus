@@ -8,3 +8,4 @@ fn f(x: u8, y: u8) -> u8 {
     g(total = 5); //~ error: L0124 assignment is a statement and has no value
     total
 }
+//~ spec: 1.12:1

@@ -16,7 +16,7 @@ fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(n: u8) -> Prop {
+logic fn within_limit(n: Int) -> Prop {
     prop!(n <= 3)
 }
 
@@ -41,7 +41,7 @@ fn either(p: Prop, q: Prop, hq: @q) -> @(p || q) {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
+logic fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
     hq
 }
 
@@ -62,10 +62,10 @@ fn headroom(n: u8, small: @(n <= 250)) -> (out: u8, @(out >= 5)) {
 
 // One `_` in `bump`, one `prove!` in `headroom`, and the conversion of the
 // lemma's claim there to the one stated.
-//~ proofs: 3
-//~ run: twice(254) => (0, Proved)
-//~ run: twice(1) => (3, Proved)
-//~ run: stepped(9, Proved) => (10, Proved)
-//~ run: headroom(250, Proved) => (5, Proved)
-//~ run: headroom(0, Proved) => (255, Proved)
-//~ rust: fn twice(n: u8) -> (u8, Proved) {
+//~ proofs: 7
+//~ run: twice(254) => (0, Erased)
+//~ run: twice(1) => (3, Erased)
+//~ run: stepped(9, Erased) => (10, Erased)
+//~ run: headroom(250, Erased) => (5, Erased)
+//~ run: headroom(0, Erased) => (255, Erased)
+//~ rust: fn twice(n: u8) -> (u8, Erased) {

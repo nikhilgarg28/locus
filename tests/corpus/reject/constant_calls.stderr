@@ -1,14 +1,14 @@
-error[L0234]: the value of `FOUR` calls `double`, and Rust computes a constant without calling a function
+error[L0209]: ordinary fn `double` cannot appear in the value of a constant
  --> tests/corpus/reject/constant_calls.lc:8:18
   |
-8 | const FOUR: u8 = double(2); //~ error: L0234 the value of `FOUR` calls `double`, and Rust computes a constant without calling a function
+8 | const FOUR: u8 = double(2); //~ error: L0209 ordinary fn `double` cannot appear in the value of a constant
   |                  ^^^^^^^^^
   |
-  = note: the value of a constant is a literal, a cast, a comparison, or a tuple, struct, or variant of those, and may name another constant; a value a function computes is a function of no parameters, `fn name() -> T { .. }`
-error[L0234]: the value of `PAIR` calls `double`, and Rust computes a constant without calling a function
-  --> tests/corpus/reject/constant_calls.lc:10:24
+  = note: write logic fn for pure, total logical computation; runtime promises never make an ordinary function logical
+error[L0209]: ordinary fn `double` cannot appear in the value of a constant
+  --> tests/corpus/reject/constant_calls.lc:10:28
    |
-10 | const PAIR: (u8, u8) = (1, double(1)); //~ error: L0234 the value of `PAIR` calls `double`
-   |                        ^^^^^^^^^^^^^^
+10 | const PAIR: (u8, u8) = (1, double(1)); //~ error: L0209 ordinary fn `double` cannot appear in the value of a constant
+   |                            ^^^^^^^^^
    |
-   = note: the value of a constant is a literal, a cast, a comparison, or a tuple, struct, or variant of those, and may name another constant; a value a function computes is a function of no parameters, `fn name() -> T { .. }`
+   = note: write logic fn for pure, total logical computation; runtime promises never make an ordinary function logical

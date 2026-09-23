@@ -1,7 +1,13 @@
 locus-proofs 1
 
-obligation 0b6836f7560a240b preserve 1
+obligation 29387b1156e9defe preserve 1
+implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8]($0), 0i)), implies_elim(implies_elim(axiom(int_le_antisymm, view[u8]($0), 0i), linear(int_le(view[u8]($0), 0i), 1, [(transport(literal(view[u8](0)), (view[u8]($0) ==[Int] #0), implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0)), 1)])), linear(int_le(0i, view[u8]($0)), 1, [(transport(literal(view[u8](0)), (view[u8]($0) ==[Int] #0), implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0)), -1)])))
+
+obligation 0b6836f7560a240b preserve 2
 of_term(fn:u8_view_injective($0, 0, proof(implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0))))
 
-obligation 66f7429fee90a6b2 preserve 2
-refl($0)
+obligation 1182c333dfd95bac preserve 3
+implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8](0), view[u8]($0))), transport(transport(literal(view[u8](0)), (#0 ==[Int] view[u8](0)), refl(view[u8](0))), (#0 ==[Int] view[u8]($0)), implies_elim(implies_elim(axiom(int_le_antisymm, 0i, view[u8]($0)), linear(int_le(0i, view[u8]($0)), 1, [(transport(literal(view[u8](0)), (view[u8]($0) ==[Int] #0), implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0)), -1)])), linear(int_le(view[u8]($0), 0i), 1, [(transport(literal(view[u8](0)), (view[u8]($0) ==[Int] #0), implies_elim(axiom(cmp_reflect[true], eq[u8]($0, 0)), h0)), 1)]))))
+
+obligation 882dd505bb38abdd preserve 4
+implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8]($0), view[u8]($0))), refl(view[u8]($0)))

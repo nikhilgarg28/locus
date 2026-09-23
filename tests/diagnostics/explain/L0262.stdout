@@ -1,0 +1,32 @@
+L0262: Mutable borrow of immutable storage
+
+The call requests exclusive write permission for a place that is not mutable. A shared reference does not acquire mutation permission merely because the referent has mutable fields. Declare a mutable owner or pass an already authorized mutable reference.
+
+Example from `tests/corpus/reject/borrow_immutable.lc`; the full file is a regression test.
+
+```locus
+// A `&mut` argument is rooted at a binding the call may assign: a
+// `let mut`, a `mut` parameter, or a `&mut` parameter. Rust refuses the
+// rest with E0596, and so does Locus.
+fn bump(counter: &mut u8) -> () {
+    counter = counter.wrapping_add(1);
+}
+
+fn immutable_local(n: u8) -> u8 {
+    let count = n;
+    bump(&mut count);
+    count
+}
+
+fn immutable_parameter(n: u8) -> u8 {
+    bump(&mut n);
+    n
+}
+
+fn behind_a_shared_reference(n: &u8) -> u8 {
+    bump(&mut n);
+    n
+}
+```
+
+Language, as built: [1.13:1](../../atlas.html#/doc/language/spec-1.13:1).

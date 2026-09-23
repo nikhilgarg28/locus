@@ -5,20 +5,22 @@ error[L0211]: `a` is a `u8` and `b` is a `u32`; a comparison is between two valu
   |     ^^^^^
   |
   = note: cast one side: `a as u32` wraps into `u32`
-error[L0211]: `a` is a `u8` and `b` is a `u32`; a comparison is between two values of one type
- --> tests/corpus/reject/comparison_across_types.lc:7:35
+error[L0230]: cannot show `a <= b`
+ --> tests/corpus/reject/comparison_across_types.lc:8:5
   |
-7 | fn in_a_claim(a: u8, b: u32) -> @(a <= b) { //~ error: L0211 `a` is a `u8` and `b` is a `u32`
-  |                                   ^^^^^^
+8 |     _ //~ error: L0230 cannot show `a <= b`
+  |     ^
   |
-  = note: compare `a as Int` with `b as Int`, which is exact, or cast `a` to `u32`, which wraps
-error[L0211]: `a` is a `u8` and `b as Int` is a `Int`; a comparison is between two values of one type
-  --> tests/corpus/reject/comparison_across_types.lc:11:42
+  = note: nothing known here speaks of the values in this claim
+  = note: it fails when a = 1, b = 0, which the arithmetic facts known here allow
+error[L0230]: cannot show `a <= b`
+  --> tests/corpus/reject/comparison_across_types.lc:12:5
    |
-11 | fn against_the_logic(a: u8, b: u32) -> @(a <= b as Int) { //~ error: L0211 `a` is a `u8` and `b as Int` is a `Int`
-   |                                          ^^^^^^^^^^^^^
+12 |     _ //~ error: L0230 cannot show `a <= b`
+   |     ^
    |
-   = note: compare `a as Int` with `b as Int`: a machine integer enters the logic through `as Int`
+   = note: nothing known here speaks of the values in this claim
+   = note: it fails when a = 1, b = 0, which the arithmetic facts known here allow
 error[L0211]: `a` is a `i8` and `b` is a `i16`; a comparison is between two values of one type
   --> tests/corpus/reject/comparison_across_types.lc:16:5
    |

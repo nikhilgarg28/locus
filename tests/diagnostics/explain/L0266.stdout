@@ -1,0 +1,35 @@
+L0266: Write or dereference lacks permission
+
+The place is not writable through this reference, or the dereference is not supported for the receiver type. A shared reference cannot be used to assign its referent. Obtain a mutable loan of the proper owner or change the operation to an observation.
+
+Example from `tests/corpus/reject/star_self_misused.lc`; the full file is a regression test.
+
+```locus
+// `*self` is the value behind a reference receiver: written whole through
+// `&mut self`, read through either. Anything else is refused with rustc's
+// code where rustc has one.
+#[derive(Clone, Copy, Debug)]
+struct Counter {
+    count: u8,
+}
+
+impl Counter {
+    fn set(&self, v: u8) -> () {
+        *self = Counter { count: v };
+    }
+
+    fn set_field(&self, v: u8) -> () {
+        self.count = v;
+    }
+
+    fn by_value(self) -> u8 {
+        (*self).count
+    }
+
+    fn field(&self) -> u8 {
+        *self.count
+    }
+}
+```
+
+Language, as built: [1.26:2](../../atlas.html#/doc/language/spec-1.26:2).

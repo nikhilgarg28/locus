@@ -1,0 +1,19 @@
+locus-proofs 1
+
+obligation 497ef976ddc29f94 ordered_i64 1
+implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($0), view[i64]($1))), of_term(proof(of_term($3))))
+
+obligation 37aed5f4a0ee37bc ordered_i64 2
+implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($1), view[i64]($2))), of_term(proof(of_term($4))))
+
+obligation 5c78bf1a0c3c98f9 ordered_i64 3
+implies_elim(axiom(cmp_reify[true], int_le_b(view[i64]($0), view[i64]($2))), of_term(proof(of_term(fn:i64_le_trans($0, $1, $2, proof(implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($0), view[i64]($1))), of_term(proof(of_term($3))))), proof(implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($1), view[i64]($2))), of_term(proof(of_term($4))))))))))
+
+obligation 0f3ec40750bdacc6 viewed 1
+implies_elim(axiom(cmp_reflect[true], int_lt_b(view[u16]($0), view[u16]($1))), of_term(proof(of_term($2))))
+
+obligation 59eadd29fc839de4 viewed 2
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u16]($0), view[u16]($1))), of_term(proof(of_term(fn:u16_le_of_lt($0, $1, proof(implies_elim(axiom(cmp_reflect[true], int_lt_b(view[u16]($0), view[u16]($1))), of_term(proof(of_term($2))))))))))
+
+obligation 176c81022afe2342 within 1
+implies_elim(axiom(cmp_reify[true], int_le_b(view[i32]($0), 2147483647i)), case_proof(of_term($1), int_le(view[i32]($0), 2147483647i), [|2, 0| of_term(#0)]))

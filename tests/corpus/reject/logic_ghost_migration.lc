@@ -1,0 +1,2 @@
+logic fn wrong(n: Ghost<u32>) -> Int { n }
+//~^ error: L0271 replaced by a logical model type

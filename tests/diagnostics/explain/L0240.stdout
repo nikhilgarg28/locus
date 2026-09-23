@@ -1,0 +1,46 @@
+L0240: Use after move
+
+A non-Copy value was consumed by an earlier operation or a previous loop iteration. Runtime argument evaluation still consumes values even when the outer result is erased. Borrow, explicitly clone a cloneable value, or restructure ownership so each move has a live source.
+
+Example from `tests/corpus/reject/moved_in_loop.lc`; the full file is a regression test.
+
+```locus
+// A value declared outside a loop and moved in its body is gone when the
+// next pass reaches the move, unless it is assigned again before the end of
+// the body or a `continue`: rustc's E0382, reported at the move.
+struct Token {
+    id: u8,
+}
+
+fn consume(t: Token) -> u8 {
+    t.id
+}
+
+fn every_pass(n: u8) -> u8 {
+    let t = Token { id: 1 };
+    let mut total = 0u8;
+    for i in 0..n {
+        total = total.wrapping_add(consume(t));
+    }
+    total
+}
+
+// Assigned again on one path only: the `continue` leaves it moved.
+fn skipped(n: u8) -> u8 {
+    let mut t = Token { id: 1 };
+    let mut total = 0u8;
+    let mut i = 0u8;
+    while i < n {
+        i = i.wrapping_add(1);
+        total = total.wrapping_add(consume(t));
+        if total > 10 {
+            continue;
+        } else {
+            t = Token { id: i };
+        }
+    }
+    total
+}
+```
+
+Language, as built: [1.13:1](../../atlas.html#/doc/language/spec-1.13:1).

@@ -82,7 +82,7 @@ impl Context {
     /// A variable of a ghost type is ghost however it is declared.
     pub fn declare(&mut self, ty: Type) -> Result<VarId, KernelError> {
         check_type(self, &ty)?;
-        let ghost = ty.is_ghost();
+        let ghost = self.definitions.is_erased_type(&ty);
         Ok(self.push_var(ty, ghost))
     }
 
@@ -98,7 +98,7 @@ impl Context {
     pub fn define(&mut self, value: &Term) -> Result<(VarId, HypId), KernelError> {
         let ghost = infer_term(self, value, Mode::Executable).is_err();
         let ty = infer_term(self, value, Mode::Logical)?;
-        let var = self.push_var(ty.clone(), ghost || ty.is_ghost());
+        let var = self.push_var(ty.clone(), ghost || self.definitions.is_erased_type(&ty));
         let equation = Term::eq(ty, Term::Free(var), value.clone());
         match self.assume(equation) {
             Ok(hyp) => Ok((var, hyp)),
@@ -133,7 +133,7 @@ impl Context {
         if self.var(id).is_some() {
             return Err(KernelError::DuplicateBinding);
         }
-        let ghost = ghost || ty.is_ghost();
+        let ghost = ghost || self.definitions.is_erased_type(&ty);
         self.entries.push(Entry::Var { id, ty, ghost });
         Ok(())
     }

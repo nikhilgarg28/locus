@@ -58,25 +58,25 @@ fn take(bounded: Bounded) -> u8 {
 }
 
 // A proposition's constructor with named fields, built and taken apart.
-prop Small(n: u8) {
-    Zero: @Small(0),
-    Below { bound: @(n < 10) },
+prop Small(n: Int) {
+    Zero => { prop!(n == 0) }
+    Below { limit: Int } => { prop!(n < limit && limit <= 10) }
 }
 
-#[terminates] #[no_panic] #[no_io]
-fn small_is_below_ten(n: u8, small: @Small(n)) -> @(n < 10) {
+logic fn small_is_below_ten(n: Int, small: @Small(n)) -> @(n < 10) {
     match small {
-        Small::Zero => rewrite!(u8_eq_symm(n, 0, prove!(n == 0)), prove!(0u8 < 10)),
-        Small::Below { bound } => bound,
+        Small::Zero @ zero => prove!(n < 10),
+        Small::Below { limit } @ bound => {
+            match bound { And::Intro(lower, upper) => prove!(n < 10) }
+        },
     }
 }
 
-#[terminates] #[no_panic] #[no_io]
-fn five_is_small() -> @Small(5) {
-    Small::Below { bound: prove!(5u8 < 10) }
+logic fn five_is_small() -> @Small(5) {
+    Small::Below { limit: 10 } @ And::Intro(prove!(5 < 10), prove!(10 <= 10))
 }
 
-//~ proofs: 3
+//~ proofs: 4
 //~ run: area(Shape::Dot) => 0
 //~ run: area(Shape::Line(7)) => 7
 //~ run: area(Shape::Box { width: 3, height: 4 }) => 12
@@ -85,5 +85,5 @@ fn five_is_small() -> @Small(5) {
 //~ run: heavy(9) => Flag { up: true, weight: 9 }
 //~ run: up(Shape::Flag { up: true, weight: 1 }) => true
 //~ run: up(Shape::Dot) => false
-//~ run: bounded(9, 3, Proved) => Below { limit: 9, value: 3, fits: Proved }
-//~ run: take(Bounded::Below { limit: 9, value: 3, fits: Proved }) => 3
+//~ run: bounded(9, 3, Erased) => Below { limit: 9, value: 3, fits: Erased }
+//~ run: take(Bounded::Below { limit: 9, value: 3, fits: Erased }) => 3

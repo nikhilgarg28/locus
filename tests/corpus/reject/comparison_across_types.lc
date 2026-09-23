@@ -4,12 +4,12 @@ fn in_code(a: u8, b: u32) -> bool {
     a < b //~ error: L0211 `a` is a `u8` and `b` is a `u32`
 }
 
-fn in_a_claim(a: u8, b: u32) -> @(a <= b) { //~ error: L0211 `a` is a `u8` and `b` is a `u32`
-    _
+fn in_a_claim(a: u8, b: u32) -> @(a <= b) {
+    _ //~ error: L0230 cannot show `a <= b`
 }
 
-fn against_the_logic(a: u8, b: u32) -> @(a <= b as Int) { //~ error: L0211 `a` is a `u8` and `b as Int` is a `Int`
-    _
+fn against_the_logic(a: u8, b: u32) -> @(a <= b as Int) {
+    _ //~ error: L0230 cannot show `a <= b`
 }
 
 fn equality_too(a: i8, b: i16) -> bool {

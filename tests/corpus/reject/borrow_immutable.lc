@@ -20,3 +20,4 @@ fn behind_a_shared_reference(n: &u8) -> u8 {
     bump(&mut n); //~ error: L0262 cannot borrow `*n` as mutable, as it is behind a `&` reference (E0596)
     n
 }
+//~ spec: 1.13:1

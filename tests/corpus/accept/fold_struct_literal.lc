@@ -1,0 +1,14 @@
+#[derive(Clone, Copy)]
+struct Number { value: u8 }
+logic fn has_value(number: Number, value: Int) -> Prop {
+    prop!(number.value as Int == value)
+}
+fn literal() -> @has_value(Number { value: 3 }, 3) {
+    fold!(has_value, prove!((Number { value: 3 }).value as Int == 3))
+}
+fn named() -> @has_value(Number { value: 3 }, 3) {
+    let number = Number { value: 3 };
+    fold!(has_value, prove!(number.value as Int == 3))
+}
+// This formerly needed a let-bound workaround. It is an ordinary regression now.
+//~ spec: 1.6:3, 2.18:3, 2.20:1

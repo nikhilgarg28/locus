@@ -1,13 +1,11 @@
-// A claim that fails in one arm: the arm's equation makes it `7 <= 6`, and
-// no explicit step can state it.
-prop SmallPrime(n: u8) {
-    Two: @SmallPrime(2),
-    Seven: @SmallPrime(7),
+// Each named arm exposes its body, but a false consequence stays unproved.
+prop SmallPrime(n: Int) {
+    Two => { prop!(n == 2) }
+    Seven => { prop!(n == 7) }
 }
-
-#[terminates] #[no_panic] #[no_io] fn too_small(n: u8, h: @SmallPrime(n)) -> @(n <= 6) {
+logic fn too_small(n: Int, h: @SmallPrime(n)) -> @(n <= 6) {
     match h {
-        SmallPrime::Two => rewrite!(u8_eq_symm(n, 2, prove!(n == 2)), prove!(2u8 <= 6)),
-        SmallPrime::Seven => _, //~ error: L0230 cannot show `n <= 6`
+        SmallPrime::Two @ two => prove!(n <= 6),
+        SmallPrime::Seven @ seven => _, //~ error: L0230 cannot show `n <= 6`
     }
 }

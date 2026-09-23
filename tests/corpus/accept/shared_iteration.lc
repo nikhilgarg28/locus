@@ -1,0 +1,11 @@
+// Each iteration holds a shared reference to the current element.
+fn sum<'a>(items: &'a [u8]) -> u8 {
+    let mut result: u8 = 0;
+    for index in 0..items.len() {
+        let item = &items[index];
+        result = result.wrapping_add(*item);
+    }
+    result
+}
+fn run() -> u8 { let input: [u8; 3] = [2, 3, 4]; sum(&input) }
+//~ run: run() => 9

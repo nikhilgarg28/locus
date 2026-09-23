@@ -1,0 +1,22 @@
+L0123: Invalid assignment target
+
+The left side of an assignment must be a supported place: a mutable binding or writable field/dereference path. A function result or arithmetic expression is a value, not a storage location. Bind a result first or assign to its actual owner.
+
+Example from `tests/corpus/reject/assignment_target.lc`; the full file is a regression test.
+
+```locus
+// The left-hand side of an assignment is a variable or a field path; what
+// rustc says of anything else, Locus says too, and the rest is still read.
+fn f(x: u8, pair: (u8, u8), lock: Lock) -> u8 {
+    let mut total = x;
+    total = 1;
+    lock.failures = 2;
+    pair.0 = 3;
+    f(x) = 1;
+    x + 1 = 2;
+    (total) = 4;
+    total
+}
+```
+
+Language, as built: [1.12:3](../../atlas.html#/doc/language/spec-1.12:3).

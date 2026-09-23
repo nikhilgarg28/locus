@@ -1,0 +1,21 @@
+L0111: Hash syntax is an attribute
+
+The # token begins a supported attribute such as #[derive(Clone)]. Earlier proof spellings using # are not accepted. Write a proof type with @ and construct evidence through prove!, a constructor or a proof-producing function.
+
+Example from `tests/corpus/reject/hash_proof_syntax.lc`; the full file is a regression test.
+
+```locus
+// `#` begins an attribute and nothing else: in a type and in an expression
+// it is an error, and the note points at proof types and `_`.
+prop Small(n: u8) {
+    Is(witness: @(n <= 9)),
+}
+
+fn first(n: u8, small: #Small(n)) -> u8 { n }
+
+fn second(n: u8) -> (out: u8, @(out == n)) {
+    (n, #{ _ })
+}
+```
+
+Language, as built: [1.7:1](../../atlas.html#/doc/language/spec-1.7:1).

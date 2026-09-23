@@ -25,3 +25,4 @@ fn huge() -> u8 {
 fn text() -> u8 {
     "a\tmessage" //~ error: L0290 string literals are not in Locus yet
 }
+//~ spec: 1.15:1

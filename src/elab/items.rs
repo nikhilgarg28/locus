@@ -34,6 +34,8 @@ pub struct HoleReport {
     pub proof_size: usize,
     /// Time to find the proof and check it once, in microseconds.
     pub micros: u128,
+    /// Opt-in raw search-stage and final kernel-check timings.
+    pub measurements: Vec<crate::measurement::Sample>,
     /// What was found, when the kernel accepted it.
     pub found: Option<FoundProof>,
 }
@@ -98,10 +100,31 @@ pub fn elaborate_with(
     program: &ast::Program,
     check_moves: bool,
 ) -> Elaborated {
+    elaborate_with_options(
+        source,
+        program,
+        &super::Options {
+            check_moves,
+            ..super::Options::default()
+        },
+    )
+}
+
+pub fn elaborate_with_options(
+    source: &SourceFile,
+    program: &ast::Program,
+    options: &super::Options,
+) -> Elaborated {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
     let mut env = Env {
+        models: super::models::primitive_models(),
+        quantifiers: Vec::new(),
+        closure_capture_boundary: None,
+        explicit_model_depth: 0,
+        layout_hints: HashMap::new(),
         source,
+        previews: options.previews.clone(),
         session: Session::new(definitions),
         prelude,
         theory,
@@ -109,7 +132,8 @@ pub fn elaborate_with(
         values: HashMap::new(),
         failed: HashSet::new(),
         file_promises: Promises::default(),
-        diagnostics: Vec::new(),
+        diagnostics: crate::limits::DiagnosticBuffer::default(),
+        normalization_exhausted: false,
         holes: Vec::new(),
         items: Vec::new(),
         ctx: Context::new(),
@@ -117,14 +141,16 @@ pub fn elaborate_with(
         facts: Vec::new(),
         loops: Vec::new(),
         returns: None,
+        recursion: None,
         never_fns: HashSet::new(),
         labels: HashMap::new(),
         total: false,
+        in_constant: false,
+        suppress_models: 0,
         item_name: String::new(),
         promises: Promises::default(),
         formula: None,
-        not_a_term: None,
-        moves: super::moves::Moves::new(check_moves),
+        moves: super::moves::Moves::new(options.check_moves),
         exits: Vec::new(),
         borrowed: Vec::new(),
         owner: None,
@@ -132,6 +158,10 @@ pub fn elaborate_with(
 
     env.declare_builtin_props();
     env.declare_builtin_lemmas();
+    let (specialized, diagnostics, quantifiers) =
+        super::generics::specialize(program, &options.previews);
+    env.diagnostics.extend(diagnostics);
+    let program = &specialized;
     env.report_unchecked_syntax(program);
     env.file_promises = env.promises_of(&program.attributes, Promises::default());
 
@@ -175,7 +205,7 @@ pub fn elaborate_with(
         }
     }
 
-    let (order, cyclic) = dependency_order(&units);
+    let (order, cyclic) = dependency_order(&units, &quantifiers);
     for index in cyclic {
         let name = declared_name(units[index].declaration).expect("a unit has a name");
         let qualified = names[index].clone().expect("a unit has a name");
@@ -190,7 +220,41 @@ pub fn elaborate_with(
         env.failed.insert(qualified);
     }
     let mut accepted: Vec<(usize, String, FnRef)> = Vec::new();
-    for index in order {
+    for group in order {
+        if group.len() > 1 {
+            if group.iter().any(|index| duplicates.contains(index)) {
+                for index in group {
+                    if let Some(name) = &names[index] {
+                        env.failed.insert(name.clone());
+                    }
+                }
+                continue;
+            }
+            let declarations: Vec<_> = group
+                .iter()
+                .map(|index| units[*index].declaration)
+                .collect();
+            for declaration in &declarations {
+                let name = declared_name(declaration).expect("logical enum group");
+                env.refuse_promises(&declaration.attributes, name, "an enum");
+            }
+            match env.logical_enum_group(&declarations) {
+                Ok(globals) => {
+                    for (name, global) in globals {
+                        env.insert_global(name, global);
+                    }
+                }
+                Err(()) => {
+                    for index in group {
+                        if let Some(name) = &names[index] {
+                            env.failed.insert(name.clone());
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        let index = group[0];
         if duplicates.contains(&index) {
             continue;
         }
@@ -201,9 +265,16 @@ pub fn elaborate_with(
         match env.unit(unit) {
             Ok(global) => {
                 if let Global::Fn(info) = &global {
+                    if let Some(model) = unit.model
+                        && env.register_model(model, Rc::clone(info)).is_err()
+                    {
+                        env.failed.insert(name);
+                        continue;
+                    }
                     accepted.push((index, name.clone(), info.reference));
                 }
                 env.insert_global(name, global);
+                env.register_quantifiers(&quantifiers);
             }
             // Either reported, or a consequence of a failure that was.
             Err(()) => {
@@ -221,7 +292,7 @@ pub fn elaborate_with(
             .into_iter()
             .map(|(_, name, reference)| (name, reference))
             .collect(),
-        diagnostics: env.diagnostics,
+        diagnostics: env.diagnostics.into_vec(),
         holes: env.holes,
         items: env.items,
         visibilities,
@@ -251,6 +322,7 @@ fn variant_named(program: &ast::Program, owner: &ast::Path, name: &ast::Name) ->
             DeclarationKind::Enum {
                 name: enum_name,
                 variants,
+                ..
             } if enum_name.text == owner.text() => variants
                 .iter()
                 .find(|variant| variant.name.text == name.text)
@@ -396,6 +468,10 @@ impl Env<'_> {
     /// Rule one: a `pub` function takes no evidence a Rust caller could
     /// supply.
     fn check_exported_fn(&mut self, info: &FnInfo, parameters: &[ast::Parameter]) {
+        // Explicit logic definitions have no callable Rust export.
+        if info.logical {
+            return;
+        }
         let Some(visibility) = &info.visibility else {
             return;
         };
@@ -476,23 +552,38 @@ impl Env<'_> {
 
     /// Whether a value of the type holds evidence anywhere in it.
     fn carries_evidence(&self, ty: &Type) -> bool {
+        self.carries_evidence_seen(ty, &mut Vec::new())
+    }
+
+    fn carries_evidence_seen(&self, ty: &Type, seen: &mut Vec<Type>) -> bool {
+        if matches!(ty, Type::Struct(_) | Type::Enum(_)) {
+            if seen.contains(ty) {
+                return false;
+            }
+            seen.push(ty.clone());
+        }
         match ty {
+            Type::Boxed(element) | Type::Buffer(element) => {
+                self.carries_evidence_seen(element, seen)
+            }
             Type::Proof(_) => true,
-            Type::Tuple(fields) => fields.iter().any(|field| self.carries_evidence(field)),
+            Type::Tuple(fields) => fields
+                .iter()
+                .any(|field| self.carries_evidence_seen(field, seen)),
             Type::Struct(id) => self.struct_by_id(*id).is_some_and(|info| {
                 info.fields
                     .iter()
-                    .any(|field| self.carries_evidence(&field.ty))
+                    .any(|field| self.carries_evidence_seen(&field.ty, seen))
             }),
             Type::Enum(id) => self.enum_by_id(*id).is_some_and(|info| {
                 info.variants.iter().any(|variant| {
                     variant
                         .payload
                         .iter()
-                        .any(|field| self.carries_evidence(&field.ty))
+                        .any(|field| self.carries_evidence_seen(&field.ty, seen))
                 })
             }),
-            Type::Fn(_, result) => self.carries_evidence(result),
+            Type::Fn(_, result) => self.carries_evidence_seen(result, seen),
             Type::Bool | Type::U8 | Type::Machine(_) | Type::Prop | Type::Int => false,
         }
     }
@@ -510,6 +601,7 @@ impl Env<'_> {
 
     fn speaks_of_siblings(&self, ty: &Type) -> bool {
         match ty {
+            Type::Boxed(element) | Type::Buffer(element) => self.speaks_of_siblings(element),
             Type::Proof(_) => true,
             Type::Tuple(fields) => fields.iter().any(|field| self.speaks_of_siblings(field)),
             Type::Fn(_, result) => self.carries_evidence(result),
@@ -530,13 +622,26 @@ impl Env<'_> {
     /// to write evidence or to change the data its siblings' evidence
     /// speaks of; and a function value could return a marker.
     fn forgery(&self, ty: &Type) -> Option<Forgery> {
+        self.forgery_seen(ty, &mut Vec::new())
+    }
+
+    fn forgery_seen(&self, ty: &Type, seen: &mut Vec<Type>) -> Option<Forgery> {
+        if matches!(ty, Type::Struct(_) | Type::Enum(_)) {
+            if seen.contains(ty) {
+                return None;
+            }
+            seen.push(ty.clone());
+        }
         match ty {
+            Type::Boxed(element) | Type::Buffer(element) => self
+                .forgery_seen(element, seen)
+                .map(|forgery| forgery.under("[]")),
             Type::Proof(_) => Some(Forgery {
                 path: String::new(),
                 reason: "is evidence".into(),
             }),
             Type::Tuple(fields) => fields.iter().enumerate().find_map(|(index, field)| {
-                self.forgery(field)
+                self.forgery_seen(field, seen)
                     .map(|forgery| forgery.under(&format!(".{index}")))
             }),
             Type::Struct(id) => {
@@ -562,7 +667,10 @@ impl Env<'_> {
                 // A `pub` field that is itself a way in, then a `pub` data
                 // field under the evidence of a sibling.
                 if let Some(forgery) = public.iter().find_map(|field| {
-                    Some(self.forgery(&field.ty)?.under(&format!(".{}", field.name)))
+                    Some(
+                        self.forgery_seen(&field.ty, seen)?
+                            .under(&format!(".{}", field.name)),
+                    )
                 }) {
                     return Some(forgery);
                 }
@@ -590,7 +698,10 @@ impl Env<'_> {
                                 } else {
                                     index.to_string()
                                 };
-                                Some(self.forgery(&field.ty)?.under(&format!(".{position}")))
+                                Some(
+                                    self.forgery_seen(&field.ty, seen)?
+                                        .under(&format!(".{position}")),
+                                )
                             })?;
                     Some(Forgery {
                         path: String::new(),
@@ -604,7 +715,7 @@ impl Env<'_> {
                     })
                 })
             }
-            Type::Fn(_, result) => self.forgery(result).map(|forgery| Forgery {
+            Type::Fn(_, result) => self.forgery_seen(result, seen).map(|forgery| Forgery {
                 path: String::new(),
                 reason: format!(
                     "is a function whose result{} {}",
@@ -640,9 +751,24 @@ impl Env<'_> {
     fn refuse_bad_impls(&mut self, program: &ast::Program, units: &[Unit<'_>]) -> HashSet<usize> {
         let mut skipped = HashSet::new();
         for declaration in &program.declarations {
-            let DeclarationKind::Impl { target, .. } = &declaration.kind else {
+            let DeclarationKind::Impl {
+                target,
+                model,
+                methods,
+            } = &declaration.kind
+            else {
                 continue;
             };
+            if let Some(model) = model {
+                if self.model_shape(model, methods).is_err() {
+                    for (index, unit) in units.iter().enumerate() {
+                        if unit.owner.is_some_and(|owner| std::ptr::eq(owner, target)) {
+                            skipped.insert(index);
+                        }
+                    }
+                }
+                continue;
+            }
             // The type, in the type namespace; failing that, whatever else
             // the file declares under the name, for the message.
             let of_name = |name: &ast::Name, wanted: fn(&DeclarationKind) -> bool| {
@@ -723,7 +849,7 @@ impl Env<'_> {
                 AttributeKind::NoPanic => promises.no_panic = true,
                 AttributeKind::NoAlloc => promises.no_alloc = true,
                 AttributeKind::NoIo => promises.no_io = true,
-                AttributeKind::Derive(_) => {}
+                AttributeKind::Derive(_) | AttributeKind::Trusted { .. } => {}
             }
         }
         promises
@@ -778,12 +904,13 @@ impl Env<'_> {
     /// type with no runtime form is `Copy`, `Clone`, and `Debug` (the
     /// marker prints as its name). `fields` are the field groups: one for a
     /// struct, one per variant for an enum, each named for a message.
-    fn derives(
+    pub(super) fn derives(
         &mut self,
         attributes: &[ast::Attribute],
         type_name: &str,
         fields: &[(String, &[Binder])],
     ) -> Elab<Vec<Derive>> {
+        self.check_logical_derive(attributes, fields)?;
         let mut derives: Vec<(Derive, Span)> = Vec::new();
         let mut failed = false;
         let closed =
@@ -794,6 +921,9 @@ impl Env<'_> {
             };
             for path in paths {
                 let name = path.text();
+                if name == "Logical" {
+                    continue;
+                }
                 let Some(derive) = path.single().and_then(|name| Derive::from_name(&name.text))
                 else {
                     self.diagnostics.push(
@@ -864,7 +994,13 @@ impl Env<'_> {
                             ),
                             "erased data has no equality at runtime: every `Proved` marker would compare equal, and lie",
                         ))
-                    } else if !self.derives_trait(&field.ty, *derive) {
+                    } else if !(self.derives_trait(&field.ty, *derive)
+                        || matches!(derive, Derive::Copy | Derive::Clone)
+                            && matches!(
+                                self.session.binding_layout(field.id),
+                                crate::typed::ErasureLayout::Shared { .. }
+                            ))
+                    {
                         Some((
                             format!(
                                 "field `{field_name}` is `{shown}`, which does not derive `{}`",
@@ -899,14 +1035,18 @@ impl Env<'_> {
     }
 
     /// A fresh function scope over the declarations accepted so far.
-    fn start_item(&mut self, name: &str, total: bool, promises: Promises) {
+    pub(super) fn start_item(&mut self, name: &str, total: bool, promises: Promises) {
         let definitions = self.session.program().definitions().clone();
         self.ctx = Context::with_definitions(Rc::new(definitions));
         self.names.clear();
+        self.layout_hints.clear();
         self.facts.clear();
         self.loops.clear();
         self.returns = None;
+        self.recursion = None;
         self.total = total;
+        self.in_constant = false;
+        self.suppress_models = 0;
         self.item_name = name.to_string();
         self.promises = promises;
         self.formula = None;
@@ -925,6 +1065,7 @@ impl Env<'_> {
         let owner_ty = match self.types.get(&owner_name) {
             Some(Global::Struct(info)) => Type::Struct(info.id),
             Some(Global::Enum(info)) => Type::Enum(info.id),
+            _ if unit.model.is_some() => self.ty(&unit.model.unwrap().target)?,
             // Reported at the block, or the type itself failed.
             _ => return Err(()),
         };
@@ -941,7 +1082,11 @@ impl Env<'_> {
     ) -> Elab<Global> {
         let attributes = &declaration.attributes;
         match &declaration.kind {
-            DeclarationKind::Struct { name, fields } => {
+            DeclarationKind::Struct {
+                name,
+                fields,
+                generics,
+            } => {
                 self.refuse_promises(attributes, name, "a struct");
                 self.start_item(&name.text, true, LOGICAL);
                 let field_visibility: Vec<Option<ast::Visibility>> = fields
@@ -965,6 +1110,19 @@ impl Env<'_> {
                     Ok(id) => id,
                     Err(error) => return self.internal(error, name.span),
                 };
+                self.session.register_type_lifetimes(
+                    &Type::Struct(id),
+                    generics
+                        .iter()
+                        .filter(|p| p.lifetime)
+                        .map(|p| p.name.text.clone())
+                        .collect(),
+                );
+                if super::logical_data::has_logical_derive(attributes)
+                    && let Err(error) = self.session.mark_logical_type(&Type::Struct(id))
+                {
+                    return self.internal(error, name.span);
+                }
                 Ok(Global::Struct(Rc::new(StructInfo {
                     id,
                     name: name.text.clone(),
@@ -974,8 +1132,22 @@ impl Env<'_> {
                     field_visibility: field_visibility.clone(),
                 })))
             }
-            DeclarationKind::Enum { name, variants } => {
+            DeclarationKind::Enum {
+                name,
+                variants,
+                generics,
+            } => {
                 self.refuse_promises(attributes, name, "an enum");
+                if super::logical_data::has_logical_derive(attributes) {
+                    return self.logical_enum(declaration, name, variants);
+                }
+                if variants.iter().any(|v| {
+                    v.fields
+                        .iter()
+                        .any(|f| super::logical_data::contains_self(&f.ty, &name.text))
+                }) {
+                    return self.runtime_recursive_enum(declaration, name, variants);
+                }
                 let mut items: Vec<VariantInfo> = Vec::new();
                 for variant in variants {
                     if items
@@ -1025,6 +1197,19 @@ impl Env<'_> {
                     Ok(id) => id,
                     Err(error) => return self.internal(error, name.span),
                 };
+                self.session.register_type_lifetimes(
+                    &Type::Enum(id),
+                    generics
+                        .iter()
+                        .filter(|p| p.lifetime)
+                        .map(|p| p.name.text.clone())
+                        .collect(),
+                );
+                if super::logical_data::has_logical_derive(attributes)
+                    && let Err(error) = self.session.mark_logical_type(&Type::Enum(id))
+                {
+                    return self.internal(error, name.span);
+                }
                 Ok(Global::Enum(Rc::new(EnumInfo {
                     id,
                     name: name.text.clone(),
@@ -1035,13 +1220,51 @@ impl Env<'_> {
             }
             DeclarationKind::Function {
                 name,
+                logical,
                 self_param,
                 parameters,
                 result,
                 body,
+                ..
             } => {
                 self.refuse_derive(attributes, "a function");
-                let promises = self.promises_of(attributes, self.file_promises);
+                if *logical {
+                    self.require_preview(
+                        crate::preview::Feature::LogicalSplit,
+                        "logic fn",
+                        name.span,
+                    )?;
+                }
+                let declared_promises = self.promises_of(attributes, self.file_promises);
+                let promises = if *logical { LOGICAL } else { declared_promises };
+                if let Some((reason, implementation)) =
+                    attributes
+                        .iter()
+                        .find_map(|attribute| match &attribute.kind {
+                            AttributeKind::Trusted {
+                                reason,
+                                implementation,
+                            } => Some((reason, implementation)),
+                            _ => None,
+                        })
+                {
+                    if owner.is_some() || *logical {
+                        return self.fail(
+                            "L0287",
+                            "trusted declarations are runtime free functions",
+                            name.span,
+                        );
+                    }
+                    return self.trusted_function(
+                        name,
+                        parameters,
+                        result,
+                        promises,
+                        declaration.visibility.clone(),
+                        reason,
+                        implementation,
+                    );
+                }
                 let receiver = match (self_param, &owner) {
                     (Some(param), Some((_, ty))) => Some(Receiver {
                         passing: match param.kind {
@@ -1062,6 +1285,7 @@ impl Env<'_> {
                         matches!(parameter.ty.kind, ast::TypeKind::Ref { mutable: true, .. })
                     });
                 let function = Function {
+                    logical: *logical,
                     promises,
                     takes_mut,
                     body: Body::Block(body),
@@ -1076,6 +1300,7 @@ impl Env<'_> {
                 self.refuse_promises(attributes, name, "a constant");
                 self.refuse_derive(attributes, "a constant");
                 let function = Function {
+                    logical: false,
                     promises: LOGICAL,
                     takes_mut: false,
                     body: Body::Expr(value),
@@ -1090,6 +1315,7 @@ impl Env<'_> {
                 name,
                 parameters,
                 variants,
+                ..
             } => {
                 self.refuse_promises(attributes, name, "a proposition");
                 self.refuse_derive(attributes, "a proposition");
@@ -1109,6 +1335,7 @@ impl Env<'_> {
         function: Function<'_>,
     ) -> Elab<Global> {
         let Function {
+            logical: explicit_logic,
             promises,
             takes_mut,
             body,
@@ -1131,33 +1358,28 @@ impl Env<'_> {
         // A function that may appear in a proposition is a function of the
         // logic: its body is a kernel term, total by construction, and
         // nothing in it may fail to return.
-        let mut logical = super::env::first_broken(LOGICAL, promises).is_none() && !takes_mut;
-        let (diagnostics, holes) = (self.diagnostics.len(), self.holes.len());
-        self.not_a_term = None;
+        let logical = explicit_logic || constant;
+        if explicit_logic && takes_mut {
+            return self.fail(
+                "L0270",
+                "a logic fn cannot take a mutable reference",
+                name.span,
+            );
+        }
+        let result_logical = self.logical_spelling(result);
+        if explicit_logic && !result_logical {
+            return self.fail(
+                "L0270",
+                "a logic fn must return a Logical type",
+                result.span,
+            );
+        }
         let signature = Signature {
             receiver: receiver.as_ref(),
             parameters,
             result,
         };
-        let mut elaborated =
-            self.function_body(name, &signature, body, logical, promises, constant);
-        // The interim rule of LOC-193: a function that makes every promise
-        // of the logic and whose body is not a kernel term, because it has
-        // an operator that may panic in it, is checked as an ordinary
-        // function with its promises, so that the checker enforces
-        // `no_panic` on the operator, and is known by its contract only.
-        let mut not_a_term = None;
-        if elaborated.is_err()
-            && logical
-            && let Some((what, span)) = self.not_a_term.take()
-        {
-            self.diagnostics.truncate(diagnostics);
-            self.holes.truncate(holes);
-            let (line, _) = self.source.line_column(span.start).unwrap_or((0, 0));
-            not_a_term = Some((what, line));
-            logical = false;
-            elaborated = self.function_body(name, &signature, body, logical, promises, constant);
-        }
+        let elaborated = self.function_body(name, &signature, body, logical, promises, constant);
         let (header, block) = elaborated?;
         let Header {
             params,
@@ -1181,17 +1403,56 @@ impl Env<'_> {
         let started = std::time::Instant::now();
         // The checker enforces the promises of an ordinary function; a
         // function of the logic keeps them by construction.
-        let declared = match &owner {
-            Some(owner) => self
-                .session
-                .declare_method(&item, promises, owner, receiver.is_some()),
-            None if constant => self.session.declare_constant(&item, promises),
-            None => self.session.declare_fn_promising(&item, promises),
+        let recursion = self
+            .recursion
+            .as_ref()
+            .map(|(binder, candidates)| (binder.id, candidates.clone()));
+        let declared = if let Some((recursive, candidates)) = &recursion {
+            self.session
+                .declare_structural_fn(&item, *recursive, candidates)
+        } else {
+            match &owner {
+                Some(owner) => self.session.declare_method_with_layout(
+                    &item,
+                    promises,
+                    owner,
+                    receiver.is_some(),
+                    self.written_layout(result),
+                ),
+                None if constant => self.session.declare_constant_with_layout(
+                    &item,
+                    promises,
+                    self.written_layout(result),
+                ),
+                None => self.session.declare_fn_with_layout(
+                    &item,
+                    promises,
+                    self.written_layout(result),
+                ),
+            }
         };
         let reference = match declared {
             Ok(reference) => reference,
+            Err(crate::typed::LowerError::ReferencePermission(message)) => {
+                return self.fail("L0286", message, name.span);
+            }
+            Err(error) if recursion.is_some() => {
+                return self.fail(
+                    "L0203",
+                    format!(
+                        "recursive logic function `{}` is not structurally decreasing: {error}",
+                        name.text
+                    ),
+                    name.span,
+                );
+            }
             Err(error) => return self.internal(error, name.span),
         };
+        {
+            self.session
+                .classify_function(reference, explicit_logic, result_logical)
+                .map_err(|error| self.error("L0300", error.to_string(), name.span))?;
+        }
         if let (FnRef::Exec(id), ast::TypeKind::Never) = (reference, &result.kind)
             && !constant
         {
@@ -1203,15 +1464,15 @@ impl Env<'_> {
             check_micros: started.elapsed().as_micros(),
         });
         Ok(Global::Fn(Rc::new(FnInfo {
+            logical,
+            result_logical,
             reference,
             name: name.text.clone(),
             params,
             result: result_ty,
             constant,
             promises,
-            takes_mut,
             passing,
-            not_a_term,
             visibility,
             receiver: receiver.is_some(),
         })))
@@ -1236,6 +1497,10 @@ impl Env<'_> {
             result,
         } = *signature;
         self.start_item(&name.text, logical, promises);
+        self.in_constant = constant;
+        if logical && !constant {
+            self.formula = Some("a logic fn");
+        }
         if constant {
             self.formula = Some("the value of a constant");
         }
@@ -1259,6 +1524,8 @@ impl Env<'_> {
             let (written, mode) = self.parameter_type(parameter)?;
             let mut binder = Binder::new(&parameter.name.text, written.ty);
             binder.ghost = written.ghost;
+            self.session
+                .register_binding_layout(binder.id, self.written_parameter_layout(&parameter.ty));
             self.declare(&binder, false, parameter.span)?;
             self.declare_passing(binder.id, mode);
             params.push(binder);
@@ -1280,12 +1547,34 @@ impl Env<'_> {
         };
         if !logical && !constant {
             self.returns = Some(super::env::ReturnTarget {
+                layout: self.written_layout(result),
+                logical: self.logical_spelling(result),
                 result: result_ty.clone(),
                 never,
             });
         }
+        if logical
+            && !constant
+            && receiver.is_none()
+            && self.previews.contains(crate::preview::Feature::LogicalData)
+        {
+            let candidates: Vec<_> = params.iter().enumerate().filter_map(|(index, param)| match &param.ty {
+                Type::Int => Some(index),
+                Type::Enum(id) if self.session.program().definitions().finite_enum_group(*id).is_some() => Some(index),
+                Type::Proof(claim) if matches!(&**claim, Term::PropApp(id, _) if self.session.program().definitions().is_inductive_prop(*id)) => Some(index),
+                _ => None,
+            }).collect();
+            if !candidates.is_empty() {
+                let ty = Type::function_over(&super::types::pairs(&params), &result_ty);
+                let mut binder = Binder::new(&name.text, ty);
+                binder.ghost = true;
+                self.declare(&binder, false, name.span)?;
+                self.recursion = Some((binder, candidates));
+            }
+        }
         let block = match body {
             Body::Block(block) => {
+                self.expect_block_layout(block, &self.written_layout(result));
                 let end = block_end(block.span);
                 let before = self.diagnostics.len();
                 let elaborated = self.block(block, Some(&result_ty));
@@ -1318,25 +1607,28 @@ impl Env<'_> {
                 block
             }
             Body::Expr(value) => {
+                self.expect_layout(value, &self.written_layout(result));
                 let checked = self.check(value, &result_ty)?;
-                // Rust computes a constant itself, and does not call to.
-                if let Some(callee) = self.called_by_constant(&checked.expr) {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            "L0234",
-                            format!("the value of `{}` calls `{callee}`, and Rust computes a constant without calling a function", name.text),
-                            value.span,
-                        )
-                        .note("the value of a constant is a literal, a cast, a comparison, or a tuple, struct, or variant of those, and may name another constant; a value a function computes is a function of no parameters, `fn name() -> T { .. }`"),
-                    );
-                    return Err(());
-                }
+                // Ordinary calls were rejected on entry to this logical initializer.
                 crate::typed::Block {
                     stmts: Vec::new(),
                     tail: Some(Box::new(checked.expr)),
                 }
             }
         };
+        if !self.logical_spelling(result)
+            && matches!(result_ty, Type::Bool)
+            && block
+                .tail
+                .as_deref()
+                .is_some_and(super::reconcile::is_logical_expr)
+        {
+            return self.fail(
+                "L0272",
+                "a function returning runtime bool cannot return logical Bool",
+                result.span,
+            );
+        }
         Ok((
             Header {
                 params,
@@ -1354,6 +1646,21 @@ impl Env<'_> {
         parameters: &[ast::Parameter],
         variants: &[ast::PropVariant],
     ) -> Elab<Global> {
+        let named = variants.iter().any(|variant| variant.body.is_some());
+        if named {
+            self.require_preview(
+                crate::preview::Feature::NamedProps,
+                "named proposition arms",
+                name.span,
+            )?;
+        }
+        if self.previews.contains(crate::preview::Feature::NamedProps)
+            && let Some(legacy) = variants.iter().find(|variant| variant.body.is_none())
+        {
+            self.diagnostics
+                .push(crate::parser::legacy_prop_migration(legacy, self.source));
+            return Err(());
+        }
         // The whole declaration is a proposition: its parameters, its payloads,
         // and the arguments each variant proves it at.
         self.start_item(&name.text, true, LOGICAL);
@@ -1370,6 +1677,11 @@ impl Env<'_> {
             }
             params.push(Binder::new(&parameter.name.text, ty));
         }
+        let mut predicate = Binder::new(
+            &name.text,
+            Type::function_over(&super::types::pairs(&params), &Type::Prop),
+        );
+        predicate.ghost = true;
         let mut infos: Vec<PropVariantInfo> = Vec::new();
         let mut kernel_variants = Vec::new();
         for variant in variants {
@@ -1386,6 +1698,53 @@ impl Env<'_> {
                 .fields
                 .iter()
                 .map(|field| (field.name.as_ref(), &field.ty, field.span));
+            if let Some(body) = &variant.body {
+                // A local callable permits checking the formula without an
+                // unchecked global predicate declaration or elimination rule.
+                self.declare(&predicate, false, variant.span)?;
+                for param in &params {
+                    self.declare(param, true, variant.span)?;
+                }
+                let mut payload = self.telescope(fields, true)?;
+                if let Some(field) = payload
+                    .iter()
+                    .find(|field| matches!(field.ty, Type::Proof(_)))
+                {
+                    return self.fail(
+                        "L0275",
+                        format!(
+                            "witness `{}` is evidence; put its proposition in the arm body",
+                            field.name
+                        ),
+                        variant.span,
+                    );
+                }
+                let (block, _, _) = self.logical("a proposition arm body", |env| {
+                    env.block(body, Some(&Type::Prop))
+                })?;
+                let value = super::exprs::Value::new(crate::typed::Expr::Block(block), Type::Prop);
+                let computed = self.term(&value, body.span)?;
+                let mut telescope = params.clone();
+                telescope.extend(payload.iter().cloned());
+                let ids: Vec<_> = telescope.iter().map(|binder| binder.id).collect();
+                let arm_body = computed.clone();
+                kernel_variants.push(PropVariant::arm(tuple_over(&telescope), |given| {
+                    ids.iter()
+                        .zip(given)
+                        .fold(arm_body, |term, (id, argument)| {
+                            term.replace_var(*id, argument)
+                        })
+                }));
+                payload.push(Binder::new("evidence", Type::proof(computed.clone())));
+                infos.push(PropVariantInfo {
+                    name: variant.name.text.clone(),
+                    body: Some(computed),
+                    payload,
+                    named: variant.shape == ast::VariantShape::Struct,
+                    conclusion: None,
+                });
+                continue;
+            }
             match &variant.target {
                 None => {
                     // The parameters are in scope in the payload.
@@ -1398,6 +1757,7 @@ impl Env<'_> {
                     kernel_variants.push(PropVariant::Params(tuple_over(&telescope)));
                     infos.push(PropVariantInfo {
                         name: variant.name.text.clone(),
+                        body: None,
                         payload,
                         named: variant.shape == ast::VariantShape::Struct,
                         conclusion: None,
@@ -1436,6 +1796,7 @@ impl Env<'_> {
                     }));
                     infos.push(PropVariantInfo {
                         name: variant.name.text.clone(),
+                        body: None,
                         payload,
                         named: variant.shape == ast::VariantShape::Struct,
                         conclusion: Some(conclusion),
@@ -1444,10 +1805,48 @@ impl Env<'_> {
             }
         }
         let param_types = params.iter().map(|param| param.ty.clone()).collect();
-        let id = match self.session.declare_prop(param_types, kernel_variants) {
+        let recursive = infos
+            .iter()
+            .filter_map(|info| info.body.as_ref())
+            .any(|body| {
+                body.find(&|term| matches!(term, Term::Free(id) if *id == predicate.id))
+                    .is_some()
+            });
+        let declared = if recursive {
+            self.require_preview(
+                crate::preview::Feature::LogicalData,
+                "recursive proposition",
+                name.span,
+            )?;
+            self.session
+                .declare_inductive_prop(param_types, kernel_variants, predicate.id)
+        } else {
+            self.session.declare_prop(param_types, kernel_variants)
+        };
+        let id = match declared {
             Ok(id) => id,
+            Err(error) if recursive => {
+                return self.fail(
+                    "L0203",
+                    format!(
+                        "recursive proposition `{}` is not strictly positive: {error}",
+                        name.text
+                    ),
+                    name.span,
+                );
+            }
             Err(error) => return self.internal(error, name.span),
         };
+        if recursive {
+            for info in &mut infos {
+                if let Some(body) = &mut info.body {
+                    *body = body.replace_predicate(predicate.id, id);
+                }
+                for field in &mut info.payload {
+                    field.ty = field.ty.replace_predicate(predicate.id, id);
+                }
+            }
+        }
         Ok(Global::Prop(Rc::new(PropInfo {
             id,
             name: name.text.clone(),
@@ -1505,6 +1904,8 @@ impl Env<'_> {
             self.values.insert(
                 name.to_string(),
                 Global::Fn(Rc::new(FnInfo {
+                    logical: true,
+                    result_logical: true,
                     reference: FnRef::Math(id),
                     name: name.to_string(),
                     params,
@@ -1517,88 +1918,11 @@ impl Env<'_> {
                         no_alloc: true,
                         no_io: true,
                     },
-                    takes_mut: false,
                     passing: Vec::new(),
-                    not_a_term: None,
                     visibility: None,
                     receiver: false,
                 })),
             );
-        }
-    }
-
-    /// The first function the value of a constant calls that is not another
-    /// constant, by name. Rust's `const` evaluator computes literals, casts,
-    /// comparisons, primitive methods, tuples, structs, variants, fields,
-    /// and conditionals of those, and does not call a function; the ghost
-    /// parts of the value, which are erased, do not count.
-    fn called_by_constant(&self, expr: &crate::typed::Expr) -> Option<String> {
-        use crate::typed::{Expr, Stmt};
-        let in_block = |block: &crate::typed::Block| {
-            block
-                .stmts
-                .iter()
-                .find_map(|stmt| match stmt {
-                    Stmt::Let { value, .. } | Stmt::Expr(value) | Stmt::Assign { value, .. } => {
-                        self.called_by_constant(value)
-                    }
-                })
-                .or_else(|| {
-                    block
-                        .tail
-                        .as_deref()
-                        .and_then(|tail| self.called_by_constant(tail))
-                })
-        };
-        let first = |exprs: &[Expr]| exprs.iter().find_map(|expr| self.called_by_constant(expr));
-        match expr {
-            Expr::CallMath { id, name, ty, .. } => {
-                if matches!(ty, Type::Prop | Type::Proof(_)) {
-                    return None;
-                }
-                let constant = self.values.values().any(|global| match global {
-                    Global::Fn(info) => info.constant && info.reference == FnRef::Math(*id),
-                    _ => false,
-                });
-                (!constant).then(|| name.clone())
-            }
-            Expr::CallFn { name, .. } => Some(name.clone()),
-            Expr::Tuple { fields, .. }
-            | Expr::Variant {
-                payload: fields, ..
-            } => first(fields),
-            Expr::Struct { fields, .. } => fields
-                .iter()
-                .find_map(|(_, value)| self.called_by_constant(value)),
-            Expr::Field { target, .. } | Expr::Cast { expr: target, .. } => {
-                self.called_by_constant(target)
-            }
-            Expr::Method {
-                receiver,
-                arguments,
-                ..
-            } => self
-                .called_by_constant(receiver)
-                .or_else(|| first(arguments)),
-            Expr::Compare { left, right, .. } => self
-                .called_by_constant(left)
-                .or_else(|| self.called_by_constant(right)),
-            Expr::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => self
-                .called_by_constant(condition)
-                .or_else(|| in_block(then_block))
-                .or_else(|| in_block(else_block)),
-            Expr::Match {
-                scrutinee, arms, ..
-            } => self
-                .called_by_constant(scrutinee)
-                .or_else(|| arms.iter().find_map(|arm| in_block(&arm.body))),
-            Expr::Block(block) => in_block(block),
-            _ => None,
         }
     }
 
@@ -1609,6 +1933,7 @@ impl Env<'_> {
         let evidence = |name: &str, of: &Binder| Binder::new(name, Type::proof(of.term()));
         let variant = |name: &str, payload: Vec<Binder>| PropVariantInfo {
             name: name.to_string(),
+            body: None,
             payload,
             named: false,
             conclusion: None,
@@ -1687,6 +2012,7 @@ fn block_end(span: Span) -> Span {
 
 /// What a `fn` or a `const` says about itself besides its signature.
 struct Function<'a> {
+    logical: bool,
     promises: Promises,
     takes_mut: bool,
     body: Body<'a>,

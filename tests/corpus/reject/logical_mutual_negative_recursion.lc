@@ -1,0 +1,4 @@
+#[derive(Logical)]
+enum Left { Next(logic Fn(Right) -> Int) } //~ error: L0203 recursive logical types must occur directly as positive enum payload fields
+#[derive(Logical)]
+enum Right { Next(Left) }

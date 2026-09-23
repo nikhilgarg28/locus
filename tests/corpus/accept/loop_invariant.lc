@@ -24,10 +24,10 @@ fn count(n: u8) -> u8 {
     total
 }
 
-//~ proofs: 0
-//~ run: walk(0) => (0, Proved)
-//~ run: walk(9) => (9, Proved)
+//~ proofs: 1
+//~ run: walk(0) => (0, Erased)
+//~ run: walk(9) => (9, Erased)
 //~ run: count(0) => 0
 //~ run: count(255) => 255
-//~ rust: for step in 0_u8..n {
-//~ rust: break (limit, Proved)
+//~ rust: for _step in 0_u8..n {
+//~ rust: break (limit, Erased)

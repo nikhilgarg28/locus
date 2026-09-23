@@ -547,6 +547,7 @@ struct Certificate {
 }
 
 #[test]
+#[doc = "spec: 2.15:1, 2.15:11, 2.15:2, 2.15:3, 2.15:4, 2.15:6, 2.15:7, 2.15:8, 2.15:9, 2.16:1, 2.16:10, 2.16:11, 2.16:12, 2.16:14, 2.16:15, 2.16:3, 2.16:4, 2.16:5, 2.16:6, 2.16:7, 2.16:8"]
 fn the_midpoint_certificates_of_the_contract_are_accepted() {
     let mut example = midpoint();
     for (name, certificate) in example.contract_certificates() {
@@ -834,6 +835,7 @@ fn a_remainder_bound_without_its_condition_is_not_a_constraint() {
 }
 
 #[test]
+#[doc = "spec: 2.15:10"]
 fn the_shapes_of_goals_and_coefficients_are_checked() {
     let (mut ctx, prelude) = setup();
     let x = Term::var(ctx.declare(Type::Int).unwrap());
@@ -1157,6 +1159,7 @@ fn a_certificate_found_for_a_true_goal_on_the_box_is_accepted() {
 // --- Atoms --------------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.15:5"]
 fn atoms_are_merged_exactly_when_they_are_the_same_term() {
     let (mut ctx, _) = setup();
     let x = Term::var(ctx.declare(Type::Int).unwrap());
@@ -1217,6 +1220,7 @@ fn atoms_are_merged_exactly_when_they_are_the_same_term() {
 // --- Limits ----------------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.15:12"]
 fn the_number_of_pairs_is_limited() {
     let (mut ctx, _) = setup();
     let x = Term::var(ctx.declare(Type::Int).unwrap());
@@ -1238,6 +1242,7 @@ fn the_number_of_pairs_is_limited() {
 }
 
 #[test]
+#[doc = "spec: 2.15:12"]
 fn the_number_of_atoms_in_a_form_is_limited() {
     let (mut ctx, _) = setup();
     // -1 <= x_1 + ... + x_n from 0 <= x_1 + ... + x_n: the form of either
@@ -1260,6 +1265,7 @@ fn the_number_of_atoms_in_a_form_is_limited() {
 }
 
 #[test]
+#[doc = "spec: 2.15:12"]
 fn the_size_of_literals_is_limited() {
     let (mut ctx, _) = setup();
     let x = Term::var(ctx.declare(Type::Int).unwrap());
@@ -1307,6 +1313,7 @@ fn the_size_of_literals_is_limited() {
 // --- The text form ---------------------------------------------------------------------
 
 #[test]
+#[doc = "spec: 2.15:13"]
 fn a_certificate_has_a_text_form_with_a_version() {
     let example = midpoint();
     let (_, certificate) = &example.contract_certificates()[0];

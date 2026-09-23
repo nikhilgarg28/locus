@@ -1,0 +1,1 @@
+fn capture(value: u8) -> logic Fn(x: Int) -> Int { |x: Int| x + value } //~ error: L0283

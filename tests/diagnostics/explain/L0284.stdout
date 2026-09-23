@@ -1,0 +1,18 @@
+L0284: Collection or Box operation is ill-formed
+
+The collection expression lacks required element information, has an incompatible physical layout, or uses an unsupported collection operation. Empty arrays need an element type from context. Box, vector and slice operations retain physical storage semantics even when payloads are logical.
+
+Example from `tests/corpus/reject/array_literal.lc`; the full file is a regression test.
+
+```locus
+// An array literal, and an empty one.
+fn items() -> u8 {
+    [1, 2, 3]
+}
+
+fn none() -> u8 {
+    []
+}
+```
+
+Language, as built: [1.26:1](../../atlas.html#/doc/language/spec-1.26:1).

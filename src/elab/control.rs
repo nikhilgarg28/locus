@@ -82,6 +82,13 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let condition_value = self.check(condition, &Type::Bool)?;
+        if !self.total && super::reconcile::is_logical_expr(&condition_value.expr) {
+            return self.fail(
+                "L0272",
+                "a runtime if requires bool; logical Bool cannot choose runtime behavior",
+                condition.span,
+            );
+        }
         let (tested, negated) = self.tested(&condition_value, condition.span)?;
         let (then_fact, else_fact) = (HypId::fresh(), HypId::fresh());
         let fact = |holds: bool| Term::eq(Type::Bool, tested.clone(), Term::Bool(holds != negated));
@@ -93,9 +100,11 @@ impl Env<'_> {
         // What each arm moves is joined the same way (`moves.rs`).
         let moves_entry = self.moves_now();
         let mark = self.mark();
+        let result_scope = self.result_scope();
         let then_result = self
             .assume(then_fact, fact(true), condition.span)
             .and_then(|()| self.branch(&then, expected));
+        let then_result = self.check_scope_result(&result_scope, then_result, span);
         let then_versions = self.versions_now(&entry);
         let then_moves = self.moves_now();
         let then_stale = self.stale_now(&entry);
@@ -115,6 +124,7 @@ impl Env<'_> {
         let else_result = self
             .assume(else_fact, fact(false), condition.span)
             .and_then(|()| self.branch(&otherwise, expected_else.as_ref()));
+        let else_result = self.check_scope_result(&result_scope, else_result, span);
         let else_versions = self.versions_now(&entry);
         let else_moves = self.moves_now();
         let else_stale = self.stale_now(&entry);
@@ -265,6 +275,7 @@ impl Env<'_> {
             let variant = &info.variants[index];
             let variant_name = &variant.name;
             let mark = self.mark();
+            let result_scope = self.result_scope();
             let arm_result = (|| {
                 let what = format!("`{}::{variant_name}`", info.name);
                 let names =
@@ -281,6 +292,10 @@ impl Env<'_> {
                         ty: field_ty,
                         ghost: variant.payload[field].ghost,
                     };
+                    self.session.register_binding_layout(
+                        binder.id,
+                        self.session.binding_layout(variant.payload[field].id),
+                    );
                     let declared =
                         self.ctx
                             .declare_with(binder.id, binder.ty.clone(), binder.ghost);
@@ -299,10 +314,17 @@ impl Env<'_> {
                     variant_term(&scrutinee_value.ty, index, &ids, &payload_types[index]),
                 );
                 self.assume(fact, claim, arm.pattern.span)?;
+                // A logical pattern names exactly this constructor. Treat the
+                // checked case equation as computation; normalization replays
+                // every replacement through kernel equality transport.
+                if self.total {
+                    self.facts.last_mut().expect("just assumed").definition = true;
+                }
                 // An arm is checked against the type as declared, whose
                 // exit binders stand for the versions current at its end.
+                let body_result = self.branch(&Branch::Expr(&arm.body), expected.or(ty.as_ref()));
                 let (body, body_ty, body_never) =
-                    self.branch(&Branch::Expr(&arm.body), expected.or(ty.as_ref()))?;
+                    self.check_scope_result(&result_scope, body_result, arm.body.span)?;
                 Ok((payload, fact, body, body_ty, body_never))
             })();
             let versions = self.versions_now(&entry);
@@ -385,18 +407,19 @@ impl Env<'_> {
                 keyword,
             );
         }
-        // In the body of a function of the logic a `return` is not a kernel
-        // term: the function is elaborated again as an ordinary one
-        // (LOC-193, `items`).
         if self.total {
-            self.not_a_term
-                .get_or_insert(("`return`".to_string(), keyword));
-            return Err(());
+            return self.fail(
+                "L0270",
+                "a logic function uses its final expression instead of return",
+                keyword,
+            );
         }
         let Some(target) = &self.returns else {
             return self.internal("`return` outside the body of a function", keyword);
         };
-        let (result_ty, never_fn) = (target.result.clone(), target.never);
+        let (result_ty, never_fn, result_logical) =
+            (target.result.clone(), target.never, target.logical);
+        let result_layout = target.layout.clone();
         let item = self.item_name.clone();
         if never_fn {
             self.diagnostics.push(
@@ -411,8 +434,9 @@ impl Env<'_> {
         }
         let value = match value {
             Some(value) => {
+                self.expect_layout(value, &result_layout);
                 let before = self.diagnostics.len();
-                match self.check(value, &result_ty) {
+                match self.argument(value, &result_ty, result_logical && !result_ty.is_ghost()) {
                     Ok(value) => Some(Box::new(value.expr)),
                     Err(()) => {
                         self.owed_at_return(before, keyword);

@@ -1,0 +1,4 @@
+locus-proofs 1
+
+obligation b9bffb73f66349e1 taught 3
+implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($0), 3i)), linear(int_le(view[u8]($0), 3i), 1, [(transport(literal(view[u8](3)), int_le(view[u8]($0), #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), of_term($1))), 1)]))

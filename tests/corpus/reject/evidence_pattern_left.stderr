@@ -1,0 +1,5 @@
+error[L0151]: the left of `@` must be a binding name or a proposition constructor
+ --> tests/corpus/reject/evidence_pattern_left.lc:2:9
+  |
+2 |     let (a, b) @ evidence = p; //~ error: L0151 left of `@`
+  |         ^^^^^^

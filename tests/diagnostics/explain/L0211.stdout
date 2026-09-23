@@ -1,0 +1,27 @@
+L0211: Comparison operands have different types
+
+The operands of this comparison do not share a supported comparison type. Locus does not silently widen one machine integer to another. Use a deliberate runtime conversion or compare their logical models in a proposition.
+
+Example from `tests/corpus/reject/comparison_across_types.lc`; the full file is a regression test.
+
+```locus
+// A comparison is between two values of one type, in code and in claims;
+// the error says which cast makes them one.
+fn in_code(a: u8, b: u32) -> bool {
+    a < b
+}
+
+fn in_a_claim(a: u8, b: u32) -> @(a <= b) {
+    _
+}
+
+fn against_the_logic(a: u8, b: u32) -> @(a <= b as Int) {
+    _
+}
+
+fn equality_too(a: i8, b: i16) -> bool {
+    a == b
+}
+```
+
+Language, as built: [1.6:1](../../atlas.html#/doc/language/spec-1.6:1).

@@ -544,7 +544,16 @@ fn the_condition_of_a_remainder_sign_is_found_by_a_nested_run() {
     };
     let gave_up = prove(&ctx, Some(prelude), &le(lit(0), rem(s, lit(4))), &shallow)
         .expect_err("no nested run");
-    assert!(matches!(gave_up.reason, Reason::Consistent), "{gave_up}");
+    assert!(
+        matches!(
+            gave_up.reason,
+            Reason::Budget {
+                name: "depth",
+                limit: 0
+            }
+        ),
+        "{gave_up}"
+    );
 }
 
 // --- Random problems on the box ------------------------------------------------------------
@@ -819,7 +828,12 @@ fn a_problem_that_blows_up_hits_the_budget_of_derived_constraints_and_says_so_tw
         )),
         "{text}"
     );
-    assert_eq!(text.lines().count(), 91, "one line per constraint");
+    assert_eq!(
+        text.lines().filter(|line| line.starts_with("  ")).count(),
+        90,
+        "one indented line per constraint; budget notices are separate"
+    );
+    assert!(text.contains("MAX_COUNTEREXAMPLE_ATOMS"));
     let second = prove(&ctx, Some(prelude), &goal, &budget).expect_err("blows up again");
     assert_eq!(second.to_string(), text);
     // A smaller instance of the same problem is decided: the goal is false.

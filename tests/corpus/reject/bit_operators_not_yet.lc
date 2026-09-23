@@ -19,3 +19,4 @@ fn xor(a: u8, b: u8) -> u8 {
 fn or(a: u8, b: u8) -> u8 {
     a | b //~ error: L0290 the `|` operator is not in Locus yet
 }
+//~ spec: 1.15:2

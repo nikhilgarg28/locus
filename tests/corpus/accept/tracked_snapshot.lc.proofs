@@ -1,0 +1,16 @@
+locus-proofs 1
+
+obligation a9cbfceb54566e88 captured 1
+transport(transport(h1, (#0 ==[Prop] $2), refl($2)), #0, transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), 3i) ==[bool] true), of_term(proof(of_term($0)))))
+
+obligation c69792b5d0aeafee snapshot_and_tracked 1
+transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), 3i) ==[bool] true), of_term(proof(of_term($0))))
+
+obligation f1b107fc871928ad snapshot_and_tracked 2
+of_term($2)
+
+obligation 3063d2ab37a073cd snapshot_and_tracked 3
+transport(transport(h1, (#0 ==[u8] $4), refl($4)), (int_le_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u8](3), 3i)))
+
+obligation b8460c9e0097c48e snapshot_and_tracked 4
+of_term($0)

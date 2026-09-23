@@ -1,4 +1,4 @@
 locus-proofs 1
 
-obligation 3954b97311ab9695 increment 1
-h0
+obligation 94ca9d97d558fcd0 increment 1
+transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_eq_b(view[u8](#0), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(view[u8](wrapping_add[u8]($0, 1)), view[u8](wrapping_add[u8]($0, 1)))), refl(view[u8](wrapping_add[u8]($0, 1)))))

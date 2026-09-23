@@ -1,5 +1,5 @@
 // `unfold!` of a definition that the evidence does not mention.
-#[terminates] #[no_panic] #[no_io] fn nonzero(x: u8) -> Prop { prop!(x != 0) }
+#[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }
 
 #[terminates] #[no_panic] #[no_io] fn first(n: u8, h: @(n != 0)) -> @(n != 0) {
     unfold!(nonzero, h) //~ error: L0229 `unfold!` found no use of `nonzero` to work on

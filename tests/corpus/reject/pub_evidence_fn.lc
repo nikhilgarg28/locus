@@ -11,7 +11,7 @@ pub struct Lock {
 }
 
 #[terminates] #[no_panic] #[no_io]
-fn within_limit(failures: u8) -> Prop {
+logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
 
@@ -48,3 +48,4 @@ pub(crate) fn step_in_crate(lock: Lock, bounded: @within_limit(lock.failures)) -
 pub(super) fn step_in_parent(lock: Lock, bounded: @within_limit(lock.failures)) -> Lock {
     lock
 }
+//~ spec: 1.17:1

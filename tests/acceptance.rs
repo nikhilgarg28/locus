@@ -22,12 +22,15 @@
 #[path = "common/corpus.rs"]
 mod runner;
 
+#[path = "common/diagnostic_inventory.rs"]
+mod diagnostic_inventory;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 
 use locus::diagnostic::Diagnostic;
-use locus::elab::{elaborate, elaborate_with};
+use locus::elab::elaborate_with;
 use locus::erased::print_module;
 use locus::kernel::{
     Axiom, CmpOp, Context, Definitions, HypId, HypRef, KernelError, MachineInt, Op, Proof, Term,
@@ -78,7 +81,13 @@ fn diagnostics_of(name: &str, text: &str) -> (bool, Vec<Diagnostic>) {
     if !parsed.is_success() {
         return (false, parsed.diagnostics);
     }
-    let elaborated = elaborate(source, &parsed.program);
+    let mut options = locus::elab::Options::default();
+    for name in ["logical-data", "heap-views"] {
+        if text.contains(&format!("//~ preview: {name}")) {
+            options.previews.enable(name).unwrap();
+        }
+    }
+    let elaborated = locus::elab::elaborate_with_options(source, &parsed.program, &options);
     (elaborated.is_success(), elaborated.diagnostics)
 }
 
@@ -87,6 +96,17 @@ fn diagnostics_of(name: &str, text: &str) -> (bool, Vec<Diagnostic>) {
 fn run_locus(arguments: &[&str], env: &[(&str, &str)]) -> (Option<i32>, String, String) {
     let mut command = locus();
     command.args(arguments);
+    if !arguments.contains(&"--preview") {
+        for argument in arguments.iter().filter(|arg| arg.ends_with(".lc")) {
+            if let Ok(text) = std::fs::read_to_string(argument) {
+                for name in ["logical-data", "heap-views"] {
+                    if text.contains(&format!("//~ preview: {name}")) {
+                        command.args(["--preview", name]);
+                    }
+                }
+            }
+        }
+    }
     for (name, value) in env {
         command.env(name, value);
     }
@@ -119,48 +139,22 @@ fn source_files() -> Vec<PathBuf> {
     found
 }
 
-/// The error codes a source text can emit: every `L0nnn` written as a whole
-/// string literal.
-fn codes_in(text: &str) -> Vec<String> {
-    let mut codes = Vec::new();
-    let bytes = text.as_bytes();
-    let mut at = 0;
-    while let Some(found) = text[at..].find("\"L0") {
-        let start = at + found + 1;
-        let end = start + 5;
-        if end < bytes.len()
-            && text[start + 2..end]
-                .bytes()
-                .all(|byte| byte.is_ascii_digit())
-            && bytes[end] == b'"'
-        {
-            let code = text[start..end].to_string();
-            if !codes.contains(&code) {
-                codes.push(code);
-            }
-        }
-        at = start;
-    }
-    codes
-}
-
 /// The body of the atlas document with this id, as one string: the data
 /// block of `atlas.html` is JSON, and a document's `body` is an array of
 /// strings, so the text between its `"id"` and the next document's holds
 /// exactly its title and body.
 fn atlas_document(id: &str) -> String {
-    let html = read(&root().join("atlas.html"));
-    let open = "<script type=\"application/json\" id=\"atlas-data\">";
-    let start = html.find(open).expect("the atlas data block") + open.len();
-    let end = start + html[start..].find("</script>").expect("the block ends");
-    let data = &html[start..end];
-    let key = format!("\"id\": \"{id}\"");
-    let from = data
-        .find(&key)
-        .unwrap_or_else(|| panic!("no document {id} in the atlas"));
-    let rest = &data[from + key.len()..];
-    let to = rest.find("\"id\": \"").unwrap_or(rest.len());
-    rest[..to].to_string()
+    let output = Command::new("python3")
+        .current_dir(root())
+        .args(["tools/atlas.py", "show", id])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
 }
 
 /// Whether `name` occurs in `text` as a whole identifier.
@@ -180,7 +174,14 @@ fn the_target_examples_run() {
     // both interpreters in both overflow modes, compile under rustc with
     // warnings denied in both builds, and the three agree on every run
     // line, panics included. Percent answers with an enum of its own.
-    let files = files_in("tests/corpus/target");
+    let files: Vec<_> = files_in("tests/corpus/target")
+        .into_iter()
+        .filter(|(name, _)| {
+            TARGET
+                .iter()
+                .any(|target| name.ends_with(&format!("/{target}.lc")))
+        })
+        .collect();
     let names: Vec<&str> = files.iter().map(|(name, _)| name.as_str()).collect();
     assert_eq!(
         names,
@@ -208,8 +209,8 @@ fn the_target_examples_run() {
             .count();
         compiled.push(unit);
     }
-    assert!(runs >= 20, "{runs} run lines");
-    assert!(panics >= 2, "{panics} run lines that panic");
+    assert!(runs >= 16, "{runs} run lines");
+    assert_eq!(panics, 0, "the target APIs all promise no_panic");
     let report = compile_and_compare(&compiled, "locus_acceptance_target", TIMEOUT);
     failures.extend(report.failures);
     inconclusive.extend(report.inconclusive);
@@ -226,8 +227,7 @@ fn the_target_examples_run() {
         .lines()
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect();
-    assert!(code.iter().any(|line| line.contains("enum Checked")));
-    assert!(!code.iter().any(|line| line.contains("Option<")));
+    assert!(code.iter().any(|line| line.contains("Option<Percent>")));
     println!(
         "criterion: the target examples run: 3 files, {runs} run lines ({panics} that panic) \
          agree in the check-IR interpreter, the erased interpreter, and compiled Rust, with \
@@ -248,10 +248,13 @@ fn the_proofs_are_the_ones_predicted() {
     // typed assignments and values, not holes, so they count as nothing.
     let counts = |name: &str| {
         let path = target(name);
-        let (code, stdout, stderr) = run_locus(
-            &["check", path.to_str().unwrap(), "--stats"],
-            &[("LOCUS_PROOFS", "off")],
-        );
+        let mut arguments = vec!["check", path.to_str().unwrap(), "--stats"];
+        if name == "percent"
+            && locus::preview::Feature::LogicalData.status() == locus::preview::Status::Preview
+        {
+            arguments.extend(["--preview", "logical-data"]);
+        }
+        let (code, stdout, stderr) = run_locus(&arguments, &[("LOCUS_PROOFS", "off")]);
         assert_eq!(code, Some(0), "{stderr}");
         stdout
             .lines()
@@ -264,10 +267,10 @@ fn the_proofs_are_the_ones_predicted() {
     let percent = counts("percent");
     assert_eq!(
         lock,
-        "obligations: 11 (1 exact, 2 computed, 2 evaluation, 6 arithmetic)"
+        "obligations: 11 (3 computed, 2 evaluation, 6 arithmetic)"
     );
     assert_eq!(midpoint, "obligations: 6 (1 evaluation, 5 arithmetic)");
-    assert_eq!(percent, "obligations: 3 (3 computed)");
+    assert_eq!(percent, "obligations: 1 (1 computed)");
     println!(
         "criterion: the proofs are the ones predicted: lock {}; midpoint {}; percent {}; \
          Target examples predicts 3 exact, 4 computed, 7 arithmetic over the lock and the \
@@ -283,11 +286,25 @@ fn the_proofs_are_the_ones_predicted() {
 fn generated_target_crate(name: &str) -> (PathBuf, PathBuf) {
     let workspace = scratch(name);
     let out = workspace.join("generated");
+    // The boundary regression also exercises setters and panic recovery;
+    // these are deliberately separate from the exact Atlas examples.
+    let lock = workspace.join("lock.lc");
+    let percent = workspace.join("percent.lc");
+    std::fs::write(
+        &lock,
+        read(&target("lock")).replace("derive(Clone, Copy)", "derive(Clone, Copy, Debug)"),
+    )
+    .unwrap();
+    std::fs::write(
+        &percent,
+        read(&root().join("tests/corpus/accept/percent_updates.lc")),
+    )
+    .unwrap();
     let (code, _, stderr) = run_locus(
         &[
             "build",
-            target("lock").to_str().unwrap(),
-            target("percent").to_str().unwrap(),
+            lock.to_str().unwrap(),
+            percent.to_str().unwrap(),
             "--out",
             out.to_str().unwrap(),
             "--name",
@@ -383,12 +400,12 @@ fn a_rust_caller_is_held_at_the_boundary() {
     );
     refused(
         "names_the_marker",
-        "fn main() {\n    let _: generated::Proved = generated::Proved;\n}\n",
+        "fn main() {\n    let _: generated::Erased = generated::Erased;\n}\n",
         &["E0603"],
     );
     refused(
         "builds_the_marker",
-        "fn main() {\n    let _ = generated::Proved { _private: () };\n}\n",
+        "fn main() {\n    let _ = generated::Erased { _private: () };\n}\n",
         &["E0451"],
     );
     refused(
@@ -422,6 +439,7 @@ fn a_rust_caller_is_held_at_the_boundary() {
 }
 
 #[test]
+#[doc = "spec: 1.21:1"]
 fn an_author_is_told_why() {
     // Each target example with a hypothesis removed: the first diagnostic
     // names the obligation, states the claim as computed, says which facts
@@ -433,10 +451,10 @@ fn an_author_is_told_why() {
         (
             "lock",
             vec![
-                ("bounded: @within_limit(failures)", ""),
+                ("bounded: @within_limit(failures as Int)", ""),
                 ("(failures: u32, )", "(failures: u32)"),
                 (
-                    "    let small = unfold!(within_limit, bounded);                                 // failures <= 3\n",
+                    "    let small = logic {\n        let within_limit::Bounds @ small = bounded;\n        small\n    };                                                                        // model(failures) <= 3\n",
                     "",
                 ),
             ],
@@ -445,18 +463,18 @@ fn an_author_is_told_why() {
         ),
         (
             "midpoint",
-            vec![(", ordered: @(lo <= hi)", "")],
+            vec![(", ordered: @((lo as Int) <= (hi as Int))", "")],
             "L0235",
             "`-` on `u32` may overflow, and `midpoint` promises no_panic",
         ),
         (
             "percent",
             vec![(
-                "if value <= 100 { Checked::Valid(Percent::new(value, prove!(value <= 100))) } else { Checked::Invalid }",
-                "Checked::Valid(Percent::new(value, prove!(value <= 100)))",
+                "if value <= 100 { Some(Percent::new(value, prove!((value as Int) <= 100))) } else { None }",
+                "Some(Percent::new(value, prove!((value as Int) <= 100)))",
             )],
             "L0230",
-            "cannot show `value <= 100u32`",
+            "cannot show `value <= 100`",
         ),
     ];
     let mut told = Vec::new();
@@ -500,7 +518,7 @@ fn an_author_is_told_why() {
     // Every error code has a rejected file and a golden rendering.
     let mut codes = Vec::new();
     for path in source_files() {
-        for code in codes_in(&read(&path)) {
+        for code in diagnostic_inventory::source_codes(&path, &read(&path)) {
             if !codes.contains(&code) {
                 codes.push(code);
             }
@@ -760,6 +778,7 @@ fn constant_in(file: &str, name: &str) -> String {
 }
 
 #[test]
+#[doc = "spec: 1.19:2"]
 fn what_is_checked_is_what_runs() {
     // The random program generator agrees three ways on at least 10,000
     // programs under the extended suite, with no more than half a percent
@@ -897,6 +916,7 @@ fn the_trusted_base_is_written_down_and_tested_as_such() {
 }
 
 #[test]
+#[doc = "spec: 1.0:2"]
 fn the_parser_is_robust_and_total_for_stated_reasons() {
     // Totality rests on two guarantees tested on their own: every loop of
     // the parser consumes a token or stops, so the steps stay within four
@@ -975,8 +995,9 @@ fn the_legacy_is_gone() {
     ];
     for text in spellings {
         let mut sources = SourceMap::default();
-        let file = sources.add("legacy.lc", text);
-        assert!(!parse(sources.get(file)).is_success(), "parsed: {text}");
+        let _file = sources.add("legacy.lc", text);
+        let (accepted, _) = diagnostics_of("legacy.lc", text);
+        assert!(!accepted, "accepted legacy spelling: {text}");
     }
     let (accepted, diagnostics) = diagnostics_of("nat.lc", "fn f(n: Nat) -> u8 { 0 }");
     assert!(!accepted);
@@ -1024,7 +1045,7 @@ fn the_legacy_is_gone() {
 fn the_suites_are_usable() {
     // tools/check.sh is the gate of every commit and has an extended form
     // before a milestone; the time of the fast form is measured by the
-    // script itself, which prints it and refuses a run over two minutes.
+    // script itself, which records it and reports a run over two minutes.
     let script = read(&root().join("tools/check.sh"));
     assert!(script.contains("--extended"));
     assert!(script.contains("LOCUS_EXTENDED=1"));
@@ -1040,6 +1061,17 @@ fn the_suites_are_usable() {
             .mode();
         assert!(mode & 0o111 != 0, "tools/check.sh is not executable");
     }
+    // Exercise completion, failure and signal interruption. A plausible test
+    // tally is not evidence that the selected gate reached its final command.
+    let receipt = Command::new("python3")
+        .arg(root().join("tools/test_gate.py"))
+        .output()
+        .unwrap();
+    assert!(
+        receipt.status.success(),
+        "{}",
+        String::from_utf8_lossy(&receipt.stderr)
+    );
     // The fast tests use fixed seeds: the randomized files name theirs.
     for file in [
         "random_programs.rs",
@@ -1051,7 +1083,32 @@ fn the_suites_are_usable() {
         assert!(text.contains("SEED: u64 = 0x"), "{file} has no fixed seed");
     }
     println!(
-        "criterion: the suites are usable: tools/check.sh gates every commit within \
-         FAST_LIMIT_SECONDS and --extended runs the long forms under LOCUS_EXTENDED=1 in release"
+        "criterion: the suites are usable: tools/check.sh emits a final completion receipt; \
+         failed or killed runs cannot claim completion; fast timings are recorded and \
+         --extended runs the long forms under LOCUS_EXTENDED=1 in release"
     );
+}
+
+#[test]
+fn target_programs_are_exactly_the_atlas_vision_examples() {
+    let source = atlas_document("target-examples");
+    let blocks: Vec<_> = source
+        .split("~~~")
+        .enumerate()
+        .filter_map(|(i, s)| (i % 2 == 1).then_some(s.trim()))
+        .filter(|s| s.contains("fn "))
+        .collect();
+    assert_eq!(
+        blocks.len(),
+        TARGET.len(),
+        "each target has one complete program fence"
+    );
+    for (name, expected) in TARGET.into_iter().zip(blocks) {
+        let actual = read(&target(name));
+        let actual = actual.split("//~").next().unwrap().trim();
+        assert_eq!(
+            actual, expected,
+            "{name}: target program changed independently of Vision"
+        );
+    }
 }

@@ -79,6 +79,7 @@ impl Env<'_> {
         let mut exprs = Vec::new();
         let mut tys: Vec<Type> = info.fields.iter().map(|field| field.ty.clone()).collect();
         for (index, (declared, value)) in info.fields.iter().zip(values).enumerate() {
+            self.expect_layout(value, &self.session.binding_layout(declared.id));
             let value = self.argument(value, &tys[index].clone(), declared.ghost)?;
             let term = self.term(&value, span)?;
             for later in tys[index + 1..].iter_mut() {
@@ -300,23 +301,12 @@ impl Env<'_> {
             let message = format!("`{}` has no field `{}`", info.name, name.text);
             return self.fail("L0210", message, name.span);
         };
-        // A `Ghost<T>` field is read only where nothing runs.
-        if info.fields[index].ghost && !self.reading() {
-            let shown = self.show_type(&info.fields[index].ty);
-            self.diagnostics.push(
-                crate::diagnostic::Diagnostic::error(
-                    "L0201",
-                    format!(
-                        "`{}` is a `Ghost<{shown}>`, which has no runtime form",
-                        self.text(expr.span)
-                    ),
-                    expr.span,
-                )
-                .note("a `Ghost<T>` value stands where nothing runs: in a proposition, in `snapshot!`, as the value of a `let` of type `Ghost<T>`, or in a `Ghost<T>` parameter or field"),
-            );
-            return Err(());
-        }
-        self.field(target, index, Some(name.text.clone()), expr.span)
+        let value = self.field(target, index, Some(name.text.clone()), expr.span)?;
+        Ok(if info.fields[index].ghost {
+            Value::new(Expr::Ghost(Box::new(value.expr)), value.ty)
+        } else {
+            value
+        })
     }
 
     pub(super) fn index(
@@ -344,7 +334,7 @@ impl Env<'_> {
         }
     }
 
-    fn field(
+    pub(super) fn field(
         &mut self,
         target: Value,
         index: usize,

@@ -33,3 +33,4 @@ fn negate(a: i16) -> i16 {
 fn nearly(n: u8, small: @(n <= 200)) -> u8 {
     n + 100 //~ error: L0235 `+` on `u8` may overflow, and `nearly` promises no_panic
 }
+//~ spec: 1.15:2

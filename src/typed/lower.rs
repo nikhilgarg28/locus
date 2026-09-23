@@ -83,6 +83,7 @@
 //! values of a function's `&mut` parameters at a panic is a side table
 //! (`Lending`) the checker never reads.
 
+use super::{ErasureLayout, ErasureLayouts};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -101,6 +102,7 @@ use super::tree::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LowerError {
+    ReferencePermission(String),
     Kernel(KernelError),
     Exec(ExecError),
     /// A math function's body must be pure: no ordinary calls, no `loop`, no
@@ -151,6 +153,7 @@ impl From<ExecError> for LowerError {
 impl fmt::Display for LowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ReferencePermission(message) => write!(f, "{message}"),
             Self::Kernel(error) => write!(f, "{error}"),
             Self::Exec(error) => write!(f, "{error}"),
             Self::ImpureInMath(name) => {
@@ -198,12 +201,14 @@ pub enum FnRef {
 /// and the identity it receives is what later items use to refer to it.
 #[derive(Clone, Debug)]
 pub struct Session {
-    program: Program,
-    erased: Module,
+    pub(super) program: Program,
+    pub(super) erased: Module,
     /// For each function with `&mut` parameters, what the interpreter of
     /// the check IR needs to report their values at a panic. The checker
     /// never reads it (`CheckInterpreter::with_lending`).
-    lending: HashMap<ExecFnId, Lending>,
+    pub(super) lending: HashMap<ExecFnId, Lending>,
+    pub(super) layouts: ErasureLayouts,
+    pub(super) buffers: Vec<super::BufferFunction>,
 }
 
 impl Session {
@@ -212,11 +217,24 @@ impl Session {
             program: Program::new(definitions),
             erased: Module::default(),
             lending: HashMap::new(),
+            layouts: ErasureLayouts::default(),
+            buffers: Vec::new(),
         }
     }
 
     pub fn program(&self) -> &Program {
         &self.program
+    }
+
+    pub fn register_quantifiers(
+        &mut self,
+        element: Type,
+        exists: PropId,
+        forall: PropId,
+    ) -> Result<crate::kernel::Quantifiers, KernelError> {
+        self.program
+            .definitions_mut()
+            .register_quantifiers(element, exists, forall)
     }
 
     /// The side table of every function with `&mut` parameters, for the
@@ -231,10 +249,131 @@ impl Session {
         &self.erased
     }
 
+    /// Declaration order is retained separately from physical field order.
+    pub fn register_type_lifetimes(&mut self, ty: &Type, names: Vec<String>) {
+        match ty {
+            Type::Struct(id) => {
+                self.layouts.struct_lifetimes.insert(*id, names);
+            }
+            Type::Enum(id) => {
+                self.layouts.enum_lifetimes.insert(*id, names);
+            }
+            _ => {}
+        }
+    }
+    pub fn canonical_lifetime_arguments(&self, ty: &Type, args: Vec<String>) -> Vec<String> {
+        let mut physical = Vec::new();
+        let declared = match ty {
+            Type::Struct(id) => {
+                if let Some(fields) = self.layouts.structs.get(id) {
+                    for f in fields {
+                        super::layout::collect_lifetimes(f, &mut physical)
+                    }
+                }
+                self.layouts.struct_lifetimes.get(id)
+            }
+            Type::Enum(id) => {
+                if let Some(variants) = self.layouts.enums.get(id) {
+                    for fields in variants {
+                        for f in fields {
+                            super::layout::collect_lifetimes(f, &mut physical)
+                        }
+                    }
+                }
+                self.layouts.enum_lifetimes.get(id)
+            }
+            _ => None,
+        };
+        match declared {
+            Some(declared) => physical
+                .iter()
+                .filter_map(|name| {
+                    declared
+                        .iter()
+                        .position(|n| n == name)
+                        .and_then(|i| args.get(i).cloned())
+                })
+                .collect(),
+            None => args,
+        }
+    }
+
+    pub fn register_binding_layout(&mut self, id: VarId, layout: ErasureLayout) {
+        self.layouts.bindings.insert(id, layout);
+    }
+
+    pub fn binding_layout(&self, id: VarId) -> ErasureLayout {
+        self.layouts.binding(id)
+    }
+
+    pub fn function_result_layout(&self, reference: FnRef) -> ErasureLayout {
+        self.layouts.function(reference)
+    }
+
+    pub fn expression_layout(&self, expr: &Expr) -> ErasureLayout {
+        self.layouts.expression(expr, self.program.definitions())
+    }
+
+    pub fn classify_function(
+        &mut self,
+        reference: FnRef,
+        logical: bool,
+        result_logical: bool,
+    ) -> Result<(), LowerError> {
+        if logical {
+            if let FnRef::Math(id) = reference {
+                self.program.definitions_mut().restrict_to_logic(id)?;
+            }
+            self.erased
+                .fns
+                .retain(|function| function.reference != reference);
+        } else if result_logical
+            && let Some(function) = self.erased.fns.iter_mut().find(|function| {
+                function.reference == reference && function.result == erased::EType::Bool
+            })
+        {
+            function.result = erased::EType::Ghost;
+            if let Some(tail) = function.body.tail.take() {
+                function.body.stmts.push(erased::EStmt::Let {
+                    pattern: erased::EPattern::Wildcard,
+                    value: *tail,
+                });
+                function.body.tail = Some(Box::new(erased::EExpr::Ghost));
+            }
+        }
+        Ok(())
+    }
+
+    /// Mark a checked aggregate as logical and remove its runtime declaration.
+    pub fn mark_logical_type(&mut self, ty: &Type) -> Result<(), LowerError> {
+        self.program.definitions_mut().mark_logical(ty)?;
+        match ty {
+            Type::Struct(id) => self.erased.structs.retain(|item| item.id != *id),
+            Type::Enum(id) => self.erased.enums.retain(|item| item.id != *id),
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub fn declare_struct(&mut self, item: &StructItem) -> Result<StructId, LowerError> {
         let fields = telescope(&item.fields);
         let id = self.program.definitions_mut().declare_struct(&fields)?;
-        self.erased.structs.push(erased::erase_struct(id, item));
+        self.layouts.structs.insert(
+            id,
+            item.fields
+                .iter()
+                .map(|field| {
+                    if field.ghost {
+                        ErasureLayout::Logical
+                    } else {
+                        self.layouts.binding(field.id)
+                    }
+                })
+                .collect(),
+        );
+        self.erased
+            .structs
+            .push(erased::erase_struct_with_layout(id, item, &self.layouts));
         Ok(id)
     }
 
@@ -245,8 +384,113 @@ impl Session {
             .map(|variant| telescope(&variant.payload))
             .collect();
         let id = self.program.definitions_mut().declare_enum(&variants)?;
-        self.erased.enums.push(erased::erase_enum(id, item));
+        self.layouts.enums.insert(
+            id,
+            item.variants
+                .iter()
+                .map(|variant| {
+                    variant
+                        .payload
+                        .iter()
+                        .map(|field| {
+                            if field.ghost {
+                                ErasureLayout::Logical
+                            } else {
+                                self.layouts.binding(field.id)
+                            }
+                        })
+                        .collect()
+                })
+                .collect(),
+        );
+        self.erased
+            .enums
+            .push(erased::erase_enum_with_layout(id, item, &self.layouts));
         Ok(id)
+    }
+
+    /// Build logical recursive data atomically, with no incomplete declaration
+    /// visible to the source elaborator or the kernel's dependent checks.
+    pub fn declare_logical_enum_group(
+        &mut self,
+        count: usize,
+        build: impl FnOnce(&[EnumId]) -> Vec<EnumItem>,
+    ) -> Result<Vec<(EnumId, EnumItem)>, LowerError> {
+        let mut built = None;
+        let ids = self
+            .program
+            .definitions_mut()
+            .declare_logical_enum_group(count, |ids| {
+                let items = build(ids);
+                let groups = items
+                    .iter()
+                    .map(|item| {
+                        item.variants
+                            .iter()
+                            .map(|variant| telescope(&variant.payload))
+                            .collect()
+                    })
+                    .collect();
+                built = Some(items);
+                groups
+            })?;
+        Ok(ids
+            .into_iter()
+            .zip(built.expect("the checked builder ran"))
+            .collect())
+    }
+
+    pub fn declare_logical_enum(
+        &mut self,
+        build: impl FnOnce(EnumId) -> EnumItem,
+    ) -> Result<(EnumId, EnumItem), LowerError> {
+        Ok(self
+            .declare_logical_enum_group(1, |ids| vec![build(ids[0])])?
+            .remove(0))
+    }
+
+    pub fn declare_runtime_recursive_enum(
+        &mut self,
+        build: impl FnOnce(EnumId) -> EnumItem,
+    ) -> Result<(EnumId, EnumItem), LowerError> {
+        let mut built = None;
+        let ids = self
+            .program
+            .definitions_mut()
+            .declare_runtime_enum_group(1, |ids| {
+                let item = build(ids[0]);
+                let variants = item
+                    .variants
+                    .iter()
+                    .map(|v| telescope(&v.payload))
+                    .collect();
+                built = Some(item);
+                vec![variants]
+            })?;
+        let id = ids[0];
+        let item = built.expect("checked builder ran");
+        self.layouts.enums.insert(
+            id,
+            item.variants
+                .iter()
+                .map(|v| {
+                    v.payload
+                        .iter()
+                        .map(|field| {
+                            if field.ghost {
+                                ErasureLayout::Logical
+                            } else {
+                                self.layouts.binding(field.id)
+                            }
+                        })
+                        .collect()
+                })
+                .collect(),
+        );
+        self.erased
+            .enums
+            .push(erased::erase_enum_with_layout(id, &item, &self.layouts));
+        Ok((id, item))
     }
 
     /// A declared proposition is wholly logical: the kernel checks it and
@@ -262,6 +506,29 @@ impl Session {
             .declare_prop(params, variants)?)
     }
 
+    pub fn declare_inductive_prop(
+        &mut self,
+        params: Vec<Type>,
+        variants: Vec<PropVariant>,
+        placeholder: VarId,
+    ) -> Result<PropId, LowerError> {
+        Ok(self
+            .program
+            .definitions_mut()
+            .declare_inductive_prop(params, |id| {
+                variants
+                    .into_iter()
+                    .map(|variant| match variant {
+                        PropVariant::Arm { witnesses, body } => PropVariant::Arm {
+                            witnesses: witnesses.replace_predicate(placeholder, id),
+                            body: body.replace_predicate(placeholder, id),
+                        },
+                        other => other,
+                    })
+                    .collect()
+            })?)
+    }
+
     pub fn declare_fn(&mut self, item: &FnItem) -> Result<FnRef, LowerError> {
         self.declare_fn_promising(item, exec::Promises::default())
     }
@@ -275,10 +542,83 @@ impl Session {
         item: &FnItem,
         promises: exec::Promises,
     ) -> Result<FnRef, LowerError> {
+        self.declare_fn_with_layout(item, promises, ErasureLayout::Default)
+    }
+
+    pub fn declare_fn_with_layout(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+        layout: ErasureLayout,
+    ) -> Result<FnRef, LowerError> {
+        super::shared::check(
+            item,
+            &layout,
+            &self.layouts,
+            &self.erased,
+            self.program.definitions(),
+        )?;
         let reference = self.check_fn(item, promises)?;
-        let erased = erased::erase_fn(&self.program, reference, item);
+        self.layouts.functions.insert(reference, layout);
+        let erased = {
+            let _timer = crate::measurement::start("erasure");
+            erased::erase_fn_with_layout(&self.program, reference, item, &self.layouts)
+        };
         self.erased.fns.extend(erased);
         Ok(reference)
+    }
+
+    /// Replace the scoped logical self callable, then check structural descent.
+    pub fn declare_structural_fn(
+        &mut self,
+        item: &FnItem,
+        recursive: VarId,
+        candidates: &[usize],
+    ) -> Result<FnRef, LowerError> {
+        if !item.math || !block_is_pure(&item.body) {
+            return Err(LowerError::ImpureInMath(item.name.clone()));
+        }
+        let params: Vec<_> = item
+            .params
+            .iter()
+            .map(|param| (param.id, param.ty.clone()))
+            .collect();
+        let signature = Type::function_over(&params, &item.result);
+        let body = {
+            let _lowering = crate::measurement::start("lowering");
+            pure_block(&item.body)?
+        };
+        let _checking = crate::measurement::start("checking");
+        let mut last = KernelError::InvalidRecursion(
+            "a recursive logic function needs a logical enum parameter",
+        );
+        for decreasing in candidates {
+            let measured = matches!(
+                item.params.get(*decreasing).map(|param| &param.ty),
+                Some(Type::Int)
+            );
+            let build = |id, arguments: &[Term]| {
+                let body = body.replace_var(recursive, &Term::Fn(id));
+                item.params
+                    .iter()
+                    .zip(arguments)
+                    .fold(body, |body, (param, term)| body.replace_var(param.id, term))
+            };
+            let checked = if measured {
+                self.program
+                    .definitions_mut()
+                    .declare_measured_fn(&signature, *decreasing, build)
+            } else {
+                self.program
+                    .definitions_mut()
+                    .declare_structural_fn(&signature, *decreasing, build)
+            };
+            match checked {
+                Ok(id) => return Ok(FnRef::Math(id)),
+                Err(error) => last = error,
+            }
+        }
+        Err(last.into())
     }
 
     /// `declare_fn_promising` for a function declared in an `impl` block
@@ -293,7 +633,18 @@ impl Session {
         owner: &str,
         receiver: bool,
     ) -> Result<FnRef, LowerError> {
-        let reference = self.declare_fn_promising(item, promises)?;
+        self.declare_method_with_layout(item, promises, owner, receiver, ErasureLayout::Default)
+    }
+
+    pub fn declare_method_with_layout(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+        owner: &str,
+        receiver: bool,
+        layout: ErasureLayout,
+    ) -> Result<FnRef, LowerError> {
+        let reference = self.declare_fn_with_layout(item, promises, layout)?;
         if let Some(function) = self.erased.fns.last_mut()
             && function.reference == reference
         {
@@ -311,7 +662,16 @@ impl Session {
         item: &FnItem,
         promises: exec::Promises,
     ) -> Result<FnRef, LowerError> {
-        let reference = self.declare_fn_promising(item, promises)?;
+        self.declare_constant_with_layout(item, promises, ErasureLayout::Default)
+    }
+
+    pub fn declare_constant_with_layout(
+        &mut self,
+        item: &FnItem,
+        promises: exec::Promises,
+        layout: ErasureLayout,
+    ) -> Result<FnRef, LowerError> {
+        let reference = self.declare_fn_with_layout(item, promises, layout)?;
         if let Some(function) = self.erased.fns.last_mut()
             && function.reference == reference
         {
@@ -321,6 +681,7 @@ impl Session {
     }
 
     fn check_fn(&mut self, item: &FnItem, promises: exec::Promises) -> Result<FnRef, LowerError> {
+        let lowering = crate::measurement::start("lowering");
         let params: Vec<(VarId, Type)> = item
             .params
             .iter()
@@ -334,6 +695,8 @@ impl Session {
             let body = pure_block(&item.body)?;
             // The kernel names the parameters itself; hand the body over in
             // terms of its names.
+            drop(lowering);
+            let _checking = crate::measurement::start("checking");
             let id = self
                 .program
                 .definitions_mut()
@@ -378,7 +741,11 @@ impl Session {
                 params: item.params.iter().map(|param| param.id).collect(),
                 body,
             };
-            let id = self.program.declare(function)?;
+            drop(lowering);
+            let id = {
+                let _checking = crate::measurement::start("checking");
+                self.program.declare(function)?
+            };
             if !lent.is_empty() {
                 self.lending.insert(id, lending_of(item, &lent));
             }
@@ -473,7 +840,11 @@ fn lending_of(item: &FnItem, lent: &[VarId]) -> Lending {
             (index, of_binding)
         })
         .collect();
-    Lending { params, calls }
+    Lending {
+        params,
+        calls,
+        ..Lending::default()
+    }
 }
 
 fn telescope(binders: &[Binder]) -> Type {
@@ -502,7 +873,8 @@ pub fn is_pure(expr: &Expr) -> bool {
         // An operator at a machine type may panic, so it is a statement and
         // never a term, whatever its operands; only the wrapping methods
         // and the operators of `Int` are terms.
-        Expr::CallFn { .. }
+        Expr::BoxNew { .. }
+        | Expr::CallFn { .. }
         | Expr::Loop { .. }
         | Expr::While { .. }
         | Expr::For { .. }
@@ -512,8 +884,11 @@ pub fn is_pure(expr: &Expr) -> bool {
         | Expr::Panic { .. }
         | Expr::Return { .. }
         | Expr::Assert { .. } => false,
+        Expr::BoxDeref { value, .. } => is_pure(value),
         Expr::IntArith { operands, .. } => operands.iter().all(is_pure),
-        Expr::Lend { value, .. } => is_pure(value),
+        Expr::Lend { value, .. } | Expr::Shared { value, .. } | Expr::Deref(value) => {
+            is_pure(value)
+        }
         Expr::Tuple { fields, .. } => fields.iter().all(is_pure),
         Expr::Struct { fields, .. } => fields.iter().all(|(_, field)| is_pure(field)),
         Expr::Variant { payload, .. } => payload.iter().all(is_pure),
@@ -525,7 +900,9 @@ pub fn is_pure(expr: &Expr) -> bool {
         } => is_pure(receiver) && arguments.iter().all(is_pure),
         Expr::Compare { left, right, .. } => is_pure(left) && is_pure(right),
         Expr::Cast { expr, .. } | Expr::Ghost(expr) => is_pure(expr),
-        Expr::CallMath { arguments, .. } => arguments.iter().all(is_pure),
+        Expr::CallMath { arguments, .. } | Expr::LogicalApply { arguments, .. } => {
+            arguments.iter().all(is_pure)
+        }
         Expr::If {
             condition,
             then_block,
@@ -600,7 +977,8 @@ fn choose(test: Term, if_false: Term, if_true: Term) -> Term {
 /// `bool`, `==` is a case on the left operand, `if a { b } else { !b }`,
 /// and `!=` the same with the branches exchanged; `bool` has no ordering.
 fn compare(op: CompareOp, ty: &Type, left: Term, right: Term) -> Result<Term, LowerError> {
-    let Some(machine) = ty.as_machine() else {
+    let machine = ty.as_machine();
+    if machine.is_none() && !matches!(ty, Type::Int) {
         if !matches!(ty, Type::Bool) || !matches!(op, CompareOp::Eq | CompareOp::Ne) {
             return Err(LowerError::Kernel(KernelError::TypeMismatch {
                 expected: Type::U8,
@@ -613,7 +991,10 @@ fn compare(op: CompareOp, ty: &Type, left: Term, right: Term) -> Result<Term, Lo
             _ => choose(left, right, not_right),
         });
     };
-    let cmp = |op, a, b| Term::cmp(op, machine, a, b);
+    let cmp = |op, a, b| match machine {
+        Some(machine) => Term::cmp(op, machine, a, b),
+        None => Term::int_cmp(op, a, b),
+    };
     Ok(match op {
         CompareOp::Eq => cmp(CmpOp::Eq, left, right),
         CompareOp::Lt => cmp(CmpOp::Lt, left, right),
@@ -702,6 +1083,8 @@ fn pure(expr: &Expr) -> Result<Term, LowerError> {
 
 fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
     Ok(match expr {
+        Expr::BoxNew { .. } => return Err(LowerError::ControlInExpression),
+        Expr::BoxDeref { value, .. } => Term::proj(pure(value)?, 0),
         Expr::Var { id, .. } => Term::var(*id),
         Expr::Bool(value) => Term::Bool(*value),
         Expr::Literal(ty, value) => Term::machine_int(*ty, *value),
@@ -719,7 +1102,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         } => Term::Variant(*id, *index, pure_all(payload)?),
         Expr::Field { target, index, .. } => Term::proj(pure(target)?, *index),
         // A lent place is the value lent.
-        Expr::Lend { value, .. } => pure(value)?,
+        Expr::Lend { value, .. } | Expr::Shared { value, .. } | Expr::Deref(value) => pure(value)?,
         Expr::Method {
             prim,
             receiver,
@@ -741,6 +1124,9 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         Expr::Ghost(expr) => pure(expr)?,
         Expr::IntArith { op, operands } => int_arith(*op, pure_all(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), pure_all(arguments)?),
+        Expr::LogicalApply {
+            callee, arguments, ..
+        } => logical_application(callee, pure_all(arguments)?),
         Expr::Proof(proof) => Term::proof(proof.clone()),
         Expr::Prop(prop) => prop.clone(),
         Expr::Absurd { proof, ty } => Term::Absurd(Box::new(proof.clone()), ty.clone()),
@@ -762,7 +1148,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
                 .into_iter()
                 .map(|(fact, block)| Ok((Vec::new(), fact, pure_block(block)?)))
                 .collect::<Result<_, LowerError>>()?;
-            Term::case_with(pure(&comparison)?, ty.clone(), arms)
+            logical_case(pure(&comparison)?, ty.clone(), arms)
         }
         Expr::Match {
             scrutinee,
@@ -781,7 +1167,7 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
                     Ok((payload, arm.fact, pure_block(&arm.body)?))
                 })
                 .collect::<Result<_, LowerError>>()?;
-            Term::case_with(pure(scrutinee)?, ty.clone(), arms)
+            logical_case(pure(scrutinee)?, ty.clone(), arms)
         }
         Expr::Block(block) => pure_block(block)?,
         Expr::CallFn { .. }
@@ -796,6 +1182,34 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         | Expr::Assert { .. } => {
             return Err(LowerError::ControlInExpression);
         }
+    })
+}
+
+/// Data cases returning evidence use the proof elimination rule, not a
+/// term-level case. Both preserve the source arm's payload and case equation.
+fn logical_case(scrutinee: Term, result: Type, arms: Vec<(Vec<VarId>, HypId, Term)>) -> Term {
+    let Type::Proof(goal) = result else {
+        return Term::case_with(scrutinee, result, arms);
+    };
+    Term::proof(Proof::CaseData {
+        scrutinee,
+        goal: *goal,
+        arms: arms
+            .into_iter()
+            .map(|(ids, fact, body)| {
+                Proof::arm(ids.len(), 1, |vars, hyps| {
+                    let body = ids
+                        .iter()
+                        .zip(vars)
+                        .fold(body, |body, (id, term)| body.replace_var(*id, term));
+                    let body = body.replace_hyp(fact, &hyps[0]);
+                    match body {
+                        Term::Proof(proof) => *proof,
+                        term => Proof::OfTerm(term),
+                    }
+                })
+            })
+            .collect(),
     })
 }
 
@@ -1228,6 +1642,9 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         }
         | Expr::CallFn {
             arguments: fields, ..
+        }
+        | Expr::LogicalApply {
+            arguments: fields, ..
         } => all(fields, on_expr),
         Expr::Struct { fields, .. } => fields
             .iter()
@@ -1235,7 +1652,11 @@ pub(crate) fn each_expr(expr: &Expr, on_expr: &mut dyn FnMut(&Expr)) {
         Expr::Field { target: inner, .. }
         | Expr::Cast { expr: inner, .. }
         | Expr::Ghost(inner)
-        | Expr::Lend { value: inner, .. } => each_expr(inner, on_expr),
+        | Expr::BoxNew { value: inner, .. }
+        | Expr::BoxDeref { value: inner, .. }
+        | Expr::Lend { value: inner, .. }
+        | Expr::Shared { value: inner, .. }
+        | Expr::Deref(inner) => each_expr(inner, on_expr),
         Expr::Break(value) | Expr::Return { value, .. } => {
             value.iter().for_each(|value| each_expr(value, on_expr));
         }
@@ -1571,6 +1992,22 @@ fn anf_form(
         exprs.iter().map(|expr| anf(expr, out, env)).collect()
     };
     Ok(match expr {
+        Expr::BoxNew {
+            value,
+            result,
+            equation,
+            logical_payload,
+        } => {
+            let value = anf(value, out, env)?;
+            out.push(exec::Stmt::BoxNew {
+                var: *result,
+                equation: *equation,
+                value,
+                logical_payload: *logical_payload,
+            });
+            Term::Free(*result)
+        }
+        Expr::BoxDeref { value, .. } => Term::proj(anf(value, out, env)?, 0),
         Expr::Tuple { ty, fields } => Term::tuple(ty, each(fields, out, env)?),
         Expr::Struct { id, fields, .. } => {
             let values = fields
@@ -1628,6 +2065,9 @@ fn anf_form(
             })));
             Term::var(*result)
         }
+        Expr::LogicalApply {
+            callee, arguments, ..
+        } => logical_application(callee, each(arguments, out, env)?),
         Expr::CallMath { id, arguments, .. } => {
             Term::call(Term::Fn(*id), each(arguments, out, env)?)
         }
@@ -1650,7 +2090,9 @@ fn anf_form(
         }
         // A lent place stands for its value; the call around it writes a
         // `&mut` one back.
-        Expr::Lend { value, .. } => anf(value, out, env)?,
+        Expr::Lend { value, .. } | Expr::Shared { value, .. } | Expr::Deref(value) => {
+            anf(value, out, env)?
+        }
         Expr::If {
             condition: tested,
             then_fact,
@@ -2164,10 +2606,17 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
         Expr::Ghost(inner) => return value_term(inner),
         Expr::IntArith { op, operands } => int_arith(*op, each(operands)?)?,
         Expr::CallMath { id, arguments, .. } => Term::call(Term::Fn(*id), each(arguments)?),
+        Expr::LogicalApply {
+            callee, arguments, ..
+        } => logical_application(callee, each(arguments)?),
         // An operator at a machine type is never read as a term: its value
         // is the result of its statement.
+        Expr::BoxNew { result, .. } => Term::Free(*result),
+        Expr::BoxDeref { value, .. } => Term::proj(value_term(value)?, 0),
         Expr::CallFn { result, lends, .. } => call_value(*result, lends),
-        Expr::Lend { value, .. } => return value_term(value),
+        Expr::Lend { value, .. } | Expr::Shared { value, .. } | Expr::Deref(value) => {
+            return value_term(value);
+        }
         Expr::Operate { result, .. }
         | Expr::If { result, .. }
         | Expr::Match { result, .. }
@@ -2367,4 +2816,19 @@ fn lower_tail(
             end.finish(value, env)?
         }
     })
+}
+
+/// The typed closure literal is represented by a zero-argument logical
+/// wrapper. Emit its checked lambda value directly so nested predicates have
+/// one canonical representation. This is syntactic lowering, not a kernel
+/// equality rule; the emitted term is checked against the declared type.
+fn logical_application(callee: &Term, arguments: Vec<Term>) -> Term {
+    if arguments.is_empty()
+        && let Term::Lambda { params, body, .. } = callee
+        && params.is_empty()
+        && matches!(**body, Term::Lambda { .. })
+    {
+        return (**body).clone();
+    }
+    Term::call(callee.clone(), arguments)
 }

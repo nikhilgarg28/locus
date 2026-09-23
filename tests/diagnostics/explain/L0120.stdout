@@ -1,0 +1,13 @@
+L0120: Unknown attribute
+
+The attribute name is not one of the attributes implemented by Locus. Attributes are checked declarations of compiler behavior, not text forwarded to Rust. Remove the attribute or replace it with the supported spelling for the intended promise.
+
+Example from `tests/corpus/reject/attribute.lc`; the full file is a regression test.
+
+```locus
+// An attribute outside the closed set is rejected, and the item is still read.
+#[inline]
+fn first(n: u8) -> u8 { n }
+```
+
+Language, as built: [1.24:1](../../atlas.html#/doc/language/spec-1.24:1).
