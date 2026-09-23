@@ -1,0 +1,411 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Locus",
+  "scopeName": "source.locus",
+  "fileTypes": [
+    "lc"
+  ],
+  "patterns": [
+    {
+      "include": "#everything"
+    }
+  ],
+  "repository": {
+    "everything": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#attributes"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#declarations"
+        },
+        {
+          "include": "#forms"
+        },
+        {
+          "include": "#evidence"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#paths"
+        },
+        {
+          "include": "#calls"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "comment": "A corpus directive: //~ run:, //~ proofs:, //~ error:, and the rest",
+          "match": "(//~)(\\^*)\\s*([a-zA-Z-]+:?)?(.*)$",
+          "captures": {
+            "1": {
+              "name": "comment.line.directive.locus punctuation.definition.comment.locus"
+            },
+            "2": {
+              "name": "comment.line.directive.locus keyword.other.directive.locus"
+            },
+            "3": {
+              "name": "comment.line.directive.locus keyword.other.directive.locus"
+            },
+            "4": {
+              "name": "comment.line.directive.locus"
+            }
+          }
+        },
+        {
+          "match": "(///|//!).*$",
+          "name": "comment.line.documentation.locus"
+        },
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash.locus"
+        }
+      ]
+    },
+    "attributes": {
+      "comment": "#[terminates], #[terminates(decreases = e)], #[no_panic], #[no_alloc], #[no_io], #[derive(...)], and the file-level #![...]",
+      "begin": "(#!?)(\\[)",
+      "end": "\\]",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.attribute.locus"
+        },
+        "2": {
+          "name": "punctuation.brackets.attribute.locus"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.brackets.attribute.locus"
+        }
+      },
+      "name": "meta.attribute.locus",
+      "patterns": [
+        {
+          "match": "\\b(terminates|no_panic|no_alloc|no_io|derive)\\b",
+          "name": "entity.name.attribute.locus"
+        },
+        {
+          "match": "\\b(decreases)\\b",
+          "name": "keyword.other.attribute.locus"
+        },
+        {
+          "match": "\\b(Clone|Copy|PartialEq|Eq|Debug|Logical)\\b",
+          "name": "entity.name.type.trait.locus"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#evidence"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "strings": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.locus",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.locus"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.locus"
+        }
+      },
+      "patterns": [
+        {
+          "match": "\\\\(x[0-7][0-9A-Fa-f]|u\\{[0-9A-Fa-f]{1,6}\\}|[nrt0\\\\\"'])",
+          "name": "constant.character.escape.locus"
+        },
+        {
+          "match": "\\\\.",
+          "name": "invalid.illegal.escape.locus"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b(0x[0-9A-Fa-f_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*)(u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize)?\\b",
+          "captures": {
+            "1": {
+              "name": "constant.numeric.integer.locus"
+            },
+            "2": {
+              "name": "storage.type.numeric.suffix.locus"
+            }
+          }
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "comment": "fn name, and logic fn name",
+          "match": "\\b(logic\\s+)?(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.logic.locus"
+            },
+            "2": {
+              "name": "keyword.other.fn.locus"
+            },
+            "3": {
+              "name": "entity.name.function.locus"
+            }
+          }
+        },
+        {
+          "comment": "prop Name, struct Name, enum Name, impl Name",
+          "match": "\\b(prop|struct|enum|impl)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.locus"
+            },
+            "2": {
+              "name": "entity.name.type.locus"
+            }
+          }
+        },
+        {
+          "match": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.const.locus"
+            },
+            "2": {
+              "name": "constant.other.locus"
+            }
+          }
+        }
+      ]
+    },
+    "forms": {
+      "comment": "The closed set of built-in forms, spelled as Rust spells a macro call",
+      "match": "\\b(prove|prop|rewrite|unfold|fold|old|snapshot|recurse|assert|debug_assert|unreachable|todo|panic|matches|vec)(!)",
+      "captures": {
+        "1": {
+          "name": "support.function.form.locus"
+        },
+        "2": {
+          "name": "support.function.form.locus punctuation.definition.form.locus"
+        }
+      }
+    },
+    "evidence": {
+      "comment": "@P is the type of evidence of P; Pred::Arm(w) @ evidence separates witnesses from evidence",
+      "patterns": [
+        {
+          "match": "(@)([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)?",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.evidence.locus"
+            },
+            "2": {
+              "name": "entity.name.type.proposition.locus"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "comment": "The restricted forms of pub: pub(crate), pub(super), pub(self), pub(in path)",
+          "match": "\\b(pub)\\s*(\\()\\s*(crate|super|self|in)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.locus"
+            },
+            "2": {
+              "name": "punctuation.brackets.round.locus"
+            },
+            "3": {
+              "name": "keyword.other.visibility.locus"
+            }
+          }
+        },
+        {
+          "match": "\\b(if|else|match|loop|while|for|in|break|continue|return)\\b",
+          "name": "keyword.control.locus"
+        },
+        {
+          "match": "\\b(fn|let|mut|struct|enum|impl|const|pub|prop|logic|as)\\b",
+          "name": "keyword.other.locus"
+        },
+        {
+          "match": "\\b(forall|exists)(?=\\s*\\()",
+          "name": "keyword.other.quantifier.locus"
+        },
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.locus"
+        },
+        {
+          "match": "\\b(self|Self)\\b",
+          "name": "variable.language.self.locus"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_])_(?![A-Za-z0-9_])",
+          "name": "keyword.operator.hole.locus"
+        },
+        {
+          "comment": "Reserved: every keyword of Rust that Locus does not use, refused with a diagnostic",
+          "match": "\\b(async|await|crate|dyn|extern|mod|move|ref|static|super|trait|type|unsafe|use|where|abstract|become|box|do|final|gen|macro|override|priv|try|typeof|unsized|virtual|yield)\\b",
+          "name": "keyword.other.reserved.locus"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(bool|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize)\\b",
+          "name": "storage.type.primitive.locus"
+        },
+        {
+          "match": "\\b(Int|Nat|Bool|Prop|Seq|Map|Ghost|Option|Result|Vec|Box)\\b",
+          "name": "support.type.logic.locus"
+        },
+        {
+          "match": "\\b(Model|Logical)\\b",
+          "name": "support.type.trait.locus"
+        },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+          "name": "entity.name.type.locus"
+        },
+        {
+          "match": "!(?=\\s*[{,)\\]]|\\s*$)",
+          "name": "storage.type.never.locus"
+        }
+      ]
+    },
+    "paths": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(::)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.locus"
+        },
+        "2": {
+          "name": "punctuation.separator.path.locus"
+        }
+      }
+    },
+    "calls": {
+      "match": "\\b([a-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.call.locus"
+        }
+      }
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "=>",
+          "name": "keyword.operator.implication.locus"
+        },
+        {
+          "match": "->",
+          "name": "keyword.operator.arrow.locus"
+        },
+        {
+          "match": "(==|!=|<=|>=|<|>)",
+          "name": "keyword.operator.comparison.locus"
+        },
+        {
+          "match": "(&&|\\|\\||!)",
+          "name": "keyword.operator.logical.locus"
+        },
+        {
+          "match": "(\\+|-|\\*|/|%)",
+          "name": "keyword.operator.arithmetic.locus"
+        },
+        {
+          "match": "(\\.\\.=|\\.\\.)",
+          "name": "keyword.operator.range.locus"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.locus"
+        },
+        {
+          "match": "&",
+          "name": "keyword.operator.reference.locus"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "[{}]",
+          "name": "punctuation.brackets.curly.locus"
+        },
+        {
+          "match": "[()]",
+          "name": "punctuation.brackets.round.locus"
+        },
+        {
+          "match": "[\\[\\]]",
+          "name": "punctuation.brackets.square.locus"
+        },
+        {
+          "match": ";",
+          "name": "punctuation.terminator.locus"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.locus"
+        },
+        {
+          "match": ":",
+          "name": "punctuation.separator.type.locus"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.accessor.locus"
+        }
+      ]
+    }
+  }
+}

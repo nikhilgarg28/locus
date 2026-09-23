@@ -1,0 +1,17 @@
+{
+  "scopeName": "markdown.locus.codeblock",
+  "injectionSelector": "L:text.html.markdown",
+  "patterns": [{ "include": "#locus-code-block" }],
+  "repository": {
+    "locus-code-block": {
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(locus|lc))\\s*$",
+      "beginCaptures": { "3": { "name": "punctuation.definition.markdown" }, "4": { "name": "fenced_code.block.language.markdown" } },
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$",
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } },
+      "name": "markup.fenced_code.block.markdown",
+      "patterns": [
+        { "begin": "(^|\\G)(\\s*)(.*)", "while": "(^|\\G)(?!\\s*([`~]{3,})\\s*$)", "contentName": "meta.embedded.block.locus", "patterns": [{ "include": "source.locus" }] }
+      ]
+    }
+  }
+}

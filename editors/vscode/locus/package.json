@@ -1,0 +1,53 @@
+{
+  "name": "locus-language",
+  "displayName": "Locus",
+  "description": "Syntax highlighting for Locus (.lc): a Rust-like language with propositions, evidence, and kernel-checked proofs.",
+  "version": "0.1.0",
+  "publisher": "locus-lang",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "locus",
+        "aliases": [
+          "Locus",
+          "locus"
+        ],
+        "extensions": [
+          ".lc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "locus",
+        "scopeName": "source.locus",
+        "path": "./syntaxes/locus.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.locus.codeblock",
+        "path": "./syntaxes/locus.markdown.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.locus": "locus"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node test/tokenize.js"
+  },
+  "devDependencies": {
+    "vscode-textmate": "^9.0.0",
+    "vscode-oniguruma": "^2.0.1"
+  }
+}

@@ -36,6 +36,15 @@ for argument in "$@"; do
 done
 
 # The fast gate. Building is not timed: the tests are, from a warm build.
+# The editor and browser highlighters: the copy embedded in the atlas is the
+# module's source, and both the module and the VS Code grammar are run over
+# every .lc file when Node is present (the grammar test skips itself
+# without its npm dependencies).
+python3 tools/highlight.py check
+if command -v node >/dev/null 2>&1; then
+    node editors/highlight/test.js
+    node editors/vscode/locus/test/tokenize.js
+fi
 cargo fmt --check
 cargo clippy --locked --offline --all-targets -- -D warnings
 cargo test --locked --offline --no-run
