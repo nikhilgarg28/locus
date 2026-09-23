@@ -33,7 +33,7 @@ fn variants(source: &str, name: &str) -> BTreeSet<String> {
 fn calculus_grammar_covers_every_check_ir_constructor() {
     let result = std::process::Command::new("python3")
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .args(["-c", "import sys; sys.path.insert(0, 'tools'); import spec; data = spec.load(spec.ROOT / 'atlas.html'); print('\\n'.join(next(d['body'] for d in data['docs'] if d['id'] == 'formal-core')))"])
+        .args(["-c", "import sys; sys.path.insert(0, 'tools'); import spec; data = spec.load(spec.ROOT / 'docs'); print('\\n'.join(next(d['body'] for d in data['docs'] if d['id'] == 'formal-core')))"])
         .output().unwrap();
     assert!(
         result.status.success(),

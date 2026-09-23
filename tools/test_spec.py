@@ -3,7 +3,6 @@
 import copy
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -116,22 +115,6 @@ class SpecGateTests(unittest.TestCase):
         for name, reason, expected in [('LOC-92','fixed','closed'),('LOC-93','missing','does not exist'),('LOC-91','','no reason')]:
             with self.assertRaisesRegex(ValueError, expected):
                 spec.validate_known(atlas(), [('bug.lc', name, reason)])
-
-    def test_renderer_emits_real_anchor_and_understands_fence_modes(self):
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node is required to test the Atlas renderer')
-        html = (spec.ROOT/'atlas.html').read_text()
-        renderer = html[html.index('const SEP ='):html.index('// The lines of the section a heading opens:')]
-        prelude = '''const DB={meta:{taskPrefix:'LOC'},tasks:[]};
-const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-const slug=s=>s; const docById=()=>true;
-'''
-        test = '''const rendered=renderMarkdown('<!-- spec: 1.21:2 legality-rule -->\\n\\nA rule.\\n\\n~~~locus check\\nfn f()->u8{1}\\n~~~',{docId:'language'}).html;
-if(!rendered.includes('id="spec-1.21:2"')||!rendered.includes('#/doc/language/spec-1.21:2')||!rendered.includes('<pre>')||rendered.includes('~~~'))throw Error(rendered);
-'''
-        result = subprocess.run([node, '-e', prelude+renderer+test], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("r[2].startsWith('spec-') ? r[2] : 'h-' + r[2]", html)
 
 if __name__ == '__main__':
     unittest.main()

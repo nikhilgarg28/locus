@@ -95,7 +95,7 @@ fn stored_integer_limit_counts_digits_without_the_sign() {
 #[test]
 #[doc = "spec: 2.40:2"]
 fn implementation_limit_registry_matches_the_complete_appendix() {
-    let atlas = include_str!("../atlas.html");
+    let atlas = include_str!("../docs/reference/kernel.md");
     let mut seen = BTreeSet::new();
     for limit in ALL {
         assert!(seen.insert(limit.name), "duplicate limit {}", limit.name);

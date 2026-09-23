@@ -891,7 +891,7 @@ fn locked_fails_on_a_missing_entry_and_searches_nothing_with_a_complete_file() {
         .collect();
     assert_eq!(
         messages,
-        ["`run` needs a proof of `0 <= 3` at line 56, and the proofs file has none"]
+        ["`run` needs a proof of `0 <= 3` at line 55, and the proofs file has none"]
     );
     assert_eq!(store.misses().len(), 1);
     assert_eq!(store.misses()[0].label.to_string(), "run 1");

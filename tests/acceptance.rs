@@ -139,10 +139,7 @@ fn source_files() -> Vec<PathBuf> {
     found
 }
 
-/// The body of the atlas document with this id, as one string: the data
-/// block of `atlas.html` is JSON, and a document's `body` is an array of
-/// strings, so the text between its `"id"` and the next document's holds
-/// exactly its title and body.
+/// A Markdown document or the assembled language manual, through the compatibility CLI.
 fn atlas_document(id: &str) -> String {
     let output = Command::new("python3")
         .current_dir(root())

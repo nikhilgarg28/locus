@@ -19,15 +19,17 @@ class GateReceipt(unittest.TestCase):
             (root / "bin").mkdir()
             for name in ("check.sh", "gate.py"):
                 shutil.copy(ROOT / "tools" / name, root / "tools" / name)
-            for tool in ("highlight", "spec", "bench", "metrics"):
+            for tool in ("highlight", "spec", "bench", "metrics", "site", "test_site"):
                 (root / f"tools/{tool}.py").write_text("pass\n")
+            if failure == "website":
+                (root / "tools/site.py").write_text("raise SystemExit(42)\n")
             (root / "target/release").mkdir(parents=True)
             binary=root / "target/release/locus"
             binary.write_text("#!/bin/bash\nexit 0\n")
             binary.chmod(0o755)
             for name in ("node", "cargo"):
                 body = "#!/bin/bash\n"
-                if name == "cargo" and failure:
+                if name == "cargo" and failure and failure != "website":
                     condition = '*"--release"*' if failure.startswith("extended_") else '"test --locked --offline"'
                     body += f'if [[ "$*" == {condition} ]]; then\n'
                     body += ('kill -TERM "$PPID"; exit 143\n' if failure.endswith("killed")
@@ -57,7 +59,7 @@ class GateReceipt(unittest.TestCase):
             self.assertIsInstance(records[0]["fast_seconds"], int)
 
     def test_failed_or_killed_suite_cannot_claim_completion(self):
-        for failure in ("failed", "killed", "extended_failed", "extended_killed"):
+        for failure in ("website", "failed", "killed", "extended_failed", "extended_killed"):
             result, records = self.run_gate(failure=failure, extended=failure.startswith("extended_"))
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn(BANNER, result.stdout)

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 import metrics
+import content
 
 class Metrics(unittest.TestCase):
     def test_only_completed_successful_test_logs_contribute_counts(self):
@@ -28,7 +29,7 @@ class Metrics(unittest.TestCase):
     def test_fingerprint_tracks_code_tests_policy_and_normative_docs_not_generated_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)
-            for name in ['tests/corpus/target/program.lc','docs/diagnostics/L0001.md','examples/demo.lc','editors/highlight/locus.js','src/a.rs','tests/b.rs','library/c.lc','tools/policy.json','Cargo.toml','Cargo.lock']:
+            for name in ['tests/corpus/target/program.lc','docs/diagnostics/L0001.md','examples/demo.lc','editors/highlight/locus.js','src/a.rs','tests/b.rs','library/c.lc','tools/policy.json','website/assets/site.js','docs/roadmap/project.md','Cargo.toml','Cargo.lock']:
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('original')
             data={'docs':[{'id':'language','group':'Now','body':['rule']},{'id':'generated-status','body':['count']}, {'id':'readme','group':'Now','body':['checked example']} ]}
             def save():
@@ -41,11 +42,28 @@ class Metrics(unittest.TestCase):
             previous=metrics.fingerprint(root)
             (root/'tools/policy.json').write_text('changed policy')
             self.assertNotEqual(previous,metrics.fingerprint(root))
-            for path in ('tests/corpus/target/program.lc','docs/diagnostics/L0001.md','examples/demo.lc','editors/highlight/locus.js'):
+            for path in ('tests/corpus/target/program.lc','docs/diagnostics/L0001.md','examples/demo.lc','editors/highlight/locus.js','website/assets/site.js','docs/roadmap/project.md'):
                 previous=metrics.fingerprint(root);(root/path).write_text('changed input')
                 self.assertNotEqual(previous,metrics.fingerprint(root))
             previous=metrics.fingerprint(root);data['docs'][2]['body']=['changed example'];save()
             self.assertNotEqual(previous,metrics.fingerprint(root))
+
+    def test_markdown_fingerprint_ignores_receipts_but_tracks_current_manual(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            (root/'docs/data').mkdir(parents=True)
+            (root/'docs/data/state.json').write_text('{"meta": {}}')
+            manual=root/'docs/manual.md'
+            metadata={'id':'language','group':'Now','route':'manual.html'}
+            manual.write_text(content.markdown(metadata,'# Manual\n\nCurrent rule.'))
+            generated=root/'docs/generated-status.md'
+            generated.write_text(content.markdown({'id':'generated-status','group':'Now'},'# Generated status\n\nOld count.'))
+            first=metrics.fingerprint(root)
+            (root/'docs/data/state.json').write_text('{"meta": {"rev": 8}}')
+            generated.write_text(content.markdown({'id':'generated-status','group':'Now'},'# Generated status\n\nNew count.'))
+            self.assertEqual(first,metrics.fingerprint(root))
+            manual.write_text(content.markdown(metadata,'# Manual\n\nChanged rule.'))
+            self.assertNotEqual(first,metrics.fingerprint(root))
 
     def test_source_changes_during_gate_are_rejected_before_collecting(self):
         with mock.patch.object(metrics,'fingerprint',return_value='new'):

@@ -1,3 +1,5 @@
 /target/
 __pycache__/
 /.claude/worktrees/
+
+/website/node_modules/

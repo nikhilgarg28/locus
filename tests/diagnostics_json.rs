@@ -168,7 +168,10 @@ import sys,re
 sys.path.insert(0,'tools')
 import spec
 from pathlib import Path
-ids={p.id for p in spec.inventory(spec.load(Path('atlas.html'))) if p.doc=='language'}
+data=spec.load(Path('docs'))
+language_docs={d['id'] for d in data['docs'] if d.get('spec_chapter',spec.SPEC_DOCS.get(d['id']))==1}
+assert language_docs, 'the canonical manual must have language chapters'
+ids={p.id for p in spec.inventory(data) if p.doc in language_docs}
 for path in Path('docs/diagnostics').glob('L*.md'):
     citations=re.findall(r'Language, as built: \[([^]]+)\]',path.read_text())
     assert len(citations)==1 and citations[0] in ids,(path,citations)

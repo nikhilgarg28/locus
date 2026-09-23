@@ -5,8 +5,8 @@ Library declarations use the ordinary Locus grammar and proof checker. They add 
 Include files explicitly with the repeatable `--library` option:
 
 ```sh
-locus check app.lc --library library/logical.lc --preview logical-data
-locus check app.lc --library library/logical.lc --library library/finite_map.lc --preview logical-data
+locus check app.lc --library library/logical.lc
+locus check app.lc --library library/logical.lc --library library/finite_map.lc
 ```
 
 The same option works for `run`, `rust`, and `build`. Included declarations share the entry file's namespace; duplicate declarations are errors. Diagnostics and proof locations point to the original input file and line. This is an explicit compilation-unit facility, not a module or package system.

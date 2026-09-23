@@ -1,12 +1,12 @@
 //! Tests for `Int` as a kernel type (build task K2; the kernel contract in
-//! atlas.html): literals, the ring and order axioms, discreteness, induction
+//! docs/reference/kernel.md): literals, the ring and order axioms, discreteness, induction
 //! over the non-negative integers, and evaluation of closed terms.
 //!
 //! Each axiom is used once and misused at least once. A few facts are then
 //! derived from the axioms alone, to show that the set is usable. Evaluation
 //! is compared with `Integer` on random closed terms from a fixed seed; set
 //! LOCUS_EXTENDED to run a hundred times as many. The last test reads the
-//! kernel contract out of the atlas and fails when an axiom, a proof rule,
+//! canonical Markdown kernel contract and fails when an axiom, a proof rule,
 //! or a primitive is not named there.
 //! Every term here is written by hand; nothing comes from the parser.
 
@@ -1715,107 +1715,6 @@ fn kernel_names() -> Vec<&'static str> {
     names
 }
 
-/// The text of one JSON string whose opening quote is at `start`, and the
-/// position after its closing quote. The build has no JSON dependency, and
-/// strings are the only part of the format with any subtlety.
-fn json_string(text: &[char], start: usize) -> (String, usize) {
-    assert_eq!(text[start], '"');
-    let mut out = String::new();
-    let mut at = start + 1;
-    let hex = |at: usize| -> u32 {
-        let digits: String = text[at..at + 4].iter().collect();
-        u32::from_str_radix(&digits, 16).expect("four hex digits after \\u")
-    };
-    loop {
-        let c = text[at];
-        at += 1;
-        match c {
-            '"' => return (out, at),
-            '\\' => {
-                let escape = text[at];
-                at += 1;
-                match escape {
-                    'n' => out.push('\n'),
-                    't' => out.push('\t'),
-                    'r' => out.push('\r'),
-                    'b' => out.push('\u{8}'),
-                    'f' => out.push('\u{c}'),
-                    'u' => {
-                        let mut code = hex(at);
-                        at += 4;
-                        // A surrogate pair is one character.
-                        if (0xD800..0xDC00).contains(&code)
-                            && text[at] == '\\'
-                            && text[at + 1] == 'u'
-                        {
-                            let low = hex(at + 2);
-                            at += 6;
-                            code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
-                        }
-                        out.push(char::from_u32(code).unwrap_or('\u{FFFD}'));
-                    }
-                    other => out.push(other),
-                }
-            }
-            other => out.push(other),
-        }
-    }
-}
-
-/// The body of the atlas document with the given id, one line per entry.
-///
-/// The atlas holds one JSON block. This reads it as a stream of tokens, of
-/// which only strings need care, and looks for the key `"id"` with the
-/// wanted value, then the next key `"body"`, then the strings up to the
-/// bracket that closes the array. A body is an array of strings and nothing
-/// else, so no nesting has to be followed, and because a string is always
-/// consumed whole, nothing written inside a document can be mistaken for
-/// structure.
-fn atlas_document(html: &str, id: &str) -> Vec<String> {
-    let open = "<script type=\"application/json\" id=\"atlas-data\">";
-    let start = html.find(open).expect("the atlas data block") + open.len();
-    let end = start + html[start..].find("</script>").expect("the block ends");
-    let text: Vec<char> = html[start..end].chars().collect();
-
-    // Tokens: a string, or any other character that is not white space.
-    let mut tokens: Vec<Result<String, char>> = Vec::new();
-    let mut at = 0;
-    while at < text.len() {
-        if text[at] == '"' {
-            let (string, next) = json_string(&text, at);
-            tokens.push(Ok(string));
-            at = next;
-        } else {
-            if !text[at].is_whitespace() {
-                tokens.push(Err(text[at]));
-            }
-            at += 1;
-        }
-    }
-    let is_key = |index: usize, name: &str| {
-        tokens[index].as_deref() == Ok(name) && tokens.get(index + 1) == Some(&Err(':'))
-    };
-    let found = (0..tokens.len())
-        .find(|&index| {
-            is_key(index, "id") && tokens.get(index + 2).map(|t| t.as_deref()) == Some(Ok(id))
-        })
-        .unwrap_or_else(|| panic!("no document {id} in the atlas"));
-    let body = (found..tokens.len())
-        .find(|&index| is_key(index, "body"))
-        .expect("the document has a body");
-    assert_eq!(tokens[body + 2], Err('['));
-    let mut lines = Vec::new();
-    for token in &tokens[body + 3..] {
-        match token {
-            Ok(line) => lines.push(line.clone()),
-            Err(',') => {}
-            Err(']') => return lines,
-            Err(other) => panic!("a body is an array of strings, found {other}"),
-        }
-    }
-    panic!("the body does not end")
-}
-
 /// Whether `name` occurs in `text` as a whole identifier.
 fn mentions(text: &str, name: &str) -> bool {
     let part = |c: char| c.is_alphanumeric() || c == '_';
@@ -1828,17 +1727,19 @@ fn mentions(text: &str, name: &str) -> bool {
 #[test]
 #[doc = "spec: 1.23:1, 2.1:13, 2.5:2, 2.24:1"]
 fn the_contract_names_every_axiom_rule_and_primitive() {
-    let path = std::env::var_os("LOCUS_ATLAS")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("atlas.html"));
-    let html = std::fs::read_to_string(&path)
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/reference/kernel.md");
+    let markdown = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("reading {}: {error}", path.display()));
-    let contract = atlas_document(&html, "kernel-contract").join("\n");
-    assert!(contract.starts_with("# Kernel contract"));
+    let (_, body) = markdown
+        .strip_prefix("+++\n")
+        .and_then(|text| text.split_once("\n+++\n"))
+        .expect("the canonical contract has TOML front matter");
+    let contract = body.trim_start();
+    assert!(contract.starts_with("# Kernel contract\n"));
 
     let missing: Vec<&str> = kernel_names()
         .into_iter()
-        .filter(|name| !mentions(&contract, name))
+        .filter(|name| !mentions(contract, name))
         .collect();
     assert!(
         missing.is_empty(),
@@ -1849,18 +1750,7 @@ fn the_contract_names_every_axiom_rule_and_primitive() {
 }
 
 #[test]
-fn the_contract_reader_handles_escapes_and_whole_words() {
-    let html = concat!(
-        "<script type=\"application/json\" id=\"atlas-data\">\n",
-        "{\"docs\": [{\"id\": \"other\", \"body\": [\"\\\"id\\\": \\\"wanted\\\"\"]},\n",
-        " {\"id\": \"wanted\", \"title\": \"body\", \"body\": [\"a \\u003c b\", \"tab\\there ]\", ",
-        "\"\\ud83d\\ude00 \\\\ \\\"q\\\"\"]}]}\n</script>\n",
-        "const FILE = '<script type=\"application/json\" id=\"atlas-data\">';"
-    );
-    assert_eq!(
-        atlas_document(html, "wanted"),
-        vec!["a < b", "tab\there ]", "\u{1F600} \\ \"q\""]
-    );
+fn the_contract_inventory_matches_whole_identifiers() {
     assert!(mentions("uses `int_induction(t)` here", "int_induction"));
     assert!(!mentions("uses `int_induction(t)` here", "induction"));
     assert!(!mentions("the int_add_zero axiom", "add_zero"));

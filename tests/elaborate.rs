@@ -115,21 +115,21 @@ fn the_lock_runs_as_written() {
         [
             // step: `prove!(lock.failures < 3)` is the branch taken, reflected
             // through `cmp_reflect`, whose comparison names its type.
-            (34, 63, "computed", 49),
-            (34, 63, "computed", 14),
+            (33, 63, "computed", 49),
+            (33, 63, "computed", 14),
             // step: `bounded` serves for `within_limit((Lock { .. }).failures)`.
-            (37, 65, "computed", 40),
+            (36, 65, "computed", 40),
             // step: `prove!(0u8 <= 3)`: the order of two views, evaluated as
             // it stands.
-            (31, 80, "evaluation", 34),
+            (30, 80, "evaluation", 34),
             // run: `prove!(0u8 <= 3)` for the initial `ok`.
-            (56, 68, "evaluation", 34),
+            (55, 68, "evaluation", 34),
             // run: `ok = still` refreshes the tracked evidence over the
             // `lock` just assigned: `still` speaks of `next`, and `lock`
             // is `next` after `lock = next`, which computing bridges.
-            (60, 14, "computed", 61),
-            (69, 55, "computed", 57),
-            (69, 32, "computed", 105),
+            (59, 14, "computed", 61),
+            (68, 55, "computed", 57),
+            (68, 32, "computed", 105),
         ]
     );
 }

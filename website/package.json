@@ -1,0 +1,20 @@
+{
+  "name": "locus-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "serve": "python3 ../tools/site.py serve"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "dependencies": {
+    "marked": "17.0.5"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

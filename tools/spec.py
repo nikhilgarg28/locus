@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import content
 
 ROOT = Path(__file__).resolve().parent.parent
 ATLAS_BLOCK = re.compile(r'<script type="application/json" id="atlas-data">\s*(.*?)\s*</script>', re.S)
@@ -65,7 +66,10 @@ class Fence:
     expected: list[str]
     reason: str = ''
 
-def load(path: Path) -> dict:
+def load(path: Path = ROOT/'docs') -> dict:
+    if path.is_dir():
+        return content.load(path.parent if path.name == 'docs' else path)
+    # Read-only legacy fixture support. The production specification is Markdown.
     match = ATLAS_BLOCK.search(path.read_text())
     if not match:
         raise ValueError(f'{path}: missing atlas-data block')
@@ -104,7 +108,7 @@ def inventory(data: dict) -> list[Paragraph]:
     result = []
     seen = set()
     for doc in data['docs']:
-        if doc['id'] not in SPEC_DOCS:
+        if doc.get('spec_chapter', SPEC_DOCS.get(doc['id'])) is None:
             continue
         pending = None
         for block in blocks(doc['body']):
@@ -119,7 +123,7 @@ def inventory(data: dict) -> list[Paragraph]:
             pending = None
             if identity in seen:
                 raise ValueError(f'duplicate spec ID {identity}')
-            if not identity.startswith(str(SPEC_DOCS[doc['id']]) + '.'):
+            if not identity.startswith(str(doc.get('spec_chapter', SPEC_DOCS.get(doc['id']))) + '.'):
                 raise ValueError(f"{identity}: wrong chapter for {doc['id']}")
             if category not in CATEGORIES:
                 raise ValueError(f'{identity}: unknown category {category}')
@@ -237,7 +241,7 @@ def validate_known(data: dict, markers: list[tuple[str, str, str]]) -> int:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['check', 'inventory', 'fences'])
-    parser.add_argument('--atlas', type=Path, default=ROOT/'atlas.html')
+    parser.add_argument('--docs', '--atlas', dest='atlas', type=Path, default=ROOT/'docs')
     parser.add_argument('--root', type=Path, default=ROOT)
     parser.add_argument('--out', type=Path)
     args = parser.parse_args(argv)

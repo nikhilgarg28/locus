@@ -1,60 +1,45 @@
 #!/usr/bin/env python3
-"""Reads and writes the documents inside atlas.html from the command line.
+"""Compatibility commands for the Markdown documentation and roadmap.
 
-atlas.html is the only copy of the documents, the language status table, and
-the projects and tasks. This tool is for working on it outside a browser.
+    python3 tools/atlas.py list / show NAME / put NAME FILE / tasks / plan
+    python3 tools/atlas.py dump DIRECTORY
+    python3 tools/atlas.py serve [PORT]    build and preview the public site
 
-    python3 tools/atlas.py list               the documents, with their names
-    python3 tools/atlas.py show NAME          print a document as markdown
-    python3 tools/atlas.py put NAME FILE      replace a document's text ("-" reads standard input)
-    python3 tools/atlas.py dump DIR           write every document, and the roadmap, as markdown files
-    python3 tools/atlas.py tasks              the projects and their tasks
-    python3 tools/atlas.py plan               check the order of the Core build tasks, and rewrite from them
-                                              the waves and the list of commits in the Build plan
-    python3 tools/atlas.py serve [PORT]       open the atlas from a local address, where it can save
-                                              itself as changes are made, in any browser
-
-Add --file PATH to work on a copy other than atlas.html, and --no-open to serve without opening a browser.
-
-Only the data block of atlas.html is rewritten, in the layout the page itself
-saves, and its revision is raised so that an open page notices the change.
+Markdown under docs/ is authoritative. atlas.html is only a legacy entry point.
 """
+import argparse
 import datetime
-import http.server
-import json
-import os
 import pathlib
 import re
+import subprocess
 import sys
-import webbrowser
+import content
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ATLAS = ROOT / "atlas.html"
-BLOCK = re.compile(r'(<script type="application/json" id="atlas-data">\n)(.*?)(\n</script>)', re.S)
 STATUS_MARK = {"done": "x", "canceled": "-"}
 
 
 def load():
-    text = ATLAS.read_text(encoding="utf-8")
-    match = BLOCK.search(text)
-    if not match:
-        sys.exit("atlas.html has no data block")
-    return text, match, json.loads(match.group(2))
+    """Keep the old three-result API for measurement publishers.
+
+    Text and match are unused now that HTML is output, not storage.
+    """
+    return None, None, content.load(ROOT)
 
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def store(text, match, data):
-    data["meta"]["rev"] = data["meta"].get("rev", 0) + 1
-    data["meta"]["savedAt"] = now()
-    # The same layout as JSON.stringify(data, null, 1) in the page.
-    dumped = json.dumps(data, indent=1, ensure_ascii=False).replace("<", "\\u003c")
-    ATLAS.write_text(text[: match.start(2)] + dumped + text[match.end(2):], encoding="utf-8")
+def store(_text, _match, data):
+    """Compatibility API for publishers that update Markdown and its metadata."""
+    content.save(data, ROOT)
 
 
 def find(data, name):
+    if name == "language":
+        chapters = [d for d in data["docs"] if d.get("spec_chapter") == 1]
+        return {"id": "language", "title": "Language manual", "body": [line for d in chapters for line in d["body"] + [""]]}
     for doc in data["docs"]:
         if doc["id"] == name or doc["title"].lower() == name.lower():
             return doc
@@ -90,7 +75,8 @@ def plan(data, name="Core build"):
     title starts with its key, and its notes have the lines "Lane: X." and
     "Depends on: K1 (LOC-n), ...". Everything else about the order is derived here."""
     doc_id, PLAN_LANES = PLAN_PROJECTS[name]
-    project = next(p for p in data["projects"] if p["name"] == name)
+    project_id = {"Core build": "p266", "Reconciliation": "p322"}[name]
+    project = next(p for p in data["projects"] if p["id"] == project_id)
     prefix = data["meta"].get("taskPrefix", "LOC")
     tasks = {}
     for task in data["tasks"]:
@@ -172,124 +158,67 @@ def plan(data, name="Core build"):
     return "%d commits in %d waves; the longest chain is %s" % (len(order), wave[last], ", ".join(chain(last)))
 
 
-def revision_of(text):
-    match = BLOCK.search(text)
-    if not match:
-        return None
-    try:
-        return json.loads(match.group(2))["meta"]["rev"]
-    except (ValueError, KeyError):
-        return None
+def serve(port, open_browser=True):
+    arguments = [sys.executable, str(ROOT/"tools/site.py"), "serve", "--port", str(port)]
+    if not open_browser:
+        arguments.append("--no-open")
+    raise SystemExit(subprocess.call(arguments))
 
 
-def serve(port, open_browser):
-    """Serves the atlas on this machine only, and writes what the page sends back."""
-    allowed_hosts = {"localhost:%d" % port, "127.0.0.1:%d" % port}
-
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def reply(self, status, body, kind="application/json"):
-            data = body.encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", kind + "; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
-
-        def ours(self):
-            # A page on another site cannot set this header without asking first, and is not answered.
-            return self.headers.get("Host") in allowed_hosts and self.headers.get("X-Atlas") == "1"
-
-        def do_GET(self):
-            path = self.path.split("?")[0]
-            if path == "/":
-                self.send_response(302)
-                self.send_header("Location", "/atlas.html")
-                self.end_headers()
-            elif path == "/atlas.html":
-                # A served snapshot never labels obsolete counts as current. This
-                # changes only the response, leaving concurrent Atlas edits alone.
-                import metrics
-                raw = ATLAS.read_text(encoding="utf-8")
-                match = BLOCK.search(raw)
-                data = json.loads(match.group(2))
-                doc = next((d for d in data['docs'] if d['id'] == 'generated-status'), None)
-                if doc is not None:
-                    doc['body'] = metrics.expected_body(data.get('measurements'), metrics.fingerprint(ATLAS.parent))
-                    raw = raw[:match.start(2)] + json.dumps(data, ensure_ascii=False).replace('<', '\\u003c') + raw[match.end(2):]
-                self.reply(200, raw, "text/html")
-            elif path == "/__atlas/info" and self.ours():
-                self.reply(200, json.dumps({"atlas": True, "rev": revision_of(ATLAS.read_text(encoding="utf-8"))}))
-            else:
-                self.reply(404, "{}")
-
-        def do_POST(self):
-            if self.path != "/__atlas/save" or not self.ours():
-                return self.reply(404, "{}")
-            text = self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode("utf-8")
-            rev = revision_of(text)
-            if rev is None or not text.startswith("<!DOCTYPE html>"):
-                return self.reply(400, "this is not an atlas")
-            scratch = ATLAS.with_name(ATLAS.name + ".saving")
-            scratch.write_text(text, encoding="utf-8")
-            os.replace(scratch, ATLAS)
-            self.reply(200, json.dumps({"rev": rev}))
-
-        def log_message(self, *args):
-            pass
-
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    address = "http://localhost:%d/atlas.html" % port
-    print("serving %s at %s (Ctrl+C to stop)" % (ATLAS, address))
-    if open_browser:
-        webbrowser.open(address)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-
-
-def main():
-    global ATLAS
-    args = sys.argv[1:]
-    if "--file" in args:
-        at = args.index("--file")
-        ATLAS = pathlib.Path(args[at + 1]).resolve()
-        del args[at:at + 2]
-    open_browser = "--no-open" not in args
-    args = [a for a in args if a != "--no-open"]
-    command = args[0] if args else "list"
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    if any(arg == "--file" or arg.startswith("--file=") for arg in args):
+        parser.error("--file has been retired: edit the Markdown sources under docs/; atlas.html is only a compatibility entry point")
+    commands = parser.add_subparsers(dest="command")
+    commands.add_parser("list", help="list Markdown documents")
+    show = commands.add_parser("show", help="print one document body")
+    show.add_argument("name")
+    put = commands.add_parser("put", help="replace one Markdown body, preserving its metadata")
+    put.add_argument("name")
+    put.add_argument("file", help="Markdown body file, or - for standard input")
+    dump = commands.add_parser("dump", help="export document bodies and a roadmap summary")
+    dump.add_argument("directory", type=pathlib.Path)
+    plans = commands.add_parser("plan", help="refresh a historical plan from its task dependencies")
+    plans.add_argument("project", nargs="?", default="Core build", choices=tuple(PLAN_PROJECTS))
+    commands.add_parser("tasks", help="print roadmap tasks")
+    preview = commands.add_parser("serve", help="build and serve the public site")
+    preview.add_argument("port", nargs="?", type=int, default=8765)
+    preview.add_argument("--no-open", action="store_true")
+    args = parser.parse_args(args)
+    command = args.command or "list"
     if command == "serve":
-        return serve(int(args[1]) if len(args) > 1 else 8765, open_browser)
+        return serve(args.port, not args.no_open)
     text, match, data = load()
     if command == "list":
         for doc in data["docs"]:
             print("%-18s %-12s %5d lines  %s" % (doc["id"], doc.get("group", ""), len(doc["body"]), doc["title"]))
-    elif command == "show" and len(args) == 2:
-        sys.stdout.write("\n".join(find(data, args[1])["body"]))
-    elif command == "put" and len(args) == 3:
-        doc = find(data, args[1])
-        body = sys.stdin.read() if args[2] == "-" else pathlib.Path(args[2]).read_text(encoding="utf-8")
-        doc["body"] = body.split("\n")
-        doc["updated"] = now()
-        store(text, match, data)
-        print("replaced %s; atlas.html is at revision %d" % (doc["id"], data["meta"]["rev"]))
-    elif command == "dump" and len(args) == 2:
-        out = pathlib.Path(args[1])
-        out.mkdir(parents=True, exist_ok=True)
+    elif command == "show":
+        print("\n".join(find(data, args.name)["body"]))
+    elif command == "put":
+        if args.name == "language":
+            parser.error("edit the individual docs/spec/*.md chapters; the combined language view is read-only")
+        doc = find(data, args.name)
+        body = sys.stdin.read() if args.file == "-" else pathlib.Path(args.file).read_text(encoding="utf-8")
+        metadata = {k: v for k, v in doc.items() if k not in ("source", "body", "body_line")}
+        metadata["updated"] = now()
+        # Replacing one body must not rewrite unrelated documents or roadmap tasks.
+        content.write_if_changed(ROOT / doc["source"], content.markdown(metadata, body))
+        print("replaced " + doc["source"])
+    elif command == "dump":
+        args.directory.mkdir(parents=True, exist_ok=True)
         for doc in data["docs"]:
-            (out / (doc["id"] + ".md")).write_text("\n".join(doc["body"]), encoding="utf-8")
-        (out / "roadmap.md").write_text(roadmap(data), encoding="utf-8")
-        print("wrote %d files to %s" % (len(data["docs"]) + 1, out))
+            (args.directory / (doc["id"] + ".md")).write_text("\n".join(doc["body"]) + "\n", encoding="utf-8")
+        (args.directory / "roadmap.md").write_text(roadmap(data), encoding="utf-8")
+        print("wrote %d files to %s" % (len(data["docs"]) + 1, args.directory))
     elif command == "plan":
-        summary = plan(data, sys.argv[2] if len(sys.argv) > 2 else "Core build")
+        summary = plan(data, args.project)
         store(text, match, data)
         print(summary)
     elif command == "tasks":
         sys.stdout.write(roadmap(data))
-    else:
-        sys.exit(__doc__)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

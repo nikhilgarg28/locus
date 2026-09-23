@@ -49,14 +49,14 @@ def comparison(current, previous, k=K):
             'median_ns':now, 'baseline_median_ns':old, 'pooled_dispersion_ns':pooled, 'k':k}
 
 
-def records():
-    if not git('rev-parse','--verify',BRANCH,check=False):
+def records(ref=BRANCH):
+    if not git('rev-parse','--verify',ref,check=False):
         return []
-    names = git('ls-tree','-r','--name-only',BRANCH).splitlines()
+    names = git('ls-tree','-r','--name-only',ref).splitlines()
     result=[]
     for name in names:
         if name.startswith('records/') and name.endswith('.json'):
-            raw=git('show',f'{BRANCH}:{name}')+'\n'
+            raw=git('show',f'{ref}:{name}')+'\n'
             if digest(raw.encode()) != pathlib.PurePosixPath(name).stem:
                 raise RuntimeError(f'benchmark content hash mismatch: {name}')
             result.append(json.loads(raw))

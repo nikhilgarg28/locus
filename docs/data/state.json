@@ -1,0 +1,1535 @@
+{
+  "meta": {
+    "title": "Locus Atlas",
+    "tagline": "Review the guarantees, check the implementation, and use the result from ordinary Rust.",
+    "rev": 140,
+    "savedAt": "2026-09-23T04:53:57.000Z",
+    "nextTask": 233,
+    "nextId": 351,
+    "taskPrefix": "LOC",
+    "groups": [
+      "Now",
+      "Vision",
+      "Plan",
+      "Scratch",
+      "Archive"
+    ]
+  },
+  "features": [
+    {
+      "id": "f95",
+      "area": "Types and data",
+      "name": "bool, and the eight machine integer types with the wrapping methods",
+      "status": "built",
+      "note": "tests/corpus/accept/integer_types.lc",
+      "doc": "language",
+      "anchor": "3-types",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f96",
+      "area": "Types and data",
+      "name": "Unit and tuples, with a later field able to mention an earlier one inside a proposition",
+      "status": "built",
+      "note": "tests/corpus/accept/evidence_argument.lc",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f97",
+      "area": "Types and data",
+      "name": "Field access by name on a tuple with named fields",
+      "status": "partial",
+      "note": "By design the names are binders; `.0` or `let` reads a field (tests/corpus/reject/field_of_a_tuple_by_name.lc)",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f98",
+      "area": "Types and data",
+      "name": "Structs with proof fields",
+      "status": "built",
+      "note": "tests/corpus/accept/derives.lc, tests/corpus/target/percent.lc",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f99",
+      "area": "Types and data",
+      "name": "Enums, including recursive physical data through Box",
+      "status": "built",
+      "note": "tests/reconcile_box.rs; tests/corpus/target/library_runtime_list.lc",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f100",
+      "area": "Types and data",
+      "name": "A function of the logic named as evidence of its general claim",
+      "status": "built",
+      "note": "Replaces the math fn type. tests/corpus/accept/explicit_steps.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f101",
+      "area": "Types and data",
+      "name": "i32, u32 and the other machine widths",
+      "status": "built",
+      "note": "tests/corpus/accept/integer_types.lc, casts.lc; tests/kernel_machine.rs",
+      "doc": "language",
+      "anchor": "15-integers-and-operators",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f102",
+      "area": "Types and data",
+      "name": "Int: unbounded, logic-only, reached with `as Int`",
+      "status": "built",
+      "note": "tests/corpus/accept/ghost_values.lc, arithmetic_facts.lc; tests/kernel_int.rs",
+      "doc": "language",
+      "anchor": "15-integers-and-operators",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f103",
+      "area": "Types and data",
+      "name": "Library Nat, Seq, Maybe and finite maps; general Set API remains future",
+      "status": "partial",
+      "note": "library/logical.lc; library/finite_map.lc; tests/reconcile_library.rs",
+      "doc": "target-language",
+      "anchor": "logic-only-types-and-erasure",
+      "project": "p24",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f104",
+      "area": "Types and data",
+      "name": "Model observations replace Ghost<T> and snapshot!(e)",
+      "status": "built",
+      "note": "Ghost and snapshot spellings produce tested migration diagnostics; tests/reconcile_logic.rs",
+      "doc": "language",
+      "anchor": "18-erasure-and-ghost",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f105",
+      "area": "Types and data",
+      "name": "Floats",
+      "status": "planned",
+      "note": "Executable only; not usable in propositions.",
+      "doc": "",
+      "anchor": "",
+      "project": "p24",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f106",
+      "area": "Types and data",
+      "name": "Arrays, parameter slices, Vec and Box; Arc and strings remain future",
+      "status": "partial",
+      "note": "tests/collections.rs; tests/reconcile_box.rs; tests/corpus/accept/slices.lc",
+      "doc": "",
+      "anchor": "",
+      "project": "p37",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f107",
+      "area": "Types and data",
+      "name": "Recursive logical data and physical recursion through Box",
+      "status": "built",
+      "note": "tests/logical_data.rs; tests/reconcile_box.rs",
+      "doc": "",
+      "anchor": "",
+      "project": "p64",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f108",
+      "area": "Types and data",
+      "name": "Generics, Logical derive, Model impls and logical closures; general traits and runtime closures remain future",
+      "status": "partial",
+      "note": "tests/reconcile_generics.rs; tests/reconcile_models.rs; tests/reconcile_closures.rs",
+      "doc": "",
+      "anchor": "",
+      "project": "p24",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f109",
+      "area": "Types and data",
+      "name": "dyn",
+      "status": "unsure",
+      "note": "",
+      "doc": "",
+      "anchor": "",
+      "project": "p37",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f110",
+      "area": "Expressions and control",
+      "name": "let, blocks, shadowing",
+      "status": "built",
+      "note": "tests/corpus/accept/assign_shadowing.lc",
+      "doc": "language",
+      "anchor": "5-expressions-and-computation-modes",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f111",
+      "area": "Expressions and control",
+      "name": "if and else, with a fact for each branch",
+      "status": "built",
+      "note": "examples/preserve.lc",
+      "doc": "language",
+      "anchor": "11-if-else-loops-return",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f112",
+      "area": "Expressions and control",
+      "name": "Comparisons, &&, || and ! with separate bool/Bool/Prop meanings",
+      "status": "built",
+      "note": "tests/reconcile_logic.rs; tests/elaborate_operators.rs",
+      "doc": "built",
+      "anchor": "tests/corpus/accept/integer_types.lc",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f113",
+      "area": "Expressions and control",
+      "name": "match on an enum, with `Enum::Variant(names)`, `Enum::Variant { fields, .. }`, and `_` arms",
+      "status": "built",
+      "note": "tests/corpus/accept/named_variants.lc",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f114",
+      "area": "Expressions and control",
+      "name": "Literal, struct, and nested patterns; let with a constructor pattern",
+      "status": "partial",
+      "note": "Parsed; rejected by the elaborator (tests/corpus/reject/nested_pattern.lc)",
+      "doc": "language",
+      "anchor": "24-not-in-the-language",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f115",
+      "area": "Expressions and control",
+      "name": "Rust's `loop` with `break value`, `while`, and `continue`, over `let mut`",
+      "status": "built",
+      "note": "Replaces the state-passing loop. tests/corpus/accept/loop_forms.lc",
+      "doc": "language",
+      "anchor": "11-if-else-loops-return",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f116",
+      "area": "Expressions and control",
+      "name": "`for` over a range of any integer type, exclusive or inclusive, with `break`",
+      "status": "built",
+      "note": "Replaces the bounded for. tests/corpus/accept/loop_ranges.lc",
+      "doc": "language",
+      "anchor": "11-if-else-loops-return",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f117",
+      "area": "Expressions and control",
+      "name": "let mut and assignment, whole and by a field path",
+      "status": "built",
+      "note": "tests/corpus/accept/assign_straight.lc, assign_branches.lc, loop_assigned.lc",
+      "doc": "language",
+      "anchor": "12-mutation-versions-and-tracked-evidence",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f118",
+      "area": "Expressions and control",
+      "name": "Arithmetic operators + - * / % with Rust's behavior; in a proposition only total operations",
+      "status": "built",
+      "note": "tests/corpus/accept/arithmetic_facts.lc, operators.lc",
+      "doc": "language",
+      "anchor": "15-integers-and-operators",
+      "project": "p2",
+      "updated": "2026-09-21T20:49:51.000Z"
+    },
+    {
+      "id": "f119",
+      "area": "Expressions and control",
+      "name": "while, for over iterators, if let",
+      "status": "partial",
+      "note": "`while` is built; `for` over an iterator and `while let` are refused (tests/corpus/reject/loops_not_yet.lc); `if let` is a syntax error",
+      "doc": "language",
+      "anchor": "24-not-in-the-language",
+      "project": "p33",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f120",
+      "area": "Expressions and control",
+      "name": "Prelude Option and Result; ? and let else remain future",
+      "status": "partial",
+      "note": "tests/reconcile_generics.rs; runtime instances emit specialized enums, not std::option::Option ABI",
+      "doc": "",
+      "anchor": "",
+      "project": "p84",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f121",
+      "area": "Expressions and control",
+      "name": "panic!, assert!, unreachable!, todo!, debug_assert! as built-in forms",
+      "status": "built",
+      "note": "tests/corpus/accept/panic_forms.lc, no_panic_forms.lc, half_written.lc",
+      "doc": "language",
+      "anchor": "10-the-forms-that-panic",
+      "project": "p84",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f122",
+      "area": "Expressions and control",
+      "name": "Loops that promise to terminate",
+      "status": "deferred",
+      "note": "Terminating code recurses for now.",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f123",
+      "area": "Propositions and proofs",
+      "name": "Prop, @P, prop!(F), connectives; quantifier keywords lower to library propositions",
+      "status": "built",
+      "note": "tests/reconcile_quantifier_library.rs",
+      "doc": "language",
+      "anchor": "6-propositions",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f124",
+      "area": "Propositions and proofs",
+      "name": "Named proposition arms with witness parameters and one explicit @ evidence slot",
+      "status": "built",
+      "note": "tests/reconcile_props.rs",
+      "doc": "language",
+      "anchor": "6-propositions",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f125",
+      "area": "Propositions and proofs",
+      "name": "`_` and `prove!` filled by fixed tiers: stored, exact, computed, evaluation, arithmetic",
+      "status": "built",
+      "note": "tests/cli.rs (stats), tests/arith.rs",
+      "doc": "language",
+      "anchor": "8-what-a-hole-finds",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f126",
+      "area": "Propositions and proofs",
+      "name": "A failed `_` reports the claim, the claim after computing, the facts, and a counterexample",
+      "status": "built",
+      "note": "tests/corpus/reject/midpoint_unordered.lc; tests/acceptance.rs",
+      "doc": "language",
+      "anchor": "21-diagnostics",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f127",
+      "area": "Propositions and proofs",
+      "name": "Evidence must match the claim exactly after computing",
+      "status": "built",
+      "note": "Replaces bridging. tests/corpus/reject/evidence_of_another_claim.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f128",
+      "area": "Propositions and proofs",
+      "name": "Proof constructors, match on evidence, `match h {}` on evidence of false",
+      "status": "built",
+      "note": "examples/propositions.lc, tests/corpus/accept/explicit_steps.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f129",
+      "area": "Propositions and proofs",
+      "name": "rewrite!, unfold!, fold!",
+      "status": "built",
+      "note": "tests/corpus/accept/forms.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "p173",
+      "updated": "2026-09-21T19:41:53.000Z"
+    },
+    {
+      "id": "f130",
+      "area": "Propositions and proofs",
+      "name": "Applying evidence of a forall or an implication; a function of the logic named as evidence",
+      "status": "built",
+      "note": "tests/corpus/accept/explicit_steps.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f131",
+      "area": "Propositions and proofs",
+      "name": "162 lemmas about Int and every machine type, callable by name",
+      "status": "built",
+      "note": "tests/kernel_lemmas.rs; tests/corpus/accept/integer_types.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f132",
+      "area": "Propositions and proofs",
+      "name": "const",
+      "status": "built",
+      "note": "tests/corpus/accept/constants.lc",
+      "doc": "language",
+      "anchor": "9-functions-and-promises",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f133",
+      "area": "Propositions and proofs",
+      "name": "Exists construction and proof-scoped witness elimination",
+      "status": "built",
+      "note": "tests/reconcile_quantifier_library.rs; arbitrary witness extraction is rejected",
+      "doc": "",
+      "anchor": "",
+      "project": "p81",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f134",
+      "area": "Propositions and proofs",
+      "name": "Tracked evidence: `let mut` evidence invalidated by assignment, refreshed explicitly, carried by loops",
+      "status": "built",
+      "note": "tests/corpus/accept/tracked_refresh.lc, tracked_loop.lc, tracked_snapshot.lc",
+      "doc": "language",
+      "anchor": "12-mutation-versions-and-tracked-evidence",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f135",
+      "area": "Propositions and proofs",
+      "name": "A decision procedure for arithmetic that produces certificates",
+      "status": "built",
+      "note": "tests/arith.rs, tests/kernel_linear.rs",
+      "doc": "language",
+      "anchor": "8-what-a-hole-finds",
+      "project": "p23",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f136",
+      "area": "Propositions and proofs",
+      "name": "Logical function values and explicit congruence; general congruence closure remains future",
+      "status": "partial",
+      "note": "tests/reconcile_closures.rs",
+      "doc": "",
+      "anchor": "",
+      "project": "p81",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f137",
+      "area": "Propositions and proofs",
+      "name": "Checked lemma libraries written in Locus",
+      "status": "built",
+      "note": "library/logical.lc; library/integer.lc; library/relations.lc; library/buffer_model.lc",
+      "doc": "",
+      "anchor": "",
+      "project": "p61",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f138",
+      "area": "Functions, effects, and references",
+      "name": "Ordinary fn may diverge; only logic fn enters propositions",
+      "status": "built",
+      "note": "tests/reconcile_logic.rs; promises do not change function mode",
+      "doc": "language",
+      "anchor": "5-expressions-and-computation-modes",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f139",
+      "area": "Functions, effects, and references",
+      "name": "Promises: terminates, no_panic, no_alloc, no_io",
+      "status": "built",
+      "note": "tests/corpus/accept/promises.lc; tests/exec_endings.rs",
+      "doc": "language",
+      "anchor": "9-functions-and-promises",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f140",
+      "area": "Functions, effects, and references",
+      "name": "Logical functions are pure, total and return Logical values",
+      "status": "built",
+      "note": "tests/reconcile_logic.rs; runtime arguments are observed without moving data",
+      "doc": "language",
+      "anchor": "5-expressions-and-computation-modes",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f141",
+      "area": "Functions, effects, and references",
+      "name": "Structural logical recursion and explicit Int descent through recurse!",
+      "status": "built",
+      "note": "tests/logical_data.rs; tests/kernel_measured.rs",
+      "doc": "target-language",
+      "anchor": "termination",
+      "project": "p64",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f142",
+      "area": "Functions, effects, and references",
+      "name": "Mutually recursive logical enum groups; mutually recursive functions remain future",
+      "status": "partial",
+      "note": "tests/corpus/target/logical_mutual_trees.lc",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p64",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f143",
+      "area": "Functions, effects, and references",
+      "name": "& and &mut as parameters; old!(x); impl blocks and self",
+      "status": "built",
+      "note": "tests/corpus/accept/references.lc, methods.lc; tests/references.rs",
+      "doc": "language",
+      "anchor": "13-references",
+      "project": "p45",
+      "updated": "2026-09-21T19:37:49.000Z"
+    },
+    {
+      "id": "f144",
+      "area": "Functions, effects, and references",
+      "name": "Shared references in locals, records and results, with lifetimes",
+      "status": "built",
+      "note": "tests/reconcile_shared.rs; tier excludes reference leaves in owned heap payloads and stored mutable references",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p37",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f145",
+      "area": "Functions, effects, and references",
+      "name": "Moves, types that are not Copy, Clone",
+      "status": "built",
+      "note": "tests/corpus/accept/moves.lc; tests/moves.rs",
+      "doc": "language",
+      "anchor": "16-moves-and-derive",
+      "project": "p37",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f146",
+      "area": "Functions, effects, and references",
+      "name": "&mut in locals, returned, or in structs",
+      "status": "deferred",
+      "note": "Not planned; the cost of each is recorded in Mutation and references.",
+      "doc": "target-language",
+      "anchor": "mutation-and-references",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f147",
+      "area": "Functions, effects, and references",
+      "name": "Interior mutability, unsafe, async, Drop",
+      "status": "unsure",
+      "note": "",
+      "doc": "",
+      "anchor": "",
+      "project": "p54",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f148",
+      "area": "Compiler and kernel",
+      "name": "Kernel gates K1 to K6",
+      "status": "built",
+      "note": "Equality, products, functions, cases and declared propositions, Int and the machine models, range iteration; the internal Nat was removed at R4",
+      "doc": "kernel-contract",
+      "anchor": "the-gates",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f149",
+      "area": "Compiler and kernel",
+      "name": "Closed evaluation, and the linear arithmetic rule",
+      "status": "built",
+      "note": "Replaces the proof by 256 cases. tests/kernel_evaluation.rs, tests/kernel_linear.rs",
+      "doc": "kernel-contract",
+      "anchor": "evaluation",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f150",
+      "area": "Compiler and kernel",
+      "name": "Typed tree, lowering, the check IR and its checker",
+      "status": "built",
+      "note": "tests/typed_lower.rs, tests/exec_check.rs",
+      "doc": "architecture",
+      "anchor": "the-pipeline",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f151",
+      "area": "Compiler and kernel",
+      "name": "Single Erased marker, effect-preserving erasure and unused-marker cleanup",
+      "status": "built",
+      "note": "tests/erasure_layout.rs; tests/rust_output.rs",
+      "doc": "architecture",
+      "anchor": "interpreter-and-rust-generation",
+      "project": "",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f152",
+      "area": "Compiler and kernel",
+      "name": "Differential testing of the two branches, and random programs three ways",
+      "status": "built",
+      "note": "tests/differential.rs, tests/random_programs.rs",
+      "doc": "architecture",
+      "anchor": "random-programs-three-ways",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f153",
+      "area": "Compiler and kernel",
+      "name": "Parser for the core grammar: every Rust keyword reserved, Rust's precedence, total by a step and a depth bound",
+      "status": "built",
+      "note": "tests/frontend.rs, tests/parser_fuzz.rs",
+      "doc": "architecture",
+      "anchor": "why-the-parser-always-finishes",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f154",
+      "area": "Compiler and kernel",
+      "name": "Elaborator: names, ordering of declarations, types, holes",
+      "status": "built",
+      "note": "tests/elaborate.rs",
+      "doc": "architecture",
+      "anchor": "the-elaborator",
+      "project": "",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f155",
+      "area": "Compiler and kernel",
+      "name": "Command line: check, run, rust, build, with --holes, --stats, --locked",
+      "status": "built",
+      "note": "tests/cli.rs",
+      "doc": "language",
+      "anchor": "22-the-command-line",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f156",
+      "area": "Compiler and kernel",
+      "name": "Proofs file of found proofs, so that checking again does not search again; --locked",
+      "status": "built",
+      "note": "tests/store.rs, tests/cli.rs",
+      "doc": "language",
+      "anchor": "20-found-proofs-are-stored",
+      "project": "p2",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f157",
+      "area": "Compiler and kernel",
+      "name": "Checked data induction, recursive predicates and monomorphic generic instances",
+      "status": "built",
+      "note": "tests/kernel_recursive.rs; tests/kernel_inductive_props.rs; tests/kernel_generics.rs",
+      "doc": "",
+      "anchor": "",
+      "project": "p64",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f158",
+      "area": "Compiler and kernel",
+      "name": "locus audit; formal erasure theorem and independent checker export remain future",
+      "status": "partial",
+      "note": "tests/audit.rs; Process P10 documents the unmechanized calculus",
+      "doc": "",
+      "anchor": "",
+      "project": "p69",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f159",
+      "area": "Organization, interop, and tooling",
+      "name": "Generated interfaces that protect what was proven; pub(crate)",
+      "status": "built",
+      "note": "tests/build.rs, tests/acceptance.rs",
+      "doc": "language",
+      "anchor": "17-visibility-and-the-boundary-with-rust",
+      "project": "p20",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f160",
+      "area": "Organization, interop, and tooling",
+      "name": "Header and implementation split",
+      "status": "agreed",
+      "note": "The header must elaborate on its own.",
+      "doc": "positioning",
+      "anchor": "how-it-is-delivered",
+      "project": "p45",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f161",
+      "area": "Organization, interop, and tooling",
+      "name": "Modules and use, packages, features, tests",
+      "status": "planned",
+      "note": "Rust's own mod, use, and pub.",
+      "doc": "",
+      "anchor": "",
+      "project": "p45",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f162",
+      "area": "Organization, interop, and tooling",
+      "name": "Reason-bearing trusted Rust collection declarations; general foreign linking remains future",
+      "status": "partial",
+      "note": "tests/trusted.rs; Vec len/get/push registry checks physical signature shape",
+      "doc": "",
+      "anchor": "",
+      "project": "p52",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f163",
+      "area": "Organization, interop, and tooling",
+      "name": "A cargo and build.rs driver; the locus! on-ramp",
+      "status": "planned",
+      "note": "Locus source tokenizes as Rust so that the macro stays possible.",
+      "doc": "",
+      "anchor": "",
+      "project": "p74",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f164",
+      "area": "Organization, interop, and tooling",
+      "name": "Diagnostics as JSON; an LSP server; a reference and example corpus for models",
+      "status": "planned",
+      "note": "",
+      "doc": "",
+      "anchor": "",
+      "project": "p74",
+      "updated": "2026-09-21T19:19:39.000Z"
+    },
+    {
+      "id": "f165",
+      "area": "Organization, interop, and tooling",
+      "name": "Verified sequence and collection models; broad standard library remains future",
+      "status": "partial",
+      "note": "tests/reconcile_collection.rs; library/buffer_model.lc",
+      "doc": "",
+      "anchor": "",
+      "project": "p67",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f167",
+      "area": "Propositions and proofs",
+      "name": "prove!(P): state a claim where it stands; the fact stays in scope and the value is evidence",
+      "status": "built",
+      "note": "tests/corpus/accept/forms.lc",
+      "doc": "language",
+      "anchor": "7-proofs-and-their-forms",
+      "project": "p173",
+      "updated": "2026-09-21T19:41:53.000Z"
+    },
+    {
+      "id": "f168",
+      "area": "Propositions and proofs",
+      "name": "Built-in forms spelled with !, and no user-defined macros",
+      "status": "built",
+      "note": "matches! and vec! wait for their types (tests/corpus/reject/unknown_form.lc)",
+      "doc": "language",
+      "anchor": "10-the-forms-that-panic",
+      "project": "p173",
+      "updated": "2026-09-21T19:41:53.000Z"
+    },
+    {
+      "id": "f169",
+      "area": "Propositions and proofs",
+      "name": "rewrite!, fold! and unfold! construct checked transport/definition proofs",
+      "status": "built",
+      "note": "tests/reconcile_props.rs; tests/reconcile_models.rs; kernel derive helpers remain untrusted",
+      "doc": "target-language",
+      "anchor": "built-in-forms",
+      "project": "p173",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f210",
+      "area": "Propositions and proofs",
+      "name": "prop!(P) for a proposition and @P for evidence; brackets left to arrays",
+      "status": "built",
+      "note": "tests/corpus/accept/forms.lc; tests/corpus/reject/array_literal.lc",
+      "doc": "language",
+      "anchor": "6-propositions",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f211",
+      "area": "Types and data",
+      "name": "Values move; Copy and Clone only by derive; use after move is an error",
+      "status": "built",
+      "note": "tests/corpus/accept/moves.lc, derives.lc",
+      "doc": "language",
+      "anchor": "16-moves-and-derive",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f212",
+      "area": "Types and data",
+      "name": "The never type !",
+      "status": "built",
+      "note": "tests/corpus/accept/early_return.lc",
+      "doc": "language",
+      "anchor": "11-if-else-loops-return",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f213",
+      "area": "Types and data",
+      "name": "Enum variants with named fields",
+      "status": "built",
+      "note": "tests/corpus/accept/named_variants.lc",
+      "doc": "language",
+      "anchor": "4-products-enums-and-match",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f214",
+      "area": "Types and data",
+      "name": "Type arguments on the types the language provides",
+      "status": "built",
+      "note": "Ghost<T> is the one such type (tests/corpus/accept/ghost_values.lc)",
+      "doc": "language",
+      "anchor": "3-types",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f215",
+      "area": "Types and data",
+      "name": "Integer literals typed as in Rust: the expected type, else i32; suffixes and other bases",
+      "status": "built",
+      "note": "tests/corpus/accept/literals.lc, integer_types.lc",
+      "doc": "language",
+      "anchor": "15-integers-and-operators",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f216",
+      "area": "Types and data",
+      "name": "usize and isize",
+      "status": "planned",
+      "note": "Platform-dependent width.",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p37",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f217",
+      "area": "Types and data",
+      "name": "Tuple structs, unit structs, newtypes; explicit discriminants",
+      "status": "planned",
+      "note": "",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p181",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f218",
+      "area": "Expressions and control",
+      "name": "return",
+      "status": "built",
+      "note": "tests/corpus/accept/early_return.lc",
+      "doc": "language",
+      "anchor": "11-if-else-loops-return",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f219",
+      "area": "Expressions and control",
+      "name": "Rust's operator precedence, exactly",
+      "status": "built",
+      "note": "tests/frontend.rs",
+      "doc": "language",
+      "anchor": "5-expressions-and-computation-modes",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f220",
+      "area": "Expressions and control",
+      "name": "== and != on bool and every integer type",
+      "status": "built",
+      "note": "tests/corpus/accept/integer_types.lc",
+      "doc": "language",
+      "anchor": "15-integers-and-operators",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f221",
+      "area": "Expressions and control",
+      "name": "match with the power it has in Rust",
+      "status": "planned",
+      "note": "Integers, bool, tuples; literal, range, and or-patterns; @ bindings; guards.",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p33",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f222",
+      "area": "Expressions and control",
+      "name": "Constants checked in logical initialization; erased constants do not execute",
+      "status": "built",
+      "note": "tests/corpus/accept/constants.lc; tests/corpus/reject/constant_calls.lc",
+      "doc": "language",
+      "anchor": "9-functions-and-promises",
+      "project": "p2",
+      "updated": "2026-09-23T03:12:39.000Z"
+    },
+    {
+      "id": "f223",
+      "area": "Organization, interop, and tooling",
+      "name": "Private by default, and pub",
+      "status": "built",
+      "note": "tests/build.rs; tests/corpus/reject/pub_evidence_fn.lc",
+      "doc": "language",
+      "anchor": "17-visibility-and-the-boundary-with-rust",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f224",
+      "area": "Organization, interop, and tooling",
+      "name": "Every Rust keyword reserved",
+      "status": "built",
+      "note": "tests/corpus/reject/keyword_as_name.lc",
+      "doc": "language",
+      "anchor": "21-diagnostics",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f225",
+      "area": "Organization, interop, and tooling",
+      "name": "Paths of any length; separate type and value namespaces",
+      "status": "built",
+      "note": "Paths through modules wait for modules (tests/corpus/reject/module_paths_not_yet.lc). tests/corpus/accept/namespaces.lc",
+      "doc": "language",
+      "anchor": "2-what-the-compiler-remembers",
+      "project": "p2",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f226",
+      "area": "Organization, interop, and tooling",
+      "name": "Doc comments and chosen attributes passed through to generated Rust",
+      "status": "planned",
+      "note": "",
+      "doc": "target-language",
+      "anchor": "",
+      "project": "p181",
+      "updated": "2026-09-21T20:29:22.000Z"
+    },
+    {
+      "id": "f237",
+      "area": "Compiler and kernel",
+      "name": "Int and the machine integer models in the kernel; an arithmetic procedure that produces evidence",
+      "status": "built",
+      "note": "tests/kernel_int.rs, tests/kernel_machine.rs, tests/kernel_ops.rs, tests/arith.rs",
+      "doc": "kernel-contract",
+      "anchor": "int",
+      "project": "p229",
+      "updated": "2026-09-21T20:49:51.000Z"
+    },
+    {
+      "id": "f238",
+      "area": "Expressions and control",
+      "name": "Bit operators and shifts",
+      "status": "planned",
+      "note": "After the core; they need a bit-level model.",
+      "doc": "",
+      "anchor": "",
+      "project": "p181",
+      "updated": "2026-09-21T20:49:51.000Z"
+    },
+    {
+      "id": "f241",
+      "area": "Functions, effects, and references",
+      "name": "Operators a programmer defines, through the operator traits",
+      "status": "planned",
+      "note": "Integers, in code and in propositions. Arrives with traits; how such an operator states when it does not panic is open.",
+      "doc": "target-language",
+      "anchor": "integers-in-code-and-in-propositions",
+      "project": "p24",
+      "updated": "2026-09-21T20:54:27.000Z"
+    }
+  ],
+  "measurements": {
+    "schema_version": 1,
+    "generated_at": "2026-09-23T04:34:55.214457+00:00",
+    "source_fingerprint": "ccbf415a87659966490844e1805561e8b36297ca94aeb11da52f6b3f08b569ca",
+    "fast_seconds": 221,
+    "fast_limit_seconds": 120,
+    "fast_tests": {
+      "passed": 849,
+      "ignored": 0,
+      "targets": 77
+    },
+    "extended_tests": {
+      "passed": 849,
+      "ignored": 0,
+      "targets": 77
+    },
+    "corpus_files": 262,
+    "proof_tiers": {
+      "tests/corpus/target/library_buffer_model.lc": {
+        "computed": 8,
+        "arithmetic": 23,
+        "exact": 3,
+        "stored": 3,
+        "evaluation": 3
+      },
+      "tests/corpus/target/library_finite_map.lc": {
+        "exact": 2,
+        "computed": 2
+      },
+      "tests/corpus/target/library_integer.lc": {
+        "computed": 3,
+        "arithmetic": 9,
+        "exact": 2,
+        "evaluation": 1
+      },
+      "tests/corpus/target/library_relations.lc": {
+        "computed": 1,
+        "arithmetic": 2
+      },
+      "tests/corpus/target/library_runtime_list.lc": {
+        "computed": 2,
+        "arithmetic": 9,
+        "exact": 2,
+        "evaluation": 1
+      },
+      "tests/corpus/target/library_seq_ops.lc": {
+        "computed": 3,
+        "arithmetic": 12,
+        "exact": 2,
+        "evaluation": 2
+      },
+      "tests/corpus/target/lock.lc": {
+        "arithmetic": 6,
+        "computed": 3,
+        "evaluation": 2
+      },
+      "tests/corpus/target/logical_mutual_trees.lc": {
+        "computed": 2,
+        "arithmetic": 1
+      },
+      "tests/corpus/target/midpoint.lc": {
+        "arithmetic": 5,
+        "evaluation": 1
+      },
+      "tests/corpus/target/percent.lc": {
+        "computed": 1
+      }
+    },
+    "stored_proof_hits": {
+      "tests/corpus/target/library_buffer_model.lc": 40,
+      "tests/corpus/target/library_finite_map.lc": 4,
+      "tests/corpus/target/library_integer.lc": 15,
+      "tests/corpus/target/library_relations.lc": 3,
+      "tests/corpus/target/library_runtime_list.lc": 14,
+      "tests/corpus/target/library_seq_ops.lc": 19,
+      "tests/corpus/target/lock.lc": 11,
+      "tests/corpus/target/logical_mutual_trees.lc": 3,
+      "tests/corpus/target/midpoint.lc": 6,
+      "tests/corpus/target/percent.lc": 1
+    },
+    "kernel_rules": [
+      "BufferStep",
+      "BufferBound",
+      "Hyp",
+      "OfTerm",
+      "Refl",
+      "Transport",
+      "ImpliesIntro",
+      "ImpliesElim",
+      "ForallIntro",
+      "ForallElim",
+      "Projection",
+      "Literal",
+      "Definition",
+      "CaseStep",
+      "CaseKnown",
+      "Construct",
+      "CaseProof",
+      "CaseData",
+      "ExistsIntro",
+      "ExistsElim",
+      "ExcludedMiddle",
+      "ForEmpty",
+      "ForStep",
+      "Omitted",
+      "Evaluate",
+      "Axiom",
+      "PropInduction",
+      "DataInduction",
+      "IntInduction",
+      "Linear"
+    ],
+    "kernel_axioms": [
+      "IntAddAssoc",
+      "IntAddComm",
+      "IntAddZero",
+      "IntAddNeg",
+      "IntSubDef",
+      "IntMulAssoc",
+      "IntMulComm",
+      "IntMulOne",
+      "IntMulAdd",
+      "IntLeRefl",
+      "IntLeTrans",
+      "IntLeAntisymm",
+      "IntLeAdd",
+      "IntLeMul",
+      "IntLeTotal",
+      "IntLtIrrefl",
+      "IntDivRem",
+      "IntDivZero",
+      "IntRemLowerPos",
+      "IntRemUpperPos",
+      "IntRemLowerNeg",
+      "IntRemUpperNeg",
+      "IntRemNonneg",
+      "IntRemNonpos",
+      "ViewLower",
+      "ViewUpper",
+      "WrapView",
+      "ViewWrap",
+      "WrapPeriod",
+      "CastDef",
+      "OpModel",
+      "OpExact",
+      "CmpReflect",
+      "CmpReify"
+    ],
+    "trusted_base": [
+      {
+        "path": "src/kernel/buffer.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 337
+      },
+      {
+        "path": "src/kernel/check.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 1953
+      },
+      {
+        "path": "src/kernel/context.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 241
+      },
+      {
+        "path": "src/kernel/defs.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 545
+      },
+      {
+        "path": "src/kernel/depth.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 288
+      },
+      {
+        "path": "src/kernel/eval.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 278
+      },
+      {
+        "path": "src/kernel/generics.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 222
+      },
+      {
+        "path": "src/kernel/int.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 230
+      },
+      {
+        "path": "src/kernel/linear.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 330
+      },
+      {
+        "path": "src/kernel/machine.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 149
+      },
+      {
+        "path": "src/kernel/measured.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 117
+      },
+      {
+        "path": "src/kernel/nat.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 316
+      },
+      {
+        "path": "src/kernel/ops.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 391
+      },
+      {
+        "path": "src/kernel/quantifiers.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 182
+      },
+      {
+        "path": "src/kernel/recursive.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 706
+      },
+      {
+        "path": "src/kernel/term.rs",
+        "category": "kernel acceptance and primitive meaning",
+        "physical_lines": 2472
+      },
+      {
+        "path": "src/typed/lower.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 2834
+      },
+      {
+        "path": "src/typed/layout.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 249
+      },
+      {
+        "path": "src/typed/shared.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 1064
+      },
+      {
+        "path": "src/typed/buffer.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 487
+      },
+      {
+        "path": "src/typed/trusted.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 88
+      },
+      {
+        "path": "src/typed/tree.rs",
+        "category": "typed lowering, layout, permissions and native boundary",
+        "physical_lines": 693
+      },
+      {
+        "path": "src/exec/check.rs",
+        "category": "check IR acceptance and native contracts",
+        "physical_lines": 728
+      },
+      {
+        "path": "src/exec/buffer.rs",
+        "category": "check IR acceptance and native contracts",
+        "physical_lines": 136
+      },
+      {
+        "path": "src/exec/ir.rs",
+        "category": "check IR acceptance and native contracts",
+        "physical_lines": 265
+      },
+      {
+        "path": "src/erased/check.rs",
+        "category": "erasure, independent layout checker, cleanup and Rust generation",
+        "physical_lines": 724
+      },
+      {
+        "path": "src/erased/erase.rs",
+        "category": "erasure, independent layout checker, cleanup and Rust generation",
+        "physical_lines": 994
+      },
+      {
+        "path": "src/erased/cleanup.rs",
+        "category": "erasure, independent layout checker, cleanup and Rust generation",
+        "physical_lines": 670
+      },
+      {
+        "path": "src/erased/rust.rs",
+        "category": "erasure, independent layout checker, cleanup and Rust generation",
+        "physical_lines": 1335
+      },
+      {
+        "path": "src/erased/tree.rs",
+        "category": "erasure, independent layout checker, cleanup and Rust generation",
+        "physical_lines": 314
+      },
+      {
+        "path": "src/elab/items.rs",
+        "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted",
+        "physical_lines": 2027
+      },
+      {
+        "path": "src/build.rs",
+        "category": "Rust crate/marker privacy boundary",
+        "physical_lines": 102
+      }
+    ],
+    "specification": {
+      "paragraphs": 341,
+      "normative": 310,
+      "citations": 465,
+      "focused_tests": 278
+    },
+    "benchmark": {
+      "epoch": "ab5fbc391857def786082ef852326ff20dfe7afc458a910a80ea2c0e3d8bb430",
+      "records": 2,
+      "observed_days": 0.016149215787037038,
+      "two_week_window_complete": false,
+      "headline_index": 100.04851783994766,
+      "freshness": {
+        "status": "current",
+        "commits": 0
+      },
+      "workloads": [
+        {
+          "name": "tests/corpus/target/library_buffer_model.lc",
+          "medians_ns": [
+            285577333,
+            283153249
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 285577333,
+            "k": 6,
+            "median_ns": 283153249,
+            "pooled_dispersion_ns": 2992784.5724722985,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/library_finite_map.lc",
+          "medians_ns": [
+            23608167,
+            23208291
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 23608167,
+            "k": 6,
+            "median_ns": 23208291,
+            "pooled_dispersion_ns": 152143.47162893222,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/library_integer.lc",
+          "medians_ns": [
+            43394584,
+            43478125
+          ],
+          "sparkline": "▁█",
+          "comparison": {
+            "baseline_median_ns": 43394584,
+            "k": 6,
+            "median_ns": 43478125,
+            "pooled_dispersion_ns": 724215.6958406039,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/library_relations.lc",
+          "medians_ns": [
+            25060375,
+            25965250
+          ],
+          "sparkline": "▁█",
+          "comparison": {
+            "baseline_median_ns": 25060375,
+            "k": 6,
+            "median_ns": 25965250,
+            "pooled_dispersion_ns": 467175.4186845565,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/library_runtime_list.lc",
+          "medians_ns": [
+            43973667,
+            44334125
+          ],
+          "sparkline": "▁█",
+          "comparison": {
+            "baseline_median_ns": 43973667,
+            "k": 6,
+            "median_ns": 44334125,
+            "pooled_dispersion_ns": 585706.4405211495,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/library_seq_ops.lc",
+          "medians_ns": [
+            58705625,
+            58635667
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 58705625,
+            "k": 6,
+            "median_ns": 58635667,
+            "pooled_dispersion_ns": 209824.59670937047,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/lock.lc",
+          "medians_ns": [
+            23837583,
+            23693457
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 23837583,
+            "k": 6,
+            "median_ns": 23693457,
+            "pooled_dispersion_ns": 360072.2689730763,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/logical_mutual_trees.lc",
+          "medians_ns": [
+            21838208,
+            21707750
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 21838208,
+            "k": 6,
+            "median_ns": 21707750,
+            "pooled_dispersion_ns": 127660.91098656491,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/midpoint.lc",
+          "medians_ns": [
+            29762501,
+            30183624
+          ],
+          "sparkline": "▁█",
+          "comparison": {
+            "baseline_median_ns": 29762501,
+            "k": 6,
+            "median_ns": 30183624,
+            "pooled_dispersion_ns": 335370.73328117863,
+            "status": "stable"
+          }
+        },
+        {
+          "name": "tests/corpus/target/percent.lc",
+          "medians_ns": [
+            19431292,
+            19124749
+          ],
+          "sparkline": "█▁",
+          "comparison": {
+            "baseline_median_ns": 19431292,
+            "k": 6,
+            "median_ns": 19124749,
+            "pooled_dispersion_ns": 240171.62468641825,
+            "status": "stable"
+          }
+        }
+      ]
+    },
+    "benchmark_record_sha256": "b5462b7f6b3899250532b93ae938adfdb577b5e373e5212fc1375dd160bafb4b"
+  }
+}

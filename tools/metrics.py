@@ -17,12 +17,12 @@ ROOT=pathlib.Path(__file__).resolve().parent.parent
 def fingerprint(root=ROOT):
     h=hashlib.sha256()
     paths=[]
-    for directory in ('src','tests','library','tools','examples','editors','docs'):
-        paths.extend(path for path in (root/directory).rglob('*') if path.is_file() and not set(path.parts) & {'__pycache__','node_modules','.git'})
+    for directory in ('src','tests','library','tools','examples','editors','docs','website'):
+        paths.extend(path for path in (root/directory).rglob('*') if path.is_file() and not set(path.parts) & {'__pycache__','node_modules','.git'} and str(path.relative_to(root)) not in {'docs/data/state.json','docs/generated-status.md'})
     paths += [root/name for name in ('Cargo.toml','Cargo.lock','build.rs') if (root/name).exists()]
     for path in sorted(paths):
         h.update(str(path.relative_to(root)).encode()+b'\0'+path.read_bytes()+b'\0')
-    data=spec.load(root/'atlas.html')
+    data=spec.load(root/'docs' if (root/'docs/data/state.json').exists() else root/'atlas.html')
     for doc in data['docs']:
         if doc['id'] != 'generated-status' and (doc.get('group') == 'Now' or doc['id'] in ('language','kernel-contract','architecture','formal-core')):
             h.update(json.dumps(doc['body'],sort_keys=True).encode())
@@ -69,7 +69,7 @@ def invalidate():
 def collect(fast_log,extended_log,seconds,expected_fingerprint):
     if expected_fingerprint != fingerprint():
         raise ValueError("source changed during the gate; rerun against one stable checkout")
-    data=spec.load(ROOT/'atlas.html')
+    data=spec.load(ROOT/'docs')
     trace=spec.validate(spec.inventory(data),spec.citations(ROOT))
     manifest=json.loads((ROOT/'tools/trusted-base.json').read_text())
     trusted=[]
@@ -150,7 +150,7 @@ def main():
         record=collect(args.fast_log,args.extended_log,args.fast_seconds,args.source_fingerprint)
         publish(record);print(json.dumps(record,sort_keys=True))
     else:
-        data=spec.load(ROOT/'atlas.html');record=data.get('measurements')
+        data=spec.load(ROOT/'docs');record=data.get('measurements')
         current=fingerprint()
         if args.fresh and (not record or record['source_fingerprint']!=current):
             sys.exit('generated status is absent or stale; run tools/check.sh --extended')

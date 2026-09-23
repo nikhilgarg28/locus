@@ -8,7 +8,7 @@
 // Usable three ways: as a classic script (defines window.highlightLocus), as a
 // CommonJS module (module.exports), and from an ES module by importing this
 // file for its side effect and reading globalThis.highlightLocus. The same
-// code is embedded in atlas.html; tools/highlight.py keeps the two in step.
+// module is imported directly by website/build.mjs; no embedded copy exists.
 (function (root) {
   'use strict';
 
