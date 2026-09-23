@@ -101,7 +101,6 @@ fn twice_then_one(n: u8, small: @(n <= 100)) -> u8 {
 
 // Arithmetic on `Int` is total and stands anywhere: in a proposition, a
 // proof type, and a function of the logic.
-#[terminates] #[no_panic] #[no_io]
 logic fn successor_claim(n: Int) -> Prop {
     prop!(n as Int + 1 <= 256)
 }

@@ -332,15 +332,15 @@ fn stats_count_the_obligations_by_tier() {
         stats(corpus("accept", "lock32_step.lc")),
         [
             "obligations: 9 (2 computed, 1 evaluation, 6 arithmetic)",
-            "  34:40 evaluation",
-            "  38:28 arithmetic, 1 pairs",
-            "  39:59 arithmetic, 1 pairs",
-            "  39:59 computed",
-            "  40:44 arithmetic, 4 pairs",
-            "  42:65 computed",
-            "  51:18 arithmetic, 1 pairs",
-            "  51:18 arithmetic, 1 pairs",
-            "  52:12 arithmetic, 4 pairs",
+            "  33:40 evaluation",
+            "  37:28 arithmetic, 1 pairs",
+            "  38:59 arithmetic, 1 pairs",
+            "  38:59 computed",
+            "  39:44 arithmetic, 4 pairs",
+            "  41:65 computed",
+            "  50:18 arithmetic, 1 pairs",
+            "  50:18 arithmetic, 1 pairs",
+            "  51:12 arithmetic, 4 pairs",
             "Checked 3 function(s); 9 proof(s) found and accepted by the kernel.",
         ]
     );
@@ -387,7 +387,7 @@ fn check_stores_the_proofs_in_a_lockfile_and_locked_never_searches() {
     let (code, _, stderr) = check_lock(&["--locked"], &[]);
     assert_eq!(code, Some(1));
     assert!(
-        stderr.contains("`step` needs a proof of `lock.failures < 3` at line 34"),
+        stderr.contains("`step` needs a proof of `lock.failures < 3` at line 33"),
         "{stderr}"
     );
     assert!(stderr.contains("the proofs file has none"), "{stderr}");

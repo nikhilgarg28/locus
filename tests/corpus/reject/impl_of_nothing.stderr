@@ -1,21 +1,21 @@
 error[L0200]: unknown type `Missing`
- --> tests/corpus/reject/impl_of_nothing.lc:8:6
+ --> tests/corpus/reject/impl_of_nothing.lc:7:6
   |
-8 | impl Missing { //~ error: L0200 unknown type `Missing`
+7 | impl Missing { //~ error: L0200 unknown type `Missing`
   |      ^^^^^^^
   |
   = note: an `impl` block is written for a struct or an enum declared in the same file, by its name
 error[L0200]: `small` is a function, and an `impl` block is for a struct or an enum
-  --> tests/corpus/reject/impl_of_nothing.lc:12:6
+  --> tests/corpus/reject/impl_of_nothing.lc:11:6
    |
-12 | impl small { //~ error: L0200 `small` is a function, and an `impl` block is for a struct or an enum
+11 | impl small { //~ error: L0200 `small` is a function, and an `impl` block is for a struct or an enum
    |      ^^^^^
    |
    = note: an `impl` block is written for a struct or an enum declared in the same file, by its name
 error[L0200]: paths through modules are not in Locus yet; modules are a later project
-  --> tests/corpus/reject/impl_of_nothing.lc:16:6
+  --> tests/corpus/reject/impl_of_nothing.lc:15:6
    |
-16 | impl std::vec::Vec { //~ error: L0200 paths through modules are not in Locus yet
+15 | impl std::vec::Vec { //~ error: L0200 paths through modules are not in Locus yet
    |      ^^^^^^^^^^^^^
    |
    = note: an `impl` block is written for a struct or an enum declared in the same file, by its name

@@ -1,11 +1,9 @@
 // Explicit `logic fn` definitions may appear in propositions. Ordinary
 // functions may transport evidence while retaining their runtime effects.
-#[terminates] #[no_panic] #[no_io]
 logic fn positive(n: Int) -> Prop {
     prop!(n > 0)
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn outside_range(n: Int) -> Prop {
     let above_zero: Prop = prop!(n > 0);
     let below_ten: Prop = prop!(n < 10);
@@ -13,12 +11,10 @@ logic fn outside_range(n: Int) -> Prop {
     !inside
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn either(p: Prop, q: Prop) -> Prop {
     p || q
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn implies(p: Prop, q: Prop) -> Prop {
     prop!(p => q)
 }

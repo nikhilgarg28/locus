@@ -1,6 +1,5 @@
 // An `impl` block is for a struct or an enum the file declares. Its
 // functions are skipped, and a mention of one is not reported again.
-#[terminates] #[no_panic] #[no_io]
 logic fn small(n: Int) -> Prop {
     prop!(n <= 3)
 }

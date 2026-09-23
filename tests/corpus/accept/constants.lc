@@ -62,7 +62,6 @@ fn pair_first() -> u8 {
 }
 
 // A constant of a ghost type mentions a call and has no runtime form.
-#[terminates] #[no_panic] #[no_io]
 logic fn double(n: Int) -> Int {
     n + n
 }

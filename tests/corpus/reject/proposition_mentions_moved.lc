@@ -19,7 +19,6 @@ fn afterwards(n: u8) -> u8 {
 }
 
 // A lemma's argument is erased with the call, so it is a mention too.
-#[terminates] #[no_panic] #[no_io]
 logic fn id_of(t: &Token) -> Int {
     t.id
 }

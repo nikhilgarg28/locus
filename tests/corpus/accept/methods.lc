@@ -81,7 +81,6 @@ impl Counter {
 
     // A method of the logic: it may appear in a proposition, as
     // `Counter::small(&c)` or `c.small()`.
-    #[terminates] #[no_panic] #[no_io]
     logic fn small(&self) -> Prop {
         prop!(self.count <= 3)
     }

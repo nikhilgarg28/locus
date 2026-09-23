@@ -74,7 +74,6 @@ fn note_then_read(x: u8, h: @(x <= 9)) -> u8 {
 
 // A function of the logic in a logic-only context: the call is absent
 // from the generated Rust, and its defining equation serves the proof.
-#[terminates] #[no_panic] #[no_io]
 logic fn double(n: Int) -> Int {
     n + n
 }

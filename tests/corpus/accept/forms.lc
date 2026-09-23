@@ -3,7 +3,6 @@
 // `rewrite!`, `unfold!`, and `fold!` are the explicit equality steps. The
 // words `forall` and `exists` are names outside a formula.
 
-#[terminates] #[no_panic] #[no_io]
 logic fn nonzero(x: Int) -> Prop {
     prop!(x != 0)
 }

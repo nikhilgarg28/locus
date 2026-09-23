@@ -12,7 +12,6 @@ struct Point {
 }
 
 // A claim about a point's coordinates, named as the type it is about.
-#[terminates] #[no_panic] #[no_io]
 logic fn Point(x: Int, y: Int) -> Prop {
     prop!(x <= y)
 }

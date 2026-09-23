@@ -10,7 +10,6 @@ pub struct Lock {
     open: bool,
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }

@@ -1,23 +1,23 @@
 error[L0244]: `failures_of` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `lock.bounded` is evidence
-  --> tests/corpus/reject/pub_evidence_hidden.lc:16:1
+  --> tests/corpus/reject/pub_evidence_hidden.lc:15:1
    |
-16 | pub fn failures_of(lock: Lock) -> u8 { //~ error: L0244 `failures_of` takes evidence and cannot be `pub`: a Rust caller could pass a...
+15 | pub fn failures_of(lock: Lock) -> u8 { //~ error: L0244 `failures_of` takes evidence and cannot be `pub`: a Rust caller could pass a...
    | ^^^                ---------- the evidence is taken here
    |
    = note: a marker cannot be made outside the generated code, and a Rust caller can obtain one honestly, from any function that returns evidence, and pass it on
    = help: make it `pub(crate)`, visible throughout the generated crate and never to Rust, or take a validated type, a struct whose fields are all private, and check plain data at runtime
 error[L0244]: `value_of` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `percent` is a `Percent`, which carries evidence, in `in_range`, and whose field `value` is `pub`, so that a Rust caller can change what the evidence speaks of
-  --> tests/corpus/reject/pub_evidence_hidden.lc:27:1
+  --> tests/corpus/reject/pub_evidence_hidden.lc:26:1
    |
-27 | pub fn value_of(percent: Percent) -> u8 { //~ error: L0244 `value_of` takes evidence and cannot be `pub`: a Rust caller could pass a...
+26 | pub fn value_of(percent: Percent) -> u8 { //~ error: L0244 `value_of` takes evidence and cannot be `pub`: a Rust caller could pass a...
    | ^^^             ---------------- the evidence is taken here
    |
    = note: a marker cannot be made outside the generated code, and a Rust caller can obtain one honestly, from any function that returns evidence, and pass it on
    = help: make it `pub(crate)`, visible throughout the generated crate and never to Rust, or take a validated type, a struct whose fields are all private, and check plain data at runtime
 error[L0244]: `unwrap` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `checked` may be `Checked::Yes`, whose payload at `1` is evidence
-  --> tests/corpus/reject/pub_evidence_hidden.lc:37:1
+  --> tests/corpus/reject/pub_evidence_hidden.lc:36:1
    |
-37 | pub fn unwrap(checked: Checked) -> u8 { //~ error: L0244 `unwrap` takes evidence and cannot be `pub`: a Rust caller could pass any m...
+36 | pub fn unwrap(checked: Checked) -> u8 { //~ error: L0244 `unwrap` takes evidence and cannot be `pub`: a Rust caller could pass any m...
    | ^^^           ---------------- the evidence is taken here
    |
    = note: a marker cannot be made outside the generated code, and a Rust caller can obtain one honestly, from any function that returns evidence, and pass it on

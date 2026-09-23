@@ -1,4 +1,3 @@
-#[terminates] #[no_panic] #[no_io]
 logic fn same(x: Int, y: Int) -> Prop {
     prop!(x == y)
 }

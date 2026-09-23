@@ -15,7 +15,6 @@ fn twice(n: u8) -> (out: u8, @(out == n.wrapping_add(1).wrapping_add(1))) {
     (second, rewrite!(first_is, second_is))
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn within_limit(n: Int) -> Prop {
     prop!(n <= 3)
 }
@@ -40,7 +39,6 @@ fn either(p: Prop, q: Prop, hq: @q) -> @(p || q) {
     Or::Right(hq)
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn from_q(p: Prop, q: Prop, hq: @q, hp: @p) -> @q {
     hq
 }

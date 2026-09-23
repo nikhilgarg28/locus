@@ -112,7 +112,6 @@ fn viewed(a: u16, b: u16, h: @(a < b)) -> @(a as Int <= b as Int) {
     u16_le_of_lt(a, b, h)
 }
 
-#[terminates] #[no_panic] #[no_io]
 logic fn bound(a: Int) -> Prop {
     prop!(a as Int <= 2147483647)
 }

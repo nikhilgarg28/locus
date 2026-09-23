@@ -2,7 +2,6 @@
 // has every field private. A `pub` evidence field could be written with a
 // marker, and a `pub` data field could be changed under the evidence that
 // speaks of it; either way the value no longer means what its type says.
-#[terminates] #[no_panic] #[no_io]
 logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }

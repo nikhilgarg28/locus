@@ -3,7 +3,6 @@
 // marker takes evidence as surely as one with a `@P` parameter. The struct
 // with the `pub` field is `pub(crate)`, so the struct itself passes; the
 // `pub` function taking it does not.
-#[terminates] #[no_panic] #[no_io]
 logic fn within_limit(failures: Int) -> Prop {
     prop!(failures <= 3)
 }
