@@ -20,12 +20,12 @@ The grammar (`syntaxes/locus.tmLanguage.json`) is a TextMate grammar, so it also
 
 ## Install
 
-From this repository, without packaging: link the folder into the extensions directory and reload the window.
-
 ```bash
-ln -s "$(pwd)/editors/vscode/locus" ~/.vscode/extensions/locus-lang.locus-language-0.1.0
+python3 editors/vscode/locus/package.py --install
 ```
 
-Or package it with `npx @vscode/vsce package` in this folder and install the `.vsix` with `code --install-extension`.
+That builds the `.vsix` without npm and installs it into VS Code, and into Cursor if present; then reload the window (Developer: Reload Window). Open a `.lc` file and the status bar should say Locus.
 
-The grammar is tested against every `.lc` file in the repository by `editors/vscode/locus/test/tokenize.js` (needs `npm install` in that folder once); `tools/check.sh` runs it when Node is present.
+Do not link the folder into `~/.vscode/extensions` instead: VS Code registers a linked folder once and then treats it as stale, and refuses to reinstall until it is restarted, which is what a symlink install looks like when it fails.
+
+The grammar is tested against every `.lc` file in the repository by `test/tokenize.js` (needs `npm install` in this folder once); `tools/check.sh` runs it when Node is present.
