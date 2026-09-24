@@ -387,6 +387,11 @@ fn every_code_has_json_coverage_including_the_inactive_preview_schema() {
             .unwrap()
             .map(|entry| entry.unwrap().path()),
     );
+    paths.extend(
+        fs::read_dir(root().join("tests/fixtures/project-errors"))
+            .unwrap()
+            .map(|e| e.unwrap().path().join("expected.jsonl")),
+    );
     for path in paths {
         let text = fs::read_to_string(path).unwrap();
         covered.extend(inventory::codes_in(&text));

@@ -1,0 +1,11 @@
+L0500: Unsupported module form
+
+Module attributes and unresolved module ASTs cannot be handed directly to elaboration. Load a source entry through the project driver; place function promises inside the module, not on mod/use.
+
+The filesystem regression is `tests/fixtures/project-errors/L0500`. Its `export.lc` reproduces this category through the actual project pipeline.
+
+```locus
+#[no_panic] mod child {}
+```
+
+Language, as built: [1.28:8](../spec/17-modules.md).

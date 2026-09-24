@@ -20,6 +20,7 @@ pub mod limits;
 pub mod measurement;
 pub mod parser;
 pub mod preview;
+pub mod project;
 pub mod source;
 pub mod store;
 pub mod typed;

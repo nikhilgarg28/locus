@@ -88,9 +88,15 @@ pub struct Visibilities {
     /// which has no visibilities, and for a test that calls into the module
     /// from outside it.
     everything_public: bool,
+    hidden: HashSet<String>,
 }
 
 impl Visibilities {
+    /// Omit definitions supplied by a dependency while retaining type metadata.
+    pub fn hide(&mut self, name: &str) {
+        self.hidden.insert(name.into());
+    }
+
     /// Every item and field `pub`.
     pub fn everything_public() -> Self {
         Self {
@@ -245,6 +251,9 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         refs: HashSet::new(),
     };
     for item in &module.structs {
+        if visibilities.hidden.contains(&item.name) {
+            continue;
+        }
         printer.derives(&item.derives);
         let visibility = visibilities.of_type(&item.name);
         printer.private_item(&visibility);
@@ -265,6 +274,9 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         printer.out.push_str("}\n");
     }
     for item in &module.enums {
+        if visibilities.hidden.contains(&item.name) {
+            continue;
+        }
         printer.derives(&item.derives);
         let visibility = visibilities.of_type(&item.name);
         printer.private_item(&visibility);
@@ -296,17 +308,23 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         }
         printer.out.push_str("}\n");
     }
-    for function in module
-        .fns
-        .iter()
-        .filter(|function| function.owner.is_none())
-    {
+    for function in module.fns.iter().filter(|function| {
+        function.owner.is_none() && !visibilities.hidden.contains(&function.name)
+    }) {
         printer.function(function, visibilities);
     }
     // The functions of each `impl` block, in the order the blocks' types
     // are first met, each block once whatever order the file wrote them in.
     let mut owners: Vec<&str> = Vec::new();
     for function in &module.fns {
+        if visibilities.hidden.contains(&function.name)
+            || function
+                .owner
+                .as_ref()
+                .is_some_and(|o| visibilities.hidden.contains(o))
+        {
+            continue;
+        }
         if let Some(owner) = &function.owner
             && !owners.contains(&owner.as_str())
         {
@@ -315,11 +333,10 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
     }
     for owner in owners {
         let _ = write!(printer.out, "\nimpl {owner} {{");
-        for function in module
-            .fns
-            .iter()
-            .filter(|function| function.owner.as_deref() == Some(owner))
-        {
+        for function in module.fns.iter().filter(|function| {
+            function.owner.as_deref() == Some(owner)
+                && !visibilities.hidden.contains(&function.name)
+        }) {
             printer.function(function, visibilities);
         }
         printer.out.push_str("}\n");

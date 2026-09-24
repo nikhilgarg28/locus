@@ -1,0 +1,5 @@
+error[L0500]: attributes on modules are not supported; put promises in the module body
+ --> <fixture>/export.lc:1:1
+  |
+1 | #[no_panic] mod child {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,7 @@
+[package]
+name="error_fixture"
+version="0.1.0"
+edition="2024"
+[workspace]
+[package.metadata.locus]
+unknown=true

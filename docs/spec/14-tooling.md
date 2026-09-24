@@ -16,7 +16,7 @@ Use an unlocked check while writing proofs, then replay the resulting certificat
 ## Found proofs are stored
 
 <!-- spec: 1.20:1 legality-rule -->
-`locus check file.lc` stores accepted certificates in `Locus.lock` beside the source. Every reused certificate is checked against the current obligation. `--locked` disables search and writes; a missing or stale certificate is an error. `--no-store` or `LOCUS_PROOFS=off` disables storage; `LOCUS_SEARCH=none` disables search while still allowing replay.
+`locus check file.lc` stores accepted certificates in `Locus.lock` beside a flat source, or at the owning Cargo package root for a [module project](17-modules.md#generated-artifacts). Every reused certificate is checked against the current obligation. `--locked` disables search and writes; a missing or stale certificate is an error. `--no-store` or `LOCUS_PROOFS=off` disables storage; `LOCUS_SEARCH=none` disables search while still allowing replay.
 
 <!-- spec: 1.91:31 informative -->
 Commit the lockfile with source changes. Its keys describe claims and contexts, so reformatting and local renaming need not discard proofs. The [development guide](../development.md#reuse-checked-proofs) covers replay and migration; the [architecture reference](../architecture.md#proof-construction-persistence-and-diagnostics) describes the format. A corrupted or stale entry can cause failure or renewed search; it cannot authorize a false claim.

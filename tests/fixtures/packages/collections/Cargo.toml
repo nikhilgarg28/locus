@@ -1,0 +1,13 @@
+[package]
+name = "verified_collections"
+version = "0.1.0"
+edition = "2024"
+include = ["Cargo.toml", "build.rs", "src/**", "locus/**", "Locus.lock"]
+
+[package.metadata.locus]
+lib = "locus/lib.lc"
+
+[[package.metadata.locus.targets]]
+name = "checked"
+entry = "locus/export.lc"
+rust-module = "checked"

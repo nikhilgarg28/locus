@@ -66,6 +66,29 @@ fn every_executable_now_fence_checks_and_every_run_agrees_with_rust() {
             }
             "check" | "run" => {
                 checked += 1;
+                // Inline module examples use the same filesystem-aware front
+                // end as project builds. Runtime module examples belong in the
+                // compiled producer/consumer fixtures until this harness supports
+                // selecting their qualified interpreter entry.
+                if mode == "check" {
+                    let mut sources = SourceMap::default();
+                    let id = sources.add(&name, &text);
+                    let parsed = parse(sources.get(id));
+                    if parsed.program.declarations.iter().any(|d| {
+                        matches!(
+                            d.kind,
+                            locus::ast::DeclarationKind::Module { .. }
+                                | locus::ast::DeclarationKind::Use { .. }
+                        )
+                    }) {
+                        if let Err(error) =
+                            locus::project::check(&output_dir.join(file), &Default::default())
+                        {
+                            failures.push(error.to_string());
+                        }
+                        continue;
+                    }
+                }
                 let result = runner::examine(&name, &text);
                 failures.extend(result.failures.iter().map(ToString::to_string));
                 failures.extend(

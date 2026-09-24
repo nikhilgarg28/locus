@@ -347,6 +347,10 @@ fn every_error_code_in_the_source_has_a_rejected_file() {
             pinned.extend(codes_pinned_in(&read(&name)));
         }
     }
+    for case in std::fs::read_dir(root().join("tests/fixtures/project-errors")).unwrap() {
+        let path = case.unwrap().path().join("export.lc");
+        pinned.extend(codes_pinned_in(&std::fs::read_to_string(path).unwrap()));
+    }
     assert!(!emitted.is_empty(), "the scan of `src/` found no codes");
 
     let mut failures = Vec::new();

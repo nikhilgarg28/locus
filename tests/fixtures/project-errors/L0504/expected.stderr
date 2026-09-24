@@ -1,0 +1,9 @@
+error[L0504]: cannot export `proof -> result`: a logical type reaches the Rust interface
+ --> <fixture>/export.lc:1:1
+  |
+1 | pub fn proof()->@(1 == 1) {prove!(1 == 1)}
+  | ^^^^^^^^^^^^^^^^---------^^^^^^^^^^^^^^^^^
+  |                 |
+  |                 the incompatible interface is declared here
+  |
+  = note: keep this item in the Locus library interface, or export a wrapper using only runtime inputs and outputs; private logical fields may protect a runtime struct

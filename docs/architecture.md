@@ -140,3 +140,7 @@ Adversarial tests submit malformed kernel declarations and proofs, wrong descent
 Canonical Markdown specifications carry permanent rule IDs, which tests cite. The documentation harness checks executable examples, including three-way agreement for run fences. The [development workflow](development.md) describes the traceability gate, known-bug lifecycle, and commands for reproducing it.
 
 [Generated status](generated-status.md) binds measured counts to a source fingerprint. [Performance records](performance.md) retain workload, toolchain, machine, and compiler identities. A past successful gate or benchmark is evidence about its recorded inputs, not a claim that every later checkout passes.
+
+## Module and package front end
+
+`src/project` expands declared module files while retaining source spans, resolves lexical and Cargo package namespaces, then supplies canonical names and source privacy information to elaboration. Each package keeps its own crate root. The existing typed/kernel pipeline checks the combined program. Reachable Rust interface checking grants emission visibility independently from Locus visibility; foreign runtime identities map to dependency paths. The shared build API emits an includable component and an input/output receipt. See the [package guide](packages.md).

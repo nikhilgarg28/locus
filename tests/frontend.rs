@@ -345,6 +345,19 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             .join(", ")
     };
     match &declaration.kind {
+        DeclarationKind::Module { name, body } => {
+            out.push_str(&format!(
+                "mod {}{}",
+                name.text,
+                if body.is_some() { " { ... }" } else { ";" }
+            ));
+        }
+        DeclarationKind::Use { imports } => {
+            for import in imports {
+                out.push_str(&format!("use {};", import.path.text()));
+            }
+        }
+
         DeclarationKind::Function {
             name,
             self_param,
@@ -3326,16 +3339,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         (
             "impl S<T> { fn get() -> u8 { 1 } }",
             "generic parameters are not in Locus yet",
-            0,
-        ),
-        (
-            "use std::fmt;",
-            "`use` declarations are not in Locus yet",
-            0,
-        ),
-        (
-            "mod inner { fn f() -> u8 { 1 } }",
-            "modules (`mod`) are not in Locus yet",
             0,
         ),
         (

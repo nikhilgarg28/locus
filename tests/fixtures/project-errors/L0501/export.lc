@@ -1,0 +1,2 @@
+mod absent;
+//~ error: L0501

@@ -1,8 +1,3 @@
-error[L0116]: `use` declarations are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:10:1
-   |
-10 | use std::fmt; //~ error: L0116 `use` declarations
-   | ^^^
 error[L0116]: traits (`impl Trait for Type`) are not in Locus yet
   --> tests/corpus/reject/rust_not_yet.lc:16:17
    |

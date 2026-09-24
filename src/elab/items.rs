@@ -118,6 +118,7 @@ pub fn elaborate_with_options(
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
     let mut env = Env {
+        module_access: options.module_access.clone(),
         models: super::models::primitive_models(),
         quantifiers: Vec::new(),
         closure_capture_boundary: None,
@@ -307,7 +308,9 @@ fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
         | DeclarationKind::Enum { name, .. }
         | DeclarationKind::Prop { name, .. }
         | DeclarationKind::Constant { name, .. } => Some(&name.text),
-        DeclarationKind::Impl { .. } => None,
+        DeclarationKind::Impl { .. }
+        | DeclarationKind::Module { .. }
+        | DeclarationKind::Use { .. } => None,
     }
 }
 
@@ -435,7 +438,7 @@ impl Env<'_> {
                             &spelled(visibility.as_ref()),
                         );
                     }
-                    if is_public(info.visibility.as_ref()) {
+                    if self.module_access.is_none() && is_public(info.visibility.as_ref()) {
                         self.check_exported_struct(&info, fields);
                     }
                 }
@@ -450,7 +453,7 @@ impl Env<'_> {
                     };
                     let info = Rc::clone(info);
                     visibilities.set_value(&name.text, &spelled(info.visibility.as_ref()));
-                    if is_public(info.visibility.as_ref()) {
+                    if self.module_access.is_none() && is_public(info.visibility.as_ref()) {
                         self.check_exported_fn(&info, parameters);
                     }
                 }
@@ -459,7 +462,10 @@ impl Env<'_> {
                         visibilities.set_value(&name.text, &spelled(info.visibility.as_ref()));
                     }
                 }
-                DeclarationKind::Prop { .. } | DeclarationKind::Impl { .. } => {}
+                DeclarationKind::Prop { .. }
+                | DeclarationKind::Impl { .. }
+                | DeclarationKind::Module { .. }
+                | DeclarationKind::Use { .. } => {}
             }
         }
         visibilities
@@ -1124,6 +1130,7 @@ impl Env<'_> {
                     return self.internal(error, name.span);
                 }
                 Ok(Global::Struct(Rc::new(StructInfo {
+                    origin: name.span,
                     id,
                     name: name.text.clone(),
                     fields,
@@ -1321,6 +1328,11 @@ impl Env<'_> {
                 self.refuse_derive(attributes, "a proposition");
                 self.prop(name, parameters, variants)
             }
+            DeclarationKind::Module { .. } | DeclarationKind::Use { .. } => self.fail(
+                "L0500",
+                "resolve modules with the project loader before elaboration",
+                declaration.span,
+            ),
             DeclarationKind::Impl { .. } => {
                 unreachable!("the functions of an impl block are units of their own")
             }
@@ -1464,6 +1476,7 @@ impl Env<'_> {
             check_micros: started.elapsed().as_micros(),
         });
         Ok(Global::Fn(Rc::new(FnInfo {
+            origin: Some(name.span),
             logical,
             result_logical,
             reference,
@@ -1904,6 +1917,7 @@ impl Env<'_> {
             self.values.insert(
                 name.to_string(),
                 Global::Fn(Rc::new(FnInfo {
+                    origin: None,
                     logical: true,
                     result_logical: true,
                     reference: FnRef::Math(id),

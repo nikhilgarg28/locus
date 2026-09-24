@@ -1,0 +1,7 @@
+use verified::runtime::{Token, increment};
+use verified::theorems::reflexive;
+pub fn round_trip(value: Token) -> Token {
+    let proof = reflexive(value.value() as Int);
+    value
+}
+pub fn answer() -> u8 { increment(41) }

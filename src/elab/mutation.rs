@@ -508,6 +508,7 @@ impl Env<'_> {
                         let message = format!("`{}` has no field `{}`", info.name, field.text);
                         return self.fail("L0210", message, field.span);
                     };
+                    self.field_visible(&info, index, field.span)?;
                     (index, Some(field.text.clone()), field.span)
                 }
                 (Type::Tuple(fields), Part::Index(index, index_span)) => {

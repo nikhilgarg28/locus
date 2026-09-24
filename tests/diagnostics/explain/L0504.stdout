@@ -1,0 +1,13 @@
+L0504: Rust interface is not exportable
+
+A reachable interface contains logical data/evidence, or has no supported concrete Rust ABI. The diagnostic follows the export through parameters, results, fields, variants and methods. Keep logical APIs in lib.lc; export concrete runtime wrappers and private invariant-bearing structs.
+
+A dependency type must have one independently generated Rust identity. If two targets expose the same source type, combine their public modules under one target. Re-exporting an existing dependency type does not create a new identity.
+
+The filesystem regression is `tests/fixtures/project-errors/L0504`. Its `export.lc` reproduces this category through the actual project pipeline.
+
+```locus
+pub fn proof()->@(1 == 1) {prove!(1 == 1)}
+```
+
+Language, as built: [1.28:13](../spec/17-modules.md).

@@ -1,0 +1,6 @@
+pub struct Token { value: u8 }
+impl Token {
+    pub fn new(value: u8) -> Token { Token { value } }
+    pub fn value(&self) -> u8 { self.value }
+}
+pub fn increment(value: u8) -> u8 { value.wrapping_add(1) }

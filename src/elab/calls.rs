@@ -375,6 +375,7 @@ impl Env<'_> {
         arguments: &[Argument<'_>],
         span: Span,
     ) -> Elab<Value> {
+        self.module_visible(info.origin, info.visibility.as_ref(), &info.name, span)?;
         match self.formula {
             Some(place) => self.admit_to_formula(info, place, span)?,
             None => self.keep_promises(info, span)?,

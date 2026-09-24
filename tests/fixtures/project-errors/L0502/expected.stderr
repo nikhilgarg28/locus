@@ -1,0 +1,7 @@
+error[L0502]: `one` is bound twice in this module
+ --> <fixture>/export.lc:1:12
+  |
+1 | mod one {} mod one {}
+  | ---------  ^^^^^^^^^
+  | |
+  | first binding here

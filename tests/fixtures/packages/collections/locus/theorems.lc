@@ -1,0 +1,1 @@
+pub logic fn reflexive(n: Int) -> @(n == n) { prove!(n == n) }

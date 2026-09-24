@@ -128,6 +128,50 @@
     {
       "path": "src/build.rs",
       "category": "Rust crate/marker privacy boundary"
+    },
+    {
+      "path": "src/project/load.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/project/resolve.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/project/check.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/project/export.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/project/cargo.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/project/build.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/source.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/elab/env.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/elab/calls.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/elab/data.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/elab/mutation.rs",
+      "category": "module identity, source privacy, Cargo identity and Rust export boundary"
     }
   ]
 }

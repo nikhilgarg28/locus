@@ -1,0 +1,6 @@
+mod helpers;
+pub struct Counter { value: u8 }
+impl Counter {
+    pub fn new(value: u8) -> Counter { Counter { value } }
+    pub fn get(&self) -> u8 { helpers::identity(self.value) }
+}

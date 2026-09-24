@@ -1,0 +1,2 @@
+mod child { fn hidden()->u8 {1} } pub fn attack()->u8 {child::hidden()}
+//~ error: L0503

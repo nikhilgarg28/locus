@@ -1,0 +1,6 @@
+pub mod first {
+    pub fn value() -> u8 { 5 }
+}
+pub mod second {
+    pub fn value() -> u8 { 8 }
+}

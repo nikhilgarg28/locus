@@ -1,0 +1,11 @@
+L0503: Module privacy violation
+
+A path, field, method, constructor or re-export exceeds its source visibility. Visibility restrictions must name lexical ancestors; an impl cannot add methods to a foreign package type. Keep access inside the owning module or expose a checked public operation.
+
+The filesystem regression is `tests/fixtures/project-errors/L0503`. Its `export.lc` reproduces this category through the actual project pipeline.
+
+```locus
+mod child { fn hidden()->u8 {1} } pub fn attack()->u8 {child::hidden()}
+```
+
+Language, as built: [1.28:6](../spec/17-modules.md).

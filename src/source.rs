@@ -99,7 +99,7 @@ impl SourceMap {
 #[derive(Debug)]
 pub struct SourceBundle {
     pub file: FileId,
-    segments: Vec<(usize, usize, FileId)>,
+    segments: Vec<(usize, usize, FileId, usize)>,
 }
 impl SourceBundle {
     pub fn join(sources: &mut SourceMap, files: &[FileId]) -> Self {
@@ -115,10 +115,24 @@ impl SourceBundle {
         for &file in files {
             let start = text.len();
             text.push_str(sources.get(file).text());
-            segments.push((start, text.len(), file));
+            segments.push((start, text.len(), file, 0));
             text.push('\n');
         }
         let name = sources.get(*files.last().unwrap()).name.clone();
+        let file = sources.add(name, text);
+        Self { file, segments }
+    }
+    /// Assemble mapped fragments, including one-character module delimiters.
+    pub fn fragments(sources: &mut SourceMap, name: &str, fragments: &[(Span, String)]) -> Self {
+        let mut text = String::new();
+        let mut segments = Vec::new();
+        for (origin, fragment) in fragments {
+            let start = text.len();
+            text.push_str(fragment);
+            if !fragment.is_empty() {
+                segments.push((start, text.len(), origin.file, origin.start));
+            }
+        }
         let file = sources.add(name, text);
         Self { file, segments }
     }
@@ -128,15 +142,15 @@ impl SourceBundle {
         }
         let index = self
             .segments
-            .partition_point(|(start, _, _)| *start <= span.start)
+            .partition_point(|(start, _, _, _)| *start <= span.start)
             .saturating_sub(1);
-        let (start, end, file) = self.segments[index];
+        let (start, end, file, original) = self.segments[index];
         // A recovery span crossing an input boundary is attributed to the
         // input where it starts; no displayed range may leave that file.
         Span::new(
             file,
-            span.start.min(end) - start,
-            span.end.min(end).max(span.start.min(end)) - start,
+            original + span.start.min(end) - start,
+            original + span.end.min(end).max(span.start.min(end)) - start,
         )
     }
     pub fn diagnostic(

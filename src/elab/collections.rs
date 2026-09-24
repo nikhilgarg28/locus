@@ -120,6 +120,7 @@ impl Env<'_> {
             Type::tuple_over(&fields)
         };
         Ok(FnInfo {
+            origin: None,
             logical: false,
             result_logical: false,
             reference: helper.reference,

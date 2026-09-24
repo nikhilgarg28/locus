@@ -322,6 +322,8 @@ impl Parser<'_> {
             || (self.at(K::Prop) && self.peek(1) != K::Bang)
             || self.at_keyword("pub")
             || self.at_keyword("impl")
+            || self.at_keyword("mod")
+            || self.at_keyword("use")
             || self.at_word("trusted")
     }
 
@@ -608,11 +610,102 @@ impl Parser<'_> {
                 Ok((DeclarationKind::Constant { name, ty, value }, end.span))
             }
             K::Keyword if self.source.slice(start.span) == Some("impl") => self.impl_block(visible),
+            K::Keyword if self.source.slice(start.span) == Some("mod") => self.module_item(),
+            K::Keyword if self.source.slice(start.span) == Some("use") => {
+                let mut imports = Vec::new();
+                self.import_tree(Vec::new(), &mut imports)?;
+                let end = self.expect(K::Semicolon)?.span;
+                Ok((DeclarationKind::Use { imports }, end))
+            }
             K::Keyword => self
                 .fail("expected a declaration: `fn`, `struct`, `enum`, `prop`, `const`, or `impl`"),
             // `declaration_start` leaves the contextual word `prop`.
             _ => self.prop(),
         }
+    }
+
+    fn module_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
+        self.nested(|this| {
+            let name = this.name()?;
+            if let Some(end) = this.eat(K::Semicolon) {
+                return Ok((DeclarationKind::Module { name, body: None }, end.span));
+            }
+            this.expect(K::LBrace)?;
+            let mut body = Program::default();
+            this.file_header(&mut body);
+            while !this.at(K::RBrace) && !this.at(K::Eof) {
+                this.step();
+                body.declarations.push(this.declaration()?);
+            }
+            let end = this.expect(K::RBrace)?.span;
+            Ok((
+                DeclarationKind::Module {
+                    name,
+                    body: Some(body),
+                },
+                end,
+            ))
+        })
+    }
+
+    fn import_tree(&mut self, mut prefix: Vec<Name>, imports: &mut Vec<Import>) -> ParseResult<()> {
+        self.nested(|this| {
+            loop {
+                this.step();
+                if this.eat(K::LBrace).is_some() {
+                    while !this.at(K::RBrace) && !this.at(K::Eof) {
+                        this.import_tree(prefix.clone(), imports)?;
+                        if this.eat(K::Comma).is_none() {
+                            break;
+                        }
+                    }
+                    this.expect(K::RBrace)?;
+                    return Ok(());
+                }
+                if this.at(K::Star) {
+                    return this.fail(
+                        "glob imports are not supported; name the imported items explicitly",
+                    );
+                }
+                let name = if this.at_keyword("self")
+                    || this.at_keyword("super")
+                    || this.at_keyword("crate")
+                {
+                    let token = this.bump();
+                    Name {
+                        text: this.source.slice(token.span).unwrap().into(),
+                        span: token.span,
+                    }
+                } else {
+                    this.name()?
+                };
+                let group_self = name.text == "self" && !prefix.is_empty();
+                if !group_self {
+                    prefix.push(name);
+                }
+                if this.eat(K::PathSep).is_some() {
+                    continue;
+                }
+                let alias = if this.eat(K::As).is_some() {
+                    Some(this.name()?)
+                } else {
+                    None
+                };
+                let span = prefix
+                    .first()
+                    .unwrap()
+                    .span
+                    .through(prefix.last().unwrap().span);
+                imports.push(Import {
+                    path: Path {
+                        segments: prefix,
+                        span,
+                    },
+                    alias,
+                });
+                return Ok(());
+            }
+        })
     }
 
     /// A checked header with a deliberately trusted native specification.
@@ -3249,7 +3342,7 @@ fn keyword_construct(keyword: &str) -> Option<&'static str> {
         "trait" => "traits are not in Locus yet",
         "type" => "type aliases (`type`) are not in Locus yet",
         "unsafe" => "`unsafe` is not in Locus yet",
-        "use" => "`use` declarations are not in Locus yet",
+        "use" => "`use` is only supported at module scope",
         "where" => "`where` clauses are not in Locus yet",
         _ => return None,
     })

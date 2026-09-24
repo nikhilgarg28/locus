@@ -557,6 +557,21 @@ fn an_author_is_told_why() {
             }
         }
     }
+    // Module/Cargo failures need complete directory trees. Their dedicated
+    // fixture runner checks rejection plus text and JSON goldens through the
+    // public API and CLI, rather than flattening them into a corpus string.
+    for case in std::fs::read_dir(root().join("tests/fixtures/project-errors")).unwrap() {
+        let case = case.unwrap().path();
+        let text = read(&case.join("export.lc"));
+        for line in text.lines() {
+            if let Some(code) = line.strip_prefix("//~ error: ") {
+                pinned.push(code.trim().into());
+            }
+        }
+        assert!(case.join("expected.stderr").is_file());
+        assert!(case.join("expected.jsonl").is_file());
+        goldens += 1;
+    }
     let unpinned: Vec<&String> = codes.iter().filter(|code| !pinned.contains(code)).collect();
     assert!(
         unpinned.is_empty(),

@@ -1,0 +1,5 @@
+error[L0506]: refusing to overwrite an existing file without a matching Locus build receipt; choose a fresh output name/directory
+ --> <fixture>/out/locus.rs:1:1
+  |
+1 |
+  | ^

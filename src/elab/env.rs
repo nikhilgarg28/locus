@@ -22,6 +22,7 @@ pub(super) type Elab<T> = Result<T, ()>;
 
 #[derive(Debug)]
 pub(super) struct StructInfo {
+    pub origin: Span,
     pub id: StructId,
     pub name: String,
     /// A field's type may mention the binders of the fields before it.
@@ -83,6 +84,7 @@ pub(super) struct PropVariantInfo {
 
 #[derive(Debug)]
 pub(super) struct FnInfo {
+    pub origin: Option<Span>,
     /// Checked logical declaration; independent of runtime promises.
     pub logical: bool,
     /// Surface result classification (kernel Bool alone cannot retain it).
@@ -239,6 +241,7 @@ impl Mark {
 
 #[derive(Clone)]
 pub(super) struct Env<'a> {
+    pub module_access: Option<std::sync::Arc<crate::project::Access>>,
     pub models: Vec<super::models::ModelEntry>,
     pub quantifiers: Vec<crate::kernel::Quantifiers>,
     pub closure_capture_boundary: Option<usize>,
@@ -599,5 +602,38 @@ pub(super) fn substitute(proof: Proof, vars: &[(VarId, Term)], hyps: &[(HypId, P
     match wrapped {
         Term::Proof(proof) => *proof,
         _ => unreachable!("substitution keeps the shape of a term"),
+    }
+}
+
+impl Env<'_> {
+    pub(super) fn module_visible(
+        &mut self,
+        origin: Option<Span>,
+        visibility: Option<&ast::Visibility>,
+        name: &str,
+        at: Span,
+    ) -> Elab<()> {
+        if let (Some(access), Some(origin)) = (&self.module_access, origin)
+            && !access.allowed(visibility, access.module_at(origin), access.module_at(at))
+        {
+            self.diagnostics.push(
+                crate::diagnostic::Diagnostic::error(
+                    "L0503",
+                    format!("`{name}` is private to its module"),
+                    at,
+                )
+                .label(origin, "declared here"),
+            );
+            return Err(());
+        }
+        Ok(())
+    }
+    pub(super) fn field_visible(&mut self, info: &StructInfo, index: usize, at: Span) -> Elab<()> {
+        self.module_visible(
+            Some(info.origin),
+            info.field_visibility[index].as_ref(),
+            &format!("{}.{}", info.name, info.fields[index].name),
+            at,
+        )
     }
 }

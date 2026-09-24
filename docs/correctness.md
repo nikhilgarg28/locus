@@ -73,3 +73,9 @@ Sources: [trusted-base manifest](../tools/trusted-base.json), [audit](../tests/a
 The guarantee is conditional on the stated input assumptions and trust boundary, and generally concerns normal return. Panic or nontermination does not establish a postcondition. Tests do not exhaustively explore allocation failure, arbitrary external code, or every possible program.
 
 The formal core states the preservation and simulation obligations connecting checked programs, lowering, and erasure. Their Lean mechanization is deferred; there is no machine-checked compiler-correctness theorem. The [roadmap](roadmap.md) and [formal-core obligations](reference/formal-core.md#spec-3.6:1) record the remaining work.
+
+## Module and package boundaries
+
+Name resolution, source privacy, reachable export validation and Cargo-to-Rust identity mapping are part of the compiler correctness boundary. Module/package fixtures exercise real directory trees, private field/method access, erased-type leaks, same-crate Rust attacks, and producer/consumer Cargo builds. A dependency's theorem is checked from its Locus source; metadata and receipts are not proof authorities.
+
+The host and dependencies must compile the generated interface at the Rust path they advertise. Build-script wiring and the Rust dependency implementation remain build assumptions. Receipt hashes detect accidental stale or edited artifacts; they cannot establish what a deliberately altered build compiled. The project pipeline always checks proofs before emission. General traits, generic runtime ABI export, and broader native ABI mappings remain separate work.

@@ -1,0 +1,7 @@
+error[L0501]: module `absent` not found
+ --> <fixture>/export.lc:1:5
+  |
+1 | mod absent;
+  |     ^^^^^^
+  |
+  = note: expected <fixture>/absent.lc or <fixture>/absent/mod.lc

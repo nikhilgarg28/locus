@@ -366,6 +366,20 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
         output.flush()?;
         return Ok(0);
     }
+    if matches!(command, "check" | "rust" | "run" | "build" | "audit")
+        && uses_project_driver(&arguments)
+    {
+        if !libraries.is_empty() {
+            emit_driver(
+                format,
+                Level::Error,
+                "L0400",
+                "module/package builds use `mod` and `use`; --library is the legacy flat-file mechanism",
+            )?;
+            return Ok(2);
+        }
+        return project_command(&arguments, &elab_options, format);
+    }
     if command == "build" {
         return build(&arguments[1..], &elab_options, &libraries, format);
     }
@@ -1118,4 +1132,237 @@ fn read_store_text(path: &Path) -> io::Result<String> {
         .take(locus::limits::MAX_PROOF_FILE_BYTES as u64 + 1)
         .read_to_string(&mut text)?;
     Ok(text)
+}
+
+/// The old flat-file commands remain compatible. Module syntax, an export
+/// entry, a directory, or explicit package/output options selects the module driver.
+fn uses_project_driver(arguments: &[OsString]) -> bool {
+    if arguments.iter().any(|a| {
+        matches!(
+            a.to_str(),
+            Some("--out-dir" | "--manifest-path" | "--check-receipt")
+        )
+    }) {
+        return true;
+    }
+    let Some(path) = arguments.get(1).map(Path::new) else {
+        return false;
+    };
+    if arguments[0] == "audit" && path.is_dir() && !path.join("export.lc").is_file() {
+        return false;
+    }
+    if path.is_dir() || path.file_name().is_some_and(|n| n == "export.lc") {
+        return true;
+    }
+    let Ok(text) = read_source(&arguments[1]) else {
+        return false;
+    };
+    if text.len() > locus::limits::MAX_SOURCE_BYTES {
+        return false;
+    }
+    let mut sources = SourceMap::default();
+    let file = sources.add(path.display().to_string(), text);
+    lexer::lex(sources.get(file)).tokens.iter().any(|t| {
+        t.kind == lexer::TokenKind::Keyword
+            && matches!(sources.get(file).slice(t.span), Some("mod" | "use"))
+    })
+}
+fn project_command(
+    arguments: &[OsString],
+    options: &elab::Options,
+    format: DiagnosticFormat,
+) -> io::Result<u8> {
+    let usage = |message: &str| -> io::Result<u8> {
+        emit_driver(format, Level::Error, "L0400", message)?;
+        Ok(2)
+    };
+    let command = arguments[0].to_string_lossy();
+    let mut entry = None;
+    let mut function = None;
+    let mut values = Vec::new();
+    let mut build = locus::project::Build::new(".");
+    build.options = options.clone();
+    build.use_proofs = env::var("LOCUS_PROOFS").as_deref() != Ok("off");
+    build.write_proofs = command == "check";
+    build.search_proofs = env::var("LOCUS_SEARCH").as_deref() != Ok("none");
+    let mut receipt = false;
+    let mut holes = false;
+    let mut stats = false;
+    let mut args = arguments[1..].iter();
+    while let Some(arg) = args.next() {
+        match arg.to_str() {
+            Some("--out-dir" | "--out") => {
+                let Some(value) = args.next() else {
+                    return usage("--out-dir takes a directory");
+                };
+                build.out_dir = Some(value.into());
+            }
+            Some("--name") => {
+                let Some(value) = args.next() else {
+                    return usage("--name takes a name");
+                };
+                build.name = value.to_string_lossy().into();
+            }
+            Some("--manifest-path") => {
+                let Some(value) = args.next() else {
+                    return usage("--manifest-path takes a Cargo.toml path");
+                };
+                build.cargo.manifest_path = Some(value.into());
+            }
+            Some("--offline") => build.cargo.offline = true,
+            Some("--locked") => {
+                build.cargo.locked = true;
+                build.locked_proofs = command == "check";
+            }
+            Some("--no-store") => {
+                build.use_proofs = false;
+                build.write_proofs = false;
+            }
+            Some("--no-default-features") => build.cargo.no_default_features = true,
+            Some("--all-features") => build.cargo.all_features = true,
+            Some("--features") => {
+                let Some(value) = args.next() else {
+                    return usage("--features takes a comma-separated list");
+                };
+                build.cargo.features = value
+                    .to_string_lossy()
+                    .split(',')
+                    .map(str::to_owned)
+                    .collect();
+            }
+            Some("--target") => {
+                let Some(value) = args.next() else {
+                    return usage("--target takes a Rust target triple");
+                };
+                build.cargo.target = Some(value.to_string_lossy().into());
+            }
+            Some("--check-receipt") => receipt = true,
+            Some("--holes") => holes = true,
+            Some("--stats") => stats = true,
+            Some(flag) if flag.starts_with("--") => {
+                return usage(&format!("unknown project option `{flag}`"));
+            }
+            _ if entry.is_none() => entry = Some(PathBuf::from(arg)),
+            _ if command == "run" && function.is_none() => {
+                function = Some(arg.to_string_lossy().into_owned())
+            }
+            _ if command == "run" => values.push(arg.to_string_lossy().into_owned()),
+            _ => return usage("module builds accept one entry point"),
+        }
+    }
+    let Some(entry) = entry else {
+        return usage("provide an entry .lc file or directory containing export.lc");
+    };
+    build.entry = entry;
+    let result =
+        (|| -> Result<u8, locus::project::Error> {
+            if receipt {
+                let current = build.is_current()?;
+                println!("{}", if current { "current" } else { "stale" });
+                return Ok(u8::from(!current));
+            }
+            if command == "build" {
+                let built = build.generate()?;
+                println!("{}\n{}", built.rust.display(), built.receipt.display());
+                return Ok(0);
+            }
+            if command == "rust" {
+                print!("{}", build.rust()?);
+                return Ok(0);
+            }
+            let checked = build.check()?;
+            if command == "run" {
+                let name = function.as_deref().unwrap_or("main");
+                let original =
+                    checked.loaded.graph.items.iter().find(|i| {
+                        i.original == name && i.module == checked.loaded.graph.export_root
+                    });
+                let alias = checked
+                    .loaded
+                    .graph
+                    .exports(checked.loaded.graph.export_root)
+                    .into_iter()
+                    .find(|e| e.path.join("::") == name);
+                let canonical = original.map(|i| i.canonical.as_str()).or_else(|| {
+                    alias
+                        .as_ref()
+                        .map(|e| checked.loaded.graph.items[e.item].canonical.as_str())
+                });
+                let reference = canonical.and_then(|n| checked.checked.function(n));
+                let Some(reference) = reference else {
+                    return Err(locus::project::command_error(
+                        &build.entry,
+                        format!("no function `{name}` at this entry"),
+                    ));
+                };
+                let module = checked.checked.session.erased();
+                let params: Vec<_> = module
+                    .fns
+                    .iter()
+                    .find(|f| f.reference == reference)
+                    .map(|f| f.params.iter().map(|(_, _, t)| t.clone()).collect())
+                    .unwrap_or_default();
+                let mut inputs = Vec::new();
+                for (index, value) in values.iter().enumerate() {
+                    let value = match (params.get(index), value.as_str()) {
+                        (Some(EType::Bool), "true") => Some(Value::Bool(true)),
+                        (Some(EType::Bool), "false") => Some(Value::Bool(false)),
+                        (Some(EType::Int(ty)), text) => text
+                            .parse::<i128>()
+                            .ok()
+                            .filter(|n| ty.contains(&Integer::from(*n)))
+                            .map(|n| Value::Int(*ty, n)),
+                        _ => None,
+                    }
+                    .ok_or_else(|| {
+                        locus::project::command_error(
+                            &build.entry,
+                            "invalid argument for runtime parameter type".into(),
+                        )
+                    })?;
+                    inputs.push(value);
+                }
+                match Interpreter::new(module, FUEL).call(reference, inputs) {
+                    Ok(Outcome::Value(value)) => println!("{}", value.debug(module)),
+                    Ok(Outcome::Panic(message)) => {
+                        eprintln!("`{name}` panicked: {message}");
+                        return Ok(101);
+                    }
+                    Ok(Outcome::OutOfFuel) => {
+                        return Err(locus::project::command_error(
+                            &build.entry,
+                            "execution exhausted its step budget".into(),
+                        ));
+                    }
+                    Err(error) => {
+                        return Err(locus::project::command_error(
+                            &build.entry,
+                            error.to_string(),
+                        ));
+                    }
+                };
+            } else {
+                if holes {
+                    for hole in &checked.checked.holes {
+                        println!("{:?}: {}", checked.loaded.bundle.span(hole.span), hole.tier);
+                    }
+                }
+                if stats {
+                    for item in &checked.checked.items {
+                        println!(
+                            "{}: {} us elaborate, {} us check",
+                            item.name, item.elaborate_micros, item.check_micros
+                        );
+                    }
+                }
+            }
+            Ok(0)
+        })();
+    match result {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            emit_diagnostics(&error.sources, &error.diagnostics, format)?;
+            Ok(1)
+        }
+    }
 }

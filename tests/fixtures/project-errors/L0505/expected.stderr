@@ -1,0 +1,5 @@
+error[L0505]: <fixture>/Cargo.toml: unknown package.metadata.locus key `unknown`
+ --> <fixture>:1:1
+  |
+1 |
+  | ^

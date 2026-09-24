@@ -7,7 +7,7 @@ pub struct Counter {
 
 pub fn visible() -> u8 { 1 }
 
-use std::fmt; //~ error: L0116 `use` declarations
+// Module imports are covered by the project fixtures.
 
 impl Counter {
     fn get(&self) -> u8 { self.count }

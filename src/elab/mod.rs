@@ -60,6 +60,7 @@ use crate::store::ProofStore;
 pub struct Options {
     pub previews: crate::preview::Previews,
     pub check_moves: bool,
+    pub module_access: Option<std::sync::Arc<crate::project::Access>>,
 }
 
 impl Default for Options {
@@ -67,6 +68,7 @@ impl Default for Options {
         Self {
             previews: crate::preview::Previews::default(),
             check_moves: true,
+            module_access: None,
         }
     }
 }

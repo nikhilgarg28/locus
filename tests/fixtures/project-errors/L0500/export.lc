@@ -1,0 +1,2 @@
+#[no_panic] mod child {}
+//~ error: L0500

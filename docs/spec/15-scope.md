@@ -28,7 +28,7 @@ Locus is tested through independent checks, hostile inputs, interpreter comparis
 - Stored mutable references, interior mutability, raw pointers, unsafe code, and async.
 - Platform-sized and 128-bit integers, floats, characters, and byte strings.
 - Bit operators, compound assignment, iterator-based `for`, `while let`, `if let`, `?`, labels, and deep runtime patterns.
-- General module/import resolution, foreign Rust linking, and user macros or attributes.
+- General Rust trait/type import, generic cross-package runtime ABI, and user macros or attributes.
 
 <!-- spec: 1.91:33 informative -->
-Use [explicit library inputs](14-tooling.md#the-command-line) for source composition and the registered [native contract bridge](11-models.md#native-contracts) for supported Rust adapters. The [roadmap](../roadmap.md) distinguishes implemented, partial, and deferred work.
+Use [modules and Cargo packages](17-modules.md) for source composition and the registered [native contract bridge](11-models.md#native-contracts) for supported Rust adapters. The [roadmap](../roadmap.md) distinguishes implemented, partial, and deferred work.

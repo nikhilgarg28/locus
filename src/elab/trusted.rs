@@ -133,6 +133,7 @@ impl Env<'_> {
             Err(error) => return self.fail("L0287", error.to_string(), name.span),
         };
         Ok(Global::Fn(Rc::new(FnInfo {
+            origin: Some(name.span),
             logical: false,
             result_logical: self.logical_spelling(result),
             reference,

@@ -360,6 +360,13 @@ impl Specializer<'_> {
     fn declaration(&mut self, declaration: &mut Declaration, substitutions: &Types) {
         let mut locals = Types::new();
         match &mut declaration.kind {
+            DeclarationKind::Module { .. } | DeclarationKind::Use { .. } => {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0500",
+                    "modules require the project loader",
+                    declaration.span,
+                ));
+            }
             DeclarationKind::Function {
                 parameters,
                 result,

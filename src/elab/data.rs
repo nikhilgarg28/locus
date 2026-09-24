@@ -74,6 +74,9 @@ impl Env<'_> {
                 name.span,
             );
         };
+        for index in 0..info.fields.len() {
+            self.field_visible(&info, index, span)?;
+        }
         let what = format!("`{}`", info.name);
         let values = self.values_by_name(&what, &info.fields, fields, span)?;
         let mut exprs = Vec::new();
@@ -341,6 +344,10 @@ impl Env<'_> {
         name: Option<String>,
         span: Span,
     ) -> Elab<Value> {
+        if let Type::Struct(id) = &target.ty {
+            let info = self.struct_by_id(*id).expect("declared struct");
+            self.field_visible(&info, index, span)?;
+        }
         let term = self.term(&target, span)?;
         // The kernel knows what the field's type says about the other fields.
         let ty = self.type_of(&Term::proj(term, index), span)?;

@@ -324,7 +324,9 @@ fn declared_namespace(declaration: &Declaration) -> Option<Namespace> {
         DeclarationKind::Struct { .. }
         | DeclarationKind::Enum { .. }
         | DeclarationKind::Prop { .. } => Some(Namespace::Type),
-        DeclarationKind::Impl { .. } => None,
+        DeclarationKind::Impl { .. }
+        | DeclarationKind::Module { .. }
+        | DeclarationKind::Use { .. } => None,
     }
 }
 
@@ -336,7 +338,9 @@ pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
         | DeclarationKind::Enum { name, .. }
         | DeclarationKind::Prop { name, .. }
         | DeclarationKind::Constant { name, .. } => Some(name),
-        DeclarationKind::Impl { .. } => None,
+        DeclarationKind::Impl { .. }
+        | DeclarationKind::Module { .. }
+        | DeclarationKind::Use { .. } => None,
     }
 }
 
@@ -525,7 +529,9 @@ impl Mentions<'_> {
                 self.expr(value);
             }
             // Its functions are units of their own.
-            DeclarationKind::Impl { .. } => {}
+            DeclarationKind::Impl { .. }
+            | DeclarationKind::Module { .. }
+            | DeclarationKind::Use { .. } => {}
         }
     }
 

@@ -61,6 +61,10 @@ A known-bug marker pins a failure and an open roadmap task. An unexpected pass, 
 
 `locus check FILE --error-format json` emits one schema-versioned, single-element diagnostic array per line on stderr. `locus explain L0230` gives a code-specific explanation and specification citation. The [diagnostic schema](diagnostics/schema.md) defines fields and compatibility; text and JSON have separate goldens. A bounded failed search is not a refutation of the requested proposition.
 
+## Build modules and packages
+
+See the [package guide](packages.md) for entry files, Cargo metadata, build.rs integration and reusable theorems. The module driver keeps original file locations in diagnostics. Its `check` command owns one host-package proof lockfile; dependency packages remain read-only.
+
 ## Reuse checked proofs
 
 `locus check path/file.lc` records the proofs it uses in `path/Locus.lock`. Commit that TOML file alongside the sources. `locus check path/file.lc --locked` requires every obligation to replay through the kernel without search or writes. `--no-store` bypasses storage for search experiments. Checking one source preserves neighboring files' lockfile entries.

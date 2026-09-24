@@ -1,0 +1,2 @@
+pub fn sum(a: u8, b: u8) -> u8 { a.wrapping_add(b) }
+pub fn increment(n: u8) -> u8 { n.wrapping_add(1) }

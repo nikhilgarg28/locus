@@ -217,6 +217,15 @@ pub struct Declaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
+    /// A source module; `None` is loaded from its declared file by the project loader.
+    Module {
+        name: Name,
+        body: Option<Program>,
+    },
+    /// Explicit imports; grouped syntax is expanded into these leaves by the parser.
+    Use {
+        imports: Vec<Import>,
+    },
     Function {
         /// `logic fn` is an erased logical definition.
         logical: bool,
@@ -889,4 +898,11 @@ impl BinaryOp {
                 | Self::GreaterEqual
         )
     }
+}
+
+/// A named import or re-export. Globs are deliberately rejected in this tier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Import {
+    pub path: Path,
+    pub alias: Option<Name>,
 }

@@ -309,3 +309,9 @@ pub fn command(
         .map(|s| s.trim_end().into())
         .map_err(|e| e.to_string())
 }
+
+/// Identity of the compiler sources used for this binary; receipts are advisory
+/// when provenance is unavailable.
+pub(crate) fn source_identity() -> &'static str {
+    build::SOURCE_GIT_BLOB
+}

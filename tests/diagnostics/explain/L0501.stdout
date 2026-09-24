@@ -1,0 +1,11 @@
+L0501: Cannot load source module
+
+A declared module file is missing, ambiguous, cyclic, unreadable, or beyond a resource limit. Use exactly one of child.lc and child/mod.lc. Directory entries require export.lc.
+
+The filesystem regression is `tests/fixtures/project-errors/L0501`. Its `export.lc` reproduces this category through the actual project pipeline.
+
+```locus
+mod absent;
+```
+
+Language, as built: [1.28:2](../spec/17-modules.md).
