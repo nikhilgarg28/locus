@@ -1,0 +1,14 @@
+mod shapes;
+mod counter;
+mod effects;
+pub use shapes::{certify as increment, proof_only, all_proofs, mixed, nested, singleton, physical, unit};
+pub use counter::Counter;
+pub use effects::{clear, step, loop_value, chained, owned, borrowed, fail};
+pub mod aliases {
+    pub use super::shapes::certify as also_increment;
+}
+pub fn reuse(n: u8) -> u8 {
+    let (out, evidence) = shapes::certify(n);
+    accepts(n, out, evidence)
+}
+fn accepts(n: u8, out: u8, evidence: @(out == n.wrapping_add(1))) -> u8 { out }

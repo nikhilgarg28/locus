@@ -71,10 +71,31 @@ Imported runtime items must have a reachable Rust export in a declared dependenc
 ## Rust export entries
 
 <!-- spec: 1.28:13 legality-rule -->
-The selected entry's public items and re-exports define the Rust interface. Public modules expose their public contents recursively. All reachable function inputs and results, public fields, enum payloads, callback signatures, public inherent methods, and public associated constants must be exportable. Logical positions are rejected in these interfaces. A physical struct may contain private logical fields; then its state remains private and Rust uses checked methods.
+The selected entry's public items and re-exports define the Rust interface. Public modules expose their public contents recursively. All reachable function inputs and results, public fields, enum payloads, callback signatures, public inherent methods, and public associated constants must be exportable. Logical positions are rejected except for ordinary function results projected by the rules below. A physical struct may contain private logical fields; then its state remains private and Rust uses checked methods.
 
 <!-- spec: 1.28:14 dynamic-semantics -->
 Required executable helpers are emitted inside a private implementation module. Locus visibility alone does not make them callable from handwritten Rust, including Rust in the same host crate. The public facade re-exports only validated items. Separate entry builds are independent components; use one export entry with multiple public modules when interfaces must share private implementation or nominal types.
+
+## Proof-returning functions
+
+<!-- spec: 1.28:18 dynamic-semantics -->
+An exported ordinary function or public inherent method receives a second Rust entry when its result is a proof or contains tuple proof fields. A proof result becomes `()`. Remove tuple proof fields recursively, including nonempty tuples consisting entirely of proofs. At a tuple layer where fields were removed, unwrap a sole survivor; otherwise retain surviving fields in order. Unchanged tuple layers keep their arity, and physical `()` values remain.
+
+<!-- spec: 1.93:8 informative -->
+| Locus result | Rust facade result |
+|---|---|
+| `@P` | `()` |
+| `(u8, @P)` | `u8` |
+| `(@P, u8, @Q, bool)` | `(u8, bool)` |
+| `((u8, @P),)` | `(u8,)` |
+| `((), @P)` | `()` |
+| `(u8,)` | `(u8,)` |
+
+<!-- spec: 1.28:19 dynamic-semantics -->
+The public name selects the facade; Locus calls retain the original erased signature. The facade forwards arguments once, calls the private implementation once, and moves surviving result components without cloning or converting data. Mutation, allocation, panic and nontermination remain observable. The original method remains private even on an exported type. Projection never traverses nominal types, boxes, collections, references, callbacks or constants. Existing export restrictions apply inside those positions and to all inputs.
+
+<!-- spec: 1.93:9 informative -->
+This convenience applies to project generation. The legacy flat emitter retains its existing signatures. Cross-package runtime proof interfaces remain unsupported: a dependency's projected Rust result cannot substitute for the full erased signature expected by a Locus call. Logical theorem reuse through packaged Locus sources is unchanged.
 
 ## Generated artifacts
 

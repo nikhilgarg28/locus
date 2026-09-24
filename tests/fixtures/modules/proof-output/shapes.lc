@@ -1,0 +1,16 @@
+//~ spec: 1.28:18
+pub fn certify(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    let out = n.wrapping_add(1);
+    (out, _)
+}
+pub fn proof_only() -> @(1 == 1) { _ }
+pub fn all_proofs() -> (@(1 == 1), @(2 == 2)) { (_, _) }
+pub fn mixed() -> (@(1 == 1), u8, @(2 == 2), bool, @(3 == 3)) {
+    (_, 7, _, true, _)
+}
+pub fn nested() -> ((u8, @(1 == 1)), (@(1 == 1), @(2 == 2)), bool) {
+    ((7, _), (_, _), true)
+}
+pub fn singleton() -> ((u8, @(1 == 1)),) { ((7, _),) }
+pub fn physical() -> ((u8,), ()) { ((7,), ()) }
+pub fn unit() -> ((), @(1 == 1)) { ((), _) }

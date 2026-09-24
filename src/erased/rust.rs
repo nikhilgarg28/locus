@@ -3,7 +3,8 @@
 //! Cleanup removes dead marker storage while retaining runtime calls,
 //! control transfers, evaluation order and runtime destruction scopes. Unused
 //! logical pattern names become wildcards; unused runtime names are prefixed
-//! without removing their bindings. Signatures and aggregate layouts remain.
+//! without removing their bindings. Original signatures and layouts remain;
+//! validated project exports can add a second entry projecting proof results.
 //!
 //! Every logical position prints as the single private-constructible Erased
 //! marker. A module includes marker support only when its output uses it.
@@ -28,6 +29,7 @@ use std::fmt::Write;
 use crate::kernel::{MachineInt, Op, Prim, VarId};
 use crate::typed::{CompareOp, Derive, Passing};
 
+use super::ProofOutput;
 use super::cleanup::{self, Visit};
 use super::interp::Value;
 use super::tree::{EBlock, EExpr, EFn, EPattern, EPlace, EStmt, EType, Module};
@@ -89,9 +91,14 @@ pub struct Visibilities {
     /// from outside it.
     everything_public: bool,
     hidden: HashSet<String>,
+    proof_outputs: BTreeMap<String, ProofOutput>,
 }
 
 impl Visibilities {
+    pub(crate) fn project_proof_output(&mut self, name: &str, output: ProofOutput) {
+        self.proof_outputs.insert(name.into(), output);
+    }
+
     /// Omit definitions supplied by a dependency while retaining type metadata.
     pub fn hide(&mut self, name: &str) {
         self.hidden.insert(name.into());
@@ -148,6 +155,7 @@ impl Visibilities {
 
 struct Printer<'m> {
     module: &'m Module,
+    proof_outputs: &'m BTreeMap<String, ProofOutput>,
     out: String,
     /// The reference parameters of the function being printed: a mention
     /// of one as a whole is written through `*`.
@@ -247,6 +255,7 @@ impl std::fmt::Debug for {name} {{
 fn items(module: &Module, visibilities: &Visibilities) -> String {
     let mut printer = Printer {
         module,
+        proof_outputs: &visibilities.proof_outputs,
         out: String::new(),
         refs: HashSet::new(),
     };
@@ -311,7 +320,7 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
     for function in module.fns.iter().filter(|function| {
         function.owner.is_none() && !visibilities.hidden.contains(&function.name)
     }) {
-        printer.function(function, visibilities);
+        printer.exported_function(function, visibilities);
     }
     // The functions of each `impl` block, in the order the blocks' types
     // are first met, each block once whatever order the file wrote them in.
@@ -337,7 +346,7 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
             function.owner.as_deref() == Some(owner)
                 && !visibilities.hidden.contains(&function.name)
         }) {
-            printer.function(function, visibilities);
+            printer.exported_function(function, visibilities);
         }
         printer.out.push_str("}\n");
     }
@@ -394,6 +403,17 @@ fn tuple_of(items: &[String]) -> String {
 }
 
 impl Printer<'_> {
+    fn exported_function(&mut self, function: &EFn, visibilities: &Visibilities) {
+        if let Some(projection) = self.proof_outputs.get(&function.name) {
+            let mut implementation = function.clone();
+            implementation.name = ProofOutput::implementation(&function.name);
+            self.function(&implementation, visibilities);
+            self.function(&projection.wrapper(function), visibilities);
+        } else {
+            self.function(function, visibilities);
+        }
+    }
+
     /// One function, or one method of an `impl` block, after a blank line.
     fn function(&mut self, function: &EFn, visibilities: &Visibilities) {
         self.out.push('\n');
@@ -893,6 +913,11 @@ impl Printer<'_> {
                 if constant {
                     name.clone()
                 } else {
+                    let name = if self.proof_outputs.contains_key(name) {
+                        ProofOutput::implementation(name)
+                    } else {
+                        name.clone()
+                    };
                     format!("{name}({})", self.all(arguments).join(", "))
                 }
             }

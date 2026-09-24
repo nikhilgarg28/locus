@@ -40,6 +40,20 @@ Tests create or copy real directory trees and exercise the public API/CLI. Strin
 
 The module/package implementation lives in `src/project`, with the [language rules](../spec/17-modules.md) and [package guide](../packages.md) as its public contract. Remaining integration covers reviewed trait/header contracts ([LOC-39](#LOC-39)), source configuration and Cargo feature inference ([LOC-43](#LOC-43)), and broader Rust ABI/type/trait support ([LOC-44](#LOC-44)). Legacy `--library` remains ordered flat-source inclusion.
 
+## Current extension: proof-returning Rust facades
+
+Keep the checked Locus signature and its ordinary erased implementation. For an exported ordinary function or public inherent method, generate a second, data-only Rust entry that calls that implementation exactly once and projects its result. Proof arguments, logical data results, public invariant-bearing fields, proof-bearing enum payloads and logical callbacks remain forbidden. No import syntax or trait machinery is added here.
+
+### Return projection
+
+A direct proof result becomes `()`. In tuples, remove proof fields recursively; a nonempty tuple containing only proofs disappears as a component. If removing components leaves one component, unwrap that tuple layer; if several remain, retain their order. A tuple with no removed components keeps its arity, including singleton and empty tuples. Preserve physical unit values. Do not project through nominal structs/enums, references, collections, boxes or callbacks: their existing export checks still apply. This avoids changing data identity or runtime discriminants. Non-proof logical results (such as Nat or Prop) still fail export.
+
+The public name selects the projected Rust entry. Locus calls, including calls from other methods, continue to select the original signature with its erased proof positions. The original entry stays private even when its owner type is public. This extension applies to project/module generation; the legacy flat emitter is unchanged. Cross-package runtime proof interfaces retain their existing explicit restriction: a dependency's data-only entry cannot silently substitute for its erased proof ABI.
+
+### Implementation and validation
+
+The delivered work is recorded in [LOC-240](#LOC-240) (projection and emission), [LOC-241](#LOC-241) (behavior and hostile callers), and [LOC-242](#LOC-242) (documentation and complete validation).
+
 <a id="LOC-39"></a>
 ## LOC-39 · Reviewed headers and implementation separation
 <!-- task: {"id": "t47", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
@@ -80,7 +94,7 @@ Implemented standalone module builds and the shared `locus::project::Build` API 
 ## LOC-237 · Reachable Rust interfaces and export diagnostics
 <!-- task: {"id": "interop-237", "status": "done", "priority": 3} -->
 
-Implemented reachable-interface validation and a private Rust backend with a public facade. Tests reject logical inputs/results, nested public leaks and incompatible public methods, then compile safe consumers and hostile same-crate accesses. Generic ABI exports and specialized collection-enum dependency ABI fail explicitly.
+Implemented reachable-interface validation and a private Rust backend with a public facade. Tests reject logical inputs, non-proof logical results, nested public leaks and incompatible public methods, then compile safe consumers and hostile same-crate accesses. Generic ABI exports and specialized collection-enum dependency ABI fail explicitly.
 
 <a id="LOC-238"></a>
 ## LOC-238 · Reproducible build receipts and Cargo publication
@@ -93,3 +107,21 @@ Implemented SHA-256 receipts, compiler/configuration/Cargo selection provenance,
 <!-- task: {"id": "interop-239", "status": "done", "priority": 3} -->
 
 Implemented the module/package manual, package/build guide, diagnostic explanations, and checked examples. Acceptance includes qualified types, independent-target identity, generic-dependency ABI rejection, canonical and derived models across modules/packages, associated constants, and checked arithmetic after proof erasure. The filesystem, Cargo, diagnostic and resource-limit suites cover these boundaries; the extended compiler/site gate is the integration requirement. See the freshness-aware [generated status](../generated-status.md) for measured results. Traits remain the next project.
+
+<a id="LOC-240"></a>
+## LOC-240 · Define and emit proof-returning Rust facades
+<!-- task: {"id": "interop-240", "status": "done", "priority": 3} -->
+
+Implemented the return projection in `src/erased/facade.rs`, selected by export validation and emitted through the existing Rust printer. The original implementation stays private; verified internal calls retain its proof positions. Public wrappers project free-function and inherent-method results, including borrowed and owned values, without duplicating execution. Constants, callbacks and unsupported dependency proof ABIs retain explicit restrictions.
+
+<a id="LOC-241"></a>
+## LOC-241 · Exercise facade behavior and hostile callers
+<!-- task: {"id": "interop-241", "status": "done", "priority": 3} -->
+
+Implemented six facade integration tests and a real multi-file fixture, with module/package regressions. Coverage includes tuple projection, aliases, receivers, ownership and borrowing, internal proof consumption, control flow, exactly-once mutation, panic-state writes, deterministic builds and receipt invalidation. Rust consumers compile with warnings denied in both overflow modes; hostile same-crate and downstream callers cannot reach private proof implementations. Both interpreters agree with the relevant source behaviors. Logical inputs, public proof fields, unsupported containers/callbacks and dependency proof ABIs remain rejected.
+
+<a id="LOC-242"></a>
+## LOC-242 · Document and validate facade exports
+<!-- task: {"id": "interop-242", "status": "done", "priority": 3} -->
+
+Updated the manuals, checked examples, package guide, architecture, formal-core obligation, correctness account, trusted-file inventory and L0504 diagnostics. New operative rules have focused citations. The complete extended compiler/site gate passed on 24 September 2026, with 917 tests passing in each of the standard and release suites, including 81,944 generated-program execution cases with no disagreements; the standard suite exceeded its advisory timing target. Desktop and narrow layouts were inspected. This completion-note edit follows that gate, so the generated measurement display is invalidated rather than relabeled fresh. Nominal/container projection, legacy emission, cross-package proof ABIs and imports remain outside this extension.

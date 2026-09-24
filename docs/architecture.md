@@ -125,6 +125,8 @@ The printer removes unused erased bindings by default, keeping effectful right s
 
 An Erased value carries no claim identity in Rust. Export safety therefore comes from a checked privacy boundary: evidence-taking functions remain restricted, and safe Rust constructs validated values through checked constructors with private invariant fields. Replaying a marker from another result cannot satisfy a publicly accessible raw-proof parameter because that interface is rejected.
 
+Project exports add a one-way return projection after ordinary erasure. `erased/facade.rs` describes proof omission and tuple projection; `project/export.rs` validates all surviving types and retains source tuple indices in diagnostics. The Rust printer emits both a private implementation with the original erased result and a public forwarding entry with the projected result. Internal calls target the private implementation; public methods keep the original source spelling. The wrapper calls once and destructures the completed result, preserving physical values, references and effects. No kernel proof rule or logical assumption is added.
+
 ## Proof construction, persistence and diagnostics
 
 A hole tries stored evidence, exact facts, checked computation, closed evaluation and bounded linear arithmetic. Every successful tier produces an explicit proof checked by the kernel. Implicit unfolding, arbitrary rewrite search and general induction search are not performed. Diagnostics can suggest the missing explicit step without silently taking it.

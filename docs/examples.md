@@ -224,3 +224,22 @@ cargo run -- build tests/corpus/target/percent.lc --out /tmp/percent_crate
 ~~~
 
 The teaching sequence takes inspiration from [Lean’s evidence-based indexing](https://lean-lang.org/functional_programming_in_lean/Interlude___-Propositions___-Proofs___-and-Indexing/) and [induction material](https://lean-lang.org/functional_programming_in_lean/Interlude___-Tactics___-Induction___-and-Proofs/), and [Verus’s loop-invariant tutorial](https://verus-lang.github.io/verus/guide/while.html). These programs use Locus syntax and its current checked contracts; they do not imply parity with either tool.
+
+## One implementation, two return interfaces
+
+This function gives Locus callers an explicit proof slot. When selected by an export entry, it also gives Rust callers a data-only result:
+
+~~~rust run
+pub fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    let out = n.wrapping_add(1);
+    (out, _)
+}
+fn checked_use(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    let (out, evidence) = increment(n);
+    (out, evidence)
+}
+//~ run: checked_use(41) => (42, Erased)
+//~ run: checked_use(255) => (0, Erased)
+~~~
+
+The project exporter generates `increment(n: u8) -> u8` for Rust and retains the pair-returning implementation privately. [Build and share a component](packages.md#export-a-function-that-returns-evidence) explains how to select the export. The complete source example above exercises Locus proof transport; filesystem and compiled-Rust tests exercise the separate facade.

@@ -114,6 +114,10 @@
       "category": "erasure, independent layout checker, cleanup and Rust generation"
     },
     {
+      "path": "src/erased/facade.rs",
+      "category": "one-way proof-output projection at the Rust export boundary"
+    },
+    {
       "path": "src/erased/rust.rs",
       "category": "erasure, independent layout checker, cleanup and Rust generation"
     },

@@ -115,9 +115,9 @@ fn export_rejects_logic_in_results_callbacks_and_reachable_methods() {
     let dir = scratch("leaks");
     let file = dir.join("export.lc");
     for source in [
-        "pub fn claim() -> @(1 == 1) { prove!(1 == 1) }",
-        "pub fn pair() -> (u8, @(1 == 1)) { (1, prove!(1 == 1)) }",
-        "pub struct Secret { data: u8 } impl Secret { pub fn claim(&self) -> @(1 == 1) { prove!(1 == 1) } }",
+        "pub fn claim(p: @(1 == 1)) -> @(1 == 1) { p }",
+        "pub fn pair() -> (u8, Nat) { (1, 1) }",
+        "pub struct Secret { data: u8 } impl Secret { pub fn claim(&self, p: @(1 == 1)) -> @(1 == 1) { p } }",
         "pub enum Answer { Data(u8), Proof(@(1 == 1)) }",
         "pub struct Unsafe { pub data:u8, proof:@(data as Int == 1) }",
     ] {
@@ -456,7 +456,7 @@ pub fn guarded(n: u8) -> u8 { if n < 255 { n + 1 } else { 0 } }
         r#"
 mod arithmetic;
 pub use arithmetic::guarded;
-pub fn increment(n: u8) -> u8 { let (out, proof) = arithmetic::increment(n); out }
+pub use arithmetic::increment;
 "#,
     );
     let rust = generate(&entry).unwrap();

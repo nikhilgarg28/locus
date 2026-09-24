@@ -467,3 +467,38 @@ fn generic_dependency_runtime_bodies_are_not_copied_but_logic_can_erase() {
         .rust()
         .unwrap_or_else(|e| panic!("{e}"));
 }
+
+#[test]
+#[doc = "spec: 1.28:12, 1.28:18"]
+fn dependency_proof_results_do_not_silently_call_a_projected_abi() {
+    let root = workspace("proof_result_abi");
+    let source = root.join("collections/locus/runtime.lc");
+    let current = fs::read_to_string(&source).unwrap();
+    fs::write(
+        &source,
+        current.replace(
+            "pub fn increment(value: u8) -> u8 { value.wrapping_add(1) }",
+            "pub fn increment(value: u8) -> (u8, @(1 == 1)) { (value.wrapping_add(1), _) }",
+        ),
+    )
+    .unwrap();
+    let producer = Build::new(root.join("collections/locus/export.lc"))
+        .offline(true)
+        .rust()
+        .unwrap();
+    assert!(producer.contains("__locus_with_proofs_"));
+    fs::write(
+        root.join("consumer/locus/export.lc"),
+        "pub fn run()->u8 { let (n, proof) = verified::runtime::increment(1); n }",
+    )
+    .unwrap();
+    let error = Build::new(root.join("consumer/locus/export.lc"))
+        .offline(true)
+        .rust()
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("L0504") && error.contains("cross-package runtime proof interfaces"),
+        "{error}"
+    );
+}

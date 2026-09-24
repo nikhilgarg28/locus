@@ -1,0 +1,17 @@
+//~ spec: 1.28:19
+pub fn clear(value: &mut u8) -> @(value == 0) { value = 0; _ }
+pub fn step(value: &mut u8) -> (u8, @(1 == 1)) {
+    value = value.wrapping_add(1);
+    if value == 2 { return (9, _); } else { () };
+    (value, _)
+}
+pub fn loop_value() -> (u8, @(1 == 1)) { loop { break (8, _); } }
+pub fn chained(n: u8) -> (u8, @(1 == 1)) {
+    if n == 0 { (7, _) } else { let (out, evidence) = super::shapes::certify(n); (out, _) }
+}
+pub fn owned(value: Box<u8>) -> (Box<u8>, @(1 == 1)) { (value, _) }
+pub fn borrowed<'a>(value: &'a u8) -> (&'a u8, @(1 == 1)) { (&value, _) }
+pub fn fail(value: &mut u8) -> @(1 == 1) {
+    value = 42;
+    panic!("facade panic")
+}

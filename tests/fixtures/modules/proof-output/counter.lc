@@ -1,0 +1,17 @@
+//~ spec: 1.28:19
+pub struct Counter { value: u8 }
+impl Counter {
+    pub fn new(value: u8) -> (Counter, @(1 == 1)) { (Counter { value }, _) }
+    pub fn read(&self) -> (out: u8, @(out == model!(self.value))) { (self.value, _) }
+    pub fn advance(&mut self) -> @(1 == 1) {
+        self.value = self.value.wrapping_add(1);
+        _
+    }
+    pub fn _read(&self) -> (u8, @(1 == 1)) { (self.value, _) }
+    pub fn consume(self) -> (u8, @(1 == 1)) { (self.value, _) }
+    pub fn twice(&mut self) -> (u8, @(1 == 1)) {
+        let evidence = self.advance();
+        let (value, proof) = self.read();
+        (value, _)
+    }
+}

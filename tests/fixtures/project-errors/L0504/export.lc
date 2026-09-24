@@ -1,2 +1,2 @@
-pub fn proof()->@(1 == 1) {prove!(1 == 1)}
+pub fn proof(p: @(1 == 1)) -> @(1 == 1) {p}
 //~ error: L0504

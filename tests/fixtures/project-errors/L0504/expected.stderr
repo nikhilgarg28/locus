@@ -1,8 +1,8 @@
-error[L0504]: cannot export `proof -> result`: a logical type reaches the Rust interface
+error[L0504]: cannot export `proof -> parameter `p``: a logical type reaches the Rust interface
  --> <fixture>/export.lc:1:1
   |
-1 | pub fn proof()->@(1 == 1) {prove!(1 == 1)}
-  | ^^^^^^^^^^^^^^^^---------^^^^^^^^^^^^^^^^^
+1 | pub fn proof(p: @(1 == 1)) -> @(1 == 1) {p}
+  | ^^^^^^^^^^^^^^^^---------^^^^^^^^^^^^^^^^^^
   |                 |
   |                 the incompatible interface is declared here
   |

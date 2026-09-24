@@ -12,6 +12,8 @@
 mod check;
 mod cleanup;
 mod erase;
+mod facade;
+pub(crate) use facade::ProofOutput;
 mod interp;
 mod rust;
 mod tree;

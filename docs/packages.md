@@ -22,6 +22,19 @@ This writes `target/locus/checked.rs` and `checked.locus.json`. An arbitrary fil
 
 The legacy `build files... --out crate-directory` command still produces a standalone flat-file crate. New module/package work should use `--out-dir`; the project driver also accepts a directory or module entry with `--out`. Legacy `--library` inclusion is not a package import and cannot be combined with module builds.
 
+## Export a function that returns evidence
+
+A selected ordinary function can return both data and proof to Locus callers. Generation automatically supplies a Rust entry that omits supported proof result positions:
+
+~~~rust check
+pub fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    let out = n.wrapping_add(1);
+    (out, _)
+}
+~~~
+
+Place this in `export.lc`, or re-export it there from your implementation module. Rust calls `increment(41)` and receives `42u8`; Locus calls receive the pair. No wrapper annotation is required. The [projection rules](spec/17-modules.md#proof-returning-functions) also cover methods and proof-only results. Logical inputs and public logical fields still cannot be exported. Cross-package calls to runtime functions with proof results remain unsupported, so use a physical-only dependency interface for now.
+
 ## Use build.rs
 
 The compiler crate exposes `locus::project::Build`. Until a compiler release is published, add this repository as a path build dependency:

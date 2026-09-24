@@ -58,9 +58,9 @@ Sources: [random programs](../tests/random_programs.rs), [differential tests](..
 
 Proofs erase to a private zero-sized marker. That marker does not retain proposition identity in Rust, so the export checker restricts evidence-taking functions and protects invariant-bearing fields. Safe Rust callers use validated constructors and the permitted data interface.
 
-Acceptance tests compile real Rust callers. Attempts to construct the marker, access restricted functions, fabricate invariant-bearing values, or replay unrelated evidence must fail. Successful exported interfaces must compile and run. Generated Rust is also compiled with warnings denied.
+Acceptance tests compile real Rust callers. Attempts to construct the marker, access restricted functions, fabricate invariant-bearing values, or replay unrelated evidence must fail. Successful exported interfaces must compile and run. Proof-returning functions additionally receive data-only facades. Tests compare their physical results with both execution interpreters, check tuple shapes and borrowed/owned values, and observe mutations before normal return and panic. Same-crate and downstream callers cannot reach the retained proof implementations. Generated Rust is also compiled with warnings denied.
 
-Sources: [export-boundary acceptance tests](../tests/acceptance.rs), [crate-build tests](../tests/build.rs), [Rust output tests](../tests/rust_output.rs).
+Sources: [export-boundary acceptance tests](../tests/acceptance.rs), [crate-build tests](../tests/build.rs), [Rust output tests](../tests/rust_output.rs), [proof-output facade tests](../tests/export_facades.rs).
 
 ## 6. Make assumptions and failed checks visible
 

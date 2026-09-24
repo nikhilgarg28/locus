@@ -5,7 +5,7 @@ use super::{Checked, Error};
 use crate::{
     ast::{Declaration, DeclarationKind},
     diagnostic::Diagnostic,
-    erased::{self, EType, Module, Visibilities},
+    erased::{self, EType, Module, ProofOutput, Visibilities},
     source::Span,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -88,6 +88,14 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
         if export.visited.contains(&format!("fn:{}", f.name))
             && (foreign.contains(&f.name) || f.owner.as_ref().is_some_and(|o| foreign.contains(o)))
         {
+            if ProofOutput::new(&f.result).changed() {
+                export.error(
+                    &f.name,
+                    graph.scopes[graph.export_root].span,
+                    graph.scopes[graph.export_root].span,
+                    "a proof-returning dependency function has a projected Rust result; cross-package runtime proof interfaces are not supported yet",
+                );
+            }
             for ty in f
                 .params
                 .iter()
@@ -320,9 +328,29 @@ impl Interface<'_> {
             self.ty(ty, &format!("{path} -> parameter `{name}`"), at);
         }
         self.origin = result_span;
-        self.ty(&f.result, &format!("{path} -> result"), at);
+        let projection = ProofOutput::new(&f.result);
+        if !f.constant && projection.changed() {
+            self.proof_result(&f.result, &format!("{path} -> result"), at);
+            self.visibility.project_proof_output(&f.name, projection);
+        } else {
+            self.ty(&f.result, &format!("{path} -> result"), at);
+        }
         self.origin = saved;
     }
+    // Keep original source tuple indices in diagnostics even when the facade
+    // removes earlier proof positions. Nominal/container/callback checks stay strict.
+    fn proof_result(&mut self, ty: &EType, path: &str, at: Span) {
+        match ty {
+            EType::Proved => {}
+            EType::Tuple(fields) => {
+                for (i, field) in fields.iter().enumerate() {
+                    self.proof_result(field, &format!("{path} -> tuple field {i}"), at);
+                }
+            }
+            _ => self.ty(ty, path, at),
+        }
+    }
+
     fn ty(&mut self, ty: &EType, path: &str, at: Span) {
         match ty {
             EType::Ghost | EType::Proved => self.error(
