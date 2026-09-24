@@ -99,6 +99,7 @@ fn rustc_codes(name: &str, source: &str) -> Vec<String> {
 }
 
 #[test]
+#[doc = "spec: 1.27:4"]
 fn a_method_resolves_by_the_receiver_s_type_and_is_called_as_rust_writes_it() {
     let result = accepted(
         "
@@ -465,6 +466,7 @@ fn run(c: Counter) -> u8 { get(c) }
 }
 
 #[test]
+#[doc = "spec: 1.27:9"]
 fn the_result_of_a_mut_self_method_speaks_of_self_at_return() {
     let result = accepted(
         "

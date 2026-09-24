@@ -2,6 +2,8 @@
 """Regression checks for canonical Markdown and static site integrity."""
 import importlib.util
 import json
+import re
+import html as html_text
 from pathlib import Path
 import tempfile
 import unittest
@@ -207,6 +209,29 @@ class StaticTests(unittest.TestCase):
         self.assertNotIn("~~~locus", examples)
         self.assertIn('class="hljs-', examples)
         self.assertIn("no broken fragments", site.validate(root))
+
+    def test_checked_excerpts_offer_exact_complete_source_without_javascript(self):
+        root = content.ROOT / "target/site"
+        if not root.exists():
+            self.skipTest("run tools/site.py build for renderer integration checks")
+        data = content.load()
+        documents = {doc["id"]: doc for doc in data["docs"]}
+        excerpts = [f for f in spec.fences(data) if f.excerpt]
+        self.assertTrue(excerpts, "the manual should exercise excerpt rendering")
+        for fence in excerpts:
+            page = (root / documents[fence.doc]["route"]).read_text()
+            visible = re.findall(r'<div class="example-excerpt">(.*?)<details class="complete-example">', page, re.S)
+            complete = re.findall(r'<details class="complete-example">(.*?)</details>', page, re.S)
+            def source(fragment):
+                code = re.search(r'<pre><code[^>]*>(.*?)</code></pre>', fragment, re.S)
+                self.assertIsNotNone(code)
+                return html_text.unescape(re.sub(r'<[^>]*>', '', code[1]))
+            self.assertIn(fence.visible_code, [source(f) for f in visible])
+            self.assertIn(fence.complete_code, [source(f) for f in complete])
+            self.assertIn('aria-label="Copy excerpt"', page)
+            self.assertIn('aria-label="Copy complete example"', page)
+            self.assertIn('<summary>Complete checked example</summary>', page)
+            self.assertNotIn('// docs:', ''.join(visible + complete))
 
 
 if __name__ == "__main__":

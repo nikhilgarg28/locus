@@ -1241,6 +1241,7 @@ fn view_wrap_and_cast_agree_with_rust_at_the_boundaries_of_every_type() {
 }
 
 #[test]
+#[doc = "spec: 1.27:2"]
 fn wrap_agrees_with_rust_at_the_boundaries_of_every_type() {
     let (mut ctx, prelude) = setup();
     for ty in ALL {

@@ -108,3 +108,21 @@ fn editing_a_fence_to_lie_fails_its_check_run_or_reject_expectation() {
     assert!(check_rejection("wrong reason", "fn f()->u8{missing}", &["L0220"]).is_err());
     assert!(check_rejection("pinned rejection", "fn f()->u8{true}", &["L0220"]).is_ok());
 }
+
+#[test]
+fn hidden_lines_still_fail_for_type_errors_and_incorrect_run_expectations() {
+    let hidden_type_error = "// docs:hide\nfn helper()->u8{true}\n// docs:show\nfn f()->u8{1}";
+    assert!(
+        !runner::examine("hidden-type-error", hidden_type_error)
+            .failures
+            .is_empty()
+    );
+    let hidden_bad_expectation = "fn f()->u8{1}\n// docs:hide\n//~ run: f() => 2\n// docs:show";
+    assert!(
+        !runner::examine("hidden-run-error", hidden_bad_expectation)
+            .failures
+            .is_empty()
+    );
+    let hidden_rejection = "// docs:hide\nfn helper()->u8{true}\n// docs:show\nfn f()->u8{1}";
+    assert!(check_rejection("hidden-pinned-rejection", hidden_rejection, &["L0220"]).is_ok());
+}

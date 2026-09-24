@@ -47,7 +47,7 @@ fn increment(n: u8) -> (out: u8, @same(out, n.wrapping_add(1))) {
     (out, fold!(same, prove!(out == n.wrapping_add(1))))
 }
 
-// Only `increment` exists at runtime; the rest of the file is logic.
+// Logical definitions erase; every ordinary fn retains its runtime body.
 //~ proofs: 5
 //~ run: increment(9) => (10, Erased)
 //~ spec: 1.7:3

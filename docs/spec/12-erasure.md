@@ -11,18 +11,64 @@ description = "What disappears, what remains, and why erasure must preserve obse
 # Erasure
 
 <!-- spec: 1.0:13 informative -->
-Checking uses logical values that the generated Rust does not need to store or compute. Erasure removes that logical work while preserving ordinary evaluation, including effects from calls whose returned values are logical.
+Verification happens before logical distinctions disappear. Erasure removes logical values and computation while preserving runtime control flow, evaluation order, mutation, and panic. The result type alone never decides whether an expression executes.
 
 ## Values and effects
 
 <!-- spec: 1.18:1 dynamic-semantics -->
-All Logical positions use one private zero-sized marker, `Erased`. Logical declarations and computations have no runtime implementation. Physical tuples and structs keep their layout positions, replacing logical fields with markers; ordinary enum tags and physical allocation remain observable. A physical `Box<T>` remains physical even when T is Logical.
+Logical positions lower to one private zero-sized `Erased` marker. Logical declarations and computations have no runtime implementation. Physical aggregates keep their positions with logical fields replaced by markers. Runtime enum tags and physical storage remain; a Box stays physical even with a Logical payload.
 
 <!-- spec: 1.18:2 dynamic-semantics -->
-Erasure separates value production from execution. A logical operation disappears after its ordinary argument computations have run. An ordinary `fn` call remains even if it returns only evidence, takes only logical inputs, or promises to terminate and avoid panic. An ordinary function that takes `&mut` and returns a proof still performs its mutation at runtime. There is no result-type shortcut that deletes its effects.
+A logical operation erases after evaluating any ordinary argument computations in source order. An ordinary function remains executable even if every argument and result is logical. In particular, a function taking `&mut` and returning only evidence still performs its mutation.
+
+<!-- spec: 1.90:60 example -->
+~~~locus run
+fn clear(value: &mut u8) -> @(value == 0) {
+    value = 0;
+    _
+}
+logic fn reuse(p: Prop, evidence: @p) -> @p { evidence }
+fn demo() -> u8 {
+    let mut value: u8 = 9;
+    let ignored = reuse(prop!(true), {
+        clear(&mut value);
+        True::Intro
+    });
+    value
+}
+//~ run: demo() => 0
+~~~
+
+<!-- spec: 1.91:28 informative -->
+The ordinary block passed as an argument runs and clears `value`. The subsequent logical `reuse` call disappears. Putting the same `clear` call inside `logic { ... }` would be rejected, because explicit logical computation cannot perform the mutation.
+
+## Removing unused markers
 
 <!-- spec: 1.18:3 dynamic-semantics -->
-Unused erased local bindings and unused erased destructuring components are removed by default in generated Rust. Effectful right sides are retained as statements. Bindings whose evaluation transfers control become the block's terminal expression, so removing an unused marker does not produce unreachable Rust or change divergence. The cleanup is checked by interpreter comparison and Rust compilation with warnings denied.
+Generated Rust removes unused marker bindings and unused erased pattern components. An initializer with runtime effects remains as a statement. An initializer that transfers control remains the block’s terminal expression. Cleanup must preserve behavior and produce warning-clean Rust, rather than suppressing unused-variable warnings globally.
+
+## Runtime choices with proof payloads
 
 <!-- spec: 1.18:4 dynamic-semantics -->
-Proofs are never observed by runtime code. Matching evidence can establish more evidence; it cannot expose an existential witness as data, including Logical data. Physical containers such as `Option<@P>` keep a runtime discriminant, so choosing Some or None is ordinary computation, with its evidence payload erased.
+Runtime code cannot observe proof contents. Proof matches establish further evidence; they do not extract witnesses as data. Physical enums keep their discriminants while proof payloads erase. This includes `Option<@P>` for a closed claim `P`; use dependent fields for claims about payload values.
+
+<!-- spec: 1.90:61 example -->
+~~~locus run
+enum Checked {
+    Zero,
+    Positive { value: u8, evidence: @(value > 0) },
+}
+fn certify(n: u8) -> Checked {
+    if n > 0 {
+        Checked::Positive { value: n, evidence: prove!(n > 0) }
+    } else { Checked::Zero }
+}
+fn accepted(n: u8) -> bool {
+    match certify(n) {
+        Checked::Positive { value: _, evidence: _ } => true,
+        Checked::Zero => false,
+    }
+}
+//~ run: accepted(0) => false
+//~ run: accepted(8) => true
+~~~

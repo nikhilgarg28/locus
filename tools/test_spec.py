@@ -110,6 +110,48 @@ class SpecGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, expected):
                 spec.fences(atlas([opening, code, '~~~']))
 
+    def test_excerpt_keeps_hidden_source_in_export_for_every_checked_mode(self):
+        source = ('// docs:hide\nfn helper()->u8{7}\n// docs:show\n'
+                  'fn f()->u8{helper()}\n// docs:hide\n//~ run: f() => 7\n// docs:show')
+        for mode in ('check', 'run', 'reject L0220'):
+            data = atlas(['~~~locus ' + mode, *source.splitlines(), '~~~'])
+            fence = spec.fences(data)[0]
+            self.assertTrue(fence.excerpt)
+            self.assertEqual(fence.visible_code, 'fn f()->u8{helper()}')
+            self.assertIn('fn helper()->u8{7}', fence.complete_code)
+            self.assertIn('//~ run: f() => 7', fence.complete_code)
+            self.assertNotIn('// docs:', fence.complete_code)
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root/'atlas.html'
+                path.write_text('<script type="application/json" id="atlas-data">'+json.dumps(data)+'</script>')
+                out = root/'exported'
+                self.assertEqual(spec.main(['fences', '--atlas', str(path), '--out', str(out)]), 0)
+                manifest = json.loads((out/'manifest.json').read_text())
+                self.assertEqual((out/manifest[0]['file']).read_text(), source+'\n')
+
+    def test_malformed_or_unchecked_excerpt_cannot_hide_program_text(self):
+        for source, reason in [
+            ('// docs:show\nfn f()->u8{1}', 'without docs:hide'),
+            ('// docs:hide\nfn f()->u8{1}', 'unclosed docs:hide'),
+            ('// docs:hide\n// docs:hide\n// docs:show', 'nested docs:hide'),
+            ('// docs:hide-all\nfn f()->u8{1}', 'unknown docs marker'),
+            ('// docs:hide\nfn f()->u8{1}\n// docs:show', 'visible code'),
+        ]:
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, reason):
+                spec.fences(atlas(['~~~locus check', *source.splitlines(), '~~~']))
+        with self.assertRaisesRegex(ValueError, 'require a checked Locus example'):
+            spec.fences(atlas(['~~~locus prose teaching', '// docs:hide', 'setup', '// docs:show', 'shown', '~~~']))
+
+    def test_unmarked_example_is_unchanged_and_indented_markers_work(self):
+        source = 'fn f()->u8{1}\n'
+        self.assertEqual(spec.example_display(source, 'test'), (source.rstrip(), source.rstrip(), False))
+        visible, complete, excerpt = spec.example_display(
+            'fn f()->u8{\n    // docs:hide\n    let hidden = 1;\n    // docs:show\n    hidden\n}', 'test')
+        self.assertTrue(excerpt)
+        self.assertEqual(visible, 'fn f()->u8{\n    hidden\n}')
+        self.assertIn('    let hidden = 1;', complete)
+
     def test_known_markers_require_existing_open_tasks(self):
         self.assertEqual(spec.validate_known(atlas(), [('bug.lc', 'LOC-91', 'fold fails')]), 1)
         for name, reason, expected in [('LOC-92','fixed','closed'),('LOC-93','missing','does not exist'),('LOC-91','','no reason')]:

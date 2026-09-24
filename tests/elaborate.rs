@@ -590,6 +590,7 @@ fn a_false_claim_is_refuted_with_a_case() {
 }
 
 #[test]
+#[doc = "spec: 1.27:6"]
 fn a_reversed_range_runs_no_pass_and_needs_no_evidence() {
     let result = accepted(
         "fn f(n: u8) -> u8 {

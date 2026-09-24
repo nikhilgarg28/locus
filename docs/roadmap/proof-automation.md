@@ -26,6 +26,8 @@ Seq, Maybe, Nat and a representation-based FiniteMap are delivered ([LOC-223](re
 
 Exact facts, checked normalization, closed evaluation, linear arithmetic and stored replay are already implemented ([LOC-167](core-build.md#LOC-167), [LOC-173](core-build.md#LOC-173), [LOC-232](process.md#LOC-232)). Remaining: identify useful missed goals, select deterministic certificate-producing procedures and expose the attempted facts/gap. Keep heuristic failure distinct from falsehood; every result still goes through the kernel. Library lemmas and explicit hints belong to [LOC-52](proof-automation.md#LOC-52), [LOC-84](proof-automation.md#LOC-84).
 
+The documentation audit exposed two concrete goals to improve: a read from `[u8; 3]` guarded by `index < bytes.len()` is not connected automatically to the literal bound, while `index < 3` works; a tracked `count <= limit` proof does not automatically become `count == limit` after `while count < limit`. Keep examples explicit about their established contract until these links are implemented and tested.
+
 <a id="LOC-52"></a>
 ## LOC-52 · Grow the proved lemma library
 <!-- task: {"id": "t63", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->

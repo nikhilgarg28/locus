@@ -89,6 +89,7 @@ fn generic_proposition_constructors_use_the_same_explicit_evidence_slot() {
     );
 }
 #[test]
+#[doc = "spec: 1.27:13"]
 fn insufficient_inference_and_dependent_local_arguments_are_diagnostics() {
     for source in [
         "fn identity<T>(x: T) -> T { x } fn run() -> () { let x = identity(3); }",

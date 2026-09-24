@@ -36,11 +36,33 @@ Each page has TOML front matter between `+++` delimiters, with a unique `id`, `t
 
 Use real relative Markdown links. The generator maps published Markdown to its HTML route, and repository source files to GitHub. Rule markers (`<!-- spec: 1.2:3 legality-rule -->`) produce stable anchors and native expandable test lists. `<!-- component: name -->` inserts repository-derived views such as benchmark charts; prose stays in Markdown.
 
+## Checked examples and excerpts
+
+Every executable example in a current page is a complete program in a `locus check`, `locus run`, or `locus reject Lxxxx` fence. `run` examples include `//~ run:` expectations. Only grammar, shell commands, and other honestly non-executable illustrations use `LANG prose REASON`.
+
+Keep helpers and test expectations in the same Markdown fence. Surround lines that would distract from the lesson with `// docs:hide` and `// docs:show`:
+
+```markdown
+```locus run
+// docs:hide
+fn helper() -> u8 { 41 }
+// docs:show
+fn answer() -> u8 { helper().wrapping_add(1) }
+// docs:hide
+//~ run: answer() => 42
+// docs:show
+```
+```
+
+The page initially shows `answer` and labels it an excerpt. A native **Complete checked example** disclosure includes the helper and run expectation, with its own copy button. Both views omit the marker comments. It works without JavaScript; copying requires JavaScript.
+
+The compiler always receives the full original fence, including hidden lines. Markers must be whole-line comments, balanced within one checked fence, and cannot nest. Unknown markers, an unclosed hidden region, or a wholly hidden example fail the build. Use hidden regions for setup and test drivers; keep assumptions, proof obligations, and the steps being taught visible. An excerpt is not a separate untested program.
+
 ## Validation and publication
 
-`tools/site.py check` builds and rejects broken local files/fragments, duplicate IDs, missing rule anchors, or operative rules without focused tests. `tools/test_site.py` checks canonical round-tripping, invalid metadata, task preservation, rule/test rendering, and path-prefix navigation. The regular `tools/check.sh` gate includes both. Executable Markdown examples still run in `tests/atlas_fences.rs`; the historical test name is retained.
+`tools/site.py check` builds and rejects broken local files/fragments, duplicate IDs, missing rule anchors, or operative rules without focused tests. `tools/test_site.py` checks canonical round-tripping, invalid metadata, task preservation, rule/test rendering, and path-prefix navigation. The regular `tools/check.sh` gate includes both. Executable Markdown examples run in `tests/atlas_fences.rs`; the historical test name is retained. The website workflow installs Rust 1.91.1 and runs that harness and its adversarial gate tests before uploading the Pages artifact.
 
-GitHub Actions builds and checks a Pages artifact on pushes and pull requests. Deployment is separate: enable **Settings → Pages → GitHub Actions**, then run the Website workflow on `main` with **Publish** selected. Ordinary pushes do not deploy. The artifact is also usable with any static host. [GitHub's workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) describes the Pages setup.
+GitHub Actions builds, checks, and executes the current-language examples on every branch push and pull request before creating a Pages artifact. Deployment is separate: enable **Settings → Pages → GitHub Actions**, then run the Website workflow on `main` with **Publish** selected. Ordinary pushes do not deploy. The artifact is also usable with any static host. [GitHub's workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) describes the Pages setup.
 
 Benchmark data comes from the `locus-bench-data` branch (local or `origin`); a full clone fetches it. Missing data produces an explicit empty state. Historical timings are labeled with revision, date, and dirty status; stale measurements never become current test counts. No network requests or fabricated samples are needed during generation.
 
@@ -48,6 +70,6 @@ Benchmark data comes from the `locus-bench-data` branch (local or `origin`); a f
 
 The organization follows [Rue's public site](https://rue-lang.dev/) and its [repository](https://github.com/rue-language/rue/tree/d39685970f97ae94258d75bdc44a0e5a710f9713): numbered Markdown chapters, separately maintained prose, generated traceability, shared templates, and a validated build artifact. Rue's production build uses its Gazette generator. Locus uses a small Node/Python build to fit its existing tooling. The warm paper, serif reading typography, restrained navigation, and book-like rhythm also take inspiration from [Crafting Interpreters](https://craftinginterpreters.com/). The layout and assets here are original.
 
-The Atlas migration preserves all 341 original rule IDs and all 232 public task IDs. Fifteen informative chapter introductions improve the manual; operative coverage is unchanged. A code-backed audit consolidated 23 projects into nine and corrected 79 task statuses, leaving partial or deferred work open. Completed work cites implementation/tests in its task notes.
+The Atlas migration preserves all 341 original rule IDs and all 232 public task IDs. The later manual rewrite adds type-by-type explanations, shorter rules, and checked teaching examples while retaining the original IDs. Additional split rules have their own focused citations. A code-backed audit consolidated 23 projects into nine and corrected 79 task statuses, leaving partial or deferred work open. Completed work cites implementation/tests in its task notes.
 
 Root `atlas.html` points at the local built site; the artifact's own `atlas.html` resolves old rule and task bookmarks. The old Atlas accidentally assigned internal ID `t179` to both LOC-85 and LOC-86; that ambiguous bookmark opens the roadmap index rather than choosing a task. Public LOC links remain unambiguous. HTML is no longer a source of truth; edit Markdown directly or use the compatibility `tools/atlas.py` commands.

@@ -44,12 +44,14 @@ The [language manual](specification.md), [kernel contract](reference/kernel.md),
 
 Tests cite IDs with `//~ spec: 1.2:3` in a corpus file or `#[doc = "spec: 1.2:3"]` on a Rust test. An operative paragraph needs a focused citation: one Rust test or a corpus file with fewer than forty physical lines. Review must still establish that the test exercises the rule; the gate checks the references and coverage, not semantic equivalence of prose and implementation.
 
-Current documentation fences declare `check`, `run`, `reject CODE`, or `prose REASON`. Run fences include expected values. The harness compiles the exact blocks and compares runnable examples across both interpreters and Rust. The internal `Now` metadata group identifies documents subject to this fence gate; archived design proposals do not become checked examples merely by appearing in the repository.
+Current documentation fences declare `check`, `run`, `reject CODE`, or `prose REASON`. Run fences include expected values. The harness compiles the complete blocks and compares runnable examples across both interpreters and Rust. The Website workflow runs it on every branch push and pull request before uploading an artifact. The internal `Now` metadata group identifies documents subject to this fence gate; archived design proposals do not become checked examples merely by appearing in the repository.
 
 ~~~sh prose shell-commands
 python3 tools/spec.py check
 python3 tools/spec.py fences --out target/doc-fences
 ~~~
+
+For a shorter teaching excerpt, put setup or test-driver lines between `// docs:hide` and `// docs:show` inside a checked fence. The HTML offers the full program in a disclosure; CI still checks every line. Markers must balance within one fence and cannot nest. Keep important assumptions and proof steps visible. See the [authoring example](../website/README.md#checked-examples-and-excerpts).
 
 A known-bug marker pins a failure and an open roadmap task. An unexpected pass, a changed pinned failure, or a closed task fails the suite. Harness panics and timeouts cannot stand in for the expected compiler rejection. When a fix lands, remove the marker and retain the reproducer as a passing regression.
 

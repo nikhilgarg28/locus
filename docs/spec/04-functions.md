@@ -11,31 +11,89 @@ description = "Signatures, result scope, methods, constants, and checked effect 
 # Functions and methods
 
 <!-- spec: 1.0:5 informative -->
-A function signature describes the data and evidence exchanged with its caller. Function promises add checked requirements such as avoiding panic; methods use the same model with a receiver. This chapter gives the supported declaration forms and their boundaries.
+A signature tells the caller what to supply and what a successful return establishes. Evidence parameters express preconditions; evidence in the result expresses postconditions. An ordinary function may still panic or diverge unless it makes a stronger promise.
+
+## Parameters and results
+
+<!-- spec: 1.9:1 syntax -->
+Declare an ordinary function as `fn name(parameters) -> Result { body }`. Write `-> ()` explicitly for a unit result. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
+
+<!-- spec: 1.90:22 example -->
+~~~locus run
+#[no_panic]
+fn difference(lo: u32, hi: u32, ordered: @(lo <= hi))
+    -> (gap: u32, @(gap == hi - lo))
+{
+    let gap = hi - lo;
+    (gap, _)
+}
+fn distance() -> u32 {
+    let (gap, correct) = difference(5, 12, prove!(5 <= 12));
+    gap
+}
+//~ run: distance() => 7
+~~~
+
+<!-- spec: 1.91:16 informative -->
+The result’s `lo` and `hi` refer to this call’s inputs. `gap` names the returned tuple’s first component. The caller receives evidence about its own destructured value, not a reference to a vanished callee local. Mutable references use the [entry/return convention](06-ownership.md#entry-and-return-values).
 
 ## Functions and promises
 
-<!-- spec: 1.9:1 syntax -->
-A function is `fn name(params) -> R { body }`, with a result type that may name its value, `-> (out: u8, @(out <= 3))`, so that the evidence returned speaks of the data returned. A parameter may be `mut`, `&T`, or `&mut T`. Every function has a result type; `-> ()` is written out. Ordinary runtime recursion is not yet supported; logical recursion is checked as described in [Logical data](08-logic.md#logical-data).
-
 <!-- spec: 1.9:2 syntax -->
-The promises are four attributes, written on the function or once for the file as `#![no_panic]`, never inferred, and each checked in the check IR against the body:
+Promises are explicit attributes on a function, or file defaults such as `#![no_panic]`. The compiler checks each promise against the body and callees; it does not infer a missing promise.
 
 <!-- spec: 1.9:3 syntax -->
-| Promise | What is checked |
+| Promise | Requirement |
 |---|---|
-| `#[terminates]` | no `loop`, `while`, or `for` anywhere in the body, and every function called promises it |
-| `#[no_panic]` | every operator that may panic carries evidence that it does not ([Integers and operators](03-integers.md#machine-arithmetic)), every panic form carries evidence of `false` ([The forms that panic](05-control-flow.md#the-forms-that-panic)), and every function called promises it |
-| `#[no_io]` | every function called promises it; the core has no primitive that performs I/O |
-| `#[no_alloc]` | every callee promises it; allocating native collection and Box operations are rejected |
+| `#[terminates]` | No loops; every runtime callee promises termination. |
+| `#[no_panic]` | Prove primitive safety conditions and unreachable panic paths; runtime callees promise no panic. |
+| `#[no_alloc]` | No allocating Box/collection operations; runtime callees promise no allocation. |
+| `#[no_io]` | Runtime callees promise no I/O; the current core has no I/O primitive. |
+
+<!-- spec: 1.90:23 example -->
+~~~locus check
+#![no_panic]
+#[terminates] #[no_alloc] #[no_io]
+fn bounded_sum(a: u8, b: u8, fits: @(a + b <= u8::MAX)) -> u8 {
+    a + b
+}
+~~~
 
 <!-- spec: 1.9:4 syntax -->
-Only `logic fn` declares a function of the logic ([Expressions and computation modes](08-logic.md#expressions-and-computation-modes)). Runtime promises do not change this classification. A promise not kept is reported at the construct that breaks it. `#[terminates(decreases = e)]` is parsed but rejected. Use checked structural recursion or `recurse!(evidence, call)` in a logical function; this attribute does not introduce ordinary runtime recursion.
+Runtime promises do not make a function callable in logic. Only `logic fn` does that. A broken promise is reported at the offending construct. A runtime `terminates(decreases = ...)` annotation is unsupported; logical recursion has its own [checked descent rules](08-logic.md#logical-data).
+
+## Constants
 
 <!-- spec: 1.9:5 syntax -->
-A `const` with a runtime form is a Rust `const`: its value is a literal, a cast, a comparison, a wrapping method, or a tuple, struct, or variant of those, naming other constants, and it is used by name; in the logic it is a function of no parameters with a defining equation. A constant of type `Prop` has no runtime form and may mention any function of the logic.
+A runtime `const` accepts literals, references to constants, casts, comparisons, wrapping operations, and products or variants built from them. It emits a Rust constant. A logical constant, including one of type `Prop`, is erased and may use logical functions. Constant definitions have logical defining equations.
+
+<!-- spec: 1.90:24 example -->
+~~~locus check
+const RETRIES: u8 = 3;
+const retries_fit: Prop = prop!(RETRIES < u8::MAX);
+fn allowed() -> @retries_fit { fold!(retries_fit, prove!(RETRIES < u8::MAX)) }
+~~~
 
 ## Methods
 
 <!-- spec: 1.14:1 syntax -->
-`impl T { ... }` declares functions under `T`. One with no `self` is an associated function, `T::name(args)`; one whose first parameter is `self`, `mut self`, `&self`, or `&mut self` is a method, called `x.name(args)` or by path with the receiver written as a lend, `T::name(&x, args)`. The receiver is a parameter named `self` of type `T`, passed as written: `self` moves `x` unless it is `Copy`, `&self` lends it, `&mut self` lends it mutably and needs a `let mut x`. `Self` is `T` inside the block, in types, literals, and variant paths; `*self` is the value behind a reference receiver, read, matched, or for `&mut self` replaced whole. In the logic a method is the function `T::name`, which a proposition calls as `c.small()` or `Counter::small(&c)`, and which `unfold!` and `fold!` take by path. An inherent `impl` block holds functions only. General trait declarations and implementations are unsupported; `impl Model<Runtime> for LogicalDestination` is the dedicated checked exception.
+`impl T` contains associated functions and methods. Call an associated function as `T::name(args)` and a method as `value.name(args)`. `Self` denotes `T` in types, literals, and variant paths. A logical method remains a logical function, selectable by path in `fold!` and `unfold!`. General trait implementations are unsupported except the dedicated Model interface.
+
+<!-- spec: 1.27:4 syntax -->
+A receiver may be `self`, `mut self`, `&self`, or `&mut self`. By-value receivers move unless `Copy`; shared receivers lend for reading; mutable receivers require mutable storage. `*self` reads a reference receiver, or replaces it whole through `&mut self`. The equivalent path call supplies the receiver explicitly.
+
+<!-- spec: 1.90:25 example -->
+~~~locus run
+struct Counter { value: u8 }
+impl Counter {
+    fn new(value: u8) -> Self { Self { value } }
+    fn read(&self) -> u8 { self.value }
+    fn clear(&mut self) -> () { self.value = 0; () }
+}
+fn demo() -> u8 {
+    let mut counter = Counter::new(7);
+    counter.clear();
+    counter.read()
+}
+//~ run: demo() => 0
+~~~

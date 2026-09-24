@@ -11,23 +11,96 @@ description = "Branches, loops, early returns, panics, and the facts each path e
 # Control flow
 
 <!-- spec: 1.0:6 informative -->
-Branches and loops organize execution while also determining which facts a proof may use. This chapter explains the facts available inside a branch, the evidence carried through a loop, and the behavior of early exits and panic.
+A runtime branch both chooses code to execute and gives the proof checker a fact about that path. Loops need evidence that remains valid from one iteration to the next. A result guarantee describes normal return; panic and divergence are separate outcomes.
 
-## if, else, loops, return
+## if and else
 
 <!-- spec: 1.11:1 dynamic-semantics -->
-In ordinary execution, `if c { a } else { b }` branches on a physical `bool`; each branch knows the outcome of the test it made, `a < b` as the fact `a < b` and its negation on the other side, and a condition `a != b` is the test `a == b` with the branches exchanged. An `if` in statement position still takes its `else`, which may be empty. `c && d`, `c || d`, and `!c` on `bool` are conditionals, so the right operand of `&&` knows the left was true, and the right operand of `||` knows it was false. Logical conditionals instead use Bool and must satisfy the [logical computation rules](08-logic.md#expressions-and-computation-modes).
+A runtime `if` tests a physical `bool`. Its branches receive the condition and its negation as facts. `else` is required, even for a statement; it may be empty. Boolean `&&` and `||` short-circuit, so their right operands know the left operand’s outcome. Logical conditionals instead use `Bool` and produce logical results.
+
+<!-- spec: 1.90:26 example -->
+~~~locus run
+fn at_least(a: u8, b: u8) -> (out: u8, @(a <= out && b <= out)) {
+    if a >= b {
+        (a, And::Intro(prove!(a <= a), prove!(b <= a)))
+    } else {
+        (b, And::Intro(prove!(a <= b), prove!(b <= b)))
+    }
+}
+//~ run: at_least(4, 9) => (9, Erased)
+~~~
+
+## Matching enums
+
+<!-- spec: 1.27:5 legality-rule -->
+A runtime `match` covers each enum variant, or supplies a `_` arm. Patterns use the variant’s unit, tuple, or named-field shape, with names or `_` for fields; named patterns allow renaming and `..`. Nested runtime patterns are unsupported. Each arm knows its constructor equation. Use `if` for booleans and comparisons for integers.
+
+<!-- spec: 1.90:27 example -->
+~~~locus check
+enum Message { Stop, Payload { byte: u8, channel: u8 } }
+fn payload(message: Message) -> Option<u8> {
+    match message {
+        Message::Stop => None,
+        Message::Payload { byte: value, .. } => Some(value),
+    }
+}
+~~~
+
+## Loops
 
 <!-- spec: 1.11:2 dynamic-semantics -->
-The loops are Rust's: `loop { ... }` with `break value` giving it its value and `continue` starting the next pass; `while c { ... }`, of type `()`, whose `break` carries nothing; and `for i in lo..hi { ... }` or `lo..=hi` over a range of any machine integer type, whose index is immutable and whose body knows `lo <= i` and `i < hi`, or `i <= hi`, afresh on every pass. Nothing is asked about the order of the bounds: a range whose start lies past its end runs no pass, and the bounds are evaluated once. `break` and `continue` belong to the innermost loop. A `loop` that never breaks fits any result type. A loop never promises to terminate: it is forbidden under `terminates` and in a proposition. A `for` over anything but a range, and `while let`, are not in Locus yet.
+`loop` repeats until `break`, which may supply its result. `while condition` and range-based `for` have unit results and accept only valueless `break`. `continue` starts the next iteration; both transfers target the innermost loop. Loops are currently forbidden in logical computation and under `#[terminates]`, including finite range loops. Iterator-based `for` and `while let` are unsupported.
+
+<!-- spec: 1.27:6 dynamic-semantics -->
+A range loop evaluates its bounds once. `lo..hi` supplies `lo <= i && i < hi`; `lo..=hi` supplies `lo <= i && i <= hi`. The immutable index has the bounds’ machine type. Reversed ranges are empty. A loop that never breaks can satisfy any expected result type by never producing a result.
+
+<!-- spec: 1.90:28 example -->
+~~~locus run
+fn first_attempt(ready: bool) -> u8 {
+    loop {
+        if ready { break 1; } else { break 0; }
+    }
+}
+fn range_sum() -> u8 {
+    let mut total: u8 = 0;
+    for i in 1u8..=3u8 { total = total.wrapping_add(i); }
+    total
+}
+//~ run: first_attempt(true) => 1
+//~ run: range_sum() => 6
+~~~
+
+<!-- spec: 1.91:17 informative -->
+A loop does not retain the initial value of a variable it changes. Carry the needed property as [tracked evidence](07-mutation.md#loop-invariants). This is the induction step: establish the property before the loop, then re-establish it after each update.
+
+## Early return
 
 <!-- spec: 1.11:3 dynamic-semantics -->
-`return`, or `return value`, ends the function from any depth, and the value is checked against the result type in what is known where the `return` stands. `return`, `break`, `continue`, the panic forms, and a call of a function declared `-> !` have the never type, which coerces to any type; a function declared `-> !` must not reach the end of its body.
+`return value` ends the function at any nesting depth; `return` supplies unit. The value must satisfy the declared result type using facts available at that point. Return, break, continue, panic, and calls declared `-> !` do not produce a normal value and coerce to any expected type. A `-> !` function must not reach its body’s end.
+
+<!-- spec: 1.90:29 example -->
+~~~locus run
+fn bounded(value: u8) -> (out: u8, @(out <= 10)) {
+    if value <= 10 { return (value, prove!(value <= 10)); } else { }
+    (10, prove!(10 <= 10))
+}
+//~ run: bounded(3) => (3, Erased)
+//~ run: bounded(20) => (10, Erased)
+~~~
 
 ## The forms that panic
 
 <!-- spec: 1.10:1 dynamic-semantics -->
-`panic!(msg)`, `todo!()`, `todo!(msg)`, `unreachable!()`, and `unreachable!(msg)` yield no value and stand where any type is expected; `assert!(c)`, `assert!(c, msg)`, `debug_assert!(c)`, and `debug_assert!(c, msg)` are checks of type `()`. A message is a string literal, written as it is; format arguments are not in Locus. After `assert!(c)` the condition is a fact. Without a `no_panic` promise, `todo!()` can stand for an unfinished body or the rest of one: it panics rather than establishing a successful return.
+`panic!(message)`, `todo!()`, and `unreachable!()` panic; the latter two also accept a message. `assert!(condition)` and `debug_assert!(condition)` return unit, with optional messages. Messages are string literals, not format arguments. Normal continuation after `assert!` supplies its condition as a fact; `debug_assert!` supplies no such fact because it can be disabled.
+
+<!-- spec: 1.90:30 example -->
+~~~locus run
+fn divide(n: u32, divisor: u32) -> u32 {
+    assert!(divisor != 0, "zero divisor");
+    n / divisor
+}
+//~ run: divide(12, 3) => 4
+~~~
 
 <!-- spec: 1.10:2 dynamic-semantics -->
-A panic is a third way for a function to end, beside returning and never returning. Under `no_panic` every panic form must carry evidence of `false` at its point, found as a hole is: `assert!(x <= 3)` from a hypothesis or by arithmetic, `unreachable!()` from the facts of the arms around it. Code after a statement that transfers control or panics is unreachable, reported as a warning once per block, and not elaborated.
+Under `no_panic`, every possible panic path needs evidence that it is unreachable. For `assert!(condition)`, this means proving its condition. Without that promise, `todo!()` may stand for unfinished code and simply panics. Code following an unconditional control transfer is warned about once per block and is not elaborated.

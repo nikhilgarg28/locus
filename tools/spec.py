@@ -65,6 +65,9 @@ class Fence:
     code: str
     expected: list[str]
     reason: str = ''
+    visible_code: str = ''
+    complete_code: str = ''
+    excerpt: bool = False
 
 def load(path: Path = ROOT/'docs') -> dict:
     if path.is_dir():
@@ -189,6 +192,38 @@ def validate(paragraphs: list[Paragraph], uses: list[Citation]) -> dict:
         raise ValueError('\n'.join(failures))
     return {'paragraphs': len(paragraphs), 'normative': sum(p.category in OPERATIVE for p in paragraphs), 'citations': sum(len(c.ids) for c in uses), 'focused_tests': sum(c.focused for c in uses)}
 
+def example_display(code: str, location: str) -> tuple[str, str, bool]:
+    """Select teaching lines without changing the source given to the compiler.
+
+    Markers are reserved whole-line comments, balanced within one code fence.
+    Keep both views: a short excerpt and the complete copyable program.
+    """
+    visible, complete = [], []
+    hidden = False
+    excerpt = False
+    for number, line in enumerate(code.splitlines(), 1):
+        marker = line.strip()
+        if marker.startswith('// docs:'):
+            if marker not in {'// docs:hide', '// docs:show'}:
+                raise ValueError(f'{location}, code line {number}: unknown docs marker {marker!r}')
+            if marker == '// docs:hide':
+                if hidden:
+                    raise ValueError(f'{location}, code line {number}: nested docs:hide')
+                hidden = excerpt = True
+            else:
+                if not hidden:
+                    raise ValueError(f'{location}, code line {number}: docs:show without docs:hide')
+                hidden = False
+            continue
+        complete.append(line)
+        if not hidden:
+            visible.append(line)
+    if hidden:
+        raise ValueError(f'{location}: unclosed docs:hide; add docs:show before the fence ends')
+    if excerpt and not any(line.strip() for line in visible):
+        raise ValueError(f'{location}: excerpt must contain visible code')
+    return '\n'.join(visible).strip('\n'), '\n'.join(complete).strip('\n'), excerpt
+
 def fences(data: dict) -> list[Fence]:
     result = []
     for doc in data['docs']:
@@ -212,7 +247,10 @@ def fences(data: dict) -> list[Fence]:
             code = '\n'.join(lines[1:-1]) + '\n'
             if mode == 'run' and not re.search(r'//~\s*run:', code):
                 raise ValueError(f"{doc['id']}:{block.start+1}: run fence has no expected run value")
-            result.append(Fence(doc['id'], block.start+1, language, mode, code, rest if mode == 'reject' else [], ' '.join(rest) if mode == 'prose' else ''))
+            visible, complete, excerpt = example_display(code, f"{doc['id']}:{block.start+1}")
+            if excerpt and mode == 'prose':
+                raise ValueError(f"{doc['id']}:{block.start+1}: docs markers require a checked Locus example")
+            result.append(Fence(doc['id'], block.start+1, language, mode, code, rest if mode == 'reject' else [], ' '.join(rest) if mode == 'prose' else '', visible, complete, excerpt))
     return result
 
 def known_markers(root: Path) -> list[tuple[str, str, str]]:

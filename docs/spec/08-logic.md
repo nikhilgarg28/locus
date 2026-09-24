@@ -11,42 +11,106 @@ description = "Logic functions and blocks, total recursion, and the boundary wit
 # Logical computation
 
 <!-- spec: 1.0:9 informative -->
-Logical computation builds the values used to state and prove properties. Its result is erased from the generated program, so it has stricter rules than ordinary execution. Here the distinction is made explicit through logical types, functions, closures and checked recursion.
+Logical code calculates the values used in claims and proofs. It is checked for purity and termination, then erased. Ordinary code may use its results for verification, but cannot turn them into runtime decisions or data.
 
 ## Expressions and computation modes
 
-<!-- spec: 1.5:1 dynamic-semantics -->
-Runtime expressions use Rust-like evaluation order: operands and arguments are evaluated left to right, while assignment evaluates its right side before its destination. Effects of ordinary calls are retained even when their returned value is Logical.
-
 <!-- spec: 1.5:2 dynamic-semantics -->
-`fn` declares ordinary execution. Its body may mutate, panic or diverge subject to its stated promises. It can accept or return data, propositions and evidence; the logical values occupy erased positions. A result's type does not make the call logical. An ordinary function cannot be unfolded or called inside a logical computation, even if it promises every effect restriction.
+`fn` declares runtime execution. It may accept or return physical data, logical data, propositions, and evidence. Logical results do not erase the call. An ordinary function cannot be called or unfolded inside logical computation, even when it promises to terminate, avoid panic, allocation, and I/O.
 
 <!-- spec: 1.5:3 dynamic-semantics -->
-`logic fn` declares checked logical computation. Its result must be Logical; it cannot perform physical mutation, allocate physical objects, panic, or call ordinary functions. It can inspect authorized immutable snapshots of runtime inputs and call other logical definitions. `logic { ... }`, `prop!(...)`, proof annotations and `prove!(...)` establish logical contexts. User-defined total recursion requires the logical-data rules in [Logical data](#logical-data). The four runtime promises do not infer logical mode.
+`logic fn` must return a Logical type. Its body may call logical definitions and observe authorized runtime inputs. It cannot call ordinary functions, mutate physical storage, allocate physical objects, or panic. `logic { ... }`, proposition literals, proof annotations, and `prove!` establish logical contexts with these same restrictions.
+
+<!-- spec: 1.90:40 example -->
+~~~locus check
+logic fn successor(n: Int) -> Int { n + 1 }
+fn describe(n: u8) -> Prop {
+    let expected = successor(n as Int);
+    prop!(expected > n)
+}
+fn proof(n: u8) -> @(successor(n) > n) {
+    fold!(successor, prove!(n + 1 > n))
+}
+~~~
+
+<!-- spec: 1.5:1 dynamic-semantics -->
+Ordinary operands and arguments evaluate left to right. Assignment evaluates its right side before its destination. These evaluation steps remain even when the enclosing expression ultimately produces a Logical value.
 
 <!-- spec: 1.5:4 dynamic-semantics -->
-Ordinary code may call a logical function or compute with Logical operands without first wrapping the expression in `logic { ... }`. These logical operations disappear, but any ordinary argument-producing calls run once in source order. Inside an explicitly logical block such calls are rejected. Runtime control depends on physical `bool` or a physical enum tag; a logical conditional uses `Bool` and produces only logical computation. A logical value cannot be converted into physical data or used to choose a runtime branch.
+Logical calls and operators may appear directly in ordinary code. Ordinary argument-producing calls execute once in source order, then the logical operation erases. An explicit logical context rejects those ordinary calls. Runtime control needs a physical `bool` or enum tag; logical control uses `Bool` or logical data and cannot select runtime effects.
+
+<!-- spec: 1.90:41 example -->
+~~~locus run
+fn take_next(counter: &mut u8) -> u8 {
+    counter = counter.wrapping_add(1);
+    counter
+}
+logic fn describe(n: Int) -> Int { n + 1 }
+fn demo() -> u8 {
+    let mut counter: u8 = 0;
+    let ignored = describe(take_next(&mut counter));
+    counter // take_next still ran
+}
+//~ run: demo() => 1
+~~~
 
 <!-- spec: 1.5:5 dynamic-semantics -->
-Operator selection follows the operand types. `count + 1` with `count: Int` is erased integer arithmetic; the same syntax at `u8` is a runtime operation with Rust overflow behavior. Logical `Bool` and physical `bool` are different surface types even though the kernel shares a boolean representation. A separately checked erasure layout preserves the distinction inside products, fields, arguments, results and control-flow joins.
+Operand types select operators: addition on `Int` is logical; addition on `u8` is runtime arithmetic. Logical `Bool` and runtime `bool` stay distinct through fields, parameters, results, and control-flow joins. A shared internal kernel representation does not make the two source types interchangeable.
 
 ## Logical data
 
 <!-- spec: 1.25:1 legality-rule -->
-`#[derive(Logical)]` structs and finite recursive enums erase completely. Recursive logical enums require no runtime Box. Mutually referring logical enum declarations form one checked group; generic groups are specialized first. Matching across group members can expose the same-typed structural descendant for a recursive function or proof. Mutually recursive functions remain unsupported. `library/logical.lc` defines Nat and Seq as ordinary enums and proves the Nat/Int correspondence; Int remains the primitive mathematical integer. Library maps, membership and reachability are checked source declarations. Explicit `--library` input includes them without a hidden privileged prelude.
+Logical structs and finite recursive enums erase completely. A logical recursive enum uses direct recursion, without Box. Mutually referring logical enums form one checked group, specialized first when generic. Logical function recursion may follow same-typed descendants exposed across that group. Mutually recursive functions are unsupported. Library types and lemmas are ordinary checked source included explicitly with `--library`.
+
+<!-- spec: 1.90:42 example -->
+~~~locus check
+#[derive(Logical)]
+enum Nat { Zero, Succ(Nat) }
+logic fn size(n: Nat) -> Int {
+    match n {
+        Nat::Zero => 0,
+        Nat::Succ(previous) => 1 + size(previous),
+    }
+}
+logic fn nonnegative(n: Nat) -> @(size(n) >= 0) {
+    match n {
+        Nat::Zero => fold!(size, prove!(0 >= 0)),
+        Nat::Succ(previous) => {
+            let induction = nonnegative(previous);
+            fold!(size, prove!(1 + size(previous) >= 0))
+        }
+    }
+}
+~~~
+
+<!-- spec: 1.91:20 informative -->
+The recursive theorem call is the induction hypothesis for `previous`. It is legitimate because matching `Succ` exposed a smaller part of `n`. `fold!` connects the branch calculation to the named function’s result. The compiler checks this once for an arbitrary finite value; it does not enumerate all naturals.
 
 <!-- spec: 1.25:2 legality-rule -->
-Structural recursion is checked against constructor subdata; recursive theorem calls become checked induction. Int recursion uses `recurse!(decreases, function(next_args))`, naming the current function, where decreases proves `0 <= next && next < current`. The descent proof is checked before admitting the recursive call, and cannot use that call to justify itself. Arbitrary nonpositive recursive proposition occurrences are rejected. The kernel checks computed arm bodies, recursive declarations, induction and reductions independently of the source elaborator.
+Structural recursion must use constructor subdata. Integer recursion uses `recurse!(decreases, self_call)`, with evidence of `0 <= next && next < current`. That evidence is checked before the recursive call is available. Recursive theorem calls provide checked induction. Recursive propositions additionally require [positive constructor conditions](09-propositions.md#recursive-propositions).
+
+<!-- spec: 1.90:43 example -->
+~~~locus check
+logic fn steps(n: Int) -> Int {
+    if n <= 0 { 0 } else {
+        let next = n - 1;
+        let smaller: @(0 <= next && next < n) =
+            And::Intro(prove!(0 <= next), prove!(next < n));
+        1 + recurse!(smaller, steps(next))
+    }
+}
+~~~
+
+## Logical closures
 
 <!-- spec: 1.25:3 legality-rule -->
-Logical closures are ordinary lambda terms with typed parameters, inferred captures, and dependent proof results. A runtime capture must be explicitly observed through a model, as in `|x: Int| x + (n as Int)`. Closure parameter and result types must be Logical; this is stricter than a named `logic fn`, which may take physical input observations. `logic Fn(x: T) -> U` is callable in ordinary code with erased results; any eager ordinary callee/argument work is retained. It is not a runtime closure type.
+Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures must be explicitly modeled, as in `|x: Int| x + (n as Int)`. Closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
 
-## Quantification
-
-<!-- spec: 1.25:4 legality-rule -->
-`Exists<T>::Witness(value) @ proof` and `ForAll<T>::Each(prove_each) @ True::Intro` are the library quantifier constructors. Predicate arguments are Logical callables returning Prop. Applying universal evidence specializes its checked proof function. Eliminating an existential proof permits its witness only within further proof construction; it does not create a witness extraction operation.
-
-## Models
-
-<!-- spec: 1.25:5 legality-rule -->
-`impl Model<Runtime> for LogicalDestination { logic fn model(source: &Runtime) -> Self { ... } }` defines an observational bridge. The definition is checked, not admitted as an axiom. A model cast records the current value version and requires a live observation permission. Models compose and a source may have multiple distinct destinations; overlapping source/destination implementations are rejected. Physical buffer shapes are retained for model selection even though their logical content snapshots share a kernel representation. [Models and heap data](11-models.md) explains storage, lifetime and native-call behavior.
+<!-- spec: 1.90:44 example -->
+~~~locus check
+logic fn apply(f: logic Fn(x: Int) -> Int, x: Int) -> Int { f(x) }
+fn capture(n: u8) -> Int {
+    let add_input = |x: Int| x + (n as Int);
+    apply(add_input, 10)
+}
+~~~

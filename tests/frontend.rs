@@ -1851,6 +1851,7 @@ fn paths_construct_variants_and_projections_take_names_or_positions() {
 }
 
 #[test]
+#[doc = "spec: 1.27:1"]
 fn struct_literals_accept_named_and_shorthand_fields() {
     let ExprKind::Struct { path, fields } =
         expression("Lock { failures: n.wrapping_add(1), open, }").kind

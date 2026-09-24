@@ -47,7 +47,7 @@ def prepare():
     paragraphs = spec.inventory(data)
     uses = spec.citations(ROOT)
     coverage = spec.validate(paragraphs, uses)
-    spec.fences(data)
+    fences = spec.fences(data)
     spec.validate_known(data, spec.known_markers(ROOT))
     citations = [source_excerpt(c) for c in uses]
     documents = []
@@ -95,6 +95,7 @@ def prepare():
         **data,
         "docs": documents,
         "rules": [asdict(p) for p in paragraphs],
+        "fences": [asdict(f) for f in fences],
         "citations": citations,
         "coverage": coverage,
         "performance": performance,

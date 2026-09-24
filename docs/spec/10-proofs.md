@@ -11,51 +11,140 @@ description = "Constructing, transporting, composing, and checking evidence."
 # Proofs and evidence
 
 <!-- spec: 1.0:11 informative -->
-Proofs have explicit places in expressions, function signatures and aggregates. You can supply evidence already in scope, build it with a proof form, or leave a hole for the compiler’s bounded search. Every accepted result is checked against the required claim.
+A proof is a value in an explicit evidence slot. Start with a fact already available, use a lemma to derive another, or request bounded proof construction. The kernel checks the resulting evidence against the exact required claim.
 
 ## Proofs and their forms
 
 <!-- spec: 1.7:1 syntax -->
-A proof type is `@name`, `@f(args)` for a call of the logic, `@N(args)` for a declared proposition, or `@(F)` for a formula; a leading `@` begins a proof type; between a named proposition constructor and its body evidence it separates the two expression operands. Evidence is an ordinary expression of a proof type:
+Write `@claim`, `@predicate(args)`, or `@(formula)` for a proof type. Leading `@` marks the type; in `Predicate::Arm @ evidence`, it separates a constructor from its body evidence. Proof values themselves are ordinary names, field projections, calls, constructors, or expressions.
 
 <!-- spec: 1.7:2 syntax -->
-| Written | What it is |
+| Form | Purpose |
 |---|---|
-| `_` | a hole: the compiler finds the evidence, by the tiers of [What a hole finds](#what-a-hole-finds) |
-| `prove!(F)` | a claim stated where it stands: as a statement it leaves `F` known to everything after it; as a value it is evidence of `F` |
-| a name, a field, a call | evidence already held, a field of evidence, or evidence a function returns |
-| `And::Intro(h, k)`, `Or::Left(h)`, `Or::Right(h)`, `True::Intro` | the constructors of the built-in connectives |
-| `N::Arm(witnesses) @ evidence`, `N::Arm { witness: value } @ evidence` | a named-arm constructor with a separate body-evidence slot |
-| `match h { N::Arm(x) @ body => ..., }` | Proof elimination; nonempty matches produce evidence, so witnesses cannot be extracted into data. Empty false elimination remains valid. |
-| `rewrite!(eq, h)` | `h` carried across the equation `eq` proves, every occurrence of its left side replaced by its right |
-| `unfold!(f, h)`, `fold!(f, h)` | `h` with a call of the function `f` of the logic opened to its body, or the body closed to the call; `f` is a name or a path such as `Counter::small` |
-| `unfold!(x as M, h)`, `fold!(x as M, h)` | select the checked Model implementation for the observation `x as M` and open or close its defining equation |
-| `general(p)(q)(h)` | evidence of a `forall` or an implication applied to an argument |
-| `u32_le_trans(a, b, c, ab, bc)` | a lemma of the theory called by name, its premises as arguments |
-| `f` | a function of the logic that returns evidence, named as evidence of its general claim |
+| `_` | Request evidence for the expected claim. |
+| `prove!(P)` | State the goal explicitly and retain the established fact. |
+| `And::Intro(h, k)` | Prove both conjuncts. |
+| `Or::Left(h)` / `Or::Right(k)` | Choose a disjunct. |
+| `True::Intro` | Establish truth. |
+| `Name::Arm(args) @ h` | Establish a named proposition. |
+| `match h { ... }` | Reason by the evidence’s alternatives. |
+| `rewrite!(equality, h)` | Transport evidence across an equality. |
+| `fold!(definition, h)` / `unfold!(definition, h)` | Close or open a definition. |
+
+<!-- spec: 1.90:49 example -->
+~~~locus check
+logic fn combine(p: Prop, q: Prop, hp: @p, hq: @q) -> @(p && q) {
+    And::Intro(hp, hq)
+}
+fn bounded(n: u8, small: @(n < 10)) -> @(n <= 10) {
+    let result: @(n <= 10) = _;
+    result
+}
+~~~
 
 <!-- spec: 1.7:3 syntax -->
-`examples/proofs.lc`, `examples/propositions.lc`, `tests/corpus/accept/explicit_steps.lc`, and `tests/corpus/accept/forms.lc` show each. The forms take `!` as a Rust macro does; a bare `rewrite(...)` is an error with a fix.
+Built-in proof forms use `!`, as in `prove!` and `rewrite!`. The compiler interprets their arguments as proof syntax; they are not ordinary functions or an extensible macro system. A bare `rewrite(...)` is rejected with a suggested correction.
 
-<!-- spec: 1.7:4 syntax -->
-The lemmas callable by name are the 162 the kernel's theory declares: six about `Int`, `int_le_of_lt`, `int_lt_of_le_of_ne`, `int_le_add_left`, `int_le_add_right`, `int_le_sub`, `int_mul_le_mul_nonneg`; and at each of the eight machine types `T`, written `<T>_<lemma>` as `u32_le_trans` and `i8_view_bounds`, `le_refl`, `le_trans`, `le_of_lt`, `lt_of_le_of_ne`, `lt_irrefl`, `le_antisymm`, `view_injective`, `view_bounds`, `le_of_cmp`, `cmp_of_le`, `lt_of_cmp`, `cmp_of_lt`, `eq_of_cmp`, `cmp_of_eq`, `lt_of_not_le`, `le_of_not_lt`, `succ_le_of_lt`, and `eq_symm`, with `zero_le`, `sub_le`, and `sub_le_sub` at the unsigned types. Their statements are in the [kernel contract](../reference/kernel.md#lemmas).
+## Opening and closing definitions
+
+<!-- spec: 1.91:22 informative -->
+`unfold!(f, h)` turns evidence about a call of `f` into evidence about its body. `fold!(f, h)` goes in the opposite direction. Neither operation proves the body for you. Give the intended result type when closing a definition so the checker knows which call to reconstruct.
+
+<!-- spec: 1.90:50 example -->
+~~~locus check
+logic fn nonzero(n: Int) -> Prop { prop!(n != 0) }
+logic fn named(n: Int, known: @(n != 0)) -> @nonzero(n) {
+    fold!(nonzero, known)
+}
+logic fn opened(n: Int, known: @nonzero(n)) -> @(n != 0) {
+    unfold!(nonzero, known)
+}
+~~~
+
+<!-- spec: 1.91:23 informative -->
+A path such as `Counter::small` selects a logical method. `fold!(value as ModelType, h)` and `unfold!(value as ModelType, h)` select a checked model definition. A named `prop` is opened by matching its evidence, not by unfolding one of its arms.
+
+## Rewriting evidence
 
 <!-- spec: 1.7:5 syntax -->
-Evidence is accepted only for the claim wanted, after computing ([What a hole finds](#what-a-hole-finds)): evidence of `x <= 3` where `y <= 3` is wanted is a mismatch, whatever relates `x` and `y`.
+Supplied evidence must establish the expected claim after the permitted computation steps. A related claim is not automatically substituted: if evidence mentions `x` but the goal mentions `y`, use explicit transport when an equation is needed.
+
+<!-- spec: 1.90:51 example -->
+~~~locus check
+fn transport(x: u8, y: u8, same: @(x == y), small: @(x <= 10))
+    -> @(y <= 10)
+{
+    rewrite!(same, small)
+}
+~~~
+
+<!-- spec: 1.91:24 informative -->
+Here `same` proves `x == y`. Rewriting replaces every occurrence of the left side in `small`’s claim with the right side, yielding `y <= 10`. The direction matters; use a symmetry lemma when the available equation points the other way.
+
+## Calling lemmas
+
+<!-- spec: 1.7:4 syntax -->
+Theory lemmas are called by name with explicit premises, such as `u32_le_trans(a, b, c, ab, bc)`. The built-in family covers integer order, equality, machine models, and selected arithmetic laws. The [kernel lemma reference](../reference/kernel.md#lemmas) lists their exact signatures; application grants only the lemma’s stated conclusion.
+
+<!-- spec: 1.90:52 example -->
+~~~locus check
+fn ordered(a: u32, b: u32, c: u32, ab: @(a <= b), bc: @(b <= c))
+    -> @(a <= c)
+{
+    u32_le_trans(a, b, c, ab, bc)
+}
+~~~
+
+## Matching proofs
+
+<!-- spec: 1.26:5 dynamic-semantics -->
+A nonempty match on evidence must return evidence, not arbitrary data, including Logical data. Witnesses stay inside the proof derivation. A witness-free single-arm proof permits `let` destructuring; witness-bearing proofs require a proof-producing match. An empty match on falsity remains valid. These restrictions preserve proof irrelevance.
+
+<!-- spec: 1.90:53 example -->
+~~~locus check
+prop Within(n: Int) { Bounds => { prop!(0 <= n && n <= 100) } }
+logic fn upper(n: Int, bounded: @Within(n)) -> @(n <= 100) {
+    let Within::Bounds @ both = bounded;
+    match both { And::Intro(lower, upper) => upper }
+}
+~~~
+
+## General proofs and specialization
+
+<!-- spec: 1.91:25 informative -->
+A logical proof function can establish a general claim; universal evidence specializes it to one argument. Implication evidence similarly accepts evidence of its premise. This is proof composition, with no runtime function pointer or proof inspection.
+
+<!-- spec: 1.90:54 example -->
+~~~locus check
+logic fn reflexive(n: Int) -> @(n == n) { _ }
+logic fn at_seven() -> @(7 == 7) {
+    let all: @(forall (n: Int) { n == n }) = reflexive;
+    all(7)
+}
+~~~
 
 ## What a hole finds
 
 <!-- spec: 1.8:1 legality-rule -->
-A `_`, a `prove!`, the obligation of an operator under `no_panic`, and the evidence of a panic form under `no_panic` are filled by a fixed search whose tiers are tried in order. Every limit in it is a count of work and never a clock, and the proof it finds is checked by the kernel like any other.
+Holes, `prove!`, and implicit safety obligations use bounded search. Limits count work, not elapsed time. Every result is checked by the kernel; failure to find a proof does not establish that a proposition is false.
 
 <!-- spec: 1.8:2 legality-rule -->
-| Tier | What it does |
+| Tier | Evidence source |
 |---|---|
-| stored | the entry for this obligation in the source directory’s `Locus.lock` ([Found proofs are stored](14-tooling.md#found-proofs-are-stored)), checked again |
-| exact | a fact in scope that is the claim: a branch or arm fact, a `let` equation, a range bound, evidence in scope, or an evidence field of a value in scope |
-| computed | the same after computing: `let` names replaced by what they stand for, projections of written products, matches on written constructors, and arithmetic on literals; a definition is never unfolded on its own |
-| evaluation | a closed comparison, run by the kernel: `0 <= 3`, `2 != 0` |
-| arithmetic | the linear arithmetic procedure (`src/arith`): the claim and the facts read as linear constraints over `Int`, the ranges of every machine value in them, the exact results of operators already discharged, and division by a literal reduced to the kernel's decomposition; it emits a certificate the kernel's `linear` rule checks |
+| Stored | A certificate from `Locus.lock`, checked again. |
+| Exact | A matching fact, proof binding, or proof field. |
+| Computed | Fixed let, projection, known-constructor, and literal computation steps. |
+| Evaluation | A closed comparison checked by evaluation. |
+| Arithmetic | A checked linear-arithmetic certificate, including machine ranges and supported division facts. |
 
 <!-- spec: 1.8:3 legality-rule -->
-What a hole does not do: take a connective apart, unfold a definition, rewrite by an equation in scope, try every value of a byte, or bridge evidence of one claim to another. Each of those is a form of [Proofs and their forms](#proofs-and-their-forms), and the diagnostic for a failed hole names which. `locus check --holes` lists every hole with the tier that filled it and the size of its proof; `--stats` counts the obligations by tier.
+A hole does not automatically unfold definitions, rewrite by arbitrary equations, select connective constructors, or enumerate all machine values. Use an explicit proof step for those tasks. Available conjunction facts can contribute arithmetic premises; that does not construct a new conjunction goal. `check --holes` reports chosen tiers and proof sizes; `--stats` summarizes obligations.
+
+<!-- spec: 1.90:55 example -->
+~~~locus check
+logic fn bounded(n: Int, low: @(0 <= n), high: @(n <= 10))
+    -> @(0 <= n && n <= 10)
+{
+    And::Intro(low, high)
+}
+~~~

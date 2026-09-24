@@ -178,6 +178,7 @@ fn expanded_tree(block: &str) -> String {
 
 #[test]
 #[doc = "spec: 1.20:1"]
+#[doc = "spec: 1.27:12"]
 fn every_found_proof_is_written_read_back_and_accepted() {
     let mut files = 0;
     let mut proofs = 0;

@@ -18,7 +18,7 @@ The manual, kernel contract, and formal core use permanent rule IDs. Tests cite 
 
 A Rust test function counts as focused. A corpus example must have fewer than forty physical lines to satisfy focused coverage; larger cases can supply context without replacing focused checks. Coverage means a reviewable relationship exists. Review must still establish that the test actually exercises the rule.
 
-Executable documentation fences declare whether they should check, run, or be rejected with specific diagnostics. The documentation harness feeds those exact examples to the compiler. Expected results are compared with both interpreters and generated Rust. Prose-only grammar and shell fragments carry explicit exemptions.
+Executable documentation fences declare whether they should check, run, or be rejected with specific diagnostics. The documentation harness feeds those complete examples to the compiler, including any lines hidden from the initial teaching excerpt. Expected results are compared with both interpreters and generated Rust. Prose-only grammar and shell fragments carry explicit exemptions. GitHub runs these checks on every branch push and pull request, before the website artifact is uploaded.
 
 Sources: [specification gate](../tools/spec.py), [adversarial gate tests](../tools/test_spec.py), [executable documentation tests](../tests/atlas_fences.rs).
 

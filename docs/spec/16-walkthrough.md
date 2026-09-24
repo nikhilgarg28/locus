@@ -11,12 +11,17 @@ description = "A complete example that carries an invariant through branches, ca
 # A verified lock
 
 <!-- spec: 1.0:17 informative -->
-This complete example maintains a lock’s failure count and returns evidence that the count stays within its limit. It brings together named propositions, evidence in function results, mutation and loop state; the source below is checked and executed by the documentation tests.
+This example verifies one precise property: a lock’s failure count never exceeds three. It does not prove a security policy or that the lock eventually opens. The runtime code processes events; its evidence records the bound through transitions and a loop.
 
-## The 32-bit lock
+## The contract
 
 <!-- spec: 1.1:1 legality-rule -->
-`tests/corpus/target/lock.lc` is the target example: named proposition arms, explicit evidence, tracked loop evidence, and checked machine arithmetic. Its program text is kept identical to the Vision target; run directives belong to the corpus harness.
+The [lock program](../../tests/corpus/target/lock.lc) exercises named proposition arms, proof-bearing results, tracked loop evidence, and safe machine arithmetic. Its source is checked by the acceptance suite; the complete program below is also checked and executed by documentation tests.
+
+<!-- spec: 1.91:37 informative -->
+`within_limit` names the bound. `step` requires evidence for its input lock and returns a new lock with evidence for the new count. A correct event resets the count; an incorrect event increments below the limit and otherwise leaves it unchanged.
+
+## The complete program
 
 <!-- spec: 1.1:2 example -->
 ~~~locus run
@@ -86,5 +91,14 @@ pub(super) fn remaining(failures: u32, bounded: @within_limit(failures as Int)) 
 //~ run: run(3, 2) => (Lock { failures: 0, open: true }, Erased)
 ~~~
 
+## Why each part checks
+
+<!-- spec: 1.91:38 informative -->
+1. **Construction:** the initial count is zero, so its bound is immediate.
+2. **Transition:** the branch `failures < 3` establishes room for the increment; `fits` states the arithmetic step explicitly.
+3. **Propagation:** destructuring `step` binds `still` as evidence about the newly returned `next`.
+4. **Mutation:** assigning `lock` invalidates `ok`; assigning `still` refreshes it before the loop’s next iteration.
+5. **Consumption:** `remaining` opens the named proof and uses the bound to justify subtraction.
+
 <!-- spec: 1.1:3 legality-rule -->
-`locus run tests/corpus/target/lock.lc run 300 9` returns `(Lock { failures: 3, open: false }, Erased)`. The evidence-taking functions are restricted exports; Rust callers use the public data interface. Proof counts and timing are measurements of the implementation, not language semantics.
+Running `run(300, 9)` returns `(Lock { failures: 3, open: false }, Erased)`. Evidence-taking helpers have restricted visibility; Rust callers use the public runtime interface. The loop’s result is proved on normal return, with no current termination certificate. Proof counts and timings are implementation measurements, not language semantics.

@@ -13,4 +13,4 @@ pub(super) fn midpoint(lo: u32, hi: u32, ordered: @((lo as Int) <= (hi as Int)))
 //~ run: midpoint(3, 10, Erased) => (6, Erased)
 //~ run: midpoint(4294967294, 4294967295, Erased) => (4294967294, Erased)
 //~ run: midpoint(7, 7, Erased) => (7, Erased)
-//~ spec: 1.15:2
+//~ spec: 1.15:2, 1.27:3

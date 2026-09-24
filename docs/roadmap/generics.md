@@ -30,7 +30,7 @@ Remaining: trait declarations, implementation selection/coherence, associated ty
 ## LOC-22 · General generic bounds and where clauses
 <!-- task: {"id": "t27", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Delivered: concrete type specialization, inference and Logical bounds ([LOC-218](reconciliation.md#LOC-218), [LOC-219](reconciliation.md#LOC-219); tests/reconcile_generics.rs). Remaining: general where clauses, trait-bound checking, generic impl blocks and a stated policy for checking generic bodies. Current unused templates are not universal proofs.
+Delivered: concrete type specialization, inference and Logical bounds ([LOC-218](reconciliation.md#LOC-218), [LOC-219](reconciliation.md#LOC-219); tests/reconcile_generics.rs). Remaining: general where clauses, trait-bound checking, generic impl blocks and a stated policy for checking generic bodies. Current unused templates are not universal proofs. Type arguments must also be closed over local values: `Option<@True>` works, but `Option<@(n > 0)>` for a local `n` is rejected (tests/reconcile_generics.rs). Dependent aggregate fields are the current alternative.
 
 <a id="LOC-24"></a>
 ## LOC-24 · Runtime closures and callable traits

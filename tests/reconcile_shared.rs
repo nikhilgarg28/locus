@@ -199,6 +199,7 @@ fn run()->u8 {let a:Vec<(bool,u8)>=Vec::from([(true,3)]);let b:Vec<(Bool,u8)>=Ve
     );
 }
 #[test]
+#[doc = "spec: 1.27:1"]
 fn field_order_does_not_change_lifetime_argument_meaning() {
     accepts(
         r#"

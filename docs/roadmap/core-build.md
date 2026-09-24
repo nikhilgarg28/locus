@@ -290,7 +290,7 @@ Delivered. [LOC-190](core-build.md#LOC-190) and [LOC-214](reconciliation.md#LOC-
 ## LOC-87 · Typed and suffixed integer literals
 <!-- task: {"id": "t180", "status": "done", "priority": 0, "created": "2026-09-21T19:55:01.438Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Delivered. [LOC-154](core-build.md#LOC-154) and [LOC-171](core-build.md#LOC-171); `tests/frontend.rs::integer_literals_carry_their_value_and_suffix` and integer elaboration tests cover all supported fixed-width suffixes, including u128.
+Delivered. [LOC-154](core-build.md#LOC-154) and [LOC-171](core-build.md#LOC-171); `tests/frontend.rs::integer_literals_carry_their_value_and_suffix` and integer elaboration tests cover the supported 8-, 16-, 32-, and 64-bit machine types. The lexer can recognize wider suffix tokens, but `u128` and `i128` are not implemented surface types.
 
 <a id="LOC-88"></a>
 ## LOC-88 · prop! and @P replace bracketed forms

@@ -155,6 +155,7 @@ fn reachable_is_constructed_and_its_ordering_proved_by_induction() {
 
 #[test]
 #[doc = "spec: 2.27:4, 2.30:1"]
+#[doc = "spec: 1.27:11"]
 fn recursion_under_negation_or_an_unknown_helper_is_rejected() {
     let (mut defs, prelude) = Definitions::with_prelude();
     let bad = defs.declare_inductive_prop(vec![Type::Int], |id| {

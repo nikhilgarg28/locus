@@ -69,6 +69,10 @@ const linkable = [
 ];
 const bySource = new Map(linkable.map((d) => [d.source, d]));
 const byRule = new Map(db.rules.map((r) => [r.id, r]));
+const fenceKey = (doc, source) => `${doc}\0${source.trimEnd()}`;
+const checkedFences = new Map(
+  db.fences.map((f) => [fenceKey(f.doc, f.code), f]),
+);
 const tasks = new Map(db.tasks.map((t) => [t.n, t]));
 const projects = new Map(db.projects.map((p) => [p.id, p]));
 const ruleUses = new Map();
@@ -172,10 +176,25 @@ function markdown(text, doc) {
   };
   renderer.code = function ({ text, lang }) {
     const [language, mode] = String(lang || "text").split(/\s+/);
-    const highlighted = ["locus", "lc", "rust"].includes(language)
-      ? highlightLocus(text)
-      : esc(text);
-    return `<figure class="code-block"><figcaption><span>${esc(language === "lc" ? "locus" : language)}</span>${["check", "run", "reject"].includes(mode) ? `<span class="code-mode">${mode === "reject" ? "expected rejection" : "checked example"}</span>` : ""}<button class="copy-code" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-${esc(language)}">${highlighted}</code></pre></figure>\n`;
+    const fence = checkedFences.get(fenceKey(doc.id, text));
+    if (/^\s*\/\/ docs:/m.test(text) && !fence) {
+      throw Error(`Unvalidated example markers in ${doc.source}`);
+    }
+    const figure = (source, caption, copyLabel) => {
+      const highlighted = ["locus", "lc", "rust"].includes(language)
+        ? highlightLocus(source)
+        : esc(source);
+      return `<figure class="code-block"><figcaption><span>${esc(language === "lc" ? "locus" : language)}</span>${caption ? `<span class="code-mode">${esc(caption)}</span>` : ""}<button class="copy-code" type="button" aria-label="${esc(copyLabel)}">Copy</button></figcaption><pre><code class="language-${esc(language)}">${highlighted}</code></pre></figure>\n`;
+    };
+    const status = mode === "reject" ? "expected rejection" : "checked example";
+    if (fence?.excerpt) {
+      return `<div class="example-excerpt">${figure(fence.visible_code, `${status} · excerpt`, "Copy excerpt")}<details class="complete-example"><summary>Complete checked example</summary>${figure(fence.complete_code, mode === "run" ? "complete program + run expectations" : "complete program", "Copy complete example")}</details></div>\n`;
+    }
+    return figure(
+      text,
+      ["check", "run", "reject"].includes(mode) ? status : "",
+      "Copy code",
+    );
   };
   renderer.link = function ({ href, title, tokens }) {
     return `<a href="${esc(resolveLink(href, doc))}"${title ? ` title="${esc(title)}"` : ""}>${this.parser.parseInline(tokens)}</a>`;

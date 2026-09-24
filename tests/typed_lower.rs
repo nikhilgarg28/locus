@@ -1232,6 +1232,7 @@ fn counting_with_evidence(theory: Theory, over_entry: bool, honest: bool) -> FnI
 }
 
 #[test]
+#[doc = "spec: 1.27:10"]
 fn a_loop_carries_tracked_evidence_typed_over_the_versions_its_body_sees() {
     let (mut session, _, theory) = setup();
     let honest = counting_with_evidence(theory, false, true);

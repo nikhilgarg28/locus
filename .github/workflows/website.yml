@@ -1,7 +1,6 @@
 name: Website
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -33,6 +32,14 @@ jobs:
       - run: python3 tools/spec.py check
       - run: python3 tools/site.py check
       - run: python3 tools/test_site.py
+      - name: Install the documentation test toolchain
+        run: rustup toolchain install 1.91.1 --profile minimal
+      - name: Check and execute every current-language example
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+        run: cargo +1.91.1 test --locked --test atlas_fences --test spec_process
       - uses: actions/upload-pages-artifact@v4
         with:
           path: target/site
