@@ -265,7 +265,8 @@ fn every_found_proof_is_written_read_back_and_accepted() {
             .filter(|hole| hole.tier == "stored")
             .count();
         assert!(stored <= again.hits, "{name}: {stored} > {}", again.hits);
-        assert_eq!(stored == 0, again.hits == 0, "{name}");
+        // Optional arithmetic safety proofs and Nat construction evidence
+        // are cached too, even when the source has no mandatory proof holes.
         // Found again from nothing: the same bytes. The examples and the
         // target files stand for the corpus here, as the fast run is
         // timed.
@@ -1986,4 +1987,35 @@ fn qualified_names_do_not_confuse_enum_variant_separators() {
         let text = print_term(&term, &ctx, &names).unwrap();
         assert_eq!(parse_term(&text, &ctx, &names).unwrap(), term);
     }
+}
+
+#[test]
+#[doc = "spec: 1.92:8"]
+fn optional_arithmetic_certificates_replay_without_search_and_misses_keep_checks() {
+    let source = "fn increment(n: u8, room: @(n < 255)) -> u8 { n + 1 }";
+    let (first, store) = run("optional.lc", source, ProofStore::new());
+    assert!(first.is_success(), "{:#?}", first.diagnostics);
+    let optimized = locus::erased::print_module(first.session.erased());
+    assert!(!optimized.contains("checked_add"));
+    assert!(store.stats().recorded > 0);
+    let saved = store.render("optional.lc");
+    let (replayed, store) = run(
+        "optional.lc",
+        source,
+        read(&saved, "optional.lc").locked(true).searching(false),
+    );
+    assert!(replayed.is_success(), "{:#?}", replayed.diagnostics);
+    assert_eq!(store.stats().searches, 0);
+    assert_eq!(
+        optimized,
+        locus::erased::print_module(replayed.session.erased())
+    );
+    let (checked, store) = run(
+        "optional.lc",
+        source,
+        ProofStore::new().locked(true).searching(false),
+    );
+    assert!(checked.is_success(), "{:#?}", checked.diagnostics);
+    assert_eq!(store.stats().searches, 0);
+    assert!(locus::erased::print_module(checked.session.erased()).contains("checked_add"));
 }

@@ -216,6 +216,8 @@ impl Env<'_> {
             return Ok(Value::new(Expr::Prop(term), Type::Prop));
         }
         let (left_value, right_value) = self.operands(left, right, false)?;
+        let left_value = self.natural_integer(left_value, left.span)?;
+        let right_value = self.natural_integer(right_value, right.span)?;
         let op = match operator {
             BinaryOp::Equal => CompareOp::Eq,
             BinaryOp::NotEqual => CompareOp::Ne,

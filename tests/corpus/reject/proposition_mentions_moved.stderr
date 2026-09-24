@@ -1,10 +1,10 @@
 error[L0241]: `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; observe `t` with a model cast before the move
-  --> tests/corpus/reject/proposition_mentions_moved.lc:17:12
+  --> tests/corpus/reject/proposition_mentions_moved.lc:17:19
    |
 16 |     let out = consume(t);
    |                       - value moved here
-17 |     prove!(t.id == n); //~ error: L0241 `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; observe `t` wi...
-   |            ^^^^
+17 |     prove!(model!(t.id) == n); //~ error: L0241 `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; observ...
+   |                   ^^^^
    |
    = note: a proposition mentions a value the code still has; evidence obtained before the move stays valid, being a value of its own
 error[L0240]: borrow of moved value: `t`

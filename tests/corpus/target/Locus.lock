@@ -4,7 +4,7 @@ version = 2
 path = "library_buffer_model.lc"
 
   [[file.obligation]]
-  key = "3b459a5023808d1f"
+  key = "17378f92bd9a2103"
   at = "nat_nonnegative 1"
   claim = "(int_le_b(0i, 0i) ==[bool] true)"
   steps = '''
@@ -13,7 +13,7 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "9d8e0dd258133691"
+  key = "67bcefbba4428bf3"
   at = "nat_nonnegative 2"
   claim = "(int_le_b(0i, int_add(1i, fn:nat_to_int($2))) ==[bool] true)"
   steps = '''
@@ -23,7 +23,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(0i, t2)), linear(int_le(0i, t2
 '''
 
   [[file.obligation]]
-  key = "1d423e5df846de57"
+  key = "346cc63ed051627d"
   at = "nat_from_int 1"
   claim = "(int_le_b(0i, $2) ==[bool] true)"
   steps = '''
@@ -32,7 +32,7 @@ s1 = transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_le_b(0i, #0) ==[bo
 '''
 
   [[file.obligation]]
-  key = "b731ee5082d392d9"
+  key = "40b6e4d1191116df"
   at = "nat_from_int 2"
   claim = "(int_lt_b($2, $0) ==[bool] true)"
   steps = '''
@@ -88,15 +88,15 @@ s2 = transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_eq_b(int_add(1i, t
 '''
 
   [[file.obligation]]
-  key = "d284fa3582655d3e"
+  key = "a7df206b7b0e42b6"
   at = "nat_from_to_int 1"
-  claim = "(enum:Nat::0() ==[enum:Nat] enum:Nat::0())"
+  claim = "(enum:Peano::0() ==[enum:Peano] enum:Peano::0())"
   steps = '''
-s1 = refl(enum:Nat::0())
+s1 = refl(enum:Peano::0())
 '''
 
   [[file.obligation]]
-  key = "a45a3cb33e081b09"
+  key = "250095379fa19e5b"
   at = "nat_from_to_int 2"
   claim = "prop:False()"
   steps = '''
@@ -105,7 +105,7 @@ s1 = linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i
 '''
 
   [[file.obligation]]
-  key = "88e02b5f41677a55"
+  key = "d2fa8262e85a226f"
   at = "nat_from_to_int 3"
   claim = "(int_eq_b(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)) ==[bool] true)"
   steps = '''
@@ -115,9 +115,9 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t2, t1)), implies_elim(implies
 '''
 
   [[file.obligation]]
-  key = "1da39ee5c334ad3f"
+  key = "1e9ccc0aa3dae123"
   at = "nat_from_to_int 4"
-  claim = "($6 ==[enum:Nat] enum:Nat::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
+  claim = "($6 ==[enum:Peano] enum:Peano::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
   steps = '''
 s1 = h2
 '''
@@ -201,7 +201,7 @@ s2 = transport(transport(h2, (#0 ==[Int] $6), refl($6)), (int_le_b(int_add(t1, #
 '''
 
   [[file.obligation]]
-  key = "b676e5b740d2e895"
+  key = "4da41693434bb12a"
   at = "buffer_model_length 1"
   claim = "(int_le_b(0i, 0i) ==[bool] true)"
   steps = '''
@@ -210,25 +210,30 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "ca8234877dc6cbb1"
+  key = "c79bdeec931f6c78"
   at = "buffer_model_length 2"
-  claim = "(int_le_b(0i, $1) ==[bool] true)"
+  claim = "(int_le_b(0i, $1.0) ==[bool] true)"
   steps = '''
-t1 = (int_le_b(0i, #0) ==[bool] true)
-t2 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)
-s1 = transport(transport(h0, (#0 ==[Int] $1), refl($1)), t1, transport(transport(definition(t2), (#0 ==[Int] t2), refl(t2)), t1, implies_elim(axiom(cmp_reify[true], int_le_b(0i, buffer_length(u8, ($0)))), buffer_lower($0))))
+t1 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)
+s1 = transport(definition(t1), (#0 ==[Int] t1), refl(t1))
+s2 = buffer_lower($0)
+t2 = struct:Nat { t1, proof(transport(s1, int_le(0i, #0), s2)) }.0
+t3 = (int_le_b(0i, #0) ==[bool] true)
+s3 = transport(transport(h0, (#0 ==[struct:Nat] $1), refl($1)), (int_le_b(0i, #0.0) ==[bool] true), transport(transport(projection(t2), (#0 ==[Int] t2), refl(t2)), t3, transport(s1, t3, implies_elim(axiom(cmp_reify[true], int_le_b(0i, buffer_length(u8, ($0)))), s2))))
 '''
 
   [[file.obligation]]
-  key = "79fb8be8c6bc6713"
+  key = "eb1bebd94f9f12b8"
   at = "buffer_model_length 3"
-  claim = "(int_le_b(int_add(0i, $1), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)) ==[bool] true)"
+  claim = "(int_le_b(int_add(0i, $1.0), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)) ==[bool] true)"
   steps = '''
-t1 = int_add(0i, #0)
-t2 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)
-t3 = buffer_length(u8, ($0))
-t4 = int_add(0i, t3)
-s1 = transport(transport(h0, (#0 ==[Int] $1), refl($1)), (int_le_b(t1, t2) ==[bool] true), transport(transport(definition(t2), (#0 ==[Int] t2), refl(t2)), (int_le_b(t1, #0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(t4, t3)), linear(int_le(t4, t3), 1, []))))
+t1 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)
+s1 = transport(definition(t1), (#0 ==[Int] t1), refl(t1))
+t2 = struct:Nat { t1, proof(transport(s1, int_le(0i, #0), buffer_lower($0))) }.0
+t3 = int_add(0i, #0)
+t4 = buffer_length(u8, ($0))
+t5 = int_add(0i, t4)
+s2 = transport(transport(h0, (#0 ==[struct:Nat] $1), refl($1)), (int_le_b(int_add(0i, #0.0), t1) ==[bool] true), transport(transport(projection(t2), (#0 ==[Int] t2), refl(t2)), (int_le_b(t3, t1) ==[bool] true), transport(s1, (int_le_b(t3, #0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(t5, t4)), linear(int_le(t5, t4), 1, [])))))
 '''
 
   [[file.obligation]]
@@ -526,7 +531,7 @@ s1 = transport(transport(h0, (#0 ==[struct:__LocusFiniteMap0] $0), refl($0)), pr
 path = "library_integer.lc"
 
   [[file.obligation]]
-  key = "3b459a5023808d1f"
+  key = "17378f92bd9a2103"
   at = "nat_nonnegative 1"
   claim = "(int_le_b(0i, 0i) ==[bool] true)"
   steps = '''
@@ -535,7 +540,7 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "9d8e0dd258133691"
+  key = "67bcefbba4428bf3"
   at = "nat_nonnegative 2"
   claim = "(int_le_b(0i, int_add(1i, fn:nat_to_int($2))) ==[bool] true)"
   steps = '''
@@ -545,7 +550,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(0i, t2)), linear(int_le(0i, t2
 '''
 
   [[file.obligation]]
-  key = "1d423e5df846de57"
+  key = "346cc63ed051627d"
   at = "nat_from_int 1"
   claim = "(int_le_b(0i, $2) ==[bool] true)"
   steps = '''
@@ -554,7 +559,7 @@ s1 = transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_le_b(0i, #0) ==[bo
 '''
 
   [[file.obligation]]
-  key = "b731ee5082d392d9"
+  key = "40b6e4d1191116df"
   at = "nat_from_int 2"
   claim = "(int_lt_b($2, $0) ==[bool] true)"
   steps = '''
@@ -610,15 +615,15 @@ s2 = transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_eq_b(int_add(1i, t
 '''
 
   [[file.obligation]]
-  key = "d284fa3582655d3e"
+  key = "a7df206b7b0e42b6"
   at = "nat_from_to_int 1"
-  claim = "(enum:Nat::0() ==[enum:Nat] enum:Nat::0())"
+  claim = "(enum:Peano::0() ==[enum:Peano] enum:Peano::0())"
   steps = '''
-s1 = refl(enum:Nat::0())
+s1 = refl(enum:Peano::0())
 '''
 
   [[file.obligation]]
-  key = "a45a3cb33e081b09"
+  key = "250095379fa19e5b"
   at = "nat_from_to_int 2"
   claim = "prop:False()"
   steps = '''
@@ -627,7 +632,7 @@ s1 = linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i
 '''
 
   [[file.obligation]]
-  key = "88e02b5f41677a55"
+  key = "d2fa8262e85a226f"
   at = "nat_from_to_int 3"
   claim = "(int_eq_b(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)) ==[bool] true)"
   steps = '''
@@ -637,15 +642,15 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t2, t1)), implies_elim(implies
 '''
 
   [[file.obligation]]
-  key = "1da39ee5c334ad3f"
+  key = "1e9ccc0aa3dae123"
   at = "nat_from_to_int 4"
-  claim = "($6 ==[enum:Nat] enum:Nat::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
+  claim = "($6 ==[enum:Peano] enum:Peano::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
   steps = '''
 s1 = h2
 '''
 
   [[file.obligation]]
-  key = "cdefa5af8b05efdb"
+  key = "00c6896e4e63eeb3"
   at = "integer_negative_model 1"
   claim = "(int_eq_b(int_neg(int_add(fn:nat_to_int($0), 1i)), int_neg(int_add(fn:nat_to_int($0), 1i))) ==[bool] true)"
   steps = '''
@@ -654,11 +659,12 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 '''
 
   [[file.obligation]]
-  key = "82f502fd3829d185"
+  key = "c45c96cb85a5ac39"
   at = "example 1"
-  claim = "(int_eq_b(fn:integer_model(enum:LibraryInt::1(enum:Nat::1(enum:Nat::0()))), -2i) ==[bool] true)"
+  claim = "(int_eq_b(fn:integer_model(enum:LibraryInt::1(enum:Peano::1(enum:Peano::0()))), -2i) ==[bool] true)"
   steps = '''
-s1 = evaluate(int_eq_b(fn:integer_model(enum:LibraryInt::1(enum:Nat::1(enum:Nat::0()))), -2i))
+t1 = int_eq_b(fn:integer_model(enum:LibraryInt::1(enum:Peano::1(enum:Peano::0()))), -2i)
+s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1))
 '''
 
 [[file]]
@@ -693,7 +699,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b($0, $1)), linear(int_le($0, $1
 path = "library_runtime_list.lc"
 
   [[file.obligation]]
-  key = "3b459a5023808d1f"
+  key = "17378f92bd9a2103"
   at = "nat_nonnegative 1"
   claim = "(int_le_b(0i, 0i) ==[bool] true)"
   steps = '''
@@ -702,7 +708,7 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "9d8e0dd258133691"
+  key = "67bcefbba4428bf3"
   at = "nat_nonnegative 2"
   claim = "(int_le_b(0i, int_add(1i, fn:nat_to_int($2))) ==[bool] true)"
   steps = '''
@@ -712,7 +718,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(0i, t2)), linear(int_le(0i, t2
 '''
 
   [[file.obligation]]
-  key = "1d423e5df846de57"
+  key = "346cc63ed051627d"
   at = "nat_from_int 1"
   claim = "(int_le_b(0i, $2) ==[bool] true)"
   steps = '''
@@ -721,7 +727,7 @@ s1 = transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_le_b(0i, #0) ==[bo
 '''
 
   [[file.obligation]]
-  key = "b731ee5082d392d9"
+  key = "40b6e4d1191116df"
   at = "nat_from_int 2"
   claim = "(int_lt_b($2, $0) ==[bool] true)"
   steps = '''
@@ -777,15 +783,15 @@ s2 = transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_eq_b(int_add(1i, t
 '''
 
   [[file.obligation]]
-  key = "d284fa3582655d3e"
+  key = "a7df206b7b0e42b6"
   at = "nat_from_to_int 1"
-  claim = "(enum:Nat::0() ==[enum:Nat] enum:Nat::0())"
+  claim = "(enum:Peano::0() ==[enum:Peano] enum:Peano::0())"
   steps = '''
-s1 = refl(enum:Nat::0())
+s1 = refl(enum:Peano::0())
 '''
 
   [[file.obligation]]
-  key = "a45a3cb33e081b09"
+  key = "250095379fa19e5b"
   at = "nat_from_to_int 2"
   claim = "prop:False()"
   steps = '''
@@ -794,7 +800,7 @@ s1 = linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i
 '''
 
   [[file.obligation]]
-  key = "88e02b5f41677a55"
+  key = "d2fa8262e85a226f"
   at = "nat_from_to_int 3"
   claim = "(int_eq_b(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)) ==[bool] true)"
   steps = '''
@@ -804,9 +810,9 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t2, t1)), implies_elim(implies
 '''
 
   [[file.obligation]]
-  key = "1da39ee5c334ad3f"
+  key = "1e9ccc0aa3dae123"
   at = "nat_from_to_int 4"
-  claim = "($6 ==[enum:Nat] enum:Nat::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
+  claim = "($6 ==[enum:Peano] enum:Peano::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
   steps = '''
 s1 = h2
 '''
@@ -823,7 +829,7 @@ s1 = transport(transport(h2, (#0 ==[enum:__LocusSeq0] $2), refl($2)), (int_eq_b(
 path = "library_seq_ops.lc"
 
   [[file.obligation]]
-  key = "3b459a5023808d1f"
+  key = "17378f92bd9a2103"
   at = "nat_nonnegative 1"
   claim = "(int_le_b(0i, 0i) ==[bool] true)"
   steps = '''
@@ -832,7 +838,7 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "9d8e0dd258133691"
+  key = "67bcefbba4428bf3"
   at = "nat_nonnegative 2"
   claim = "(int_le_b(0i, int_add(1i, fn:nat_to_int($2))) ==[bool] true)"
   steps = '''
@@ -842,7 +848,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(0i, t2)), linear(int_le(0i, t2
 '''
 
   [[file.obligation]]
-  key = "1d423e5df846de57"
+  key = "346cc63ed051627d"
   at = "nat_from_int 1"
   claim = "(int_le_b(0i, $2) ==[bool] true)"
   steps = '''
@@ -851,7 +857,7 @@ s1 = transport(transport(h1, (#0 ==[Int] $2), refl($2)), (int_le_b(0i, #0) ==[bo
 '''
 
   [[file.obligation]]
-  key = "b731ee5082d392d9"
+  key = "40b6e4d1191116df"
   at = "nat_from_int 2"
   claim = "(int_lt_b($2, $0) ==[bool] true)"
   steps = '''
@@ -907,15 +913,15 @@ s2 = transport(transport(h1, (#0 ==[Int] $3), refl($3)), (int_eq_b(int_add(1i, t
 '''
 
   [[file.obligation]]
-  key = "d284fa3582655d3e"
+  key = "a7df206b7b0e42b6"
   at = "nat_from_to_int 1"
-  claim = "(enum:Nat::0() ==[enum:Nat] enum:Nat::0())"
+  claim = "(enum:Peano::0() ==[enum:Peano] enum:Peano::0())"
   steps = '''
-s1 = refl(enum:Nat::0())
+s1 = refl(enum:Peano::0())
 '''
 
   [[file.obligation]]
-  key = "a45a3cb33e081b09"
+  key = "250095379fa19e5b"
   at = "nat_from_to_int 2"
   claim = "prop:False()"
   steps = '''
@@ -924,7 +930,7 @@ s1 = linear(prop:False(), 0, [(implies_elim(axiom(cmp_reflect[true], int_le_b(0i
 '''
 
   [[file.obligation]]
-  key = "88e02b5f41677a55"
+  key = "d2fa8262e85a226f"
   at = "nat_from_to_int 3"
   claim = "(int_eq_b(int_sub(int_add(1i, fn:nat_to_int($2)), 1i), fn:nat_to_int($2)) ==[bool] true)"
   steps = '''
@@ -934,9 +940,9 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t2, t1)), implies_elim(implies
 '''
 
   [[file.obligation]]
-  key = "1da39ee5c334ad3f"
+  key = "1e9ccc0aa3dae123"
   at = "nat_from_to_int 4"
-  claim = "($6 ==[enum:Nat] enum:Nat::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
+  claim = "($6 ==[enum:Peano] enum:Peano::1(fn:nat_from_int(int_sub(int_add(1i, fn:nat_to_int($2)), 1i))))"
   steps = '''
 s1 = h2
 '''
@@ -1018,18 +1024,18 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t2, t3)), transport(transport(
 '''
 
   [[file.obligation]]
-  key = "efffae6f8a63e828"
+  key = "9f1d7c58b21e88b4"
   at = "step 2"
   claim = "int_le(0i, int_add(view[u32]($0.0), view[u32](1u32)))"
   steps = '''
 t1 = view[u32](1u32)
 t2 = $0.0
 t3 = view[u32](t2)
-s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int_add(t3, #0)), linear(int_le(0i, int_add(t3, 1i)), 1, [(axiom(view_lower[u32], t2), 1)]))
+s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int_add(t3, #0)), linear(int_le(0i, int_add(t3, 1i)), 1, [(of_term(struct:Nat { t3, proof(axiom(view_lower[u32], t2)) }.1), 1)]))
 '''
 
   [[file.obligation]]
-  key = "c3f153b24bcdacd3"
+  key = "bfaa6771a3a2013f"
   at = "step 3"
   claim = "int_le(int_add(view[u32]($0.0), view[u32](1u32)), 4294967295i)"
   steps = '''
@@ -1098,7 +1104,7 @@ s1 = transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), t1, transport
 '''
 
   [[file.obligation]]
-  key = "ebf3332129d303c4"
+  key = "eb3dc11cbec84c11"
   at = "remaining 1"
   claim = "int_le(0i, int_sub(view[u32](3u32), view[u32]($0)))"
   steps = '''
@@ -1108,13 +1114,13 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "fa9648c5cf51ebdb"
+  key = "f7cfba93c79f457c"
   at = "remaining 2"
   claim = "int_le(int_sub(view[u32](3u32), view[u32]($0)), 4294967295i)"
   steps = '''
 t1 = view[u32](3u32)
 t2 = view[u32]($0)
-s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_sub(#0, t2), 4294967295i), linear(int_le(int_sub(3i, t2), 4294967295i), 1, [(axiom(view_lower[u32], $0), 1)]))
+s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_sub(#0, t2), 4294967295i), linear(int_le(int_sub(3i, t2), 4294967295i), 1, [(of_term(struct:Nat { t2, proof(axiom(view_lower[u32], $0)) }.1), 1)]))
 '''
 
   [[file.obligation]]
@@ -1170,7 +1176,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(0i, t2)), linear(int_le(0i, t2
 path = "midpoint.lc"
 
   [[file.obligation]]
-  key = "ee823e8d6483414c"
+  key = "af297c63df2190e5"
   at = "midpoint 1"
   claim = "int_le(0i, int_sub(view[u32]($1), view[u32]($0)))"
   steps = '''
@@ -1180,15 +1186,16 @@ s1 = linear(int_le(0i, int_sub(t1, t2)), 1, [(implies_elim(axiom(cmp_reflect[tru
 '''
 
   [[file.obligation]]
-  key = "7b32630ec8249e0b"
+  key = "110a4bd6e0f3bf00"
   at = "midpoint 2"
   claim = "int_le(int_sub(view[u32]($1), view[u32]($0)), 4294967295i)"
   steps = '''
-s1 = linear(int_le(int_sub(view[u32]($1), view[u32]($0)), 4294967295i), 1, [(axiom(view_upper[u32], $1), 1), (axiom(view_lower[u32], $0), 1)])
+t1 = view[u32]($0)
+s1 = linear(int_le(int_sub(view[u32]($1), t1), 4294967295i), 1, [(of_term(struct:Nat { t1, proof(axiom(view_lower[u32], $0)) }.1), 1), (axiom(view_upper[u32], $1), 1)])
 '''
 
   [[file.obligation]]
-  key = "ea84dbeb15ec8a00"
+  key = "a323c7c5240d281c"
   at = "midpoint 3"
   claim = "((view[u32](2u32) ==[Int] 0i) => prop:False())"
   steps = '''
@@ -1197,18 +1204,18 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), ((#0 ==[Int] 0
 '''
 
   [[file.obligation]]
-  key = "4ab9ea58af11e04e"
+  key = "a3a98cc4ce97ba5f"
   at = "midpoint 4"
   claim = "int_le(0i, int_add(view[u32]($0), view[u32]($5)))"
   steps = '''
 t1 = view[u32]($0)
 t2 = int_le(0i, int_add(t1, view[u32](#0)))
 t3 = div[u32](sub[u32]($1, $0), 2u32)
-s1 = transport(transport(h4, (#0 ==[u32] $5), refl($5)), t2, transport(transport(h2, (#0 ==[u32] $4), refl($4)), t2, transport(transport(h0, (#0 ==[u32] $3), refl($3)), int_le(0i, int_add(t1, view[u32](div[u32](#0, 2u32)))), linear(int_le(0i, int_add(t1, view[u32](t3))), 1, [(axiom(view_lower[u32], $0), 1), (axiom(view_lower[u32], t3), 1)]))))
+s1 = transport(transport(h4, (#0 ==[u32] $5), refl($5)), t2, transport(transport(h2, (#0 ==[u32] $4), refl($4)), t2, transport(transport(h0, (#0 ==[u32] $3), refl($3)), int_le(0i, int_add(t1, view[u32](div[u32](#0, 2u32)))), linear(int_le(0i, int_add(t1, view[u32](t3))), 1, [(of_term(struct:Nat { t1, proof(axiom(view_lower[u32], $0)) }.1), 1), (axiom(view_lower[u32], t3), 1)]))))
 '''
 
   [[file.obligation]]
-  key = "b4c726fbab8ac3a5"
+  key = "ff334e7630b9e8ba"
   at = "midpoint 5"
   claim = "int_le(int_add(view[u32]($0), view[u32]($5)), 4294967295i)"
   steps = '''

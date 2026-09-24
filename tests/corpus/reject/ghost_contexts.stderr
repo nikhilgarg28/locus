@@ -1,7 +1,7 @@
-error[L0209]: ordinary fn `may_loop` cannot appear in a logic block
+error[L0209]: ordinary fn `may_loop` cannot appear in a logical cast
  --> tests/corpus/reject/ghost_contexts.lc:6:13
   |
-6 |     logic { may_loop(n) as Int } //~ error: L0209 ordinary fn `may_loop` cannot appear in a logic block
+6 |     logic { may_loop(n) as Int } //~ error: L0209 ordinary fn `may_loop` cannot appear in a logical cast
   |             ^^^^^^^^^^^
   |
   = note: write logic fn for pure, total logical computation; runtime promises never make an ordinary function logical

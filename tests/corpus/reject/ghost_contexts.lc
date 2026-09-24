@@ -3,7 +3,7 @@ fn may_loop(n: u8) -> u8 { n }
 #[terminates] #[no_panic] #[no_io]
 fn promised(n: u8) -> u8 { n }
 fn in_logic(n: u8) -> Int {
-    logic { may_loop(n) as Int } //~ error: L0209 ordinary fn `may_loop` cannot appear in a logic block
+    logic { may_loop(n) as Int } //~ error: L0209 ordinary fn `may_loop` cannot appear in a logical cast
 }
 fn in_formula(n: u8) -> Prop {
     prop!(promised(n) == n) //~ error: L0209 ordinary fn `promised` cannot appear in a proposition

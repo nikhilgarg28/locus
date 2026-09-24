@@ -12,8 +12,9 @@ pub logic fn buffer_segment<T, M: Logical>(source: &[T], start: Int, count: Int,
         Seq::Cons { head, tail }
     }
 }
-impl Model<[u8]> for Seq<Int> {
-    logic fn model(source: &[u8]) -> Self {
+impl Model for [u8] {
+    type Logic = Seq<Int>;
+    logic fn model(source: &[u8]) -> Seq<Int> {
         let count = source.len();
         let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
             And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));

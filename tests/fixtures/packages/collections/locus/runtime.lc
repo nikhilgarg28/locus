@@ -1,5 +1,7 @@
+#[derive(Model)]
 pub struct Token { value: u8 }
 impl Token {
+    pub const LIMIT: u8 = 255;
     pub fn new(value: u8) -> Token { Token { value } }
     pub fn value(&self) -> u8 { self.value }
 }

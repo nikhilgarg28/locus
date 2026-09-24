@@ -1,7 +1,10 @@
-use verified::runtime::{Token, increment};
+use verified::runtime::{Token, TokenModel, increment};
 use verified::theorems::reflexive;
 pub fn round_trip(value: Token) -> Token {
-    let proof = reflexive(value.value() as Int);
+    let snapshot: TokenModel = model!(value);
+    let byte = value.value();
+    let proof = reflexive(byte as Int);
     value
 }
 pub fn answer() -> u8 { increment(41) }
+pub fn limit() -> u8 { Token::LIMIT }

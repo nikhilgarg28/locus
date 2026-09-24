@@ -146,79 +146,36 @@ const BUMP: &str = "\
 fn bump(n: u8) -> u8 { n + 1 }
 ";
 
-/// `=> panic | 0`: the outcome with overflow checks on, then with them
-/// off. Each interpreter is judged in the mode of the build, and each
-/// build against its own outcome.
+/// The corpus format can describe separate builds; Locus arithmetic itself
+/// must give the checked result under either Rust setting.
 #[test]
-fn a_build_dependent_run_line_is_judged_per_build() {
-    let text = format!(
-        "{BUMP}//~ run: bump(255) => panic | 0
-//~ run: bump(255) => panic: attempt to add with overflow | 0
-//~ run: bump(254) => 255
-//~ run: bump(255) => panic | 1
-//~ run: bump(255) => 0 | 0
-//~ run: bump(255) => panic
-"
-    );
-    let wrong_wrapped = |line: &str| {
-        Overflow::ALL
-            .iter()
-            .filter(|build| **build == Overflow::Wrapping)
-            .flat_map(|build| {
-                ["check-IR interpreter", "erased-tree interpreter"].map(|interpreter| {
-                    format!(
-                        "{line}: {interpreter}, {}: `bump(255)` is `0`, expected `1`",
-                        build.name()
-                    )
-                })
-            })
-            .collect::<Vec<_>>()
-    };
-    let mut expected = wrong_wrapped("5");
-    for interpreter in ["check-IR interpreter", "erased-tree interpreter"] {
-        expected.push(format!(
-            "6: {interpreter}, overflow checks on: `bump(255)` is `panic: attempt to add with overflow`, expected `0`"
-        ));
-    }
-    for interpreter in ["check-IR interpreter", "erased-tree interpreter"] {
-        expected.push(format!(
-            "7: {interpreter}, overflow checks off: `bump(255)` is `0`, expected `panic`"
-        ));
-    }
+fn build_specific_expectations_do_not_change_checked_arithmetic() {
+    let text = format!("{BUMP}//~ run: bump(255) => panic | 0\n");
+    let expected: Vec<_> = ["check-IR interpreter", "erased-tree interpreter"].iter().map(|interpreter|
+        format!("2: {interpreter}, overflow checks off: `bump(255)` is `panic: attempt to add with overflow`, expected `0`")).collect();
     assert_eq!(failures_of(&text), expected);
-
-    // The compiled builds are compared with the same expectations.
     let compiled = [examine("memory.lc", &text).compiled.unwrap()];
-    let runs = &compiled[0].runs;
     assert_eq!(
-        runs[0].expected_in(Overflow::Checked),
+        compiled[0].runs[0].expected_in(Overflow::Checked),
         &Expected::Panic(None)
     );
     assert_eq!(
-        runs[0].expected_in(Overflow::Wrapping),
+        compiled[0].runs[0].expected_in(Overflow::Wrapping),
         &Expected::Value("0".into())
     );
-    assert_eq!(runs[2].expected_in(Overflow::Wrapping), &runs[2].expected);
-    let checked_output = "panic: attempt to add with overflow\npanic: attempt to add with overflow\n255\npanic: attempt to add with overflow\npanic: attempt to add with overflow\npanic: attempt to add with overflow\n";
-    let wrapping_output = "0\n0\n255\n0\n0\n0\n";
-    let failures = |build: Overflow, output: &str| -> Vec<String> {
-        let observed: Vec<Seen> = output.lines().map(Observed::of_line).collect();
-        let report = compare(&compiled, build, &observed);
-        report.failures.iter().map(Failure::to_string).collect()
-    };
-    assert_eq!(
-        failures(Overflow::Checked, checked_output),
-        [
-            "memory.lc:6: compiled Rust, overflow checks on: `memory::bump(255)` is `panic: attempt to add with overflow`, expected `0`"
-        ]
+    let observed = vec![Observed::of_line("panic: attempt to add with overflow")];
+    assert!(
+        compare(&compiled, Overflow::Checked, &observed)
+            .failures
+            .is_empty()
     );
     assert_eq!(
-        failures(Overflow::Wrapping, wrapping_output),
-        [
-            "memory.lc:5: compiled Rust, overflow checks off: `memory::bump(255)` is `0`, expected `1`",
-            "memory.lc:7: compiled Rust, overflow checks off: `memory::bump(255)` is `0`, expected `panic`",
-        ]
+        compare(&compiled, Overflow::Wrapping, &observed)
+            .failures
+            .len(),
+        1
     );
+    assert!(failures_of(&format!("{BUMP}//~ run: bump(255) => panic\n")).is_empty());
 }
 
 #[test]

@@ -19,7 +19,7 @@ pub fn bounded_zero() -> @within_limit(0) {
     fold!(within_limit, prove!(0u8 <= 3))
 }
 
-pub fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) { //~ error: L0244 `step` takes evidence and cannot be `pub`
+pub fn step(lock: Lock, bounded: @within_limit(model!(lock.failures))) -> (next: Lock, @within_limit(model!(next.failures))) { //~ error: L0244 `step` takes evidence and cannot be `pub`
     (lock, bounded)
 }
 
@@ -40,11 +40,11 @@ pub fn value_of(percent: Percent) -> u8 {
 }
 
 // The restricted forms mean what they mean in Rust; none reaches Rust.
-pub(crate) fn step_in_crate(lock: Lock, bounded: @within_limit(lock.failures)) -> Lock {
+pub(crate) fn step_in_crate(lock: Lock, bounded: @within_limit(model!(lock.failures))) -> Lock {
     lock
 }
 
-pub(super) fn step_in_parent(lock: Lock, bounded: @within_limit(lock.failures)) -> Lock {
+pub(super) fn step_in_parent(lock: Lock, bounded: @within_limit(model!(lock.failures))) -> Lock {
     lock
 }
 //~ spec: 1.17:1

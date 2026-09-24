@@ -23,7 +23,7 @@ A by-value use moves a runtime value unless its type is `Copy`. Using a moved va
 struct Packet { byte: u8 }
 fn consume(packet: Packet) -> u8 { packet.byte }
 fn borrow_then_move(packet: Packet) -> u8 {
-    let observed = prop!(packet.byte <= 255);
+    let observed = prop!(model!(packet.byte) <= 255);
     consume(packet)
 }
 ~~~

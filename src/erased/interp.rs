@@ -10,13 +10,11 @@
 //! meaning of the primitives is the kernel's native evaluation, so logic and
 //! execution share one definition.
 //!
-//! The operators `+`, `-`, `*`, `/`, `%`, and unary minus are where Rust
-//! panics, and where its two builds differ, so the interpreter has two
-//! modes, `Overflow`. In the default mode, `Checks`, every panic condition
-//! of the table in `src/kernel/ops.rs` panics with Rust's message. In
-//! `Wrap`, the overflow of `+`, `-`, `*`, and unary minus wraps instead, as
-//! a build without overflow checks does, and nothing else changes: `/` and
-//! `%` still panic on a zero divisor and on `min / -1`, in every build.
+//! Every failing safety condition in `src/kernel/ops.rs` panics. `Overflow`
+//! records the Rust build setting used by differential tests; Locus's checked
+//! arithmetic has the same semantics under either setting. Explicit wrapping
+//! operators retain their modular meaning. Division and remainder also panic
+//! on zero divisors and signed `min / -1`.
 //!
 //! A reference is a value here. A `&T` argument passes the value of the
 //! place lent, and a `&mut T` argument passes it in and, when the call
@@ -58,11 +56,8 @@ impl Value {
     }
 }
 
-/// How an interpreter treats an operation whose panic condition holds, as
-/// Rust's two builds do: `Checks` panics at every condition of the table,
-/// `Wrap` wraps the overflow of `+`, `-`, `*`, and unary minus and panics
-/// at the rest. Both interpreters take one; the default is `Checks`, the
-/// stricter behaviour.
+/// The Rust overflow setting being compared. Locus uses checked arithmetic
+/// under both settings; retaining the setting exercises both backend builds.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Overflow {
     #[default]
@@ -515,7 +510,9 @@ impl<'m> Interpreter<'m> {
                 let right = value!(self.expr(right));
                 Value::Bool(compare(*op, left, right)?)
             }
-            EExpr::Operate { op, ty, operands } => match self.all(operands)? {
+            EExpr::Operate {
+                op, ty, operands, ..
+            } => match self.all(operands)? {
                 Ok(values) => operate(self.overflow, *op, *ty, &values)?,
                 Err(flow) => return Ok(flow),
             },
@@ -676,14 +673,11 @@ fn primitive(prim: Prim, operands: &[Value]) -> Result<Value, Stop> {
     }
 }
 
-/// An operator of the table applied at runtime, in the given mode: the
-/// operands must be values of the row's type; where the row's panic
-/// condition holds (`Row::fits_at`) the result is a panic with Rust's
-/// message, unless the mode is `Wrap` and the row wraps in a build without
-/// overflow checks (`Row::wraps_instead`); otherwise the value is the
-/// row's meaning, `Row::compute`, which the kernel evaluates the same.
+/// Checked runtime arithmetic. Overflow flags identify the Rust build under
+/// comparison, but never change Locus behavior. A failed row condition panics;
+/// otherwise its total kernel value agrees with the returned machine value.
 pub(crate) fn operate(
-    overflow: Overflow,
+    _overflow: Overflow,
     op: Op,
     ty: MachineInt,
     operands: &[Value],
@@ -705,7 +699,7 @@ pub(crate) fn operate(
             numbers.len()
         ));
     }
-    if !row.fits_at(&numbers) && (overflow == Overflow::Checks || !row.wraps_instead()) {
+    if !row.fits_at(&numbers) {
         return Err(Stop::Panic {
             message: panic_message(op, &numbers).into(),
             lent: Vec::new(),

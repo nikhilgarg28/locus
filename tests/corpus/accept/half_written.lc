@@ -19,7 +19,7 @@ fn deposit(account: Account, amount: u8) -> Account {
     todo!()
 }
 
-fn withdraw(account: Account, amount: u8) -> (out: Account, @(out.holds == account.holds)) {
+fn withdraw(account: Account, amount: u8) -> (out: Account, @(model!(out.holds) == model!(account.holds))) {
     let room = available(account);
     if amount <= room {
         todo!("the withdrawal itself")

@@ -258,8 +258,8 @@ pub enum DeclarationKind {
         ty: Type,
         value: Expr,
     },
-    /// `impl Name { ... }`: methods and associated functions, each a
-    /// `Function` declaration with its own doc, attributes, and visibility.
+    /// `impl Name { ... }`: methods, associated functions, and constants,
+    /// each with its own documentation, attributes, and visibility.
     Impl {
         /// The compiler-known Model bridge; ordinary inherent impls have none.
         model: Option<ModelImpl>,
@@ -269,7 +269,7 @@ pub enum DeclarationKind {
     },
 }
 
-/// `impl Model<Source> for Target`: a checked observational bridge.
+/// `impl Model for Source { type Logic = Target; ... }`: a checked canonical observation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelImpl {
     pub source: Type,
@@ -578,6 +578,9 @@ pub enum ExprKind {
         /// The name, without its `!`.
         name_span: Span,
         arguments: Vec<Expr>,
+        /// Specialization's physical source hint for model! dependency ordering.
+        /// Elaboration independently checks the path and selected model.
+        source_hint: Option<Box<Type>>,
     },
     /// `S { fields }`, or `E::V { fields }` for a variant with named fields.
     Struct {
@@ -740,6 +743,7 @@ pub enum Form {
     Fold,
     Old,
     Snapshot,
+    Model,
     Recurse,
     Assert,
     Unreachable,
@@ -751,7 +755,7 @@ pub enum Form {
 }
 
 impl Form {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Prop,
         Self::Prove,
         Self::Rewrite,
@@ -759,6 +763,7 @@ impl Form {
         Self::Fold,
         Self::Old,
         Self::Snapshot,
+        Self::Model,
         Self::Recurse,
         Self::Assert,
         Self::Unreachable,
@@ -779,6 +784,7 @@ impl Form {
             Self::Fold => "fold",
             Self::Old => "old",
             Self::Snapshot => "snapshot",
+            Self::Model => "model",
             Self::Recurse => "recurse",
             Self::Assert => "assert",
             Self::Unreachable => "unreachable",

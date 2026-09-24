@@ -18,6 +18,7 @@ use locus::parser::parse;
 use locus::source::{SourceFile, SourceMap};
 
 const PRELUDE: &str = "
+#[derive(Model)]
 struct Token {
     id: u8,
 }

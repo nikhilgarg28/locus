@@ -10,4 +10,5 @@ fn main() {
     let returned: verified::checked::Token = local::round_trip(original);
     assert_eq!(returned.value(), 7);
     assert_eq!(local::answer(), 42);
+    assert_eq!(local::limit(), 255);
 }

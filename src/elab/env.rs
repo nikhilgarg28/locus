@@ -22,7 +22,7 @@ pub(super) type Elab<T> = Result<T, ()>;
 
 #[derive(Debug)]
 pub(super) struct StructInfo {
-    pub origin: Span,
+    pub origin: Option<Span>,
     pub id: StructId,
     pub name: String,
     /// A field's type may mention the binders of the fields before it.
@@ -82,7 +82,7 @@ pub(super) struct PropVariantInfo {
     pub conclusion: Option<Vec<Term>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct FnInfo {
     pub origin: Option<Span>,
     /// Checked logical declaration; independent of runtime promises.
@@ -630,7 +630,7 @@ impl Env<'_> {
     }
     pub(super) fn field_visible(&mut self, info: &StructInfo, index: usize, at: Span) -> Elab<()> {
         self.module_visible(
-            Some(info.origin),
+            info.origin,
             info.field_visibility[index].as_ref(),
             &format!("{}.{}", info.name, info.fields[index].name),
             at,

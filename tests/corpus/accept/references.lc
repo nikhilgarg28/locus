@@ -69,7 +69,7 @@ fn settle(a: &mut u8, b: &mut u8, le: @(a <= b)) -> @(a == b) {
     prove!(a == b)
 }
 
-fn settled(pair: Pair, le: @(pair.lo <= pair.hi)) -> (out: Pair, @(out.lo == out.hi)) {
+fn settled(pair: Pair, le: @(model!(pair.lo) <= model!(pair.hi))) -> (out: Pair, @(model!(out.lo) == model!(out.hi))) {
     let mut copy = pair;
     let done = settle(&mut copy.lo, &mut copy.hi, le);
     (copy, done)
@@ -140,7 +140,7 @@ logic fn within_limit(failures: Int) -> Prop {
 // The lock of examples/lock.lc with the transition taking the lock by
 // `&mut`: the evidence it takes speaks of the lock at entry, and the
 // evidence it returns of the lock at return.
-fn step(lock: &mut Lock, ok: @within_limit(lock.failures), event: Event) -> @within_limit(lock.failures) {
+fn step(lock: &mut Lock, ok: @within_limit(model!(lock.failures)), event: Event) -> @within_limit(model!(lock.failures)) {
     match event {
         Event::Right => {
             lock = Lock { failures: 0, open: true };
@@ -148,7 +148,7 @@ fn step(lock: &mut Lock, ok: @within_limit(lock.failures), event: Event) -> @wit
         }
         Event::Wrong => {
             if lock.failures < 3 {
-                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(model!(lock.failures) < 3));
                 lock = Lock { failures: lock.failures.wrapping_add(1), open: false };
                 fold!(within_limit, fits)
             } else {
@@ -166,9 +166,9 @@ fn event_at(attempt: u8, correct: u8) -> Event {
 // Tracked evidence refreshed by a `&mut` call: `step(&mut lock, ok, ..)`
 // leaves `ok` stale, and the evidence it returns about the lock it handed
 // back establishes it again, in one statement. The `for` carries both.
-fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(last.failures)) {
+fn run(attempts: u8, correct: u8) -> (last: Lock, @within_limit(model!(last.failures))) {
     let mut lock = Lock { failures: 0, open: false };
-    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(0u8 <= 3));
+    let mut ok: @within_limit(model!(lock.failures)) = fold!(within_limit, prove!(0u8 <= 3));
     for attempt in 0..attempts {
         ok = step(&mut lock, ok, event_at(attempt, correct));
     }

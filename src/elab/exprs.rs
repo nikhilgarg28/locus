@@ -125,6 +125,9 @@ impl Env<'_> {
         if same_type(&value.ty, expected) {
             return Ok(value);
         }
+        if self.is_natural(&value.ty) && *expected == Type::Int {
+            return self.natural_integer(value, span);
+        }
         // The never type coerces to any type. A `return`, `break`,
         // `continue`, or panic produces no value, and lowering ends the
         // block with it; a call to a function declared `-> !` produces
@@ -177,7 +180,9 @@ impl Env<'_> {
         if self.total
             && (!self.in_constant || self.formula != Some("the value of a constant"))
             && self.suppress_models == 0
-            && expected.is_none_or(|ty| ty.as_machine().is_none())
+            && expected.is_none_or(|ty| {
+                self.session.program().definitions().is_erased_type(ty) || matches!(ty, Type::Bool)
+            })
         {
             self.logical_value(value, expr.span)
         } else {
@@ -249,6 +254,7 @@ impl Env<'_> {
                 form,
                 name_span,
                 arguments,
+                ..
             } => self.form(*form, *name_span, arguments, expected, expr.span),
             ExprKind::Forall { .. }
             | ExprKind::Exists { .. }
@@ -312,6 +318,10 @@ impl Env<'_> {
             },
             ExprKind::Path(path) => match self.associated_constant(path) {
                 Some(constant) => constant,
+                None if self.path_function(path).is_some_and(|info| info.constant) => {
+                    let info = self.path_function(path).expect("matched constant");
+                    self.call_fn(&info, &[], expr.span)
+                }
                 None if self.path_function(path).is_some() => self.fail(
                     "L0290",
                     "a function used as a value is not supported yet; call it",

@@ -1,52 +1,13 @@
-//! The operators `+`, `-`, `*`, `/`, `%`, and unary minus.
+//! Source arithmetic and checked safety evidence.
 //!
-//! On `Int` they are the total primitives of the logic, `int_add` and the
-//! rest, and may stand anywhere, since nothing of `Int` runs. On a machine
-//! integer type they are the rows of the table in `src/kernel/ops.rs`, and
-//! may panic, which decides where they may stand and what is known of
-//! their result, by the rule of the Vision (Integers, in code and in
-//! propositions):
-//!
-//! - In a proposition, an operator on a machine type is refused, because
-//!   it may panic: the message offers `a as Int + b as Int` for the exact
-//!   sum and `a.wrapping_add(b)` for the wrapped one. In the body of a
-//!   function that makes every promise of the logic, whose body would be a
-//!   kernel term with no place for the operator's evidence, the function
-//!   is elaborated again as an ordinary one with its promises and is then
-//!   known by its contract only (the interim rule of LOC-193; `items`).
-//! - In code, `let s = a + b` becomes a statement of the check IR,
-//!   `exec::OperateStmt`, whose result `s` is known by its equation to be
-//!   the wrapped result, `s == (a as Int + b as Int) as T`, which holds in
-//!   every build. Nothing else is known, unless the function promises
-//!   `no_panic`: then the operator carries an obligation, the premises of
-//!   `Row::fits` that say it does not panic, discharged here as a hole
-//!   would be, and the exact result is known afterwards, `s as Int == a as
-//!   Int + b as Int`. An operation that panics in every build, `/` or `%`,
-//!   teaches its condition to what follows in either case: after `a / b`
-//!   the divisor is known not to be zero, as `c` is known after
-//!   `assert!(c)`.
-//!
-//! The obligation is discharged by the solver's four tiers, exact,
-//! computed, evaluation, and arithmetic, with one adjustment for its
-//! shape: the premises speak of the views of the operands, so a view of a
-//! literal is computed on both sides, which lets `prove!(n as Int + 1 <=
-//! u32::MAX as Int)` on the line before serve as the fact it is. The
-//! arithmetic tier, the procedure of `src/arith` over the facts in scope,
-//! lives here and is the same call a hole makes (`solve`): the facts are
-//! presented to the procedure in every spelling they have, as stated, with
-//! literal views computed, and bridged from a machine type to the views by
-//! the kernel's own steps. The premises of an unsigned type include a
-//! lower bound that only the ranges of the views establish, so even `+` on
-//! `u32` under a fact stating its sum fits takes this tier for that bound.
-//! A proof from any tier is checked by the kernel before it is used. When
-//! every tier fails, the diagnostic writes the premise out, shows the
-//! values the procedure found against it when they are a counterexample,
-//! and says that a fact in scope stating it, or a `prove!` of it just
-//! before, is what is needed.
-//!
-//! After a division by a literal the exact result is known too, `view(q)
-//! == view(a) / k`, derived from the model and `view_wrap` once the
-//! procedure has shown the quotient lies in the type's range.
+//! Nat and Int operations are logical; Nat results carry checked nonnegativity.
+//! Machine operations lower to Operate. Before introducing a result or its
+//! normal-return facts, bounded proof construction tries the row's safety
+//! premises. Every found proof is kernel-checked. Missing evidence retains a
+//! runtime check, except under no_panic where it is an error. Normal return
+//! establishes exactness for overflow-checking operations in every build.
+//! Explicit wrapping methods retain modular meaning. Division and remainder
+//! establish their nonzero-divisor and signed-overflow exclusions.
 
 use std::time::Instant;
 
@@ -115,9 +76,18 @@ impl Env<'_> {
         // two sides of a comparison are, at one type.
         let (left_value, right_value) = match expected {
             Some(expected)
+                if self.in_constant
+                    && self.formula == Some("the value of a constant")
+                    && expected.as_machine().is_some() =>
+            {
+                (self.check(left, expected)?, self.check(right, expected)?)
+            }
+            Some(expected)
                 if untyped_literal(left)
                     && untyped_literal(right)
-                    && (expected.as_machine().is_some() || same_type(expected, &Type::Int)) =>
+                    && (expected.as_machine().is_some()
+                        || same_type(expected, &Type::Int)
+                        || self.is_natural(expected)) =>
             {
                 let left_value = self.check(left, expected)?;
                 let right_value = self.check(right, expected)?;
@@ -171,6 +141,74 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let ty = operands[0].value.ty.clone();
+        if self.is_natural(&ty) {
+            if op == Op::Neg {
+                return self.fail(
+                    "L0237",
+                    "Nat has no unary minus; convert to Int first",
+                    operator_span,
+                );
+            }
+            let mut values = Vec::new();
+            let mut nonnegative = Vec::new();
+            for operand in operands {
+                let term = self.term(&operand.value, operand.span)?;
+                nonnegative.push(Proof::OfTerm(Term::proj(term, 1)));
+                values.push(self.natural_integer(operand.value, operand.span)?);
+            }
+            let terms = values
+                .iter()
+                .map(|value| crate::typed::value_term(&value.expr).expect("logical Nat operand"))
+                .collect::<Vec<_>>();
+            if matches!(op, Op::Div | Op::Rem) && terms[1] == Term::int(0) {
+                for axiom in [
+                    Axiom::IntDivZero(terms[0].clone()),
+                    Axiom::IntDivRem(terms[0].clone(), terms[1].clone()),
+                ] {
+                    let proof = Proof::Axiom(axiom);
+                    let checked = crate::kernel::infer_proof(&mut self.ctx, &proof);
+                    let claim = self.kernel(checked, span)?;
+                    self.know(proof, claim);
+                }
+            }
+            let evidence = match op {
+                Op::Add => Some(Proof::linear(
+                    Term::int_le(
+                        Term::int(0),
+                        Term::int_add(terms[0].clone(), terms[1].clone()),
+                    ),
+                    1,
+                    vec![(nonnegative[0].clone(), 1), (nonnegative[1].clone(), 1)],
+                )),
+                Op::Mul => Some(Proof::implies_elim(
+                    Proof::implies_elim(
+                        Proof::Axiom(Axiom::IntLeMul(terms[0].clone(), terms[1].clone())),
+                        nonnegative[0].clone(),
+                    ),
+                    nonnegative[1].clone(),
+                )),
+                Op::Div => Some(super::naturals::quotient_nonnegative(
+                    terms[0].clone(),
+                    terms[1].clone(),
+                    nonnegative[0].clone(),
+                    nonnegative[1].clone(),
+                    self.theory.int_mul_le_mul_nonneg,
+                )),
+                Op::Rem => Some(Proof::implies_elim(
+                    Proof::Axiom(Axiom::IntRemNonneg(terms[0].clone(), terms[1].clone())),
+                    nonnegative[0].clone(),
+                )),
+                _ => None,
+            };
+            let value = Value::new(
+                Expr::IntArith {
+                    op,
+                    operands: values.into_iter().map(|value| value.expr).collect(),
+                },
+                Type::Int,
+            );
+            return self.make_natural(value, evidence, operator_span);
+        }
         if same_type(&ty, &Type::Int) {
             return Ok(Value::new(
                 Expr::IntArith {
@@ -201,10 +239,77 @@ impl Env<'_> {
                 operator_span,
             );
         }
+        if self.in_constant && self.formula == Some("the value of a constant") {
+            return self.operate_in_constant(op, machine, operands, operator_span);
+        }
         if self.total {
             return self.fail("L0270", "machine arithmetic cannot execute in logic; observe operands through their logical model", operator_span);
         }
         self.operate_at_runtime(op, machine, operands, operator_span, span)
+    }
+
+    /// A physical constant must evaluate without panic. Check the same
+    /// operator premises in the kernel, then use its closed evaluation rule.
+    /// No runtime statement or interpreter is used to establish the value.
+    fn operate_in_constant(
+        &mut self,
+        op: Op,
+        ty: MachineInt,
+        operands: Vec<Operand>,
+        span: Span,
+    ) -> Elab<Value> {
+        let row = op.row(ty).expect("checked by the caller");
+        let terms = operands
+            .iter()
+            .map(|operand| self.term(&operand.value, operand.span))
+            .collect::<Elab<Vec<_>>>()?;
+        for premise in row.fits(&self.prelude, &terms) {
+            let safe = self
+                .constant_condition(&premise)
+                .is_some_and(|proof| check_proof(&mut self.ctx, &proof, &premise).is_ok());
+            if !safe {
+                return self.fail("L0235", format!(
+                    "constant `{}` at `{}` must be evaluable without overflow or division by zero",
+                    op.symbol(), ty.name()), span);
+            }
+        }
+        let evaluated =
+            crate::kernel::infer_proof(&mut self.ctx, &Proof::Evaluate(row.applied(&terms)));
+        if let Ok(Term::Eq(_, _, value)) = evaluated
+            && let Some((found, integer)) = value.machine_value()
+            && found == ty
+            && let Some(value) = integer.to_i128()
+        {
+            return Ok(Value::new(Expr::Literal(ty, value), Type::machine(ty)));
+        }
+        self.fail(
+            "L0270",
+            "constant arithmetic needs closed operands within the evaluation budget",
+            span,
+        )
+    }
+
+    /// Closed operator conditions need evaluation, not proof search or a
+    /// stored certificate. Signed division also has an implication premise.
+    fn constant_condition(&mut self, claim: &Term) -> Option<Proof> {
+        if let Some(proof) = self.evaluated(claim) {
+            return Some(proof);
+        }
+        let Term::Implies(premise, conclusion) = claim else {
+            return None;
+        };
+        if let Some(proof) = self.evaluated(conclusion) {
+            return Some(Proof::implies_intro((**premise).clone(), |_| proof));
+        }
+        let negation = self.prelude.not_prop((**premise).clone());
+        let impossible = self.evaluated(&negation)?;
+        Some(Proof::implies_intro((**premise).clone(), |assumption| {
+            Proof::CaseProof {
+                scrutinee: Box::new(Proof::implies_elim(impossible, assumption)),
+                goal: (**conclusion).clone(),
+                arms: vec![],
+            }
+        }))
     }
 
     /// The statement: the result is declared with its equation, the wrapped
@@ -230,8 +335,6 @@ impl Env<'_> {
         let result = VarId::fresh();
         let equation = HypId::fresh();
         let applied = row.applied(&terms);
-        let defined = self.ctx.define_with(result, equation, &applied);
-        self.kernel(defined, span)?;
         let label = self
             .text(span)
             .split_whitespace()
@@ -249,7 +352,19 @@ impl Env<'_> {
                 proofs.push(self.obligation(row, index, premise, &texts, result, operator_span)?);
             }
             fits = Some(proofs);
+        } else if row.panic() != Panic::Never {
+            // Bounded, kernel-checked search in the PRE-operation context.
+            // A failed attempt keeps the runtime check, without a diagnostic.
+            fits = premises
+                .iter()
+                .map(|premise| {
+                    self.stored_or(premise, |env| env.discharge(premise))
+                        .map(|(proof, _)| proof)
+                })
+                .collect();
         }
+        let defined = self.ctx.define_with(result, equation, &applied);
+        self.kernel(defined, span)?;
         self.facts.push(Fact::definition(
             Proof::hyp(equation),
             Term::eq(machine_type.clone(), Term::var(result), applied),
@@ -271,7 +386,7 @@ impl Env<'_> {
             Term::eq(machine_type, Term::var(result), meaning),
         );
         let mut learned = Vec::new();
-        if fits.is_some() && row.panic() == Panic::Overflow {
+        if row.panic() == Panic::Overflow {
             let claim = Term::eq(
                 Type::Int,
                 Term::view(ty, Term::var(result)),
@@ -446,7 +561,7 @@ impl Env<'_> {
     /// two read with the views of their literals computed, since the
     /// premise says `view(1u8)` where a claim says `1`; computed, with
     /// names replaced; evaluation; then the arithmetic procedure.
-    fn discharge(&mut self, premise: &Term) -> Option<(Proof, &'static str)> {
+    pub(super) fn discharge(&mut self, premise: &Term) -> Option<(Proof, &'static str)> {
         let exact_timer = crate::measurement::start("exact");
         let (goal, mut steps) = self.literal_views(premise);
         let stated: Vec<Fact> = self.facts.iter().rev().cloned().collect();

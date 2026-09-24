@@ -994,7 +994,7 @@ fn the_parser_is_robust_and_total_for_stated_reasons() {
 #[test]
 fn the_legacy_is_gone() {
     // No math fn, no `[P]` or `@[P]`, no state-passing loop or bounded for,
-    // no `Nat` in the kernel, no proof by 256 cases: each spelling is an
+    // no proof by 256 cases: each old spelling is an
     // ordinary syntax error, and the source has no path for any of them.
     let spellings = [
         "math fn f() -> u8 { 1 }",
@@ -1014,8 +1014,7 @@ fn the_legacy_is_gone() {
         assert!(!accepted, "accepted legacy spelling: {text}");
     }
     let (accepted, diagnostics) = diagnostics_of("nat.lc", "fn f(n: Nat) -> u8 { 0 }");
-    assert!(!accepted);
-    assert_eq!(diagnostics[0].code, "L0201");
+    assert!(accepted, "{diagnostics:?}");
     let mut leftovers = Vec::new();
     for path in source_files() {
         let text = read(&path);
@@ -1048,9 +1047,9 @@ fn the_legacy_is_gone() {
     }
     assert!(leftovers.is_empty(), "{leftovers:?}");
     println!(
-        "criterion: the legacy is gone: {} retired spellings are syntax errors, `Nat` is no \
-         type, and the source has no path for math fn, brackets, state-passing loops, Nat, or \
-         a proof by 256 cases",
+        "criterion: the legacy is gone: {} retired spellings are syntax errors; Nat is a \
+         checked logical product, and the source has no path for math fn, brackets, \
+         state-passing loops, the former primitive Nat, or a proof by 256 cases",
         spellings.len()
     );
 }

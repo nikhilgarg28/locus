@@ -26,6 +26,7 @@ impl Env<'_> {
                     .definitions()
                     .is_erased_type(&local.ty)
                 && !matches!(local.ty, Type::Fn(..))
+                && !self.models.iter().any(|model| model.source == local.ty)
             {
                 return self.fail("L0283", format!("a logical closure cannot capture runtime `{}` without an explicit model observation", local.name), span);
             }

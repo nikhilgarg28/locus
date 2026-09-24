@@ -22,7 +22,7 @@
   var SELF = new Set(['self', 'Self']);
   var PRIMITIVES = new Set(['bool', 'u8', 'u16', 'u32', 'u64', 'u128', 'usize', 'i8', 'i16', 'i32', 'i64', 'i128', 'isize']);
   var LOGIC_TYPES = new Set(['Int', 'Nat', 'Bool', 'Prop', 'Seq', 'Map', 'Ghost', 'Option', 'Result', 'Vec', 'Box', 'Model', 'Logical']);
-  var FORMS = new Set(['prove', 'prop', 'rewrite', 'unfold', 'fold', 'old', 'snapshot', 'recurse', 'assert',
+  var FORMS = new Set(['prove', 'prop', 'rewrite', 'unfold', 'fold', 'old', 'snapshot', 'model', 'recurse', 'assert',
     'debug_assert', 'unreachable', 'todo', 'panic', 'matches', 'vec']);
   var ATTRIBUTES = new Set(['terminates', 'no_panic', 'no_alloc', 'no_io', 'derive', 'decreases']);
   var SUFFIX = /^(u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize)\b/;

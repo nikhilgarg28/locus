@@ -376,9 +376,9 @@ pub enum Expr {
     /// statement of the check IR, `exec::OperateStmt`, whose value is
     /// `result` under the equation `equation`, the wrapped meaning. `fits`
     /// is the evidence that it does not panic, one proof per premise of
-    /// `Row::fits`, which the elaborator fills under `no_panic` and leaves
-    /// out otherwise; `learned` names the facts known afterwards, as the
-    /// statement says.
+    /// `Row::fits`, required under `no_panic` and otherwise supplied when
+    /// available to remove the runtime check; `learned` names the facts
+    /// known afterwards, as the statement says.
     Operate {
         op: Op,
         ty: MachineInt,

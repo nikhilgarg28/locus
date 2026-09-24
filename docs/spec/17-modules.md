@@ -37,7 +37,7 @@ pub fn increment(n: u8) -> u8 { n.wrapping_add(1) }
 Names resolve within their module, with separate type and value namespaces. `crate::`, `self::`, and `super::` select lexical roots or ancestors. `use` supports explicit paths, aliases, grouped imports, and forward re-exports. Duplicate bindings, unresolved import cycles, and cyclic public module re-exports are errors. Imports name modules or declarations; glob imports and importing individual associated members or enum variants are not supported.
 
 <!-- spec: 1.28:6 legality-rule -->
-Items and struct fields are private to their module and descendants by default. `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, and `pub(in ancestor)` widen access to their stated scope. A restricted path must name a lexical ancestor. Imports cannot widen the target declaration's visibility. Field reads, writes, construction, borrows, logical observations, and method calls respect the same boundary.
+Items and struct fields are private to their module and descendants by default. `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, and `pub(in ancestor)` widen access to their stated scope. A restricted path must name a lexical ancestor. Imports cannot widen the target declaration's visibility. Field reads, writes, construction, borrows, logical observations, method calls, and associated constants respect the same boundary.
 
 <!-- spec: 1.28:7 example -->
 ~~~locus check
@@ -71,7 +71,7 @@ Imported runtime items must have a reachable Rust export in a declared dependenc
 ## Rust export entries
 
 <!-- spec: 1.28:13 legality-rule -->
-The selected entry's public items and re-exports define the Rust interface. Public modules expose their public contents recursively. All reachable function inputs and results, public fields, enum payloads, callback signatures, and public inherent methods must be exportable. Logical positions are rejected in these interfaces. A physical struct may contain private logical fields; then its state remains private and Rust uses checked methods.
+The selected entry's public items and re-exports define the Rust interface. Public modules expose their public contents recursively. All reachable function inputs and results, public fields, enum payloads, callback signatures, public inherent methods, and public associated constants must be exportable. Logical positions are rejected in these interfaces. A physical struct may contain private logical fields; then its state remains private and Rust uses checked methods.
 
 <!-- spec: 1.28:14 dynamic-semantics -->
 Required executable helpers are emitted inside a private implementation module. Locus visibility alone does not make them callable from handwritten Rust, including Rust in the same host crate. The public facade re-exports only validated items. Separate entry builds are independent components; use one export entry with multiple public modules when interfaces must share private implementation or nominal types.

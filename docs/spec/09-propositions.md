@@ -32,7 +32,7 @@ fn package() -> Certificate {
 ~~~
 
 <!-- spec: 1.6:2 legality-rule -->
-Inside logical computation, machine integers default to their `Int` model and runtime booleans to `Bool`. Thus `prop!(x + 1 > x)` uses mathematical addition. `x as Int` states the observation explicitly. An explicitly wrapping operation keeps its machine-width meaning. Physical comparisons outside logic still require matching machine types.
+Inside logical computation, unsigned machine integers default to `Nat`, signed machine integers to `Int`, and runtime booleans to `Bool`. Thus `prop!(x + 1 > x)` uses mathematical addition. `model!(x)` states a physical observation explicitly; `as Int` widens a Nat without changing its value. An explicitly wrapping operation keeps its machine-width meaning. Physical comparisons outside logic still require matching machine types.
 
 ## Calculated predicates
 

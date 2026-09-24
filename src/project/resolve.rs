@@ -27,6 +27,8 @@ pub struct Scope {
 }
 #[derive(Clone, Debug)]
 pub struct Item {
+    /// A name supplied by derive(Model); elaboration creates its definition.
+    pub derived_model: bool,
     pub module: usize,
     pub canonical: String,
     pub original: String,
@@ -196,6 +198,9 @@ pub fn resolve_units(
     let mut declarations = Vec::new();
     for index in 0..graph.items.len() {
         let item = &graph.items[index];
+        if item.derived_model {
+            continue;
+        }
         let mut d = item.declaration.clone();
         let mut rewrite = Rewriter {
             graph: &graph,
@@ -357,6 +362,7 @@ impl Graph {
                         format!("__locus_m{module}_n{id}_{name}")
                     };
                     self.items.push(Item {
+                        derived_model: false,
                         module,
                         canonical,
                         original: name.clone(),
@@ -370,11 +376,28 @@ impl Graph {
                             ns,
                             Binding {
                                 target: Target::Item(id),
-                                visibility: d.visibility,
+                                visibility: d.visibility.clone(),
                                 span: d.span,
                             },
                             errors,
                         );
+                    }
+                    if matches!(d.kind, DeclarationKind::Struct { .. })
+                        && d.attributes.iter().any(|a| matches!(&a.kind,
+                            AttributeKind::Derive(paths) if paths.iter().any(|p| p.text() == "Model")))
+                    {
+                        let mut derived = self.items[id].clone();
+                        derived.derived_model = true;
+                        derived.original.push_str("Model");
+                        derived.canonical.push_str("Model");
+                        let name = derived.original.clone();
+                        let derived_id = self.items.len();
+                        self.items.push(derived);
+                        self.bind(module, name, Namespace::Type, Binding {
+                            target: Target::Item(derived_id),
+                            visibility: d.visibility.clone(),
+                            span: d.span,
+                        }, errors);
                     }
                 }
             }
@@ -812,12 +835,32 @@ impl Rewriter<'_> {
                 model,
                 methods,
             } => {
-                if let Ok((Target::Item(i), _)) =
-                    self.graph.lookup(self.module, target, Namespace::Type)
+                // A Model impl's internal owner is its logical destination,
+                // but coherence belongs to the physical source being modeled.
+                let source_kind = model.as_ref().map(|m| {
+                    let mut source = &m.source;
+                    while let TypeKind::Group(inner) | TypeKind::Ref { inner, .. } = &source.kind {
+                        source = inner;
+                    }
+                    &source.kind
+                });
+                let implemented = match source_kind {
+                    None => Some(target.clone()),
+                    Some(TypeKind::Named(name)) => Some(Path {
+                        segments: vec![name.clone()],
+                        span: name.span,
+                    }),
+                    Some(TypeKind::Path { path, .. }) => Some(*path.clone()),
+                    _ => None,
+                };
+                if let Some(implemented) = implemented
+                    && let Ok((Target::Item(i), _)) =
+                        self.graph
+                            .lookup(self.module, &implemented, Namespace::Type)
                     && self.graph.package_of(self.graph.items[i].module)
                         != self.graph.package_of(self.module)
                 {
-                    self.errors.push(Diagnostic::error("L0503","an inherent or Model implementation must belong to the type's Cargo package",target.span));
+                    self.errors.push(Diagnostic::error("L0503","an inherent or Model implementation must belong to the type's Cargo package",implemented.span));
                 }
                 self.path(target, Namespace::Type);
                 if let Some(m) = model {

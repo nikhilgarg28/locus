@@ -645,11 +645,16 @@ impl Eraser<'_> {
             // The evidence and the learned facts are logical; the operation
             // stays the operator it is, at its type.
             Expr::Operate {
-                op, ty, operands, ..
+                op,
+                ty,
+                operands,
+                fits,
+                ..
             } => EExpr::Operate {
                 op: *op,
                 ty: *ty,
                 operands: self.all(operands),
+                proven_safe: fits.is_some(),
             },
             // The empty match: a marker when it stands for a ghost, a trap
             // when it stands for a value.

@@ -1,7 +1,7 @@
 // A signed mathematical integer defined in ordinary library code. Native Int
 // remains the compact arithmetic backend; model links this fragment to it.
 #[derive(Logical)]
-pub enum LibraryInt { NonNegative(Nat), Negative(Nat) }
+pub enum LibraryInt { NonNegative(Peano), Negative(Peano) }
 
 pub logic fn integer_model(value: LibraryInt) -> Int {
     match value {
@@ -13,10 +13,10 @@ pub logic fn integer_model(value: LibraryInt) -> Int {
 pub logic fn integer_negate(value: LibraryInt) -> LibraryInt {
     match value {
         LibraryInt::NonNegative(n) => match n {
-            Nat::Zero => LibraryInt::NonNegative(Nat::Zero),
-            Nat::Succ(previous) => LibraryInt::Negative(previous),
+            Peano::Zero => LibraryInt::NonNegative(Peano::Zero),
+            Peano::Succ(previous) => LibraryInt::Negative(previous),
         },
-        LibraryInt::Negative(n) => LibraryInt::NonNegative(Nat::Succ(n)),
+        LibraryInt::Negative(n) => LibraryInt::NonNegative(Peano::Succ(n)),
     }
 }
 
@@ -27,7 +27,7 @@ pub logic fn integer_nonnegative_roundtrip(n: Int, nonnegative: @(n >= 0))
     fold!(integer_model, exact)
 }
 
-pub logic fn integer_negative_model(n: Nat)
+pub logic fn integer_negative_model(n: Peano)
     -> @(integer_model(LibraryInt::Negative(n)) == -(nat_to_int(n) + 1))
 {
     fold!(integer_model, prove!(-(nat_to_int(n) + 1) == -(nat_to_int(n) + 1)))

@@ -564,23 +564,19 @@ fn every_item_form_renders_from_its_syntax_tree() {
 /// `impl` blocks: what they hold, `Self` and `self` inside them, and what
 /// they reject.
 #[test]
-fn impl_blocks_hold_methods_and_associated_functions() {
+fn impl_blocks_hold_methods_associated_functions_and_constants() {
     let parsed = parse_text(
-        "impl S { fn f(&self) -> u8 { self.x } fn g() -> Self { Self { x: 1 } } fn h(n: u8) -> u8 { Self::f(n) } }",
+        "impl S { const N: u8 = 1; fn f(&self) -> u8 { self.x } fn g() -> Self { Self { x: 1 } } fn h(n: u8) -> u8 { Self::f(n) } }",
     );
     assert!(parsed.is_success(), "{:#?}", parsed.diagnostics);
     let DeclarationKind::Impl { methods, .. } = &parsed.program.declarations[0].kind else {
         panic!()
     };
-    assert_eq!(methods.len(), 3);
+    assert_eq!(methods.len(), 4);
     for (text, message) in [
         (
             "impl S { struct T { x: u8 } }",
-            "an `impl` block holds functions: `fn`",
-        ),
-        (
-            "impl S { const N: u8 = 1; }",
-            "an `impl` block holds functions: `fn`",
+            "an `impl` block holds functions and constants: `fn`, `logic fn`, or `const`",
         ),
         (
             "impl S { fn f(n: u8, self) -> u8 { 1 } }",
@@ -3795,7 +3791,7 @@ fn a_form_outside_the_list_or_with_other_delimiters_is_reported() {
     assert_eq!(
         error.notes,
         [
-            "the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros"
+            "the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `model!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros"
         ]
     );
     for form in Form::ALL {
@@ -4252,4 +4248,29 @@ fn lifetimes_are_scope_names_in_references_and_nominal_arguments() {
 fn shared_dereference_parses_as_an_ordinary_prefix_operation() {
     assert!(parse_text("fn f<'a>(x: &'a u8) -> u8 { *x }").is_success());
     assert_eq!(grouped(&expression("*items[0] + 1")), "((*items[0]) + 1)");
+}
+
+#[test]
+#[doc = "spec: 1.92:15"]
+fn associated_proposition_constant_is_a_named_proof_target() {
+    let parsed = parse_text(
+        "struct S {} impl S {
+        const CLAIM: Prop = prop!(true);
+        logic fn proof() -> @Self::CLAIM { _ }
+    }",
+    );
+    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
+    let DeclarationKind::Impl { methods, .. } = &parsed.program.declarations[1].kind else {
+        panic!()
+    };
+    let DeclarationKind::Function { result, .. } = &methods[1].kind else {
+        panic!()
+    };
+    let TypeKind::Proof(proposition) = &result.kind else {
+        panic!()
+    };
+    let ExprKind::Path(path) = &proposition.kind else {
+        panic!()
+    };
+    assert_eq!(path.text(), "Self::CLAIM");
 }

@@ -25,7 +25,7 @@ fn count_up(n: u8) -> u8 {
 fn set_lo(pair: Pair, lo: u8) -> Pair {
     let mut copy = pair;
     copy.lo = lo;
-    prove!(copy.hi == pair.hi);
+    prove!(model!(copy.hi) == model!(pair.hi));
     copy
 }
 
@@ -33,7 +33,7 @@ fn set_deep(n: Nested) -> Nested {
     let mut copy = n;
     copy.pair.hi = 7;
     copy.count = copy.count.wrapping_add(1);
-    prove!(copy.pair.lo == n.pair.lo);
+    prove!(model!(copy.pair.lo) == model!(n.pair.lo));
     copy
 }
 

@@ -81,17 +81,6 @@ impl Env<'_> {
                 // of the logic, or a proof type.
                 "Int" => Ok(Type::Int),
 
-                "Nat" if !self.types.contains_key("Nat") => {
-                    self.diagnostics.push(
-                        crate::diagnostic::Diagnostic::error(
-                            "L0201",
-                            "`Nat` is not part of the core language",
-                            name.span,
-                        )
-                        .note("the integers of the logic are `Int`, and the machine integers are `u8` to `i64`"),
-                    );
-                    Err(())
-                }
                 wide @ ("u128" | "usize" | "i128" | "isize") => self.fail(
                     "L0290",
                     format!("the type `{wide}` is not in Locus yet"),

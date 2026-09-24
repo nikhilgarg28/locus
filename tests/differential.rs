@@ -98,9 +98,9 @@ fn both_in(session: &Session, callee: FnRef, arguments: &[Value], mode: Overflow
     [checked, erased]
 }
 
-/// fn f(n: u8) -> u8 { n * 3 / (n - 100) }: an overflow of `*` for large
-/// `n`, a zero divisor at `n == 100`, and an overflow of `-` below it,
-/// which wraps in one build and panics in the other.
+/// fn f(n: u8) -> u8 { n * 3 / (n - 10) }: an overflow of `*` for large
+/// `n`, a zero divisor at `n == 10`, and an overflow of `-` below it,
+/// which panics under either Rust build setting.
 fn arithmetic() -> FnItem {
     let n = Binder::new("n", Type::U8);
     let operate = |op: Op, operands: Vec<Expr>| Expr::Operate {
@@ -120,7 +120,7 @@ fn arithmetic() -> FnItem {
         Op::Div,
         vec![
             operate(Op::Mul, vec![Expr::var(&n), Expr::u8(3)]),
-            operate(Op::Sub, vec![Expr::var(&n), Expr::u8(100)]),
+            operate(Op::Sub, vec![Expr::var(&n), Expr::u8(10)]),
         ],
     );
     FnItem {
@@ -153,21 +153,23 @@ fn lowering_and_erasure_agree_on_the_operators_in_both_modes() {
             }
         }
     }
-    // Every byte panics or returns in each mode, and both happen: with
-    // overflow checks on, 0..=85 have `n - 100` wrap, which panics, and
-    // `n == 100` divides by zero in either mode.
+    // Every byte panics or returns in each mode, and both outcomes occur.
+    // The arithmetic is checked under either Rust overflow setting.
     assert!(panics > 0 && values > 0, "{panics} panics, {values} values");
     let at = |byte: u8, mode: Overflow| both_in(&session, callee, &[Value::u8(byte)], mode);
     assert_eq!(
-        at(100, Overflow::Wrap)[0],
+        at(10, Overflow::Wrap)[0],
         Ok(Outcome::Panic("attempt to divide by zero".into()))
     );
     assert_eq!(
-        at(10, Overflow::Checks)[1],
+        at(5, Overflow::Checks)[1],
         Ok(Outcome::Panic("attempt to subtract with overflow".into()))
     );
-    // 10 * 3 = 30, 10 - 100 wraps to 166: 30 / 166 = 0.
-    assert_eq!(at(10, Overflow::Wrap)[1], Ok(Outcome::Value(Value::u8(0))));
+    // Turning Rust overflow checks off does not permit Locus subtraction to wrap.
+    assert_eq!(
+        at(5, Overflow::Wrap)[1],
+        Ok(Outcome::Panic("attempt to subtract with overflow".into()))
+    );
 }
 
 #[test]

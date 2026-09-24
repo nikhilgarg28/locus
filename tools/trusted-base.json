@@ -1,5 +1,5 @@
 {
-  "policy": "Conservative whole-file count: mixed trusted/untrusted files count in full. Count is the current end-to-end compiler correctness boundary, larger than the logical proof kernel. Excludes diagnostic/error-only types, module reexports, proof-producing derive/theory, audit-only classical dependency discovery, proof search, parsers/store and both interpreters/projection. Rust toolchain, registered native implementations and explicit foreign specifications remain external assumptions. Limits metadata is resource policy, not a source of accepted evidence.",
+  "policy": "Conservative whole-file count: mixed trusted/untrusted files count in full. Count is the current end-to-end compiler correctness boundary, larger than the logical proof kernel. Excludes diagnostic/error-only types, module reexports, proof-producing derive/theory, audit-only classical dependency discovery, proof search, parsers/store and both interpreters/projection. Rust toolchain, registered native implementations and explicit foreign specifications remain external assumptions. Limits metadata is resource policy, not a source of accepted evidence. Canonical-model and Nat proof construction remain untrusted and kernel-checked; exact normal-return arithmetic facts and proof-directed check elimination are covered by the existing exec checker and erasure/emission entries. Model proof construction is kernel-checked, but its handling of module privacy is counted as a mixed compiler boundary.",
   "files": [
     {
       "path": "src/kernel/buffer.rs",
@@ -172,6 +172,10 @@
     {
       "path": "src/elab/mutation.rs",
       "category": "module identity, source privacy, Cargo identity and Rust export boundary"
+    },
+    {
+      "path": "src/elab/models.rs",
+      "category": "mixed: canonical observation and derived-model privacy; proof construction untrusted"
     }
   ]
 }

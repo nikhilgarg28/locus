@@ -1,3 +1,168 @@
 {
-    "workbench.colorTheme": "Darcula GoLand"
+    "workbench.colorTheme": "Darcula GoLand",
+    "editor.tokenColorCustomizations": {
+        "[Darcula GoLand]": {
+            "textMateRules": [
+                {
+                    "scope": [
+                        "comment",
+                        "punctuation.definition.comment"
+                    ],
+                    "settings": {
+                        "foreground": "#808080",
+                        "fontStyle": "italic"
+                    }
+                },
+                {
+                    "scope": [
+                        "comment.line.directive.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#8A8A8A",
+                        "fontStyle": "italic"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword.other.directive.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#BBB529",
+                        "fontStyle": "italic"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword",
+                        "keyword.control",
+                        "keyword.other",
+                        "storage.type",
+                        "variable.language"
+                    ],
+                    "settings": {
+                        "foreground": "#CC7832"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword.other.reserved.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#CC7832",
+                        "fontStyle": "underline"
+                    }
+                },
+                {
+                    "scope": [
+                        "string",
+                        "constant.character.escape"
+                    ],
+                    "settings": {
+                        "foreground": "#6A8759"
+                    }
+                },
+                {
+                    "scope": [
+                        "constant.numeric",
+                        "storage.type.numeric.suffix"
+                    ],
+                    "settings": {
+                        "foreground": "#6897BB"
+                    }
+                },
+                {
+                    "scope": [
+                        "constant.language"
+                    ],
+                    "settings": {
+                        "foreground": "#CC7832"
+                    }
+                },
+                {
+                    "scope": [
+                        "entity.name.function"
+                    ],
+                    "settings": {
+                        "foreground": "#FFC66D"
+                    }
+                },
+                {
+                    "scope": [
+                        "entity.name.function.call.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#A9B7C6"
+                    }
+                },
+                {
+                    "scope": [
+                        "entity.name.type",
+                        "support.type",
+                        "storage.type.primitive"
+                    ],
+                    "settings": {
+                        "foreground": "#A9B7C6",
+                        "fontStyle": "bold"
+                    }
+                },
+                {
+                    "scope": [
+                        "entity.name.type.proposition.locus",
+                        "keyword.operator.evidence.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#9876AA",
+                        "fontStyle": "bold"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword.operator.hole.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#9876AA",
+                        "fontStyle": "bold"
+                    }
+                },
+                {
+                    "scope": [
+                        "support.function.form.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#4EC9B0",
+                        "fontStyle": "bold"
+                    }
+                },
+                {
+                    "scope": [
+                        "meta.attribute",
+                        "entity.name.attribute.locus",
+                        "punctuation.definition.attribute",
+                        "punctuation.brackets.attribute"
+                    ],
+                    "settings": {
+                        "foreground": "#BBB529"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword.operator.implication.locus"
+                    ],
+                    "settings": {
+                        "foreground": "#CC7832",
+                        "fontStyle": "bold"
+                    }
+                },
+                {
+                    "scope": [
+                        "keyword.operator"
+                    ],
+                    "settings": {
+                        "foreground": "#A9B7C6"
+                    }
+                }
+            ]
+        }
+    },
+    "editor.semanticHighlighting.enabled": true
 }

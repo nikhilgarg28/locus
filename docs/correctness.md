@@ -44,7 +44,9 @@ Sources: [IR checker tests](../tests/exec_check.rs), [lowering tests](../tests/t
 
 ## 4. Compare three execution paths
 
-The checking-IR interpreter runs the checker-side meaning. The erased interpreter runs the runtime tree. The Rust compiler builds the emitted program with overflow checks enabled and disabled. Tests compare values, panic messages, and mutations completed before a panic across these executions.
+The checking-IR interpreter runs the checker-side meaning. The erased interpreter runs the runtime tree. The Rust compiler builds the emitted program with overflow checks enabled and disabled. Tests compare values, panic messages, and mutations completed before a panic across these executions. Checked arithmetic must agree under both Rust settings. A safety proof is checked before adding the operation's result facts, so its postcondition cannot remove its own check. Adversarial IR tests attempt exactly that circular justification.
+
+Canonical models are checked logical definitions, and Nat is an Int paired with kernel-checked nonnegativity evidence. Their constructors and arithmetic proof builders add no axioms. Tests cover duplicate model rejection, physical read paths, stale snapshots, borrowed representations, and failed natural-number conversions. Correct erasure and the correspondence between physical operations and these observations remain compiler obligations, not a completed mechanized proof.
 
 Generated programs exercise arithmetic, branching, loops, mutable state, and calls through `&mut`. Each run records its seed, and `LOCUS_SEED` reproduces it; shrinking searches for a smaller counterexample. The fast gate uses a smaller sample, while the extended gate generates 10,000 programs. Boundary tests also compare machine operations with Rust across integer types.
 
@@ -79,3 +81,5 @@ The formal core states the preservation and simulation obligations connecting ch
 Name resolution, source privacy, reachable export validation and Cargo-to-Rust identity mapping are part of the compiler correctness boundary. Module/package fixtures exercise real directory trees, private field/method access, erased-type leaks, same-crate Rust attacks, and producer/consumer Cargo builds. A dependency's theorem is checked from its Locus source; metadata and receipts are not proof authorities.
 
 The host and dependencies must compile the generated interface at the Rust path they advertise. Build-script wiring and the Rust dependency implementation remain build assumptions. Receipt hashes detect accidental stale or edited artifacts; they cannot establish what a deliberately altered build compiled. The project pipeline always checks proofs before emission. General traits, generic runtime ABI export, and broader native ABI mappings remain separate work.
+
+Canonical models obey that source boundary as well: their bodies may inspect representation fields in the defining module, while consumers can select only visible model fields. Derived models retain their source module and field visibility. Module and Cargo fixtures exercise these rules together with associated constants and checked arithmetic.

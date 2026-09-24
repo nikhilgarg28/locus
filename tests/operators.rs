@@ -207,7 +207,7 @@ fn every_row_agrees_with_rust_in_both_modes_at_the_boundary_set() {
             // Wrap: Rust's wrapping operation; a division still panics
             // where every build does.
             let wanted = match expected.wrapping {
-                Some(value) if row.wraps_instead() || expected.checked.is_some() => {
+                Some(value) if expected.checked.is_some() => {
                     Outcome::Value(Value::Int(row.ty, value))
                 }
                 _ => Outcome::Panic(message(row.op, &operands).into()),
@@ -256,10 +256,7 @@ fn the_named_pairs_panic_where_rust_does() {
             );
         }
         // Every other row panics in one build and wraps in the other.
-        let expected = |wrapped: Value, message: &str| match mode {
-            Overflow::Checks => Outcome::Panic(message.into()),
-            Overflow::Wrap => Outcome::Value(wrapped),
-        };
+        let expected = |_wrapped: Value, message: &str| Outcome::Panic(message.into());
         for outcome in run(&session, neg, vec![byte(-128)], mode) {
             assert_eq!(
                 outcome,
@@ -419,9 +416,20 @@ fn the_printer_writes_the_operators_with_rusts_precedence() {
         })
         .unwrap();
     let rust = print_module(session.erased());
-    assert!(rust.contains("(a + b) * c - a / (b % c)\n"), "{rust}");
-    assert!(rust.contains("a - (b - c)\n"), "{rust}");
-    assert!(rust.contains("a - b - c\n"), "{rust}");
+    assert!(rust.contains(".checked_mul(c).expect(\"attempt to multiply with overflow\")).checked_sub(a / (b % c))"), "{rust}");
+    assert!(
+        rust.contains("(a).checked_sub((b).checked_sub(c)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains(
+            "((a).checked_sub(b).expect(\"attempt to subtract with overflow\")).checked_sub(c)"
+        ),
+        "{rust}"
+    );
     assert!(rust.contains("((a as i16) < x)\n"), "{rust}");
-    assert!(rust.contains("-(x + y)\n"), "{rust}");
+    assert!(
+        rust.contains(".checked_neg().expect(\"attempt to negate with overflow\")"),
+        "{rust}"
+    );
 }

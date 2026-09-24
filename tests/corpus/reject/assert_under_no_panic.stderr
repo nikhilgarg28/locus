@@ -12,5 +12,5 @@ error[L0239]: `debug_assert!` needs evidence of its condition in `unchecked_in_d
 14 |     debug_assert!(x <= 2); //~ error: L0239 `debug_assert!` needs evidence of its condition in `unchecked_in_debug`, which promises ...
    |     ^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: known here: `small: x <= 3`
+   = note: known here: `small: x <= 3`, `0 <= x`
    = note: it fails when x = 3, which the arithmetic facts known here allow

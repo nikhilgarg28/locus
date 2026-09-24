@@ -93,7 +93,8 @@ use verified::runtime::Token;
 use verified::theorems::reflexive;
 
 pub fn round_trip(value: Token) -> Token {
-    let proof = reflexive(value.value() as Int);
+    let byte = value.value();
+    let proof = reflexive(byte as Int);
     value
 }
 ~~~

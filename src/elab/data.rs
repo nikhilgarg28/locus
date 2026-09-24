@@ -285,6 +285,19 @@ impl Env<'_> {
         name: &ast::Name,
     ) -> Elab<Value> {
         let target = self.infer(value)?;
+        if self.total
+            && self.suppress_models == 0
+            && !self
+                .session
+                .program()
+                .definitions()
+                .is_erased_type(&target.ty)
+        {
+            let ty = self.show_type(&target.ty);
+            self.diagnostics.push(crate::diagnostic::Diagnostic::error("L0282", format!("`{ty}` has no canonical model for logical field access; use model! on the physical field"), expr.span)
+                .suggest(crate::diagnostic::Suggestion { message: "observe this physical field explicitly".into(), span: expr.span, replacement: format!("model!({})", self.text(expr.span)), applicability: crate::diagnostic::Applicability::MaybeIncorrect }));
+            return Err(());
+        }
         let Type::Struct(id) = &target.ty else {
             let shown = self.show_type(&target.ty);
             self.diagnostics.push(
@@ -348,6 +361,18 @@ impl Env<'_> {
             let info = self.struct_by_id(*id).expect("declared struct");
             self.field_visible(&info, index, span)?;
         }
+        self.project_field(target, index, name, span)
+    }
+
+    /// A projection inside already authorized compiler-generated computation,
+    /// such as the body of a derived model. Source projections use `field`.
+    pub(super) fn project_field(
+        &mut self,
+        target: Value,
+        index: usize,
+        name: Option<String>,
+        span: Span,
+    ) -> Elab<Value> {
         let term = self.term(&target, span)?;
         // The kernel knows what the field's type says about the other fields.
         let ty = self.type_of(&Term::proj(term, index), span)?;

@@ -117,19 +117,21 @@ pub fn elaborate_with_options(
 ) -> Elaborated {
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
+    let mut session = Session::new(definitions);
+    let natural = super::naturals::declare(&mut session);
     let mut env = Env {
         module_access: options.module_access.clone(),
-        models: super::models::primitive_models(),
+        models: super::models::primitive_models(Type::Struct(natural.id)),
         quantifiers: Vec::new(),
         closure_capture_boundary: None,
         explicit_model_depth: 0,
         layout_hints: HashMap::new(),
         source,
         previews: options.previews.clone(),
-        session: Session::new(definitions),
+        session,
         prelude,
         theory,
-        types: HashMap::new(),
+        types: HashMap::from([("Nat".into(), Global::Struct(natural))]),
         values: HashMap::new(),
         failed: HashSet::new(),
         file_promises: Promises::default(),
@@ -184,6 +186,15 @@ pub fn elaborate_with_options(
                 | DeclarationKind::Enum { .. }
                 | DeclarationKind::Prop { .. }
         );
+        if is_type && qualified == "Nat" {
+            env.diagnostics.push(Diagnostic::error(
+                "L0202",
+                "`Nat` is a built-in logical type and cannot be redeclared",
+                name.span,
+            ));
+            duplicates.insert(index);
+            continue;
+        }
         let earlier = seen
             .get(&(is_type, qualified.as_str()))
             .copied()
@@ -741,6 +752,30 @@ impl Env<'_> {
     fn report_unchecked_syntax(&mut self, program: &ast::Program) {
         self.refuse_derive(&program.attributes, "the file");
         for declaration in &program.declarations {
+            for attribute in &declaration.attributes {
+                if let ast::AttributeKind::Derive(paths) = &attribute.kind {
+                    for path in paths.iter().filter(|path| path.text() == "Model") {
+                        if let DeclarationKind::Struct { name, .. } = &declaration.kind {
+                            let generated = format!("{}Model", name.text);
+                            if program.declarations.iter().any(|other| {
+                                declared_name_of(&other.kind).is_some_and(|name| name == generated)
+                            }) {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "L0282",
+                                    format!("derived model name `{generated}` is already declared"),
+                                    path.span,
+                                ));
+                            }
+                        } else {
+                            self.diagnostics.push(Diagnostic::error(
+                                "L0282",
+                                "Model can currently be derived only for a physical struct",
+                                path.span,
+                            ));
+                        }
+                    }
+                }
+            }
             if let DeclarationKind::Impl { methods, .. } = &declaration.kind {
                 for method in methods {
                     self.refuse_derive(&method.attributes, "a method");
@@ -927,7 +962,7 @@ impl Env<'_> {
             };
             for path in paths {
                 let name = path.text();
-                if name == "Logical" {
+                if name == "Logical" || name == "Model" {
                     continue;
                 }
                 let Some(derive) = path.single().and_then(|name| Derive::from_name(&name.text))
@@ -1129,15 +1164,31 @@ impl Env<'_> {
                 {
                     return self.internal(error, name.span);
                 }
-                Ok(Global::Struct(Rc::new(StructInfo {
-                    origin: name.span,
+                let info = Rc::new(StructInfo {
+                    origin: Some(name.span),
                     id,
                     name: name.text.clone(),
                     fields,
                     derives,
                     visibility: declaration.visibility.clone(),
                     field_visibility: field_visibility.clone(),
-                })))
+                });
+                let count: usize = attributes
+                    .iter()
+                    .filter_map(|attribute| match &attribute.kind {
+                        AttributeKind::Derive(paths) => {
+                            Some(paths.iter().filter(|path| path.text() == "Model").count())
+                        }
+                        _ => None,
+                    })
+                    .sum();
+                if count > 1 {
+                    return self.fail("L0242", "`Model` is derived twice", name.span);
+                }
+                if count == 1 {
+                    self.derive_model(&info, name.span)?;
+                }
+                Ok(Global::Struct(info))
             }
             DeclarationKind::Enum {
                 name,
@@ -1313,7 +1364,7 @@ impl Env<'_> {
                     body: Body::Expr(value),
                     constant: true,
                     visibility: declaration.visibility.clone(),
-                    owner: None,
+                    owner: owner.map(|(name, _)| name),
                     receiver: None,
                 };
                 self.function(name, &[], ty, function)
@@ -1424,16 +1475,16 @@ impl Env<'_> {
                 .declare_structural_fn(&item, *recursive, candidates)
         } else {
             match &owner {
+                _ if constant => self.session.declare_constant_with_layout(
+                    &item,
+                    promises,
+                    self.written_layout(result),
+                ),
                 Some(owner) => self.session.declare_method_with_layout(
                     &item,
                     promises,
                     owner,
                     receiver.is_some(),
-                    self.written_layout(result),
-                ),
-                None if constant => self.session.declare_constant_with_layout(
-                    &item,
-                    promises,
                     self.written_layout(result),
                 ),
                 None => self.session.declare_fn_with_layout(
@@ -1460,6 +1511,9 @@ impl Env<'_> {
             }
             Err(error) => return self.internal(error, name.span),
         };
+        if constant {
+            self.session.set_constant_owner(reference, owner.as_deref());
+        }
         {
             self.session
                 .classify_function(reference, explicit_logic, result_logical)

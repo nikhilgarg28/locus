@@ -5,5 +5,5 @@ error[L0230]: cannot show `x <= 2`
    |     ^^^^^^^^^^^^^^
    |
    = note: after computing, the claim is `if x < 2 { x = 1; prove!(x <= 2); } else { x = 2; prove!(x <= 2); }.0 <= 2`
-   = note: nothing known here speaks of the values in this claim
-   = note: it fails when `if x < 2 { x = 1; prove!(x <= 2); } else { x = 2; prove!(x <= 2); }.0` = 3, which the arithmetic facts known here allow
+   = note: known here: `0 <= if x < 2 { x = 1; prove!(x <= 2); } else { x = 2; prove!(x <= 2); }.0`
+   = note: it fails when `if x < 2 { x = 1; prove!(x <= 2); } else { x = 2; prove!(x <= 2); }.0` = 3, x = 0, which the arithmetic facts known here allow

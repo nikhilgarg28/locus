@@ -165,7 +165,7 @@ fn privacy_checks_fields_methods_references_and_logical_observations() {
         "let s=child::Secret::new();s.value",
         "let s=child::Secret::new();s.hidden()",
         "let s=child::Secret {value:1};0",
-        "let s=child::Secret::new();let p=prove!(s.value == 1);0",
+        "let s=child::Secret::new();let p=prove!(model!(s.value) == 1);0",
     ] {
         fs_write(&entry, &format!("{setup} pub fn attack()->u8 {{{body}}}"));
         let error = project::check(&entry, &Default::default())
@@ -299,4 +299,205 @@ fn qualified_monomorphic_types_work_without_import_aliases() {
             .unwrap()
             .success()
     );
+}
+
+#[test]
+#[doc = "spec: 1.28:5, 1.28:6, 1.92:5"]
+fn derived_models_have_module_identity_and_preserve_field_privacy() {
+    let root = scratch("derived_models");
+    let entry = root.join("export.lc");
+    fs_write(
+        &root.join("point.lc"),
+        r#"
+#[derive(Model)] pub struct Point { pub x: u8, hidden: i32 }
+impl Point { pub fn new() -> Point { Point { x: 3, hidden: 4 } } }
+pub logic fn inspect(point: &Point) -> PointModel { model!(point) }
+"#,
+    );
+    fs_write(
+        &entry,
+        r#"
+mod point;
+use point::{Point, PointModel, inspect};
+logic fn nonnegative(value: PointModel) -> @(value.x >= 0) { _ }
+pub fn run() -> u8 {
+    let point = Point::new();
+    let direct: PointModel = model!(point);
+    let direct_fact = nonnegative(direct);
+    let value: point::PointModel = inspect(&point);
+    let fact = nonnegative(value);
+    point.x
+}
+"#,
+    );
+    let rust = generate(&entry).unwrap();
+    fs_write(&root.join("generated.rs"), &rust);
+    let out = rustc(
+        &root,
+        "include!(\"generated.rs\");fn main(){assert_eq!(run(),3);}",
+    );
+    assert!(
+        out.status.success(),
+        "{}\n{rust}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    for body in [
+        "let p = Point::new(); let h = prove!(p.hidden == 4);",
+        "let p = Point::new(); let h = model!(p.hidden);",
+    ] {
+        fs_write(
+            &entry,
+            &format!("mod point; use point::Point; fn attack() -> () {{ {body} }}"),
+        );
+        assert!(check(&entry).unwrap_err().contains("L0503"), "{body}");
+    }
+    fs_write(&entry, "mod point; pub use point::PointModel;");
+    assert!(generate(&entry).unwrap_err().contains("L0504"));
+}
+
+#[test]
+#[doc = "spec: 1.28:6, 1.28:13, 1.92:15"]
+fn associated_constants_keep_module_privacy_and_export_checked_values() {
+    let root = scratch("associated_constants");
+    let entry = root.join("export.lc");
+    let setup = r#"mod constants {
+        pub struct Limits {}
+        impl Limits {
+            pub const NEXT: u8 = Self::BASE + 1;
+            const BASE: u8 = 41;
+            pub(crate) const INTERNAL: Nat = 9;
+        }
+    }"#;
+    fs_write(
+        &entry,
+        &format!("{setup} pub use constants::Limits; pub fn value()->u8 {{ Limits::NEXT }}"),
+    );
+    let rust = generate(&entry).unwrap();
+    fs_write(&root.join("generated.rs"), &rust);
+    let out = rustc(
+        &root,
+        "include!(\"generated.rs\");fn main(){assert_eq!(value(),42);assert_eq!(Limits::NEXT,42);}",
+    );
+    assert!(
+        out.status.success(),
+        "{}\n{rust}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        std::process::Command::new(root.join("run"))
+            .status()
+            .unwrap()
+            .success()
+    );
+    let bad = rustc(
+        &root,
+        "include!(\"generated.rs\");fn main(){let _=Limits::BASE;}",
+    );
+    assert!(!bad.status.success());
+    fs_write(
+        &entry,
+        &format!("{setup} fn attack()->u8 {{constants::Limits::BASE}}"),
+    );
+    assert!(check(&entry).unwrap_err().contains("L0503"));
+    fs_write(
+        &entry,
+        "pub struct Limits {} impl Limits { pub const LOGICAL: Nat = 1; }",
+    );
+    assert!(generate(&entry).unwrap_err().contains("L0504"));
+}
+
+#[test]
+#[doc = "spec: 1.28:5, 1.92:1, 1.92:4"]
+fn explicit_models_and_observations_work_across_files() {
+    let root = scratch("explicit_models");
+    let entry = root.join("export.lc");
+    fs_write(
+        &root.join("point.lc"),
+        r#"
+pub struct Point { x: u8 }
+#[derive(Logical)] pub struct Position { pub horizontal: Nat }
+impl Model for Point {
+    type Logic = Position;
+    logic fn model(&self) -> Self::Logic { Position { horizontal: model!(self.x) } }
+}
+impl Point { pub fn new() -> Point { Point { x: 3 } } }
+"#,
+    );
+    fs_write(
+        &entry,
+        r#"
+mod point;
+use point::{Point, Position};
+fn read(point: &Point) -> Position { model!(point) }
+fn nonnegative(point: &Point) -> @(point.horizontal >= 0) { _ }
+pub fn run() -> u8 { let point = Point::new(); let value = read(&point); let h = nonnegative(&point); 3 }
+"#,
+    );
+    generate(&entry).unwrap();
+}
+
+#[test]
+#[doc = "spec: 1.28:14, 1.27:3, 1.92:8"]
+fn checked_arithmetic_survives_module_wrappers_and_proof_erasure() {
+    let root = scratch("arithmetic");
+    let entry = root.join("export.lc");
+    fs_write(
+        &root.join("arithmetic.lc"),
+        r#"
+pub fn increment(n: u8) -> (out: u8, @(out == n + 1)) {
+    let out = n + 1;
+    (out, _)
+}
+pub fn guarded(n: u8) -> u8 { if n < 255 { n + 1 } else { 0 } }
+"#,
+    );
+    fs_write(
+        &entry,
+        r#"
+mod arithmetic;
+pub use arithmetic::guarded;
+pub fn increment(n: u8) -> u8 { let (out, proof) = arithmetic::increment(n); out }
+"#,
+    );
+    let rust = generate(&entry).unwrap();
+    assert!(rust.contains("checked_add"), "{rust}");
+    fs_write(&root.join("generated.rs"), &rust);
+    fs_write(
+        &root.join("main.rs"),
+        r#"
+include!("generated.rs");
+fn main() {
+    assert_eq!(increment(41), 42);
+    assert_eq!(guarded(254), 255);
+    assert_eq!(guarded(255), 0);
+    assert!(std::panic::catch_unwind(|| increment(255)).is_err());
+}
+"#,
+    );
+    for mode in ["yes", "no"] {
+        let out = std::process::Command::new("rustc")
+            .args([
+                "--edition=2024",
+                "-Dwarnings",
+                "-C",
+                &format!("overflow-checks={mode}"),
+            ])
+            .arg(root.join("main.rs"))
+            .arg("-o")
+            .arg(root.join("run"))
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}\n{rust}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            std::process::Command::new(root.join("run"))
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
 }

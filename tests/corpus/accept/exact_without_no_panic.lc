@@ -1,0 +1,9 @@
+// A successful checked addition establishes the exact sum even without
+// a no_panic promise. Overflow panics under either Rust overflow setting.
+fn sum(a: u8, b: u8) -> u8 {
+    let s = a + b;
+    prove!(s as Int == a as Int + b as Int);
+    s
+}
+//~ run: sum(2, 3) => 5
+//~ run: sum(255, 1) => panic: attempt to add with overflow

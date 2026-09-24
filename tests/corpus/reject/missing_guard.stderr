@@ -4,5 +4,5 @@ error[L0230]: cannot show `within_limit(lock.failures.wrapping_add(1))`
 24 |         Event::Wrong => (Lock { failures: lock.failures.wrapping_add(1), open: false }, _),
    |                                                                                         ^
    |
-   = note: known here: `bounded: within_limit(lock.failures)`
+   = note: known here: `bounded: within_limit(lock.failures)`, `0 <= lock.failures`
    = note: it fails when `lock.failures` is 3, which the facts known here allow

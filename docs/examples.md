@@ -88,7 +88,7 @@ impl Percent {
     }
 }
 #[no_panic]
-fn remaining(percent: &Percent) -> (out: u32, @(out + percent.value == 100)) {
+fn remaining(percent: &Percent) -> (out: u32, @(out + model!(percent.value) == 100)) {
     let out = 100 - percent.value;
     (out, _)
 }

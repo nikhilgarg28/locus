@@ -51,6 +51,6 @@ error[L0235]: `+` on `u8` may overflow, and `nearly` promises no_panic
    |       ^
    |
    = note: the sum `n as Int + 100` must be at most 255, and nothing known here shows it
-   = note: known here: `n <= 200`
+   = note: known here: `n <= 200`, `0 <= n`
    = note: it fails when n = 156, which the arithmetic facts known here allow
    = note: a fact in scope stating `n as Int + 100 <= 255`, or `prove!(n as Int + 100 <= 255);` just before this, is what is needed

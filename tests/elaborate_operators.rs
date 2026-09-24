@@ -182,7 +182,7 @@ fn bump(n: u32) -> u32 {
 }
 
 #[test]
-fn the_exact_result_is_known_under_no_panic_and_not_without_it() {
+fn the_exact_result_is_known_on_every_successful_return() {
     let text = |promise: &str| {
         format!(
             "{promise}
@@ -196,9 +196,9 @@ fn sum(a: u8, b: u8, fits: @(a as Int + b as Int <= 255)) -> u8 {{
     };
     let result = accepted(&text("#[no_panic]"));
     assert_eq!(tiers(&result), ["arithmetic", "computed", "computed"]);
-    let (codes, message) = rejected(&text(""));
-    assert_eq!(codes, ["L0230"]);
-    assert!(message.contains("cannot show `s == a + b`"), "{message}");
+    let result = accepted(&text(""));
+    assert_eq!(tiers(&result), ["computed"]);
+    accepted("fn sum(a: u8, b: u8) -> (s: u8, @(s == a + b)) { let s = a + b; (s, _) }");
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn the_wrapped_result_is_known_in_every_function() {
     let arguments = vec![Value::u8(200), Value::u8(100)];
     assert_eq!(
         run(&result, "sum", arguments.clone(), Overflow::Wrap),
-        Outcome::Value(Value::Tuple(vec![Value::u8(44), Value::Proved]))
+        Outcome::Panic("attempt to add with overflow".into())
     );
     assert_eq!(
         run(&result, "sum", arguments, Overflow::Checks),

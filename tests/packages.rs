@@ -305,6 +305,8 @@ fn source_privacy_and_runtime_abi_fail_closed_across_packages() {
     for code in [
         "use verified::runtime::hidden; pub fn leak()->u8 {hidden()}",
         "use verified::runtime::Token; impl Token {pub fn invented(&self)->u8 {1}}",
+        "use verified::runtime::Token; impl Model for Token { type Logic = Nat; logic fn model(&self)->Self::Logic {0} }",
+        "use verified::runtime::Token; impl Model for (Token) { type Logic = Nat; logic fn model(&self)->Self::Logic {0} }",
     ] {
         fs::write(&source, code).unwrap();
         let err = Build::new(&source)

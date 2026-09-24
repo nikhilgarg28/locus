@@ -680,6 +680,19 @@ impl Session {
         Ok(reference)
     }
 
+    /// Retain an associated constant’s namespace in emitted Rust.
+    pub(crate) fn set_constant_owner(&mut self, reference: FnRef, owner: Option<&str>) {
+        if let Some(owner) = owner
+            && let Some(function) = self
+                .erased
+                .fns
+                .iter_mut()
+                .find(|f| f.reference == reference)
+        {
+            function.owner = Some(owner.to_owned());
+        }
+    }
+
     fn check_fn(&mut self, item: &FnItem, promises: exec::Promises) -> Result<FnRef, LowerError> {
         let lowering = crate::measurement::start("lowering");
         let params: Vec<(VarId, Type)> = item

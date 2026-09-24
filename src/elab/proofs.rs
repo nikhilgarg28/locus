@@ -739,6 +739,13 @@ impl Env<'_> {
         };
         let selected = if let ExprKind::Cast { expr, ty, .. } = &first.kind {
             Some(self.model_definition_selector(expr, ty, first.span)?)
+        } else if let ExprKind::Form {
+            form: Form::Model,
+            arguments,
+            ..
+        } = &first.kind
+        {
+            Some(self.observation_definition_selector(arguments, first.span)?)
         } else {
             None
         };

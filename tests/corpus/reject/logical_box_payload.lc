@@ -1,2 +1,2 @@
-#[derive(Logical)] enum Nat { Zero, Succ(Nat) }
-#[derive(Logical)] struct Bad { value: Box<Nat> } //~ error: L0243
+#[derive(Logical)] enum Peano { Zero, Succ(Peano) }
+#[derive(Logical)] struct Bad { value: Box<Peano> } //~ error: L0243

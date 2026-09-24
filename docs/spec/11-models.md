@@ -16,21 +16,22 @@ A model is an immutable logical description of runtime data. It may keep only th
 ## Defining a model
 
 <!-- spec: 1.25:5 legality-rule -->
-Define `impl Model<Runtime> for LogicalDestination` with `logic fn model(source: &Runtime) -> Self`. The body is checked logical computation, not an assumed axiom. `value as Destination` records a permitted observation of the current version. Models may compose and a source may have multiple destinations; overlapping implementations are rejected. Buffer shapes remain distinct for model selection.
+A physical type has at most one canonical model. Declare `impl Model for T { type Logic = M; logic fn model(&self) -> Self::Logic { ... } }`. `M` must be Logical. The body is checked pure, terminating logical computation. Its defining equation supplies the meaning; registration adds no axiom. A named shared parameter may replace `&self`. Canonical observation is available wherever the source can legally be read; its implementation body checks in the defining module, including access to private representation fields. Access to the resulting model’s fields follows normal visibility.
 
 <!-- spec: 1.90:56 example -->
 ~~~locus run
 struct Point { x: u8, y: u8 }
 #[derive(Logical)]
-struct Position { x: Int, y: Int }
-impl Model<Point> for Position {
-    logic fn model(source: &Point) -> Self {
-        Self { x: source.x as Int, y: source.y as Int }
+struct Position { x: Nat, y: Nat }
+impl Model for Point {
+    type Logic = Position;
+    logic fn model(&self) -> Self::Logic {
+        Position { x: model!(self.x), y: model!(self.y) }
     }
 }
 fn move_right() -> u8 {
     let mut point = Point { x: 3, y: 4 };
-    let before = point as Position;
+    let before = model!(point);
     point.x = 5;
     let historical = prove!(before.x == 3);
     point.x
@@ -41,10 +42,46 @@ fn move_right() -> u8 {
 <!-- spec: 1.91:26 informative -->
 `before` neither clones the point nor keeps it borrowed. It continues to describe the old `x` after mutation. A fresh observation still needs permission to read the current storage. [Ownership](06-ownership.md#shared-references) defines those permissions.
 
+## Logical receivers and physical read paths
+
+<!-- spec: 1.92:1 legality-rule -->
+In logical expressions, observe a physical receiver through its canonical model before selecting named fields. Field names refer to that model’s fields. A physical receiver without a model cannot supply logical field access implicitly. Already-logical values keep their type and meaning.
+
+<!-- spec: 1.92:2 legality-rule -->
+`model!(place)` resolves the complete physical read path first, then observes the selected value. Paths may use names, constant paths, parentheses, fields, tuple positions, authorized dereferences, entry paths selected by `old!`, and built-in indexing. Index expressions are logical and need bounds evidence. Calls, arithmetic, blocks and mutations are not physical read paths.
+
+<!-- spec: 1.92:3 example -->
+~~~locus check
+struct Connection {}
+struct Session { requests: u32, connection: Connection }
+fn count(session: Session) -> Nat {
+    model!(session.requests)
+}
+fn nonnegative(session: Session) -> @(model!(session.requests) >= 0) {
+    _
+}
+~~~
+
+<!-- spec: 1.92:4 legality-rule -->
+Observation checks permission to read the selected storage. It neither moves it nor retains a borrow, allocates, or executes a getter. The result describes the current binding and heap versions; later mutation does not change an earlier observation. Bind an executable computation’s result before observing it.
+
+## Deriving a structural model
+
+<!-- spec: 1.92:5 legality-rule -->
+`#[derive(Model)]` on a physical struct creates its canonical logical `NameModel`, with corresponding modeled fields. Derivation is explicit and requires a model for every physical field. A missing field model, conflicting model or generated name is an error. Dependent proof fields require a manually defined representation. The generated type belongs to the same module and inherits the struct’s visibility; each modeled field inherits its source field’s visibility. This built-in derivation is not a general trait system.
+
+<!-- spec: 1.92:6 example -->
+~~~locus check
+#[derive(Model)]
+struct Point { x: u32, y: i32 }
+fn position(point: Point) -> PointModel { model!(point) }
+fn nonnegative_x(point: Point) -> @(point.x >= 0) { _ }
+~~~
+
 ## Collections
 
 <!-- spec: 1.26:1 dynamic-semantics -->
-Arrays, slices, and vectors have immutable logical content snapshots and separately checked physical layouts. Runtime lengths and indices use `u64`; logical lengths are mathematical values bounded by `u64::MAX`. Access requires bounds evidence. Updates and push produce new snapshots and normal-return equations. Allocation failure or panic is outside a normal-return guarantee. `Vec::new` and `Vec::from` use registered Rust implementations.
+Arrays, slices, and vectors have immutable logical content snapshots and separately checked physical layouts. Runtime lengths and indices use `u64`; logical lengths are `Nat` values bounded by `u64::MAX`. Access requires bounds evidence. Updates and push produce new snapshots and normal-return equations. Allocation failure or panic is outside a normal-return guarantee. `Vec::new` and `Vec::from` use registered Rust implementations.
 
 <!-- spec: 1.90:57 example -->
 ~~~locus run
@@ -95,3 +132,12 @@ fn demo() -> u64 {
 }
 //~ run: demo() => 2
 ~~~
+
+
+## Inspecting a model's source representation
+
+<!-- spec: 1.92:11 legality-rule -->
+A logical helper may borrow physical data explicitly. `&place` arguments retain the declared physical type. `match &place` inspects its physical constructors without invoking its model, making recursive model definitions possible. Built-in array/slice/vector `len`, `get`, and indexing are checked storage observations; they do not dispatch to a user model method. They may be used to define that model. Ordinary runtime getters remain forbidden in logic.
+
+<!-- spec: 1.92:12 informative -->
+General associated-type traits are not yet implemented. Model destinations are named logical types, including concrete generic instances. Structural derivation currently supports structs; enums need manual models. Anonymous tuples have no implicit fieldwise model: use `model!(pair.0)` to select a physical component. These restrictions avoid silently selecting an abstraction or adding runtime work.

@@ -32,7 +32,7 @@ for (const file of files) {
 }
 const lock = highlightLocus(fs.readFileSync(path.join(root, 'examples', 'lock.lc'), 'utf8'));
 const expect = [
-  ['hljs-keyword', 'fn'], ['hljs-meta', '#['], ['hljs-meta', 'derive'], ['hljs-built_in', 'prop!'], ['hljs-built_in', 'prove!'],
+  ['hljs-keyword', 'fn'], ['hljs-meta', '#['], ['hljs-meta', 'derive'], ['hljs-built_in', 'prop!'], ['hljs-built_in', 'prove!'], ['hljs-built_in', 'model!'],
   ['hljs-symbol', '@'], ['hljs-symbol', 'within_limit'], ['hljs-title class_', 'Lock'], ['hljs-title function_', 'step'],
   ['hljs-type', 'u8'], ['hljs-type', 'Prop'], ['hljs-number', '3'], ['hljs-literal', 'true'], ['hljs-comment', '// A lock that tolerates three wrong codes. The failure count never exceeds'],
 ];

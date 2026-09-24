@@ -1,5 +1,5 @@
 error[L0243]: cannot derive Logical: field `Bad.value` is not Logical
  --> tests/corpus/reject/logical_box_payload.lc:2:10
   |
-2 | #[derive(Logical)] struct Bad { value: Box<Nat> } //~ error: L0243
+2 | #[derive(Logical)] struct Bad { value: Box<Peano> } //~ error: L0243
   |          ^^^^^^^
