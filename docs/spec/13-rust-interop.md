@@ -19,7 +19,7 @@ Generated Rust contains executable data and code, with erased markers where logi
 Source visibility controls Locus access. The selected [export entry](17-modules.md#rust-export-entries) grants Rust access only to exportable interfaces. Logical inputs and outputs are rejected, including nested public positions. Export validated physical types with private invariant-bearing fields and checked methods. Legacy flat-file emission retains its older evidence-input restriction; use the project build path for the complete same-crate boundary.
 
 <!-- spec: 1.90:62 example -->
-~~~locus run
+~~~rust run
 pub struct Percent { value: u32, valid: @(value <= 100) }
 impl Percent {
     pub fn checked(value: u32) -> Option<Percent> {

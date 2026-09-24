@@ -206,7 +206,9 @@ class StaticTests(unittest.TestCase):
         self.assertNotIn("<Erased>", models)
         examples = (root / "examples.html").read_text()
         self.assertIn("checked example", examples)
-        self.assertNotIn("~~~locus", examples)
+        self.assertNotIn("~~~rust", examples)
+        self.assertIn('class="language-locus"', examples)
+        self.assertIn("<figcaption><span>locus</span>", examples)
         self.assertIn('class="hljs-', examples)
         self.assertIn("no broken fragments", site.validate(root))
 

@@ -4,7 +4,7 @@ The receiver type has no field with this name or position. Tuple field names bin
 
 Example from `tests/corpus/reject/field_of_a_tuple_by_name.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A tuple is projected by position.
 fn first(pair: (u8, u8)) -> u8 {
     pair.left

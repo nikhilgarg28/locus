@@ -6,7 +6,7 @@ A dependency type must have one independently generated Rust identity. If two ta
 
 The filesystem regression is `tests/fixtures/project-errors/L0504`. Its `export.lc` reproduces this category through the actual project pipeline.
 
-```locus
+```rust
 pub fn proof()->@(1 == 1) {prove!(1 == 1)}
 ```
 

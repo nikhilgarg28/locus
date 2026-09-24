@@ -4,7 +4,7 @@ The recognized form received the wrong argument count or an invalid argument sha
 
 Example from `tests/corpus/reject/form_arguments.lc`; the full file is a regression test.
 
-```locus
+```rust
 // The arguments of the forms that panic: `assert!` takes a condition, and
 // a message is a string literal.
 fn empty() -> u8 {

@@ -4,7 +4,7 @@ An earlier arm already handles every value this arm could match. Duplicate const
 
 Example from `tests/corpus/reject/unreachable_arm.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Arms that are never reached: a variant twice, and `_` after every variant.
 enum Light {
     Red,

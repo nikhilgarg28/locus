@@ -19,7 +19,7 @@ A runtime branch both chooses code to execute and gives the proof checker a fact
 A runtime `if` tests a physical `bool`. Its branches receive the condition and its negation as facts. `else` is required, even for a statement; it may be empty. Boolean `&&` and `||` short-circuit, so their right operands know the left operand’s outcome. Logical conditionals instead use `Bool` and produce logical results.
 
 <!-- spec: 1.90:26 example -->
-~~~locus run
+~~~rust run
 fn at_least(a: u8, b: u8) -> (out: u8, @(a <= out && b <= out)) {
     if a >= b {
         (a, And::Intro(prove!(a <= a), prove!(b <= a)))
@@ -36,7 +36,7 @@ fn at_least(a: u8, b: u8) -> (out: u8, @(a <= out && b <= out)) {
 A runtime `match` covers each enum variant, or supplies a `_` arm. Patterns use the variant’s unit, tuple, or named-field shape, with names or `_` for fields; named patterns allow renaming and `..`. Nested runtime patterns are unsupported. Each arm knows its constructor equation. Use `if` for booleans and comparisons for integers.
 
 <!-- spec: 1.90:27 example -->
-~~~locus check
+~~~rust check
 enum Message { Stop, Payload { byte: u8, channel: u8 } }
 fn payload(message: Message) -> Option<u8> {
     match message {
@@ -55,7 +55,7 @@ fn payload(message: Message) -> Option<u8> {
 A range loop evaluates its bounds once. `lo..hi` supplies `lo <= i && i < hi`; `lo..=hi` supplies `lo <= i && i <= hi`. The immutable index has the bounds’ machine type. Reversed ranges are empty. A loop that never breaks can satisfy any expected result type by never producing a result.
 
 <!-- spec: 1.90:28 example -->
-~~~locus run
+~~~rust run
 fn first_attempt(ready: bool) -> u8 {
     loop {
         if ready { break 1; } else { break 0; }
@@ -79,7 +79,7 @@ A loop does not retain the initial value of a variable it changes. Carry the nee
 `return value` ends the function at any nesting depth; `return` supplies unit. The value must satisfy the declared result type using facts available at that point. Return, break, continue, panic, and calls declared `-> !` do not produce a normal value and coerce to any expected type. A `-> !` function must not reach its body’s end.
 
 <!-- spec: 1.90:29 example -->
-~~~locus run
+~~~rust run
 fn bounded(value: u8) -> (out: u8, @(out <= 10)) {
     if value <= 10 { return (value, prove!(value <= 10)); } else { }
     (10, prove!(10 <= 10))
@@ -94,7 +94,7 @@ fn bounded(value: u8) -> (out: u8, @(out <= 10)) {
 `panic!(message)`, `todo!()`, and `unreachable!()` panic; the latter two also accept a message. `assert!(condition)` and `debug_assert!(condition)` return unit, with optional messages. Messages are string literals, not format arguments. Normal continuation after `assert!` supplies its condition as a fact; `debug_assert!` supplies no such fact because it can be disabled.
 
 <!-- spec: 1.90:30 example -->
-~~~locus run
+~~~rust run
 fn divide(n: u32, divisor: u32) -> u32 {
     assert!(divisor != 0, "zero divisor");
     n / divisor

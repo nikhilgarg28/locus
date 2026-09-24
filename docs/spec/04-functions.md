@@ -19,7 +19,7 @@ A signature tells the caller what to supply and what a successful return establi
 Declare an ordinary function as `fn name(parameters) -> Result { body }`. Write `-> ()` explicitly for a unit result. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
 
 <!-- spec: 1.90:22 example -->
-~~~locus run
+~~~rust run
 #[no_panic]
 fn difference(lo: u32, hi: u32, ordered: @(lo <= hi))
     -> (gap: u32, @(gap == hi - lo))
@@ -51,7 +51,7 @@ Promises are explicit attributes on a function, or file defaults such as `#![no_
 | `#[no_io]` | Runtime callees promise no I/O; the current core has no I/O primitive. |
 
 <!-- spec: 1.90:23 example -->
-~~~locus check
+~~~rust check
 #![no_panic]
 #[terminates] #[no_alloc] #[no_io]
 fn bounded_sum(a: u8, b: u8, fits: @(a + b <= u8::MAX)) -> u8 {
@@ -68,7 +68,7 @@ Runtime promises do not make a function callable in logic. Only `logic fn` does 
 A runtime `const` accepts literals, references to constants, casts, comparisons, integer arithmetic, and products or variants built from them. Machine arithmetic is checked during compilation; overflow and division by zero are errors unless explicit wrapping operations are used. It emits a Rust constant. A logical constant, including one of type `Prop`, is erased and may use logical functions. Constant definitions have logical defining equations.
 
 <!-- spec: 1.90:24 example -->
-~~~locus check
+~~~rust check
 const RETRIES: u8 = 3;
 const retries_fit: Prop = prop!(RETRIES < u8::MAX);
 fn allowed() -> @retries_fit { fold!(retries_fit, prove!(RETRIES < u8::MAX)) }
@@ -81,7 +81,7 @@ Observe a physical constant's checked value through its canonical model. Its ini
 Declare an associated constant inside `impl T` as `const NAME: Type = value;` and read it as `T::NAME`, without call parentheses. Inside the implementation, `Self` names `T`. Associated constants follow the same initializer and visibility rules as free constants. Forward references are allowed; dependency cycles and name collisions with other constants, functions or variants are rejected.
 
 <!-- spec: 1.92:14 example -->
-~~~locus run
+~~~rust run
 struct Limits {}
 impl Limits {
     const LIMIT: u32 = u32::MAX;
@@ -103,7 +103,7 @@ fn value() -> u8 { Limits::ROLLED }
 A receiver may be `self`, `mut self`, `&self`, or `&mut self`. By-value receivers move unless `Copy`; shared receivers lend for reading; mutable receivers require mutable storage. `*self` reads a reference receiver, or replaces it whole through `&mut self`. The equivalent path call supplies the receiver explicitly.
 
 <!-- spec: 1.90:25 example -->
-~~~locus run
+~~~rust run
 struct Counter { value: u8 }
 impl Counter {
     fn new(value: u8) -> Self { Self { value } }

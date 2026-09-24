@@ -4,7 +4,7 @@ The elaborator produced a candidate that the independent execution or proof chec
 
 Example from `tests/corpus/reject/checker_rejected.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Proof-valued branches now check. A nested continue still reaches the
 // independent checker rejection rather than being accepted.
 fn choose(flag: bool) -> @(1 == 1) {

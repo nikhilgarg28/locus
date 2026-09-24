@@ -4,7 +4,7 @@ A compiler form such as rewrite or unfold is written with an exclamation mark: r
 
 Example from `tests/corpus/reject/bare_proof_form.lc`; the full file is a regression test.
 
-```locus
+```rust
 // `rewrite`, `unfold`, and `fold` written as calls: the forms take `!` now,
 // and each is reported with the fix. A `fold` of one's own is a function.
 #[terminates] #[no_panic] #[no_io] logic fn nonzero(x: Int) -> Prop { prop!(x != 0) }

@@ -4,7 +4,7 @@ The returned or stored reference would outlive its source, or an overlapping wri
 
 Example from `tests/corpus/reject/shared_permissions.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Lifetimes constrain physical storage even when the final use is erased.
 fn local_escape<'a>(input: &'a u8) -> &'a u8 {
     let local: u8 = 4;

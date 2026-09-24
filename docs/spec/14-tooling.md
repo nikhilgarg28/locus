@@ -33,7 +33,7 @@ Diagnostics have stable codes, source spans, notes, and applicable suggested edi
 Failed proof construction (`L0230`) and arithmetic safety obligations (`L0235`) show the goal and up to six relevant facts. A reported counterexample is checked against those facts. Stale evidence identifies the invalidating write. When a missing explicit step is recognizable, the diagnostic suggests it. Parser recovery reports further errors under fixed work and depth limits.
 
 <!-- spec: 1.90:63 example -->
-~~~locus reject L0235
+~~~rust reject L0235
 #[no_panic]
 fn difference(lo: u32, hi: u32) -> u32 {
     hi - lo // Missing a precondition or branch establishing lo <= hi.

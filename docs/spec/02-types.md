@@ -27,7 +27,7 @@ Classification belongs to the type, not the binding. Use ordinary `let` for logi
 The unsigned types `u8`, `u16`, `u32`, and `u64` hold nonnegative integers; `i8`, `i16`, `i32`, and `i64` also hold negative integers. The number is the width in bits. For example, `u8` ranges from 0 to 255 and `i8` from −128 to 127. Each type has `MIN` and `MAX`. See [integer arithmetic](03-integers.md) for literals, casts, and overflow.
 
 <!-- spec: 1.90:1 example -->
-~~~locus run
+~~~rust run
 fn packet_fields() -> (u8, u16, i32) {
     let kind: u8 = 0x2a;
     let length = 1_024u16;
@@ -43,7 +43,7 @@ fn packet_fields() -> (u8, u16, i32) {
 `bool` has the values `true` and `false`. Runtime comparisons produce `bool`; `if` uses it to choose which code executes. `!`, `&&`, and `||` provide negation and short-circuit conjunction and disjunction.
 
 <!-- spec: 1.90:2 example -->
-~~~locus run
+~~~rust run
 fn eligible(age: u8, has_ticket: bool) -> bool {
     age >= 16 && has_ticket
 }
@@ -57,7 +57,7 @@ fn eligible(age: u8, has_ticket: bool) -> bool {
 Unit, written `()`, is the result when there is no useful value to return. The never type, `!`, describes an expression that cannot return normally. A panic or an endless loop can stand where another type is expected because neither supplies a result. See [early exits](05-control-flow.md#early-return).
 
 <!-- spec: 1.90:3 example -->
-~~~locus run
+~~~rust run
 fn do_nothing() -> () { () }
 fn unfinished() -> ! { todo!("not implemented") }
 fn value_or_fail(ready: bool) -> u8 {
@@ -72,7 +72,7 @@ fn value_or_fail(ready: bool) -> u8 {
 Construct a tuple with `(a, b)` and a one-field tuple with `(a,)`. Read fields by position, such as `pair.0` or `pair.1.0`. Optional names in tuple **types** bind values for later field types; they do not create named accessors. Construction and destructuring substitute each earlier field into the types of the following fields.
 
 <!-- spec: 1.90:4 example -->
-~~~locus run
+~~~rust run
 fn successor(n: u8) -> (value: u8, @(value == n.wrapping_add(1))) {
     let value = n.wrapping_add(1);
     (value, _)
@@ -97,7 +97,7 @@ Types may annotate parameters, bindings, fields, constants, and results. Later f
 Construct `S { field: value, other }` with every declared field exactly once, in any order. `other` abbreviates `other: other`. Read a field with `value.field`. A later proof field is checked against the values supplied for the earlier fields.
 
 <!-- spec: 1.90:5 example -->
-~~~locus run
+~~~rust run
 pub struct NonZero {
     value: u32,
     valid: @(value != 0),
@@ -122,7 +122,7 @@ fn checked(value: u32) -> Option<NonZero> {
 Enum variants have no fields, positional fields, or named fields. Construct them with `E::V`, `E::V(value)`, or `E::V { field: value }`; `Self::V` works inside the enum’s `impl`. Later payload types may refer to earlier payloads in propositions. A runtime enum keeps its discriminant even when a payload is logical. [Matching](05-control-flow.md#matching-enums) handles its alternatives.
 
 <!-- spec: 1.90:6 example -->
-~~~locus run
+~~~rust run
 enum ReadOutcome { End, Byte(u8), Failed { code: u8 } }
 fn to_option(outcome: ReadOutcome) -> Option<u8> {
     match outcome {
@@ -144,7 +144,7 @@ The prelude supplies `Option<T>` (`Some`, `None`) and `Result<T, E>` (`Ok`, `Err
 An array has a fixed, literal length and one element type. `[u8; 3]` is a type; `[10, 20, 30]` constructs a value. Lengths and runtime indices use `u64`. An access needs a proof that the index is in bounds, often supplied by a surrounding branch. [Collections](11-models.md#collections) specify the bounds and update rules.
 
 <!-- spec: 1.90:7 example -->
-~~~locus run
+~~~rust run
 fn sample(index: u64) -> Option<u8> {
     let bytes: [u8; 3] = [10, 20, 30];
     if index < 3 { Some(bytes[index]) } else { None }
@@ -159,7 +159,7 @@ fn sample(index: u64) -> Option<u8> {
 A `Vec<T>` owns growable runtime storage. Construct an empty vector with `Vec::new()` or initialize one with `Vec::from(array)`. `push` appends an element. Both its length and its contents have logical observations, so a result can state how an operation changed them.
 
 <!-- spec: 1.90:8 example -->
-~~~locus run
+~~~rust run
 fn append_byte(value: u8) -> u64 {
     let mut bytes: Vec<u8> = Vec::from([1, 2]);
     bytes.push(value);
@@ -174,7 +174,7 @@ fn append_byte(value: u8) -> u64 {
 A reference lends access without transferring ownership. `&T` permits reads; a call-scoped `&mut T` permits updates. A slice borrows an array or vector without fixing its length in the type. Stored and returned shared references need the [lifetime rules](06-ownership.md#shared-references); mutable references cannot yet be stored or returned.
 
 <!-- spec: 1.90:9 example -->
-~~~locus run
+~~~rust run
 fn first(items: &[u8]) -> Option<u8> {
     if items.len() > 0 { Some(items[0]) } else { None }
 }
@@ -191,7 +191,7 @@ fn demo() -> Option<u8> {
 `Box<T>` owns an indirect runtime value. Use `Box::new(value)` and `*box_value` to construct and dereference it. A recursive runtime enum needs this indirection to have a finite layout. `Box<T>` is always physical, including when `T` is Logical; logical recursive enums use direct recursion instead.
 
 <!-- spec: 1.90:10 example -->
-~~~locus run
+~~~rust run
 enum Chain { End, Link(u8, Box<Chain>) }
 fn singleton(value: u8) -> Chain {
     Chain::Link(value, Box::new(Chain::End))
@@ -209,7 +209,7 @@ fn boxed_byte() -> u8 {
 `Int` denotes mathematical integers without a machine-width bound. Its arithmetic is erased. A runtime integer can be observed as an `Int`, but an `Int` cannot be converted back into runtime data. The [operators chapter](03-integers.md#logical-arithmetic) defines its total division and remainder operations.
 
 <!-- spec: 1.90:11 example -->
-~~~locus check
+~~~rust check
 logic fn distance_squared(x: Int, y: Int) -> Int {
     let delta = x - y;
     delta * delta
@@ -225,7 +225,7 @@ logic fn concrete_distance() -> @(distance_squared(3, 7) == 16) {
 `Nat` denotes nonnegative mathematical integers. It is Logical and is the canonical model of unsigned machine integers. Literals cannot be negative. Arithmetic has no width bound; subtraction needs evidence that its result is nonnegative. `n as Int` widens exactly. To construct a Nat from an Int, supply evidence in `Nat { value: n, nonnegative: proof }`; a cast cannot assume it.
 
 <!-- spec: 1.92:10 example -->
-~~~locus check
+~~~rust check
 logic fn difference(a: Nat, b: Nat, ordered: @(b <= a)) -> Nat {
     a - b
 }
@@ -241,7 +241,7 @@ logic fn as_integer(n: Nat) -> Int { n as Int }
 `Bool` has logical true and false values. Comparisons inside logical computation produce it; a logical `if` can select between logical results. It cannot control an executable branch. A runtime `bool` can be observed through its `Bool` model.
 
 <!-- spec: 1.90:12 example -->
-~~~locus check
+~~~rust check
 logic fn nonnegative(n: Int) -> Bool { n >= 0 }
 logic fn magnitude(n: Int) -> Int {
     if n < 0 { -n } else { n }
@@ -254,7 +254,7 @@ logic fn magnitude(n: Int) -> Int {
 `Prop` holds a claim, such as `prop!(n != 0)`. `@P` holds evidence for the particular claim `P`. Both erase. A false claim is a valid proposition value; producing its evidence is what the checker must refuse. See [propositions](09-propositions.md) and [proofs](10-proofs.md).
 
 <!-- spec: 1.90:13 example -->
-~~~locus check
+~~~rust check
 fn claim_and_evidence(n: Int) -> (claim: Prop, @claim) {
     let claim = prop!(n == n);
     (claim, prove!(n == n))
@@ -267,7 +267,7 @@ fn claim_and_evidence(n: Int) -> (claim: Prop, @claim) {
 `#[derive(Logical)]` checks that all stored fields are Logical. Logical enums may be directly recursive, with finite values and checked positive recursion. The checked library defines `Peano` (an inductive representation of natural numbers), `Maybe<T>` (an optional logical value), and `Seq<T>` (a finite sequence). These are ordinary declarations, not additional compiler primitives. See [logical data and recursion](08-logic.md#logical-data).
 
 <!-- spec: 1.90:14 example -->
-~~~locus check
+~~~rust check
 #[derive(Logical)]
 struct Bounds { lower: Int, upper: Int }
 #[derive(Logical)]
@@ -281,7 +281,7 @@ logic fn two() -> Peano { Peano::Succ(Peano::Succ(Peano::Zero)) }
 `logic Fn(x: T) -> U` is the type of an erased callable. Its parameters and result are Logical; a result may contain evidence about its parameters. A closure such as `|x: Int| x + 1` constructs one. Named logical functions can additionally observe runtime inputs; [closures](08-logic.md#logical-closures) have the narrower signature rule.
 
 <!-- spec: 1.90:15 example -->
-~~~locus check
+~~~rust check
 logic fn twice(f: logic Fn(x: Int) -> Int, value: Int) -> Int {
     f(f(value))
 }
@@ -294,7 +294,7 @@ logic fn add_two(n: Int) -> Int { twice(|x: Int| x + 1, n) }
 Generic structs, enums, propositions, and functions are checked templates. Each concrete instantiation is elaborated and kernel-checked; an unused body is not universally verified. `T: Logical` is the supported bound. Generic methods in inherent `impl` blocks and general trait definitions are unsupported; [Model](11-models.md#defining-a-model) is a dedicated built-in interface.
 
 <!-- spec: 1.90:16 example -->
-~~~locus check
+~~~rust check
 #[derive(Logical)]
 struct Pair<T: Logical> { first: T, second: T }
 logic fn duplicate<T: Logical>(value: T) -> Pair<T> {

@@ -4,7 +4,7 @@ A quantifier needs a bound value type and a formula body. The surface form lower
 
 Example from `tests/corpus/reject/empty_quantifier.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A quantifier with nothing to state.
 const nothing: Prop = prop!(
     forall (n: u8) { }

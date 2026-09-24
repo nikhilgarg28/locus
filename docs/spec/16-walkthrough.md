@@ -24,7 +24,7 @@ The [lock program](../../tests/corpus/target/lock.lc) exercises named propositio
 ## The complete program
 
 <!-- spec: 1.1:2 example -->
-~~~locus run
+~~~rust run
 #[derive(Clone, Copy)]
 pub enum Event { Wrong, Right }
 

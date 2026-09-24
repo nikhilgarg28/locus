@@ -4,7 +4,7 @@ This control-flow form is not permitted in the current total or logical computat
 
 Example from `tests/corpus/reject/loop_in_math_fn.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A `loop` in a function that promises to return.
 #[terminates] #[no_panic] #[no_io] fn first(n: u8) -> u8 {
     loop {

@@ -4,7 +4,7 @@ The @ marker introduces a proof type or separates a proposition constructor from
 
 Example from `tests/corpus/reject/proof_block.lc`; the full file is a regression test.
 
-```locus
+```rust
 // `@` begins a proof type and nothing else: `@{ _ }` is not an expression.
 fn first(n: u8) -> (out: u8, @(out == n)) {
     (n, @{ _ })

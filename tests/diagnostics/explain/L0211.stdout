@@ -4,7 +4,7 @@ The operands of this comparison do not share a supported comparison type. Locus 
 
 Example from `tests/corpus/reject/comparison_across_types.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A comparison is between two values of one type, in code and in claims;
 // the error says which cast makes them one.
 fn in_code(a: u8, b: u32) -> bool {

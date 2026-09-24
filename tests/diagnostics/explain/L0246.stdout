@@ -4,7 +4,7 @@ This evidence is tied to the current generation of a mutable binding. A write ch
 
 Example from `tests/corpus/reject/tracked_loop_edges.lc`; the full file is a regression test.
 
-```locus
+```rust
 if n == 10 {
             break;
         } else {

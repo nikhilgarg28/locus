@@ -4,7 +4,7 @@ A block or function result type still names a local symbolic value that is not a
 
 Example from `tests/corpus/reject/scope_opaque_proof.lc`; the full file is a regression test.
 
-```locus
+```rust
 fn pick() -> u8 { 7 }
 fn leak() -> u8 {
     let escaped = {

@@ -4,7 +4,7 @@ A named proposition constructor receives witnesses in its tuple or named fields,
 
 Example from `tests/corpus/reject/evidence_at_chain.lc`; the full file is a regression test.
 
-```locus
+```rust
 fn bad() -> @P {
     P::A @ P::B @ h
 }

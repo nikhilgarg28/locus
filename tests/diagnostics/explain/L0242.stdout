@@ -4,7 +4,7 @@ A requested derive has prerequisite traits that are not present. Copy requires C
 
 Example from `tests/corpus/reject/copy_without_clone.lc`; the full file is a regression test.
 
-```locus
+```rust
 // `Copy` requires `Clone`, as in Rust (E0277), and `Eq` requires `PartialEq`.
 #[derive(Copy)]
 struct Point {

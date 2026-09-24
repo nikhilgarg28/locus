@@ -4,7 +4,7 @@ A derive cannot establish its promise for a field or payload. Copy needs copyabl
 
 Example from `tests/corpus/reject/copy_with_non_copy_field.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A struct or an enum is `Copy` only if every field is: a field whose type
 // does not derive `Copy` prevents it, and is named. `Clone` asks the same
 // of its fields, and a tuple field has what its parts have.

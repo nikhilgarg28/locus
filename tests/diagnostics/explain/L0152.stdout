@@ -4,7 +4,7 @@ Every named proposition arm states a body using => { ... }. Old bare constructor
 
 Example from `tests/corpus/reject/legacy_prop_arm.lc`; the full file is a regression test.
 
-```locus
+```rust
 prop New { Yes => { prop!(true) } }
 prop Old {
     Intro

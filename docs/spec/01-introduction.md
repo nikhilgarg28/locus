@@ -16,7 +16,7 @@ Locus is a Rust-like language in which functions can exchange data and checked e
 ## A first guarantee
 
 <!-- spec: 1.90:64 example -->
-~~~locus run
+~~~rust run
 #[no_panic]
 fn next(n: u8, room: @(n < u8::MAX)) -> (out: u8, @(out == n + 1)) {
     let out = n + 1;

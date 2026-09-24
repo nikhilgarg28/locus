@@ -22,7 +22,7 @@ Logical positions lower to one private zero-sized `Erased` marker. Logical decla
 A logical operation erases after evaluating any ordinary argument computations in source order. An ordinary function remains executable even if every argument and result is logical. In particular, a function taking `&mut` and returning only evidence still performs its mutation.
 
 <!-- spec: 1.90:60 example -->
-~~~locus run
+~~~rust run
 fn clear(value: &mut u8) -> @(value == 0) {
     value = 0;
     _
@@ -53,7 +53,7 @@ Generated Rust removes unused marker bindings and unused erased pattern componen
 Runtime code cannot observe proof contents. Proof matches establish further evidence; they do not extract witnesses as data. Physical enums keep their discriminants while proof payloads erase. This includes `Option<@P>` for a closed claim `P`; use dependent fields for claims about payload values.
 
 <!-- spec: 1.90:61 example -->
-~~~locus run
+~~~rust run
 enum Checked {
     Zero,
     Positive { value: u8, evidence: @(value > 0) },

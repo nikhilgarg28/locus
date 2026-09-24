@@ -19,7 +19,7 @@ A proposition describes a claim. A proof establishes it. Locus lets you name and
 `prop!(expression)` creates a `Prop`: it accepts a proposition or turns a logical Boolean into the claim that it holds. It captures permitted observations at their current versions, with no runtime closure or lasting borrow. A captured proposition can outlive a local name if its dependencies are closed or explicitly packaged.
 
 <!-- spec: 1.90:45 example -->
-~~~locus check
+~~~rust check
 fn claims() -> (Prop, Prop) {
     // Both are well-formed claims; only the first can be proved.
     (prop!(2 + 2 == 4), prop!(2 + 2 == 5))
@@ -40,7 +40,7 @@ Inside logical computation, unsigned machine integers default to `Nat`, signed m
 A `logic fn` returning `Prop` defines a predicate by calculation. Its body may use immutable lets, conditionals, matches, and total logical calls. Its claim is proved using its defining equation through `fold!` or `unfold!`; the definition does not assert that its body is true.
 
 <!-- spec: 1.90:46 example -->
-~~~locus check
+~~~rust check
 logic fn magnitude_is_nonnegative(x: Int) -> Prop {
     let magnitude = if x < 0 { -x } else { x };
     prop!(magnitude >= 0)
@@ -60,7 +60,7 @@ logic fn always(x: Int) -> @magnitude_is_nonnegative(x) {
 A named proposition lists alternative reasons it can hold. Each arm’s body computes a proposition to be proved. The following declaration allows zero, or a value below a supplied bound no greater than ten.
 
 <!-- spec: 1.6:5 example -->
-~~~locus check
+~~~rust check
 prop Small(n: Int) {
     Zero => { prop!(n == 0) }
     Below { limit: Int } => { prop!(n < limit && limit <= 10) }
@@ -83,7 +83,7 @@ Use `Arm => { ... }`, `Arm(witness: T) => { ... }`, or `Arm { witness: T } => { 
 Inside a proposition formula, `P && Q`, `P || Q`, `!P`, and `P => Q` construct conjunction, disjunction, negation, and implication. `forall (x: T) { F }` and `exists (x: T) { F }` bind a Logical value and lower to the checked prelude propositions `ForAll<T>` and `Exists<T>`. Kernel-validated schemas authorize their use in recursive propositions; their names alone grant no authority.
 
 <!-- spec: 1.90:47 example -->
-~~~locus check
+~~~rust check
 logic fn combine(p: Prop, q: Prop) -> Prop { prop!(p && (p => q)) }
 logic fn a_larger_integer(n: Int) -> @(exists (m: Int) { m > n }) {
     Exists::<Int>::Witness(n + 1) @ prove!(n + 1 > n)
@@ -102,7 +102,7 @@ logic fn reflexivity() -> @(forall (n: Int) { n == n }) {
 Recursive occurrences in arm conditions must be strictly positive and visible through supported logical forms: conjunction, disjunction, quantification, or an implication’s conclusion when its premise is independent. Negated, hidden, or premise-side recursive occurrences are rejected. A recursive claim does not run a recursive search. Constructed evidence is finite; proving facts about it uses checked induction.
 
 <!-- spec: 1.90:48 example -->
-~~~locus check
+~~~rust check
 prop Reachable(from: Int, to: Int) {
     Same => { prop!(from == to) }
     Next(middle: Int) => {

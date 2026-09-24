@@ -4,7 +4,7 @@ The parser recognizes this form but the current elaborator has no checked implem
 
 Example from `tests/corpus/reject/bit_operators_not_yet.lc`; the full file is a regression test.
 
-```locus
+```rust
 // The shifts and the bitwise operators parse with Rust's precedence and
 // have no meaning until after the core.
 fn shift_left(a: u8, b: u8) -> u8 {

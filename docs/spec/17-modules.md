@@ -22,7 +22,7 @@ An explicit file is the entry regardless of its name. A directory selects exactl
 Only declared module files are loaded. An unrelated file, even one containing invalid syntax, has no effect. Every loaded declaration is checked, including unused declarations, subject to the existing restriction that generic bodies are checked when instantiated. Inclusion cycles, missing files, excessive nesting, and source-size limits are errors.
 
 <!-- spec: 1.28:4 example -->
-~~~locus prose multi-file-example-covered-by-tests-modules
+~~~rust prose multi-file-example-covered-by-tests-modules
 // export.lc
 mod arithmetic;
 pub use arithmetic::increment;
@@ -40,7 +40,7 @@ Names resolve within their module, with separate type and value namespaces. `cra
 Items and struct fields are private to their module and descendants by default. `pub`, `pub(crate)`, `pub(super)`, `pub(self)`, and `pub(in ancestor)` widen access to their stated scope. A restricted path must name a lexical ancestor. Imports cannot widen the target declaration's visibility. Field reads, writes, construction, borrows, logical observations, method calls, and associated constants respect the same boundary.
 
 <!-- spec: 1.28:7 example -->
-~~~locus check
+~~~rust check
 mod implementation {
     pub struct Counter { value: u8 }
     impl Counter {

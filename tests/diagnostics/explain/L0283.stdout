@@ -4,7 +4,7 @@ A logical callable must have a logical result and captures that remain meaningfu
 
 Example from `tests/corpus/reject/closure_capture_runtime.lc`; the full file is a regression test.
 
-```locus
+```rust
 fn capture(value: u8) -> logic Fn(x: Int) -> Int { |x: Int| x + value }
 ```
 

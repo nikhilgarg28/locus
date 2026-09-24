@@ -4,7 +4,7 @@ An opening parenthesis, bracket or brace has no matching closing delimiter. The 
 
 Example from `tests/corpus/reject/unclosed_parenthesis.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A parenthesis that is never closed.
 fn first(n: u8) -> u8 {
     (n

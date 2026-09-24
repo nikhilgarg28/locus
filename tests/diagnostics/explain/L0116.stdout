@@ -4,7 +4,7 @@ This spelling resembles a Rust feature that Locus does not implement. Rust-like 
 
 Example from `tests/corpus/reject/rust_not_yet.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Pasted Rust either parses or is told, construct by construct, that it is
 // not in Locus yet. One construct is one error, and the rest is still read.
 #[derive(Debug)]

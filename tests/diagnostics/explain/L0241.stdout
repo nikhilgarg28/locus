@@ -4,7 +4,7 @@ A proposition cannot freshly observe a place after ownership has moved away. A s
 
 Example from `tests/corpus/reject/proposition_mentions_moved.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A proposition formed in a body cannot mention a local that was moved: the
 // code no longer has the value. Evidence obtained before the move stays
 // valid, being a value of its own; `snapshot!` (E8) keeps the value for a

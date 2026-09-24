@@ -19,7 +19,7 @@ A proposition describes values at a particular program point. Reassignment does 
 Each binding has its own identity. Shadowing creates another identity; assignment gives the same mutable binding a new version. A proposition captures the versions current when it is formed. Reusing a source spelling never retargets an old claim.
 
 <!-- spec: 1.90:36 example -->
-~~~locus check
+~~~rust check
 fn snapshot() -> @True {
     let mut n: u8 = 3;
     let before = n as Int;
@@ -41,7 +41,7 @@ Available facts include typed parameters, justified let equations, branch and ma
 `let mut` and mutable parameters permit assignment to the whole value or a field path. Assignment is a statement, not a value. Each write creates a new logical version; field writes rebuild the containing value. A field used by another field’s proof cannot be changed alone: replace the whole aggregate with fresh evidence.
 
 <!-- spec: 1.90:37 example -->
-~~~locus check
+~~~rust check
 struct Limited { value: u8, valid: @(value <= 10) }
 fn reset(item: &mut Limited) -> () {
     item = Limited { value: 0, valid: prove!(0 <= 10) };
@@ -55,7 +55,7 @@ fn reset(item: &mut Limited) -> () {
 An immutable proof keeps its snapshot. A `let mut` proof tracks the bindings named in its declared type. Assignment or mutable lending of a dependency makes it stale, even if the claim remains true. Assign fresh evidence to restore availability. After a branch, tracked evidence is available only if every reaching arm leaves it valid. The checker verifies the claim about the current versions independently of this availability analysis.
 
 <!-- spec: 1.90:38 example -->
-~~~locus run
+~~~rust run
 fn refreshed() -> (n: u8, @(n <= 10)) {
     let mut n: u8 = 3;
     let mut bounded: @(n <= 10) = _;
@@ -80,7 +80,7 @@ A branch joins the new versions of outer bindings assigned by any reaching arm. 
 Tracked evidence carried by a loop must hold at entry, every `continue`, and the body’s end. It is available after the loop. Evidence not carried retains only its old snapshot; if it tracks changed data, it must be re-established before use. A fact needed after a `break` must be valid on that exit too.
 
 <!-- spec: 1.90:39 example -->
-~~~locus run
+~~~rust run
 #[no_panic]
 fn count_to(limit: u8) -> (count: u8, @(count <= limit)) {
     let mut count: u8 = 0;

@@ -4,7 +4,7 @@ The attribute name is not one of the attributes implemented by Locus. Attributes
 
 Example from `tests/corpus/reject/attribute.lc`; the full file is a regression test.
 
-```locus
+```rust
 // An attribute outside the closed set is rejected, and the item is still read.
 #[inline]
 fn first(n: u8) -> u8 { n }

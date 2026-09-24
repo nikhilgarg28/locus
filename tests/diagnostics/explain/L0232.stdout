@@ -4,7 +4,7 @@ Assignment or a mutable borrow requires a writable place. Ordinary let bindings 
 
 Example from `tests/corpus/reject/assign_immutable.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Assignment needs `let mut`, in Rust's words. A parameter cannot be
 // assigned either, until `mut` parameters mean something.
 fn f(n: u8) -> u8 {

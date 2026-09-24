@@ -38,12 +38,14 @@ Use real relative Markdown links. The generator maps published Markdown to its H
 
 ## Checked examples and excerpts
 
-Every executable example in a current page is a complete program in a `locus check`, `locus run`, or `locus reject Lxxxx` fence. `run` examples include `//~ run:` expectations. Only grammar, shell commands, and other honestly non-executable illustrations use `LANG prose REASON`.
+Every executable example in a current page is a complete program in a `rust check`, `rust run`, or `rust reject Lxxxx` fence. `run` examples include `//~ run:` expectations. Only grammar, shell commands, and other honestly non-executable illustrations use `LANG prose REASON`.
+
+The `rust` language label provides GitHub syntax highlighting. The `check`, `run`, and `reject` modes still select the Locus compiler; the website displays these as Locus with its own highlighter. Actual Rust illustrations use `rust prose REASON` on current pages. Legacy `locus` and `lc` fences remain accepted by the checker, but new Markdown should use `rust`. Standalone `.lc` files use the same GitHub fallback through the root `.gitattributes`.
 
 Keep helpers and test expectations in the same Markdown fence. Surround lines that would distract from the lesson with `// docs:hide` and `// docs:show`:
 
-```markdown
-```locus run
+````markdown
+```rust run
 // docs:hide
 fn helper() -> u8 { 41 }
 // docs:show
@@ -52,7 +54,7 @@ fn answer() -> u8 { helper().wrapping_add(1) }
 //~ run: answer() => 42
 // docs:show
 ```
-```
+````
 
 The page initially shows `answer` and labels it an excerpt. A native **Complete checked example** disclosure includes the helper and run expectation, with its own copy button. Both views omit the marker comments. It works without JavaScript; copying requires JavaScript.
 

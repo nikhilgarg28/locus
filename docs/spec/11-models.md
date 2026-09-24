@@ -19,7 +19,7 @@ A model is an immutable logical description of runtime data. It may keep only th
 A physical type has at most one canonical model. Declare `impl Model for T { type Logic = M; logic fn model(&self) -> Self::Logic { ... } }`. `M` must be Logical. The body is checked pure, terminating logical computation. Its defining equation supplies the meaning; registration adds no axiom. A named shared parameter may replace `&self`. Canonical observation is available wherever the source can legally be read; its implementation body checks in the defining module, including access to private representation fields. Access to the resulting model’s fields follows normal visibility.
 
 <!-- spec: 1.90:56 example -->
-~~~locus run
+~~~rust run
 struct Point { x: u8, y: u8 }
 #[derive(Logical)]
 struct Position { x: Nat, y: Nat }
@@ -51,7 +51,7 @@ In logical expressions, observe a physical receiver through its canonical model 
 `model!(place)` resolves the complete physical read path first, then observes the selected value. Paths may use names, constant paths, parentheses, fields, tuple positions, authorized dereferences, entry paths selected by `old!`, and built-in indexing. Index expressions are logical and need bounds evidence. Calls, arithmetic, blocks and mutations are not physical read paths.
 
 <!-- spec: 1.92:3 example -->
-~~~locus check
+~~~rust check
 struct Connection {}
 struct Session { requests: u32, connection: Connection }
 fn count(session: Session) -> Nat {
@@ -71,7 +71,7 @@ Observation checks permission to read the selected storage. It neither moves it 
 `#[derive(Model)]` on a physical struct creates its canonical logical `NameModel`, with corresponding modeled fields. Derivation is explicit and requires a model for every physical field. A missing field model, conflicting model or generated name is an error. Dependent proof fields require a manually defined representation. The generated type belongs to the same module and inherits the struct’s visibility; each modeled field inherits its source field’s visibility. This built-in derivation is not a general trait system.
 
 <!-- spec: 1.92:6 example -->
-~~~locus check
+~~~rust check
 #[derive(Model)]
 struct Point { x: u32, y: i32 }
 fn position(point: Point) -> PointModel { model!(point) }
@@ -84,7 +84,7 @@ fn nonnegative_x(point: Point) -> @(point.x >= 0) { _ }
 Arrays, slices, and vectors have immutable logical content snapshots and separately checked physical layouts. Runtime lengths and indices use `u64`; logical lengths are `Nat` values bounded by `u64::MAX`. Access requires bounds evidence. Updates and push produce new snapshots and normal-return equations. Allocation failure or panic is outside a normal-return guarantee. `Vec::new` and `Vec::from` use registered Rust implementations.
 
 <!-- spec: 1.90:57 example -->
-~~~locus run
+~~~rust run
 fn append(values: &mut Vec<u8>, byte: u8)
     -> @(values.len() == old!(values).len() + 1)
 {
@@ -108,7 +108,7 @@ The checked [buffer model library](../../library/buffer_model.lc) observes stora
 A physical Vec, array, or parameter slice may contain Logical elements. Its payload lowers to markers (`Vec<Int>` becomes `Vec<Erased>`) while its length, tag, storage behavior, and ordinary argument effects remain. Mixed elements retain their physical fields. Reading a Logical element yields a Logical value, never a runtime integer or boolean.
 
 <!-- spec: 1.90:58 example -->
-~~~locus run
+~~~rust run
 fn logical_payloads() -> u64 {
     let values: Vec<Int> = Vec::from([logic { 3 }, logic { 4 }]);
     values.len()
@@ -122,7 +122,7 @@ fn logical_payloads() -> u64 {
 `trusted "reason" fn name(parameters) -> Result = Vec::len;` declares an assumed native contract. Only registered Vec len/get/push adapters are supported. Headers must match runtime shapes, including evidence slots, and carry a nonempty reason. The body is not verified against the postcondition. `locus audit` reports the assumption. A false contract can invalidate caller guarantees; it is never an unfoldable logical definition.
 
 <!-- spec: 1.90:59 example -->
-~~~locus run
+~~~rust run
 trusted "Rust Vec::len returns the number of stored elements"
 fn length(values: &Vec<u8>) -> (out: u64, @(out == values.len())) = Vec::len;
 fn demo() -> u64 {

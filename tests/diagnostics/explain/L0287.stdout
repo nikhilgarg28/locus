@@ -4,7 +4,7 @@ The trusted declaration does not match a supported native operation or its speci
 
 Example from `tests/corpus/reject/trusted_shape.lc`; the full file is a regression test.
 
-```locus
+```rust
 trusted "same native item, incorrect runtime type"
 fn wrong(xs: &Vec<u8>) -> (out: u8, @(out == 0)) = Vec::len;
 ```

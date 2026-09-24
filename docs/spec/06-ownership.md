@@ -19,7 +19,7 @@ Ownership controls access to runtime storage. Logical observations also need per
 A by-value use moves a runtime value unless its type is `Copy`. Using a moved value is an error; assigning a moved mutable binding initializes it again. Reading a `Copy` field copies only that field; moving another field makes that field unavailable. A match that moves no fields leaves its scrutinee intact. Logical evidence is reusable and never moved.
 
 <!-- spec: 1.90:31 example -->
-~~~locus check
+~~~rust check
 struct Packet { byte: u8 }
 fn consume(packet: Packet) -> u8 { packet.byte }
 fn borrow_then_move(packet: Packet) -> u8 {
@@ -32,7 +32,7 @@ fn borrow_then_move(packet: Packet) -> u8 {
 Runtime derives are a closed set: `Clone`, `Copy`, `PartialEq`, `Eq`, and `Debug`, in any order. `Copy` requires `Clone`; `Eq` requires `PartialEq`. Evidence-bearing types may derive Clone, Copy, and Debug, but not PartialEq. `#[derive(Logical)]` instead checks logical field classification and erases the declaration.
 
 <!-- spec: 1.90:32 example -->
-~~~locus check
+~~~rust check
 #[derive(Clone, Copy)]
 struct Coordinate { row: u8, column: u8 }
 fn twice(point: Coordinate) -> (Coordinate, Coordinate) { (point, point) }
@@ -52,7 +52,7 @@ Arguments cannot overlap when either is mutably borrowed. Another argument canno
 A mutable parameter names its entry value in parameter types and its final value in the result type. `old!(parameter)` selects the entry value. Its body reads and updates the referent; normal return writes the final value back into the caller’s place.
 
 <!-- spec: 1.90:33 example -->
-~~~locus run
+~~~rust run
 fn clear(value: &mut u8) -> @(value == 0) {
     value = 0;
     prove!(value == 0)
@@ -66,7 +66,7 @@ fn demo() -> u8 {
 ~~~
 
 <!-- spec: 1.90:34 example -->
-~~~locus check
+~~~rust check
 #[no_panic]
 fn bump(value: &mut u8, room: @(value < u8::MAX))
     -> @(value == old!(value) + 1)
@@ -85,7 +85,7 @@ A panic does not undo writes already made through `&mut`. A Rust caller that cat
 Shared references record their storage origin, path, and version. Local lifetimes may be inferred; returned reference signatures use explicit input lifetimes. References cannot escape local storage. An overlapping write or move prevents a later reference use, including an erased model observation. Locus checks this before erasure; rustc independently checks the retained accesses.
 
 <!-- spec: 1.90:35 example -->
-~~~locus run
+~~~rust run
 struct Item { value: u8 }
 fn first<'a>(items: &'a [Item], present: @(0 < items.len())) -> &'a Item {
     &items[0]

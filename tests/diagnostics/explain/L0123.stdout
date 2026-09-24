@@ -4,7 +4,7 @@ The left side of an assignment must be a supported place: a mutable binding or w
 
 Example from `tests/corpus/reject/assignment_target.lc`; the full file is a regression test.
 
-```locus
+```rust
 // The left-hand side of an assignment is a variable or a field path; what
 // rustc says of anything else, Locus says too, and the rest is still read.
 fn f(x: u8, pair: (u8, u8), lock: Lock) -> u8 {

@@ -4,7 +4,7 @@ The reference or lifetime spelling is outside the supported shared-reference mod
 
 Example from `tests/corpus/reject/reference_in_let.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Stored shared references require a borrow expression rather than a bare
 // referent value. Mutable references still last for one call.
 struct Holder {

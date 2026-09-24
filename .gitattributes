@@ -1,0 +1,2 @@
+# Use Rust as GitHub Linguist's closest available grammar for Locus.
+*.lc linguist-language=Rust

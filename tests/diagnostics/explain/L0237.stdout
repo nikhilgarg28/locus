@@ -4,7 +4,7 @@ Unary minus is not defined for unsigned machine values. Use a signed runtime typ
 
 Example from `tests/corpus/reject/negate_unsigned.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Unary minus exists at the signed types only, as in Rust.
 fn negate(a: u8) -> u8 {
     -a

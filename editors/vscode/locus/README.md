@@ -2,6 +2,8 @@
 
 Syntax highlighting for `.lc` files, and for ```` ```locus ```` fences in Markdown.
 
+Repository Markdown uses `rust` fences for GitHub compatibility, and `.gitattributes` maps `.lc` files to Rust on GitHub. The project website keeps its Locus highlighter for checked examples.
+
 The grammar (`syntaxes/locus.tmLanguage.json`) is a TextMate grammar, so it also works anywhere else that reads one: Shiki in the browser, GitHub Linguist, Zed, Sublime Text. The scopes it assigns:
 
 | Scope | What |

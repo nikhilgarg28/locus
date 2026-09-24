@@ -4,7 +4,7 @@ Implication and quantified formula syntax are accepted in a proposition context.
 
 Example from `tests/corpus/reject/outside_formula.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Implication and the quantifiers are read only inside `prop!(...)`,
 // `prove!(...)`, and `@(...)`.
 #[terminates] #[no_panic] #[no_io] logic fn implies(p: Prop, q: Prop) -> Prop {

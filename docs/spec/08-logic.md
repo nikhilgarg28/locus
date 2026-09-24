@@ -22,7 +22,7 @@ Logical code calculates the values used in claims and proofs. It is checked for 
 `logic fn` must return a Logical type. Its body may call logical definitions and observe authorized runtime inputs. It cannot call ordinary functions, mutate physical storage, allocate physical objects, or panic. `logic { ... }`, proposition literals, proof annotations, and `prove!` establish logical contexts with these same restrictions.
 
 <!-- spec: 1.90:40 example -->
-~~~locus check
+~~~rust check
 logic fn successor(n: Int) -> Int { n + 1 }
 fn describe(n: u8) -> Prop {
     let expected = successor(n as Int);
@@ -40,7 +40,7 @@ Ordinary operands and arguments evaluate left to right. Assignment evaluates its
 Logical calls and operators may appear directly in ordinary code. Ordinary argument-producing calls execute once in source order, then the logical operation erases. An explicit logical context rejects those ordinary calls. Runtime control needs a physical `bool` or enum tag; logical control uses `Bool` or logical data and cannot select runtime effects.
 
 <!-- spec: 1.90:41 example -->
-~~~locus run
+~~~rust run
 fn take_next(counter: &mut u8) -> u8 {
     counter = counter.wrapping_add(1);
     counter
@@ -63,7 +63,7 @@ Operand types select operators: addition on `Nat` or `Int` is logical; addition 
 Logical structs and finite recursive enums erase completely. A logical recursive enum uses direct recursion, without Box. Mutually referring logical enums form one checked group, specialized first when generic. Logical function recursion may follow same-typed descendants exposed across that group. Mutually recursive functions are unsupported. Library types and lemmas are ordinary checked source included explicitly with `--library`.
 
 <!-- spec: 1.90:42 example -->
-~~~locus check
+~~~rust check
 #[derive(Logical)]
 enum Peano { Zero, Succ(Peano) }
 logic fn size(n: Peano) -> Int {
@@ -90,7 +90,7 @@ The recursive theorem call is the induction hypothesis for `previous`. It is leg
 Structural recursion must use constructor subdata. Integer recursion uses `recurse!(decreases, self_call)`, with evidence of `0 <= next && next < current`. That evidence is checked before the recursive call is available. Recursive theorem calls provide checked induction. Recursive propositions additionally require [positive constructor conditions](09-propositions.md#recursive-propositions).
 
 <!-- spec: 1.90:43 example -->
-~~~locus check
+~~~rust check
 logic fn steps(n: Int) -> Int {
     if n <= 0 { 0 } else {
         let next = n - 1;
@@ -107,7 +107,7 @@ logic fn steps(n: Int) -> Int {
 Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures need a canonical model, inferred for simple logical uses such as `|x: Int| x + n`. Use `model!(s.n)` to capture a physical field of an unmodeled enclosing value. Captures retain the observed versions. Closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
 
 <!-- spec: 1.90:44 example -->
-~~~locus check
+~~~rust check
 logic fn apply(f: logic Fn(x: Int) -> Int, x: Int) -> Int { f(x) }
 fn capture(n: u8) -> Int {
     let add_input = |x: Int| x + (n as Int);

@@ -23,7 +23,7 @@ Each example answers three questions: what runs, what is promised, and where the
 
 The name `out` in the result type binds the returned byte for the later proof field. `_` requests evidence; the kernel checks it. Wrapping addition includes the boundary case where 255 becomes zero.
 
-~~~locus run
+~~~rust run
 fn increment(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
     let out = n.wrapping_add(1);
     (out, _)
@@ -44,7 +44,7 @@ A caller can forward `correct` as a proof argument. It cannot inspect the proof 
 
 The mathematical specification is `(lo + hi) / 2`. Computing that sum in `u32` can overflow even when both inputs are valid. The implementation subtracts first, halves the difference, and adds it back. The input proof establishes that subtraction is safe; `no_panic` makes the compiler check every arithmetic safety condition.
 
-~~~locus run
+~~~rust run
 #[terminates] #[no_panic] #[no_alloc] #[no_io]
 fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
     -> (mid: u32, @(mid == (lo + hi) / 2))
@@ -61,7 +61,7 @@ fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi))
 
 Arithmetic inside the proof type uses `Int` models, so the specification’s sum does not overflow. This tempting implementation fails its safety obligation:
 
-~~~locus reject L0235
+~~~rust reject L0235
 #[no_panic]
 fn midpoint(lo: u32, hi: u32, ordered: @(lo <= hi)) -> u32 {
     (lo + hi) / 2
@@ -74,7 +74,7 @@ The failure is useful: `lo <= hi` does not imply that their sum fits. See [machi
 
 A percentage is more useful than an unconnected proof of a number’s range. Its private proof field certifies its own value field. A constructor checks untrusted input at runtime; a consumer obtains the bound from the type without repeating the check.
 
-~~~locus run
+~~~rust run
 pub struct Percent {
     value: u32,
     valid: @(value <= 100),
@@ -114,7 +114,7 @@ The proof travels through three layers: validation, the `Percent` value, and `re
 
 A bounds check can produce the fact required by an access. The runtime branch handles an empty slice; the other branch has evidence that index zero exists. The returned `Option` is ordinary runtime data.
 
-~~~locus run
+~~~rust run
 fn first(bytes: &[u8]) -> Option<u8> {
     if bytes.len() > 0 {
         Some(bytes[0])
@@ -132,7 +132,7 @@ fn demo() -> Option<u8> {
 
 For a caller that already knows the slice is nonempty, the same condition can be a proof parameter:
 
-~~~locus check
+~~~rust check
 fn first_known(bytes: &[u8], available: @(0 < bytes.len())) -> u8 {
     bytes[0]
 }
@@ -144,7 +144,7 @@ The current compiler requires evidence for collection access. A function can est
 
 `bounded` is the loop invariant: a proof about the current counter. Initial construction establishes it. Increment invalidates it; the next assignment supplies evidence for the updated value. It must hold on every loop back edge.
 
-~~~locus run
+~~~rust run
 #[no_panic]
 fn count_to(limit: u8) -> (count: u8, @(count <= limit)) {
     let mut count: u8 = 0;
@@ -165,7 +165,7 @@ The signature guarantees the bound on normal return, and `no_panic` guarantees t
 
 A logical sequence is a finite value defined by constructors. `append` follows the first sequence’s structure. The theorem follows that same structure: the empty case needs no recursive hypothesis; the nonempty case reuses the theorem for the tail.
 
-~~~locus check
+~~~rust check
 #[derive(Logical)]
 enum Seq { Empty, Cons { head: Int, tail: Seq } }
 

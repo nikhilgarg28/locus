@@ -88,7 +88,7 @@ verified = { package = "verified_collections", version = "0.1" }
 
 Its Locus code imports names from the dependency's library root:
 
-~~~locus prose dependency-example-covered-by-tests-packages
+~~~rust prose dependency-example-covered-by-tests-packages
 use verified::runtime::Token;
 use verified::theorems::reflexive;
 

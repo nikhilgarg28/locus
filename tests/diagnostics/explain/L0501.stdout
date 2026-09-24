@@ -4,7 +4,7 @@ A declared module file is missing, ambiguous, cyclic, unreadable, or beyond a re
 
 The filesystem regression is `tests/fixtures/project-errors/L0501`. Its `export.lc` reproduces this category through the actual project pipeline.
 
-```locus
+```rust
 mod absent;
 ```
 

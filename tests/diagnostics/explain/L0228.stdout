@@ -4,7 +4,7 @@ Only evidence with a function-like logical conclusion, such as implication or un
 
 Example from `tests/corpus/reject/evidence_applied_to_nothing.lc`; the full file is a regression test.
 
-```locus
+```rust
 // Evidence of an equation takes no argument.
 #[terminates] #[no_panic] #[no_io] fn first(h: @(1 == 1), n: u8) -> @(1 == 1) {
     h(n)

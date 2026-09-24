@@ -4,7 +4,7 @@ Locus could not write output, or found an existing Rust file without a matching 
 
 The filesystem regression is `tests/fixtures/project-errors/L0506`. Its `export.lc` reproduces this category through the actual project pipeline.
 
-```locus
+```rust
 pub fn value()->u8 {1}
 ```
 

@@ -175,8 +175,10 @@ function markdown(text, doc) {
     return `<h${depth} id="${esc(id)}">${title}${depth > 1 ? `<a class="heading-anchor" href="#${id}" aria-label="Link to ${esc(plainHTML(title))}">#</a>` : ""}</h${depth}>\n`;
   };
   renderer.code = function ({ text, lang }) {
-    const [language, mode] = String(lang || "text").split(/\s+/);
+    const [sourceLanguage, mode] = String(lang || "text").split(/\s+/);
     const fence = checkedFences.get(fenceKey(doc.id, text));
+    // Rust is the GitHub fallback; checked examples are still Locus programs.
+    const language = fence && mode !== "prose" ? "locus" : sourceLanguage;
     if (/^\s*\/\/ docs:/m.test(text) && !fence) {
       throw Error(`Unvalidated example markers in ${doc.source}`);
     }

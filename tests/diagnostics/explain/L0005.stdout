@@ -4,7 +4,7 @@ Rust raw identifiers such as r#match are not part of Locus. The lexer rejects th
 
 Example from `tests/corpus/reject/raw_identifier.lc`; the full file is a regression test.
 
-```locus
+```rust
 // A raw identifier.
 fn first(r#match: u8) -> u8 { 1 }
 ```

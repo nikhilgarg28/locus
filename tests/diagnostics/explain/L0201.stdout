@@ -4,7 +4,7 @@ A type constructor has the wrong arguments, or a lifetime appears where a value 
 
 Example from `tests/corpus/reject/box_type_arity.lc`; the full file is a regression test.
 
-```locus
+```rust
 fn invalid(value: Box<u8, u8>) -> u8 { 0 }
 ```
 

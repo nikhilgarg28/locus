@@ -4,7 +4,7 @@ Arguments lend overlapping storage with incompatible permissions, such as two mu
 
 Example from `tests/corpus/reject/overlapping_arguments.lc`; the full file is a regression test.
 
-```locus
+```rust
 fn lend_then_move(a: &Token, b: Token) -> u8 {
     a.id.wrapping_add(b.id)
 }

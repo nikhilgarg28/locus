@@ -101,6 +101,18 @@ class SpecGateTests(unittest.TestCase):
         data['docs'][0]['group'] = 'Vision'
         self.assertEqual(spec.fences(data), [])
 
+    def test_rust_highlighting_requires_explicit_locus_checking_mode(self):
+        for language in ('rust', 'locus', 'lc'):
+            fence = spec.fences(atlas(['~~~' + language + ' check', 'fn f()->u8{1}', '~~~']))[0]
+            self.assertEqual(fence.mode, 'check')
+            self.assertEqual(fence.code, 'fn f()->u8{1}\n')
+        prose = spec.fences(atlas(['~~~rust prose generated-output', 'fn main() {}', '~~~']))[0]
+        self.assertEqual(prose.mode, 'prose')
+        with self.assertRaisesRegex(ValueError, 'needs LANGUAGE'):
+            spec.fences(atlas(['~~~rust', 'fn main() {}', '~~~']))
+        with self.assertRaisesRegex(ValueError, 'executable Locus fence'):
+            spec.fences(atlas(['~~~python check', 'pass', '~~~']))
+
     def test_prose_requires_reason_run_requires_value_reject_requires_code(self):
         for opening, code, expected in [
             ('~~~text prose', 'X := Y', 'needs a reason'),
@@ -114,7 +126,7 @@ class SpecGateTests(unittest.TestCase):
         source = ('// docs:hide\nfn helper()->u8{7}\n// docs:show\n'
                   'fn f()->u8{helper()}\n// docs:hide\n//~ run: f() => 7\n// docs:show')
         for mode in ('check', 'run', 'reject L0220'):
-            data = atlas(['~~~locus ' + mode, *source.splitlines(), '~~~'])
+            data = atlas(['~~~rust ' + mode, *source.splitlines(), '~~~'])
             fence = spec.fences(data)[0]
             self.assertTrue(fence.excerpt)
             self.assertEqual(fence.visible_code, 'fn f()->u8{helper()}')

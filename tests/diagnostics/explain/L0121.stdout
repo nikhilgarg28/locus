@@ -4,7 +4,7 @@ A recognized attribute has the wrong argument shape. For example, no_panic takes
 
 Example from `tests/corpus/reject/attribute_shape.lc`; the full file is a regression test.
 
-```locus
+```rust
 // An attribute of the closed set in a shape it does not have.
 #[no_panic(always)]
 fn first(n: u8) -> u8 { n }

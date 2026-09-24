@@ -4,7 +4,7 @@ A while or for loop does not return a break payload in this core, and continue c
 
 Example from `tests/corpus/reject/break_in_for.lc`; the full file is a regression test.
 
-```locus
+```rust
 // `break` with a value leaves a `while` or a `for`, which produce no value;
 // only a `loop` has the value of its `break`.
 fn first(n: u8) -> u8 {

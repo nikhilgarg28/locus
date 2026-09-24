@@ -238,8 +238,8 @@ def fences(data: dict) -> list[Fence]:
                 raise ValueError(f"{doc['id']}:{block.start+1}: every Now fence needs LANGUAGE check/run/reject/prose")
             language, mode = info[:2]
             rest = info[2:]
-            if mode != 'prose' and language not in {'locus', 'lc'}:
-                raise ValueError(f"{doc['id']}:{block.start+1}: executable fence must use locus or lc")
+            if mode != 'prose' and language not in {'rust', 'locus', 'lc'}:
+                raise ValueError(f"{doc['id']}:{block.start+1}: executable Locus fence must use rust (legacy locus and lc are also accepted)")
             if mode == 'reject' and (not rest or any(not re.fullmatch(r'L\d{4}', code) for code in rest)):
                 raise ValueError(f"{doc['id']}:{block.start+1}: reject fence needs diagnostic codes")
             if mode == 'prose' and not rest:

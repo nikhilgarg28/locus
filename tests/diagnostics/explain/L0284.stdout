@@ -4,7 +4,7 @@ The collection expression lacks required element information, has an incompatibl
 
 Example from `tests/corpus/reject/array_literal.lc`; the full file is a regression test.
 
-```locus
+```rust
 // An array literal, and an empty one.
 fn items() -> u8 {
     [1, 2, 3]
