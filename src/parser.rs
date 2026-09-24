@@ -397,7 +397,7 @@ impl Parser<'_> {
     }
 
     /// An item: its doc comments, attributes, and visibility, then one of
-    /// the declaration forms. Inside an `impl` block, only a function.
+    /// the declaration forms. An `impl` holds functions and constants.
     fn declaration(&mut self) -> ParseResult<Declaration> {
         let start = self.current().span;
         let (doc, mut attributes) = self.outer_attributes()?;
@@ -413,8 +413,10 @@ impl Parser<'_> {
                 span: start.through(end),
             });
         }
-        if self.in_impl && !matches!(self.current().kind, K::Fn | K::Logic) {
-            return self.fail("an `impl` block holds functions: `fn`");
+        if self.in_impl && !matches!(self.current().kind, K::Fn | K::Logic | K::Const) {
+            return self.fail(
+                "an `impl` block holds functions and constants: `fn`, `logic fn`, or `const`",
+            );
         }
         if !self.declaration_start() {
             return self.fail(
@@ -714,13 +716,22 @@ impl Parser<'_> {
             return self.fail("expected the type an `impl` block is for");
         }
         let first = self.path()?;
-        let (target, model) = if first.text() == "Model" && self.at(K::Less) {
-            let opening = self.bump();
+        if first.text() == "Model" && self.at(K::For) {
+            self.bump();
             let source = self.ty()?;
-            self.close_angle(opening)?;
-            self.expect(K::For)?;
-            let target = self.ty()?;
-            let path = match &target.kind {
+            let opening = self.expect(K::LBrace)?;
+            if self.source.slice(self.current().span) != Some("type") {
+                return self.fail("a Model implementation starts with `type Logic = LogicalType;`");
+            }
+            self.bump();
+            let associated = self.name()?;
+            if associated.text != "Logic" {
+                return self.fail("the Model associated type is named `Logic`");
+            }
+            self.expect(K::Equal)?;
+            let target_type = self.ty()?;
+            self.expect(K::Semicolon)?;
+            let target = match &target_type.kind {
                 TypeKind::Named(name) => Path {
                     segments: vec![name.clone()],
                     span: name.span,
@@ -728,18 +739,63 @@ impl Parser<'_> {
                 TypeKind::Path { path, .. } => *path.clone(),
                 _ => return self.fail("a Model destination is a named logical type"),
             };
-            let span = first.span.through(target.span);
-            (
-                path,
-                Some(crate::ast::ModelImpl {
-                    source,
+            let saved = std::mem::replace(&mut self.in_impl, true);
+            let methods = self.impl_body();
+            self.in_impl = saved;
+            let mut methods = methods?;
+            let end = self.close(K::RBrace, opening)?;
+            // The special trait lowers to a checked logical definition with
+            // an explicit shared source argument. No new kernel rule.
+            for method in &mut methods {
+                if let DeclarationKind::Function {
+                    self_param,
+                    parameters,
+                    ..
+                } = &mut method.kind
+                    && let Some(receiver) = self_param.take()
+                {
+                    if receiver.kind != SelfKind::Ref {
+                        return self.fail("Model::model requires `&self`");
+                    }
+                    parameters.insert(
+                        0,
+                        Parameter {
+                            name: Name {
+                                text: "self".into(),
+                                span: receiver.span,
+                            },
+                            mutable: false,
+                            ty: Type {
+                                span: receiver.span,
+                                kind: TypeKind::Ref {
+                                    lifetime: None,
+                                    mutable: false,
+                                    inner: Box::new(source.clone()),
+                                },
+                            },
+                            span: receiver.span,
+                        },
+                    );
+                }
+            }
+            let span = first.span.through(end.span);
+            return Ok((
+                DeclarationKind::Impl {
                     target,
-                    span,
-                }),
-            )
-        } else {
-            (first, None)
-        };
+                    model: Some(ModelImpl {
+                        source,
+                        target: target_type,
+                        span,
+                    }),
+                    methods,
+                },
+                end.span,
+            ));
+        }
+        if first.text() == "Model" && self.at(K::Less) {
+            return self.fail("write `impl Model for Source { type Logic = Destination; logic fn model(&self) -> Self::Logic { ... } }`; each source has one canonical model");
+        }
+        let (target, model) = (first, None);
         self.no_generics()?;
         if self.at(K::For) {
             self.diagnostics.push(Diagnostic::error(
@@ -1420,7 +1476,7 @@ impl Parser<'_> {
     /// followed by a block, so `claim {` is not a struct literal.
     fn proof_target(&mut self, at: Token) -> ParseResult<Expr> {
         match self.current().kind {
-            K::Name => self.header(false, |parser| parser.expression_bp(OPERAND)),
+            _ if self.at_named() => self.header(false, |parser| parser.expression_bp(OPERAND)),
             K::LParen => self.formula_mode(Self::parenthesized),
             _ => {
                 self.diagnostics.push(Diagnostic::error(
@@ -2306,6 +2362,7 @@ impl Parser<'_> {
                 form,
                 name_span: name.span,
                 arguments,
+                source_hint: None,
             },
         })
     }

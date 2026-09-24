@@ -402,7 +402,7 @@ impl Printer<'_> {
             let _ = writeln!(
                 self.out,
                 "\n{visibility}const {}: {result} = {value};",
-                function.name
+                function.method_name()
             );
             return;
         }
@@ -832,6 +832,24 @@ impl Printer<'_> {
             }
             EExpr::Cast { expr, to } => {
                 format!("({} as {})", self.postfix_operand(expr), to.name())
+            }
+            EExpr::Operate {
+                op,
+                operands,
+                proven_safe: false,
+                ..
+            } if op.panic() == crate::kernel::Panic::Overflow => {
+                let method = format!("checked_{}", op.name());
+                let receiver = format!("({})", self.expr(&operands[0]));
+                let args = self.all(&operands[1..]).join(", ");
+                let message = match op {
+                    crate::kernel::Op::Add => "attempt to add with overflow",
+                    crate::kernel::Op::Sub => "attempt to subtract with overflow",
+                    crate::kernel::Op::Mul => "attempt to multiply with overflow",
+                    crate::kernel::Op::Neg => "attempt to negate with overflow",
+                    _ => unreachable!(),
+                };
+                format!("{receiver}.{method}({args}).expect(\"{message}\")")
             }
             EExpr::Operate { op, operands, .. } => match operands.as_slice() {
                 [operand] => format!("-{}", self.operand(operand, *op, false)),

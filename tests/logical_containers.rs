@@ -87,7 +87,7 @@ fn arrays_and_slices_of_int_allow_checked_logical_access() {
 #[doc = "spec: 1.3:1"]
 fn logical_recursive_payloads_keep_a_physical_array() {
     accepts(
-        "#[derive(Logical)] enum Nat{Zero,Succ(Nat)} fn run()->[Nat;1]{[Nat::Succ(Nat::Zero)]}",
+        "#[derive(Logical)] enum Peano{Zero,Succ(Peano)} fn run()->[Peano;1]{[Peano::Succ(Peano::Zero)]}",
         Value::Buffer(vec![Value::Ghost]),
         "assert_eq!(run().len(),1);",
     );

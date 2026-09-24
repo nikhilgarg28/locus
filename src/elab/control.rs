@@ -195,7 +195,18 @@ impl Env<'_> {
         // A matched place is read here; an arm whose pattern binds a part
         // that is not `Copy` moves it (`moves.rs`).
         self.mark_place_root(scrutinee);
-        let scrutinee_value = self.infer(scrutinee)?;
+        // An explicitly borrowed scrutinee selects the physical representation.
+        // This is needed to define a model without inspecting that same model.
+        let physical =
+            self.total && matches!(scrutinee.kind, ast::ExprKind::Ref { mutable: false, .. });
+        if physical {
+            self.suppress_models += 1;
+        }
+        let scrutinee_value = self.infer(scrutinee);
+        if physical {
+            self.suppress_models -= 1;
+        }
+        let scrutinee_value = scrutinee_value?;
         let place = self.place_taken(&scrutinee_value, scrutinee.span);
         if matches!(scrutinee_value.ty, Type::Proof(_)) {
             return self.match_evidence(scrutinee_value, scrutinee.span, arms, expected, span);

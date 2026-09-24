@@ -48,6 +48,20 @@ impl Env<'_> {
         span: Span,
     ) -> Elab<Value> {
         let value = Integer::from_parts(negative, literal.value.clone());
+        if literal.suffix.is_none() && expected.is_some_and(|ty| self.is_natural(ty)) {
+            if negative && !value.is_zero() {
+                return self.fail("L0205", "Nat literals cannot be negative", span);
+            }
+            let evidence = crate::kernel::Proof::Evaluate(crate::kernel::Term::int_le(
+                crate::kernel::Term::int(0),
+                crate::kernel::Term::Int(value.clone()),
+            ));
+            return self.make_natural(
+                Value::new(Expr::Int(value), Type::Int),
+                Some(evidence),
+                span,
+            );
+        }
         // A suffix names the type outright; without one the literal takes
         // the type expected of it, else `i32`. A suffixed literal where
         // another type is expected is a mismatch, reported by the caller.

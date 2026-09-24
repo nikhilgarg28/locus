@@ -1,0 +1,35 @@
+//~ spec: 1.9:5, 1.14:1, 1.92:13, 1.92:15
+const ALIAS: u32 = Limits::LIMIT;
+#[derive(Clone, Copy, Debug)]
+pub struct Limits { pub value: u32 }
+impl Limits {
+    pub const LIMIT: u32 = u32::MAX;
+    const BYTE: u8 = 255u8.wrapping_add(1);
+    const ANSWER: u32 = (2 + 3) * 8 + 2;
+    pub const ZERO: Self = Self { value: Self::BYTE as u32 };
+    const CLAIM: Prop = prop!(Self::LIMIT + 1 == 4294967296);
+    logic fn claim() -> @Self::CLAIM {
+        fold!(Self::CLAIM, prove!(Self::LIMIT + 1 == 4294967296))
+    }
+}
+#[derive(Clone, Copy, Debug)]
+enum Slot { Empty, Full(u32) }
+impl Slot { const DEFAULT: Self = Self::Full(ALIAS); }
+fn limit() -> (out: u32, @(out == Limits::LIMIT)) { (ALIAS, _) }
+fn zero() -> u32 { Limits::ZERO.value }
+fn answer() -> u32 { Limits::ANSWER }
+fn generic_max<T>() -> T { T::MAX }
+fn max() -> u32 { generic_max::<u32>() }
+fn slot() -> u32 {
+    match Slot::DEFAULT { Slot::Empty => 0, Slot::Full(n) => n }
+}
+fn generic<T>() -> u32 { T::LIMIT }
+fn instantiated() -> u32 { generic::<Limits>() }
+//~ run: limit() => (4294967295, Erased)
+//~ run: zero() => 0
+//~ run: answer() => 42
+//~ run: max() => 4294967295
+//~ run: slot() => 4294967295
+//~ run: instantiated() => 4294967295
+//~ rust: pub const LIMIT: u32 =
+//~ rust: pub const ZERO: Limits =

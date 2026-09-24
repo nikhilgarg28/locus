@@ -282,6 +282,19 @@ impl Env<'_> {
         name: &ast::Name,
     ) -> Elab<Value> {
         let target = self.infer(value)?;
+        if self.total
+            && self.suppress_models == 0
+            && !self
+                .session
+                .program()
+                .definitions()
+                .is_erased_type(&target.ty)
+        {
+            let ty = self.show_type(&target.ty);
+            self.diagnostics.push(crate::diagnostic::Diagnostic::error("L0282", format!("`{ty}` has no canonical model for logical field access; use model! on the physical field"), expr.span)
+                .suggest(crate::diagnostic::Suggestion { message: "observe this physical field explicitly".into(), span: expr.span, replacement: format!("model!({})", self.text(expr.span)), applicability: crate::diagnostic::Applicability::MaybeIncorrect }));
+            return Err(());
+        }
         let Type::Struct(id) = &target.ty else {
             let shown = self.show_type(&target.ty);
             self.diagnostics.push(

@@ -65,7 +65,7 @@ Runtime promises do not make a function callable in logic. Only `logic fn` does 
 ## Constants
 
 <!-- spec: 1.9:5 syntax -->
-A runtime `const` accepts literals, references to constants, casts, comparisons, wrapping operations, and products or variants built from them. It emits a Rust constant. A logical constant, including one of type `Prop`, is erased and may use logical functions. Constant definitions have logical defining equations.
+A runtime `const` accepts literals, references to constants, casts, comparisons, integer arithmetic, and products or variants built from them. Machine arithmetic is checked during compilation; overflow and division by zero are errors unless explicit wrapping operations are used. It emits a Rust constant. A logical constant, including one of type `Prop`, is erased and may use logical functions. Constant definitions have logical defining equations.
 
 <!-- spec: 1.90:24 example -->
 ~~~locus check
@@ -74,10 +74,30 @@ const retries_fit: Prop = prop!(RETRIES < u8::MAX);
 fn allowed() -> @retries_fit { fold!(retries_fit, prove!(RETRIES < u8::MAX)) }
 ~~~
 
+<!-- spec: 1.92:13 legality-rule -->
+Observe a physical constant's checked value through its canonical model. Its initializer keeps physical semantics; it is not reinterpreted as logical arithmetic. Machine `MIN`/`MAX` constants follow this rule. `const fn` declarations are not yet supported. A call in logic still requires `logic fn`; runtime effect promises do not suffice.
+
+<!-- spec: 1.92:15 legality-rule -->
+Declare an associated constant inside `impl T` as `const NAME: Type = value;` and read it as `T::NAME`, without call parentheses. Inside the implementation, `Self` names `T`. Associated constants follow the same initializer and visibility rules as free constants. Forward references are allowed; dependency cycles and name collisions with other constants, functions or variants are rejected.
+
+<!-- spec: 1.92:14 example -->
+~~~locus run
+struct Limits {}
+impl Limits {
+    const LIMIT: u32 = u32::MAX;
+    const ROLLED: u8 = 255u8.wrapping_add(1);
+}
+logic fn constants() -> @(Limits::ROLLED == 0 && Limits::LIMIT + 1 == 4294967296) {
+    And::Intro(prove!(Limits::ROLLED == 0), prove!(Limits::LIMIT + 1 == 4294967296))
+}
+fn value() -> u8 { Limits::ROLLED }
+//~ run: value() => 0
+~~~
+
 ## Methods
 
 <!-- spec: 1.14:1 syntax -->
-`impl T` contains associated functions and methods. Call an associated function as `T::name(args)` and a method as `value.name(args)`. `Self` denotes `T` in types, literals, and variant paths. A logical method remains a logical function, selectable by path in `fold!` and `unfold!`. General trait implementations are unsupported except the dedicated Model interface.
+`impl T` contains associated constants, functions and methods. Call an associated function as `T::name(args)` and a method as `value.name(args)`. `Self` denotes `T` in types, literals, and variant paths. A logical method remains a logical function, selectable by path in `fold!` and `unfold!`. General trait implementations are unsupported except the dedicated Model interface.
 
 <!-- spec: 1.27:4 syntax -->
 A receiver may be `self`, `mut self`, `&self`, or `&mut self`. By-value receivers move unless `Copy`; shared receivers lend for reading; mutable receivers require mutable storage. `*self` reads a reference receiver, or replaces it whole through `&mut self`. The equivalent path call supplies the receiver explicitly.

@@ -79,9 +79,9 @@ fn none() -> Maybe { Maybe::None }
 fn finite_recursive_logical_data_needs_no_runtime_indirection() {
     let checked = check(
         r#"
-#[derive(Logical)] enum Nat { Zero, Next(Nat) }
+#[derive(Logical)] enum Peano { Zero, Next(Peano) }
 #[derive(Logical)] enum Seq { Empty, Push { head: Int, tail: Seq } }
-logic fn two() -> Nat { Nat::Next(Nat::Next(Nat::Zero)) }
+logic fn two() -> Peano { Peano::Next(Peano::Next(Peano::Zero)) }
 logic fn single() -> Seq { Seq::Push { head: 7, tail: Seq::Empty } }
 logic fn head(xs: Seq) -> Int { match xs { Seq::Empty => 0, Seq::Push { head, tail } => head } }
 "#,
@@ -139,7 +139,7 @@ logic fn count_two() -> Int { length(append(singleton(), singleton())) }
         .is_ok()
     );
     let bad = check(
-        "#[derive(Logical)] enum Nat { Zero, Next(Nat) } logic fn bad(n: Nat) -> Int { bad(n) }",
+        "#[derive(Logical)] enum Peano { Zero, Next(Peano) } logic fn bad(n: Peano) -> Int { bad(n) }",
     );
     assert!(!bad.is_success());
     assert!(
@@ -235,9 +235,9 @@ logic fn ordered(a: Int, b: Int, path: @Reachable(a, b)) -> @(a <= b) {
 fn logical_case_refinement_does_not_prove_false_branch_goals_or_fake_descent() {
     let checked = check(
         r#"
-#[derive(Logical)] enum Nat { Zero, Next(Nat) }
-logic fn false_claim(n: Nat) -> @(false) {
-    match n { Nat::Zero => prove!(false), Nat::Next(previous) => false_claim(previous) }
+#[derive(Logical)] enum Peano { Zero, Next(Peano) }
+logic fn false_claim(n: Peano) -> @(false) {
+    match n { Peano::Zero => prove!(false), Peano::Next(previous) => false_claim(previous) }
 }
 "#,
     );
@@ -260,15 +260,15 @@ logic fn bad(a: Int, b: Int, h: @Reachable(a,b)) -> @(false) { bad(a,b,h) }
 fn checked_int_measures_construct_library_naturals_from_ints() {
     let checked = check(
         r#"
-#[derive(Logical)] enum Nat { Zero, Next(Nat) }
-logic fn from_int(n: Int) -> Nat {
-    if n <= 0 { Nat::Zero } else {
+#[derive(Logical)] enum Peano { Zero, Next(Peano) }
+logic fn from_int(n: Int) -> Peano {
+    if n <= 0 { Peano::Zero } else {
         let next = n - 1;
         let smaller: @(0 <= next && next < n) = And::Intro(prove!(0 <= next), prove!(next < n));
-        Nat::Next(recurse!(smaller, from_int(next)))
+        Peano::Next(recurse!(smaller, from_int(next)))
     }
 }
-logic fn to_int(n: Nat) -> Int { match n { Nat::Zero => 0, Nat::Next(previous) => 1 + to_int(previous) } }
+logic fn to_int(n: Peano) -> Int { match n { Peano::Zero => 0, Peano::Next(previous) => 1 + to_int(previous) } }
 logic fn seven() -> Int { to_int(from_int(7)) }
 "#,
     );
@@ -343,8 +343,8 @@ fn userland_nat_correspondence_is_checked() {
     );
     assert!(infer_term(&mut ctx, &bad, Mode::Logical).is_err());
     let incorrect = source.replace(
-        "pub logic fn nat_from_to_int(n: Nat) -> @(nat_from_int(nat_to_int(n)) == n)",
-        "pub logic fn nat_from_to_int(n: Nat) -> @(nat_from_int(nat_to_int(n)) == Nat::Succ(n))",
+        "pub logic fn nat_from_to_int(n: Peano) -> @(nat_from_int(nat_to_int(n)) == n)",
+        "pub logic fn nat_from_to_int(n: Peano) -> @(nat_from_int(nat_to_int(n)) == Peano::Succ(n))",
     );
     assert!(!check(&incorrect).is_success());
 }

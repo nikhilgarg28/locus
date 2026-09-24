@@ -532,24 +532,12 @@ impl Program {
 
     /// A primitive operation that may panic, `let var = op[ty](arguments)`.
     ///
-    /// The rule. The row must exist and its arguments must be executable
-    /// values of `ty`. `var` is defined by `var ==[ty] op[ty](arguments)`,
-    /// the meaning the kernel evaluates and `op_model` states, which is the
-    /// wrapped result and holds in every build. When `fits` is given, each
-    /// proof is checked against the corresponding premise of `Row::fits`,
-    /// and for a row that can overflow the exact result is then also
-    /// known: the hypothesis `view[ty](var) ==[Int] e` is assumed under the
-    /// first learned identity, justified by a proof the checker builds from
-    /// `op_exact` and the two premises and checks like any other, so that
-    /// nothing is assumed that the kernel has not derived. Under `no_panic`,
-    /// `fits` is required at every row whose panic condition is not
-    /// `Never`. For `/` and `%`, which panic in every build, the premises
-    /// themselves are assumed after the statement, `fits` or no `fits`,
-    /// under the learned identities: execution continues only if the
-    /// division did not panic, so the code after it knows the divisor was
-    /// not zero, as it knows `c` after `assert!(c)`. For `+`, `-`, `*`, and
-    /// unary minus without `fits`, nothing is learned beyond the equation,
-    /// because an overflow that only some builds check teaches nothing.
+    /// Operands and any `fits` evidence are checked before binding the result.
+    /// `no_panic` requires that evidence. Normal continuation knows the exact
+    /// result of checked arithmetic, even when no static safety proof exists;
+    /// the runtime check supplies this operational fact. The kernel's total
+    /// wrapped equation is also valid whenever execution returns. Division
+    /// and remainder additionally establish the failed-panic exclusions.
     fn check_operate(
         &self,
         ctx: &mut Context,
@@ -578,7 +566,8 @@ impl Program {
             expect(ctx, argument, &Type::machine(ty), &self.definitions)?;
         }
         let premises = row.fits(&prelude, arguments);
-        let exact_learned = row.panic() == Panic::Overflow && fits.is_some();
+        let exact_learned =
+            row.panic() == Panic::Overflow && (fits.is_some() || !learned.is_empty());
         let expected_learned = match row.panic() {
             Panic::Never => 0,
             Panic::Overflow => usize::from(exact_learned),
@@ -590,8 +579,6 @@ impl Program {
         if fits.is_none() && declared.promises.no_panic && row.panic() != Panic::Never {
             return Err(ExecError::OperationUnderNoPanic { op, ty });
         }
-        // The equation: the applied row, whose meaning is the wrapped result.
-        ctx.define_with(*var, *equation, &row.applied(arguments))?;
         if let Some(proofs) = fits {
             if proofs.len() != premises.len() {
                 return Err(bad());
@@ -599,34 +586,52 @@ impl Program {
             for (proof, premise) in proofs.iter().zip(&premises) {
                 check_proof(ctx, proof, premise)?;
             }
-            if exact_learned {
-                // op_exact: min <= e => (e <= max => view(op(xs)) == e); the
-                // two premises discharge it, and the equation moves the
-                // view from the applied row to `var`.
-                let [lower, upper] = proofs.as_slice() else {
-                    return Err(bad());
-                };
-                let of_row = Proof::implies_elim(
-                    Proof::implies_elim(
-                        Proof::Axiom(Axiom::OpExact(op, ty, arguments.clone())),
-                        lower.clone(),
-                    ),
-                    upper.clone(),
-                );
-                let exact = row.exact_term(arguments);
-                let claim = Term::eq(Type::Int, Term::view(ty, Term::var(*var)), exact.clone());
-                let proof = Proof::Transport {
-                    eq: Box::new(symm_at(
-                        &Type::machine(ty),
-                        &Term::var(*var),
-                        Proof::hyp(*equation),
-                    )),
-                    template: Term::eq(Type::Int, Term::view(ty, Term::Bound(0)), exact),
-                    proof: Box::new(of_row),
-                };
-                check_proof(ctx, &proof, &claim)?;
-                ctx.assume_with(learned[0], claim)?;
-            }
+        }
+        // Check all input certificates before introducing the result or any
+        // successful-continuation facts: they cannot justify their own check.
+        ctx.define_with(*var, *equation, &row.applied(arguments))?;
+        if let Some(proofs) = fits
+            && exact_learned
+        {
+            // op_exact: min <= e => (e <= max => view(op(xs)) == e); the
+            // two premises discharge it, and the equation moves the
+            // view from the applied row to `var`.
+            let [lower, upper] = proofs.as_slice() else {
+                return Err(bad());
+            };
+            let of_row = Proof::implies_elim(
+                Proof::implies_elim(
+                    Proof::Axiom(Axiom::OpExact(op, ty, arguments.clone())),
+                    lower.clone(),
+                ),
+                upper.clone(),
+            );
+            let exact = row.exact_term(arguments);
+            let claim = Term::eq(Type::Int, Term::view(ty, Term::var(*var)), exact.clone());
+            let proof = Proof::Transport {
+                eq: Box::new(symm_at(
+                    &Type::machine(ty),
+                    &Term::var(*var),
+                    Proof::hyp(*equation),
+                )),
+                template: Term::eq(Type::Int, Term::view(ty, Term::Bound(0)), exact),
+                proof: Box::new(of_row),
+            };
+            check_proof(ctx, &proof, &claim)?;
+            ctx.assume_with(learned[0], claim)?;
+        }
+        if exact_learned && fits.is_none() {
+            // Operational rule, like the continuation of assert!: execution
+            // reaches here only if the checked exact result fits its type.
+            // This is NOT a kernel axiom available to pure logical terms.
+            ctx.assume_with(
+                learned[0],
+                Term::eq(
+                    Type::Int,
+                    Term::view(ty, Term::var(*var)),
+                    row.exact_term(arguments),
+                ),
+            )?;
         }
         if row.panic() == Panic::Division {
             for (hyp, premise) in learned.iter().zip(premises) {

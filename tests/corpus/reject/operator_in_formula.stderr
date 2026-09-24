@@ -4,7 +4,7 @@ error[L0230]: cannot show `a * b <= 255`
 5 |     prove!(a * b <= 255); //~ error: L0230 cannot show `a * b <= 255`
   |     ^^^^^^^^^^^^^^^^^^^^
   |
-  = note: nothing known here speaks of the values in this claim
+  = note: known here: `0 <= a * b`, `0 <= b`, `0 <= a`
 error[L0220]: expected `Prop`, found `Int`
   --> tests/corpus/reject/operator_in_formula.lc:11:11
    |

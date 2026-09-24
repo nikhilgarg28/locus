@@ -1,2 +1,2 @@
-// `Nat` is not in the core yet.
-fn first(n: Nat) -> u8 { 1 } //~ error: L0201 `Nat` is not part of the core language
+// Arbitrary numeric types are not implicitly declared.
+fn first(n: Rational) -> u8 { 1 } //~ error: L0200 unknown type `Rational`

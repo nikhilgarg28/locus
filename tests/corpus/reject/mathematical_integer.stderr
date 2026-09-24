@@ -1,7 +1,5 @@
-error[L0201]: `Nat` is not part of the core language
+error[L0200]: unknown type `Rational`
  --> tests/corpus/reject/mathematical_integer.lc:2:13
   |
-2 | fn first(n: Nat) -> u8 { 1 } //~ error: L0201 `Nat` is not part of the core language
-  |             ^^^
-  |
-  = note: the integers of the logic are `Int`, and the machine integers are `u8` to `i64`
+2 | fn first(n: Rational) -> u8 { 1 } //~ error: L0200 unknown type `Rational`
+  |             ^^^^^^^^

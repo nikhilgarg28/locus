@@ -81,7 +81,7 @@ fn bounded_id(n: u8, small: @(n <= 10)) -> u8 {
 
 fn with_evidence(n: u8, small: @(n <= 10)) -> (out: u8, @(n <= 10)) {
     let t = Token { id: n };
-    prove!(t.id == n);
+    prove!(model!(t.id) == n);
     let first = bounded_id(n, small);
     let out = consume(t);
     let second = bounded_id(n, small);

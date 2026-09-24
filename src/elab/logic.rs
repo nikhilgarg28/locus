@@ -112,6 +112,8 @@ impl Env<'_> {
         right: &ast::Expr,
     ) -> Elab<Term> {
         let (left_value, right_value) = self.operands(left, right, true)?;
+        let left_value = self.natural_integer(left_value, left.span)?;
+        let right_value = self.natural_integer(right_value, right.span)?;
         let ty = left_value.ty.clone();
         let l = self.term(&left_value, left.span)?;
         let r = self.term(&right_value, right.span)?;
@@ -199,6 +201,14 @@ impl Env<'_> {
         };
         if same_type(&left_value.ty, &right_value.ty) {
             return Ok((left_value, right_value));
+        }
+        if (self.is_natural(&left_value.ty) && right_value.ty == Type::Int)
+            || (left_value.ty == Type::Int && self.is_natural(&right_value.ty))
+        {
+            return Ok((
+                self.natural_integer(left_value, left.span)?,
+                self.natural_integer(right_value, right.span)?,
+            ));
         }
         self.two_types(
             what,

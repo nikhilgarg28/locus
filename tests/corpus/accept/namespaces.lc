@@ -24,12 +24,12 @@ enum Mode {
 
 const Mode: Prop = prop!(true);
 
-fn ordered(x: u8, y: u8, h: @(x <= y)) -> (out: Point, @Point(out.x, out.y)) {
+fn ordered(x: u8, y: u8, h: @(x <= y)) -> (out: Point, @Point(model!(out.x), model!(out.y))) {
     let point = Point { x, y };
     (point, fold!(Point, h))
 }
 
-fn lower(p: Point, h: @Point(p.x, p.y)) -> @(p.x <= p.y) {
+fn lower(p: Point, h: @Point(model!(p.x), model!(p.y))) -> @(model!(p.x) <= model!(p.y)) {
     unfold!(Point, h)
 }
 

@@ -44,7 +44,9 @@ Sources: [IR checker tests](../tests/exec_check.rs), [lowering tests](../tests/t
 
 ## 4. Compare three execution paths
 
-The checking-IR interpreter runs the checker-side meaning. The erased interpreter runs the runtime tree. The Rust compiler builds the emitted program with overflow checks enabled and disabled. Tests compare values, panic messages, and mutations completed before a panic across these executions.
+The checking-IR interpreter runs the checker-side meaning. The erased interpreter runs the runtime tree. The Rust compiler builds the emitted program with overflow checks enabled and disabled. Tests compare values, panic messages, and mutations completed before a panic across these executions. Checked arithmetic must agree under both Rust settings. A safety proof is checked before adding the operation's result facts, so its postcondition cannot remove its own check. Adversarial IR tests attempt exactly that circular justification.
+
+Canonical models are checked logical definitions, and Nat is an Int paired with kernel-checked nonnegativity evidence. Their constructors and arithmetic proof builders add no axioms. Tests cover duplicate model rejection, physical read paths, stale snapshots, borrowed representations, and failed natural-number conversions. Correct erasure and the correspondence between physical operations and these observations remain compiler obligations, not a completed mechanized proof.
 
 Generated programs exercise arithmetic, branching, loops, mutable state, and calls through `&mut`. Each run records its seed, and `LOCUS_SEED` reproduces it; shrinking searches for a smaller counterexample. The fast gate uses a smaller sample, while the extended gate generates 10,000 programs. Boundary tests also compare machine operations with Rust across integer types.
 

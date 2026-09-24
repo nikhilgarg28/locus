@@ -234,6 +234,8 @@ pub enum EExpr {
         op: Op,
         ty: MachineInt,
         operands: Vec<EExpr>,
+        /// Set only after the checking IR accepts safety evidence.
+        proven_safe: bool,
     },
     Call {
         callee: FnRef,

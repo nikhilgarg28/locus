@@ -3,14 +3,12 @@
 //! trusted checker demands at an operator, under `no_panic` and without
 //! it, and what the code after it may rely on.
 //!
-//! The rule under test: `let v = op[T](xs)` defines `v` by the equation
-//! `v == op[T](xs)`, the wrapped meaning; with evidence `fits` for the
-//! premises of `Row::fits`, checked one by one, the exact result `view(v)
-//! == e` is also known for `+`, `-`, `*`, and unary minus, under the
-//! learned identity; under `no_panic` the evidence is required at every
-//! row that can panic; and after `/` or `%` the premises themselves are
-//! known, in every function, because the division panics in every build
-//! where they fail.
+//! The rule under test: safety evidence is checked in the input context.
+//! Successful arithmetic may establish its exact result with or without
+//! such evidence. Evidence allows check elimination and is mandatory under
+//! `no_panic`; otherwise execution checks the operation and may panic.
+//! Division/remainder establish their nonzero and signed-overflow exclusions
+//! on normal continuation. Forged or circular evidence must be rejected.
 
 use std::rc::Rc;
 
@@ -215,14 +213,15 @@ fn an_operator_under_no_panic_needs_its_evidence() {
     let id = accepted
         .declare(u8_fn(Promises::default(), n_id, Type::U8, body(Vec::new())))
         .unwrap();
-    // Nothing is learned without evidence: a learned identity is refused.
+    // One exact-result fact is available after the checked operation;
+    // two invented facts remain malformed.
     let mut too_much = program(&world);
     assert_eq!(
         too_much.declare(u8_fn(
             Promises::default(),
             n_id,
             Type::U8,
-            body(vec![HypId::fresh()])
+            body(vec![HypId::fresh(), HypId::fresh()])
         )),
         Err(ExecError::BadOperation {
             op: Op::Add,
@@ -240,7 +239,7 @@ fn an_operator_under_no_panic_needs_its_evidence() {
     );
     assert_eq!(
         run(&accepted, id, vec![Value::u8(255)], Overflow::Wrap),
-        Outcome::Value(Value::u8(0))
+        Outcome::Panic("attempt to add with overflow".into())
     );
 }
 
@@ -646,9 +645,8 @@ fn the_wrapped_meaning_is_known_without_evidence() {
     };
     let mut accepted = program(&world);
     let id = accepted.declare(function).unwrap();
-    // The claim holds in both builds: the value the wrapping build gives
-    // is the wrapped one, and the checked build panics instead of giving
-    // another.
+    // Both builds panic on overflow. Whenever the operation returns, its
+    // exact value also agrees with the kernel's total wrapped operation.
     assert_eq!(
         run(
             &accepted,
@@ -656,7 +654,7 @@ fn the_wrapped_meaning_is_known_without_evidence() {
             vec![Value::u8(200), Value::u8(100)],
             Overflow::Wrap
         ),
-        Outcome::Value(Value::Tuple(vec![Value::u8(44), Value::Proved]))
+        Outcome::Panic("attempt to add with overflow".into())
     );
     assert_eq!(
         run(
@@ -720,4 +718,82 @@ fn a_missing_row_or_a_wrong_arity_is_refused() {
         )),
         Err(ExecError::Kernel(KernelError::TypeMismatch { .. }))
     ));
+}
+
+#[test]
+#[doc = "spec: 1.92:8, 3.2:7"]
+fn an_operation_cannot_use_its_own_postcondition_to_eliminate_its_check() {
+    let world = world();
+    let (n_id, n) = var();
+    let (result_id, result) = var();
+    let future = HypId::fresh();
+    let fits = successor_fits(&n, future);
+    let body = Block {
+        stmts: vec![operate(
+            result_id,
+            HypId::fresh(),
+            Op::Add,
+            MachineInt::U8,
+            vec![n, u8_lit(1)],
+            Some(fits),
+            vec![future],
+        )],
+        tail: Tail::Value(result),
+    };
+    assert!(
+        program(&world)
+            .declare(u8_fn(Promises::default(), n_id, Type::U8, body))
+            .is_err()
+    );
+}
+
+#[test]
+#[doc = "spec: 1.15:2, 1.27:3, 3.2:7"]
+fn a_checked_operation_provides_exact_evidence_on_normal_return_without_a_safety_proof() {
+    let world = world();
+    let (n_id, n) = var();
+    let (m_id, m) = var();
+    let exact = HypId::fresh();
+    let result = exact_successor(&n);
+    let body = Block {
+        stmts: vec![operate(
+            m_id,
+            HypId::fresh(),
+            Op::Add,
+            MachineInt::U8,
+            vec![n.clone(), u8_lit(1)],
+            None,
+            vec![exact],
+        )],
+        tail: Tail::Value(Term::tuple(
+            &result,
+            vec![m, Term::proof(Proof::hyp(exact))],
+        )),
+    };
+    let signature = Type::function(1, |params| {
+        if params.is_empty() {
+            Type::U8
+        } else {
+            exact_successor(&params[0])
+        }
+    });
+    let mut accepted = program(&world);
+    let id = accepted
+        .declare(ExecFn {
+            promises: Promises::default(),
+            signature,
+            params: vec![n_id],
+            body,
+        })
+        .unwrap();
+    for mode in [Overflow::Checks, Overflow::Wrap] {
+        assert!(matches!(
+            run(&accepted, id, vec![Value::u8(41)], mode),
+            Outcome::Value(_)
+        ));
+        assert!(matches!(
+            run(&accepted, id, vec![Value::u8(255)], mode),
+            Outcome::Panic(_)
+        ));
+    }
 }

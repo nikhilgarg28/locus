@@ -5,7 +5,7 @@ struct Lock { failures: u8 }
 
 #[terminates] //~ error: L0233 `#[terminates]` is a promise about what a function does when it runs, and `Open` is a proposition
 prop Open(lock: Lock) {
-    Yes => { prop!(lock.failures == 0) }
+    Yes => { prop!(model!(lock.failures) == 0) }
 }
 
 #[no_io] //~ error: L0233 `#[no_io]` is a promise about what a function does when it runs, and `LIMIT` is a constant

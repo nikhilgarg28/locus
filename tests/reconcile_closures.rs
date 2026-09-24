@@ -49,8 +49,9 @@ fn immutable_logical_captures_and_nested_closures_check() {
 #[doc = "spec: 1.25:3"]
 fn runtime_capture_requires_a_model_and_logical_parameters_are_required() {
     accepted("fn make(n: u8) -> logic Fn(x: Int) -> Int { logic { |x: Int| x + (n as Int) } }");
+    accepted("fn make(n: u8) -> logic Fn(x: Int) -> Int { logic { |x: Int| x + n } }");
     for source in [
-        "fn make(n: u8) -> logic Fn(x: Int) -> Int { logic { |x: Int| x + n } }",
+        "struct Unmodeled { n: u8 } fn make(n: Unmodeled) -> logic Fn(x: Int) -> Int { logic { |x: Int| x + n.n } }",
         "logic fn bad() -> logic Fn(x: Int) -> Int { |x: u8| x as Int }",
     ] {
         let result = check(source);

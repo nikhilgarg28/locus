@@ -24,19 +24,19 @@ logic fn within_limit(failures: Int) -> Prop {
 #[terminates] #[no_panic] #[no_io]
 pub(crate) fn step(
     lock: Lock,
-    bounded: @within_limit(lock.failures),
+    bounded: @within_limit(model!(lock.failures)),
     event: Event,
-) -> (next: Lock, @within_limit(next.failures)) {
+) -> (next: Lock, @within_limit(model!(next.failures))) {
     match event {
         Event::Right => {
             let next = Lock { failures: 0, open: true };
-            (next, fold!(within_limit, prove!(next.failures <= 3)))             // evaluation: 0 <= 3
+            (next, fold!(within_limit, prove!(model!(next.failures) <= 3)))             // evaluation: 0 <= 3
         }
         Event::Wrong => {
             if lock.failures < 3 {
-                let fits = prove!(lock.failures as Int + 1 <= u32::MAX as Int); // arithmetic, from lock.failures < 3
+                let fits = prove!(model!(lock.failures) as Int + 1 <= u32::MAX as Int); // arithmetic, from lock.failures < 3
                 let next = Lock { failures: lock.failures + 1, open: false };   // the obligations of +: fits is exact, the lower bound arithmetic
-                (next, fold!(within_limit, prove!(next.failures <= 3)))         // arithmetic
+                (next, fold!(within_limit, prove!(model!(next.failures) <= 3)))         // arithmetic
             } else {
                 (Lock { failures: lock.failures, open: false }, bounded)        // computed: the field is lock.failures
             }

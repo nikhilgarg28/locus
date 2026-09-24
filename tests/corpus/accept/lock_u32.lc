@@ -25,14 +25,14 @@ logic fn within_limit(failures: Int) -> Prop {
 // takes the step from `lock.failures < 3` to a bound on the successor.
 fn step(
     lock: Lock,
-    bounded: @within_limit(lock.failures),
+    bounded: @within_limit(model!(lock.failures)),
     event: Event,
-) -> (next: Lock, @within_limit(next.failures)) {
+) -> (next: Lock, @within_limit(model!(next.failures))) {
     match event {
         Event::Right => (Lock { failures: 0, open: true }, fold!(within_limit, prove!(0u32 <= 3))),
         Event::Wrong => {
             if lock.failures < 3 {
-                let fits = u32_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                let fits = u32_succ_le_of_lt(lock.failures, 3, prove!(model!(lock.failures) < 3));
                 (Lock { failures: lock.failures.wrapping_add(1), open: false }, fold!(within_limit, fits))
             } else {
                 (Lock { failures: lock.failures, open: false }, bounded)
@@ -52,9 +52,9 @@ fn event_at(attempt: u32, correct: u32) -> Event {
 // `ok = still` establishes it again, with the evidence `step` returned
 // about the lock it handed back. The `for` carries both as its state, and
 // the checker does the induction: nothing names an invariant.
-fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(last.failures)) {
+fn run(attempts: u32, correct: u32) -> (last: Lock, @within_limit(model!(last.failures))) {
     let mut lock = Lock { failures: 0, open: false };
-    let mut ok: @within_limit(lock.failures) = fold!(within_limit, prove!(0u32 <= 3));
+    let mut ok: @within_limit(model!(lock.failures)) = fold!(within_limit, prove!(0u32 <= 3));
     for attempt in 0..attempts {
         let (next, still) = step(lock, ok, event_at(attempt, correct));
         lock = next;

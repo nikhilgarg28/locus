@@ -34,8 +34,8 @@ fn run(text: &str, expected: &str) {
 }
 const POINT: &str = "struct Point { x: u8 }
 #[derive(Logical)] struct Position { x: Int }
-impl Model<Point> for Position {
-    logic fn model(source: &Point) -> Self { Self { x: source.x as Int } }
+impl Model for Point { type Logic = Position;
+    logic fn model(source: &Point) -> Position { Position { x: model!(source.x) as Int } }
 }";
 #[test]
 #[doc = "spec: 1.25:5, 1.3:4"]
@@ -49,10 +49,16 @@ fn observed_struct_is_not_moved_and_snapshot_keeps_its_version() {
 }
 #[test]
 #[doc = "spec: 1.25:5"]
-fn multiple_destinations_and_composed_models_are_resolved_by_type() {
+fn a_second_destination_is_rejected_and_models_can_compose() {
+    let result = check(&format!(
+        "{POINT}
+        impl Model for Point {{ type Logic = Int; logic fn model(source: &Point) -> Int {{ 0 }} }}"
+    ));
+    assert!(result.diagnostics.iter().any(|d| d.code == "L0282"));
     accepted(&format!("{POINT}
-        impl Model<Point> for Int {{ logic fn model(source: &Point) -> Self {{ let position = source as Position; position.x }} }}
-        fn run(point: Point) -> Int {{ point as Int }}"));
+        struct Outer {{ point: Point }}
+        impl Model for Outer {{ type Logic = Position; logic fn model(source: &Outer) -> Position {{ model!(source.point) }} }}
+        fn run(value: Outer) -> Position {{ model!(value) }}"));
 }
 #[test]
 fn casts_use_an_active_mutable_referent_and_do_not_retain_the_loan() {
@@ -66,7 +72,7 @@ fn eager_runtime_source_computation_runs_once() {
         &format!(
             "{POINT}
         fn make(n: &mut u8) -> Point {{ n = n.wrapping_add(1); Point {{ x: n }} }}
-        fn run() -> u8 {{ let mut n: u8 = 0; let snapshot = make(&mut n) as Position; n }}"
+        fn run() -> u8 {{ let mut n: u8 = 0; let produced = make(&mut n); let snapshot = model!(produced); n }}"
         ),
         "1",
     );
@@ -74,7 +80,7 @@ fn eager_runtime_source_computation_runs_once() {
 #[test]
 fn model_cannot_call_an_ordinary_function() {
     let result = check(
-        "struct Point { x: u8 } fn getter(p: &Point) -> u8 { p.x } impl Model<Point> for Int { logic fn model(source: &Point) -> Self { getter(&source) as Int } }",
+        "struct Point { x: u8 } fn getter(p: &Point) -> u8 { p.x } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { getter(&source) as Int } }",
     );
     assert!(
         result.diagnostics.iter().any(|d| d.code == "L0209"),
@@ -86,10 +92,10 @@ fn model_cannot_call_an_ordinary_function() {
 #[doc = "spec: 1.25:5"]
 fn duplicate_pairs_missing_models_and_wrong_signatures_are_rejected() {
     for text in [
-        "struct Point { x: u8 } impl Model<Point> for Int { logic fn model(source: &Point) -> Self { source.x as Int } } impl Model<Point> for Int { logic fn model(source: &Point) -> Self { 0 } }",
+        "struct Point { x: u8 } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { model!(source.x) as Int } } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { 0 } }",
         "#[derive(Logical)] struct Data { n: Int } fn f(x: u8) -> Data { x as Data }",
-        "struct Point { x: u8 } impl Model<Point> for Int { fn model(source: &Point) -> Int { 0 } }",
-        "struct Point { x: u8 } impl Model<Point> for Int { logic fn model(source: Point) -> Self { 0 } }",
+        "struct Point { x: u8 } impl Model for Point { type Logic = Int; fn model(source: &Point) -> Int { 0 } }",
+        "struct Point { x: u8 } impl Model for Point { type Logic = Int; logic fn model(source: Point) -> Int { 0 } }",
     ] {
         let result = check(text);
         assert!(
@@ -102,20 +108,21 @@ fn duplicate_pairs_missing_models_and_wrong_signatures_are_rejected() {
 #[test]
 fn model_declaration_order_does_not_change_cast_resolution() {
     accepted(
-        "struct Point { x: u8 } fn use_model(point: Point) -> Int { point as Int } impl Model<Point> for Int { logic fn model(source: &Point) -> Self { source.x as Int } }",
+        "struct Point { x: u8 } fn use_model(point: Point) -> Int { point as Int } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { model!(source.x) as Int } }",
     );
 }
 #[test]
-fn generic_model_destination_and_primitive_source_preserve_their_types() {
-    accepted("#[derive(Logical)] struct View<T: Logical> { value: T }
-        impl Model<u8> for View<Int> { logic fn model(source: &u8) -> Self { Self { value: source as Int } } }
-        fn observe(n: u8) -> View<Int> { n as View<Int> }");
+fn generic_model_destinations_preserve_their_types() {
+    accepted("struct Byte { value: u8 } #[derive(Logical)] struct View<T: Logical> { value: T }
+        impl Model for Byte { type Logic = View<Int>; logic fn model(source: &Byte) -> View<Int> { View::<Int> { value: model!(source.value) as Int } } }
+        fn observe(n: Byte) -> View<Int> { model!(n) }");
 }
 
 #[test]
 fn fixed_array_models_keep_source_shape_and_do_not_apply_to_other_lengths() {
-    let source = "impl Model<[u8; 1]> for Int { logic fn model(source: &[u8; 1]) -> Self { 1 } }
-        impl Model<[u8; 2]> for Int { logic fn model(source: &[u8; 2]) -> Self { 2 } }
+    let source =
+        "impl Model for [u8; 1] { type Logic = Int; logic fn model(source: &[u8; 1]) -> Int { 1 } }
+        impl Model for [u8; 2] { type Logic = Int; logic fn model(source: &[u8; 2]) -> Int { 2 } }
         fn observe() -> @(true) {
             let a: [u8; 1] = [3]; let b: [u8; 2] = [4, 5];
             let one = a as Int; let two = b as Int;
@@ -124,7 +131,7 @@ fn fixed_array_models_keep_source_shape_and_do_not_apply_to_other_lengths() {
     let result = heap_check(source);
     assert!(result.is_success(), "{:#?}", result.diagnostics);
     let result = heap_check(
-        "impl Model<[u8; 1]> for Int { logic fn model(source: &[u8; 1]) -> Self { 1 } }
+        "impl Model for [u8; 1] { type Logic = Int; logic fn model(source: &[u8; 1]) -> Int { 1 } }
         fn bad(values: &[u8; 2]) -> Int { values as Int }",
     );
     assert!(
@@ -137,14 +144,14 @@ fn fixed_array_models_keep_source_shape_and_do_not_apply_to_other_lengths() {
 fn slice_and_shape_specific_models_cannot_overlap() {
     for (first, second) in [("[u8]", "[u8; 2]"), ("Vec<u8>", "[u8]")] {
         let result = heap_check(&format!(
-            "impl Model<{first}> for Int {{ logic fn model(source: &{first}) -> Self {{ 1 }} }}
-            impl Model<{second}> for Int {{ logic fn model(source: &{second}) -> Self {{ 2 }} }}"
+            "impl Model for {first} {{ type Logic = Int; logic fn model(source: &{first}) -> Int {{ 1 }} }}
+            impl Model for {second} {{ type Logic = Int; logic fn model(source: &{second}) -> Int {{ 2 }} }}"
         ));
         assert!(
             result
                 .diagnostics
                 .iter()
-                .any(|d| d.code == "L0282" && d.message.contains("overlapping")),
+                .any(|d| d.code == "L0282" && d.message.contains("canonical Model")),
             "{:#?}",
             result.diagnostics
         );
@@ -202,19 +209,19 @@ fn model_selectors_reject_wrong_observation_unknown_model_and_runtime_effects() 
 #[test]
 fn eager_runtime_arguments_still_move_inside_erased_observations() {
     let cases = [
-        "let observed = consume(point) as Int;",
-        "let observed = logical_identity(consume(point) as Int);",
-        "let observed = Box::new(point) as Int;",
-        "let observed = Vec::from([point]) as Int;",
-        "let observed = [point] as Int;",
+        "let produced = consume(point); let observed = model!(produced);",
+        "let observed = logical_identity(consume(point));",
+        "let produced = Box::new(point); let observed = model!(produced);",
+        "let produced = Vec::from([point]); let observed = model!(produced);",
+        "let produced = [point]; let observed = model!(produced);",
     ];
     for statement in cases {
         let source = format!("struct Point {{ x: u8 }}
             fn consume(point: Point) -> u8 {{ point.x }}
             logic fn logical_identity(value: Int) -> Int {{ value }}
-            impl Model<Box<Point>> for Int {{ logic fn model(source: &Box<Point>) -> Self {{ 1 }} }}
-            impl Model<[Point]> for Int {{ logic fn model(source: &[Point]) -> Self {{ 1 }} }}
-            fn bad() -> u8 {{ let point = Point {{ x: 3 }}; {statement} let stale = prove!(point.x == 3); point.x }}");
+            impl Model for Box<Point> {{ type Logic = Int; logic fn model(source: &Box<Point>) -> Int {{ 1 }} }}
+            impl Model for [Point] {{ type Logic = Int; logic fn model(source: &[Point]) -> Int {{ 1 }} }}
+            fn bad() -> u8 {{ let point = Point {{ x: 3 }}; {statement} let stale = prove!(model!(point.x) == 3); point.x }}");
         let result = heap_check(&source);
         assert!(!result.is_success(), "{statement}");
         assert!(
@@ -243,12 +250,12 @@ fn temporary_method_receivers_respect_the_selected_execution_mode() {
     let definitions = "struct Point { x: u8 }
         impl Point {
             fn consume(self) -> u8 { self.x }
-            logic fn inspect(self) -> Int { self.x as Int }
+            logic fn inspect(self) -> Int { model!(self.x) as Int }
         }";
     let rejected = check(&format!(
         "{definitions} fn bad() -> u8 {{
         let point = Point {{ x: 3 }};
-        let observed = ({{ point }}).consume() as Int;
+        let produced = ({{ point }}).consume(); let observed = model!(produced);
         point.x
     }}"
     ));
@@ -274,7 +281,7 @@ fn temporary_method_receivers_respect_the_selected_execution_mode() {
         fn run() -> u8 {{
             let mut counter: u8 = 0;
             let point = Point {{ x: 3 }};
-            let observed = ({{ touch(&mut counter); point }}).consume() as Int;
+            let produced = ({{ touch(&mut counter); point }}).consume(); let observed = model!(produced);
             counter
         }}"
         ),
@@ -292,7 +299,7 @@ fn receiver_type_probes_do_not_change_proof_cache_or_generated_execution() {
         fn run() -> u8 {
             let mut counter: u8 = 0;
             let point = Point { x: 3 };
-            let observed = ({ let h = prove!(1 == 1); touch(&mut counter); point }).consume() as Int;
+            let produced = ({ let h = prove!(1 == 1); touch(&mut counter); point }).consume(); let observed = model!(produced);
             counter
         }";
     let mut map = SourceMap::default();
@@ -363,7 +370,7 @@ fn model_signature_preserves_the_declared_physical_source_shape() {
         ("[u8]", "Vec<u8>"),
     ] {
         let result = heap_check(&format!(
-            "impl Model<{declared}> for Int {{ logic fn model(source: &{parameter}) -> Self {{ 0 }} }}"
+            "impl Model for {declared} {{ type Logic = Int; logic fn model(source: &{parameter}) -> Int {{ 0 }} }}"
         ));
         assert!(
             result.diagnostics.iter().any(|d| d.code == "L0282"),

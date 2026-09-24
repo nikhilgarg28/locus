@@ -54,10 +54,7 @@ pub(super) fn specialize(
         {
             let self_type = Type {
                 span: target.span,
-                kind: TypeKind::Path {
-                    path: Box::new(target.clone()),
-                    arguments: vec![],
-                },
+                kind: TypeKind::Named(target.segments.last().expect("impl target").clone()),
             };
             for method in methods {
                 if let Some(name) = declaration_name(method) {
@@ -424,7 +421,8 @@ impl Specializer<'_> {
                         target.segments = vec![name.clone()];
                         target.span = model.target.span;
                     }
-                    substitutions.insert("Self".into(), model.target.clone());
+                    substitutions.insert("Self".into(), model.source.clone());
+                    substitutions.insert("Self::Logic".into(), model.target.clone());
                     if methods.len() == 1
                         && let DeclarationKind::Function { name, .. } = &mut methods[0].kind
                         && name.text == "model"
@@ -432,6 +430,16 @@ impl Specializer<'_> {
                         name.text = format!("__model_{}", self.model_serial);
                         self.model_serial += 1;
                     }
+                } else {
+                    substitutions.insert(
+                        "Self".into(),
+                        Type {
+                            span: target.span,
+                            kind: TypeKind::Named(
+                                target.segments.last().expect("impl target").clone(),
+                            ),
+                        },
+                    );
                 }
                 for method in methods {
                     if !parameters(method).is_empty() {
@@ -511,6 +519,11 @@ impl Specializer<'_> {
                         }
                     };
                 }
+            }
+            TypeKind::Path { path, arguments }
+                if arguments.is_empty() && substitutions.contains_key(&path.text()) =>
+            {
+                *ty = substitutions[&path.text()].clone();
             }
             TypeKind::Path { arguments, .. } => {
                 for argument in arguments {
@@ -593,6 +606,10 @@ impl Specializer<'_> {
             return;
         };
         let template = first.text.clone();
+        if let Some(replacement) = substitutions.get(&template).and_then(type_name) {
+            path.segments[0].text = replacement.text.clone();
+            return;
+        }
         if !self.templates.contains_key(&template) {
             return;
         }
@@ -871,6 +888,13 @@ impl Specializer<'_> {
             }
             ExprKind::Path(path) => {
                 self.specialize_path(path, None, expected, substitutions, locals);
+                if let Some((declaration, substitutions)) =
+                    self.declarations.get(&path.text()).cloned()
+                    && let DeclarationKind::Constant { mut ty, .. } = declaration.kind
+                {
+                    self.ty(&mut ty, &substitutions, locals);
+                    return Some(ty);
+                }
                 self.payload(path, locals)
                     .map(|_| named_type(&path.segments[0]))
             }
@@ -1072,12 +1096,23 @@ impl Specializer<'_> {
                 expected.cloned()
             }
             ExprKind::Form {
-                form, arguments, ..
+                form,
+                arguments,
+                source_hint,
+                ..
             } => {
-                for arg in &mut *arguments {
-                    self.expr(arg, None, substitutions, locals);
+                let mut first = None;
+                for (index, arg) in arguments.iter_mut().enumerate() {
+                    let ty = self.expr(arg, None, substitutions, locals);
+                    if index == 0 {
+                        first = ty;
+                    }
+                }
+                if *form == Form::Model {
+                    *source_hint = first.clone().map(Box::new);
                 }
                 match form {
+                    Form::Old => first,
                     Form::Prop => Some(named_type(&Name {
                         text: "Prop".into(),
                         span,
@@ -1572,6 +1607,7 @@ fn quantifier_expression(
         kind: ExprKind::Form {
             form: Form::Prop,
             name_span: span,
+            source_hint: None,
             arguments: vec![(**body.tail.as_ref().expect("checked quantifier formula")).clone()],
         },
     };

@@ -11,7 +11,7 @@ error[L0230]: cannot show `a <= b`
 8 |     _ //~ error: L0230 cannot show `a <= b`
   |     ^
   |
-  = note: nothing known here speaks of the values in this claim
+  = note: known here: `0 <= b`, `0 <= a`
   = note: it fails when a = 1, b = 0, which the arithmetic facts known here allow
 error[L0230]: cannot show `a <= b`
   --> tests/corpus/reject/comparison_across_types.lc:12:5
@@ -19,7 +19,7 @@ error[L0230]: cannot show `a <= b`
 12 |     _ //~ error: L0230 cannot show `a <= b`
    |     ^
    |
-   = note: nothing known here speaks of the values in this claim
+   = note: known here: `0 <= a`, `0 <= b`
    = note: it fails when a = 1, b = 0, which the arithmetic facts known here allow
 error[L0211]: `a` is a `i8` and `b` is a `i16`; a comparison is between two values of one type
   --> tests/corpus/reject/comparison_across_types.lc:16:5

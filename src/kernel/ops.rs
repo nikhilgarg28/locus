@@ -12,8 +12,8 @@
 //!
 //! The kernel evaluates the meaning that holds in every build, the wrapped
 //! one, and never panics: a kernel term is a mathematical object. Panicking
-//! is the interpreters' business; they read `Row::fits_at` and
-//! `Row::wraps_instead`, and the checker of the check IR reads `Row::fits`
+//! is the interpreters' business; they read `Row::fits_at` regardless of build mode, while
+//! `Row::rust_can_wrap` documents plain Rust. The check IR reads `Row::fits`
 //! to state the obligation a `no_panic` promise makes.
 //!
 //! Each row is meant to be checked against the Rust Reference in a minute:
@@ -216,7 +216,7 @@ impl Row {
     /// where a build with them panics: true for the overflow of `+`, `-`,
     /// `*`, and unary minus, and false for `/` and `%`, which panic in
     /// every build, and for the wrapping methods, which never panic.
-    pub fn wraps_instead(self) -> bool {
+    pub fn rust_can_wrap(self) -> bool {
         self.panic() == Panic::Overflow
     }
 
@@ -361,7 +361,7 @@ mod tests {
             }
         }
         for row in rows {
-            assert_eq!(row.wraps_instead(), row.panic() == Panic::Overflow);
+            assert_eq!(row.rust_can_wrap(), row.panic() == Panic::Overflow);
             assert_eq!(
                 row.panic() == Panic::Never,
                 row.op.name().starts_with("wrapping_")

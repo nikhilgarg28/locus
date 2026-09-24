@@ -37,8 +37,7 @@ fn check_then_write(counter: &mut u8, v: u8) -> () {
     counter = v;
 }
 
-// An operator that panics in one build and wraps in the other leaves the
-// old value in the first and the wrapped one in the second.
+// Checked addition panics in both builds, before replacing the old value.
 fn overflowing(counter: &mut u8) -> () {
     counter = counter + 1;
 }
@@ -60,7 +59,7 @@ fn count_to(counter: &mut u8, limit: u8) -> () {
 //~ run: two_writes(&mut Pair { lo: 0, hi: 0 } -> Pair { lo: 1, hi: 7 }) => panic: after the write
 //~ run: check_then_write(&mut 3 -> 3, 200) => panic: assertion failed: v <= 100
 //~ run: check_then_write(&mut 3 -> 50, 50) => ()
-//~ run: overflowing(&mut 255 -> 255 | 0) => panic: attempt to add with overflow | ()
+//~ run: overflowing(&mut 255 -> 255) => panic: attempt to add with overflow
 //~ run: overflowing(&mut 41 -> 42) => ()
 //~ run: count_to(&mut 0 -> 2, 2) => ()
 //~ run: count_to(&mut 0 -> 3, 9) => panic: three

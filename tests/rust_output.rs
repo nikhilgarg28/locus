@@ -321,7 +321,9 @@ fn divergence_is_kept_without_an_unreachable_erased_tail() {
 
 #[test]
 fn physical_allocation_feeding_only_a_model_observation_is_retained() {
-    let (_, source) = printed_source("fn run()->u8{let observed=(*Box::new(7u8)) as Int;8}");
+    let (_, source) = printed_source(
+        "fn run()->u8{let boxed=Box::new(7u8);let observed=model!(*boxed) as Int;8}",
+    );
     assert!(
         source.contains("Box::new(7_u8)"),
         "physical allocation disappeared: {source}"

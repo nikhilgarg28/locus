@@ -14,13 +14,13 @@ fn consume(t: Token) -> u8 {
 fn afterwards(n: u8) -> u8 {
     let t = Token { id: n };
     let out = consume(t);
-    prove!(t.id == n); //~ error: L0241 `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; observe `t` with a model cast before the move
+    prove!(model!(t.id) == n); //~ error: L0241 `t` was moved at line 16 and cannot be mentioned in a proposition afterwards; observe `t` with a model cast before the move
     out
 }
 
 // A lemma's argument is erased with the call, so it is a mention too.
 logic fn id_of(t: &Token) -> Int {
-    t.id
+    model!(t.id)
 }
 
 fn in_a_claim(n: u8) -> (out: u8, @(out == n)) {

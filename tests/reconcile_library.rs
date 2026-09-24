@@ -81,11 +81,11 @@ fn named_membership_and_recursive_reachability_use_checked_arm_bodies() {
 }
 #[test]
 fn library_integer_representation_matches_native_arithmetic_on_a_checked_fragment() {
-    accept(&[LOGICAL, include_str!("../library/integer.lc"), "logic fn negative_two() -> @(integer_model(LibraryInt::Negative(Nat::Succ(Nat::Zero))) == -2) {
-        prove!(integer_model(LibraryInt::Negative(Nat::Succ(Nat::Zero))) == -2)
+    accept(&[LOGICAL, include_str!("../library/integer.lc"), "logic fn negative_two() -> @(integer_model(LibraryInt::Negative(Peano::Succ(Peano::Zero))) == -2) {
+        prove!(integer_model(LibraryInt::Negative(Peano::Succ(Peano::Zero))) == -2)
     }
-    logic fn positive_two() -> @(integer_model(LibraryInt::NonNegative(Nat::Succ(Nat::Succ(Nat::Zero)))) == 2) {
-        prove!(integer_model(LibraryInt::NonNegative(Nat::Succ(Nat::Succ(Nat::Zero)))) == 2)
+    logic fn positive_two() -> @(integer_model(LibraryInt::NonNegative(Peano::Succ(Peano::Succ(Peano::Zero)))) == 2) {
+        prove!(integer_model(LibraryInt::NonNegative(Peano::Succ(Peano::Succ(Peano::Zero)))) == 2)
     }"]);
 }
 #[test]
@@ -103,13 +103,14 @@ fn directly_recursive_data_is_inductive_and_negative_recursion_is_rejected() {
     );
 }
 #[test]
+#[doc = "spec: 1.92:11"]
 fn a_runtime_boxed_list_has_a_separate_persistent_logical_model() {
     let checked = accept(&[
         LOGICAL,
         include_str!("../library/runtime_list.lc"),
         "fn run() -> u8 {
         let list = RuntimeList::Cons(1, Box::new(RuntimeList::Empty));
-        let observed = list as Seq<Nat>;
+        let observed = list as Seq<Peano>;
         let consumed = list;
         let length = prove!(seq_length(observed) == 1);
         7
@@ -123,14 +124,14 @@ fn a_runtime_boxed_list_has_a_separate_persistent_logical_model() {
     let rust = locus::erased::print_module(module);
     assert!(rust.contains("Box<RuntimeList>"), "{rust}");
     assert!(
-        !rust.contains("enum Nat") && !rust.contains("enum __LocusSeq"),
+        !rust.contains("enum Peano") && !rust.contains("enum __LocusSeq"),
         "{rust}"
     );
 }
 #[test]
 fn box_of_logical_data_is_still_physical_and_cannot_derive_logical() {
-    let result = check(&["#[derive(Logical)] enum Nat { Zero, Succ(Nat) }
-        #[derive(Logical)] struct Bad { value: Box<Nat> }"]);
+    let result = check(&["#[derive(Logical)] enum Peano { Zero, Succ(Peano) }
+        #[derive(Logical)] struct Bad { value: Box<Peano> }"]);
     assert!(
         result.diagnostics.iter().any(|d| d.code == "L0243"),
         "{:#?}",
@@ -164,7 +165,7 @@ fn ordinary_buffer_model_proves_length_and_keeps_before_after_snapshots() {
 #[test]
 fn generic_buffer_observation_uses_a_checked_user_element_model() {
     accept(&[LOGICAL, include_str!("../library/buffer_model.lc"), "struct Item { key: u8 }
-        impl Model<Item> for Int { logic fn model(source: &Item) -> Self { source.key as Int } }
+        impl Model for Item { type Logic = Int; logic fn model(source: &Item) -> Int { model!(source.key) as Int } }
         logic fn inspect(source: &[Item]) -> Seq<Int> {
             let count = source.len();
             let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =

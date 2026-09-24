@@ -222,7 +222,7 @@
     },
     "forms": {
       "comment": "The closed set of built-in forms, spelled as Rust spells a macro call",
-      "match": "\\b(prove|prop|rewrite|unfold|fold|old|snapshot|recurse|assert|debug_assert|unreachable|todo|panic|matches|vec)(!)",
+      "match": "\\b(prove|prop|rewrite|unfold|fold|old|snapshot|model|recurse|assert|debug_assert|unreachable|todo|panic|matches|vec)(!)",
       "captures": {
         "1": {
           "name": "support.function.form.locus"

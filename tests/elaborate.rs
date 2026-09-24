@@ -113,7 +113,7 @@ fn the_lock_runs_as_written() {
     assert_eq!(
         found,
         [
-            // step: `prove!(lock.failures < 3)` is the branch taken, reflected
+            // step: `prove!(model!(lock.failures) < 3)` is the branch taken, reflected
             // through `cmp_reflect`, whose comparison names its type.
             (33, 63, "computed", 49),
             (33, 63, "computed", 14),
@@ -123,7 +123,7 @@ fn the_lock_runs_as_written() {
             // it stands.
             (30, 80, "evaluation", 34),
             // run: `prove!(0u8 <= 3)` for the initial `ok`.
-            (55, 68, "evaluation", 34),
+            (55, 76, "evaluation", 34),
             // run: `ok = still` refreshes the tracked evidence over the
             // `lock` just assigned: `still` speaks of `next`, and `lock`
             // is `next` after `lock = next`, which computing bridges.
@@ -197,7 +197,7 @@ fn the_generated_rust_reads_like_the_source_and_agrees_with_the_interpreter() {
 #[test]
 fn a_missing_guard_is_reported_with_the_claim_the_facts_and_a_failing_case() {
     let guarded = "            if lock.failures < 3 {
-                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(lock.failures < 3));
+                let fits = u8_succ_le_of_lt(lock.failures, 3, prove!(model!(lock.failures) < 3));
                 (Lock { failures: lock.failures.wrapping_add(1), open: false }, fold!(within_limit, fits))
             } else {
                 (Lock { failures: lock.failures, open: false }, bounded)
@@ -219,7 +219,7 @@ fn a_missing_guard_is_reported_with_the_claim_the_facts_and_a_failing_case() {
     assert_eq!(
         error.notes,
         [
-            "known here: `bounded: within_limit(lock.failures)`",
+            "known here: `bounded: within_limit(lock.failures)`, `0 <= lock.failures`",
             "it fails when `lock.failures` is 3, which the facts known here allow",
         ]
     );
@@ -520,7 +520,7 @@ fn errors_name_the_problem() {
             "L0220",
             "expected `u8`, found `bool`",
         ),
-        ("fn f(n: Nat) -> u8 { 0 }", "L0201", "not part of the core"),
+        ("fn f(n: Rational) -> u8 { 0 }", "L0200", "unknown type"),
         (
             "fn f(n: u8) -> u8 { let x = _; n }",
             "L0206",
@@ -586,7 +586,7 @@ fn a_false_claim_is_refuted_with_a_case() {
     assert!(full.contains("it fails when `n` is 255"), "{full}");
     let (_, full) = rejected("fn f(n: u8, m: u8) -> @(n <= m) { _ }");
     assert!(full.contains("cannot show `n <= m`"), "{full}");
-    assert!(full.contains("nothing known here"), "{full}");
+    assert!(full.contains("0 <= m") && full.contains("0 <= n"), "{full}");
 }
 
 #[test]
@@ -1352,12 +1352,12 @@ fn a_lemma_reads_its_argument_and_a_proposition_cannot_mention_a_moved_one() {
     // whole for the code after it.
     accepted(
         "struct Token { id: u8 }
-        logic fn small(t: Token) -> Prop { prop!(t.id <= 10) }
+        logic fn small(t: Token) -> Prop { prop!(model!(t.id) <= 10) }
         fn consume(t: Token) -> u8 { t.id }
         fn read_then_use(n: u8) -> u8 {
             let t = Token { id: n };
             let claim = small(t);
-            let again = prop!(small(t) && t.id == n);
+            let again = prop!(small(t) && model!(t.id) == n);
             consume(t)
         }",
     );
@@ -1367,7 +1367,7 @@ fn a_lemma_reads_its_argument_and_a_proposition_cannot_mention_a_moved_one() {
         fn afterwards(n: u8) -> u8 {
             let t = Token { id: n };
             let out = consume(t);
-            prove!(t.id == n);
+            prove!(model!(t.id) == n);
             out
         }",
     );
@@ -1679,8 +1679,9 @@ fn a_call_in_a_logic_only_context_must_be_one_a_proposition_admits() {
         }
     }
     // Outside a logical block the eager source computation remains executable.
-    let result =
-        accepted("fn f(n: u8) -> u8 { n } fn g(n: u8) -> u8 { let model = f(n) as Int; n }");
+    let result = accepted(
+        "fn f(n: u8) -> u8 { n } fn g(n: u8) -> u8 { let produced = f(n); let model = model!(produced); n }",
+    );
     assert_eq!(call(&result, "g", &[3]), "3");
     assert!(print_module(result.session.erased()).contains("f(n)"));
 }
@@ -1727,10 +1728,10 @@ fn a_call_with_a_logic_only_result_and_a_mut_parameter_is_kept() {
 fn a_logical_model_is_preserved_after_a_move_but_cannot_be_runtime_data() {
     accepted(
         "struct Token { id: u8 }
-        fn consume(t: Token) -> (out: u8, @(out == t.id)) { (t.id, _) }
+        fn consume(t: Token) -> (out: u8, @(out == model!(t.id))) { (t.id, _) }
         fn keep(n: u8) -> (out: u8, @(out == n)) {
             let t = Token { id: n };
-            let before = t.id as Int;
+            let before = model!(t.id) as Int;
             let (consumed, unchanged) = consume(t);
             prove!(before == n);
             (consumed, _)

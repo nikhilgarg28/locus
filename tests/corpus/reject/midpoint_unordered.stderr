@@ -13,5 +13,5 @@ error[L0230]: cannot show `mid == (lo + hi) / 2`
 16 |     prove!(mid as Int == (lo as Int + hi as Int) / 2) //~ error: L0230 cannot show `mid == (lo + hi) / 2`
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: known here: `sum: mid == lo + half`
+   = note: known here: `0 <= hi`, `0 <= lo`, `0 <= mid`, `sum: mid == lo + half`
    = note: it fails when mid = 2, lo = 2, half = 0, hi = 0, `(lo + hi) / 2` = 1, `(lo + hi) % 2` = 0, which the arithmetic facts known here allow

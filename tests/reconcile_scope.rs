@@ -44,7 +44,7 @@ fn packaged() -> u8 {
         let claim = logic { prop!((hidden as Int) == (hidden as Int)) };
         Certificate { claim, evidence: prove!(claim) }
     };
-    let carried: @(certificate.claim) = certificate.evidence;
+    let carried: @(model!(certificate.claim)) = certificate.evidence;
     7
 }
 "#,
@@ -136,7 +136,7 @@ fn changed() -> u8 {
     let claim = logic { prop!(3 == 3) };
     let mut note = Annotated { value: 3, claim, evidence: prove!(claim) };
     note.value = 0;
-    let still: @(note.claim) = note.evidence;
+    let still: @(model!(note.claim)) = note.evidence;
     note.value
 }
 "#,
@@ -204,7 +204,7 @@ struct Token { value: u8 }
 fn consume(token: Token) -> u8 { token.value }
 fn run() -> u8 {
     let token = Token { value: 7 };
-    let claim = logic { prop!((token.value as Int) == 7) };
+    let claim = logic { prop!((model!(token.value) as Int) == 7) };
     let before: @claim = _;
     let value = consume(token);
     let after: @claim = before;
@@ -225,7 +225,7 @@ fn consume(token: Token) -> u8 { token.value }
 fn run() -> u8 {
     let token = Token { value: 7 };
     let value = consume(token);
-    let claim = logic { prop!((token.value as Int) == 7) };
+    let claim = logic { prop!((model!(token.value) as Int) == 7) };
     value
 }
 "#,

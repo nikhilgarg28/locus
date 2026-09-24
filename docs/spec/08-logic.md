@@ -55,7 +55,7 @@ fn demo() -> u8 {
 ~~~
 
 <!-- spec: 1.5:5 dynamic-semantics -->
-Operand types select operators: addition on `Int` is logical; addition on `u8` is runtime arithmetic. Logical `Bool` and runtime `bool` stay distinct through fields, parameters, results, and control-flow joins. A shared internal kernel representation does not make the two source types interchangeable.
+Operand types select operators: addition on `Nat` or `Int` is logical; addition on `u8` is runtime arithmetic. Logical `Bool` and runtime `bool` stay distinct through fields, parameters, results, and control-flow joins. A shared internal kernel representation does not make the two source types interchangeable.
 
 ## Logical data
 
@@ -65,17 +65,17 @@ Logical structs and finite recursive enums erase completely. A logical recursive
 <!-- spec: 1.90:42 example -->
 ~~~locus check
 #[derive(Logical)]
-enum Nat { Zero, Succ(Nat) }
-logic fn size(n: Nat) -> Int {
+enum Peano { Zero, Succ(Peano) }
+logic fn size(n: Peano) -> Int {
     match n {
-        Nat::Zero => 0,
-        Nat::Succ(previous) => 1 + size(previous),
+        Peano::Zero => 0,
+        Peano::Succ(previous) => 1 + size(previous),
     }
 }
-logic fn nonnegative(n: Nat) -> @(size(n) >= 0) {
+logic fn nonnegative(n: Peano) -> @(size(n) >= 0) {
     match n {
-        Nat::Zero => fold!(size, prove!(0 >= 0)),
-        Nat::Succ(previous) => {
+        Peano::Zero => fold!(size, prove!(0 >= 0)),
+        Peano::Succ(previous) => {
             let induction = nonnegative(previous);
             fold!(size, prove!(1 + size(previous) >= 0))
         }
@@ -104,7 +104,7 @@ logic fn steps(n: Int) -> Int {
 ## Logical closures
 
 <!-- spec: 1.25:3 legality-rule -->
-Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures must be explicitly modeled, as in `|x: Int| x + (n as Int)`. Closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
+Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures need a canonical model, inferred for simple logical uses such as `|x: Int| x + n`. Use `model!(s.n)` to capture a physical field of an unmodeled enclosing value. Captures retain the observed versions. Closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
 
 <!-- spec: 1.90:44 example -->
 ~~~locus check

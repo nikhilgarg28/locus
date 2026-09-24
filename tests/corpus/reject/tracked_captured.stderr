@@ -6,6 +6,7 @@ error[L0230]: this is evidence of `p`, and `x <= 3` is needed
    |
    = note: after computing, the claim is `9 <= 3`
    = note: nothing known here speaks of the values in this claim
+   = note: it fails when `x as it was before line 19` = 0, which the arithmetic facts known here allow
 error[L0245]: `ok` speaks of `p`, which was assigned at line 27; refresh it with `ok = _;` or `ok = <proof>;` before using it
   --> tests/corpus/reject/tracked_captured.lc:28:16
    |

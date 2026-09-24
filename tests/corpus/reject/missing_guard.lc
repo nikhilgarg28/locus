@@ -16,9 +16,9 @@ struct Lock {
 
 fn step(
     lock: Lock,
-    bounded: @within_limit(lock.failures),
+    bounded: @within_limit(model!(lock.failures)),
     event: Event,
-) -> (next: Lock, @within_limit(next.failures)) {
+) -> (next: Lock, @within_limit(model!(next.failures))) {
     match event {
         Event::Right => (Lock { failures: 0, open: true }, _),
         Event::Wrong => (Lock { failures: lock.failures.wrapping_add(1), open: false }, _),
@@ -27,7 +27,7 @@ fn step(
 }
 
 // What depends on `step` is not reported again.
-fn twice(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) {
+fn twice(lock: Lock, bounded: @within_limit(model!(lock.failures))) -> (next: Lock, @within_limit(model!(next.failures))) {
     let (once, still_bounded) = step(lock, bounded, Event::Wrong);
     step(once, still_bounded, Event::Wrong)
 }

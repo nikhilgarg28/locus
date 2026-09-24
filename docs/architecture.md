@@ -31,13 +31,15 @@ The lexer and Pratt/recursive-descent parser carry byte spans, bounded nesting a
 
 `--library path.lc` loads ordinary declarations into the same checked module. A SourceBundle retains segments mapping virtual offsets to original files for diagnostic labels, suggestions and proof locations. Duplicate declarations are errors. Libraries gain no privilege by their path or by being shipped with the compiler.
 
+Free and associated constants share one checking path. Associated names retain their owner through dependency ordering and Rust emission. Physical constant arithmetic checks the operator's safety premises and evaluates its closed term through the existing kernel rules, then lowers the resulting literal. Logical observations model this checked physical value; neither execution interpreter participates in acceptance.
+
 Generic declarations are templates. Specialization substitutes concrete types throughout signatures, field types, propositions and bodies, then sends the result through the normal pipeline. Instance count and type-depth limits stop expanding polymorphic recursion. Uninstantiated generic bodies are not claimed to have passed universal checking. Runtime/logical mode is fixed by each declaration, not inferred anew per instance.
 
 ## Logical classification and physical layout
 
 `logic fn` and logical blocks have checked total, effect-free bodies with Logical results. Ordinary functions remain executable irrespective of their promises or result types. Only the logical representation has unfolding equations. Calls to ordinary functions are opaque: callers receive exactly the declared result and its evidence fields.
 
-Logical classification belongs to types. Int, Bool, Prop and proof types are logical; user logical structs/enums are checked as such. Runtime aggregates can contain logical fields. Ordinary enum discriminants and physical Box allocation remain runtime even with erased payloads.
+Logical classification belongs to types. Nat, Int, Bool, Prop and proof types are logical; user logical structs/enums are checked as such. Runtime aggregates can contain logical fields. Ordinary enum discriminants and physical Box allocation remain runtime even with erased payloads.
 
 The kernel uses one mathematical Bool, while the surface distinguishes physical bool from Logical Bool. ErasureLayout therefore accompanies kernel types through bindings, products, branches, function signatures and nominal fields. This is checked independently of proof search. A kernel-valid boolean term alone cannot authorize a runtime test of erased data.
 
@@ -77,7 +79,7 @@ The checker handles the following forms:
 | Match | Check the scrutinee; bind payloads and branch equations; check every arm. |
 | Loop | Check initial state, abstract state, continue edges and break results; make no termination claim. |
 | For | Evaluate bounds once; each iteration knows its range bounds; check carried state and control exits. Empty/reversed ranges execute no iterations. |
-| Operate | Check machine operands and required no-panic evidence; learn only equations valid for the selected overflow semantics. |
+| Operate | Check safety evidence before introducing the result; require it under no_panic. Otherwise retain a runtime overflow check. Normal return establishes the exact result. |
 | Buffer | Check the native operation's arguments and bound evidence before introducing its normal-return content equation. |
 | Box allocation | Preserve physical allocation and its possible failure; logical contents do not erase the allocation. |
 | Return/break/continue | Check the value or state against the corresponding target in the current context. |
@@ -97,7 +99,9 @@ Stored shared references add typed provenance: storage roots, projection paths, 
 
 Buffer<T> is an immutable finite sequence of element snapshots with a u64 length bound. Arrays, slices and Vec share that mathematical content representation but retain distinct runtime layouts. Bounds proofs authorize logical reads; they do not authorize a physical borrow. Native helpers preserve element order and carry explicit allocation/panic effects. Runtime push yields its length equation only on normal return.
 
-A model implementation is a checked logical definition over an authorized shared observation. Its source layout participates in resolution: a shared slice observer may accept compatible array/vector borrows; an array-specific implementation must not silently apply to a different physical shape. Definitions may compose into larger models.
+A model implementation is the one canonical checked logical definition for its physical source. `model!(place)` selects a physical read path before applying that model; ordinary logical named-field access selects the model first. `#[derive(Model)]` constructs fieldwise models only when requested. Nat is encoded by a checked logical Int/nonnegativity product, and unsigned observations use the existing machine range proof. These constructions add no kernel axioms.
+
+A model implementation uses an authorized shared observation. Its source layout participates in resolution: a shared slice observer may accept compatible array/vector borrows; an array-specific implementation must not silently apply to a different physical shape. Definitions may compose into larger models. The specialization pass retains physical source-type hints for `model!` dependency ordering, including nested fields; elaboration independently checks the actual path and model.
 
 Runtime generic instances currently emit distinct named Rust structs/enums. In particular, source `Option<T>` and `Result<T, E>` use checked prelude templates but their generated ABI is a specialized Locus enum, not `std::option::Option` or `std::result::Result`. Rust callers use the emitted type and variants. Mapping recognized prelude types to the standard Rust ABI belongs to the later interop work and must preserve the export/forgery checks.
 
@@ -112,6 +116,8 @@ The execution program records each trusted adapter with its reason and backend. 
 ## Erasure and cleanup
 
 Logical values become a single private zero-sized marker, Erased. Runtime aggregates preserve their data fields, physical tags and marker positions. Logical declarations have no emitted implementations. Ordinary calls retain their effects even when all inputs/results erase.
+
+An erased arithmetic node retains a `proven_safe` bit derived from accepted safety evidence. The Rust printer emits a plain operator when set, and `checked_*().expect(...)` otherwise. Both paths evaluate operands once in source order. This emission decision belongs to the compiler correctness boundary; the marker bit alone is not a proof.
 
 Erasure preserves eager computation: `derive(mutate_and_prove(&mut x))` runs the mutation exactly once and then yields a marker. A logical value is not inspected to choose runtime control. Logical Bool operators in ordinary code preserve eager ordinary operands; erasing them must not introduce physical short-circuit behavior.
 
@@ -129,7 +135,7 @@ Diagnostics retain source spans and suggested fixes. SourceBundle maps library s
 
 ## Agreement and the trusted base
 
-The test harness compares the check-IR interpreter, erased interpreter and compiled Rust on values and observable panic behavior, including mutations before a caught panic. Overflow-enabled and wrapping builds are both exercised. The interpreters use different program representations but share some primitive machinery; agreement is testing evidence, not three independent soundness proofs. Fuel exhaustion or a timeout is inconclusive, never agreement or proof of divergence; interpreters need not consume equal fuel.
+The test harness compares the check-IR interpreter, erased interpreter and compiled Rust on values and observable panic behavior, including mutations before a caught panic. Rust builds with overflow checks enabled and disabled are both exercised; Locus arithmetic has identical checked behavior in each. The interpreters use different program representations but share some primitive machinery; agreement is testing evidence, not three independent soundness proofs. Fuel exhaustion or a timeout is inconclusive, never agreement or proof of divergence; interpreters need not consume equal fuel.
 
 Trusted components include the kernel and primitive meanings; logical/runtime layout and permission validation; lowering and the exec checker; erasure/cleanup and Rust printing; and the Rust toolchain. Registered native semantics and explicit foreign contracts are additional assumptions. Parsing, elaboration, proof search, stored proof input, derived lemmas and both interpreters are outside the proof kernel. Their placement does not itself prove that parsing and elaboration faithfully implement the source specification. The [trusted-file inventory](../tools/trusted-base.json) conservatively counts the implemented validation and emission boundary, not a mechanically established minimal trusted base.
 

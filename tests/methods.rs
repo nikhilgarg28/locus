@@ -16,7 +16,7 @@ use locus::typed::FnRef;
 const FUEL: u64 = 1_000_000;
 
 const PRELUDE: &str = "
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Model)]
 struct Counter {
     count: u8,
 }

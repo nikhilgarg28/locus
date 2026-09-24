@@ -40,7 +40,7 @@ impl Counter {
         self.count
     }
 
-    fn get_proven(&self) -> (out: u8, @(out == self.count)) {
+    fn get_proven(&self) -> (out: u8, @(out == model!(self.count))) {
         (self.count, _)
     }
 
@@ -62,15 +62,15 @@ impl Counter {
     // `&mut self`: the whole value replaced, and the result speaks of
     // `self` at return, as it does of any `&mut` parameter (O3).
     #[no_io]
-    fn reset(&mut self) -> @(self.count == 0) {
+    fn reset(&mut self) -> @(model!(self.count) == 0) {
         *self = Counter { count: 0 };
-        prove!(self.count == 0)
+        prove!(model!(self.count) == 0)
     }
 
     // `old!(self)` names the value at entry.
     #[no_io]
-    fn keep(&mut self) -> @(self.count == old!(self).count) {
-        prove!(self.count == old!(self).count)
+    fn keep(&mut self) -> @(model!(self.count) == model!(old!(self).count)) {
+        prove!(model!(self.count) == model!(old!(self).count))
     }
 
     // `mut self`: taken by value and assigned in the body.
@@ -82,7 +82,7 @@ impl Counter {
     // A method of the logic: it may appear in a proposition, as
     // `Counter::small(&c)` or `c.small()`.
     logic fn small(&self) -> Prop {
-        prop!(self.count <= 3)
+        prop!(model!(self.count) <= 3)
     }
 }
 
@@ -151,7 +151,7 @@ fn folded(c: Counter, h: @(c.small())) -> (out: u8, @(out <= 3)) {
     (out, prove!(out <= 3))
 }
 
-fn known(c: Counter, h: @Counter::small(&c)) -> @(c.count <= 3) {
+fn known(c: Counter, h: @Counter::small(&c)) -> @(model!(c.count) <= 3) {
     unfold!(Counter::small, h)
 }
 

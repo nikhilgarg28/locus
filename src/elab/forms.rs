@@ -56,6 +56,7 @@ impl Env<'_> {
             }
             Form::Assert | Form::DebugAssert => self.assert_form(form, arguments, name_span, span),
             Form::Snapshot => self.snapshot(arguments, expected, name_span, span),
+            Form::Model => self.observe_place(arguments, span),
             Form::Old => self.old_form(arguments, name_span, span),
             Form::Recurse => self.measured_call(arguments, span),
             _ => self.form_not_yet(form, name_span),

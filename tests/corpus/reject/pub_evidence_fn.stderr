@@ -1,8 +1,8 @@
 error[L0244]: `step` takes evidence and cannot be `pub`: a Rust caller could pass any marker, since `bounded` is evidence
   --> tests/corpus/reject/pub_evidence_fn.lc:22:1
    |
-22 | pub fn step(lock: Lock, bounded: @within_limit(lock.failures)) -> (next: Lock, @within_limit(next.failures)) { //~ error: L0244 `ste...
-   | ^^^                     ------------------------------------- the evidence is taken here
+22 | pub fn step(lock: Lock, bounded: @within_limit(model!(lock.failures))) -> (next: Lock, @within_limit(model!(next.failures))) { //~ e...
+   | ^^^                     --------------------------------------------- the evidence is taken here
    |
    = note: a marker cannot be made outside the generated code, and a Rust caller can obtain one honestly, from any function that returns evidence, and pass it on
    = help: make it `pub(crate)`, visible throughout the generated crate and never to Rust, or take a validated type, a struct whose fields are all private, and check plain data at runtime

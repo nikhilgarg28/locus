@@ -16,10 +16,10 @@ A type describes the values a program can hold and the operations it permits. St
 ## Type classification
 
 <!-- spec: 1.3:1 legality-rule -->
-Every type is either physical or Logical. Machine integers, `bool`, references, and runtime containers are physical. `Int`, `Bool`, `Prop`, proof types, logical callables, and checked `#[derive(Logical)]` declarations are Logical. An ordinary struct or enum remains physical even when it contains logical fields. Tuples retain a product of their field representations, including erased positions; the current frontend does not accept a tuple as a `logic fn` result.
+Every type is either physical or Logical. Machine integers, `bool`, references, and runtime containers are physical. `Nat`, `Int`, `Bool`, `Prop`, proof types, logical callables, and checked `#[derive(Logical)]` declarations are Logical. An ordinary struct or enum remains physical even when it contains logical fields. Tuples retain a product of their field representations, including erased positions; the current frontend does not accept a tuple as a `logic fn` result.
 
 <!-- spec: 1.3:4 legality-rule -->
-Classification belongs to the type, not the binding. Use ordinary `let` for logical values and `x as M` to observe a runtime value through a logical [model](11-models.md). A logical value has no runtime contents to recover.
+Classification belongs to the type, not the binding. Use ordinary `let` for logical values. Logical contexts observe a physical value through its canonical [model](11-models.md); `model!(place)` explicitly selects physical storage before observing it. `as` converts between admitted logical types. A logical value has no runtime contents to recover.
 
 ## Machine integers
 
@@ -219,6 +219,22 @@ logic fn concrete_distance() -> @(distance_squared(3, 7) == 16) {
 }
 ~~~
 
+## Natural numbers: Nat
+
+<!-- spec: 1.92:7 legality-rule -->
+`Nat` denotes nonnegative mathematical integers. It is Logical and is the canonical model of unsigned machine integers. Literals cannot be negative. Arithmetic has no width bound; subtraction needs evidence that its result is nonnegative. `n as Int` widens exactly. To construct a Nat from an Int, supply evidence in `Nat { value: n, nonnegative: proof }`; a cast cannot assume it.
+
+<!-- spec: 1.92:10 example -->
+~~~locus check
+logic fn difference(a: Nat, b: Nat, ordered: @(b <= a)) -> Nat {
+    a - b
+}
+logic fn from_integer(n: Int, valid: @(n >= 0)) -> Nat {
+    Nat { value: n, nonnegative: valid }
+}
+logic fn as_integer(n: Nat) -> Int { n as Int }
+~~~
+
 ## Logical booleans: Bool
 
 <!-- spec: 1.91:11 informative -->
@@ -248,15 +264,15 @@ fn claim_and_evidence(n: Int) -> (claim: Prop, @claim) {
 ## User-defined logical data
 
 <!-- spec: 1.91:13 informative -->
-`#[derive(Logical)]` checks that all stored fields are Logical. Logical enums may be directly recursive, with finite values and checked positive recursion. The checked library defines `Nat` (natural numbers), `Maybe<T>` (an optional logical value), and `Seq<T>` (a finite sequence). These are ordinary declarations, not additional compiler primitives. See [logical data and recursion](08-logic.md#logical-data).
+`#[derive(Logical)]` checks that all stored fields are Logical. Logical enums may be directly recursive, with finite values and checked positive recursion. The checked library defines `Peano` (an inductive representation of natural numbers), `Maybe<T>` (an optional logical value), and `Seq<T>` (a finite sequence). These are ordinary declarations, not additional compiler primitives. See [logical data and recursion](08-logic.md#logical-data).
 
 <!-- spec: 1.90:14 example -->
 ~~~locus check
 #[derive(Logical)]
 struct Bounds { lower: Int, upper: Int }
 #[derive(Logical)]
-enum Nat { Zero, Succ(Nat) }
-logic fn two() -> Nat { Nat::Succ(Nat::Succ(Nat::Zero)) }
+enum Peano { Zero, Succ(Peano) }
+logic fn two() -> Peano { Peano::Succ(Peano::Succ(Peano::Zero)) }
 ~~~
 
 ## Logical function values

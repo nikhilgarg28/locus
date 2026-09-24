@@ -1,7 +1,7 @@
 // Checked logical data. These declarations use the same parser and kernel
 // as application code; none of their equations are trusted primitives.
 #[derive(Logical)]
-pub enum Nat { Zero, Succ(Nat) }
+pub enum Peano { Zero, Succ(Peano) }
 
 #[derive(Logical)]
 pub enum Maybe<T: Logical> { None, Some(T) }
@@ -9,14 +9,14 @@ pub enum Maybe<T: Logical> { None, Some(T) }
 #[derive(Logical)]
 pub enum Seq<T: Logical> { Empty, Cons { head: T, tail: Seq<T> } }
 
-pub logic fn nat_to_int(n: Nat) -> Int {
-    match n { Nat::Zero => 0, Nat::Succ(previous) => 1 + nat_to_int(previous) }
+pub logic fn nat_to_int(n: Peano) -> Int {
+    match n { Peano::Zero => 0, Peano::Succ(previous) => 1 + nat_to_int(previous) }
 }
 
-pub logic fn nat_nonnegative(n: Nat) -> @(nat_to_int(n) >= 0) {
+pub logic fn nat_nonnegative(n: Peano) -> @(nat_to_int(n) >= 0) {
     match n {
-        Nat::Zero => fold!(nat_to_int, prove!(0 >= 0)),
-        Nat::Succ(previous) => {
+        Peano::Zero => fold!(nat_to_int, prove!(0 >= 0)),
+        Peano::Succ(previous) => {
             let smaller = nat_nonnegative(previous);
             fold!(nat_to_int, prove!(1 + nat_to_int(previous) >= 0))
         }
@@ -65,12 +65,12 @@ pub logic fn seq_nonnegative<T: Logical>(xs: Seq<T>) -> @(seq_length(xs) >= 0) {
 
 // Total on all Int values, clipping negative inputs to zero. The inverse
 // law below requires the nonnegative evidence supplied by the caller.
-pub logic fn nat_from_int(n: Int) -> Nat {
-    if n <= 0 { Nat::Zero } else {
+pub logic fn nat_from_int(n: Int) -> Peano {
+    if n <= 0 { Peano::Zero } else {
         let next = n - 1;
         let smaller: @(0 <= next && next < n) =
             And::Intro(prove!(0 <= next), prove!(next < n));
-        Nat::Succ(recurse!(smaller, nat_from_int(next)))
+        Peano::Succ(recurse!(smaller, nat_from_int(next)))
     }
 }
 
@@ -78,7 +78,7 @@ pub logic fn nat_to_from_int(n: Int, nonnegative: @(n >= 0))
     -> @(nat_to_int(nat_from_int(n)) == n)
 {
     if n <= 0 {
-        let base: @(nat_to_int(Nat::Zero) == n) =
+        let base: @(nat_to_int(Peano::Zero) == n) =
             fold!(nat_to_int, prove!(0 == n));
         fold!(nat_from_int, base)
     } else {
@@ -87,20 +87,20 @@ pub logic fn nat_to_from_int(n: Int, nonnegative: @(n >= 0))
         let smaller: @(0 <= next && next < n) =
             And::Intro(prove!(0 <= next), prove!(next < n));
         let induction = recurse!(smaller, nat_to_from_int(next, next_nonnegative));
-        let step: @(nat_to_int(Nat::Succ(nat_from_int(next))) == n) =
+        let step: @(nat_to_int(Peano::Succ(nat_from_int(next))) == n) =
             fold!(nat_to_int, prove!(1 + nat_to_int(nat_from_int(next)) == n));
         fold!(nat_from_int, step)
     }
 }
 
-pub logic fn nat_from_to_int(n: Nat) -> @(nat_from_int(nat_to_int(n)) == n) {
+pub logic fn nat_from_to_int(n: Peano) -> @(nat_from_int(nat_to_int(n)) == n) {
     match n {
-        Nat::Zero => {
-            let base: @(nat_from_int(0) == Nat::Zero) =
-                fold!(nat_from_int, prove!(Nat::Zero == Nat::Zero));
+        Peano::Zero => {
+            let base: @(nat_from_int(0) == Peano::Zero) =
+                fold!(nat_from_int, prove!(Peano::Zero == Peano::Zero));
             fold!(nat_to_int, base)
         }
-        Nat::Succ(previous) => {
+        Peano::Succ(previous) => {
             let nonnegative = nat_nonnegative(previous);
             let induction = nat_from_to_int(previous);
             if 1 + nat_to_int(previous) <= 0 {
@@ -108,12 +108,12 @@ pub logic fn nat_from_to_int(n: Nat) -> @(nat_from_int(nat_to_int(n)) == n) {
                 match impossible {}
             } else {
                 let subtract_one: @((1 + nat_to_int(previous)) - 1 == nat_to_int(previous)) = _;
-                let rebuilt = Nat::Succ(nat_from_int((1 + nat_to_int(previous)) - 1));
-                let initial: @(rebuilt == Nat::Succ(nat_from_int((1 + nat_to_int(previous)) - 1))) = _;
-                let simplified: @(rebuilt == Nat::Succ(nat_from_int(nat_to_int(previous)))) =
+                let rebuilt = Peano::Succ(nat_from_int((1 + nat_to_int(previous)) - 1));
+                let initial: @(rebuilt == Peano::Succ(nat_from_int((1 + nat_to_int(previous)) - 1))) = _;
+                let simplified: @(rebuilt == Peano::Succ(nat_from_int(nat_to_int(previous)))) =
                     rewrite!(subtract_one, initial);
-                let equal: @(rebuilt == Nat::Succ(previous)) = rewrite!(induction, simplified);
-                let step: @(nat_from_int(1 + nat_to_int(previous)) == Nat::Succ(previous)) =
+                let equal: @(rebuilt == Peano::Succ(previous)) = rewrite!(induction, simplified);
+                let step: @(nat_from_int(1 + nat_to_int(previous)) == Peano::Succ(previous)) =
                     fold!(nat_from_int, equal);
                 fold!(nat_to_int, step)
             }
@@ -122,7 +122,7 @@ pub logic fn nat_from_to_int(n: Nat) -> @(nat_from_int(nat_to_int(n)) == n) {
 }
 
 // The interface for callers that require an exact nonnegative conversion.
-pub logic fn nat_from_nonnegative(n: Int, nonnegative: @(n >= 0)) -> Nat {
+pub logic fn nat_from_nonnegative(n: Int, nonnegative: @(n >= 0)) -> Peano {
     nat_from_int(n)
 }
 
@@ -158,10 +158,10 @@ logic fn append_values() -> @(maybe_value(seq_get(seq_append(Seq::<Int>::Cons { 
     prove!(maybe_value(seq_get(seq_append(Seq::<Int>::Cons { head: 1, tail: Seq::Empty }, Seq::<Int>::Cons { head: 2, tail: Seq::Empty }), 1)) == 2)
 }
 logic fn length_fact(xs: Seq<Int>) -> @(seq_length(xs) >= 0) { seq_nonnegative(xs) }
-logic fn natural_fact(n: Nat) -> @(nat_to_int(n) >= 0) { nat_nonnegative(n) }
+logic fn natural_fact(n: Peano) -> @(nat_to_int(n) >= 0) { nat_nonnegative(n) }
 logic fn to_from(n: Int, nonnegative: @(n >= 0)) -> @(nat_to_int(nat_from_int(n)) == n) { nat_to_from_int(n, nonnegative) }
-logic fn from_to(n: Nat) -> @(nat_from_int(nat_to_int(n)) == n) { nat_from_to_int(n) }
-logic fn exact_natural(n: Int, nonnegative: @(n >= 0)) -> Nat { nat_from_nonnegative(n, nonnegative) }
+logic fn from_to(n: Peano) -> @(nat_from_int(nat_to_int(n)) == n) { nat_from_to_int(n) }
+logic fn exact_natural(n: Int, nonnegative: @(n >= 0)) -> Peano { nat_from_nonnegative(n, nonnegative) }
 
 logic fn appended_length(xs: Seq<Int>, ys: Seq<Int>)
     -> @(seq_length(seq_append(xs, ys)) == seq_length(xs) + seq_length(ys)) {

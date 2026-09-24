@@ -110,13 +110,13 @@ fn stated(a: u8, b: u8, h: @(a as Int + b as Int <= 255)) -> @(a as Int + b as I
 }
 
 //~ proofs: 26
-//~ run: wrapped_sum(200, 100) => panic: attempt to add with overflow | (44, Erased)
+//~ run: wrapped_sum(200, 100) => panic: attempt to add with overflow
 //~ run: wrapped_sum(200, 55) => (255, Erased)
-//~ run: wrapped_difference(-32768, 1) => panic: attempt to subtract with overflow | (32767, Erased)
+//~ run: wrapped_difference(-32768, 1) => panic: attempt to subtract with overflow
 //~ run: wrapped_difference(5, 7) => (-2, Erased)
-//~ run: wrapped_product(65536, 65536) => panic: attempt to multiply with overflow | (0, Erased)
+//~ run: wrapped_product(65536, 65536) => panic: attempt to multiply with overflow
 //~ run: wrapped_product(65535, 65537) => (4294967295, Erased)
-//~ run: wrapped_negation(-128) => panic: attempt to negate with overflow | (-128, Erased)
+//~ run: wrapped_negation(-128) => panic: attempt to negate with overflow
 //~ run: wrapped_negation(-127) => (127, Erased)
 //~ run: quotient(7, 2) => (3, Erased)
 //~ run: quotient(7, 0) => panic: attempt to divide by zero
@@ -131,8 +131,8 @@ fn stated(a: u8, b: u8, h: @(a as Int + b as Int <= 255)) -> @(a as Int + b as I
 //~ run: safe_quotient(7, 3, Erased) => 2
 //~ run: twice_then_one(100, Erased) => 201
 //~ rust: fn wrapped_sum(a: u8, b: u8) -> (u8, Erased) {
-//~ rust: let s = a + b;
-//~ rust: let n = -a;
+//~ rust: let s = (a).checked_add(b).expect("attempt to add with overflow");
+//~ rust: let n = (a).checked_neg().expect("attempt to negate with overflow");
 //~ rust: let q = a / b;
 //~ rust: d + 1
 //~ rust: 100_u8 + 10_u8

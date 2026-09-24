@@ -345,7 +345,10 @@ impl Env<'_> {
         };
         let (steps, _) = self.place_steps(slot, &parts, access)?;
         // The place read as a value, not moved (`moves.rs`).
-        let value = self.lending(|env| env.check(inner, expected))?;
+        self.suppress_models += 1;
+        let value = self.lending(|env| env.check(inner, expected));
+        self.suppress_models -= 1;
+        let value = value?;
         let local = &self.names[slot];
         let place = Place {
             binding: local.binding.unwrap_or(local.id),
@@ -586,7 +589,10 @@ impl Env<'_> {
             );
         }
         if self.total {
-            return self.lending(|env| env.infer(inner));
+            self.suppress_models += 1;
+            let value = self.lending(|env| env.infer(inner));
+            self.suppress_models -= 1;
+            return value;
         }
         self.require_preview(
             crate::preview::Feature::HeapViews,

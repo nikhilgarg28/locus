@@ -14,13 +14,13 @@ fn widened(n: u8) -> (out: u8, @(out as Int == n as Int)) {
     (n, prove!(n as Int == wide))
 }
 
-// A `Ghost<T>` parameter is the marker at runtime, and the value in the
+// A Logical parameter is the marker at runtime, and the value in the
 // claims about the other parameters.
 fn under(n: u8, cap: Int, h: @(n <= cap)) -> (out: u8, @(out <= cap)) {
     (n, h)
 }
 
-// What stands in a `Ghost<T>` position is a logical value: a snapshot, or
+// What stands in a Logical position is a logical value: a snapshot, or
 // a value read where nothing runs.
 fn under_limit(n: u8, h: @(n <= 200)) -> u8 {
     let (out, _) = under(n, (200 as Int), h);
@@ -28,7 +28,7 @@ fn under_limit(n: u8, h: @(n <= 200)) -> u8 {
     again
 }
 
-// A `Ghost<T>` field holds a historical value, with evidence about it.
+// A Logical field holds a historical value, with evidence about it.
 #[derive(Clone, Copy, Debug)]
 struct Historical {
     value: Int,
@@ -39,8 +39,8 @@ fn record(x: u8, h: @(x != 0)) -> Historical {
     Historical { value: (x as Int), evidence: h }
 }
 
-// The field is read in a proposition, where it is its `u8` value.
-fn recorded(r: Historical) -> @(r.value != 0) {
+// The field is read in a proposition, where its Int value stays logical.
+fn recorded(r: Historical) -> @(model!(r.value) != 0) {
     r.evidence
 }
 
@@ -122,7 +122,7 @@ fn use_spin(x: u8) -> u8 {
     x
 }
 
-//~ proofs: 11
+//~ proofs: 10
 //~ run: keep(7) => (7, Erased)
 //~ run: widened(9) => (9, Erased)
 //~ run: under(3, Erased, Erased) => (3, Erased)
@@ -135,12 +135,12 @@ fn use_spin(x: u8) -> u8 {
 //~ run: doubled_noted(21) => (42, Erased)
 //~ run: with_room(100, Erased) => 150
 //~ run: checked(0) => Erased
-//~ run: checked(1) => panic | Erased
+//~ run: checked(1) => panic
 //~ run: use_checked(0) => 0
-//~ run: use_checked(200) => panic | 200
+//~ run: use_checked(200) => panic
 //~ rust: fn keep(x: u8) -> (u8, Erased) {
 //~ rust: fn under(n: u8, _cap: Erased, _h: Erased) -> (u8, Erased) {
-//~ rust: let (out, _) = under(n, Erased, Erased);
+//~ rust: let (out, _) = under(n, Erased, h);
 //~ rust: let (again, _) = under(out, Erased, Erased);
 //~ rust: value: Erased,
 //~ rust: Historical { value: Erased, evidence: Erased }

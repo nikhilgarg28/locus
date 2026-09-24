@@ -196,7 +196,7 @@ fn monomorphic_rust_compiles_with_warnings_denied_and_preserves_behavior() {
 
 #[test]
 fn public_recursive_logical_functions_do_not_overflow_the_export_checker() {
-    let source = "#[derive(Logical)] pub enum Nat { Zero, Succ(Nat) } pub logic fn size(n: Nat) -> Int { match n { Nat::Zero => 0, Nat::Succ(tail) => 1 + size(tail) } }";
+    let source = "#[derive(Logical)] pub enum Peano { Zero, Succ(Peano) } pub logic fn size(n: Peano) -> Int { match n { Peano::Zero => 0, Peano::Succ(tail) => 1 + size(tail) } }";
     let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("recursive-export-{}.lc", std::process::id()));
     std::fs::write(&path, source).unwrap();

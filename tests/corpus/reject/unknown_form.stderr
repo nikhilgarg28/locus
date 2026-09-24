@@ -4,7 +4,7 @@ error[L0118]: `println!` is not a form of Locus
 4 |     println!("{}", n); //~ error: L0118 `println!` is not a form of Locus
   |     ^^^^^^^^
   |
-  = note: the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros
+  = note: the forms are `prop!`, `prove!`, `rewrite!`, `unfold!`, `fold!`, `old!`, `snapshot!`, `model!`, `recurse!`, `assert!`, `unreachable!`, `todo!`, `panic!`, `debug_assert!`, `matches!`, and `vec!`; Locus has no user-defined macros
 error[L0118]: Locus forms take parentheses: `vec!(...)`
  --> tests/corpus/reject/unknown_form.lc:9:17
   |

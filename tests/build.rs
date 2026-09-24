@@ -46,7 +46,7 @@ pub fn bounded_zero() -> @within_limit(0) {
     within_limit::Bounds @ prove!(0 <= 3)
 }
 
-pub(crate) fn step(lock: Lock, bounded: @within_limit(lock.failures as Int)) -> (next: Lock, @within_limit(next.failures as Int)) {
+pub(crate) fn step(lock: Lock, bounded: @within_limit(model!(lock.failures) as Int)) -> (next: Lock, @within_limit(model!(next.failures) as Int)) {
     (lock, bounded)
 }
 
@@ -72,7 +72,7 @@ pub fn bounded_zero() -> @within_limit(0) {
     within_limit::Bounds @ prove!(0 <= 3)
 }
 
-pub fn step(lock: Lock, bounded: @within_limit(lock.failures as Int)) -> (next: Lock, @within_limit(next.failures as Int)) {
+pub fn step(lock: Lock, bounded: @within_limit(model!(lock.failures) as Int)) -> (next: Lock, @within_limit(model!(next.failures) as Int)) {
     (lock, bounded)
 }
 "#;
@@ -538,4 +538,47 @@ fn the_impl_block_is_printed_with_its_receivers_and_visibilities() {
     }
     let root = std::fs::read_to_string(directory.join("src").join("lib.rs")).unwrap();
     assert!(root.contains("pub mod percent;"), "{root}");
+}
+
+#[test]
+#[doc = "spec: 1.92:15"]
+fn associated_constants_preserve_rust_visibility_and_const_use() {
+    let directory = build_crate_from(
+        "associated_constants",
+        "limits.lc",
+        r#"
+        pub struct Limits {}
+        impl Limits {
+            pub const LIMIT: u32 = u32::MAX;
+            const PRIVATE: u8 = 7;
+            pub const WIDTH: u8 = Self::PRIVATE;
+        }
+    "#,
+    );
+    let rlib = compile_generated(&directory);
+    let binary = compile_caller(
+        &directory,
+        "public_constants",
+        r#"
+        use generated::limits::Limits;
+        const ARRAY: [u8; Limits::WIDTH as usize] = [0; Limits::WIDTH as usize];
+        fn main() { println!("{} {}", Limits::LIMIT, ARRAY.len()); }
+    "#,
+        &rlib,
+    )
+    .unwrap_or_else(|stderr| panic!("{stderr}"));
+    assert_eq!(run(binary), "4294967295 7\n");
+    let stderr = compile_caller(
+        &directory,
+        "private_constant",
+        r#"
+        fn main() { println!("{}", generated::limits::Limits::PRIVATE); }
+    "#,
+        &rlib,
+    )
+    .expect_err("private constants remain private across the crate boundary");
+    assert!(
+        error_codes(&stderr).iter().any(|code| code == "E0624"),
+        "{stderr}"
+    );
 }

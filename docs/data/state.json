@@ -1053,21 +1053,21 @@
   ],
   "measurements": {
     "schema_version": 1,
-    "generated_at": "2026-09-23T04:34:55.214457+00:00",
-    "source_fingerprint": "ccbf415a87659966490844e1805561e8b36297ca94aeb11da52f6b3f08b569ca",
-    "fast_seconds": 221,
+    "generated_at": "2026-09-24T07:34:08.414350+00:00",
+    "source_fingerprint": "f9eabc98c932d9046393676a1f567bbb354099e9a570043af38eff1edba20b48",
+    "fast_seconds": 222,
     "fast_limit_seconds": 120,
     "fast_tests": {
-      "passed": 849,
+      "passed": 883,
       "ignored": 0,
-      "targets": 77
+      "targets": 78
     },
     "extended_tests": {
-      "passed": 849,
+      "passed": 883,
       "ignored": 0,
-      "targets": 77
+      "targets": 78
     },
-    "corpus_files": 262,
+    "corpus_files": 265,
     "proof_tiers": {
       "tests/corpus/target/library_buffer_model.lc": {
         "computed": 8,
@@ -1283,7 +1283,7 @@
       {
         "path": "src/typed/lower.rs",
         "category": "typed lowering, layout, permissions and native boundary",
-        "physical_lines": 2834
+        "physical_lines": 2847
       },
       {
         "path": "src/typed/layout.rs",
@@ -1313,7 +1313,7 @@
       {
         "path": "src/exec/check.rs",
         "category": "check IR acceptance and native contracts",
-        "physical_lines": 728
+        "physical_lines": 733
       },
       {
         "path": "src/exec/buffer.rs",
@@ -1328,12 +1328,12 @@
       {
         "path": "src/erased/check.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 724
+        "physical_lines": 726
       },
       {
         "path": "src/erased/erase.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 994
+        "physical_lines": 999
       },
       {
         "path": "src/erased/cleanup.rs",
@@ -1343,17 +1343,17 @@
       {
         "path": "src/erased/rust.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 1335
+        "physical_lines": 1353
       },
       {
         "path": "src/erased/tree.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 314
+        "physical_lines": 316
       },
       {
         "path": "src/elab/items.rs",
         "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted",
-        "physical_lines": 2027
+        "physical_lines": 2081
       },
       {
         "path": "src/build.rs",
@@ -1362,17 +1362,17 @@
       }
     ],
     "specification": {
-      "paragraphs": 341,
-      "normative": 310,
-      "citations": 465,
-      "focused_tests": 278
+      "paragraphs": 489,
+      "normative": 335,
+      "citations": 526,
+      "focused_tests": 315
     },
     "benchmark": {
-      "epoch": "ab5fbc391857def786082ef852326ff20dfe7afc458a910a80ea2c0e3d8bb430",
-      "records": 2,
-      "observed_days": 0.016149215787037038,
+      "epoch": "4798fc0b00fbe1bb59179d8dd9d3903af00a8877d0bc2c4279a397c3a1519b69",
+      "records": 1,
+      "observed_days": 0.0,
       "two_week_window_complete": false,
-      "headline_index": 100.04851783994766,
+      "headline_index": 100.0,
       "freshness": {
         "status": "current",
         "commits": 0
@@ -1381,155 +1381,105 @@
         {
           "name": "tests/corpus/target/library_buffer_model.lc",
           "medians_ns": [
-            285577333,
-            283153249
+            415321000
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 285577333,
-            "k": 6,
-            "median_ns": 283153249,
-            "pooled_dispersion_ns": 2992784.5724722985,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/library_finite_map.lc",
           "medians_ns": [
-            23608167,
-            23208291
+            24152042
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 23608167,
-            "k": 6,
-            "median_ns": 23208291,
-            "pooled_dispersion_ns": 152143.47162893222,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/library_integer.lc",
           "medians_ns": [
-            43394584,
-            43478125
+            45567375
           ],
-          "sparkline": "▁█",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 43394584,
-            "k": 6,
-            "median_ns": 43478125,
-            "pooled_dispersion_ns": 724215.6958406039,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/library_relations.lc",
           "medians_ns": [
-            25060375,
-            25965250
+            25722958
           ],
-          "sparkline": "▁█",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 25060375,
-            "k": 6,
-            "median_ns": 25965250,
-            "pooled_dispersion_ns": 467175.4186845565,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/library_runtime_list.lc",
           "medians_ns": [
-            43973667,
-            44334125
+            46267000
           ],
-          "sparkline": "▁█",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 43973667,
-            "k": 6,
-            "median_ns": 44334125,
-            "pooled_dispersion_ns": 585706.4405211495,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/library_seq_ops.lc",
           "medians_ns": [
-            58705625,
-            58635667
+            60065250
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 58705625,
-            "k": 6,
-            "median_ns": 58635667,
-            "pooled_dispersion_ns": 209824.59670937047,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/lock.lc",
           "medians_ns": [
-            23837583,
-            23693457
+            25611875
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 23837583,
-            "k": 6,
-            "median_ns": 23693457,
-            "pooled_dispersion_ns": 360072.2689730763,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/logical_mutual_trees.lc",
           "medians_ns": [
-            21838208,
-            21707750
+            23180209
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 21838208,
-            "k": 6,
-            "median_ns": 21707750,
-            "pooled_dispersion_ns": 127660.91098656491,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/midpoint.lc",
           "medians_ns": [
-            29762501,
-            30183624
+            31975459
           ],
-          "sparkline": "▁█",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 29762501,
-            "k": 6,
-            "median_ns": 30183624,
-            "pooled_dispersion_ns": 335370.73328117863,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         },
         {
           "name": "tests/corpus/target/percent.lc",
           "medians_ns": [
-            19431292,
-            19124749
+            19687626
           ],
-          "sparkline": "█▁",
+          "sparkline": "▁",
           "comparison": {
-            "baseline_median_ns": 19431292,
-            "k": 6,
-            "median_ns": 19124749,
-            "pooled_dispersion_ns": 240171.62468641825,
-            "status": "stable"
+            "status": "insufficient_samples"
           }
         }
       ]
     },
-    "benchmark_record_sha256": "b5462b7f6b3899250532b93ae938adfdb577b5e373e5212fc1375dd160bafb4b"
+    "benchmark_record_sha256": "0f434da1b5b962c2fd5f09d9459d9acb5a4c9b386abed1d49fc6f721b5c97a43"
   }
 }

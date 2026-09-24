@@ -1,0 +1,5 @@
+error[L0201]: Box requires one payload type
+ --> tests/corpus/reject/box_type_arity.lc:2:19
+  |
+2 | fn invalid(value: Box<u8, u8>) -> u8 { 0 } //~ error: L0201 Box requires one payload type
+  |                   ^^^^^^^^^^^

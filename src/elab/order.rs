@@ -77,7 +77,7 @@ pub(super) fn dependency_order(
     quantifiers: &[super::generics::QuantifierNames],
 ) -> (Vec<Vec<usize>>, Vec<usize>) {
     let names: Vec<Option<String>> = units.iter().map(unit_name).collect();
-    let index_of: HashMap<(Namespace, &str), usize> = units
+    let mut index_of: HashMap<(Namespace, &str), usize> = units
         .iter()
         .zip(&names)
         .enumerate()
@@ -86,6 +86,15 @@ pub(super) fn dependency_order(
             name.as_deref().map(|name| ((namespace, name), index))
         })
         .collect();
+    let derived_names: Vec<(String, usize)> = units.iter().enumerate().filter_map(|(index, unit)| {
+        if let DeclarationKind::Struct { name, .. } = &unit.declaration.kind
+            && unit.declaration.attributes.iter().any(|attribute| matches!(&attribute.kind, AttributeKind::Derive(paths) if paths.iter().any(|path| path.text() == "Model"))) {
+            Some((format!("{}Model", name.text), index))
+        } else { None }
+    }).collect();
+    for (name, index) in &derived_names {
+        index_of.insert((Namespace::Type, name), *index);
+    }
     // Every `impl` function by its own name, for a method call.
     let mut methods: HashMap<&str, Vec<usize>> = HashMap::new();
     for (index, unit) in units.iter().enumerate() {
@@ -100,7 +109,9 @@ pub(super) fn dependency_order(
         if let Some(model) = unit.model
             && let Some(owner) = unit.owner
         {
-            models.entry(owner.text()).or_default().push(index);
+            if let Some(source) = model_type_name(&model.source) {
+                models.entry(source).or_default().push(index);
+            }
             if let Some(source) = model_type_name(&model.source) {
                 models
                     .entry(format!("{source}->{}", owner.text()))
@@ -114,12 +125,46 @@ pub(super) fn dependency_order(
         .enumerate()
         .map(|(index, unit)| {
             let mut names = HashSet::new();
-            Mentions {
+            let mut mentions = Mentions {
                 names: &mut names,
                 bound: Vec::new(),
                 owner: unit.owner.map(Path::text),
+                logical: matches!(unit.declaration.kind, DeclarationKind::Function { logical: true, .. } | DeclarationKind::Prop { .. }) || unit.declaration.attributes.iter().any(|attribute| matches!(&attribute.kind, AttributeKind::Derive(paths) if paths.iter().any(|path| path.text() == "Model"))),
+                model_types: HashSet::new(),
+            };
+            mentions.unit(unit);
+            let logical = mentions.logical;
+            let mut model_types = mentions.model_types;
+            if logical {
+                // A local may get its physical type from a function result,
+                // without spelling that type in the observing function.
+                let callees: Vec<_> = names.iter().flat_map(|(namespace, name)| {
+                    if *namespace == Namespace::Method {
+                        methods.get(name.as_str()).into_iter().flatten().copied().collect::<Vec<_>>()
+                    } else if matches!(namespace, Namespace::Value | Namespace::Applied) {
+                        index_of.get(&(Namespace::Value, name.as_str())).copied().into_iter().collect()
+                    } else { Vec::new() }
+                }).collect();
+                for callee in callees {
+                    if let Some(result) = match &units[callee].declaration.kind {
+                        DeclarationKind::Function { result, .. } => Some(result),
+                        DeclarationKind::Constant { ty, .. } => Some(ty),
+                        _ => None,
+                    } {
+                        let mut unused_names = HashSet::new();
+                        let mut result_mentions = Mentions {
+                            names: &mut unused_names,
+                            bound: Vec::new(),
+                            owner: units[callee].owner.map(Path::text),
+                            logical: true,
+                            model_types: HashSet::new(),
+                        };
+                        result_mentions.ty(result);
+                        model_types.extend(result_mentions.model_types);
+                    }
+                }
+                for name in model_types { names.insert((Namespace::Model, name)); }
             }
-            .unit(unit);
             let mut edges: Vec<usize> = names
                 .iter()
                 .flat_map(|(namespace, name)| match namespace {
@@ -129,7 +174,11 @@ pub(super) fn dependency_order(
                         .copied()
                         .into_iter()
                         .collect::<Vec<usize>>(),
-                    Namespace::Model => models.get(name).into_iter().flatten().copied().filter(|found| *found != index).collect(),
+                    Namespace::Model => {
+                        if unit.model.is_some_and(|model| model_type_name(&model.source).as_ref() == Some(name)) {
+                            Vec::new()
+                        } else { models.get(name).into_iter().flatten().copied().filter(|found| *found != index).collect() }
+                    },
                     Namespace::Method => methods
                         .get(name.as_str())
                         .into_iter()
@@ -346,6 +395,8 @@ struct Mentions<'a> {
     bound: Vec<String>,
     /// Inside an `impl` block: its target, which `Self` names.
     owner: Option<String>,
+    logical: bool,
+    model_types: HashSet<String>,
 }
 
 impl Mentions<'_> {
@@ -361,6 +412,7 @@ impl Mentions<'_> {
     /// literal or pattern. No local shadows a type.
     fn type_name(&mut self, name: &Name) {
         let text = self.type_text(name);
+        self.model_types.insert(text.clone());
         self.names.insert((Namespace::Type, text));
     }
 
@@ -530,6 +582,18 @@ impl Mentions<'_> {
     }
 
     fn ty(&mut self, ty: &Type) {
+        if let Some(name) = model_type_name(ty)
+            && name != "Buffer"
+        {
+            self.model_types.insert(name);
+        }
+        if matches!(
+            &ty.kind,
+            TypeKind::Proof(_) | TypeKind::LogicalFunction { .. }
+        ) || matches!(&ty.kind, TypeKind::Named(name) if matches!(name.text.as_str(), "Int" | "Nat" | "Bool" | "Prop"))
+        {
+            self.logical = true;
+        }
         match &ty.kind {
             TypeKind::Named(name) => self.type_name(name),
             TypeKind::Path { path, arguments } => {
@@ -639,6 +703,18 @@ impl Mentions<'_> {
     }
 
     fn expr(&mut self, expr: &Expr) {
+        if matches!(
+            &expr.kind,
+            ExprKind::Logic(_)
+                | ExprKind::Forall { .. }
+                | ExprKind::Exists { .. }
+                | ExprKind::Form {
+                    form: Form::Model | Form::Prop | Form::Prove | Form::Fold | Form::Unfold,
+                    ..
+                }
+        ) {
+            self.logical = true;
+        }
         match &expr.kind {
             ExprKind::Subscript { value, index } => {
                 self.expr(value);
@@ -683,8 +759,21 @@ impl Mentions<'_> {
                 self.expr(lower);
                 self.expr(upper);
             }
-            ExprKind::Form { arguments, .. } => {
+            ExprKind::Form {
+                form,
+                arguments,
+                source_hint,
+                ..
+            } => {
                 arguments.iter().for_each(|argument| self.expr(argument));
+                if *form == Form::Model
+                    && let Some(ty) = source_hint.as_deref()
+                {
+                    self.ty(ty);
+                    if let Some(source) = model_type_name(ty) {
+                        self.names.insert((Namespace::Model, source));
+                    }
+                }
             }
             ExprKind::Struct { path, fields } => {
                 self.type_name(&path.segments[0]);
@@ -704,6 +793,15 @@ impl Mentions<'_> {
                 self.expr(scrutinee);
                 for arm in arms {
                     self.with_pattern(&arm.pattern, |this| this.expr(&arm.body));
+                }
+                if matches!(scrutinee.kind, ExprKind::Ref { mutable: false, .. }) {
+                    for arm in arms {
+                        if let PatternKind::Variant { path, .. }
+                        | PatternKind::Struct { path, .. } = &arm.pattern.kind
+                        {
+                            self.model_types.remove(&path.segments[0].text);
+                        }
+                    }
                 }
             }
             ExprKind::Loop { body } => self.block(body),
@@ -784,7 +882,10 @@ impl Mentions<'_> {
 fn model_type_name(ty: &Type) -> Option<String> {
     match &ty.kind {
         TypeKind::Named(name) => Some(name.text.clone()),
+        TypeKind::Path { path, .. } if path.text() == "Vec" => Some("Buffer".into()),
         TypeKind::Path { path, .. } => Some(path.text()),
+        TypeKind::Array { .. } | TypeKind::Slice(_) => Some("Buffer".into()),
+        TypeKind::Tuple(_) => Some("Tuple".into()),
         TypeKind::Group(inner) | TypeKind::Ref { inner, .. } => model_type_name(inner),
         _ => None,
     }

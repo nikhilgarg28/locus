@@ -76,7 +76,9 @@ impl Env<'_> {
     /// A value for a position of type `ty`. Logical positions retain their
     /// erasure layout; eager runtime effects in argument expressions remain.
     pub(super) fn argument(&mut self, argument: &ast::Expr, ty: &Type, ghost: bool) -> Elab<Value> {
-        let value = if (matches!(ty, Type::Int) || ghost && matches!(ty, Type::Bool))
+        let value = if (matches!(ty, Type::Int)
+            || self.is_natural(ty)
+            || ghost && matches!(ty, Type::Bool))
             && !untyped_literal(argument)
         {
             let value = self.infer(argument)?;
@@ -115,6 +117,11 @@ impl Env<'_> {
         match &callee.kind {
             // `Type::name(..)`: a function of an `impl` block, or a variant.
             ExprKind::Path(path) => match self.path_function(path) {
+                Some(info) if info.constant => self.fail(
+                    "L0208",
+                    "a constant is a value; omit the call parentheses",
+                    span,
+                ),
                 Some(info) => self.call_fn(&info, arguments, span),
                 None => self.variant(path, arguments, expected, span),
             },
@@ -127,6 +134,11 @@ impl Env<'_> {
                     .or_else(|| self.types.get(&name.text))
                     .cloned();
                 match global {
+                    Some(Global::Fn(info)) if info.constant => self.fail(
+                        "L0208",
+                        "a constant is a value; omit the call parentheses",
+                        span,
+                    ),
                     Some(Global::Fn(info)) => self.call_fn(&info, arguments, span),
                     Some(Global::Prop(info)) => {
                         let term = self.prop_application(&info, arguments, span)?;

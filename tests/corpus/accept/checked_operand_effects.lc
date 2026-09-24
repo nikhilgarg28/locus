@@ -1,0 +1,12 @@
+//~ spec: 1.92:8
+fn tick(counter: &mut u8) -> u8 {
+    let old = counter;
+    counter = counter.wrapping_add(1);
+    old
+}
+fn sum(counter: &mut u8) -> u8 { tick(&mut counter) + tick(&mut counter) }
+fn difference(counter: &mut u8) -> u8 { tick(&mut counter) - tick(&mut counter) }
+//~ run: sum(&mut 2 -> 4) => 5
+//~ run: sum(&mut 128 -> 130) => panic: attempt to add with overflow
+//~ run: difference(&mut 255 -> 1) => 255
+//~ run: difference(&mut 2 -> 4) => panic: attempt to subtract with overflow

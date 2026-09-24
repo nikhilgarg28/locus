@@ -175,6 +175,13 @@ impl Env<'_> {
         }
     }
 
+    fn logical_index(&mut self, index: &ast::Expr) -> Elab<Value> {
+        let previous = std::mem::replace(&mut self.suppress_models, 0);
+        let result = self.infer(index);
+        self.suppress_models = previous;
+        result
+    }
+
     fn logical_buffer(
         &mut self,
         op: BufferOp,
@@ -202,6 +209,7 @@ impl Env<'_> {
         let mut parameters = vec![(source_id, receiver.ty.clone())];
         let mut model_args = vec![Term::Free(source_id)];
         if let Some(index) = index {
+            let index = self.natural_integer(index, span)?;
             let index_id = VarId::fresh();
             let source = self.term(&receiver, span)?;
             let actual_index = self.term(&index, span)?;
@@ -245,14 +253,33 @@ impl Env<'_> {
             arguments: model_args,
         };
         let callee = Term::lambda_over(&parameters, &ty, body);
-        Ok(Value::new(
+        let result = Value::new(
             Expr::LogicalApply {
                 callee,
                 arguments,
                 ty: ty.clone(),
             },
             ty,
-        ))
+        );
+        if op == BufferOp::Length {
+            let value = self.term(&receiver, span)?;
+            let call = self.term(&result, span)?;
+            let evidence = crate::kernel::Proof::Transport {
+                eq: Box::new(crate::kernel::derive::symm_at(
+                    &Type::Int,
+                    &call,
+                    crate::kernel::Proof::Definition(call.clone()),
+                )),
+                template: Term::int_le(Term::int(0), Term::Bound(0)),
+                proof: Box::new(crate::kernel::Proof::BufferBound {
+                    value,
+                    upper: false,
+                }),
+            };
+            self.make_natural(result, Some(evidence), span)
+        } else {
+            Ok(result)
+        }
     }
 
     pub(super) fn vector_constructor(
@@ -457,7 +484,7 @@ impl Env<'_> {
                             );
                         }
                         let index = if op == BufferOp::Get {
-                            Some(self.infer(&arguments[0])?)
+                            Some(self.logical_index(&arguments[0])?)
                         } else {
                             None
                         };
@@ -549,7 +576,7 @@ impl Env<'_> {
                 );
             }
             let index = if op == BufferOp::Get {
-                Some(self.infer(&arguments[0])?)
+                Some(self.logical_index(&arguments[0])?)
             } else {
                 None
             };

@@ -1,4 +1,4 @@
-error[L0282]: no Model implementation observes `u8` as `Observation`
+error[L0282]: no logical conversion from `Nat` to `Observation`; use the canonical model or an explicitly checked conversion
  --> tests/corpus/reject/model_bridge_missing.lc:2:46
   |
 2 | fn observe(value: u8) -> Observation { value as Observation } //~ error: L0282

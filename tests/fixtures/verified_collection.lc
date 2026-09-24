@@ -1,10 +1,12 @@
 #[derive(Clone, Copy, Debug)]
 struct Item { key: u8 }
-impl Model<Item> for Int {
-    logic fn model(source: &Item) -> Self { source.key as Int }
+impl Model for Item {
+    type Logic = Int;
+    logic fn model(source: &Item) -> Int { model!(source.key) as Int }
 }
-impl Model<[Item]> for Seq<Int> {
-    logic fn model(source: &[Item]) -> Self {
+impl Model for [Item] {
+    type Logic = Seq<Int>;
+    logic fn model(source: &[Item]) -> Seq<Int> {
         let count = source.len();
         let bounds: @(0 <= 0 && 0 <= count && 0 + count <= source.len()) =
             And::Intro(And::Intro(prove!(0 <= 0), prove!(0 <= count)), prove!(0 + count <= source.len()));

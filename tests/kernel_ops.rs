@@ -391,7 +391,7 @@ fn the_table_has_the_rows_it_says_and_no_others() {
             Op::WrappingNeg => (Panic::Never, false, 1),
         };
         assert_eq!(row.panic(), panic, "{row:?}");
-        assert_eq!(row.wraps_instead(), wraps, "{row:?}");
+        assert_eq!(row.rust_can_wrap(), wraps, "{row:?}");
         assert_eq!(row.arity(), arity, "{row:?}");
         assert_eq!(row.op.arity(), arity);
     }
@@ -823,7 +823,7 @@ fn min_over_minus_one_panics_at_every_signed_type_and_wraps_to_min() {
         assert_eq!(rust(Op::Rem, ty, &[lo, -1]).checked, None);
         assert!(!div.fits_at(&operands), "{}", ty.name());
         assert!(!rem.fits_at(&operands), "{}", ty.name());
-        assert!(!div.wraps_instead() && !rem.wraps_instead());
+        assert!(!div.rust_can_wrap() && !rem.rust_can_wrap());
         assert!(!kernel_fits(
             &mut ctx,
             &prelude,
@@ -908,7 +908,7 @@ fn division_by_zero_panics_in_every_build_at_every_type() {
                     op.name(),
                     ty.name()
                 );
-                assert!(!row.wraps_instead());
+                assert!(!row.rust_can_wrap());
                 assert_eq!(
                     rust(op, ty, &[a, 0]),
                     Rust {
@@ -944,7 +944,7 @@ fn negating_min_panics_at_every_signed_type_and_wraps_to_min() {
         // in a build without overflow checks; the table says the panic can
         // wrap.
         assert!(!neg.fits_at(&integers(&[lo])), "{}", ty.name());
-        assert!(neg.wraps_instead());
+        assert!(neg.rust_can_wrap());
         assert_eq!(
             rust(Op::Neg, ty, &[lo]),
             Rust {
@@ -965,7 +965,7 @@ fn negating_min_panics_at_every_signed_type_and_wraps_to_min() {
         }
         // `wrapping_neg`: never panics, and `min` is its own negation.
         assert_eq!(wrapping.panic(), Panic::Never);
-        assert!(!wrapping.wraps_instead());
+        assert!(!wrapping.rust_can_wrap());
         for a in [lo, lo + 1, -1, 0, 1, hi] {
             assert!(wrapping.fits_at(&integers(&[a])));
             assert!(wrapping.fits(&prelude, &[lit(ty, a)]).is_empty());
@@ -1044,7 +1044,7 @@ fn overflow_of_plus_minus_times_wraps_and_the_table_says_where() {
                 ty.name()
             );
             assert!(!row.fits_at(&integers(&[a, b])));
-            assert!(row.wraps_instead());
+            assert!(row.rust_can_wrap());
             assert_eq!(
                 Some(i128_of(&row.compute(&integers(&[a, b])))),
                 expected.wrapping
