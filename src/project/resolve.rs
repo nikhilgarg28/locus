@@ -1,4 +1,8 @@
-use crate::{ast::*, diagnostic::Diagnostic, source::Span};
+use crate::{
+    ast::*,
+    diagnostic::Diagnostic,
+    source::{SourceFile, Span},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -50,6 +54,7 @@ pub struct Graph {
     pub package_roots: Vec<usize>,
     pub export_roots: Vec<Vec<usize>>,
     pub externs: BTreeMap<usize, BTreeMap<String, usize>>,
+    spec_guards: Vec<super::specs::Guard>,
 }
 #[derive(Clone, Debug, Default)]
 pub struct Access {
@@ -137,7 +142,7 @@ pub struct Unit {
     pub exports: Vec<Option<Program>>,
 }
 
-pub fn resolve(program: Program) -> (Program, Graph, Vec<Diagnostic>) {
+pub fn resolve(program: Program, source: &SourceFile) -> (Program, Graph, Vec<Diagnostic>) {
     resolve_units(
         vec![Unit {
             program,
@@ -146,18 +151,21 @@ pub fn resolve(program: Program) -> (Program, Graph, Vec<Diagnostic>) {
             exports: Vec::new(),
         }],
         None,
+        source,
     )
 }
 pub fn resolve_units(
     units: Vec<Unit>,
     selected: Option<usize>,
+    source: &SourceFile,
 ) -> (Program, Graph, Vec<Diagnostic>) {
+    let matcher = super::specs::Matcher::new(source);
     let mut graph = Graph::default();
     let mut errors = Vec::new();
     let mut dependencies = Vec::new();
     for unit in units {
         let span = program_span(&unit.program);
-        let root = graph.collect(unit.program, None, unit.name, span, &mut errors);
+        let root = graph.collect(unit.program, None, unit.name, span, &mut errors, &matcher);
         graph.package_roots.push(root);
         dependencies.push(unit.dependencies);
         let mut exports = Vec::new();
@@ -170,6 +178,7 @@ pub fn resolve_units(
                     format!("__export{i}"),
                     span,
                     &mut errors,
+                    &matcher,
                 ));
             } else {
                 exports.push(root);
@@ -210,6 +219,25 @@ pub fn resolve_units(
             errors: &mut errors,
         };
         rewrite.declaration(&mut d);
+        if let DeclarationKind::Impl {
+            model: None,
+            target,
+            ..
+        } = &d.kind
+        {
+            for guard in &graph.spec_guards {
+                if let Some(owner) = graph.items.iter().find(|i| {
+                    i.declaration.span == guard.representation
+                        && matches!(i.declaration.kind, DeclarationKind::Struct { .. })
+                }) && target.text() == owner.canonical
+                    && d.span != guard.implementation
+                {
+                    errors.push(Diagnostic::error("L0511", format!("additional implementation of spec type `{}` is not permitted", guard.name), d.span)
+                        .label(guard.header, "spec declared here")
+                        .note("put private helpers and declared methods in the single local implementation block"));
+                }
+            }
+        }
         if let Some(name) = declared_name_mut(&mut d.kind) {
             name.text = item.canonical.clone();
         }
@@ -282,7 +310,10 @@ impl Graph {
         name: String,
         span: Span,
         errors: &mut Vec<Diagnostic>,
+        matcher: &super::specs::Matcher<'_>,
     ) -> usize {
+        let (program, guards) = super::specs::prepare(program, matcher, errors);
+        self.spec_guards.extend(guards);
         let module = self.scopes.len();
         self.scopes.push(Scope {
             parent,
@@ -309,7 +340,14 @@ impl Graph {
                     if !d.attributes.is_empty() {
                         errors.push(Diagnostic::error("L0500","attributes on modules are not supported; put promises in the module body",d.span));
                     }
-                    let child = self.collect(body, Some(module), name.text.clone(), d.span, errors);
+                    let child = self.collect(
+                        body,
+                        Some(module),
+                        name.text.clone(),
+                        d.span,
+                        errors,
+                        matcher,
+                    );
                     self.bind(
                         module,
                         name.text,

@@ -1,0 +1,5 @@
+error[L0510]: spec members are public function or constant headers; other forms are not supported yet
+ --> <fixture>/export.lc:1:20
+  |
+1 | spec mod counter { pub fn read() -> u8; }
+  |                    ^^^

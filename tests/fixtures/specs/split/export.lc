@@ -1,0 +1,10 @@
+pub spec mod arithmetic {
+    #[no_panic]
+    fn next(n: u8) -> (out: u8, @(out == n.wrapping_add(1)));
+}
+pub spec mod arithmetic { const BASE: u8; }
+impl mod arithmetic;
+pub fn answer() -> u8 {
+    let (out, proof) = arithmetic::next(arithmetic::BASE);
+    out
+}

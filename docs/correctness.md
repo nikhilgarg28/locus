@@ -83,3 +83,7 @@ Name resolution, source privacy, reachable export validation and Cargo-to-Rust i
 The host and dependencies must compile the generated interface at the Rust path they advertise. Build-script wiring and the Rust dependency implementation remain build assumptions. Receipt hashes detect accidental stale or edited artifacts; they cannot establish what a deliberately altered build compiled. The project pipeline always checks proofs before emission. General traits, generic runtime ABI export, and broader native ABI mappings remain separate work.
 
 Canonical models obey that source boundary as well: their bodies may inspect representation fields in the defining module, while consumers can select only visible model fields. Derived models retain their source module and field visibility. Module and Cargo fixtures exercise these rules together with associated constants and checked arithmetic.
+
+## Reviewed interfaces still need proofs
+
+[Concrete specs](spec/18-specifications.md) do not turn declarations into assumptions. Tests in `tests/specifications.rs` reject missing bodies, altered proof signatures, false output evidence, weakened effect promises and alias-based extra implementations. Real files exercise split headers/definitions and original diagnostic locations; generated Rust runs under warning denial and rejects private representation access. Kernel checking of the implementation remains necessary after matching the header.

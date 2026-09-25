@@ -1,0 +1,9 @@
+const BASE: u8 = 41;
+fn next(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    helper(n)
+}
+#[no_panic]
+fn helper(n: u8) -> (out: u8, @(out == n.wrapping_add(1))) {
+    let out = n.wrapping_add(1);
+    (out, _)
+}

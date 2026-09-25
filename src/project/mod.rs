@@ -32,3 +32,7 @@ impl std::error::Error for Error {}
 pub fn command_error(path: &std::path::Path, message: String) -> Error {
     build::driver("L0505", path, message)
 }
+
+pub(crate) mod specs;
+
+pub(crate) use resolve::resolve as resolve_inline;

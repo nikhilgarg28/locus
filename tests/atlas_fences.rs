@@ -77,7 +77,9 @@ fn every_executable_now_fence_checks_and_every_run_agrees_with_rust() {
                     if parsed.program.declarations.iter().any(|d| {
                         matches!(
                             d.kind,
-                            locus::ast::DeclarationKind::Module { .. }
+                            locus::ast::DeclarationKind::Spec { .. }
+                                | locus::ast::DeclarationKind::ModuleImpl { .. }
+                                | locus::ast::DeclarationKind::Module { .. }
                                 | locus::ast::DeclarationKind::Use { .. }
                         )
                     }) {

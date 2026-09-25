@@ -252,6 +252,11 @@ const WORDS: &[&str] = &[
 /// Openers and fragments that lead the parser into each production, so that
 /// random input reaches further than the first token of a declaration.
 const FRAGMENTS: &[&str] = &[
+    "spec mod api { fn f(n:u8)->u8; }",
+    "impl mod api { fn f(n:u8)->u8{n} }",
+    "spec type T { fn get(&self)->u8; }",
+    "spec mod unfinished { logic fn f(",
+    "impl mod api;",
     "fn f() -> u8 {",
     "#[terminates] #[no_panic] #[no_io] fn g(n: u8) -> Prop {",
     "fn h(x: u8, p: @(x == x)) -> (out: u8, @(out == x)) {",

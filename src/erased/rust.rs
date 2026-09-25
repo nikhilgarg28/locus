@@ -436,6 +436,9 @@ impl Printer<'_> {
             && let Some(value) = &function.body.tail
         {
             let value = self.expr(value);
+            if function.method_name().starts_with("__locus_") {
+                self.out.push_str("// Module identities retain their source spelling.\n#[allow(non_upper_case_globals)]\n");
+            }
             let _ = writeln!(
                 self.out,
                 "\n{visibility}const {}: {result} = {value};",

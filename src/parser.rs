@@ -84,6 +84,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
         statement: false,
         formula: false,
         in_impl: false,
+        in_spec: false,
         in_method: false,
         closers: None,
         diagnostics: lexed.diagnostics.into(),
@@ -114,6 +115,8 @@ struct Parser<'a> {
     formula: bool,
     /// Set inside an `impl` block, where `Self` is a type.
     in_impl: bool,
+    /// Function and constant declarations end in semicolons inside a spec.
+    in_spec: bool,
     /// Set in the body of a method with a `self` parameter, where `self`
     /// is a value.
     in_method: bool,
@@ -325,6 +328,11 @@ impl Parser<'_> {
             || self.at_keyword("mod")
             || self.at_keyword("use")
             || self.at_word("trusted")
+            || (self.at_word("spec")
+                && self
+                    .tokens
+                    .get(self.position + 1)
+                    .is_some_and(|t| matches!(self.source.slice(t.span), Some("mod" | "type"))))
     }
 
     /// A doc comment or an attribute, which begin an item as well.
@@ -404,6 +412,21 @@ impl Parser<'_> {
         let start = self.current().span;
         let (doc, mut attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
+        if self.in_spec {
+            if visibility.is_some() || !matches!(self.current().kind, K::Fn | K::Logic | K::Const) {
+                self.diagnostics.push(Diagnostic::error("L0510",
+                    "spec members are public function or constant headers; other forms are not supported yet", start));
+                return Err(());
+            }
+            if attributes.iter().any(|a| !a.kind.is_promise()) {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0510",
+                    "only function promises are allowed in a spec header",
+                    start,
+                ));
+                return Err(());
+            }
+        }
         if self.at_word("trusted") {
             let (kind, attribute, end) = self.trusted_function()?;
             attributes.push(attribute);
@@ -606,11 +629,24 @@ impl Parser<'_> {
                 let name = self.name()?;
                 self.expect(K::Colon)?;
                 let ty = self.ty()?;
-                self.expect(K::Equal)?;
-                let value = self.expression()?;
-                let end = self.semicolon(value.span, "constant declaration")?;
+                let (value, end) = if self.in_spec {
+                    let end = self.expect(K::Semicolon)?;
+                    (
+                        Expr {
+                            kind: ExprKind::Hole,
+                            span: end.span,
+                        },
+                        end,
+                    )
+                } else {
+                    self.expect(K::Equal)?;
+                    let value = self.expression()?;
+                    let end = self.semicolon(value.span, "constant declaration")?;
+                    (value, end)
+                };
                 Ok((DeclarationKind::Constant { name, ty, value }, end.span))
             }
+            K::Name if self.source.slice(start.span) == Some("spec") => self.spec_item(),
             K::Keyword if self.source.slice(start.span) == Some("impl") => self.impl_block(visible),
             K::Keyword if self.source.slice(start.span) == Some("mod") => self.module_item(),
             K::Keyword if self.source.slice(start.span) == Some("use") => {
@@ -624,6 +660,44 @@ impl Parser<'_> {
             // `declaration_start` leaves the contextual word `prop`.
             _ => self.prop(),
         }
+    }
+
+    fn spec_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
+        self.nested(|this| {
+            let module = if this.at_keyword("mod") {
+                true
+            } else if this.at_keyword("type") {
+                false
+            } else {
+                return this.fail("write `spec mod Name` or `spec type Name`");
+            };
+            this.bump();
+            let name = this.name()?;
+            if this.at(K::Less) {
+                this.diagnostics.push(Diagnostic::error(
+                    "L0510",
+                    "generic specs are not supported yet",
+                    this.current().span,
+                ));
+                return Err(());
+            }
+            let open = this.expect(K::LBrace)?;
+            let saved = (this.in_spec, this.in_impl);
+            this.in_spec = true;
+            this.in_impl = !module;
+            let members = this.impl_body();
+            (this.in_spec, this.in_impl) = saved;
+            let members = members?;
+            let end = this.close(K::RBrace, open)?.span;
+            Ok((
+                DeclarationKind::Spec {
+                    module,
+                    name,
+                    members,
+                },
+                end,
+            ))
+        })
     }
 
     fn module_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
@@ -773,6 +847,11 @@ impl Parser<'_> {
             Ok((self_param, parameters, result))
         })();
         let body = match &signature {
+            Ok(_) if self.in_spec => self.expect(K::Semicolon).map(|end| Block {
+                statements: Vec::new(),
+                tail: None,
+                span: end.span,
+            }),
             Ok(_) => self.block(),
             Err(()) => Err(()),
         };
@@ -800,9 +879,20 @@ impl Parser<'_> {
         if let Some(span) = visible {
             self.diagnostics.push(Diagnostic::error(
                 "L0122",
-                "`pub` is not written on an `impl` block; write it on each method",
+                if self.at_keyword("mod") {
+                    "put module visibility on `spec mod`, not `impl mod`"
+                } else {
+                    "`pub` is not written on an `impl` block; write it on each method"
+                },
                 span,
             ));
+        }
+        if self.at_keyword("mod") {
+            self.bump();
+            let (DeclarationKind::Module { name, body }, end) = self.module_item()? else {
+                unreachable!()
+            };
+            return Ok((DeclarationKind::ModuleImpl { name, body }, end));
         }
         self.no_generics()?;
         if !self.at_named() {

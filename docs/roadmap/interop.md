@@ -54,11 +54,26 @@ The public name selects the projected Rust entry. Locus calls, including calls f
 
 The delivered work is recorded in [LOC-240](#LOC-240) (projection and emission), [LOC-241](#LOC-241) (behavior and hostile callers), and [LOC-242](#LOC-242) (documentation and complete validation).
 
+## Specifications and native imports
+
+The [specification design](../vision/spec-interfaces.md) and [separate import design](../vision/rust-imports.md) define this work. LOC-39 owns manual interfaces; LOC-44 owns native interoperability. Implement in this order, with an explicit stop before imports:
+
+1. LOC-243: parse concrete module/type spec headers and manual bodies; retain original spans and reject deferred grammar deliberately.
+2. LOC-244: completeness, exact signatures, inherited promises, privacy and alias-resistant implementation checks; pass all bodies through existing proof checking.
+3. LOC-245: real-directory positive/negative fixtures, compiled Rust and hostile clients, executable documentation and complete validation. Then discuss the import design live.
+4. LOC-246: native identity discovery and rustc validation for explicit specs under Cargo configuration. No behavioral assumptions may conceal a signature mismatch.
+5. LOC-247: audited output-proof adapters, caller-owned input obligations, result projection and effect preservation.
+6. LOC-248: generation-only CLI, inspected editable output, explicit unsupported-member diagnostics; no update command.
+7. LOC-249: packaging, changed dependency/configuration provenance, hostile callers, end-to-end Cargo tests and import documentation/gates.
+8. LOC-250: broaden manual specs after the concrete subset: elaborated/alpha-renamed matching, split implementations, generics coordinated with LOC-21/LOC-22, transparent structs/enums, proposition interfaces and logical opacity.
+
+Success for manual specs means: an unused unimplemented declaration fails; a false promised proof still fails; signature disagreement cites both locations; implementation helpers cannot leak; aliases cannot bypass type-spec completeness; external implementation files execute after Rust generation; no new trusted proof rule is introduced. Success for imports additionally requires correct native identity and audited conditional assumptions. Those latter claims cannot be marked complete by passing manual-spec tests.
+
 <a id="LOC-39"></a>
 ## LOC-39 · Reviewed headers and implementation separation
 <!-- task: {"id": "t47", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Remaining: a compiler-checked boundary between a reviewed contract/header and its implementation, including dependency/signature hashes and diagnostics for disagreement. Export visibility exists ([LOC-183](core-build.md#LOC-183)), but files loaded with --library share one namespace and are not this feature. Depends on module organization ([LOC-41](interop.md#LOC-41)).
+The concrete implementation is delivered in LOC-243 through LOC-245, with the full design and ordered plan below. Existing source fingerprints cover header inputs. Broader signature equivalence, generic/trait interfaces and logical opacity remain in LOC-250. Module organization (LOC-41) supplies ownership and file loading.
 
 <a id="LOC-41"></a>
 ## LOC-41 · Modules, imports and cross-file resolution
@@ -125,3 +140,51 @@ Implemented six facade integration tests and a real multi-file fixture, with mod
 <!-- task: {"id": "interop-242", "status": "done", "priority": 3} -->
 
 Updated the manuals, checked examples, package guide, architecture, formal-core obligation, correctness account, trusted-file inventory and L0504 diagnostics. New operative rules have focused citations. The complete extended compiler/site gate passed on 24 September 2026, with 917 tests passing in each of the standard and release suites, including 81,944 generated-program execution cases with no disagreements; the standard suite exceeded its advisory timing target. Desktop and narrow layouts were inspected. This completion-note edit follows that gate, so the generated measurement display is invalidated rather than relabeled fresh. Nominal/container projection, legacy emission, cross-package proof ABIs and imports remain outside this extension.
+
+<a id="LOC-243"></a>
+## LOC-243 · Spec grammar and module/type realizations
+<!-- task: {"id":"interop-243","status":"done","priority":3} -->
+
+Implemented concrete function/logic-function/constant headers, spec mod/type, inline/file-loaded module implementations and opaque private struct representations. Parser fuzz fragments and a nesting-limit regression cover the new productions.
+
+<a id="LOC-244"></a>
+## LOC-244 · Checked interface matching
+<!-- task: {"id":"interop-244","status":"done","priority":3} -->
+
+Implemented exact signature checks including evidence, inherited promises, complete unique realizations and rejection of extra public members. Canonical resolution closes alias/cross-module bypasses. The 16 tests in `tests/specifications.rs` cover false outputs, mutation, input obligations, logic mode, duplicates, private fields, file discovery and generated Rust.
+
+<a id="LOC-245"></a>
+## LOC-245 · Manual-spec acceptance and documentation
+<!-- task: {"id":"interop-245","status":"done","priority":3} -->
+
+Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. Import implementation remains pending live review.
+
+<a id="LOC-246"></a>
+## LOC-246 · Bind explicit specs to native Rust interfaces
+<!-- task: {"id":"interop-246","status":"backlog","priority":3} -->
+
+Implement import path [as spec], native lookup and physical signature checks, including host visibility, constants, ownership and dependency aliases. Unsupported forms fail explicitly. Depends on live design review and LOC-245.
+
+<a id="LOC-247"></a>
+## LOC-247 · Audited native proof adapters
+<!-- task: {"id":"interop-247","status":"backlog","priority":3} -->
+
+Generate output-only assumptions, preserve caller proof inputs and exactly-once effects, handle mutable snapshots and panic behavior. Reject unsupported logical data/struct invariants. Inventory all native assumptions and retain export restrictions.
+
+<a id="LOC-248"></a>
+## LOC-248 · Generate editable native spec source
+<!-- task: {"id":"interop-248","status":"backlog","priority":2} -->
+
+Separate generate command; no automatic extraction in imports, no update command and no overwriting source. Test omissions, unsupported members, extraction failures and handwritten fallback against the same binder.
+
+<a id="LOC-249"></a>
+## LOC-249 · Native import packaging and acceptance
+<!-- task: {"id":"interop-249","status":"backlog","priority":3} -->
+
+Cargo-host/dependency fixtures, publication identity, configuration changes, stale metadata and receipts, same-crate/downstream hostile consumers, diagnostic snapshots, documentation and full gates. Behavioral assumptions remain visible after compatible-signature dependency updates.
+
+<a id="LOC-250"></a>
+## LOC-250 · Expand specification expressiveness
+<!-- task: {"id":"interop-250","status":"backlog","priority":1} -->
+
+Elaborated signature matching, binder renaming, separately partitioned implementation blocks, generic specs/methods and traits (including spec trait and native trait binding, with per-implementation logical laws), transparent fields/enums, nested header interfaces and uses, proposition contracts, constant value contracts, logical opacity and declaration-only checked artifacts. Each extension needs explicit completeness, identity and proof-boundary tests; coordinate rather than duplicate the generic/trait projects.

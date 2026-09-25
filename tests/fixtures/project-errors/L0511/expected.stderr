@@ -1,0 +1,12 @@
+error[L0511]: implementation signature of `read` differs from its spec
+ --> <fixture>/counter.lc:1:1
+  |
+1 | fn read(n: u16) -> u8 { 0 }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+ ::: <fixture>/export.lc:1:20
+  |
+1 | spec mod counter { fn read(n: u8) -> u8; }
+  |                    --------------------- required signature
+  |
+  = note: repeat the same signature, including parameter names and proof propositions; whitespace and comments may differ

@@ -1,0 +1,2 @@
+spec mod counter { pub fn read() -> u8; }
+//~ error: L0510

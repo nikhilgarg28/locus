@@ -118,7 +118,8 @@ pub fn load(path: &Path) -> Result<Loaded, Error> {
                 .collect(),
         });
     }
-    let (program, graph, diagnostics) = super::resolve::resolve(parsed.program);
+    let (program, graph, diagnostics) =
+        super::resolve::resolve(parsed.program, loader.sources.get(bundle.file));
     if !diagnostics.is_empty() {
         return Err(Error {
             sources: loader.sources,
@@ -256,7 +257,8 @@ pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Res
             exports,
         });
     }
-    let (program, graph, diagnostics) = super::resolve::resolve_units(units, selection);
+    let (program, graph, diagnostics) =
+        super::resolve::resolve_units(units, selection, loader.sources.get(bundle.file));
     if !diagnostics.is_empty() {
         return Err(Error {
             sources: loader.sources,

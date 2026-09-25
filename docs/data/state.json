@@ -1053,19 +1053,19 @@
   ],
   "measurements": {
     "schema_version": 1,
-    "generated_at": "2026-09-24T22:37:57.095282+00:00",
-    "source_fingerprint": "34928275a31f851b29e08489c1d07378efff4b2551313831190d5943ec288f64",
-    "fast_seconds": 257,
+    "generated_at": "2026-09-25T02:12:00.058202+00:00",
+    "source_fingerprint": "e1d6b4b4d1f3420bd20288ccae439f867662140604c8ae478c82decbd88c0ccf",
+    "fast_seconds": 210,
     "fast_limit_seconds": 120,
     "fast_tests": {
-      "passed": 917,
+      "passed": 933,
       "ignored": 0,
-      "targets": 82
+      "targets": 83
     },
     "extended_tests": {
-      "passed": 917,
+      "passed": 933,
       "ignored": 0,
-      "targets": 82
+      "targets": 83
     },
     "corpus_files": 265,
     "proof_tiers": {
@@ -1348,7 +1348,7 @@
       {
         "path": "src/erased/rust.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 1395
+        "physical_lines": 1398
       },
       {
         "path": "src/erased/tree.rs",
@@ -1358,7 +1358,7 @@
       {
         "path": "src/elab/items.rs",
         "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted",
-        "physical_lines": 2095
+        "physical_lines": 2127
       },
       {
         "path": "src/build.rs",
@@ -1368,12 +1368,12 @@
       {
         "path": "src/project/load.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 483
+        "physical_lines": 485
       },
       {
         "path": "src/project/resolve.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 1159
+        "physical_lines": 1197
       },
       {
         "path": "src/project/check.rs",
@@ -1427,17 +1427,17 @@
       }
     ],
     "specification": {
-      "paragraphs": 518,
-      "normative": 352,
-      "citations": 576,
-      "focused_tests": 339
+      "paragraphs": 532,
+      "normative": 358,
+      "citations": 589,
+      "focused_tests": 347
     },
     "benchmark": {
       "epoch": "4798fc0b00fbe1bb59179d8dd9d3903af00a8877d0bc2c4279a397c3a1519b69",
-      "records": 3,
-      "observed_days": 0.6276439949421296,
+      "records": 4,
+      "observed_days": 0.7762905926620369,
       "two_week_window_complete": false,
-      "headline_index": 104.29676603199039,
+      "headline_index": 96.50982495628517,
       "freshness": {
         "status": "current",
         "commits": 0
@@ -1448,14 +1448,15 @@
           "medians_ns": [
             415321000,
             399707166,
-            429243666
+            429243666,
+            393277166
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▂█▁",
           "comparison": {
-            "baseline_median_ns": 405272791.5,
+            "baseline_median_ns": 415321000,
             "k": 6,
-            "median_ns": 429243666,
-            "pooled_dispersion_ns": 6835167.005518308,
+            "median_ns": 393277166,
+            "pooled_dispersion_ns": 14286573.769732736,
             "status": "stable"
           }
         },
@@ -1464,14 +1465,15 @@
           "medians_ns": [
             24152042,
             23325792,
-            25616084
+            25616084,
+            23431917
           ],
-          "sparkline": "▄▁█",
+          "sparkline": "▄▁█▁",
           "comparison": {
-            "baseline_median_ns": 23764145.5,
+            "baseline_median_ns": 24152042,
             "k": 6,
-            "median_ns": 25616084,
-            "pooled_dispersion_ns": 523716.0046170857,
+            "median_ns": 23431917,
+            "pooled_dispersion_ns": 872588.7060651062,
             "status": "stable"
           }
         },
@@ -1480,14 +1482,15 @@
           "medians_ns": [
             45567375,
             43202291,
-            47424583
+            47424583,
+            43271916
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▁█▁",
           "comparison": {
-            "baseline_median_ns": 44317917.0,
+            "baseline_median_ns": 45567375,
             "k": 6,
-            "median_ns": 47424583,
-            "pooled_dispersion_ns": 1224950.422176286,
+            "median_ns": 43271916,
+            "pooled_dispersion_ns": 1947133.7304683714,
             "status": "stable"
           }
         },
@@ -1496,14 +1499,15 @@
           "medians_ns": [
             25722958,
             24434584,
-            26717167
+            26717167,
+            24534917
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▁█▁",
           "comparison": {
-            "baseline_median_ns": 24835792.0,
+            "baseline_median_ns": 25722958,
             "k": 6,
-            "median_ns": 26717167,
-            "pooled_dispersion_ns": 474892.1343223369,
+            "median_ns": 24534917,
+            "pooled_dispersion_ns": 1042706.1599728244,
             "status": "stable"
           }
         },
@@ -1512,14 +1516,15 @@
           "medians_ns": [
             46267000,
             43715333,
-            48138750
+            48138750,
+            43742667
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▁█▁",
           "comparison": {
-            "baseline_median_ns": 44273437.0,
+            "baseline_median_ns": 46267000,
             "k": 6,
-            "median_ns": 48138750,
-            "pooled_dispersion_ns": 752283.7971901189,
+            "median_ns": 43742667,
+            "pooled_dispersion_ns": 2145121.708443054,
             "status": "stable"
           }
         },
@@ -1528,14 +1533,15 @@
           "medians_ns": [
             60065250,
             58350417,
-            64306250
+            64306250,
+            58665583
           ],
-          "sparkline": "▃▁█",
+          "sparkline": "▃▁█▁",
           "comparison": {
-            "baseline_median_ns": 59227854.5,
+            "baseline_median_ns": 60328583,
             "k": 6,
-            "median_ns": 64306250,
-            "pooled_dispersion_ns": 1055064.1956368156,
+            "median_ns": 58665583,
+            "pooled_dispersion_ns": 2130088.827436225,
             "status": "stable"
           }
         },
@@ -1544,14 +1550,15 @@
           "medians_ns": [
             25611875,
             24458084,
-            25986167
+            25986167,
+            25169125
           ],
-          "sparkline": "▆▁█",
+          "sparkline": "▆▁█▄",
           "comparison": {
-            "baseline_median_ns": 25090272.0,
+            "baseline_median_ns": 25611875,
             "k": 6,
-            "median_ns": 25986167,
-            "pooled_dispersion_ns": 685759.0329461184,
+            "median_ns": 25169125,
+            "pooled_dispersion_ns": 401437.9225291749,
             "status": "stable"
           }
         },
@@ -1560,14 +1567,15 @@
           "medians_ns": [
             23180209,
             21786833,
-            23983374
+            23983374,
+            22376416
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▁█▃",
           "comparison": {
-            "baseline_median_ns": 22279875.0,
+            "baseline_median_ns": 23180209,
             "k": 6,
-            "median_ns": 23983374,
-            "pooled_dispersion_ns": 574029.1218773612,
+            "median_ns": 22376416,
+            "pooled_dispersion_ns": 981574.9695899523,
             "status": "stable"
           }
         },
@@ -1576,14 +1584,15 @@
           "medians_ns": [
             31975459,
             31392751,
-            33831750
+            33831750,
+            31532667
           ],
-          "sparkline": "▃▁█",
+          "sparkline": "▃▁█▁",
           "comparison": {
-            "baseline_median_ns": 31946312.5,
+            "baseline_median_ns": 32102083,
             "k": 6,
-            "median_ns": 33831750,
-            "pooled_dispersion_ns": 476440.4918174944,
+            "median_ns": 31532667,
+            "pooled_dispersion_ns": 937261.8584417811,
             "status": "stable"
           }
         },
@@ -1592,19 +1601,20 @@
           "medians_ns": [
             19687626,
             18631458,
-            20452625
+            20452625,
+            19199334
           ],
-          "sparkline": "▅▁█",
+          "sparkline": "▅▁█▃",
           "comparison": {
-            "baseline_median_ns": 19122354.5,
+            "baseline_median_ns": 19687626,
             "k": 6,
-            "median_ns": 20452625,
-            "pooled_dispersion_ns": 570143.5304378553,
+            "median_ns": 19199334,
+            "pooled_dispersion_ns": 845442.8864161938,
             "status": "stable"
           }
         }
       ]
     },
-    "benchmark_record_sha256": "a61444918282426f22186e48508df7f621f9bc0b5e5c3836602f791447f2b419"
+    "benchmark_record_sha256": "3397654cd04e6f5c0f2b19c655ac7e79504c97b2b6065f9bbab60f2866387054"
   }
 }

@@ -1162,9 +1162,13 @@ fn uses_project_driver(arguments: &[OsString]) -> bool {
     }
     let mut sources = SourceMap::default();
     let file = sources.add(path.display().to_string(), text);
-    lexer::lex(sources.get(file)).tokens.iter().any(|t| {
+    let tokens = lexer::lex(sources.get(file)).tokens;
+    tokens.iter().any(|t| {
         t.kind == lexer::TokenKind::Keyword
             && matches!(sources.get(file).slice(t.span), Some("mod" | "use"))
+    }) || tokens.windows(2).any(|pair| {
+        sources.get(file).slice(pair[0].span) == Some("spec")
+            && sources.get(file).slice(pair[1].span) == Some("type")
     })
 }
 fn project_command(

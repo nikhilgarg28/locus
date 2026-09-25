@@ -115,6 +115,31 @@ pub fn elaborate_with_options(
     program: &ast::Program,
     options: &super::Options,
 ) -> Elaborated {
+    if crate::project::specs::present(program) {
+        let (resolved, graph, diagnostics) =
+            crate::project::resolve_inline(program.clone(), source);
+        if !diagnostics.is_empty() {
+            let mut result = elaborate_with_options(source, &ast::Program::default(), options);
+            result.diagnostics.extend(diagnostics);
+            return result;
+        }
+        let options = super::Options {
+            module_access: Some(std::sync::Arc::new(graph.access.clone())),
+            ..options.clone()
+        };
+        let mut result = elaborate_with_options(source, &resolved, &options);
+        // The flat API's entry lookup continues to use source-level root names.
+        for (name, _) in &mut result.functions {
+            if let Some(item) = graph
+                .items
+                .iter()
+                .find(|i| i.canonical == *name && i.module == graph.package_roots[0])
+            {
+                *name = item.original.clone();
+            }
+        }
+        return result;
+    }
     let (mut definitions, prelude) = Definitions::with_prelude();
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
     let mut session = Session::new(definitions);
@@ -320,6 +345,8 @@ fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
         | DeclarationKind::Prop { name, .. }
         | DeclarationKind::Constant { name, .. } => Some(&name.text),
         DeclarationKind::Impl { .. }
+        | DeclarationKind::Spec { .. }
+        | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
         | DeclarationKind::Use { .. } => None,
     }
@@ -475,6 +502,8 @@ impl Env<'_> {
                 }
                 DeclarationKind::Prop { .. }
                 | DeclarationKind::Impl { .. }
+                | DeclarationKind::Spec { .. }
+                | DeclarationKind::ModuleImpl { .. }
                 | DeclarationKind::Module { .. }
                 | DeclarationKind::Use { .. } => {}
             }
@@ -1379,7 +1408,10 @@ impl Env<'_> {
                 self.refuse_derive(attributes, "a proposition");
                 self.prop(name, parameters, variants)
             }
-            DeclarationKind::Module { .. } | DeclarationKind::Use { .. } => self.fail(
+            DeclarationKind::Spec { .. }
+            | DeclarationKind::ModuleImpl { .. }
+            | DeclarationKind::Module { .. }
+            | DeclarationKind::Use { .. } => self.fail(
                 "L0500",
                 "resolve modules with the project loader before elaboration",
                 declaration.span,

@@ -270,7 +270,7 @@
           "name": "keyword.control.locus"
         },
         {
-          "match": "\\b(fn|let|mut|struct|enum|impl|const|pub|prop|logic|as)\\b",
+          "match": "\\b(fn|let|mut|struct|enum|impl|const|pub|prop|logic|spec|as)\\b",
           "name": "keyword.other.locus"
         },
         {

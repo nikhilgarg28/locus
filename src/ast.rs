@@ -217,6 +217,18 @@ pub struct Declaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
+    /// A concrete interface. Its function/constant members are signatures only;
+    /// their placeholder bodies must never reach elaboration.
+    Spec {
+        module: bool,
+        name: Name,
+        members: Vec<Declaration>,
+    },
+    /// `impl mod name { ... }`, or an external body loaded by the project loader.
+    ModuleImpl {
+        name: Name,
+        body: Option<Program>,
+    },
     /// A source module; `None` is loaded from its declared file by the project loader.
     Module {
         name: Name,

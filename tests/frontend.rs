@@ -345,7 +345,19 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             .join(", ")
     };
     match &declaration.kind {
-        DeclarationKind::Module { name, body } => {
+        DeclarationKind::Spec {
+            module,
+            name,
+            members,
+        } => {
+            out.push_str(&format!(
+                "spec {} {} {{ {} members }}",
+                if *module { "mod" } else { "type" },
+                name.text,
+                members.len()
+            ));
+        }
+        DeclarationKind::ModuleImpl { name, body } | DeclarationKind::Module { name, body } => {
             out.push_str(&format!(
                 "mod {}{}",
                 name.text,
