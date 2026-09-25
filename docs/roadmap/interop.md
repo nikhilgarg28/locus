@@ -141,36 +141,6 @@ Implemented six facade integration tests and a real multi-file fixture, with mod
 
 Updated the manuals, checked examples, package guide, architecture, formal-core obligation, correctness account, trusted-file inventory and L0504 diagnostics. New operative rules have focused citations. The complete extended compiler/site gate passed on 24 September 2026, with 917 tests passing in each of the standard and release suites, including 81,944 generated-program execution cases with no disagreements; the standard suite exceeded its advisory timing target. Desktop and narrow layouts were inspected. This completion-note edit follows that gate, so the generated measurement display is invalidated rather than relabeled fresh. Nominal/container projection, legacy emission, cross-package proof ABIs and imports remain outside this extension.
 
-<a id="LOC-256"></a>
-## LOC-256 · Spec grammar and module/type realizations
-<!-- task: {"id": "interop-243", "status": "done", "priority": 3} -->
-
-Historical prototype: concrete module/type headers and same-named private representations. Superseded by LOC-252–255; module specs are now deferred under LOC-250.
-
-<a id="LOC-257"></a>
-## LOC-257 · Checked interface matching
-<!-- task: {"id": "interop-244", "status": "done", "priority": 3} -->
-
-Historical token-matching prototype, superseded by resolved matching and distinct nominal representations in LOC-252–255. Its regression coverage is migrated rather than discarded.
-
-<a id="LOC-258"></a>
-## LOC-258 · Manual-spec acceptance and documentation
-<!-- task: {"id": "interop-245", "status": "done", "priority": 3} -->
-
-Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. This prototype is superseded by LOC-252–255; current import work follows the revised plain-import design.
-
-<a id="LOC-259"></a>
-## LOC-259 · Import physical Rust interfaces
-<!-- task: {"id": "interop-246", "status": "done", "priority": 3} -->
-
-Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); sysroot/native-type expansion and staged host builds remain in LOC-44 and LOC-63.
-
-<a id="LOC-260"></a>
-## LOC-260 · Audited native proof adapters
-<!-- task: {"id": "interop-247", "status": "backlog", "priority": 3} -->
-
-Future `assume ImportedType impl Spec` requires no proof inputs in the initial contract. Match physical signatures while omitting output evidence only, then generate audited normal-return assumptions. Preserve exactly-once effects, snapshots and panic behavior; reject unsupported logical values or invariant construction. Separate from plain imports.
-
 <a id="LOC-248"></a>
 ## LOC-248 · Generate editable native spec source
 <!-- task: {"id": "interop-248", "status": "backlog", "priority": 2} -->
@@ -214,3 +184,33 @@ Implemented one complete realization per declared family in its owning package, 
 <!-- task: {"id": "interop-255", "status": "done", "priority": 3} -->
 
 Updated the manual, checked examples, diagnostics, architecture, formal core and trust inventory; preserved historical IDs and tracked deferred expansions. The extended gate completed with both compiler suites, documentation/site checks and measurements. The fast suite exceeded its advisory timing target. The existing maximum-depth proof-file regression also exposed excessive debug stack use; smaller parsing frames now preserve the original bound and test.
+
+<a id="LOC-256"></a>
+## LOC-256 · Spec grammar and module/type realizations
+<!-- task: {"id": "interop-243", "status": "done", "priority": 3} -->
+
+Historical prototype: concrete module/type headers and same-named private representations. Superseded by LOC-252–255; module specs are now deferred under LOC-250.
+
+<a id="LOC-257"></a>
+## LOC-257 · Checked interface matching
+<!-- task: {"id": "interop-244", "status": "done", "priority": 3} -->
+
+Historical token-matching prototype, superseded by resolved matching and distinct nominal representations in LOC-252–255. Its regression coverage is migrated rather than discarded.
+
+<a id="LOC-258"></a>
+## LOC-258 · Manual-spec acceptance and documentation
+<!-- task: {"id": "interop-245", "status": "done", "priority": 3} -->
+
+Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. This prototype is superseded by LOC-252–255; current import work follows the revised plain-import design.
+
+<a id="LOC-259"></a>
+## LOC-259 · Import physical Rust interfaces
+<!-- task: {"id": "interop-246", "status": "done", "priority": 3} -->
+
+Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); sysroot/native-type expansion and staged host builds remain in LOC-44 and LOC-63.
+
+<a id="LOC-260"></a>
+## LOC-260 · Audited native proof adapters
+<!-- task: {"id": "interop-247", "status": "backlog", "priority": 3} -->
+
+Future `assume ImportedType impl Spec` requires no proof inputs in the initial contract. Match physical signatures while omitting output evidence only, then generate audited normal-return assumptions. Preserve exactly-once effects, snapshots and panic behavior; reject unsupported logical values or invariant construction. Separate from plain imports.
