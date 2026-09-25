@@ -251,8 +251,8 @@ pub enum BufferStorage {
 }
 
 /// Native operation. Arguments are runtime values, without proof terms:
-/// literal: elements; length: buffer; get: buffer,index:u64;
-/// set: buffer,index:u64,value; push: buffer,value.
+/// literal: elements; length: buffer; get: buffer,index:usize;
+/// set: buffer,index:usize,value; push: buffer,value.
 /// Indexing requires both bound proofs. Push learns available mathematical
 /// length only on normal return. Allocation/panic effects are checked here.
 #[derive(Clone, Debug)]

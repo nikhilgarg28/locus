@@ -98,11 +98,63 @@ impl Env<'_> {
                 name.span,
             );
         };
-        for index in 0..info.fields.len() {
-            self.field_visible(&info, index, span)?;
+        if info.shape != ast::VariantShape::Struct {
+            return self.fail(
+                "L0224",
+                "this struct uses a positional or unit constructor, not braces",
+                span,
+            );
         }
         let what = format!("`{}`", info.name);
         let values = self.values_by_name(&what, &info.fields, fields, span)?;
+        self.construct_struct(&info, &values, expected, span)
+    }
+
+    pub(super) fn positional_struct(
+        &mut self,
+        info: &super::env::StructInfo,
+        arguments: Option<&[ast::Expr]>,
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
+        let shape = if arguments.is_some() {
+            ast::VariantShape::Tuple
+        } else {
+            ast::VariantShape::Unit
+        };
+        if info.shape != shape {
+            return self.fail(
+                "L0224",
+                "struct constructor syntax does not match its declaration",
+                span,
+            );
+        }
+        let values: Vec<_> = arguments.unwrap_or(&[]).iter().collect();
+        self.construct_struct(info, &values, expected, span)
+    }
+
+    fn construct_struct(
+        &mut self,
+        info: &super::env::StructInfo,
+        values: &[&ast::Expr],
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Value> {
+        if values.len() != info.fields.len() {
+            return self.fail(
+                "L0208",
+                format!(
+                    "`{}` has {} fields, but {} values were supplied",
+                    info.name,
+                    info.fields.len(),
+                    values.len()
+                ),
+                span,
+            );
+        }
+        for index in 0..info.fields.len() {
+            self.field_visible(info, index, span)?;
+        }
         let mut exprs = Vec::new();
         let ty = self.family_expected(Type::Struct(info.id), &info.captures, expected, span)?;
         let mut tys: Vec<Type> = info
@@ -344,7 +396,10 @@ impl Env<'_> {
             return Err(());
         };
         let info = self.struct_by_id(*id).expect("a struct type was declared");
-        let Some(index) = info.fields.iter().position(|field| field.name == name.text) else {
+        let Some(index) = (info.shape == ast::VariantShape::Struct)
+            .then(|| info.fields.iter().position(|field| field.name == name.text))
+            .flatten()
+        else {
             let message = format!("`{}` has no field `{}`", info.name, name.text);
             return self.fail("L0210", message, name.span);
         };
@@ -366,6 +421,17 @@ impl Env<'_> {
         let target = self.infer(value)?;
         let arity = match &target.ty {
             Type::Tuple(fields) => fields.len(),
+            ty if matches!(ty.nominal(), Type::Struct(_)) => {
+                let Type::Struct(id) = ty.nominal() else {
+                    unreachable!()
+                };
+                let info = self.struct_by_id(*id).expect("declared struct");
+                if info.shape == ast::VariantShape::Tuple {
+                    info.fields.len()
+                } else {
+                    0
+                }
+            }
             _ => 0,
         };
         match index.parse::<usize>() {

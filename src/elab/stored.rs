@@ -49,7 +49,11 @@ impl Env<'_> {
         store::with_current(|_| ())?;
         let names = self.definition_names();
         let key = text::print_key(goal, &self.ctx, &names).ok()?;
-        Some((Key::of(&key), names))
+        let current = Key::of(&key);
+        if let Some((_, legacy)) = key.split_once('\n') {
+            store::with_current(|store| store.rekey_legacy(Key::of(legacy), current));
+        }
+        Some((current, names))
     }
 
     /// A proof of `goal`, accepted by the kernel: the stored one when the

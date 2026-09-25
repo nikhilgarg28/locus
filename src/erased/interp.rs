@@ -375,7 +375,15 @@ impl<'m> Interpreter<'m> {
                     .zip(fields)
                     .try_for_each(|(pattern, field)| self.bind(pattern, field))
             }
-            _ => stuck("a tuple pattern against something else"),
+            (EPattern::Struct { id, parts, .. }, Value::Struct(actual, fields))
+                if *id == actual && parts.len() == fields.len() =>
+            {
+                parts
+                    .iter()
+                    .zip(fields)
+                    .try_for_each(|(p, v)| self.bind(p, v))
+            }
+            _ => stuck("a product pattern against something else"),
         }
     }
 
@@ -453,7 +461,7 @@ impl<'m> Interpreter<'m> {
                     Ok(values) => values,
                     Err(flow) => return Ok(flow),
                 };
-                let result = buffer_operation(*op, &values)?;
+                let result = buffer_operation(*op, &values, self.module.pointer_width)?;
                 if matches!(
                     op,
                     crate::kernel::BufferOp::Set | crate::kernel::BufferOp::Push
@@ -778,20 +786,30 @@ pub(crate) fn compare(op: CompareOp, left: Value, right: Value) -> Result<bool, 
 pub(crate) fn buffer_operation(
     op: crate::kernel::BufferOp,
     arguments: &[Value],
+    width: crate::kernel::PointerWidth,
 ) -> Result<Value, Stop> {
     use crate::kernel::BufferOp;
     if op == BufferOp::Literal {
+        if crate::kernel::Integer::from(arguments.len() as u128) > width.usize().max() {
+            return stuck("buffer literal exceeds target usize");
+        }
         return Ok(Value::Buffer(arguments.to_vec()));
     }
     let Some(Value::Buffer(items)) = arguments.first() else {
         return stuck("collection operation needs a buffer");
     };
+    if crate::kernel::Integer::from(items.len() as u128) > width.usize().max() {
+        return stuck("buffer input exceeds target usize");
+    }
     match op {
-        BufferOp::Length => Ok(Value::Int(MachineInt::U64, items.len() as i128)),
+        BufferOp::Length => Ok(Value::Int(width.usize(), items.len() as i128)),
         BufferOp::Get | BufferOp::Set => {
-            let Some(Value::Int(MachineInt::U64, index)) = arguments.get(1) else {
-                return stuck("collection index is not u64");
+            let Some(Value::Int(index_ty, index)) = arguments.get(1) else {
+                return stuck("collection index is not usize");
             };
+            if *index_ty != width.usize() {
+                return stuck("collection index has the wrong target width");
+            }
             let index = usize::try_from(*index).map_err(|_| Stop::Panic {
                 message: "index out of bounds".into(),
                 lent: Vec::new(),
@@ -814,6 +832,12 @@ pub(crate) fn buffer_operation(
             }
         }
         BufferOp::Push => {
+            if crate::kernel::Integer::from(items.len() as u128) == width.usize().max() {
+                return Err(Stop::Panic {
+                    message: "capacity overflow".into(),
+                    lent: Vec::new(),
+                });
+            }
             let mut updated = items.clone();
             updated.push(
                 arguments

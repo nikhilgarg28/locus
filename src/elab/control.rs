@@ -224,6 +224,48 @@ impl Env<'_> {
                 scrutinee.span,
             );
         }
+        if matches!(scrutinee_value.ty.nominal(), Type::Struct(_)) {
+            if arms.is_empty() {
+                return self.fail("L0213", "a struct match needs an arm", span);
+            }
+            if arms.len() != 1 {
+                return self.fail(
+                    "L0214",
+                    "a struct pattern is irrefutable; later arms are unreachable",
+                    arms[1].pattern.span,
+                );
+            }
+            let arm = &arms[0];
+            let entry = self.mutable_entry();
+            let mark = self.mark();
+            let result_scope = self.result_scope();
+            let result = (|| {
+                let term = self.term(&scrutinee_value, scrutinee.span)?;
+                let pattern = self.bind_pattern(&arm.pattern, term, false)?;
+                let layout = self.session.expression_layout(&scrutinee_value.expr);
+                self.register_pattern_layout(&pattern, &layout);
+                self.move_by_pattern(place.as_ref(), &arm.pattern, &pattern, arm.pattern.span);
+                let (mut block, ty, never) = self.branch(&Branch::Expr(&arm.body), expected)?;
+                block.stmts.insert(
+                    0,
+                    typed::Stmt::Let {
+                        pattern,
+                        value: scrutinee_value.expr,
+                    },
+                );
+                Ok((block, ty, never))
+            })();
+            let result = self.check_scope_result(&result_scope, result, span);
+            let kept = self.facts_since(&mark, &entry);
+            self.close_names(mark);
+            self.facts.extend(kept);
+            let (block, ty, never) = result?;
+            return Ok(Value {
+                expr: Expr::Block(block),
+                ty,
+                never,
+            });
+        }
         let Type::Enum(id) = scrutinee_value.ty.nominal() else {
             let shown = self.show_type(&scrutinee_value.ty);
             let message = format!("`match` takes apart an enum or evidence, and this is `{shown}`");

@@ -10,6 +10,7 @@ use super::term::{HypId, Term, Type, VarId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KernelError {
+    WrongPointerWidth(MachineInt, u32),
     InvalidBuffer(&'static str),
     UnknownVariable(VarId),
     UnknownHypothesis(HypId),
@@ -132,6 +133,11 @@ impl From<LinearError> for KernelError {
 impl fmt::Display for KernelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::WrongPointerWidth(ty, bits) => write!(
+                f,
+                "{} cannot execute on a {bits}-bit target",
+                ty.kernel_name()
+            ),
             Self::InvalidBuffer(message) => write!(f, "invalid buffer operation: {message}"),
             Self::UnknownVariable(id) => write!(f, "variable {id:?} is not in the context"),
             Self::UnknownHypothesis(id) => write!(f, "hypothesis {id:?} is not in the context"),

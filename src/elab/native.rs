@@ -7,13 +7,13 @@ use crate::{
     typed::{Binder, Passing},
 };
 use std::rc::Rc;
-fn ty(t: &PhysicalType) -> Type {
+fn ty(t: &PhysicalType, width: crate::kernel::PointerWidth) -> Type {
     match t {
         PhysicalType::Scalar(s) if s == "bool" => Type::Bool,
-        PhysicalType::Scalar(s) => Type::machine(
-            crate::kernel::MachineInt::from_name(s).expect("normalized native scalar"),
-        ),
-        PhysicalType::Tuple(fields) => Type::Tuple(fields.iter().map(ty).collect()),
+        PhysicalType::Scalar(s) => {
+            Type::machine(width.machine(s).expect("normalized native scalar"))
+        }
+        PhysicalType::Tuple(fields) => Type::Tuple(fields.iter().map(|t| ty(t, width)).collect()),
     }
 }
 impl Env<'_> {
@@ -37,11 +37,11 @@ impl Env<'_> {
         self.start_item(&name.text, false, Promises::default());
         let mut params = Vec::new();
         for (index, input) in signature.inputs.iter().enumerate() {
-            let binder = Binder::new(&format!("arg{index}"), ty(input));
+            let binder = Binder::new(&format!("arg{index}"), ty(input, self.pointer_width));
             self.declare(&binder, false, name.span)?;
             params.push(binder);
         }
-        let result = ty(&signature.output);
+        let result = ty(&signature.output, self.pointer_width);
         let reference =
             match self
                 .session

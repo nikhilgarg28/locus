@@ -161,10 +161,10 @@ fn observations_follow_complete_paths_and_check_index_bounds() {
         fn nested(outer: Outer) -> Nat { model!(outer.inner.number) }
         fn tuple(pair: (u8, bool)) -> Nat { model!(pair.0) }
         fn boxed(value: Box<u8>) -> Nat { model!(*value) }
-        fn indexed(items: &[u8], index: u64, valid: @(index < items.len())) -> Nat { model!(items[index]) }
+        fn indexed(items: &[u8], index: usize, valid: @(index < items.len())) -> Nat { model!(items[index]) }
         fn entry(point: &mut Outer) -> @(model!(point.inner.number) == model!(old!(point).inner.number)) { _ }");
     let result =
-        check("fn out_of_bounds(items: &[u8], index: u64) -> Nat { model!(items[index]) }");
+        check("fn out_of_bounds(items: &[u8], index: usize) -> Nat { model!(items[index]) }");
     assert!(
         result.diagnostics.iter().any(|d| d.code == "L0230"),
         "{:#?}",

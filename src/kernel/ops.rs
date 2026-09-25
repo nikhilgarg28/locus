@@ -346,8 +346,8 @@ mod tests {
     #[test]
     fn the_rows_are_the_operations_at_the_types_they_exist_at() {
         let rows = Row::all();
-        // Ten operations at four signed types, eight at four unsigned ones.
-        assert_eq!(rows.len(), 4 * 10 + 4 * 8);
+        // Ten operations at six signed identities, eight at six unsigned ones.
+        assert_eq!(rows.len(), 6 * 10 + 6 * 8);
         for ty in MachineInt::ALL {
             for op in Op::ALL {
                 let expected = ty.signed() || !matches!(op, Op::Neg | Op::WrappingNeg);

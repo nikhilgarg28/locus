@@ -297,7 +297,7 @@ impl Printer<'_> {
             Type::Bool => self.push("bool"),
             Type::U8 => self.push("u8"),
             Type::Int => self.push("Int"),
-            Type::Machine(ty) => self.push(ty.name()),
+            Type::Machine(ty) => self.push(ty.kernel_name()),
             Type::Prop => self.push("Prop"),
             Type::Proof(prop) => {
                 self.push("@");
@@ -364,7 +364,7 @@ impl Printer<'_> {
             Term::Bool(value) => self.number("", value),
             Term::U8(value) => self.number("", value),
             Term::Int(value) => self.literal(value, "i"),
-            Term::Machine(ty, value) => self.literal(value, ty.name()),
+            Term::Machine(ty, value) => self.literal(value, ty.kernel_name()),
             Term::Prim(prim, arguments) => self.prim(*prim, arguments),
             Term::Eq(ty, left, right) => self.equation(ty, left, right),
             Term::Implies(premise, conclusion) => self.implication(premise, conclusion),
@@ -873,13 +873,13 @@ impl Printer<'_> {
             | Axiom::WrapView(ty, _)
             | Axiom::ViewWrap(ty, _)
             | Axiom::WrapPeriod(ty, _) => {
-                let _ = write!(self.out, "[{}]", ty.name());
+                let _ = write!(self.out, "[{}]", ty.kernel_name());
             }
             Axiom::CastDef(from, to, _) => {
-                let _ = write!(self.out, "[{}, {}]", from.name(), to.name());
+                let _ = write!(self.out, "[{}, {}]", from.kernel_name(), to.kernel_name());
             }
             Axiom::OpModel(op, ty, _) | Axiom::OpExact(op, ty, _) => {
-                let _ = write!(self.out, "[{}, {}]", op.name(), ty.name());
+                let _ = write!(self.out, "[{}, {}]", op.name(), ty.kernel_name());
             }
             Axiom::CmpReflect(_, flag) | Axiom::CmpReify(_, flag) => {
                 let _ = write!(self.out, "[{flag}]");
@@ -977,6 +977,11 @@ pub fn print_proof(proof: &Proof, ctx: &Context, names: &Names) -> Result<String
 /// is a proof of the other, whatever the names in the source.
 pub fn print_key(claim: &Term, ctx: &Context, names: &Names) -> Result<String, PrintError> {
     let mut printer = printer(ctx, names);
+    let _ = writeln!(
+        printer.out,
+        "target_pointer_width={}",
+        ctx.pointer_width().bits()
+    );
     let (mut vars, mut hyps) = (0, 0);
     for binding in ctx.bindings() {
         match binding {

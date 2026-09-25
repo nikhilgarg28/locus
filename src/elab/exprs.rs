@@ -581,9 +581,12 @@ impl Env<'_> {
         let global = self
             .values
             .get(&name.text)
-            .or_else(|| self.types.get(&name.text))
+            .or_else(|| self.types.get(&self.type_text(name)))
             .cloned();
         match global {
+            Some(Global::Struct(info)) if info.shape == ast::VariantShape::Unit => {
+                self.positional_struct(&info, None, expected, name.span)
+            }
             Some(Global::Fn(info)) if info.constant => self.call_fn(&info, &[], name.span),
             // A function of the logic returning evidence is evidence of its general claim,
             // where evidence is expected or where nothing in particular is,

@@ -68,7 +68,7 @@ fn avoid_collisions(function: &EFn, renames: &mut HashMap<VarId, String>) {
         fn pattern(&mut self, pattern: &EPattern) {
             match pattern {
                 EPattern::Bind { id, name, .. } => self.bindings.push((*id, name.clone())),
-                EPattern::Tuple(parts) => {
+                EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => {
                     for part in parts {
                         self.pattern(part);
                     }
@@ -148,7 +148,7 @@ fn uses(function: &EFn, module: &Module) -> Uses {
             EPattern::Bind { id, ty, .. } if marker(ty) => {
                 uses.markers.insert(*id);
             }
-            EPattern::Tuple(parts) => {
+            EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => {
                 for part in parts {
                     pattern(part, uses);
                 }
@@ -269,7 +269,7 @@ fn clean_pattern(pattern: &mut EPattern, uses: &Uses, changed: &mut bool) {
             *pattern = EPattern::Wildcard;
             *changed = true;
         }
-        EPattern::Tuple(parts) => {
+        EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => {
             for part in parts {
                 clean_pattern(part, uses, changed);
             }
@@ -281,7 +281,7 @@ fn clean_pattern(pattern: &mut EPattern, uses: &Uses, changed: &mut bool) {
 fn all_wild(pattern: &EPattern) -> bool {
     match pattern {
         EPattern::Wildcard => true,
-        EPattern::Tuple(parts) => parts.iter().all(all_wild),
+        EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => parts.iter().all(all_wild),
         _ => false,
     }
 }
@@ -343,7 +343,7 @@ fn collect_unused(block: &mut EBlock, uses: &Uses, names: &mut HashMap<VarId, St
             EPattern::Bind { id, name, .. } if !uses.read.contains(id) => {
                 names.insert(*id, unused_name(name));
             }
-            EPattern::Tuple(parts) => {
+            EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => {
                 for part in parts {
                     pattern(part, uses, names);
                 }
@@ -405,7 +405,7 @@ fn rename_block(block: &mut EBlock, uses: &Uses, names: &HashMap<VarId, String>)
                 }
                 *mutable &= uses.written.contains(id);
             }
-            EPattern::Tuple(parts) => {
+            EPattern::Tuple(parts) | EPattern::Struct { parts, .. } => {
                 for part in parts {
                     pattern(part, uses, names);
                 }

@@ -611,7 +611,16 @@ impl Env<'_> {
                     });
                 }
             }
-            (PatternKind::Tuple(parts), Pattern::Tuple(typed_parts)) => {
+            (PatternKind::Tuple(parts), Pattern::Tuple(typed_parts))
+            | (
+                PatternKind::Variant {
+                    arguments: Some(parts),
+                    ..
+                },
+                Pattern::Struct {
+                    parts: typed_parts, ..
+                },
+            ) => {
                 for (index, (part, typed_part)) in parts.iter().zip(typed_parts).enumerate() {
                     let mut path = path.clone();
                     path.push(index);

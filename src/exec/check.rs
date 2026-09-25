@@ -137,6 +137,7 @@ impl std::error::Error for ExecError {}
 ///   no primitive that allocates or performs I/O.
 #[derive(Clone, Debug)]
 pub struct Program {
+    pointer_width: crate::kernel::PointerWidth,
     definitions: Definitions,
     fns: Vec<ExecFn>,
     trusted: Vec<TrustedContract>,
@@ -173,7 +174,23 @@ pub struct TrustedContract {
 
 impl Program {
     pub fn new(definitions: Definitions) -> Self {
+        let width = definitions.pointer_width();
+        Self::with_pointer_width(definitions, width)
+    }
+    pub fn pointer_width(&self) -> crate::kernel::PointerWidth {
+        self.pointer_width
+    }
+    pub fn with_pointer_width(
+        definitions: Definitions,
+        pointer_width: crate::kernel::PointerWidth,
+    ) -> Self {
+        assert_eq!(
+            definitions.pointer_width(),
+            pointer_width,
+            "kernel and execution target layouts must agree"
+        );
         Self {
+            pointer_width,
             definitions,
             fns: Vec::new(),
             trusted: Vec::new(),
@@ -397,9 +414,13 @@ impl Program {
                 ctx.assume_with(*equation, Term::eq(ty, Term::Free(*var), snapshot))?;
                 Ok(())
             }
-            Stmt::Buffer(operation) => {
-                super::buffer::check(ctx, operation, declared.promises, &self.definitions)
-            }
+            Stmt::Buffer(operation) => super::buffer::check(
+                ctx,
+                operation,
+                declared.promises,
+                &self.definitions,
+                self.pointer_width,
+            ),
             Stmt::Let {
                 var,
                 equation,

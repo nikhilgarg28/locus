@@ -16,7 +16,7 @@ A signature tells the caller what to supply and what a successful return establi
 ## Parameters and results
 
 <!-- spec: 1.9:1 syntax -->
-Declare an ordinary function as `fn name(parameters) -> Result { body }`. Write `-> ()` explicitly for a unit result. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
+Declare an ordinary function as `fn name(parameters) -> Result { body }`. Omitting the result annotation means `-> ()`; it does not infer the result from the body. This applies to methods and spec headers too. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
 
 <!-- spec: 1.90:22 example -->
 ~~~rust run
@@ -36,6 +36,13 @@ fn distance() -> u32 {
 
 <!-- spec: 1.91:16 informative -->
 The result’s `lo` and `hi` refer to this call’s inputs. `gap` names the returned tuple’s first component. The caller receives evidence about its own destructured value, not a reference to a vanished callee local. Mutable references use the [entry/return convention](06-ownership.md#entry-and-return-values).
+
+<!-- spec: 1.96:8 example -->
+~~~rust run
+fn clear(value: &mut u8) { value = 0; }
+fn demo() -> u8 { let mut value: u8 = 8; clear(&mut value); value }
+//~ run: demo() => 0
+~~~
 
 ## Functions and promises
 

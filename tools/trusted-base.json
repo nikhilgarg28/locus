@@ -1,5 +1,5 @@
 {
-  "policy": "Conservative whole-file count: mixed trusted/untrusted files count in full. Count is the current end-to-end compiler correctness boundary, larger than the logical proof kernel. Excludes diagnostic/error-only types, module reexports, proof-producing derive/theory, audit-only classical dependency discovery, proof search, parsers/store and both interpreters/projection. Rust toolchain, registered native implementations and explicit foreign specifications remain external assumptions. Limits metadata is resource policy, not a source of accepted evidence. Canonical-model and Nat proof construction remain untrusted and kernel-checked; exact normal-return arithmetic facts and proof-directed check elimination are covered by the existing exec checker and erasure/emission entries. Model proof construction is kernel-checked, but its handling of module privacy is counted as a mixed compiler boundary. Scoped nominal families are checked by the existing kernel declaration/type/constructor rules; argument scoping, layout and export enforcement remain within the listed whole-compiler boundary. Logical reference normalization and single-evaluation staging use the existing frontend, permission and erasure boundaries; reference depth adds no proof assumption. No new axiom is introduced.",
+  "policy": "Conservative whole-file count: mixed trusted/untrusted files count in full. Count is the current end-to-end compiler correctness boundary, larger than the logical proof kernel. Excludes diagnostic/error-only types, module reexports, proof-producing derive/theory, audit-only classical dependency discovery, proof search, parsers/store and both interpreters/projection. Rust toolchain, registered native implementations and explicit foreign specifications remain external assumptions. Limits metadata is resource policy, not a source of accepted evidence. Canonical-model and Nat proof construction remain untrusted and kernel-checked; exact normal-return arithmetic facts and proof-directed check elimination are covered by the existing exec checker and erasure/emission entries. Model proof construction is kernel-checked, but its handling of module privacy is counted as a mixed compiler boundary. Scoped nominal families are checked by the existing kernel declaration/type/constructor rules; argument scoping, layout and export enforcement remain within the listed whole-compiler boundary. Logical reference normalization and single-evaluation staging use the existing frontend, permission and erasure boundaries; reference depth adds no proof assumption. No new axiom is introduced. Target selection is explicit and immutable; pointer-width-specific machine identities, buffer bounds, proof keys and Rust guards must agree. Tuple/unit structs reuse nominal products and add no axioms.",
   "files": [
     {
       "path": "src/kernel/buffer.rs",
@@ -212,6 +212,10 @@
     {
       "path": "src/typed/native.rs",
       "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/target.rs",
+      "category": "whole-compiler target layout selection"
     }
   ]
 }

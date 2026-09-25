@@ -1496,11 +1496,27 @@ fn debug_support(module: &Module) -> String {
             continue;
         }
         let ls = lifetimes(item.fields.iter().map(|(_, ty)| ty.clone()));
-        out.push_str(&format!("impl{ls} std::fmt::Debug for {}{ls} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ f.debug_struct({:?})", item.name, item.name));
-        for (name, _) in &item.fields {
-            out.push_str(&format!(".field({name:?}, &self.{name})"));
+        out.push_str(&format!("impl{ls} std::fmt::Debug for {}{ls} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ ", item.name));
+        match item.shape {
+            locus::ast::VariantShape::Unit => {
+                out.push_str(&format!("f.write_str({:?})", item.name))
+            }
+            locus::ast::VariantShape::Tuple => {
+                out.push_str(&format!("f.debug_tuple({:?})", item.name));
+                for index in 0..item.fields.len() {
+                    out.push_str(&format!(".field(&self.{index})"));
+                }
+                out.push_str(".finish()");
+            }
+            locus::ast::VariantShape::Struct => {
+                out.push_str(&format!("f.debug_struct({:?})", item.name));
+                for (name, _) in &item.fields {
+                    out.push_str(&format!(".field({name:?}, &self.{name})"));
+                }
+                out.push_str(".finish()");
+            }
         }
-        out.push_str(".finish() } }\n");
+        out.push_str(" } }\n");
     }
     for item in &module.enums {
         if item.derives.contains(&Derive::Debug) {

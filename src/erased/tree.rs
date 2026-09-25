@@ -34,6 +34,7 @@ impl EType {
 
 #[derive(Clone, Debug, Default)]
 pub struct Module {
+    pub pointer_width: crate::kernel::PointerWidth,
     pub structs: Vec<EStruct>,
     pub enums: Vec<EEnum>,
     pub fns: Vec<EFn>,
@@ -41,6 +42,7 @@ pub struct Module {
 
 #[derive(Clone, Debug)]
 pub struct EStruct {
+    pub shape: crate::ast::VariantShape,
     pub id: StructId,
     pub name: String,
     pub fields: Vec<(String, EType)>,
@@ -165,6 +167,12 @@ pub enum EPattern {
     },
     Wildcard,
     Tuple(Vec<EPattern>),
+    Struct {
+        id: StructId,
+        name: String,
+        tuple: bool,
+        parts: Vec<EPattern>,
+    },
 }
 
 #[derive(Clone, Debug)]

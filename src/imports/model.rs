@@ -40,7 +40,9 @@ impl PhysicalType {
     }
     fn read(v: &Value) -> Result<Self, String> {
         if let Some(p) = v.get("primitive").and_then(Value::as_str) {
-            if p == "bool" || crate::kernel::MachineInt::from_name(p).is_some() {
+            if matches!(p, "bool" | "usize" | "isize")
+                || crate::kernel::MachineInt::from_name(p).is_some()
+            {
                 return Ok(Self::Scalar(p.into()));
             }
             return Err(format!(

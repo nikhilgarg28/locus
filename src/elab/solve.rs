@@ -1109,7 +1109,7 @@ fn rewrite_buffer_arguments(
             parameter(element.clone());
             parameter(Type::proof(Term::int_lt(
                 crate::kernel::buffer::length(element.clone(), source),
-                Term::Int(crate::kernel::MachineInt::U64.max()),
+                Term::Int(ctx.pointer_width().usize().max()),
             )));
         }
         _ => return Err(KernelError::NoComputationStep(operation.clone())),

@@ -135,7 +135,7 @@ impl Type {
     }
 
     /// The kernel type of a machine integer type: `Type::U8` for `u8`, and
-    /// `Type::Machine` for the other seven.
+    /// `Type::Machine` for the other eleven.
     pub fn machine(ty: MachineInt) -> Self {
         match ty {
             MachineInt::U8 => Self::U8,
@@ -391,9 +391,9 @@ impl fmt::Display for Prim {
         f.write_str(self.name())?;
         match self {
             Self::View(ty) | Self::Wrap(ty) | Self::Op(_, ty) | Self::Cmp(_, ty) => {
-                write!(f, "[{}]", ty.name())
+                write!(f, "[{}]", ty.kernel_name())
             }
-            Self::Cast(from, to) => write!(f, "[{}, {}]", from.name(), to.name()),
+            Self::Cast(from, to) => write!(f, "[{}, {}]", from.kernel_name(), to.kernel_name()),
             _ => Ok(()),
         }
     }
@@ -1041,7 +1041,7 @@ impl Term {
         assert!(
             ty.contains(&value),
             "Term::machine: {value} is not a value of {}",
-            ty.name()
+            ty.kernel_name()
         );
         match ty {
             MachineInt::U8 => {
@@ -2394,7 +2394,7 @@ impl fmt::Display for Type {
             Self::Bool => f.write_str("bool"),
             Self::U8 => f.write_str("u8"),
             Self::Int => f.write_str("Int"),
-            Self::Machine(ty) => f.write_str(ty.name()),
+            Self::Machine(ty) => f.write_str(ty.kernel_name()),
             Self::Prop => f.write_str("Prop"),
             Self::Proof(prop) => write!(f, "@{prop}"),
             Self::Tuple(fields) => {
@@ -2443,7 +2443,7 @@ impl fmt::Display for Term {
             Self::Bool(value) => write!(f, "{value}"),
             Self::U8(value) => write!(f, "{value}"),
             Self::Int(value) => write!(f, "{value}i"),
-            Self::Machine(ty, value) => write!(f, "{value}{}", ty.name()),
+            Self::Machine(ty, value) => write!(f, "{value}{}", ty.kernel_name()),
             Self::Prim(prim, arguments) => {
                 write!(f, "{prim}(")?;
                 write_list(f, arguments)?;

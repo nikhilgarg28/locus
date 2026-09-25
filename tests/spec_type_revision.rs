@@ -386,3 +386,48 @@ fn bad(n: u8, other: u8, proof: @(n > 0)) -> @(other > 0) {
     .unwrap();
     assert!(error.contains("L02"), "{error}");
 }
+
+#[test]
+#[doc = "spec: 1.9:1"]
+fn omitted_unit_results_match_explicit_specs_and_preserve_effects() {
+    let checked = check(
+        "omitted_unit",
+        r#"
+spec type Counter { fn new()->Self; fn clear(&mut self); fn get(&self)->u8; }
+struct R { n:u8 }
+impl Counter for R {
+ fn new()->Self { Self { n:7 } }
+ fn clear(&mut self)->() { self.n=0; }
+ fn get(&self)->u8 { self.n }
+}
+fn reset(value:&mut u8) { value=3; }
+pub fn demo()->u8 {
+ let mut c=Counter::new(); c.clear();
+ let mut n=c.get(); reset(&mut n); n
+}
+"#,
+    )
+    .unwrap();
+    let function = checked
+        .checked
+        .functions
+        .iter()
+        .find(|f| f.0.ends_with("_demo"))
+        .unwrap()
+        .1;
+    let a = locus::exec::CheckInterpreter::new(checked.checked.session.program(), 10000)
+        .with_lending(checked.checked.session.lending())
+        .call(function, vec![])
+        .unwrap();
+    let b = locus::erased::Interpreter::new(checked.checked.session.erased(), 10000)
+        .call(function, vec![])
+        .unwrap();
+    assert_eq!(a, b);
+    assert_eq!(
+        a,
+        locus::erased::Outcome::Value(locus::erased::Value::Int(locus::kernel::MachineInt::U8, 3))
+    );
+    assert!(check("omitted_not_inferred", "fn wrong(){7u8}").is_err());
+    assert!(check("omitted_bad_return", "fn wrong(){return 7u8;}").is_err());
+    assert!(check("omitted_logic_not_erased_unit", "logic fn wrong(){}").is_err());
+}

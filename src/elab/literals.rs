@@ -66,7 +66,7 @@ impl Env<'_> {
         // the type expected of it, else `i32`. A suffixed literal where
         // another type is expected is a mismatch, reported by the caller.
         let ty = match (literal.suffix, expected) {
-            (Some(suffix), _) => match MachineInt::from_name(suffix.name()) {
+            (Some(suffix), _) => match self.machine_type(suffix.name()) {
                 Some(ty) => ty,
                 None => {
                     return self.fail(
@@ -112,7 +112,7 @@ impl Env<'_> {
                 path.span,
             ));
         }
-        let ty = MachineInt::from_name(&prefix.text)?;
+        let ty = self.machine_type(&prefix.text)?;
         let value = match name.text.as_str() {
             "MAX" => ty.max(),
             "MIN" => ty.min(),

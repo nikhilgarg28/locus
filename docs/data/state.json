@@ -1053,19 +1053,19 @@
   ],
   "measurements": {
     "schema_version": 1,
-    "generated_at": "2026-09-25T09:11:08.518612+00:00",
-    "source_fingerprint": "dcd06b20865efad21eda8db34f665f09f3e6f274ebb8882e2aa6d65cde8bfec2",
-    "fast_seconds": 305,
+    "generated_at": "2026-09-25T17:06:42.789743+00:00",
+    "source_fingerprint": "f2f9476df8bbb59882d485fd6b83adf30f1ddd28881a92a455f873f24cdde71f",
+    "fast_seconds": 539,
     "fast_limit_seconds": 120,
     "fast_tests": {
-      "passed": 957,
+      "passed": 1018,
       "ignored": 0,
-      "targets": 85
+      "targets": 90
     },
     "extended_tests": {
-      "passed": 957,
+      "passed": 1018,
       "ignored": 0,
-      "targets": 85
+      "targets": 90
     },
     "corpus_files": 265,
     "proof_tiers": {
@@ -1203,32 +1203,32 @@
       {
         "path": "src/kernel/buffer.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 337
+        "physical_lines": 338
       },
       {
         "path": "src/kernel/check.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 1953
+        "physical_lines": 2030
       },
       {
         "path": "src/kernel/context.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 241
+        "physical_lines": 245
       },
       {
         "path": "src/kernel/defs.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 545
+        "physical_lines": 636
       },
       {
         "path": "src/kernel/depth.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 288
+        "physical_lines": 296
       },
       {
         "path": "src/kernel/eval.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 278
+        "physical_lines": 298
       },
       {
         "path": "src/kernel/generics.rs",
@@ -1248,7 +1248,7 @@
       {
         "path": "src/kernel/machine.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 149
+        "physical_lines": 241
       },
       {
         "path": "src/kernel/measured.rs",
@@ -1273,17 +1273,17 @@
       {
         "path": "src/kernel/recursive.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 706
+        "physical_lines": 708
       },
       {
         "path": "src/kernel/term.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 2472
+        "physical_lines": 2506
       },
       {
         "path": "src/typed/lower.rs",
         "category": "typed lowering, layout, permissions and native boundary",
-        "physical_lines": 2847
+        "physical_lines": 2947
       },
       {
         "path": "src/typed/layout.rs",
@@ -1298,7 +1298,7 @@
       {
         "path": "src/typed/buffer.rs",
         "category": "typed lowering, layout, permissions and native boundary",
-        "physical_lines": 487
+        "physical_lines": 490
       },
       {
         "path": "src/typed/trusted.rs",
@@ -1308,17 +1308,17 @@
       {
         "path": "src/typed/tree.rs",
         "category": "typed lowering, layout, permissions and native boundary",
-        "physical_lines": 693
+        "physical_lines": 702
       },
       {
         "path": "src/exec/check.rs",
         "category": "check IR acceptance and native contracts",
-        "physical_lines": 760
+        "physical_lines": 781
       },
       {
         "path": "src/exec/buffer.rs",
         "category": "check IR acceptance and native contracts",
-        "physical_lines": 136
+        "physical_lines": 137
       },
       {
         "path": "src/exec/ir.rs",
@@ -1328,12 +1328,12 @@
       {
         "path": "src/erased/check.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 741
+        "physical_lines": 832
       },
       {
         "path": "src/erased/erase.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 999
+        "physical_lines": 1040
       },
       {
         "path": "src/erased/cleanup.rs",
@@ -1348,17 +1348,17 @@
       {
         "path": "src/erased/rust.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 1404
+        "physical_lines": 1481
       },
       {
         "path": "src/erased/tree.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 321
+        "physical_lines": 329
       },
       {
         "path": "src/elab/items.rs",
         "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted",
-        "physical_lines": 2149
+        "physical_lines": 2215
       },
       {
         "path": "src/build.rs",
@@ -1368,17 +1368,17 @@
       {
         "path": "src/project/load.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 517
+        "physical_lines": 520
       },
       {
         "path": "src/project/resolve.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 1357
+        "physical_lines": 1406
       },
       {
         "path": "src/project/check.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 35
+        "physical_lines": 38
       },
       {
         "path": "src/project/export.rs",
@@ -1388,12 +1388,12 @@
       {
         "path": "src/project/cargo.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 297
+        "physical_lines": 300
       },
       {
         "path": "src/project/build.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 285
+        "physical_lines": 321
       },
       {
         "path": "src/source.rs",
@@ -1403,42 +1403,42 @@
       {
         "path": "src/elab/env.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 639
+        "physical_lines": 635
       },
       {
         "path": "src/elab/calls.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 656
+        "physical_lines": 820
       },
       {
         "path": "src/elab/data.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 531
+        "physical_lines": 641
       },
       {
         "path": "src/elab/mutation.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 1027
+        "physical_lines": 1053
       },
       {
         "path": "src/elab/models.rs",
         "category": "mixed: canonical observation and derived-model privacy; proof construction untrusted",
-        "physical_lines": 559
+        "physical_lines": 564
       },
       {
         "path": "src/project/specs.rs",
         "category": "opaque spec identity, contract matching and checked adapter lowering",
-        "physical_lines": 1134
+        "physical_lines": 1143
       },
       {
         "path": "src/project/specs/walk.rs",
         "category": "structural substitution used by opaque spec lowering",
-        "physical_lines": 370
+        "physical_lines": 380
       },
       {
         "path": "src/imports/model.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
-        "physical_lines": 374
+        "physical_lines": 376
       },
       {
         "path": "src/imports/extract.rs",
@@ -1453,7 +1453,7 @@
       {
         "path": "src/imports/mod.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
-        "physical_lines": 242
+        "physical_lines": 243
       },
       {
         "path": "src/elab/native.rs",
@@ -1464,20 +1464,25 @@
         "path": "src/typed/native.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
         "physical_lines": 70
+      },
+      {
+        "path": "src/target.rs",
+        "category": "whole-compiler target layout selection",
+        "physical_lines": 124
       }
     ],
     "specification": {
-      "paragraphs": 550,
-      "normative": 368,
-      "citations": 608,
-      "focused_tests": 360
+      "paragraphs": 570,
+      "normative": 381,
+      "citations": 644,
+      "focused_tests": 386
     },
     "benchmark": {
       "epoch": "4798fc0b00fbe1bb59179d8dd9d3903af00a8877d0bc2c4279a397c3a1519b69",
-      "records": 8,
-      "observed_days": 1.0673591205208335,
+      "records": 10,
+      "observed_days": 1.3976154003935184,
       "two_week_window_complete": false,
-      "headline_index": 102.52402007219979,
+      "headline_index": 164.60033148675558,
       "freshness": {
         "status": "current",
         "commits": 0
@@ -1493,14 +1498,16 @@
             404874084,
             432299001,
             398596125,
-            412923125
+            412923125,
+            433914375,
+            441843292
           ],
-          "sparkline": "▅▂▇▁▃█▂▅",
+          "sparkline": "▄▂▆▁▃▇▂▄▇█",
           "comparison": {
-            "baseline_median_ns": 405755542,
+            "baseline_median_ns": 410144583,
             "k": 6,
-            "median_ns": 412923125,
-            "pooled_dispersion_ns": 13086591.329083689,
+            "median_ns": 441843292,
+            "pooled_dispersion_ns": 14254385.885752482,
             "status": "stable"
           }
         },
@@ -1514,15 +1521,17 @@
             23851917,
             25372208,
             23534750,
-            25995459
+            25995459,
+            25774791,
+            46090541
           ],
-          "sparkline": "▃▁▇▁▂▆▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 23881417,
+            "baseline_median_ns": 24446376,
             "k": 6,
-            "median_ns": 25995459,
-            "pooled_dispersion_ns": 1230737.4114737257,
-            "status": "stable"
+            "median_ns": 46090541,
+            "pooled_dispersion_ns": 1183230.1943828552,
+            "status": "slowdown"
           }
         },
         {
@@ -1535,15 +1544,17 @@
             43934084,
             47695374,
             44869876,
-            47535542
+            47535542,
+            47412583,
+            70085876
           ],
-          "sparkline": "▅▁█▁▂█▄█",
+          "sparkline": "▂▁▂▁▁▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 44869876,
+            "baseline_median_ns": 46503500,
             "k": 6,
-            "median_ns": 47535542,
-            "pooled_dispersion_ns": 1686713.0941412407,
-            "status": "stable"
+            "median_ns": 70085876,
+            "pooled_dispersion_ns": 1532431.34634947,
+            "status": "slowdown"
           }
         },
         {
@@ -1556,15 +1567,17 @@
             25008166,
             26610375,
             24709083,
-            25968000
+            25968000,
+            26749125,
+            47938542
           ],
-          "sparkline": "▅▁█▁▃█▂▆",
+          "sparkline": "▁▁▂▁▁▂▁▁▂█",
           "comparison": {
-            "baseline_median_ns": 25109084,
+            "baseline_median_ns": 25183750,
             "k": 6,
-            "median_ns": 25968000,
-            "pooled_dispersion_ns": 826671.7801915292,
-            "status": "stable"
+            "median_ns": 47938542,
+            "pooled_dispersion_ns": 907949.1467493693,
+            "status": "slowdown"
           }
         },
         {
@@ -1577,15 +1590,17 @@
             44123333,
             47306167,
             44094208,
-            45014416
+            45014416,
+            48401792,
+            70705709
           ],
-          "sparkline": "▅▁█▁▂▇▂▃",
+          "sparkline": "▂▁▂▁▁▂▁▁▂█",
           "comparison": {
-            "baseline_median_ns": 44995041,
+            "baseline_median_ns": 45415166,
             "k": 6,
-            "median_ns": 45014416,
-            "pooled_dispersion_ns": 1793035.0542464342,
-            "status": "stable"
+            "median_ns": 70705709,
+            "pooled_dispersion_ns": 1775039.5547975488,
+            "status": "slowdown"
           }
         },
         {
@@ -1598,15 +1613,17 @@
             58723458,
             64463666,
             57783334,
-            63369291
+            63369291,
+            64792292,
+            91266251
           ],
-          "sparkline": "▃▂█▂▂█▁▇",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 59184792,
+            "baseline_median_ns": 60328583,
             "k": 6,
-            "median_ns": 63369291,
-            "pooled_dispersion_ns": 2357696.9129367676,
-            "status": "stable"
+            "median_ns": 91266251,
+            "pooled_dispersion_ns": 2659997.372175356,
+            "status": "slowdown"
           }
         },
         {
@@ -1619,15 +1636,17 @@
             26252043,
             26833416,
             24698666,
-            26314208
+            26314208,
+            27070500,
+            45085000
           ],
-          "sparkline": "▄▁▆▃▆█▂▆",
+          "sparkline": "▁▁▂▁▂▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 25611875,
+            "baseline_median_ns": 25815917,
             "k": 6,
-            "median_ns": 26314208,
-            "pooled_dispersion_ns": 1171733.7316133014,
-            "status": "stable"
+            "median_ns": 45085000,
+            "pooled_dispersion_ns": 922092.2533200928,
+            "status": "slowdown"
           }
         },
         {
@@ -1640,15 +1659,17 @@
             22057416,
             23415374,
             22253125,
-            22845167
+            22845167,
+            24183709,
+            43446000
           ],
-          "sparkline": "▅▁█▃▂▆▂▄",
+          "sparkline": "▁▁▂▁▁▂▁▁▂█",
           "comparison": {
-            "baseline_median_ns": 22511208,
+            "baseline_median_ns": 22733999,
             "k": 6,
-            "median_ns": 22845167,
-            "pooled_dispersion_ns": 830221.9768687885,
-            "status": "stable"
+            "median_ns": 43446000,
+            "pooled_dispersion_ns": 946485.7888976207,
+            "status": "slowdown"
           }
         },
         {
@@ -1661,15 +1682,17 @@
             31249709,
             33739500,
             31076417,
-            33619000
+            33619000,
+            34161000,
+            51895667
           ],
-          "sparkline": "▃▂█▂▁█▁▇",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 31957208,
+            "baseline_median_ns": 32116917,
             "k": 6,
-            "median_ns": 33619000,
-            "pooled_dispersion_ns": 888909.544547405,
-            "status": "stable"
+            "median_ns": 51895667,
+            "pooled_dispersion_ns": 1120476.9923809145,
+            "status": "slowdown"
           }
         },
         {
@@ -1682,19 +1705,21 @@
             19569542,
             20499666,
             18724208,
-            20512041
+            20512041,
+            20711416,
+            39720083
           ],
-          "sparkline": "▅▁█▃▄█▁█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█",
           "comparison": {
-            "baseline_median_ns": 19491583,
+            "baseline_median_ns": 19856292,
             "k": 6,
-            "median_ns": 20512041,
-            "pooled_dispersion_ns": 959814.8846096359,
-            "status": "stable"
+            "median_ns": 39720083,
+            "pooled_dispersion_ns": 1511541.8466201553,
+            "status": "slowdown"
           }
         }
       ]
     },
-    "benchmark_record_sha256": "780c6b162eff23e434e49ba85b787f64669a700d5e2ea024d399c5c6378c9237"
+    "benchmark_record_sha256": "a713d777e1c4d78e3b364fe9027789a3c0c5b931167f85ccb2042d87294713ab"
   }
 }

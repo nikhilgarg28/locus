@@ -248,6 +248,14 @@ impl Env<'_> {
         if let Some(result) = self.vector_constructor(callee, arguments, expected, span) {
             return result;
         }
+        if let ExprKind::Name(name) = &callee.kind
+            && self.lookup(&name.text).is_none()
+            && !self.values.contains_key(&name.text)
+            && let Some(Global::Struct(info)) = self.types.get(&self.type_text(name)).cloned()
+            && info.shape == ast::VariantShape::Tuple
+        {
+            return self.positional_struct(&info, Some(arguments), expected, span);
+        }
         match &callee.kind {
             // `Type::name(..)`: a function of an `impl` block, or a variant.
             ExprKind::Path(path) => match self.path_function(path) {

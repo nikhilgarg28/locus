@@ -25,3 +25,5 @@ pub mod project;
 pub mod source;
 pub mod store;
 pub mod typed;
+
+pub mod target;

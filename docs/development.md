@@ -69,7 +69,7 @@ See the [package guide](packages.md) for entry files, Cargo metadata, build.rs i
 
 `locus check path/file.lc` records the proofs it uses in `path/Locus.lock`. Commit that TOML file alongside the sources. `locus check path/file.lc --locked` requires every obligation to replay through the kernel without search or writes. `--no-store` bypasses storage for search experiments. Checking one source preserves neighboring files' lockfile entries.
 
-Older `<source>.proofs` files are read only when that source has no table in `Locus.lock`. A successful unlocked check writes canonical named proof steps into the lockfile before deleting the migrated sidecar. Locked checking can read a legacy sidecar but leaves migration for an unlocked check. Stored claims and labels never substitute for kernel checking.
+Older `<source>.proofs` files are read only when that source has no table in `Locus.lock`. A successful unlocked check writes canonical named proof steps into the lockfile before deleting the migrated sidecar. Locked checking can read a legacy sidecar but leaves migration for an unlocked check. Pre-layout version-1 entries may be re-keyed as candidates and are still checked against the current target and claim. Existing version-2 lockfiles need regeneration after the target-width key change. Stored claims and labels never substitute for kernel checking.
 
 ## Record measurements
 
@@ -80,3 +80,7 @@ Records append to the local Git branch `locus-bench-data`, without changing the 
 The extended gate produces `target/status-record.json`, `target/status.json`, and [generated status](generated-status.md) from complete logs and measured data. Its source fingerprint covers compiler inputs, tests, tools, examples, editor files, website sources, and documentation, including the roadmap. A changed fingerprint makes the report stale; old counts must not be presented as current. `python3 tools/metrics.py check` checks the displayed report, and `--fresh` additionally requires a current complete measurement. The extended gate rejects a checkout changed while its tests were running.
 
 A published static report describes its recorded revision. It cannot monitor subsequent repository changes. Trusted-base counts use the conservative whole-file inventory in [tools/trusted-base.json](../tools/trusted-base.json); they are distinct from the size of the proof kernel. The [correctness page](correctness.md) explains the remaining preservation and mechanization obligations.
+
+## Checking another target
+
+Use `locus check export.lc --target i686-unknown-linux-gnu` or the same option on `build`. Pointer-sized arithmetic, collection indices and proof bounds then use 32 bits. Layout discovery needs rustc, but not a target standard library; compiling the resulting Rust still requires the appropriate Rust target support. The build API also accepts `.target(...)` and recognizes Cargo's `TARGET` in build scripts. Regenerate output when changing target; do not remove its target-width guard.

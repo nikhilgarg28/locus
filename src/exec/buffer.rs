@@ -3,7 +3,7 @@
 use super::{BufferStmt, BufferStorage, ExecError, Promises};
 use crate::kernel::buffer::{bounds, length};
 use crate::kernel::{
-    BufferOp, Context, MachineInt, Mode, Proof, Term, Type, check_proof, infer_term, same_type,
+    BufferOp, Context, Mode, Proof, Term, Type, check_proof, infer_term, same_type,
 };
 
 pub(super) fn check(
@@ -11,6 +11,7 @@ pub(super) fn check(
     operation: &BufferStmt,
     promises: Promises,
     definitions: &crate::kernel::Definitions,
+    width: crate::kernel::PointerWidth,
 ) -> Result<(), ExecError> {
     let BufferStmt {
         var,
@@ -51,10 +52,10 @@ pub(super) fn check(
     let expected = match op {
         BufferOp::Literal => vec![element.clone(); arguments.len()],
         BufferOp::Length => vec![buffer.clone()],
-        BufferOp::Get => vec![buffer.clone(), Type::machine(MachineInt::U64)],
+        BufferOp::Get => vec![buffer.clone(), Type::machine(width.usize())],
         BufferOp::Set => vec![
             buffer.clone(),
-            Type::machine(MachineInt::U64),
+            Type::machine(width.usize()),
             element.clone(),
         ],
         BufferOp::Push => vec![buffer.clone(), element.clone()],
@@ -88,7 +89,7 @@ pub(super) fn check(
     }
     let mut model_arguments = arguments.clone();
     if indexing {
-        let index = Term::view(MachineInt::U64, arguments[1].clone());
+        let index = Term::view(width.usize(), arguments[1].clone());
         let claims = bounds(element, &arguments[0], &index);
         for (proof, claim) in evidence.iter().zip(claims) {
             check_proof(ctx, proof, &claim)?;
@@ -102,7 +103,7 @@ pub(super) fn check(
     if *op == BufferOp::Push {
         let room = Term::int_lt(
             length(element.clone(), arguments[0].clone()),
-            Term::Int(MachineInt::U64.max()),
+            Term::Int(width.usize().max()),
         );
         // Reaching the next statement means Rust's push returned. It could
         // not have produced a representable collection with an overflowing length.
@@ -116,7 +117,7 @@ pub(super) fn check(
     };
     let model_ty = infer_term(ctx, &model, Mode::Logical)?;
     let result_ty = if *op == BufferOp::Length {
-        Type::machine(MachineInt::U64)
+        Type::machine(width.usize())
     } else {
         model_ty.clone()
     };
@@ -127,7 +128,7 @@ pub(super) fn check(
         return Ok(());
     }
     let actual = if *op == BufferOp::Length {
-        Term::view(MachineInt::U64, Term::Free(*var))
+        Term::view(width.usize(), Term::Free(*var))
     } else {
         Term::Free(*var)
     };

@@ -4,7 +4,7 @@ version = 2
 path = "arithmetic_facts.lc"
 
   [[file.obligation]]
-  key = "4a34b1982405518c"
+  key = "c9c03618a758bd61"
   at = "wrapped_sum 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8]($1)))"
   steps = '''
@@ -12,7 +12,7 @@ s1 = linear(int_le(0i, int_add(view[u8]($0), view[u8]($1))), 1, [(axiom(view_low
 '''
 
   [[file.obligation]]
-  key = "348fb5ba5b7e73c7"
+  key = "9d4439c462c6af82"
   at = "wrapped_sum 3"
   claim = "(int_eq_b(view[u8]($3), view[u8](wrapping_add[u8]($0, $1))) ==[bool] true)"
   steps = '''
@@ -26,7 +26,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), t4, transport(transport(
 '''
 
   [[file.obligation]]
-  key = "991162fe0fb0cfc3"
+  key = "cff70147528ec83c"
   at = "wrapped_difference 2"
   claim = "(int_eq_b(view[i16]($3), view[i16](wrapping_sub[i16]($0, $1))) ==[bool] true)"
   steps = '''
@@ -40,7 +40,7 @@ s1 = transport(transport(h2, (#0 ==[i16] $3), refl($3)), t4, transport(transport
 '''
 
   [[file.obligation]]
-  key = "4b915d42c27df8b1"
+  key = "48752db2cf870122"
   at = "wrapped_product 2"
   claim = "(int_eq_b(view[u32]($3), view[u32](wrapping_mul[u32]($0, $1))) ==[bool] true)"
   steps = '''
@@ -54,7 +54,7 @@ s1 = transport(transport(h2, (#0 ==[u32] $3), refl($3)), t4, transport(transport
 '''
 
   [[file.obligation]]
-  key = "ab244f107ccfba5a"
+  key = "194b9cb8764d6ff9"
   at = "wrapped_negation 1"
   claim = "int_le(-128i, int_neg(view[i8]($0)))"
   steps = '''
@@ -62,7 +62,7 @@ s1 = linear(int_le(-128i, int_neg(view[i8]($0))), 1, [(axiom(view_upper[i8], $0)
 '''
 
   [[file.obligation]]
-  key = "b02f7da67f91678e"
+  key = "2f20898b9a1ed15f"
   at = "wrapped_negation 3"
   claim = "(int_eq_b(view[i8]($2), view[i8](wrapping_neg[i8]($0))) ==[bool] true)"
   steps = '''
@@ -76,7 +76,7 @@ s1 = transport(transport(h2, (#0 ==[i8] $2), refl($2)), t4, transport(transport(
 '''
 
   [[file.obligation]]
-  key = "39c9a7257efc0f5f"
+  key = "eccc9aee9a66420a"
   at = "quotient 2"
   claim = "(int_eq_b(view[u8]($1), 0i) ==[bool] false)"
   steps = '''
@@ -84,7 +84,7 @@ s1 = implies_elim(axiom(cmp_reify[false], int_eq_b(view[u8]($1), 0i)), h1)
 '''
 
   [[file.obligation]]
-  key = "e3b0cede3c648fd8"
+  key = "eb83f805340b1ebb"
   at = "remainder 3"
   claim = "(int_eq_b(view[i64]($1), 0i) ==[bool] false)"
   steps = '''
@@ -92,7 +92,7 @@ s1 = implies_elim(axiom(cmp_reify[false], int_eq_b(view[i64]($1), 0i)), h1)
 '''
 
   [[file.obligation]]
-  key = "57e34a04156167eb"
+  key = "cad9b7be6b86ac66"
   at = "next 1"
   claim = "int_le(0i, int_add(view[u32]($0), view[u32](1u32)))"
   steps = '''
@@ -102,7 +102,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "e611ba86310976ea"
+  key = "c2801b7fb1638041"
   at = "next 2"
   claim = "int_le(int_add(view[u32]($0), view[u32](1u32)), 4294967295i)"
   steps = '''
@@ -114,7 +114,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "23d79fd5d35be8f1"
+  key = "f35487ca649a43c2"
   at = "next 3"
   claim = "(int_eq_b(view[u32]($3), int_add(view[u32]($0), 1i)) ==[bool] true)"
   steps = '''
@@ -126,7 +126,7 @@ s1 = transport(transport(h2, (#0 ==[u32] $3), refl($3)), t4, transport(transport
 '''
 
   [[file.obligation]]
-  key = "9b405e003a19ec49"
+  key = "4825b3275792f1e0"
   at = "ten_more 1"
   claim = "(int_le_b(int_add(view[u8]($0), 10i), 255i) ==[bool] true)"
   steps = '''
@@ -134,7 +134,7 @@ s1 = of_term($1)
 '''
 
   [[file.obligation]]
-  key = "6ff8e9e7623e31d3"
+  key = "c2b75c681e2cadac"
   at = "ten_more 2"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](10)))"
   steps = '''
@@ -144,7 +144,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "37b10e9f4497e741"
+  key = "9ef01ba194148e56"
   at = "ten_more 3"
   claim = "int_le(int_add(view[u8]($0), view[u8](10)), 255i)"
   steps = '''
@@ -154,7 +154,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "8aa4385295c19c1b"
+  key = "c9c4c5fce00ced74"
   at = "ten_more 4"
   claim = "(int_eq_b(view[u8]($3), int_add(view[u8]($0), 10i)) ==[bool] true)"
   steps = '''
@@ -166,7 +166,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), t4, transport(transport(
 '''
 
   [[file.obligation]]
-  key = "070418f63fc4bed3"
+  key = "5b73cbc764ed179c"
   at = "scaled 1"
   claim = "int_le(0i, int_mul(view[u8]($0), view[u8](5)))"
   steps = '''
@@ -176,7 +176,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "ac7f9caa911966d3"
+  key = "3d6456f884126c8c"
   at = "scaled 2"
   claim = "int_le(int_mul(view[u8]($0), view[u8](5)), 255i)"
   steps = '''
@@ -186,7 +186,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_mul
 '''
 
   [[file.obligation]]
-  key = "133b513d65b3080d"
+  key = "9f9e57e18940a05a"
   at = "scaled 3"
   claim = "(int_eq_b(view[u8]($3), int_mul(view[u8]($0), 5i)) ==[bool] true)"
   steps = '''
@@ -198,7 +198,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), t4, transport(transport(
 '''
 
   [[file.obligation]]
-  key = "541d9286af73aec2"
+  key = "c7c3a4e2b43b1785"
   at = "hundred_and_ten 1"
   claim = "int_le(0i, int_add(view[u8](100), view[u8](10)))"
   steps = '''
@@ -209,7 +209,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "34a184c664048a6a"
+  key = "25871202f35189cd"
   at = "hundred_and_ten 2"
   claim = "int_le(int_add(view[u8](100), view[u8](10)), 255i)"
   steps = '''
@@ -220,7 +220,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "1435c950355e5ca1"
+  key = "f1272c7198cb52ce"
   at = "halve 1"
   claim = "((view[i32]($1) ==[Int] 0i) => prop:False())"
   steps = '''
@@ -229,7 +229,7 @@ s1 = implies_intro((t1 ==[Int] 0i), linear(prop:False(), 0, [(implies_elim(axiom
 '''
 
   [[file.obligation]]
-  key = "a64dfa3f7e0c7342"
+  key = "2df97af96a2ef2b7"
   at = "halve 2"
   claim = "((view[i32]($0) ==[Int] -2147483648i) => ((view[i32]($1) ==[Int] -1i) => prop:False()))"
   steps = '''
@@ -238,7 +238,7 @@ s1 = implies_intro((view[i32]($0) ==[Int] -2147483648i), implies_intro((t1 ==[In
 '''
 
   [[file.obligation]]
-  key = "14c6247fa02aeb6c"
+  key = "5922ab2a64d3b999"
   at = "safe_quotient 1"
   claim = "((view[u8]($1) ==[Int] 0i) => prop:False())"
   steps = '''
@@ -246,7 +246,7 @@ s1 = implies_elim(axiom(cmp_reflect[false], int_eq_b(view[u8]($1), 0i)), of_term
 '''
 
   [[file.obligation]]
-  key = "d5ad2b0cc4a88888"
+  key = "7cf6f84222e6df25"
   at = "twice_then_one 1"
   claim = "int_le(0i, int_mul(view[u8]($0), view[u8](2)))"
   steps = '''
@@ -256,7 +256,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "0ff1395110f62aa8"
+  key = "599ba33de52fa3c1"
   at = "twice_then_one 2"
   claim = "int_le(int_mul(view[u8]($0), view[u8](2)), 255i)"
   steps = '''
@@ -266,7 +266,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_mul
 '''
 
   [[file.obligation]]
-  key = "546c99c7a7e0874f"
+  key = "d35a1f000e2ef1b8"
   at = "twice_then_one 3"
   claim = "int_le(0i, int_add(view[u8]($3), view[u8](1)))"
   steps = '''
@@ -285,7 +285,7 @@ s4 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "eacd019163933407"
+  key = "f5b24f549fbbe4f0"
   at = "twice_then_one 4"
   claim = "int_le(int_add(view[u8]($3), view[u8](1)), 255i)"
   steps = '''
@@ -307,23 +307,25 @@ s4 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 path = "assign_join_evidence.lc"
 
   [[file.obligation]]
-  key = "692b8625c7cace10"
+  key = "a7f8bdba4b7877d3"
   at = "clamp_then_state 1"
   claim = "(int_le_b(view[u8]($2), 2i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h2, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 2i) ==[bool] true), evaluate(int_le_b(view[u8](1), 2i)))
+t1 = int_le_b(view[u8](1), 2i)
+s1 = transport(transport(h2, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 2i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
   [[file.obligation]]
-  key = "6503dd23f453c406"
+  key = "629ebd5665d7ed93"
   at = "clamp_then_state 2"
   claim = "(int_le_b(view[u8]($2), 2i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h2, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 2i) ==[bool] true), evaluate(int_le_b(view[u8](2), 2i)))
+t1 = int_le_b(view[u8](2), 2i)
+s1 = transport(transport(h2, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 2i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
   [[file.obligation]]
-  key = "17ab2439adcd457e"
+  key = "ca02b3f5f7492017"
   at = "clamp_then_state 3"
   claim = "(int_le_b(view[u8]($3), 2i) ==[bool] true)"
   steps = '''
@@ -334,7 +336,7 @@ s1 = of_term($5)
 path = "assign_order.lc"
 
   [[file.obligation]]
-  key = "f0e158c2e7eb666e"
+  key = "0c8dec9d11f56c35"
   at = "self_referential 1"
   claim = "(int_eq_b(view[u8]($2), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true)"
   steps = '''
@@ -346,7 +348,7 @@ s1 = transport(transport(h1, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), 
 path = "assign_shadowing.lc"
 
   [[file.obligation]]
-  key = "dd208fad527931a3"
+  key = "4f854b4463615298"
   at = "inner_assigned 1"
   claim = "(int_eq_b(view[u8]($2), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -358,7 +360,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), 
 path = "assign_straight.lc"
 
   [[file.obligation]]
-  key = "018cc5fa74b5054a"
+  key = "ce9323d7a520857d"
   at = "count_up 1"
   claim = "(int_eq_b(view[u8]($3), view[u8](wrapping_add[u8](wrapping_add[u8]($0, 1), 1))) ==[bool] true)"
   steps = '''
@@ -368,7 +370,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), (int_eq_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "7f3d8b887e238d18"
+  key = "fbfd754c7a2c9cbd"
   at = "set_lo 1"
   claim = "(int_eq_b(view[u8]($3.1), view[u8]($0.1)) ==[bool] true)"
   steps = '''
@@ -380,7 +382,7 @@ s1 = transport(transport(h1, (#0 ==[struct:Pair] $3), refl($3)), (int_eq_b(view[
 '''
 
   [[file.obligation]]
-  key = "3731e84141ae4839"
+  key = "b83659142202e5a0"
   at = "set_deep 1"
   claim = "(int_eq_b(view[u8]($3.0.0), view[u8]($0.0.0)) ==[bool] true)"
   steps = '''
@@ -400,18 +402,19 @@ s1 = transport(transport(h2, (#0 ==[struct:Nested] $3), refl($3)), (int_eq_b(vie
 '''
 
   [[file.obligation]]
-  key = "f3c5a9014967d4f5"
+  key = "3b2bd9b407a6496c"
   at = "nested_block 1"
   claim = "(int_eq_b(view[u8]($2), 3i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h1, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_eq_b(view[u8](3), 3i)))
+t1 = int_eq_b(view[u8](3), 3i)
+s1 = transport(transport(h1, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
 [[file]]
 path = "associated_constants.lc"
 
   [[file.obligation]]
-  key = "7dc4c855405ca0cb"
+  key = "0aa33c66a54923ee"
   at = "Limits::claim 1"
   claim = "(int_eq_b(int_add(view[u32](fn:Limits::LIMIT()), 1i), 4294967296i) ==[bool] true)"
   steps = '''
@@ -420,7 +423,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "9638ceb2d34aa4bd"
+  key = "129a50bc6f118f9a"
   at = "limit 1"
   claim = "(int_eq_b(view[u32](fn:ALIAS()), view[u32](fn:Limits::LIMIT())) ==[bool] true)"
   steps = '''
@@ -432,7 +435,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 path = "checked_operand_effects.lc"
 
   [[file.obligation]]
-  key = "b8448cccbcd21486"
+  key = "e441931999b5c6cf"
   at = "sum 1"
   claim = "int_le(0i, int_add(view[u8]($2.1), view[u8]($4.1)))"
   steps = '''
@@ -445,7 +448,7 @@ s1 = linear(int_le(0i, int_add(view[u8](t1), view[u8](t2))), 1, [(axiom(view_low
 path = "constants.lc"
 
   [[file.obligation]]
-  key = "695d08bf3e2847aa"
+  key = "1e1fef0f7e0bac5d"
   at = "limit_is_small 1"
   claim = "(int_le_b(view[u8](fn:LIMIT()), 9i) ==[bool] true)"
   steps = '''
@@ -454,7 +457,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "e679675703a5e16f"
+  key = "99a5b9747f47d596"
   at = "within 1"
   claim = "int_le(view[u8]($0), view[u8](fn:LIMIT()))"
   steps = '''
@@ -462,7 +465,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], int_le_b(view[u8]($0), view[u8](fn:LI
 '''
 
   [[file.obligation]]
-  key = "c9f619a4faacec1c"
+  key = "21a9782ca20092c6"
   at = "within 2"
   claim = "int_le(view[u8](fn:LIMIT()), view[u8](9))"
   steps = '''
@@ -470,7 +473,7 @@ s1 = evaluate(int_le(view[u8](fn:LIMIT()), view[u8](9)))
 '''
 
   [[file.obligation]]
-  key = "b2dfee74828cb87e"
+  key = "b0b584304b1ef4e8"
   at = "within 3"
   claim = "(int_le_b(view[u8]($0), 9i) ==[bool] true)"
   steps = '''
@@ -482,7 +485,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 9i)), transport(literal(t2
 '''
 
   [[file.obligation]]
-  key = "311d4c5ad39cfcdc"
+  key = "887a2273887dcc11"
   at = "known 1"
   claim = "(int_eq_b(fn:double(2i), 4i) ==[bool] true)"
   steps = '''
@@ -494,57 +497,59 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 path = "derives.lc"
 
   [[file.obligation]]
-  key = "adb5646d5fcd214e"
+  key = "c51bc333edcfaba7"
   at = "classify 1"
   claim = "(int_le_b(view[u8]($0), 100i) ==[bool] true)"
   steps = '''
 t1 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), linear(int_le(t1, 100i), 1, [(transport(literal(view[u8](100)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 100)), h0)), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), transport(literal(view[u8](100)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 100)), h0)))
 '''
 
 [[file]]
 path = "early_return.lc"
 
   [[file.obligation]]
-  key = "ec4b4a6d061d6e3a"
+  key = "6fab6eb4141973fb"
   at = "clamp 1"
   claim = "(int_le_b(view[u8]($0), 3i) ==[bool] true)"
   steps = '''
 t1 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 3i)), linear(int_le(t1, 3i), 1, [(transport(literal(view[u8](3)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), h0)), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 3i)), transport(literal(view[u8](3)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), h0)))
 '''
 
   [[file.obligation]]
-  key = "05600cc70252d68c"
+  key = "82b5aac12206813d"
   at = "clamp 2"
   claim = "(int_le_b(view[u8](3), 3i) ==[bool] true)"
   steps = '''
-s1 = evaluate(int_le_b(view[u8](3), 3i))
+t1 = int_le_b(view[u8](3), 3i)
+s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1))
 '''
 
 [[file]]
 path = "evidence_argument.lc"
 
   [[file.obligation]]
-  key = "8ef394a1c58031c9"
+  key = "735ce8191a6a47a6"
   at = "headroom 1"
   claim = "int_le(view[u8]($0), view[u8](250))"
   steps = '''
 t1 = view[u8](250)
 t2 = view[u8]($0)
-s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0), linear(int_le(t2, 250i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(t2, 250i)), of_term($1)), 1)]))
+s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0), implies_elim(axiom(cmp_reflect[true], int_le_b(t2, 250i)), of_term($1)))
 '''
 
   [[file.obligation]]
-  key = "e4ab2915c783431b"
+  key = "0307f51719e86720"
   at = "headroom 2"
   claim = "(int_le_b(view[u8](250), 255i) ==[bool] true)"
   steps = '''
-s1 = evaluate(int_le_b(view[u8](250), 255i))
+t1 = int_le_b(view[u8](250), 255i)
+s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1))
 '''
 
   [[file.obligation]]
-  key = "51c378304a4de759"
+  key = "ce86424f18510390"
   at = "headroom 3"
   claim = "int_le(view[u8](250), view[u8](255))"
   steps = '''
@@ -552,38 +557,39 @@ s1 = evaluate(int_le(view[u8](250), view[u8](255)))
 '''
 
   [[file.obligation]]
-  key = "7b7b3a691c25a202"
+  key = "af41887d550546c9"
   at = "headroom 4"
   claim = "(int_le_b(5i, view[u8](wrapping_sub[u8](255, $0))) ==[bool] true)"
   steps = '''
 t1 = view[u8](wrapping_sub[u8](255, $0))
 t2 = view[u8](250)
 t3 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(5i, t1)), linear(int_le(5i, t1), 1, [(transport(literal(view[u8](5)), int_le(#0, t1), transport(literal(wrapping_sub[u8](255, 250)), int_le(view[u8](#0), t1), of_term(proof(of_term(fn:u8_sub_le_sub(255, $0, 250, proof(transport(transport(literal(t2), (#0 ==[Int] t2), refl(t2)), int_le(t3, #0), linear(int_le(t3, 250i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(t3, 250i)), of_term($1)), 1)]))), proof(evaluate(int_le(t2, view[u8](255)))))))))), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(5i, t1)), transport(literal(view[u8](5)), int_le(#0, t1), transport(literal(wrapping_sub[u8](255, 250)), int_le(view[u8](#0), t1), of_term(proof(of_term(fn:u8_sub_le_sub(255, $0, 250, proof(transport(transport(literal(t2), (#0 ==[Int] t2), refl(t2)), int_le(t3, #0), implies_elim(axiom(cmp_reflect[true], int_le_b(t3, 250i)), of_term($1)))), proof(evaluate(int_le(t2, view[u8](255)))))))))))
 '''
 
   [[file.obligation]]
-  key = "5607d7fd67ddfc02"
+  key = "0b0872330eb1b92b"
   at = "clamp 1"
   claim = "(int_le_b(view[u8]($0), 250i) ==[bool] true)"
   steps = '''
 t1 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 250i)), linear(int_le(t1, 250i), 1, [(transport(literal(view[u8](250)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 250)), h0)), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 250i)), transport(literal(view[u8](250)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 250)), h0)))
 '''
 
   [[file.obligation]]
-  key = "32866481d4010bb4"
+  key = "b92c36d7d06108cd"
   at = "clamp 2"
   claim = "(int_le_b(view[u8](250), 250i) ==[bool] true)"
   steps = '''
-s1 = evaluate(int_le_b(view[u8](250), 250i))
+t1 = int_le_b(view[u8](250), 250i)
+s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1))
 '''
 
 [[file]]
 path = "exact_without_no_panic.lc"
 
   [[file.obligation]]
-  key = "4a34b1982405518c"
+  key = "c9c03618a758bd61"
   at = "sum 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8]($1)))"
   steps = '''
@@ -591,7 +597,7 @@ s1 = linear(int_le(0i, int_add(view[u8]($0), view[u8]($1))), 1, [(axiom(view_low
 '''
 
   [[file.obligation]]
-  key = "b796db59edd16eac"
+  key = "22d42c4ace215633"
   at = "sum 3"
   claim = "(int_eq_b(view[u8]($3), int_add(view[u8]($0), view[u8]($1))) ==[bool] true)"
   steps = '''
@@ -605,7 +611,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), t3, transport(transport(
 path = "explicit_steps.lc"
 
   [[file.obligation]]
-  key = "21b92554fd931f78"
+  key = "6b029a6b0d6bf447"
   at = "bump 1"
   claim = "(int_eq_b(view[u8](wrapping_add[u8]($0, 1)), view[u8](wrapping_add[u8]($0, 1))) ==[bool] true)"
   steps = '''
@@ -614,7 +620,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 '''
 
   [[file.obligation]]
-  key = "f6ca228406d50598"
+  key = "a4b009a599e73acd"
   at = "stepped 1"
   claim = "int_le(int_add(view[u8]($0), 1i), view[u8](10))"
   steps = '''
@@ -624,7 +630,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "65a6b1dbfd58367b"
+  key = "e6b35618e019307c"
   at = "stepped 2"
   claim = "(int_le_b(view[u8](wrapping_add[u8]($0, 1)), 10i) ==[bool] true)"
   steps = '''
@@ -636,7 +642,7 @@ s2 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 10i)), transport(s1, int_l
 '''
 
   [[file.obligation]]
-  key = "8ef394a1c58031c9"
+  key = "735ce8191a6a47a6"
   at = "headroom 1"
   claim = "int_le(view[u8]($0), view[u8](250))"
   steps = '''
@@ -646,7 +652,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0)
 '''
 
   [[file.obligation]]
-  key = "e4ab2915c783431b"
+  key = "0307f51719e86720"
   at = "headroom 2"
   claim = "(int_le_b(view[u8](250), 255i) ==[bool] true)"
   steps = '''
@@ -655,7 +661,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "51c378304a4de759"
+  key = "ce86424f18510390"
   at = "headroom 3"
   claim = "int_le(view[u8](250), view[u8](255))"
   steps = '''
@@ -663,7 +669,7 @@ s1 = evaluate(int_le(view[u8](250), view[u8](255)))
 '''
 
   [[file.obligation]]
-  key = "7b7b3a691c25a202"
+  key = "af41887d550546c9"
   at = "headroom 4"
   claim = "(int_le_b(5i, view[u8](wrapping_sub[u8](255, $0))) ==[bool] true)"
   steps = '''
@@ -677,7 +683,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(5i, t1)), transport(literal(vi
 path = "fold_struct_literal.lc"
 
   [[file.obligation]]
-  key = "346c5f07a9a7ec94"
+  key = "a4b837f5cfd73dc7"
   at = "literal 1"
   claim = "(int_eq_b(struct:NumberModel { struct:Nat { view[u8](struct:Number { 3 }.0), proof(axiom(view_lower[u8], struct:Number { 3 }.0)) } }.0.0, 3i) ==[bool] true)"
   steps = '''
@@ -690,7 +696,7 @@ s1 = transport(transport(projection(t3), (#0 ==[struct:Nat] t3), refl(t3)), (int
 '''
 
   [[file.obligation]]
-  key = "0285ba33f560a2ff"
+  key = "3be54080d03c454e"
   at = "named 1"
   claim = "(int_eq_b(view[u8]($0.0), 3i) ==[bool] true)"
   steps = '''
@@ -703,7 +709,7 @@ s1 = transport(transport(h0, (#0 ==[struct:Number] $0), refl($0)), (int_eq_b(vie
 path = "forms.lc"
 
   [[file.obligation]]
-  key = "f6ca228406d50598"
+  key = "a4b009a599e73acd"
   at = "bump 1"
   claim = "int_le(int_add(view[u8]($0), 1i), view[u8](10))"
   steps = '''
@@ -713,7 +719,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "9ef6d46e03f75d44"
+  key = "fa7b5ce081fd186f"
   at = "bump 2"
   claim = "(int_le_b(view[u8](wrapping_add[u8]($0, 1)), 10i) ==[bool] true)"
   steps = '''
@@ -722,7 +728,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 10i)), transport(literal(v
 '''
 
   [[file.obligation]]
-  key = "ab3c0f00d14c39a8"
+  key = "a354a4276bdbdbcf"
   at = "bump 3"
   claim = "(int_le_b(view[u8]($3), 10i) ==[bool] true)"
   steps = '''
@@ -731,7 +737,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "6d4e8badcb508fba"
+  key = "7fd2b5908abd9c3f"
   at = "named 1"
   claim = "(int_eq_b(view[u8](1), 0i) ==[bool] false)"
   steps = '''
@@ -740,7 +746,7 @@ s1 = transport(transport(evaluate(false), (#0 ==[bool] false), refl(false)), (t1
 '''
 
   [[file.obligation]]
-  key = "f7da3479d62ca8f4"
+  key = "84d1fbef1b67cae1"
   at = "named 2"
   claim = "(int_eq_b(view[u8]($0), 0i) ==[bool] false)"
   steps = '''
@@ -752,7 +758,7 @@ s1 = implies_elim(axiom(cmp_reify[false], int_eq_b(t1, 0i)), transport(literal(v
 path = "ghost_result.lc"
 
   [[file.obligation]]
-  key = "bfe7dfa70f2f46d0"
+  key = "ea1fcc0802298373"
   at = "claim_of 1"
   claim = "$1"
   steps = '''
@@ -764,7 +770,7 @@ s1 = transport(transport(h0, (#0 ==[Prop] $1), refl($1)), #0, implies_elim(axiom
 path = "ghost_values.lc"
 
   [[file.obligation]]
-  key = "03ef5bcad955c4ec"
+  key = "b453df8fbfdf335f"
   at = "keep 1"
   claim = "(int_eq_b(view[u8]($2), $1) ==[bool] true)"
   steps = '''
@@ -773,7 +779,7 @@ s1 = transport(transport(h0, (#0 ==[Int] $1), refl($1)), (int_eq_b(view[u8]($2),
 '''
 
   [[file.obligation]]
-  key = "44ac22e276766e5e"
+  key = "e3ef2818e8ed7055"
   at = "keep 2"
   claim = "(int_eq_b(view[u8]($2), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -785,7 +791,7 @@ s2 = transport(s1, t2, transport(h1, t2, transport(h0, t3, of_term(proof(transpo
 '''
 
   [[file.obligation]]
-  key = "e273192818989ff4"
+  key = "a86b9782300238c3"
   at = "widened 1"
   claim = "(int_eq_b(view[u8]($0), $1) ==[bool] true)"
   steps = '''
@@ -794,7 +800,7 @@ s1 = transport(transport(h0, (#0 ==[Int] $1), refl($1)), (int_eq_b(t1, #0) ==[bo
 '''
 
   [[file.obligation]]
-  key = "16e7d8a64dffccc6"
+  key = "3f05b42a53daa621"
   at = "widened 2"
   claim = "(int_eq_b(view[u8]($0), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -804,7 +810,7 @@ s1 = transport(h0, t2, of_term(proof(transport(transport(h0, (#0 ==[Int] $1), re
 '''
 
   [[file.obligation]]
-  key = "74fcf7705375b7e1"
+  key = "d44009b95b85c70a"
   at = "under_limit 1"
   claim = "(int_le_b(view[u8]($3), 200i) ==[bool] true)"
   steps = '''
@@ -812,7 +818,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "09f06c3f10dd9be2"
+  key = "e2904b8188e1b5ef"
   at = "doubled_noted 1"
   claim = "(int_eq_b(view[u8]($2), view[u8](wrapping_add[u8]($0, $0))) ==[bool] true)"
   steps = '''
@@ -821,7 +827,7 @@ s1 = transport(transport(h1, (#0 ==[u8] $2), refl($2)), (int_eq_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "83cccc8ece8d796d"
+  key = "372c0511486443b2"
   at = "bounded_by 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](50)))"
   steps = '''
@@ -831,7 +837,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "1298337500032bd7"
+  key = "35d31f77573093d0"
   at = "bounded_by 2"
   claim = "int_le(int_add(view[u8]($0), view[u8](50)), 255i)"
   steps = '''
@@ -841,7 +847,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "496f922256cbb167"
+  key = "76b0a64a5cdc2540"
   at = "bounded_by 3"
   claim = "(int_le_b(int_add(view[u8]($0), 50i), 255i) ==[bool] true)"
   steps = '''
@@ -851,7 +857,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t2, 255i)), linear(int_le(t2, 
 '''
 
   [[file.obligation]]
-  key = "d9af83f952badffa"
+  key = "0050b3ae7310e421"
   at = "with_room 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](50)))"
   steps = '''
@@ -861,7 +867,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "9b05569b73c8f358"
+  key = "a2fe4ef33925347b"
   at = "with_room 2"
   claim = "int_le(int_add(view[u8]($0), view[u8](50)), 255i)"
   steps = '''
@@ -871,7 +877,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "4c9590ead19040fc"
+  key = "d485a1010fd654b7"
   at = "checked 1"
   claim = "int_le(0i, int_add(view[u8](255), view[u8]($0)))"
   steps = '''
@@ -881,7 +887,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "716331303e2721b3"
+  key = "e72454c8b703b3de"
   at = "checked 3"
   claim = "(int_le_b(view[u8]($0), 255i) ==[bool] true)"
   steps = '''
@@ -893,7 +899,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 255i)), linear(int_le(t1, 
 path = "half_written.lc"
 
   [[file.obligation]]
-  key = "0499dc88946f99da"
+  key = "3b80fd7db20705df"
   at = "withdraw 1"
   claim = "(int_eq_b(view[u8]($0.1), view[u8]($0.1)) ==[bool] true)"
   steps = '''
@@ -905,7 +911,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 path = "integer_types.lc"
 
   [[file.obligation]]
-  key = "497ef976ddc29f94"
+  key = "473a4f4cdc696251"
   at = "ordered_i64 1"
   claim = "int_le(view[i64]($0), view[i64]($1))"
   steps = '''
@@ -913,7 +919,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($0), view[i64]($1)
 '''
 
   [[file.obligation]]
-  key = "37aed5f4a0ee37bc"
+  key = "da391d5af744192d"
   at = "ordered_i64 2"
   claim = "int_le(view[i64]($1), view[i64]($2))"
   steps = '''
@@ -921,7 +927,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], int_le_b(view[i64]($1), view[i64]($2)
 '''
 
   [[file.obligation]]
-  key = "5c78bf1a0c3c98f9"
+  key = "37bb08fbf3765b50"
   at = "ordered_i64 3"
   claim = "(int_le_b(view[i64]($0), view[i64]($2)) ==[bool] true)"
   steps = '''
@@ -932,7 +938,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, t2)), of_term(proof(of_ter
 '''
 
   [[file.obligation]]
-  key = "0f3ec40750bdacc6"
+  key = "d0798d0c5c56d9a1"
   at = "viewed 1"
   claim = "int_le(int_add(view[u16]($0), 1i), view[u16]($1))"
   steps = '''
@@ -940,7 +946,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], int_lt_b(view[u16]($0), view[u16]($1)
 '''
 
   [[file.obligation]]
-  key = "59eadd29fc839de4"
+  key = "668802f7c83040f1"
   at = "viewed 2"
   claim = "(int_le_b(view[u16]($0), view[u16]($1)) ==[bool] true)"
   steps = '''
@@ -950,7 +956,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, t2)), of_term(proof(of_ter
 '''
 
   [[file.obligation]]
-  key = "176c81022afe2342"
+  key = "34a6835d06dc31bb"
   at = "within 1"
   claim = "(int_le_b(view[i32]($0), 2147483647i) ==[bool] true)"
   steps = '''
@@ -962,7 +968,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 2147483647i)), case_proof(
 path = "lock32_step.lc"
 
   [[file.obligation]]
-  key = "3dc8c148af1b8c5f"
+  key = "64621b917ee6e404"
   at = "step 1"
   claim = "(int_le_b(int_add(view[u32]($0.0), 1i), view[u32](4294967295u32)) ==[bool] true)"
   steps = '''
@@ -974,7 +980,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t2, t3)), transport(transport(
 '''
 
   [[file.obligation]]
-  key = "1f4efe7a339446ed"
+  key = "075a58c77f00eca2"
   at = "step 2"
   claim = "int_le(0i, int_add(view[u32]($0.0), view[u32](1u32)))"
   steps = '''
@@ -985,7 +991,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "fa51ed573c2018c4"
+  key = "8e6048b1f2777aa9"
   at = "step 3"
   claim = "int_le(int_add(view[u32]($0.0), view[u32](1u32)), 4294967295i)"
   steps = '''
@@ -997,7 +1003,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "abcbf8cc4ba8bc3d"
+  key = "b93b25509639fb82"
   at = "step 4"
   claim = "(int_le_b(view[u32]($5.0), 3i) ==[bool] true)"
   steps = '''
@@ -1018,7 +1024,7 @@ s4 = transport(transport(h4, (#0 ==[struct:Lock] $5), refl($5)), (int_le_b(view[
 '''
 
   [[file.obligation]]
-  key = "05653e347ec10552"
+  key = "8ddc2ca424c94679"
   at = "step 5"
   claim = "fn:within_limit(view[u32](struct:Lock { $0.0, false }.0))"
   steps = '''
@@ -1027,16 +1033,17 @@ s1 = transport(transport(projection(t1), (#0 ==[u32] t1), refl(t1)), fn:within_l
 '''
 
   [[file.obligation]]
-  key = "1bb0e5a60d206311"
+  key = "61c3cd466f4642a6"
   at = "step 6"
   claim = "(int_le_b(view[u32]($3.0), 3i) ==[bool] true)"
   steps = '''
 t1 = struct:Lock { 0u32, true }.0
-s1 = transport(transport(h1, (#0 ==[struct:Lock] $3), refl($3)), (int_le_b(view[u32](#0.0), 3i) ==[bool] true), transport(transport(projection(t1), (#0 ==[u32] t1), refl(t1)), (int_le_b(view[u32](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u32](0u32), 3i))))
+t2 = int_le_b(view[u32](0u32), 3i)
+s1 = transport(transport(h1, (#0 ==[struct:Lock] $3), refl($3)), (int_le_b(view[u32](#0.0), 3i) ==[bool] true), transport(transport(projection(t1), (#0 ==[u32] t1), refl(t1)), (int_le_b(view[u32](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t2 ==[bool] #0), evaluate(t2))))
 '''
 
   [[file.obligation]]
-  key = "cffe3471b2f1a06a"
+  key = "b67cb5512c258f9f"
   at = "remaining 1"
   claim = "int_le(0i, int_sub(view[u32](3u32), view[u32]($0)))"
   steps = '''
@@ -1046,7 +1053,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "292f13ee2522431d"
+  key = "36f3bcdf1ecee536"
   at = "remaining 2"
   claim = "int_le(int_sub(view[u32](3u32), view[u32]($0)), 4294967295i)"
   steps = '''
@@ -1056,7 +1063,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_sub
 '''
 
   [[file.obligation]]
-  key = "622846439bfb7e0d"
+  key = "37b745b6f5fcb40a"
   at = "remaining 3"
   claim = "(int_le_b(view[u32]($4), 3i) ==[bool] true)"
   steps = '''
@@ -1064,20 +1071,20 @@ t1 = view[u32](#0)
 t2 = (int_le_b(t1, 3i) ==[bool] true)
 s1 = transport(h0, (#0 ==[u32] $3), refl($3))
 t3 = view[u32](sub[u32](3u32, $0))
-t4 = view[u32](3u32)
-s2 = literal(t4)
-t5 = view[u32]($0)
-t6 = int_sub(#0, t5)
-s3 = transport(s2, ($3 ==[u32] wrap[u32](t6)), transport(s1, (#0 ==[u32] wrap[u32](int_sub(t4, t5))), axiom(op_model[sub, u32], 3u32, $0)))
+t4 = view[u32]($0)
+t5 = view[u32](3u32)
+s2 = literal(t5)
+t6 = int_sub(#0, t4)
+s3 = transport(s2, ($3 ==[u32] wrap[u32](t6)), transport(s1, (#0 ==[u32] wrap[u32](int_sub(t5, t4))), axiom(op_model[sub, u32], 3u32, $0)))
 t7 = view[u32]($3)
-s4 = transport(transport(h2, (#0 ==[u32] $4), refl($4)), t2, transport(s1, t2, implies_elim(axiom(cmp_reify[true], int_le_b(t3, 3i)), linear(int_le(t3, 3i), 1, [(transport(s3, (t7 ==[Int] t1), refl(t7)), -1), (transport(s2, (t7 ==[Int] t6), h1), 1), (transport(transport(h0, (#0 ==[u32] wrap[u32](int_sub(3i, t5))), s3), (t3 ==[Int] t1), refl(t3)), 1), (axiom(view_lower[u32], $0), 1)]))))
+s4 = transport(transport(h2, (#0 ==[u32] $4), refl($4)), t2, transport(s1, t2, implies_elim(axiom(cmp_reify[true], int_le_b(t3, 3i)), linear(int_le(t3, 3i), 1, [(of_term(struct:Nat { t4, proof(axiom(view_lower[u32], $0)) }.1), 1), (transport(s3, (t7 ==[Int] t1), refl(t7)), -1), (transport(s2, (t7 ==[Int] t6), h1), 1), (transport(transport(h0, (#0 ==[u32] wrap[u32](int_sub(3i, t4))), s3), (t3 ==[Int] t1), refl(t3)), 1)]))))
 '''
 
 [[file]]
 path = "lock_u32.lc"
 
   [[file.obligation]]
-  key = "65b6b21478e9fe4d"
+  key = "740c7f10a61a1f78"
   at = "step 1"
   claim = "(int_lt_b(view[u32]($0.0), 3i) ==[bool] true)"
   steps = '''
@@ -1087,7 +1094,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_lt_b(t2, 3i)), transport(literal(vi
 '''
 
   [[file.obligation]]
-  key = "b9d4c63e3f6a7279"
+  key = "441fe43ec94a332c"
   at = "step 2"
   claim = "int_le(int_add(view[u32]($0.0), 1i), view[u32](3u32))"
   steps = '''
@@ -1095,7 +1102,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], lt[u32]($0.0, 3u32)), h1)
 '''
 
   [[file.obligation]]
-  key = "05653e347ec10552"
+  key = "8ddc2ca424c94679"
   at = "step 3"
   claim = "fn:within_limit(view[u32](struct:Lock { $0.0, false }.0))"
   steps = '''
@@ -1104,7 +1111,7 @@ s1 = transport(transport(projection(t1), (#0 ==[u32] t1), refl(t1)), fn:within_l
 '''
 
   [[file.obligation]]
-  key = "1242fb9d317ded7c"
+  key = "648a9742c096f7ab"
   at = "step 4"
   claim = "(int_le_b(view[u32](0u32), 3i) ==[bool] true)"
   steps = '''
@@ -1113,7 +1120,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "18af3033cf78691c"
+  key = "941ee447c6d661eb"
   at = "run 1"
   claim = "(int_le_b(view[u32](0u32), 3i) ==[bool] true)"
   steps = '''
@@ -1122,7 +1129,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "5048c0c71a545280"
+  key = "40c64740522b9d5d"
   at = "run 2"
   claim = "fn:within_limit(view[u32]($11.0))"
   steps = '''
@@ -1131,7 +1138,7 @@ s1 = transport(transport(h4, (#0 ==[struct:Lock] $11), refl($11)), t1, transport
 '''
 
   [[file.obligation]]
-  key = "e682679a14cbe8e5"
+  key = "3ed2b61565ad66fe"
   at = "remaining 1"
   claim = "int_le(view[u32]($0), view[u32](3u32))"
   steps = '''
@@ -1141,7 +1148,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0)
 '''
 
   [[file.obligation]]
-  key = "26958926021b03b1"
+  key = "8eaa7acc7877de4a"
   at = "remaining 2"
   claim = "(int_le_b(view[u32](wrapping_sub[u32](3u32, $0)), 3i) ==[bool] true)"
   steps = '''
@@ -1156,19 +1163,19 @@ s2 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 3i)), transport(s1, int_le
 path = "logical_containers.lc"
 
   [[file.obligation]]
-  key = "43eb279c1a299fca"
+  key = "d3f86d8887d9292b"
   at = "run 1"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "0d513eed74851add"
+  key = "17e1e8d57a3a196e"
   at = "run 2"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(Int, ($8)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(Int, ($8)))"
   steps = '''
-t1 = int_add(view[u64](0u64), 1i)
+t1 = int_add(view[usize64](0usize64), 1i)
 t2 = buffer_length(Int, (#0))
 t3 = int_le(t1, t2)
 t4 = $7.1
@@ -1205,19 +1212,19 @@ s6 = transport(transport(h4, (#0 ==[buffer(Int)] $8), refl($8)), t3, transport(t
 '''
 
   [[file.obligation]]
-  key = "afa35b11ad41f8b7"
+  key = "8910b44c8e466b0a"
   at = "run 3"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "822c7a9a54e63524"
+  key = "b0579532c87159d5"
   at = "run 4"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(Int, ($13)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(Int, ($13)))"
   steps = '''
-t1 = view[u64](0u64)
+t1 = view[usize64](0usize64)
 t2 = int_add(t1, 1i)
 t3 = buffer_length(Int, (#0))
 t4 = int_le(t2, t3)
@@ -1310,7 +1317,7 @@ s17 = transport(transport(h7, (#0 ==[buffer(Int)] $13), refl($13)), t4, transpor
 path = "loop_invariant.lc"
 
   [[file.obligation]]
-  key = "ba6877daab95f22b"
+  key = "411d968263264ff6"
   at = "walk 1"
   claim = "(int_le_b(view[u8]($0), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -1322,16 +1329,16 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, t1)), of_term(proof(of_ter
 path = "loop_ranges.lc"
 
   [[file.obligation]]
-  key = "58702c9335cfa147"
+  key = "132c551f8776f97a"
   at = "bounded 1"
   claim = "(int_le_b(3i, view[u8]($3)) ==[bool] true)"
   steps = '''
 t1 = view[u8]($3)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(3i, t1)), linear(int_le(3i, t1), 1, [(transport(literal(view[u8](3)), int_le(#0, t1), h1), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(3i, t1)), transport(literal(view[u8](3)), int_le(#0, t1), h1))
 '''
 
   [[file.obligation]]
-  key = "55428856a914a61f"
+  key = "3aef590af70d321e"
   at = "bounded 2"
   claim = "(int_lt_b(view[u8]($3), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -1339,7 +1346,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_lt_b(view[u8]($3), view[u8]($0))), 
 '''
 
   [[file.obligation]]
-  key = "589df22028051392"
+  key = "e3304bd603486595"
   at = "bounded_through 1"
   claim = "(int_le_b(view[u8]($3), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -1350,7 +1357,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(view[u8]($3), view[u8]($0))), 
 path = "methods.lc"
 
   [[file.obligation]]
-  key = "9949210aac2e179a"
+  key = "6a67c163f4d3ca39"
   at = "Counter::get_proven 1"
   claim = "(int_eq_b(view[u8]($0.0), view[u8]($0.0)) ==[bool] true)"
   steps = '''
@@ -1359,7 +1366,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 '''
 
   [[file.obligation]]
-  key = "62e3f02222bcce33"
+  key = "3f97ead2c35fa20c"
   at = "Counter::reset 1"
   claim = "(int_eq_b(view[u8]($2.0), 0i) ==[bool] true)"
   steps = '''
@@ -1369,7 +1376,7 @@ s1 = transport(transport(h0, (#0 ==[struct:Counter] $2), refl($2)), (int_eq_b(vi
 '''
 
   [[file.obligation]]
-  key = "84364889f46f0769"
+  key = "5d896dd806b90cba"
   at = "Counter::keep 1"
   claim = "(int_eq_b(view[u8]($0.0), view[u8]($0.0)) ==[bool] true)"
   steps = '''
@@ -1378,7 +1385,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 '''
 
   [[file.obligation]]
-  key = "c31dc6105ac4fcd8"
+  key = "251a599844d1d145"
   at = "folded 1"
   claim = "(int_le_b(view[u8]($5), 3i) ==[bool] true)"
   steps = '''
@@ -1391,7 +1398,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $5), refl($5)), (int_le_b(view[u8](#0), 
 path = "moves.lc"
 
   [[file.obligation]]
-  key = "d040803bc7029b82"
+  key = "e006b57660affac7"
   at = "with_evidence 1"
   claim = "(int_eq_b(view[u8]($2.0), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -1404,7 +1411,7 @@ s1 = transport(transport(h0, (#0 ==[struct:Token] $2), refl($2)), (int_eq_b(view
 path = "named_variants.lc"
 
   [[file.obligation]]
-  key = "6fbc22943067e1e6"
+  key = "4c3f5695121825a9"
   at = "small_is_below_ten 1"
   claim = "(int_lt_b($0, 10i) ==[bool] true)"
   steps = '''
@@ -1412,7 +1419,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_lt_b($0, 10i)), linear(int_le(int_a
 '''
 
   [[file.obligation]]
-  key = "46b1f5063b5a4e3e"
+  key = "efc387b820c819f7"
   at = "small_is_below_ten 2"
   claim = "(int_lt_b($0, 10i) ==[bool] true)"
   steps = '''
@@ -1423,7 +1430,7 @@ s2 = implies_elim(axiom(cmp_reify[true], int_lt_b($0, 10i)), linear(int_le(int_a
 '''
 
   [[file.obligation]]
-  key = "3088dbb0f5001a9c"
+  key = "5675281168732945"
   at = "five_is_small 1"
   claim = "(int_lt_b(5i, 10i) ==[bool] true)"
   steps = '''
@@ -1432,7 +1439,7 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 '''
 
   [[file.obligation]]
-  key = "463d86f204231fa1"
+  key = "3a7d129012936a6a"
   at = "five_is_small 2"
   claim = "(int_le_b(10i, 10i) ==[bool] true)"
   steps = '''
@@ -1444,17 +1451,17 @@ s1 = transport(transport(literal(t1), (#0 ==[bool] t1), refl(t1)), (#0 ==[bool] 
 path = "no_panic_forms.lc"
 
   [[file.obligation]]
-  key = "1f2f24300e7563c9"
+  key = "6b8504e6b0e78e06"
   at = "debug 1"
   claim = "int_le(view[u8]($0), view[u8](3))"
   steps = '''
 t1 = view[u8](3)
 t2 = view[u8]($0)
-s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0), linear(int_le(t2, 3i), 1, [(implies_elim(axiom(cmp_reflect[true], int_le_b(t2, 3i)), of_term($1)), 1)]))
+s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t2, #0), implies_elim(axiom(cmp_reflect[true], int_le_b(t2, 3i)), of_term($1)))
 '''
 
   [[file.obligation]]
-  key = "7c794ca78def8ebb"
+  key = "03101977b6246e90"
   at = "apart 1"
   claim = "(($0 ==[u8] 4) => prop:False())"
   steps = '''
@@ -1463,7 +1470,7 @@ s1 = implies_intro(($0 ==[u8] 4), linear(prop:False(), 0, [(implies_elim(axiom(c
 '''
 
   [[file.obligation]]
-  key = "18291207897a3f6d"
+  key = "4cb39dab596ee036"
   at = "apart 2"
   claim = "int_le(int_add(view[u8]($0), 1i), view[u8](4))"
   steps = '''
@@ -1474,18 +1481,17 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(t3, #0)
 '''
 
   [[file.obligation]]
-  key = "37269fae53cf1614"
+  key = "a09f931958e130e7"
   at = "exact 1"
   claim = "($0 ==[u8] 3)"
   steps = '''
 t1 = view[u8](3)
 t2 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reflect[true], int_eq_b(t2, 3i)), of_term($1))
-s2 = of_term(fn:u8_view_injective($0, 3, proof(transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), (t2 ==[Int] #0), implies_elim(implies_elim(axiom(int_le_antisymm, t2, 3i), linear(int_le(t2, 3i), 1, [(s1, 1)])), linear(int_le(3i, t2), 1, [(s1, -1)]))))))
+s1 = of_term(fn:u8_view_injective($0, 3, proof(transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), (t2 ==[Int] #0), implies_elim(axiom(cmp_reflect[true], int_eq_b(t2, 3i)), of_term($1))))))
 '''
 
   [[file.obligation]]
-  key = "f0fc89112e1aadef"
+  key = "b87c274b65d6851c"
   at = "branch 1"
   claim = "($0 ==[bool] true)"
   steps = '''
@@ -1493,7 +1499,7 @@ s1 = h0
 '''
 
   [[file.obligation]]
-  key = "ee44d52860fc013c"
+  key = "9616a759f611b435"
   at = "dead_arm 1"
   claim = "prop:False()"
   steps = '''
@@ -1502,7 +1508,7 @@ s1 = linear(prop:False(), 0, [(transport(literal(view[u8](3)), (int_le(t1, #0) =
 '''
 
   [[file.obligation]]
-  key = "7894be476f9a593e"
+  key = "14fe016d056e9a47"
   at = "dead_arm_named 1"
   claim = "prop:False()"
   steps = '''
@@ -1511,7 +1517,7 @@ s1 = linear(prop:False(), 0, [(transport(literal(view[u8](4)), (int_le(int_add(t
 '''
 
   [[file.obligation]]
-  key = "c97c4a7804b25573"
+  key = "4b69f93b62b780f6"
   at = "absurd 1"
   claim = "prop:False()"
   steps = '''
@@ -1519,7 +1525,7 @@ s1 = of_term($1)
 '''
 
   [[file.obligation]]
-  key = "bf6d43276443647b"
+  key = "124042782530d146"
   at = "taught 2"
   claim = "(int_le_b(view[u8]($0), 3i) ==[bool] true)"
   steps = '''
@@ -1530,7 +1536,7 @@ s1 = of_term($1)
 path = "operators.lc"
 
   [[file.obligation]]
-  key = "4a34b1982405518c"
+  key = "c9c03618a758bd61"
   at = "add_u8 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8]($1)))"
   steps = '''
@@ -1538,7 +1544,7 @@ s1 = linear(int_le(0i, int_add(view[u8]($0), view[u8]($1))), 1, [(axiom(view_low
 '''
 
   [[file.obligation]]
-  key = "ab244f107ccfba5a"
+  key = "194b9cb8764d6ff9"
   at = "neg_i8 1"
   claim = "int_le(-128i, int_neg(view[i8]($0)))"
   steps = '''
@@ -1546,7 +1552,7 @@ s1 = linear(int_le(-128i, int_neg(view[i8]($0))), 1, [(axiom(view_upper[i8], $0)
 '''
 
   [[file.obligation]]
-  key = "0093f58f914d4ef0"
+  key = "2fa101f17936c829"
   at = "add_u32 1"
   claim = "int_le(0i, int_add(view[u32]($0), view[u32]($1)))"
   steps = '''
@@ -1554,7 +1560,7 @@ s1 = linear(int_le(0i, int_add(view[u32]($0), view[u32]($1))), 1, [(axiom(view_l
 '''
 
   [[file.obligation]]
-  key = "e3c7a4606107a080"
+  key = "6927e29596a17e77"
   at = "neg_i64 1"
   claim = "int_le(-9223372036854775808i, int_neg(view[i64]($0)))"
   steps = '''
@@ -1565,49 +1571,49 @@ s1 = linear(int_le(-9223372036854775808i, int_neg(view[i64]($0))), 1, [(axiom(vi
 path = "panic_forms.lc"
 
   [[file.obligation]]
-  key = "b9bffb73f66349e1"
+  key = "5b37a6868bde271a"
   at = "taught 3"
   claim = "(int_le_b(view[u8]($0), 3i) ==[bool] true)"
   steps = '''
 t1 = view[u8]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 3i)), linear(int_le(t1, 3i), 1, [(transport(literal(view[u8](3)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), of_term($1))), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 3i)), transport(literal(view[u8](3)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u8]($0, 3)), of_term($1))))
 '''
 
 [[file]]
 path = "percent_updates.lc"
 
   [[file.obligation]]
-  key = "3340f9299b247295"
+  key = "cad5e8ae0d64a6bc"
   at = "Percent::checked 1"
   claim = "(int_le_b(view[u32]($0), 100i) ==[bool] true)"
   steps = '''
 t1 = view[u32]($0)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), linear(int_le(t1, 100i), 1, [(transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($0, 100u32)), h0)), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($0, 100u32)), h0)))
 '''
 
   [[file.obligation]]
-  key = "c3cee257f8d2bab0"
+  key = "27a50741fa4df0f9"
   at = "Percent::set_twice 2"
   claim = "(int_le_b(view[u32]($1), 100i) ==[bool] true)"
   steps = '''
 t1 = view[u32]($1)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), linear(int_le(t1, 100i), 1, [(transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($1, 100u32)), of_term($4))), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($1, 100u32)), of_term($4))))
 '''
 
   [[file.obligation]]
-  key = "d4ee099e52608e0b"
+  key = "79b61fb3ff8e6fae"
   at = "Percent::set_twice 4"
   claim = "(int_le_b(view[u32]($2), 100i) ==[bool] true)"
   steps = '''
 t1 = view[u32]($2)
-s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), linear(int_le(t1, 100i), 1, [(transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($2, 100u32)), of_term($6))), 1)]))
+s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 100i)), transport(literal(view[u32](100u32)), int_le(t1, #0), implies_elim(axiom(cmp_reflect[true], le[u32]($2, 100u32)), of_term($6))))
 '''
 
 [[file]]
 path = "promises.lc"
 
   [[file.obligation]]
-  key = "9184aaa70aee8f00"
+  key = "467b935014b06093"
   at = "double 1"
   claim = "(int_eq_b(view[u8](wrapping_add[u8]($0, $0)), view[u8](wrapping_add[u8]($0, $0))) ==[bool] true)"
   steps = '''
@@ -1616,7 +1622,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_eq_b(t1, t1)), refl(t1))
 '''
 
   [[file.obligation]]
-  key = "b47f6ceff0cc8a33"
+  key = "360298f538db42ac"
   at = "four 1"
   claim = "(int_eq_b(fn:sum_twice(2i), 4i) ==[bool] true)"
   steps = '''
@@ -1628,7 +1634,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 path = "references.lc"
 
   [[file.obligation]]
-  key = "3463a1817375e3ee"
+  key = "c194e8eaeb0ad3b3"
   at = "settle 1"
   claim = "(int_eq_b(view[u8]($5), view[u8]($1)) ==[bool] true)"
   steps = '''
@@ -1637,7 +1643,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $5), refl($5)), (int_eq_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "6fbfa803bde2e9e6"
+  key = "c35c0c7c512c5925"
   at = "settled 1"
   claim = "(int_le_b(view[u8]($2.0), view[u8]($2.1)) ==[bool] true)"
   steps = '''
@@ -1645,7 +1651,7 @@ s1 = transport(transport(h0, (#0 ==[struct:Pair] $2), refl($2)), (int_le_b(view[
 '''
 
   [[file.obligation]]
-  key = "2556d30d16855334"
+  key = "04c600d1fcb40c93"
   at = "settled 2"
   claim = "(int_eq_b(view[u8]($5.0), view[u8]($5.1)) ==[bool] true)"
   steps = '''
@@ -1664,7 +1670,7 @@ s1 = transport(transport(h2, (#0 ==[struct:Pair] $5), refl($5)), (int_eq_b(view[
 '''
 
   [[file.obligation]]
-  key = "e6f0daee7962971d"
+  key = "abd5bbf2f993d97a"
   at = "bump_exact 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](1)))"
   steps = '''
@@ -1674,7 +1680,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "a9ce630c0014fb79"
+  key = "29918a5fed4ec8c6"
   at = "bump_exact 2"
   claim = "int_le(int_add(view[u8]($0), view[u8](1)), 255i)"
   steps = '''
@@ -1684,7 +1690,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "5aa67e61ca604f36"
+  key = "9b400a3381ca8d81"
   at = "bump_exact 3"
   claim = "(int_eq_b(view[u8]($4), int_add(view[u8]($0), 1i)) ==[bool] true)"
   steps = '''
@@ -1696,7 +1702,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $4), refl($4)), t4, transport(transport(
 '''
 
   [[file.obligation]]
-  key = "a777eb489e20f969"
+  key = "8bf343920a729c7e"
   at = "exact_twice 1"
   claim = "(int_le_b(int_add(view[u8]($2), 1i), 255i) ==[bool] true)"
   steps = '''
@@ -1706,7 +1712,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $2), refl($2)), (int_le_b(int_add(view[u
 '''
 
   [[file.obligation]]
-  key = "80470753ebd61cee"
+  key = "d04e4a79b6a6af7d"
   at = "exact_twice 2"
   claim = "(int_le_b(int_add(view[u8]($4), 1i), 255i) ==[bool] true)"
   steps = '''
@@ -1718,7 +1724,7 @@ s1 = transport(transport(h1, (#0 ==[u8] $4), refl($4)), (int_le_b(t1, 255i) ==[b
 '''
 
   [[file.obligation]]
-  key = "e82421248ad43cd7"
+  key = "0df181d480184a48"
   at = "exact_twice 3"
   claim = "(int_eq_b(view[u8]($7), int_add(view[u8]($0), 2i)) ==[bool] true)"
   steps = '''
@@ -1734,7 +1740,7 @@ s3 = transport(transport(h2, (#0 ==[u8] $7), refl($7)), (int_eq_b(t1, t3) ==[boo
 '''
 
   [[file.obligation]]
-  key = "72e78193ceb0d388"
+  key = "e523da4f749d1a83"
   at = "step 1"
   claim = "(int_lt_b(view[u8]($0.0), 3i) ==[bool] true)"
   steps = '''
@@ -1744,7 +1750,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_lt_b(t2, 3i)), transport(literal(vi
 '''
 
   [[file.obligation]]
-  key = "272eab81b64abf31"
+  key = "2c120f2484485ee6"
   at = "step 2"
   claim = "int_le(int_add(view[u8]($0.0), 1i), view[u8](3))"
   steps = '''
@@ -1752,7 +1758,7 @@ s1 = implies_elim(axiom(cmp_reflect[true], lt[u8]($0.0, 3)), h1)
 '''
 
   [[file.obligation]]
-  key = "1a96bdc688e38914"
+  key = "d7659d0de344ad65"
   at = "step 3"
   claim = "fn:within_limit(view[u8]($4.0))"
   steps = '''
@@ -1761,7 +1767,7 @@ s1 = transport(transport(h2, (#0 ==[struct:Lock] $4), refl($4)), fn:within_limit
 '''
 
   [[file.obligation]]
-  key = "3d03118783c80558"
+  key = "b2c8bc7fbad2aa59"
   at = "step 4"
   claim = "(int_le_b(view[u8](0), 3i) ==[bool] true)"
   steps = '''
@@ -1770,7 +1776,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "caccac166ef12c6d"
+  key = "2ecbb32bddb4c08c"
   at = "run 1"
   claim = "(int_le_b(view[u8](0), 3i) ==[bool] true)"
   steps = '''
@@ -1779,7 +1785,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 '''
 
   [[file.obligation]]
-  key = "2b11b22d372f677b"
+  key = "65e10b2883277f56"
   at = "run 2"
   claim = "fn:within_limit(view[u8]($9.0))"
   steps = '''
@@ -1787,7 +1793,7 @@ s1 = transport(transport(h3, (#0 ==[struct:Lock] $9), refl($9)), fn:within_limit
 '''
 
   [[file.obligation]]
-  key = "ee71791eba631087"
+  key = "e4db15df7ab38740"
   at = "set_to 1"
   claim = "(int_le_b(view[u8](0), 100i) ==[bool] true)"
   steps = '''
@@ -1799,7 +1805,7 @@ s1 = transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==
 path = "references_panic.lc"
 
   [[file.obligation]]
-  key = "d2aced1088bdcfcc"
+  key = "6694f76355a875bf"
   at = "overflowing 1"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](1)))"
   steps = '''
@@ -1812,44 +1818,44 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 path = "shared_iteration.lc"
 
   [[file.obligation]]
-  key = "cb599094eb65ca77"
+  key = "4a79102c29aed429"
   at = "sum 1"
-  claim = "int_le(0i, view[u64]($4))"
+  claim = "int_le(0i, view[usize64]($4))"
   steps = '''
-s1 = transport(literal(view[u64](0u64)), int_le(#0, view[u64]($4)), h1)
+s1 = transport(literal(view[usize64](0usize64)), int_le(#0, view[usize64]($4)), h1)
 '''
 
   [[file.obligation]]
-  key = "e46cc6a636ee654e"
+  key = "a48071bc0bf4de7c"
   at = "sum 2"
-  claim = "int_le(int_add(view[u64]($4), 1i), buffer_length(u8, ($0)))"
+  claim = "int_le(int_add(view[usize64]($4), 1i), buffer_length(u8, ($0)))"
   steps = '''
-s1 = transport(of_term($2.1), int_le(int_add(view[u64]($4), 1i), #0), h2)
+s1 = transport(of_term($2.1), int_le(int_add(view[usize64]($4), 1i), #0), h2)
 '''
 
 [[file]]
 path = "shared_lookup.lc"
 
   [[file.obligation]]
-  key = "1b1c97113f7ceee8"
+  key = "6717e1c62ce379c1"
   at = "head 1"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "9bf9b9652204812a"
+  key = "20316f7656e7d0e9"
   at = "head 2"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(struct:Item, ($0)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(struct:Item, ($0)))"
   steps = '''
-t1 = view[u64](0u64)
+t1 = view[usize64](0usize64)
 t2 = buffer_length(struct:Item, ($0))
 s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add(#0, 1i), t2), implies_elim(axiom(cmp_reflect[true], int_lt_b(0i, t2)), transport(definition(lambda((buffer(struct:Item)), Int, buffer_length(struct:Item, (#0)))($0)), (int_lt_b(0i, #0) ==[bool] true), of_term($1))))
 '''
 
   [[file.obligation]]
-  key = "aff02a58f8eb7973"
+  key = "5dde55bb222b04ec"
   at = "run 1"
   claim = "(int_lt_b(0i, lambda((buffer(struct:Item)), Int, buffer_length(struct:Item, (#0)))($1)) ==[bool] true)"
   steps = '''
@@ -1868,26 +1874,26 @@ s1 = transport(transport(h0, (#0 ==[buffer(struct:Item)] $1), refl($1)), t2, tra
 path = "shared_parser.lc"
 
   [[file.obligation]]
-  key = "a89d30942936c699"
+  key = "366f01510a626762"
   at = "first 1"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "63a2676808f6cc4e"
+  key = "e089a5e1a23ee8cd"
   at = "first 2"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(u8, ($0.0)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(u8, ($0.0)))"
   steps = '''
-t1 = view[u64](0u64)
+t1 = view[usize64](0usize64)
 t2 = $0.0
 t3 = buffer_length(u8, (t2))
 s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add(#0, 1i), t3), implies_elim(axiom(cmp_reflect[true], int_lt_b(0i, t3)), transport(definition(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))(t2)), (int_lt_b(0i, #0) ==[bool] true), of_term($0.1))))
 '''
 
   [[file.obligation]]
-  key = "819f703366487711"
+  key = "fc78d014eac263b8"
   at = "run 1"
   claim = "(int_lt_b(0i, lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($1)) ==[bool] true)"
   steps = '''
@@ -1906,54 +1912,54 @@ s1 = transport(transport(h0, (#0 ==[buffer(u8)] $1), refl($1)), t2, transport(tr
 path = "slices.lc"
 
   [[file.obligation]]
-  key = "f5371d4855b71ec3"
+  key = "3f93459bba3d9b80"
   at = "head 1"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "706ff0fa58a63a1a"
+  key = "442c79834c5b0891"
   at = "head 2"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(u8, ($0)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(u8, ($0)))"
   steps = '''
-t1 = view[u64](0u64)
+t1 = view[usize64](0usize64)
 t2 = buffer_length(u8, ($0))
 s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add(#0, 1i), t2), implies_elim(axiom(cmp_reflect[true], int_lt_b(0i, t2)), transport(definition(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)), (int_lt_b(0i, #0) ==[bool] true), of_term($1))))
 '''
 
   [[file.obligation]]
-  key = "50388c1cd386ba49"
+  key = "fc4379ac45227bcb"
   at = "size 1"
-  claim = "(int_eq_b(view[u64]($1.0), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)) ==[bool] true)"
+  claim = "(int_eq_b(view[usize64]($1.0), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)) ==[bool] true)"
   steps = '''
 s1 = of_term($1.1)
-t1 = view[u64]($1.0)
+t1 = view[usize64]($1.0)
 t2 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)
 t3 = buffer_length(u8, ($0))
 s2 = transport(transport(s1, (#0 ==[Int] t1), refl(t1)), (int_eq_b(#0, t2) ==[bool] true), transport(transport(definition(t2), (#0 ==[Int] t2), refl(t2)), (int_eq_b(t3, #0) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_eq_b(t3, t3)), transport(s1, (#0 ==[Int] t3), s1))))
 '''
 
   [[file.obligation]]
-  key = "5a7c05b68c420a48"
+  key = "5ed0ded8b94b4022"
   at = "replace 1"
-  claim = "int_le(0i, view[u64]($1))"
+  claim = "int_le(0i, view[usize64]($1))"
   steps = '''
-s1 = of_term(struct:Nat { view[u64]($1), proof(axiom(view_lower[u64], $1)) }.1)
+s1 = of_term(struct:Nat { view[usize64]($1), proof(axiom(view_lower[usize64], $1)) }.1)
 '''
 
   [[file.obligation]]
-  key = "d9b30c2fda031751"
+  key = "77d81cf45cffeedf"
   at = "replace 2"
-  claim = "int_le(int_add(view[u64]($1), 1i), buffer_length(u8, ($0)))"
+  claim = "int_le(int_add(view[usize64]($1), 1i), buffer_length(u8, ($0)))"
   steps = '''
-t1 = view[u64]($1)
+t1 = view[usize64]($1)
 s1 = implies_elim(axiom(cmp_reflect[true], int_lt_b(t1, buffer_length(u8, ($0)))), transport(definition(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)), (int_lt_b(t1, #0) ==[bool] true), of_term($2)))
 '''
 
   [[file.obligation]]
-  key = "0f01e77de3d459a3"
+  key = "13906940570ba871"
   at = "replace 3"
   claim = "(int_eq_b(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($7), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0)) ==[bool] true)"
   steps = '''
@@ -1963,9 +1969,9 @@ t3 = (int_eq_b(t1(#0), t2) ==[bool] true)
 t4 = $6.0
 t5 = proof(of_term(#1))
 t6 = lambda((buffer(u8), Int, @int_le(0i, #0), @int_le(int_add(#1, 1i), buffer_length(u8, (#2))), u8), buffer(u8), buffer_set(u8, (#4, #3, proof(of_term(#2)), t5, #0)))
-t7 = view[u64]($1)
+t7 = view[usize64]($1)
 t8 = int_le(0i, t7)
-s1 = of_term(proof(of_term(struct:Nat { t7, proof(axiom(view_lower[u64], $1)) }.1)))
+s1 = of_term(proof(of_term(struct:Nat { t7, proof(axiom(view_lower[usize64], $1)) }.1)))
 t9 = proof(transport(h0, t8, s1))
 t10 = proof(of_term(t9))
 t11 = buffer_length(u8, ($0))
@@ -1988,19 +1994,19 @@ s5 = transport(transport(h1, (#0 ==[buffer(u8)] $7), refl($7)), t3, transport(tr
 '''
 
   [[file.obligation]]
-  key = "a424a609d81ef281"
+  key = "d88650aba959025c"
   at = "literal 1"
-  claim = "int_le(0i, view[u64](1u64))"
+  claim = "int_le(0i, view[usize64](1usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](1u64)))
+s1 = evaluate(int_le(0i, view[usize64](1usize64)))
 '''
 
   [[file.obligation]]
-  key = "4b7ce2be933706b7"
+  key = "9c29d39cc259fb8a"
   at = "literal 2"
-  claim = "int_le(int_add(view[u64](1u64), 1i), buffer_length(u8, ($1)))"
+  claim = "int_le(int_add(view[usize64](1usize64), 1i), buffer_length(u8, ($1)))"
   steps = '''
-t1 = int_add(view[u64](1u64), 1i)
+t1 = int_add(view[usize64](1usize64), 1i)
 t2 = int_le(t1, buffer_length(u8, (#0)))
 t3 = $0.0
 t4 = buffer_length(u8, (buffer_literal(u8, (1, 2, 3))))
@@ -2008,7 +2014,7 @@ s1 = transport(transport(h0, (#0 ==[buffer(u8)] $1), refl($1)), t2, transport(tr
 '''
 
   [[file.obligation]]
-  key = "07d74f7cb89ad4d8"
+  key = "018d720674f06887"
   at = "borrowed 1"
   claim = "(int_lt_b(0i, lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($1)) ==[bool] true)"
   steps = '''
@@ -2024,11 +2030,11 @@ s1 = transport(transport(h0, (#0 ==[buffer(u8)] $1), refl($1)), t2, transport(tr
 '''
 
   [[file.obligation]]
-  key = "3c9201d1f645f5ff"
+  key = "380e80f50e1f785a"
   at = "borrowed 2"
-  claim = "(int_lt_b(view[u64](0u64), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($1)) ==[bool] true)"
+  claim = "(int_lt_b(view[usize64](0usize64), lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($1)) ==[bool] true)"
   steps = '''
-t1 = view[u64](0u64)
+t1 = view[usize64](0usize64)
 t2 = lambda((buffer(u8)), Int, buffer_length(u8, (#0)))
 t3 = (int_lt_b(t1, t2(#0)) ==[bool] true)
 t4 = $0.0
@@ -2041,7 +2047,7 @@ s1 = transport(transport(h0, (#0 ==[buffer(u8)] $1), refl($1)), t3, transport(tr
 '''
 
   [[file.obligation]]
-  key = "7602c4a500231b81"
+  key = "1553a55150ed5cb4"
   at = "borrowed 3"
   claim = "(int_lt_b(0i, lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($3)) ==[bool] true)"
   steps = '''
@@ -2060,26 +2066,26 @@ s2 = transport(transport(h1, (#0 ==[buffer(u8)] $3), refl($3)), (int_lt_b(0i, t2
 '''
 
   [[file.obligation]]
-  key = "48d2bb1eb2a89b66"
+  key = "2dc3ab05b5bdfc20"
   at = "sum 1"
-  claim = "int_le(0i, view[u64]($4))"
+  claim = "int_le(0i, view[usize64]($4))"
   steps = '''
-s1 = transport(literal(view[u64](0u64)), int_le(#0, view[u64]($4)), h1)
+s1 = transport(literal(view[usize64](0usize64)), int_le(#0, view[usize64]($4)), h1)
 '''
 
   [[file.obligation]]
-  key = "af2e0c5c5e1fa664"
+  key = "f532f593669b1d16"
   at = "sum 2"
-  claim = "int_le(int_add(view[u64]($4), 1i), buffer_length(u32, ($0)))"
+  claim = "int_le(int_add(view[usize64]($4), 1i), buffer_length(u32, ($0)))"
   steps = '''
-s1 = transport(of_term($2.1), int_le(int_add(view[u64]($4), 1i), #0), h2)
+s1 = transport(of_term($2.1), int_le(int_add(view[usize64]($4), 1i), #0), h2)
 '''
 
 [[file]]
 path = "tracked_loop.lc"
 
   [[file.obligation]]
-  key = "004153a41182e981"
+  key = "46ecc4303ba00fba"
   at = "advance 1"
   claim = "(int_le_b(int_add(view[u8]($0), 1i), view[u8](255)) ==[bool] true)"
   steps = '''
@@ -2090,7 +2096,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, t2)), transport(transport(
 '''
 
   [[file.obligation]]
-  key = "c394c45412ab7cc0"
+  key = "8a3c745178ff1ac5"
   at = "advance 2"
   claim = "int_le(0i, int_add(view[u8]($0), view[u8](1)))"
   steps = '''
@@ -2100,7 +2106,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "4bf8abf780bb6570"
+  key = "f605076b5fa89061"
   at = "advance 3"
   claim = "int_le(int_add(view[u8]($0), view[u8](1)), 255i)"
   steps = '''
@@ -2112,7 +2118,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "776938e76fbd0644"
+  key = "b4d89907f91b601d"
   at = "advance 4"
   claim = "(int_le_b(view[u8]($4), 10i) ==[bool] true)"
   steps = '''
@@ -2131,7 +2137,7 @@ s4 = transport(transport(h3, (#0 ==[u8] $4), refl($4)), t2, transport(s1, t2, im
 '''
 
   [[file.obligation]]
-  key = "d18cf888d589d6ee"
+  key = "6ab59226e86404db"
   at = "stale_on_entry 1"
   claim = "(int_le_b(view[u8]($2), 10i) ==[bool] true)"
   steps = '''
@@ -2139,7 +2145,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "28ccff138e238807"
+  key = "a37a1a9034c990a0"
   at = "walk 2"
   claim = "(int_le_b(view[u8]($10), 10i) ==[bool] true)"
   steps = '''
@@ -2148,7 +2154,7 @@ s1 = transport(transport(h2, (#0 ==[u8] $10), refl($10)), t1, transport(transpor
 '''
 
   [[file.obligation]]
-  key = "ccb0de9a0612bc8c"
+  key = "83ee376d667748a5"
   at = "walk 3"
   claim = "(int_le_b(view[u8]($10), 10i) ==[bool] true)"
   steps = '''
@@ -2157,17 +2163,17 @@ s1 = transport(transport(h2, (#0 ==[u8] $10), refl($10)), t1, transport(transpor
 '''
 
   [[file.obligation]]
-  key = "9e6e4a210d466df3"
+  key = "db7bd800d91abff6"
   at = "count_to 1"
   claim = "(int_le_b(view[u8]($1), view[u8]($0)) ==[bool] true)"
   steps = '''
 t1 = view[u8]($0)
 t2 = view[u8](0)
-s1 = transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), t1) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(t2, t1)), transport(transport(literal(t2), (#0 ==[Int] t2), refl(t2)), int_le(#0, t1), linear(int_le(0i, t1), 1, [(axiom(view_lower[u8], $0), 1)]))))
+s1 = transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), t1) ==[bool] true), implies_elim(axiom(cmp_reify[true], int_le_b(t2, t1)), transport(transport(literal(t2), (#0 ==[Int] t2), refl(t2)), int_le(#0, t1), of_term(struct:Nat { t1, proof(axiom(view_lower[u8], $0)) }.1))))
 '''
 
   [[file.obligation]]
-  key = "ee0e82b2dad374ca"
+  key = "95ed34ea01e72fcb"
   at = "count_to 2"
   claim = "int_le(0i, int_add(view[u8]($5), view[u8](1)))"
   steps = '''
@@ -2177,7 +2183,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(0i, int
 '''
 
   [[file.obligation]]
-  key = "f0e422fda9bbd462"
+  key = "8c681e403d731e97"
   at = "count_to 3"
   claim = "int_le(int_add(view[u8]($5), view[u8](1)), 255i)"
   steps = '''
@@ -2187,7 +2193,7 @@ s1 = transport(transport(literal(t1), (#0 ==[Int] t1), refl(t1)), int_le(int_add
 '''
 
   [[file.obligation]]
-  key = "b320f9b756943371"
+  key = "d0b3443ef2b16776"
   at = "count_to 4"
   claim = "(int_le_b(view[u8]($7), view[u8]($0)) ==[bool] true)"
   steps = '''
@@ -2206,7 +2212,7 @@ s4 = transport(transport(h5, (#0 ==[u8] $7), refl($7)), t3, transport(s1, t3, im
 '''
 
   [[file.obligation]]
-  key = "e0e7b78e3a598db5"
+  key = "63cc67e512a52a9c"
   at = "stale_on_entry 2"
   claim = "(int_le_b(view[u8]($6), 10i) ==[bool] true)"
   steps = '''
@@ -2218,7 +2224,7 @@ s1 = implies_elim(axiom(cmp_reify[true], int_le_b(t1, 10i)), linear(int_le(t1, 1
 path = "tracked_refresh.lc"
 
   [[file.obligation]]
-  key = "764ddb6722c33026"
+  key = "db0c25347d9f0437"
   at = "bump_within 1"
   claim = "(int_le_b(view[u8]($2), 3i) ==[bool] true)"
   steps = '''
@@ -2226,7 +2232,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $2), refl($2)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "9aa9e3dc772c7ae8"
+  key = "402260245fc9335d"
   at = "bump_within 2"
   claim = "(int_le_b(view[u8]($4), 3i) ==[bool] true)"
   steps = '''
@@ -2237,15 +2243,16 @@ s1 = transport(transport(h1, (#0 ==[u8] $4), refl($4)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "1f99c8f184092dfc"
+  key = "87a71e4b724dc079"
   at = "clamp 1"
   claim = "(int_le_b(view[u8]($1), 3i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u8](0), 3i)))
+t1 = int_le_b(view[u8](0), 3i)
+s1 = transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
   [[file.obligation]]
-  key = "4631efc704a0efd4"
+  key = "040641997a8b9b69"
   at = "clamp 2"
   claim = "(int_le_b(view[u8]($3), 3i) ==[bool] true)"
   steps = '''
@@ -2254,15 +2261,16 @@ s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "f3bd3e7ef56b1096"
+  key = "4a998d19335618eb"
   at = "clamp 3"
   claim = "(int_le_b(view[u8]($3), 3i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u8](3), 3i)))
+t1 = int_le_b(view[u8](3), 3i)
+s1 = transport(transport(h2, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
   [[file.obligation]]
-  key = "378126028006254e"
+  key = "b218c654f14c320b"
   at = "maybe_reset 1"
   claim = "(int_le_b(view[u8]($3), 3i) ==[bool] true)"
   steps = '''
@@ -2270,18 +2278,19 @@ s1 = transport(transport(h0, (#0 ==[u8] $3), refl($3)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "a1737700a7703c21"
+  key = "9fa1059561de050c"
   at = "maybe_reset 2"
   claim = "(int_le_b(view[u8]($5), 3i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h2, (#0 ==[u8] $5), refl($5)), (int_le_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u8](0), 3i)))
+t1 = int_le_b(view[u8](0), 3i)
+s1 = transport(transport(h2, (#0 ==[u8] $5), refl($5)), (int_le_b(view[u8](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
 [[file]]
 path = "tracked_snapshot.lc"
 
   [[file.obligation]]
-  key = "c69792b5d0aeafee"
+  key = "24926c959d3e3c2f"
   at = "snapshot_and_tracked 1"
   claim = "(int_le_b(view[u8]($1), 3i) ==[bool] true)"
   steps = '''
@@ -2289,7 +2298,7 @@ s1 = transport(transport(h0, (#0 ==[u8] $1), refl($1)), (int_le_b(view[u8](#0), 
 '''
 
   [[file.obligation]]
-  key = "f1b107fc871928ad"
+  key = "7255a9d21e5eb69a"
   at = "snapshot_and_tracked 2"
   claim = "(int_le_b(view[u8]($1), 3i) ==[bool] true)"
   steps = '''
@@ -2297,15 +2306,16 @@ s1 = of_term($2)
 '''
 
   [[file.obligation]]
-  key = "3063d2ab37a073cd"
+  key = "db2793ddc90057aa"
   at = "snapshot_and_tracked 3"
   claim = "(int_le_b(view[u8]($4), 3i) ==[bool] true)"
   steps = '''
-s1 = transport(transport(h1, (#0 ==[u8] $4), refl($4)), (int_le_b(view[u8](#0), 3i) ==[bool] true), evaluate(int_le_b(view[u8](3), 3i)))
+t1 = int_le_b(view[u8](3), 3i)
+s1 = transport(transport(h1, (#0 ==[u8] $4), refl($4)), (int_le_b(view[u8](#0), 3i) ==[bool] true), transport(transport(evaluate(true), (#0 ==[bool] true), refl(true)), (t1 ==[bool] #0), evaluate(t1)))
 '''
 
   [[file.obligation]]
-  key = "b8460c9e0097c48e"
+  key = "fab977341a4f2415"
   at = "snapshot_and_tracked 4"
   claim = "(int_le_b(view[u8](2), 3i) ==[bool] true)"
   steps = '''
@@ -2313,7 +2323,7 @@ s1 = of_term($0)
 '''
 
   [[file.obligation]]
-  key = "a9cbfceb54566e88"
+  key = "7217a6304360b8d9"
   at = "captured 1"
   claim = "$2"
   steps = '''
@@ -2324,7 +2334,7 @@ s1 = transport(transport(h1, (#0 ==[Prop] $2), refl($2)), #0, transport(transpor
 path = "trusted_push.lc"
 
   [[file.obligation]]
-  key = "838bb1c931f1194b"
+  key = "eb53f67ab08d2cc2"
   at = "grow 1"
   claim = "(int_eq_b(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($4), int_add(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0), 1i)) ==[bool] true)"
   steps = '''
@@ -2344,7 +2354,7 @@ s3 = transport(transport(h0, (#0 ==[buffer(u8)] $4), refl($4)), (int_eq_b(t1(#0)
 path = "vector_growth.lc"
 
   [[file.obligation]]
-  key = "e547e6d8fd4fd814"
+  key = "be371cbfb18ae541"
   at = "grow 1"
   claim = "(int_eq_b(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($4), int_add(lambda((buffer(u8)), Int, buffer_length(u8, (#0)))($0), 1i)) ==[bool] true)"
   steps = '''
@@ -2363,19 +2373,19 @@ s1 = transport(transport(h0, (#0 ==[buffer(u8)] $4), refl($4)), t4, transport(tr
 '''
 
   [[file.obligation]]
-  key = "3582bdd1e72a91f3"
+  key = "6f7322bb91a38f70"
   at = "first 1"
-  claim = "int_le(0i, view[u64](0u64))"
+  claim = "int_le(0i, view[usize64](0usize64))"
   steps = '''
-s1 = evaluate(int_le(0i, view[u64](0u64)))
+s1 = evaluate(int_le(0i, view[usize64](0usize64)))
 '''
 
   [[file.obligation]]
-  key = "e8e53c78fdff6235"
+  key = "2e28d5eeab693ce6"
   at = "first 2"
-  claim = "int_le(int_add(view[u64](0u64), 1i), buffer_length(u8, ($1)))"
+  claim = "int_le(int_add(view[usize64](0usize64), 1i), buffer_length(u8, ($1)))"
   steps = '''
-t1 = int_add(view[u64](0u64), 1i)
+t1 = int_add(view[usize64](0usize64), 1i)
 t2 = int_le(t1, buffer_length(u8, (#0)))
 t3 = $0.0
 t4 = buffer_length(u8, (buffer_literal(u8, (4, 5))))

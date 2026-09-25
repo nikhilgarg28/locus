@@ -8,6 +8,7 @@ import re
 import sys
 import datetime
 import atlas
+import content
 import bench
 import spec
 
@@ -49,6 +50,13 @@ def expected_body(record, current_fingerprint):
     return render(record)
 
 
+def store_status(data):
+    # A receipt update must not normalize unrelated manuals or reorder roadmap
+    # tasks: those are gate inputs, and changing them invalidates this receipt.
+    content.save({**data, 'docs': [d for d in data['docs'] if d['id'] == 'generated-status'],
+                  'projects': [], 'tasks': []}, ROOT)
+
+
 def invalidate():
     text, match, data = atlas.load()
     record = data.get('measurements')
@@ -63,7 +71,7 @@ def invalidate():
         doc['body'] = body; doc['updated'] = atlas.now()
     else:
         return
-    atlas.store(text, match, data)
+    store_status(data)
 
 
 def collect(fast_log,extended_log,seconds,expected_fingerprint):
@@ -131,7 +139,7 @@ def publish(record):
         doc={'id':'generated-status','title':'Generated status','group':'Now','body':[],'created':atlas.now()}
         data['docs'].append(doc)
     doc['body']=render(record);doc['updated']=atlas.now()
-    atlas.store(text,match,data)
+    store_status(data)
     path=ROOT/'target/status.json';path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(record,indent=2,sort_keys=True)+'\n')
 

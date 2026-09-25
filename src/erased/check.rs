@@ -13,7 +13,6 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::kernel::MachineInt;
 use crate::kernel::{Prim, VarId};
 use crate::typed::{CompareOp, FnRef};
 
@@ -72,6 +71,27 @@ macro_rules! needed {
 }
 
 pub fn check_module(module: &Module) -> Result<(), TypeError> {
+    for item in &module.structs {
+        if item.shape == crate::ast::VariantShape::Unit && !item.fields.is_empty() {
+            return fail("unit struct has fields");
+        }
+        for (_, ty) in &item.fields {
+            target_type(ty, module.pointer_width)?;
+        }
+    }
+    for item in &module.enums {
+        for variant in &item.variants {
+            for ty in &variant.payload {
+                target_type(ty, module.pointer_width)?;
+            }
+        }
+    }
+    for function in &module.fns {
+        for (_, _, ty) in &function.params {
+            target_type(ty, module.pointer_width)?;
+        }
+        target_type(&function.result, module.pointer_width)?;
+    }
     let signatures = module
         .fns
         .iter()
@@ -116,6 +136,33 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         )?;
     }
     Ok(())
+}
+
+fn target_type(ty: &EType, width: crate::kernel::PointerWidth) -> Result<(), TypeError> {
+    match ty {
+        EType::Int(m) if m.pointer_width().is_some_and(|w| w != width) => fail(format!(
+            "{} does not match the {}-bit target",
+            m.kernel_name(),
+            width.bits()
+        )),
+        EType::Array(t, n) => {
+            if crate::kernel::Integer::from(*n as u128) > width.usize().max() {
+                return fail("array length does not fit target usize");
+            }
+            target_type(t, width)
+        }
+        EType::Boxed(t) | EType::Buffer(t) | EType::Slice(t) | EType::Ref(_, t) => {
+            target_type(t, width)
+        }
+        EType::Tuple(ts) => ts.iter().try_for_each(|t| target_type(t, width)),
+        EType::Fn(ps, r) => {
+            for t in ps {
+                target_type(t, width)?;
+            }
+            target_type(r, width)
+        }
+        _ => Ok(()),
+    }
 }
 
 fn expect(found: &Yield, expected: &EType, what: &str) -> Result<(), TypeError> {
@@ -189,6 +236,7 @@ impl Checker<'_> {
                 ty,
                 mutable,
             } => {
+                target_type(ty, self.module.pointer_width)?;
                 if *ty == EType::Ghost {
                     return fail(format!(
                         "{name} is bound to a value with no runtime form, which erasure leaves out"
@@ -199,6 +247,38 @@ impl Checker<'_> {
                 }
                 self.env.push((*id, ty.clone(), *mutable));
                 Ok(())
+            }
+            EPattern::Struct {
+                id,
+                name,
+                tuple,
+                parts,
+            } => {
+                if found.is_some_and(|ty| !matches!(ty, EType::Struct(actual) | EType::StructApplied(actual, _) if actual == id)) {
+                    return fail("struct pattern has a different nominal type");
+                }
+                let declaration = self
+                    .module
+                    .structs
+                    .iter()
+                    .find(|s| s.id == *id)
+                    .ok_or_else(|| TypeError("unknown struct in pattern".into()))?;
+                let expected_shape = if *tuple {
+                    crate::ast::VariantShape::Tuple
+                } else {
+                    crate::ast::VariantShape::Unit
+                };
+                if declaration.shape != expected_shape || declaration.name != *name {
+                    return fail("struct pattern spelling does not match its declaration");
+                }
+                let fields = declaration.fields.clone();
+                if parts.len() != fields.len() {
+                    return fail("struct pattern arity mismatch");
+                }
+                parts
+                    .iter()
+                    .zip(&fields)
+                    .try_for_each(|(p, (_, t))| self.bind(p, Some(t)))
             }
             EPattern::Tuple(patterns) => match found {
                 None => patterns
@@ -305,7 +385,7 @@ impl Checker<'_> {
     }
 
     fn expr(&mut self, expr: &EExpr) -> Result<Yield, TypeError> {
-        Ok(Some(match expr {
+        let ty = match expr {
             EExpr::Shared { value, lifetime } => {
                 EType::Ref(lifetime.clone(), Box::new(needed!(self.expr(value)?)))
             }
@@ -335,10 +415,17 @@ impl Checker<'_> {
                     crate::kernel::BufferOp::Literal => vec![element.clone(); arguments.len()],
                     crate::kernel::BufferOp::Length => vec![buffer.clone()],
                     crate::kernel::BufferOp::Get => {
-                        vec![buffer.clone(), EType::Int(MachineInt::U64)]
+                        vec![
+                            buffer.clone(),
+                            EType::Int(self.module.pointer_width.usize()),
+                        ]
                     }
                     crate::kernel::BufferOp::Set => {
-                        vec![buffer.clone(), EType::Int(MachineInt::U64), element.clone()]
+                        vec![
+                            buffer.clone(),
+                            EType::Int(self.module.pointer_width.usize()),
+                            element.clone(),
+                        ]
                     }
                     crate::kernel::BufferOp::Push => vec![buffer.clone(), element.clone()],
                 };
@@ -365,7 +452,9 @@ impl Checker<'_> {
                         }
                         buffer
                     }
-                    crate::kernel::BufferOp::Length => EType::Int(MachineInt::U64),
+                    crate::kernel::BufferOp::Length => {
+                        EType::Int(self.module.pointer_width.usize())
+                    }
                     crate::kernel::BufferOp::Get => element.clone(),
                     crate::kernel::BufferOp::Set | crate::kernel::BufferOp::Push => EType::unit(),
                 }
@@ -663,7 +752,9 @@ impl Checker<'_> {
                 expect(&found, &result, "a returned value")?;
                 return Ok(None);
             }
-        }))
+        };
+        target_type(&ty, self.module.pointer_width)?;
+        Ok(Some(ty))
     }
 
     /// Checks the body of a loop, a while, or a for: it sees the index if

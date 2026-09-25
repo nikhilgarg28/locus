@@ -1,6 +1,6 @@
 L0284: Collection or Box operation is ill-formed
 
-The collection expression lacks required element information, has an incompatible physical layout, or uses an unsupported collection operation. Empty arrays need an element type from context. Box, vector and slice operations retain physical storage semantics even when payloads are logical.
+The collection expression lacks required element information, has an incompatible physical layout, or uses an unsupported collection operation. Empty arrays need an element type from context. Array lengths must be nonnegative literals that fit the selected target’s usize; runtime indices use usize, not u64. Box, vector and slice operations retain physical storage semantics even when payloads are logical.
 
 Example from `tests/corpus/reject/array_literal.lc`; the full file is a regression test.
 

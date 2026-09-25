@@ -191,6 +191,7 @@ pub(crate) fn erase_struct_with_layout(
     layouts: &ErasureLayouts,
 ) -> EStruct {
     EStruct {
+        shape: item.shape,
         id,
         name: item.name.clone(),
         fields: item
@@ -599,8 +600,30 @@ impl Eraser<'_> {
     /// A `let` pattern. A name with no runtime form binds nothing: it is
     /// recorded, so that a mention of it is the marker, and it stands as
     /// `_` here.
+    fn erase_pattern_bindings(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Bind { binder, .. } => {
+                self.ghost.insert(binder.id);
+            }
+            Pattern::Tuple(parts) | Pattern::Struct { parts, .. } => {
+                for part in parts {
+                    self.erase_pattern_bindings(part);
+                }
+            }
+            Pattern::Wildcard => {}
+        }
+    }
     fn pattern(&mut self, pattern: &Pattern) -> EPattern {
         match pattern {
+            Pattern::Struct { id, .. }
+                if self
+                    .program
+                    .definitions()
+                    .is_erased_type(&Type::Struct(*id)) =>
+            {
+                self.erase_pattern_bindings(pattern);
+                EPattern::Wildcard
+            }
             Pattern::Bind { binder, .. } if vanishes(self.program, binder, self.layouts) => {
                 self.ghost.insert(binder.id);
                 EPattern::Wildcard
@@ -612,6 +635,17 @@ impl Eraser<'_> {
                 name: binder.name.clone(),
                 ty: binder_type_with_layout(Some(self.program), binder, self.layouts),
                 mutable: *mutable && self.assigned.contains(&binder.id),
+            },
+            Pattern::Struct {
+                id,
+                name,
+                tuple,
+                parts,
+            } => EPattern::Struct {
+                id: *id,
+                name: name.clone(),
+                tuple: *tuple,
+                parts: parts.iter().map(|p| self.pattern(p)).collect(),
             },
             Pattern::Wildcard => EPattern::Wildcard,
             Pattern::Tuple(patterns) => {

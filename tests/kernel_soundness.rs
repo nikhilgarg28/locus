@@ -48,7 +48,7 @@ use locus::parser::parse;
 use locus::source::SourceMap;
 use locus::typed::FnRef;
 
-use MachineInt::{I8, I16, I32, I64, U8, U16, U32, U64};
+use MachineInt::{I8, I16, I32, I64, Isize32, Isize64, U8, U16, U32, U64, Usize32, Usize64};
 
 const SEED: u64 = 0x5eed_10c5_2024_0002;
 
@@ -267,12 +267,12 @@ fn shape(ty: MachineInt) -> (u32, bool) {
     match ty {
         U8 => (8, false),
         U16 => (16, false),
-        U32 => (32, false),
-        U64 => (64, false),
+        U32 | Usize32 => (32, false),
+        U64 | Usize64 => (64, false),
         I8 => (8, true),
         I16 => (16, true),
-        I32 => (32, true),
-        I64 => (64, true),
+        I32 | Isize32 => (32, true),
+        I64 | Isize64 => (64, true),
     }
 }
 
@@ -365,12 +365,12 @@ fn neighbours(ty: MachineInt) -> Vec<MachineInt> {
     match ty {
         U8 => vec![I8, U16],
         U16 => vec![I16, U8, U32],
-        U32 => vec![I32, U16, U64],
-        U64 => vec![I64, U32],
+        U32 | Usize32 => vec![I32, U16, U64],
+        U64 | Usize64 => vec![I64, U32],
         I8 => vec![U8, I16],
         I16 => vec![U16, I8, I32],
-        I32 => vec![U32, I16, I64],
-        I64 => vec![U64, I32],
+        I32 | Isize32 => vec![U32, I16, I64],
+        I64 | Isize64 => vec![U64, I32],
     }
 }
 
@@ -1307,7 +1307,7 @@ fn perturb_node(term: &Term, prelude: &Prelude, vars: &[(VarId, Type)]) -> Vec<T
             // The bound of a range for the other bound: a claim about the
             // range of a machine type then names the wrong end.
             if let Some(value) = value.to_i128() {
-                for ty in MachineInt::ALL {
+                for ty in MachineInt::FIXED {
                     let (lo, hi) = machine_range(ty);
                     if value == lo {
                         out.push(int128(hi));
@@ -4814,7 +4814,7 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
     // literal of the type; the oracle's is the same number, or nothing when
     // an integer inside went past `i128`.
     fn machine(rng: &mut Rng, world: &World, depth: usize) -> (MachineInt, Term) {
-        let ty = *rng.pick(&MachineInt::ALL).unwrap();
+        let ty = *rng.pick(&MachineInt::FIXED).unwrap();
         if depth == 0 {
             let sample = machine_sample(ty);
             return (ty, lit(ty, *rng.pick(&sample).unwrap()));
@@ -4878,7 +4878,7 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
     }
     assert!(valued > 100, "{valued} machine terms had a value");
     assert!(overflowed > 0, "{overflowed} machine terms overflowed i128");
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         assert!(
             types_seen.contains(&ty),
             "no term of {} had a value",
@@ -4896,7 +4896,7 @@ fn the_oracle_agrees_with_the_kernel_on_closed_terms() {
 fn the_oracle_reduces_into_a_range_as_the_kernel_table_does() {
     let mut rng = Rng(SEED ^ 4);
     let mut compared = 0;
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         let (lo, hi) = machine_range(ty);
         assert_eq!(Integer::from(lo), ty.min(), "{}", ty.name());
         assert_eq!(Integer::from(hi), ty.max(), "{}", ty.name());

@@ -1,4 +1,4 @@
 // Every index must be bounded in the current storage version.
-fn unchecked(xs: &[u8], index: u64) -> u8 {
+fn unchecked(xs: &[u8], index: usize) -> u8 {
     xs[index] //~ error: L0230 cannot show
 }

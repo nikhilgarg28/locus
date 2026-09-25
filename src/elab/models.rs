@@ -116,6 +116,7 @@ impl Env<'_> {
             entries.push(entry);
         }
         let item = crate::typed::StructItem {
+            shape: info.shape,
             name: name.clone(),
             fields: fields.clone(),
             derives: vec![],
@@ -128,6 +129,7 @@ impl Env<'_> {
             return self.internal(error, span);
         }
         let derived = Rc::new(super::env::StructInfo {
+            shape: info.shape,
             captures: Vec::new(),
             origin: info.origin,
             id,

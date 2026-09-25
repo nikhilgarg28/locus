@@ -7,8 +7,59 @@
 
 use super::int::Integer;
 
+/// Selected pointer layout. It is explicit data, never mutable ambient state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PointerWidth {
+    W32,
+    W64,
+}
+impl Default for PointerWidth {
+    fn default() -> Self {
+        Self::HOST
+    }
+}
+impl PointerWidth {
+    pub const HOST: Self = if usize::BITS == 32 {
+        Self::W32
+    } else {
+        Self::W64
+    };
+    pub fn from_bits(bits: u32) -> Option<Self> {
+        match bits {
+            32 => Some(Self::W32),
+            64 => Some(Self::W64),
+            _ => None,
+        }
+    }
+    pub fn bits(self) -> u32 {
+        match self {
+            Self::W32 => 32,
+            Self::W64 => 64,
+        }
+    }
+    pub fn usize(self) -> MachineInt {
+        match self {
+            Self::W32 => MachineInt::Usize32,
+            Self::W64 => MachineInt::Usize64,
+        }
+    }
+    pub fn isize(self) -> MachineInt {
+        match self {
+            Self::W32 => MachineInt::Isize32,
+            Self::W64 => MachineInt::Isize64,
+        }
+    }
+    pub fn machine(self, name: &str) -> Option<MachineInt> {
+        match name {
+            "usize" => Some(self.usize()),
+            "isize" => Some(self.isize()),
+            _ => MachineInt::FIXED.into_iter().find(|m| m.name() == name),
+        }
+    }
+}
+
 /// A machine integer type. `Type::U8` is the kernel's spelling of the first
-/// entry; the other seven are `Type::Machine(_)`. See `Type::machine`.
+/// entry; the other eleven are `Type::Machine(_)`. See `Type::machine`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MachineInt {
     U8,
@@ -19,11 +70,15 @@ pub enum MachineInt {
     I16,
     I32,
     I64,
+    Usize32,
+    Usize64,
+    Isize32,
+    Isize64,
 }
 
 impl MachineInt {
     /// Every machine integer type, unsigned first, narrowest first.
-    pub const ALL: [MachineInt; 8] = [
+    pub const FIXED: [MachineInt; 8] = [
         Self::U8,
         Self::U16,
         Self::U32,
@@ -34,17 +89,52 @@ impl MachineInt {
         Self::I64,
     ];
 
+    pub const ALL: [MachineInt; 12] = [
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::U64,
+        Self::I8,
+        Self::I16,
+        Self::I32,
+        Self::I64,
+        Self::Usize32,
+        Self::Usize64,
+        Self::Isize32,
+        Self::Isize64,
+    ];
+    pub fn pointer_width(self) -> Option<PointerWidth> {
+        match self {
+            Self::Usize32 | Self::Isize32 => Some(PointerWidth::W32),
+            Self::Usize64 | Self::Isize64 => Some(PointerWidth::W64),
+            _ => None,
+        }
+    }
+    /// Certificate spelling distinguishes widths and remains independent of the host.
+    pub fn kernel_name(self) -> &'static str {
+        match self {
+            Self::Usize32 => "usize32",
+            Self::Usize64 => "usize64",
+            Self::Isize32 => "isize32",
+            Self::Isize64 => "isize64",
+            _ => self.name(),
+        }
+    }
+
     pub fn bits(self) -> u32 {
         match self {
             Self::U8 | Self::I8 => 8,
             Self::U16 | Self::I16 => 16,
-            Self::U32 | Self::I32 => 32,
-            Self::U64 | Self::I64 => 64,
+            Self::U32 | Self::I32 | Self::Usize32 | Self::Isize32 => 32,
+            Self::U64 | Self::I64 | Self::Usize64 | Self::Isize64 => 64,
         }
     }
 
     pub fn signed(self) -> bool {
-        matches!(self, Self::I8 | Self::I16 | Self::I32 | Self::I64)
+        matches!(
+            self,
+            Self::I8 | Self::I16 | Self::I32 | Self::I64 | Self::Isize32 | Self::Isize64
+        )
     }
 
     /// The Rust name of the type, which is also its Locus name.
@@ -58,12 +148,14 @@ impl MachineInt {
             Self::I16 => "i16",
             Self::I32 => "i32",
             Self::I64 => "i64",
+            Self::Usize32 | Self::Usize64 => "usize",
+            Self::Isize32 | Self::Isize64 => "isize",
         }
     }
 
     /// The type of this name, `u8` to `i64`, if there is one.
     pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|ty| ty.name() == name)
+        Self::ALL.into_iter().find(|ty| ty.kernel_name() == name)
     }
 
     /// `2^bits`, the number of values of the type and the period of `wrap`.

@@ -231,9 +231,10 @@ fn search_agrees_across_checked_ir_erasure_and_both_rust_builds() {
                     let (found, index) = if tag == 0 {
                         (false, 0)
                     } else {
-                        let [Value::Int(MachineInt::U64, index)] = payload.as_slice() else {
+                        let [Value::Int(index_ty, index)] = payload.as_slice() else {
                             panic!()
                         };
+                        assert_eq!(*index_ty, locus::kernel::PointerWidth::HOST.usize());
                         (true, *index as usize)
                     };
                     assert_eq!(found, items.contains(&key));
@@ -250,7 +251,7 @@ fn search_agrees_across_checked_ir_erasure_and_both_rust_builds() {
     assert!(!rust.contains("fn Sorted"));
     assert!(!rust.contains("fn ordered_prefix"));
     assert!(rust.contains("Some(Erased)"));
-    rust.push_str(&format!("\npub fn observe(items: &[u32], key:u32, known:bool)->(bool,u64) {{
+    rust.push_str(&format!("\npub fn observe(items: &[u32], key:u32, known:bool)->(bool,usize) {{
         let evidence=if known {{{evidence_name}::Some(Erased)}}else{{{evidence_name}::None}};
         match search(items,key,evidence) {{{answer_name}::None=>(false,0),{answer_name}::Some(i)=>(true,i)}}
     }}"));
@@ -284,7 +285,7 @@ fn unsorted_input_and_mutated_list_cannot_supply_sorted_evidence() {
     let false_claim = example.replace("[1, 3, 5]", "[3, 1, 5]");
     rejected(&false_claim);
     let stale = format!(
-        "{example} fn stale(xs:&mut [u32], p:Option<@Sorted(&xs)>)->Option<u64>{{if xs.len()>0{{xs[0]=0;search(&xs,0,p)}}else{{None}}}}"
+        "{example} fn stale(xs:&mut [u32], p:Option<@Sorted(&xs)>)->Option<usize>{{if xs.len()>0{{xs[0]=0;search(&xs,0,p)}}else{{None}}}}"
     );
     rejected(&stale);
 }

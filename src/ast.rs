@@ -279,6 +279,7 @@ pub enum DeclarationKind {
         body: Block,
     },
     Struct {
+        shape: VariantShape,
         generics: Vec<GenericParameter>,
         name: Name,
         fields: Vec<Field>,

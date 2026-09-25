@@ -60,6 +60,10 @@ impl Context {
         }
     }
 
+    pub fn pointer_width(&self) -> super::PointerWidth {
+        self.definitions().pointer_width()
+    }
+
     pub(super) fn definitions(&self) -> Rc<Definitions> {
         Rc::clone(&self.definitions)
     }

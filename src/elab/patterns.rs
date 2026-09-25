@@ -38,6 +38,21 @@ impl Env<'_> {
         match &pattern.kind {
             PatternKind::Wildcard => Ok(Pattern::Wildcard),
             PatternKind::Group(inner) => self.bind_pattern_in(inner, value, ghost, earlier),
+            PatternKind::Name {
+                name,
+                mutable: false,
+            } if matches!(self.types.get(&self.type_text(name)), Some(super::env::Global::Struct(info)) if info.shape == ast::VariantShape::Unit) => {
+                self.bind_struct_pattern(name, None, value, ghost, earlier, pattern.span)
+            }
+            PatternKind::Variant { path, arguments } if path.single().is_some() => self
+                .bind_struct_pattern(
+                    path.single().unwrap(),
+                    arguments.as_deref(),
+                    value,
+                    ghost,
+                    earlier,
+                    pattern.span,
+                ),
             PatternKind::Name { name, mutable } => {
                 let (id, equation) = (VarId::fresh(), HypId::fresh());
                 let over_projections = self.type_of(&value, pattern.span)?;
@@ -105,6 +120,50 @@ impl Env<'_> {
                 pattern.span,
             ),
         }
+    }
+
+    fn bind_struct_pattern(
+        &mut self,
+        name: &ast::Name,
+        parts: Option<&[ast::Pattern]>,
+        value: Term,
+        ghost: bool,
+        earlier: &mut Vec<Named>,
+        span: Span,
+    ) -> Elab<Pattern> {
+        let Some(super::env::Global::Struct(info)) = self.types.get(&self.type_text(name)).cloned()
+        else {
+            return self.fail("L0220", "expected an irrefutable struct pattern", span);
+        };
+        let shape = if parts.is_some() {
+            ast::VariantShape::Tuple
+        } else {
+            ast::VariantShape::Unit
+        };
+        let parts = parts.unwrap_or(&[]);
+        let ty = self.type_of(&value, span)?;
+        if info.shape != shape
+            || ty.nominal() != &Type::Struct(info.id)
+            || parts.len() != info.fields.len()
+        {
+            return self.fail("L0220", "struct pattern must match the value's nominal type, constructor form and field count", span);
+        }
+        let mut patterns = Vec::new();
+        for (index, part) in parts.iter().enumerate() {
+            self.field_visible(&info, index, span)?;
+            patterns.push(self.bind_pattern_in(
+                part,
+                Term::proj(value.clone(), index),
+                ghost,
+                earlier,
+            )?);
+        }
+        Ok(Pattern::Struct {
+            id: info.id,
+            name: info.name.clone(),
+            tuple: shape == ast::VariantShape::Tuple,
+            parts: patterns,
+        })
     }
 
     /// Declares `id` with the equation `id == value` as `equation`, as the

@@ -26,13 +26,14 @@ impl Env<'_> {
 
     pub(super) fn array_length(&mut self, length: &ast::Expr) -> Elab<usize> {
         if let ast::ExprKind::Integer(n) = &length.kind
+            && n.value <= self.pointer_width.usize().max().to_natural().unwrap()
             && let Some(n) = n.value.to_u128().and_then(|n| usize::try_from(n).ok())
         {
             return Ok(n);
         }
         self.fail(
             "L0284",
-            "an array length must be a non-negative integer literal",
+            "an array length must be a non-negative integer literal that fits the target usize",
             length.span,
         )
     }

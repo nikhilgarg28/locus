@@ -39,7 +39,13 @@ impl Built {
         for path in &self.inputs {
             println!("cargo:rerun-if-changed={}", path.display());
         }
-        for name in ["TARGET", "CARGO_ENCODED_RUSTFLAGS"] {
+        for name in [
+            "TARGET",
+            "CARGO_BUILD_TARGET",
+            "CARGO_HOME",
+            "RUSTC",
+            "CARGO_ENCODED_RUSTFLAGS",
+        ] {
             println!("cargo:rerun-if-env-changed={name}");
         }
     }
@@ -78,14 +84,44 @@ impl Build {
         self.cargo.locked = yes;
         self
     }
+    pub fn target(mut self, target: impl Into<String>) -> Self {
+        self.cargo.target = Some(target.into());
+        self
+    }
     fn load(&self) -> Result<Loaded, Error> {
-        let workspace = cargo::discover(&self.entry, &self.cargo)
+        let manifest = cargo::manifest_for(&self.entry, self.cargo.manifest_path.as_deref())
             .map_err(|e| driver("L0505", &self.entry, e))?;
-        if let Some(workspace) = workspace {
-            super::load::load_cargo(&self.entry, workspace, &self.cargo)
+        let directory = manifest
+            .as_deref()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| {
+                if self.entry.is_dir() {
+                    &self.entry
+                } else {
+                    self.entry
+                        .parent()
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .unwrap_or(Path::new("."))
+                }
+            });
+        let directory = directory
+            .canonicalize()
+            .map_err(|e| driver("L0505", &self.entry, e.to_string()))?;
+        let layout =
+            crate::target::TargetLayout::discover(&directory, self.cargo.target.as_deref())
+                .map_err(|e| driver("L0505", &self.entry, e))?;
+        let mut cargo = self.cargo.clone();
+        cargo.target = Some(layout.triple.clone());
+        let workspace =
+            cargo::discover(&self.entry, &cargo).map_err(|e| driver("L0505", &self.entry, e))?;
+        let mut loaded = if let Some(workspace) = workspace {
+            super::load::load_cargo(&self.entry, workspace, &cargo)?
         } else {
-            super::load(&self.entry)
-        }
+            super::load(&self.entry)?
+        };
+        loaded.inputs.extend(layout.inputs.clone());
+        loaded.target = Some(layout);
+        Ok(loaded)
     }
     pub fn check(&self) -> Result<Checked, Error> {
         let loaded = self.load()?;
@@ -222,7 +258,7 @@ impl Build {
         Ok(record["outputs"][format!("{}.rs", self.name)] == hash(&source))
     }
     fn configuration(&self, loaded: &Loaded) -> serde_json::Value {
-        serde_json::json!({"entry":loaded.entry.canonicalize().unwrap_or_else(|_|loaded.entry.clone()),"previews":self.options.previews.iter().map(|p|p.name()).collect::<Vec<_>>(),"cargo":loaded.cargo.as_ref().map(|w|&w.selection),"check_moves":self.options.check_moves,"native_imports":loaded.native.receipt()})
+        serde_json::json!({"entry":loaded.entry.canonicalize().unwrap_or_else(|_|loaded.entry.clone()),"previews":self.options.previews.iter().map(|p|p.name()).collect::<Vec<_>>(),"cargo":loaded.cargo.as_ref().map(|w|&w.selection),"check_moves":self.options.check_moves,"native_imports":loaded.native.receipt(),"target_layout":loaded.target.as_ref().map(|t|t.receipt())})
     }
 }
 fn owned_receipt(path: &Path, name: &str) -> bool {

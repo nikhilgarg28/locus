@@ -25,6 +25,7 @@ pub(super) fn declare(session: &mut Session) -> Rc<StructInfo> {
     };
     let fields = vec![value, evidence];
     let item = StructItem {
+        shape: crate::ast::VariantShape::Struct,
         name: "Nat".into(),
         fields: fields.clone(),
         derives: vec![],
@@ -36,6 +37,7 @@ pub(super) fn declare(session: &mut Session) -> Rc<StructInfo> {
         .mark_logical_type(&Type::Struct(id))
         .expect("Nat has logical fields only");
     Rc::new(StructInfo {
+        shape: crate::ast::VariantShape::Struct,
         captures: Vec::new(),
         origin: None,
         id,

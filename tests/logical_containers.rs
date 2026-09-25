@@ -78,8 +78,8 @@ fn vectors_of_logical_bool_preserve_marker_layout() {
 #[test]
 fn arrays_and_slices_of_int_allow_checked_logical_access() {
     accepts(
-        "fn first(xs:&[Int],present:@(0<xs.len()))->Int{xs[0]} fn run()->u64{let xs:[Int;2]=[1 as Int,2 as Int];let observed=first(&xs,prove!(0<xs.len()));xs.len()}",
-        Value::Int(locus::kernel::MachineInt::U64, 2),
+        "fn first(xs:&[Int],present:@(0<xs.len()))->Int{xs[0]} fn run()->usize{let xs:[Int;2]=[1 as Int,2 as Int];let observed=first(&xs,prove!(0<xs.len()));xs.len()}",
+        Value::Int(locus::kernel::PointerWidth::HOST.usize(), 2),
         "assert_eq!(run(),2);",
     );
 }
@@ -114,7 +114,7 @@ fn logical_payload_construction_keeps_ordinary_call_effects() {
 fn logical_elements_cannot_be_extracted_as_runtime_data() {
     for source in [
         "fn bad(xs:&[Bool],present:@(0<xs.len()))->bool{xs[0]}",
-        "fn bad(xs:&[Int],present:@(0<xs.len()))->u64{xs[0]}",
+        "fn bad(xs:&[Int],present:@(0<xs.len()))->usize{xs[0]}",
         "fn bad(xs:&[Bool],present:@(0<xs.len()))->u8{if xs[0]{1}else{0}}",
         "fn bad()->Vec<bool>{Vec::from([logic{true}])}",
         "fn bad()->[bool;1]{[logic{true}]}",
@@ -135,8 +135,8 @@ fn inferred_logical_bool_elements_are_not_runtime_bool() {
 #[test]
 fn slices_of_logical_bool_can_be_borrowed_and_observed() {
     accepts(
-        "fn first<'a>(xs:&'a[Bool],present:@(0<xs.len()))->&'a Bool{&xs[0]} fn run()->u64{let xs:[Bool;1]=[logic{true}];let r=first(&xs,prove!(0<xs.len()));let observed=logic{*r};xs.len()}",
-        Value::Int(locus::kernel::MachineInt::U64, 1),
+        "fn first<'a>(xs:&'a[Bool],present:@(0<xs.len()))->&'a Bool{&xs[0]} fn run()->usize{let xs:[Bool;1]=[logic{true}];let r=first(&xs,prove!(0<xs.len()));let observed=logic{*r};xs.len()}",
+        Value::Int(locus::kernel::PointerWidth::HOST.usize(), 1),
         "assert_eq!(run(),1);",
     );
 }

@@ -106,9 +106,9 @@ Delivered: tuple/struct/enum destructuring, boolean/literal parsing, whole-value
 
 <a id="LOC-103"></a>
 ## LOC-103 · Target-sized usize and isize
-<!-- task: {"id": "t197", "status": "backlog", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+<!-- task: {"id": "t197", "status": "done", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-25T17:07:25.165396+00:00"} -->
 
-Remaining: target-width-aware kernel models, casts, bounds and deterministic cross-target behavior. Current native collection APIs deliberately use u64 lengths/indices for the supported 32/64-bit targets ([LOC-228](reconciliation.md#LOC-228)), so slices did not silently complete this request.
+Delivered: explicit 32/64-bit target identities, models, checked arithmetic, casts, proof-store isolation and generated-Rust width guards. Collection lengths and indices now use usize. `tests/platform_integers.rs` covers both layouts, Cargo configuration, receipts, independent arithmetic oracles and emitted Rust. The complete extended gate passed; see the [implementation and validation record](../plans/platform-types-and-structs.md).
 
 <a id="LOC-107"></a>
 ## LOC-107 · Loop labels and labeled break/continue

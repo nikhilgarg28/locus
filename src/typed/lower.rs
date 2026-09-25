@@ -213,9 +213,21 @@ pub struct Session {
 
 impl Session {
     pub fn new(definitions: Definitions) -> Self {
+        {
+            let width = definitions.pointer_width();
+            Self::with_pointer_width(definitions, width)
+        }
+    }
+    pub fn with_pointer_width(
+        definitions: Definitions,
+        pointer_width: crate::kernel::PointerWidth,
+    ) -> Self {
         Self {
-            program: Program::new(definitions),
-            erased: Module::default(),
+            program: Program::with_pointer_width(definitions, pointer_width),
+            erased: Module {
+                pointer_width,
+                ..Module::default()
+            },
             lending: HashMap::new(),
             layouts: ErasureLayouts::default(),
             buffers: Vec::new(),
@@ -1315,7 +1327,10 @@ fn bound_parts(pattern: &Pattern, value: &Term, earlier: &mut Vec<Named>) -> Vec
             }
             vec![named]
         }
-        Pattern::Tuple(patterns) => patterns
+        Pattern::Tuple(patterns)
+        | Pattern::Struct {
+            parts: patterns, ..
+        } => patterns
             .iter()
             .enumerate()
             .flat_map(|(index, pattern)| {
@@ -1597,7 +1612,10 @@ fn bound_ids(pattern: &Pattern, out: &mut HashSet<VarId>) {
             out.insert(binder.id);
         }
         Pattern::Wildcard => {}
-        Pattern::Tuple(patterns) => patterns.iter().for_each(|pattern| bound_ids(pattern, out)),
+        Pattern::Tuple(patterns)
+        | Pattern::Struct {
+            parts: patterns, ..
+        } => patterns.iter().for_each(|pattern| bound_ids(pattern, out)),
     }
 }
 
@@ -2797,7 +2815,10 @@ fn declare_mutable(pattern: &Pattern, env: &mut Versions) {
             ..
         } => env.declare(binder),
         Pattern::Bind { .. } | Pattern::Wildcard => {}
-        Pattern::Tuple(patterns) => patterns
+        Pattern::Tuple(patterns)
+        | Pattern::Struct {
+            parts: patterns, ..
+        } => patterns
             .iter()
             .for_each(|pattern| declare_mutable(pattern, env)),
     }

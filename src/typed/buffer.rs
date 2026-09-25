@@ -4,7 +4,7 @@ use super::{Binder, ErasureLayout, FnRef, LowerError, Passing, Session};
 use crate::erased::{self, EBlock, EExpr, EFn, EPattern, EPlace, EStmt};
 use crate::exec::{self, BufferStmt, BufferStorage, ExecFn, Lending, Promises};
 use crate::kernel::buffer::{bounds, length};
-use crate::kernel::{BufferOp, HypId, MachineInt, Proof, Term, Type, VarId};
+use crate::kernel::{BufferOp, HypId, Proof, Term, Type, VarId};
 
 #[derive(Clone, Debug)]
 pub struct BufferFunction {
@@ -150,7 +150,10 @@ impl Session {
                 layout.clone()
             });
             if matches!(op, BufferOp::Get | BufferOp::Set) {
-                params.push(binder("index", Type::machine(MachineInt::U64)));
+                params.push(binder(
+                    "index",
+                    Type::machine(self.program.pointer_width().usize()),
+                ));
                 passing.push(Passing::Value);
                 parameter_layouts.push(ErasureLayout::Default);
             }
@@ -179,7 +182,7 @@ impl Session {
             for (index, claim) in bounds(
                 &element,
                 &arguments[0],
-                &Term::view(MachineInt::U64, arguments[1].clone()),
+                &Term::view(self.program.pointer_width().usize(), arguments[1].clone()),
             )
             .into_iter()
             .enumerate()
@@ -192,7 +195,7 @@ impl Session {
             }
         }
         let value_type = match op {
-            BufferOp::Length => Type::machine(MachineInt::U64),
+            BufferOp::Length => Type::machine(self.program.pointer_width().usize()),
             BufferOp::Get => element.clone(),
             _ => buffer_type(&element),
         };
@@ -212,7 +215,7 @@ impl Session {
         if matches!(op, BufferOp::Get | BufferOp::Set) {
             model_args = vec![
                 arguments[0].clone(),
-                Term::view(MachineInt::U64, arguments[1].clone()),
+                Term::view(self.program.pointer_width().usize(), arguments[1].clone()),
             ];
             model_args.extend(evidence.iter().cloned().map(Term::proof));
             if op == BufferOp::Set {
@@ -239,7 +242,7 @@ impl Session {
                 "room",
                 Type::proof(Term::int_lt(
                     length(element.clone(), arguments[0].clone()),
-                    Term::Int(MachineInt::U64.max()),
+                    Term::Int(self.program.pointer_width().usize().max()),
                 )),
             );
             model_args.push(proof_value(room.id));
@@ -253,7 +256,7 @@ impl Session {
             arguments: model_args,
         };
         let actual = if op == BufferOp::Length {
-            Term::view(MachineInt::U64, Term::Free(out.id))
+            Term::view(self.program.pointer_width().usize(), Term::Free(out.id))
         } else {
             Term::Free(out.id)
         };

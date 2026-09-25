@@ -37,6 +37,25 @@ fn packet_fields() -> (u8, u16, i32) {
 //~ run: packet_fields() => (42, 1024, -12)
 ~~~
 
+## Pointer-sized integers: usize and isize
+
+<!-- spec: 1.96:1 legality-rule -->
+`usize` and `isize` use the selected Rust target's pointer width, currently 32 or 64 bits. They remain distinct from `u32`, `u64`, `i32`, and `i64`; conversions require `as`. Their bounds, casts, wrapping and checked arithmetic use that width. Their logical models are respectively `Nat` and `Int`.
+
+<!-- spec: 1.96:2 example -->
+~~~rust run
+fn previous(length: usize) -> Option<usize> {
+    if length > 0 { Some(length - 1) } else { None }
+}
+fn signed_offset() -> isize { -3isize }
+//~ run: previous(4) => Some(3)
+//~ run: previous(0) => None
+//~ run: signed_offset() => -3
+~~~
+
+<!-- spec: 1.96:3 informative -->
+Proofs can use `usize::MAX` and `isize::MIN` without assuming a fixed width. A theorem using a concrete bound may hold only on some targets. [Target selection](17-modules.md#target-layout) records that choice and guards generated Rust against a different width.
+
 ## Runtime booleans: bool
 
 <!-- spec: 1.91:2 informative -->
@@ -86,7 +105,7 @@ fn client(n: u8) -> u8 {
 ~~~
 
 <!-- spec: 1.4:3 legality-rule -->
-A `let` pattern may be a name, `_`, or a tuple of those patterns. A bound name may be `mut`. Runtime structs and enum variants are opened through field access or `match`, not a `let` pattern.
+A `let` pattern may be a name, `_`, a tuple, or an irrefutable tuple/unit struct pattern. These product patterns may nest; bound names may be `mut`. Named struct fields are accessed by name; enum destructuring remains in `match`. Destructuring preserves nominal identity, field privacy, moves, and dependent evidence.
 
 ## Structs and dependent proof fields
 
@@ -116,6 +135,31 @@ fn checked(value: u32) -> Option<NonZero> {
 <!-- spec: 1.91:4 informative -->
 `NonZero` ties its evidence to its own `value` field. A struct can instead contain `claim: Prop` followed by `evidence: @claim`, packaging a claim and its proof. A mutable value must preserve these field dependencies; [whole-value replacement](07-mutation.md#assignment) supplies fresh evidence together with new data.
 
+## Tuple and unit structs
+
+<!-- spec: 1.96:4 legality-rule -->
+`struct S(T, U);` declares a tuple struct; `struct Ready;` declares a unit struct. Construct them with `S(a, b)` and `Ready`. A zero-field tuple struct still uses `S()`. These forms are nominally distinct and do not accept named-field construction. Their constructors occupy the value namespace, so a same-scope function or constant cannot share their name. `Self(...)` and `Self` select the corresponding constructor inside an implementation.
+
+<!-- spec: 1.96:5 legality-rule -->
+Tuple struct fields use `.0`, `.1`, and so on. Optional declaration names bind earlier fields for later dependent types, but never create named accessors. Each field may carry a visibility qualifier. Construction or destructuring requires access to every field; reads and writes require access to the selected field. Updating part of a proof-dependent value must obey the existing invariant rules.
+
+<!-- spec: 1.96:6 example -->
+~~~rust run
+struct Positive(value: u8, @(value > 0));
+struct Ready;
+fn inspect() -> u8 {
+    let item = Positive(7, _);
+    let Positive(value, valid) = item;
+    let Ready = Ready;
+    let checked: @(value > 0) = valid;
+    value
+}
+//~ run: inspect() => 7
+~~~
+
+<!-- spec: 1.96:7 legality-rule -->
+A match on a tuple/unit struct has one irrefutable arm; a second arm is unreachable. Product patterns may nest and bind names or `_`; literal tests are not irrefutable patterns. Tuple/unit forms support the same generics, logical derivation, ownership, and private export boundaries as named structs.
+
 ## Enums, Option, and Result
 
 <!-- spec: 1.4:2 legality-rule -->
@@ -141,11 +185,11 @@ The prelude supplies `Option<T>` (`Some`, `None`) and `Result<T, E>` (`Ok`, `Err
 ## Arrays: [T; n]
 
 <!-- spec: 1.91:6 informative -->
-An array has a fixed, literal length and one element type. `[u8; 3]` is a type; `[10, 20, 30]` constructs a value. Lengths and runtime indices use `u64`. An access needs a proof that the index is in bounds, often supplied by a surrounding branch. [Collections](11-models.md#collections) specify the bounds and update rules.
+An array has a fixed, literal length and one element type. `[u8; 3]` is a type; `[10, 20, 30]` constructs a value. Lengths and runtime indices use `usize`. An access needs a proof that the index is in bounds, often supplied by a surrounding branch. [Collections](11-models.md#collections) specify the bounds and update rules.
 
 <!-- spec: 1.90:7 example -->
 ~~~rust run
-fn sample(index: u64) -> Option<u8> {
+fn sample(index: usize) -> Option<u8> {
     let bytes: [u8; 3] = [10, 20, 30];
     if index < 3 { Some(bytes[index]) } else { None }
 }
@@ -160,7 +204,7 @@ A `Vec<T>` owns growable runtime storage. Construct an empty vector with `Vec::n
 
 <!-- spec: 1.90:8 example -->
 ~~~rust run
-fn append_byte(value: u8) -> u64 {
+fn append_byte(value: u8) -> usize {
     let mut bytes: Vec<u8> = Vec::from([1, 2]);
     bytes.push(value);
     bytes.len()

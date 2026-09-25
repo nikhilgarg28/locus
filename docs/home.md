@@ -33,15 +33,15 @@ logic fn Sorted(items: &[u32]) -> Prop {
     prop!(ordered_prefix(items, count, within))
 }
 #[no_panic]
-fn binary_search(items: &[u32], key: u32, sorted: @Sorted(items)) -> Option<u64> {
-    let mut lo: u64 = 0;
+fn binary_search(items: &[u32], key: u32, sorted: @Sorted(items)) -> Option<usize> {
+    let mut lo: usize = 0;
     let mut hi = items.len();
     let mut bounded: @(lo <= hi && hi <= items.len()) = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
     loop {
         if lo < hi {
             let mid = lo + (hi - lo) / 2;
             let value = items.get(mid);
-            if value == key { break Option::<u64>::Some(mid); } else {
+            if value == key { break Option::<usize>::Some(mid); } else {
                 if value < key {
                     lo = mid + 1;
                     bounded = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
@@ -50,28 +50,28 @@ fn binary_search(items: &[u32], key: u32, sorted: @Sorted(items)) -> Option<u64>
                     bounded = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
                 }
             }
-        } else { break Option::<u64>::None; }
+        } else { break Option::<usize>::None; }
     }
 }
 #[no_panic]
-fn linear_search(items: &[u32], key: u32) -> Option<u64> {
-    let mut i: u64 = 0;
+fn linear_search(items: &[u32], key: u32) -> Option<usize> {
+    let mut i: usize = 0;
     loop {
         if i < items.len() {
-            if items.get(i) == key { break Option::<u64>::Some(i); } else { i = i + 1; }
-        } else { break Option::<u64>::None; }
+            if items.get(i) == key { break Option::<usize>::Some(i); } else { i = i + 1; }
+        } else { break Option::<usize>::None; }
     }
 }
 // docs:show
 #[no_panic]
-fn search(items: &[u32], key: u32, sorted: Option<@Sorted(items)>) -> Option<u64> {
+fn search(items: &[u32], key: u32, sorted: Option<@Sorted(items)>) -> Option<usize> {
     match sorted {
         Option::Some(proof) => binary_search(&items, key, proof),
         Option::None => linear_search(&items, key),
     }
 }
 // docs:hide
-fn example() -> Option<u64> {
+fn example() -> Option<usize> {
     let xs: [u32; 3] = [1, 3, 5];
     let sorted: @Sorted(xs) = fold!(Sorted, prove!(ordered_prefix(xs, 3, And::Intro(prove!(0 <= 3), prove!(3 <= xs.len())))));
     search(&xs, 3, Some(sorted))

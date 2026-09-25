@@ -8,6 +8,22 @@ import metrics
 import content
 
 class Metrics(unittest.TestCase):
+    def test_status_publisher_leaves_manuals_and_roadmap_bytes_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            (root/'docs/data').mkdir(parents=True)
+            manual=root/'docs/manual.md';manual.write_text('Unusual spacing retained.\n')
+            roadmap=root/'docs/roadmap.md';roadmap.write_text('Task order retained.\n')
+            data={'docs':[{'id':'generated-status','source':'docs/generated-status.md','body':['STALE']},
+                          {'id':'manual','source':'docs/manual.md','body':['rewritten']}],
+                  'projects':[{'id':'p','name':'Project','source':'docs/roadmap.md'}],
+                  'tasks':[], 'measurements':{'source_fingerprint':'old'}}
+            with mock.patch.object(metrics,'ROOT',root):metrics.store_status(data)
+            self.assertEqual(manual.read_text(),'Unusual spacing retained.\n')
+            self.assertEqual(roadmap.read_text(),'Task order retained.\n')
+            self.assertIn('STALE',(root/'docs/generated-status.md').read_text())
+            self.assertEqual(json.loads((root/'docs/data/state.json').read_text())['measurements'],data['measurements'])
+
     def test_only_completed_successful_test_logs_contribute_counts(self):
         tally='test result: ok. 7 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1s\n'
         with self.assertRaises(ValueError):metrics.test_counts(tally,'fast')

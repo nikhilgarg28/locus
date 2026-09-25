@@ -3,7 +3,7 @@ fn grow(xs: &mut Vec<u8>, value: u8) -> @(xs.len() == old!(xs).len() + 1) {
     xs.push(value);
     _
 }
-fn demo() -> u64 {
+fn demo() -> usize {
     let mut xs: Vec<u8> = Vec::new();
     grow(&mut xs, 7);
     grow(&mut xs, 9);

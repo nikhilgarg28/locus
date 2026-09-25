@@ -4329,3 +4329,30 @@ fn native_import_is_a_contextual_declaration_with_an_optional_alias() {
     assert!(!parse_text("import dep::*;").is_success());
     assert!(!parse_text("import dep::{a,b};").is_success());
 }
+
+#[test]
+#[doc = "spec: 1.9:1"]
+fn omitted_return_types_are_unit_in_declarations_and_headers() {
+    let parsed = parse_text(
+        "fn plain() {} logic fn logical() {} spec type Api { fn clear(&mut self); } trusted \"native\" fn effect() = Vec::push;",
+    );
+    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
+    for index in [0, 1, 3] {
+        let DeclarationKind::Function { result, .. } = &parsed.program.declarations[index].kind
+        else {
+            panic!()
+        };
+        assert!(matches!(result.kind, TypeKind::Unit));
+        assert_eq!(result.span.start, result.span.end);
+    }
+    let DeclarationKind::Spec { members, .. } = &parsed.program.declarations[2].kind else {
+        panic!()
+    };
+    let DeclarationKind::Function { result, .. } = &members[0].kind else {
+        panic!()
+    };
+    assert!(matches!(result.kind, TypeKind::Unit));
+    // An explicit arrow still requires a type, and omission cannot hide a typo.
+    assert!(!parse_text("fn broken() -> {}").is_success());
+    assert!(!parse_text("fn broken() u8 {}").is_success());
+}
