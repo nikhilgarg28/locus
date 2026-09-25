@@ -1,8 +1,8 @@
-error[L0116]: traits (`impl Trait for Type`) are not in Locus yet
-  --> tests/corpus/reject/rust_not_yet.lc:16:17
+error[L0116]: generic inherent impls require a checked spec realization for now
+  --> tests/corpus/reject/rust_not_yet.lc:16:9
    |
-16 | impl fmt::Debug for Counter { } //~ error: L0116 traits (`impl Trait for Type`)
-   |                 ^^^
+16 | impl<T> Counter<T> { } //~ error: L0116 generic inherent impls
+   |         ^^^^^^^
 error[L0116]: compound assignment (`+=`) is not in Locus yet
   --> tests/corpus/reject/rust_not_yet.lc:20:11
    |

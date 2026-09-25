@@ -99,7 +99,7 @@ impl SourceMap {
 #[derive(Debug)]
 pub struct SourceBundle {
     pub file: FileId,
-    segments: Vec<(usize, usize, FileId, usize)>,
+    segments: Vec<(usize, usize, FileId, usize, usize)>,
 }
 impl SourceBundle {
     pub fn join(sources: &mut SourceMap, files: &[FileId]) -> Self {
@@ -115,7 +115,7 @@ impl SourceBundle {
         for &file in files {
             let start = text.len();
             text.push_str(sources.get(file).text());
-            segments.push((start, text.len(), file, 0));
+            segments.push((start, text.len(), file, 0, sources.get(file).text().len()));
             text.push('\n');
         }
         let name = sources.get(*files.last().unwrap()).name.clone();
@@ -130,7 +130,7 @@ impl SourceBundle {
             let start = text.len();
             text.push_str(fragment);
             if !fragment.is_empty() {
-                segments.push((start, text.len(), origin.file, origin.start));
+                segments.push((start, text.len(), origin.file, origin.start, origin.end));
             }
         }
         let file = sources.add(name, text);
@@ -142,15 +142,15 @@ impl SourceBundle {
         }
         let index = self
             .segments
-            .partition_point(|(start, _, _, _)| *start <= span.start)
+            .partition_point(|(start, _, _, _, _)| *start <= span.start)
             .saturating_sub(1);
-        let (start, end, file, original) = self.segments[index];
+        let (start, end, file, original, original_end) = self.segments[index];
         // A recovery span crossing an input boundary is attributed to the
         // input where it starts; no displayed range may leave that file.
         Span::new(
             file,
-            original + span.start.min(end) - start,
-            original + span.end.min(end).max(span.start.min(end)) - start,
+            (original + span.start.min(end) - start).min(original_end),
+            (original + span.end.min(end).max(span.start.min(end)) - start).min(original_end),
         )
     }
     pub fn diagnostic(

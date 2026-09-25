@@ -1,72 +1,67 @@
 +++
 id = "spec-interfaces"
-title = "Specifications and implementations"
+title = "Specifications and checked implementations"
 group = "Vision"
 route = "vision/spec-interfaces.html"
-order = 44
+order = 13
 +++
 
-# Specifications and implementations
+# Specifications and checked implementations
 
-A spec is a named concrete interface whose declarations must be implemented. It is not a trait, axiom, or new runtime object. The [implementation plan](../roadmap/interop.md#specifications-and-native-imports) separates the first checked subset from extensions. [Rust imports](rust-imports.md) are a separate realization mechanism; they are not implemented in this round.
+A spec names one opaque concrete type with one implementation. A trait describes a requirement that many types can implement. They can share member grammar and contract checking without sharing type identity. The [manual](../spec/18-specifications.md) defines the implemented subset; the [implementation plan](../plans/opaque-spec-types.md) records its validation obligations.
 
-## Grammar and names
+## A type and its representation
 
-~~~text prose grammar
-spec-item = visibility? "spec" ("mod" | "type") Name "{" member* "}"
-member    = attributes? "logic"? "fn" signature ";"
-          | "const" Name ":" Type ";"
-module-implementation = "impl" "mod" Name (";" | "{" ordinary-items* "}")
-type-representation   = "struct" Name "{" private-fields* "}"
-type-implementation   = "impl" Name "{" functions-and-constants* "}"
-~~~
+```rust
+spec type Counter {
+    fn new() -> Self;
+    fn take(self) -> u8;
+}
+struct CounterImpl { value: u8 }
+impl Counter for CounterImpl {
+    fn new() -> Self { Self { value: 0 } }
+    fn take(self) -> u8 { self.value }
+}
+```
 
-`spec mod counters` creates the module `counters`. `impl mod counters` supplies its implementation; the explicit `mod` distinguishes it from an inherent type implementation. `impl mod counters;` loads `counters.lc` or `counters/mod.lc` using ordinary module discovery. Both blocks occur in the same lexical parent. There is no special header extension. Ordinary `use` and re-export rules apply.
+`Counter` has its own nominal identity. Clients do not need a trait import or another generic parameter to use it. `CounterImpl` remains an ordinary type, with ordinary privacy and additional inherent methods. It cannot be implicitly converted into a `Counter`. An implementation contains exactly the declared members; backing helpers belong outside it.
 
-`spec type Counter` specifies one nominal type. Its initial manual representation is a same-named struct in the same lexical module, with one `impl Counter`. All representation fields are private. The spec controls the type's visibility; its representation cannot independently widen it. Normal module privacy applies, including access from the declaring module and its descendants. This does not create a second privacy boundary inside a module.
+The implementation and declaration are owned by one package. Every loaded spec has exactly one complete realization, including unused specs. A generic realization covers the complete declared family once. Current generic body checking happens at concrete instantiation; universal checking is separate generic-system work, not a claim made by this feature.
 
-All members in a spec are public within the spec's visibility. Do not write `pub` on individual header members. A matching implementation member inherits public visibility; plain `pub` is permitted but redundant there. Unlisted implementation members must be private. Restricted-public helpers such as `pub(crate)` also constitute additional exposure and are rejected.
+## Contracts and abstraction
 
-## Completion and composition
+Headers retain propositions and explicit proof slots. Manual bodies and generated adapters must establish them using ordinary kernel-checked evidence. Signatures match resolved names and consistently renamed binders. Source grouping and whitespace do not change a contract. Logical definitions remain transparent; logical opacity needs its own introduction, elimination and unfolding rules.
 
-Several spec blocks in the same lexical module may contribute disjoint members to one spec. Kind and visibility must agree. Duplicate member names are errors with both source locations; there is no overriding or file-order preference.
+Associated types, constants and logical methods belong in the interface. The first version permits concrete associated bindings. Associated type families, arbitrary trait bounds, generic methods, exact-value constant contracts and general borrowed/container Self adapters need additional machinery. Each unsupported form must fail with a targeted diagnostic. Language-wide `const fn` is [LOC-251](../roadmap/generics.md#LOC-251).
 
-A module spec has exactly one `impl mod` body. A type spec has exactly one representation and one inherent implementation in its declaring module. Missing or duplicate realizations, extra exposed members, and additional implementations through aliases or other modules are errors in the initial subset. Even unused loaded specs must be complete. Unloaded files contribute nothing. A consumer cannot replace a dependency's realization.
+Automatic adapters may not invent casts, allocations, clone operations or aliasing assumptions. The initial adapters use a private nominal wrapper and support owned Self results, tuple components, direct Self inputs and shared/mutable Self borrows. A proof referring to a representation must still type-check when crossing the public interface; matching an erased signature is insufficient.
 
-Later work may split implementation bodies or introduce declaration-only checked artifacts. Such artifacts must never register an unproved theorem or make a missing implementation callable.
+## Module specs later
 
-## Signatures and proofs
+Module specs are deferred and their previous experimental syntax is rejected. The intended broader interface can contain opaque types, their associated item signatures and free items, with exactly one owned implementation. A possible surface is:
 
-Signatures resolve in the completed module/type’s ordinary scope. A spec is not yet an independently compiled header environment: referenced type and logical definitions remain part of the contract and must be inspected when reviewing it. Separate checked interface artifacts are deferred.
+```rust
+spec mod counters {
+    type Counter {
+        fn new() -> Self;
+        fn read(&self) -> u8;
+    }
+    const DEFAULT: u8;
+}
+```
 
-Initially, header and implementation signatures must have the same tokens, ignoring whitespace and ordinary comments. Parameter names, mutability, lifetimes, tuple binders, logical mode, result types and propositions all participate. Semantically equivalent formulas, renamed binders and alternate alias spellings are deliberately rejected. Later matching can compare elaborated, alpha-renamed signatures; it must never compare contracts after proof erasure.
+Before implementation, define representation bindings, sharing of existing types, associated-type equality, nested modules, completeness and export identity. Avoid building an implicit trait-object or functor system into this concrete interface feature. Transparent layouts, macros, proposition constructors and declaration-only artifacts need separate decisions.
 
-Header promises such as `#[no_panic]` become obligations of the implementation even when not repeated. Implementation promises may be stronger. Bodies pass the ordinary elaborator, ownership checker, execution-IR checker and proof kernel. A header neither creates evidence nor authorizes recursion.
+## Rust import and assumed realization
 
-A proof input remains a caller obligation. A proof output must be constructed by the body. Mutable parameters retain their entry/exit snapshot and `old!` rules. Empty implementations, `_` for a false proposition, and cycles of declarations must fail. Ordinary and logical recursion retain their existing termination restrictions.
+Plain `import path [as alias]` obtains physical Rust interfaces and preserves foreign identity; it creates no behavioral proofs and is independent of specs. Extraction should retain traits, async and unsafe items even when Locus cannot use them. Unsupported use must explain the limitation rather than pretend the item is missing.
 
-A `logic fn` header requires a logical definition. Its implementation remains transparent under the existing logical-function rules: separating files does not introduce an opaque logical constant. Abstract logical interfaces and opacity control are follow-up work. Constants declare their type; implementations supply checked initializers whose values remain available to constant evaluation. A type-only constant header does not promise a particular value.
+A future `assume ImportedType impl Spec` can generate Locus-only wrappers. It is a distinct audited trust boundary: input proof requirements are prohibited in that first design; output proofs can be omitted when matching the native signature and assumed only on normal return. Runtime parameter/receiver types, constants, associated identities, effects and mutation footprints must match. Import itself cannot establish these laws or invent a logical model. The [import vision](rust-imports.md) and [roadmap](../roadmap/interop.md) track this separate work.
 
-## Types and invariant fields
+## Remaining obligations
 
-The first `spec type` exposes methods and associated constants, not fields. Its private representation may carry proofs about earlier fields. Every construction or whole-value replacement must supply checked evidence. Existing dependent-field mutation restrictions still apply. A spec does not manufacture struct invariants.
-
-The broader design can also support transparent struct declarations inside module specs: complete ordered fields, all public, including dependent proof fields. Implementation layout and propositions must match; no hidden extra fields may be appended. Such a type can be useful in Locus but fails Rust export when a public field is logical. Transparent structs, enums and their constructor interfaces are explicitly deferred.
-
-Proposition declarations in future headers must specify constructors or deliberate opaque introduction/elimination laws. An unknown body cannot be treated as transparent. Initially, define propositions normally outside the spec and reference them by path.
-
-## Initial limits and lowering
-
-The first subset is concrete module and struct-type specs, ordinary/logical function headers, supported receivers and proof/data signatures, plus constant headers. Generic specs/methods, traits, associated type families, enum representations, transparent fields, nested header specs, header `use` items, default bodies and arbitrary spec attributes are deferred. Existing concrete uses such as `Option<u8>` remain valid in signatures.
-
-Specs are checked before ordinary module lowering. Only actual definitions reach elaboration, augmented with header visibility and promises. Header/body mismatch diagnostics point to both locations. Type-spec completeness must also be checked after path resolution so aliases or implementations elsewhere cannot bypass it. This requires no new kernel rule or runtime representation.
-
-## Export and packaging
-
-`pub` controls Locus visibility; export roots separately select Rust exposure. Proof-returning functions can use the existing data-only facade. Proof inputs, public logical fields and other forbidden positions still fail export. Necessary private runtime helpers are emitted privately.
-
-Specs and implementations are ordinary packaged `.lc` source. Cargo ownership, proof locks and build receipts apply. Contract/source changes enter the normal input fingerprint. Generated Rust remains a build artifact, not an independently editable verified header.
-
-## Relationship to traits
-
-A type spec names one nominal type with one representation. A trait names a requirement that many types may implement. Share member grammar, associated-type concepts, logical methods and contract checking, but keep these identities distinct: a trait alone does not choose which concrete value `new` constructs. The future spelling `spec trait` can describe an existing or external trait interface without collapsing it into a concrete `spec type`. Generic trait bounds and implementation selection belong to the trait/generics project.
+- Prove the adapter lowering preserves results, evaluation order, mutation and the safe Rust abstraction boundary; passing differential and hostile-client tests is evidence, not a mechanized preservation theorem.
+- Generalize abstract models and proof contracts over Self without exposing representation capabilities.
+- Expand Self adapters only with explicit lifetime/ownership rules. No reference casts or automatic container reconstruction.
+- Define generic associated types, traits and native implementation selection alongside universal generic checking.
+- Keep generated artifacts reproducible, audit native assumptions and report toolchain/schema/configuration mismatches before trusting cached imports.

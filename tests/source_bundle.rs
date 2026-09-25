@@ -50,3 +50,26 @@ fn single_source_and_cross_segment_recovery_keep_valid_ranges() {
         Span::new(second, 1, 1)
     );
 }
+
+#[test]
+fn synthetic_fragments_cannot_make_diagnostic_spans_leave_the_original() {
+    use locus::source::{SourceBundle, SourceMap, Span};
+    let mut sources = SourceMap::default();
+    let file = sources.add("driver.lc", "");
+    let bundle = SourceBundle::fragments(
+        &mut sources,
+        "bundle",
+        &[(Span::new(file, 0, 0), "mod __locus_unit0 {}".into())],
+    );
+    assert_eq!(
+        bundle.span(Span::new(bundle.file, 4, 17)),
+        Span::new(file, 0, 0)
+    );
+    let d = locus::diagnostic::Diagnostic::error(
+        "L0502",
+        "synthetic input",
+        Span::new(bundle.file, 4, 17),
+    );
+    let rendered = bundle.diagnostic(&d).render(&sources, false);
+    assert!(rendered.contains("synthetic input"));
+}

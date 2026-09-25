@@ -63,7 +63,7 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
                 // The source monomorphizer names each instantiated template.
                 // Runtime dependency specializations need an ABI mapping; do
                 // not silently copy their implementation into the consumer.
-                let prefix = format!("__locus_{}_", item.canonical);
+                let prefix = format!("__locus_{}_", item.canonical.trim_start_matches('_'));
                 if module.fns.iter().any(|f| f.name.starts_with(&prefix))
                     || module.structs.iter().any(|s| s.name.starts_with(&prefix))
                     || module.enums.iter().any(|e| e.name.starts_with(&prefix))

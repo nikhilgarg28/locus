@@ -87,3 +87,7 @@ Canonical models obey that source boundary as well: their bodies may inspect rep
 ## Reviewed interfaces still need proofs
 
 [Concrete specs](spec/18-specifications.md) do not turn declarations into assumptions. Tests in `tests/specifications.rs` reject missing bodies, altered proof signatures, false output evidence, weakened effect promises and alias-based extra implementations. Real files exercise split headers/definitions and original diagnostic locations; generated Rust runs under warning denial and rejects private representation access. Kernel checking of the implementation remains necessary after matching the header.
+
+## Checked spec adapters
+
+A type spec supplies a contract, not evidence. Both the manual representation body and its generated opaque adapter pass the ordinary compiler and kernel checks. Tests cover missing/duplicate implementations, changed propositions, false evidence, mutable effects and hostile Rust clients. Resolved signature matching and adapter/privacy lowering are counted in the compiler trust inventory. Generic bodies remain checked at concrete instantiation; declarations alone do not certify all instantiations. Module specs and more general representation conversions remain deferred.

@@ -413,9 +413,15 @@ impl Parser<'_> {
         let (doc, mut attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
         if self.in_spec {
-            if visibility.is_some() || !matches!(self.current().kind, K::Fn | K::Logic | K::Const) {
-                self.diagnostics.push(Diagnostic::error("L0510",
-                    "spec members are public function or constant headers; other forms are not supported yet", start));
+            if visibility.is_some()
+                || (!matches!(self.current().kind, K::Fn | K::Logic | K::Const)
+                    && !self.at_keyword("type"))
+            {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0510",
+                    "spec members are implicitly public fn, logic fn, const, or type headers",
+                    start,
+                ));
                 return Err(());
             }
             if attributes.iter().any(|a| !a.kind.is_promise()) {
@@ -438,12 +444,14 @@ impl Parser<'_> {
                 span: start.through(end),
             });
         }
-        if self.in_impl && !matches!(self.current().kind, K::Fn | K::Logic | K::Const) {
-            return self.fail(
-                "an `impl` block holds functions and constants: `fn`, `logic fn`, or `const`",
-            );
+        if self.in_impl
+            && !matches!(self.current().kind, K::Fn | K::Logic | K::Const)
+            && !self.at_keyword("type")
+        {
+            return self
+                .fail("an `impl` block holds functions, constants and associated type bindings");
         }
-        if !self.declaration_start() {
+        if !(self.declaration_start() || self.in_impl && self.at_keyword("type")) {
             return self.fail(
                 "expected a declaration: `fn`, `struct`, `enum`, `prop`, `const`, or `impl`",
             );
@@ -646,6 +654,17 @@ impl Parser<'_> {
                 };
                 Ok((DeclarationKind::Constant { name, ty, value }, end.span))
             }
+            K::Keyword if self.source.slice(start.span) == Some("type") && self.in_impl => {
+                let name = self.name()?;
+                let value = if self.in_spec {
+                    None
+                } else {
+                    self.expect(K::Equal)?;
+                    Some(self.ty()?)
+                };
+                let end = self.expect(K::Semicolon)?.span;
+                Ok((DeclarationKind::AssociatedType { name, value }, end))
+            }
             K::Name if self.source.slice(start.span) == Some("spec") => self.spec_item(),
             K::Keyword if self.source.slice(start.span) == Some("impl") => self.impl_block(visible),
             K::Keyword if self.source.slice(start.span) == Some("mod") => self.module_item(),
@@ -665,6 +684,11 @@ impl Parser<'_> {
     fn spec_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         self.nested(|this| {
             let module = if this.at_keyword("mod") {
+                this.diagnostics.push(Diagnostic::error(
+                    "L0510",
+                    "module specs are deferred; use `spec type` and ordinary modules",
+                    this.current().span,
+                ));
                 true
             } else if this.at_keyword("type") {
                 false
@@ -673,14 +697,7 @@ impl Parser<'_> {
             };
             this.bump();
             let name = this.name()?;
-            if this.at(K::Less) {
-                this.diagnostics.push(Diagnostic::error(
-                    "L0510",
-                    "generic specs are not supported yet",
-                    this.current().span,
-                ));
-                return Err(());
-            }
+            let generics = this.generic_parameters()?;
             let open = this.expect(K::LBrace)?;
             let saved = (this.in_spec, this.in_impl);
             this.in_spec = true;
@@ -693,6 +710,7 @@ impl Parser<'_> {
                 DeclarationKind::Spec {
                     module,
                     name,
+                    generics,
                     members,
                 },
                 end,
@@ -888,18 +906,31 @@ impl Parser<'_> {
             ));
         }
         if self.at_keyword("mod") {
+            self.diagnostics.push(Diagnostic::error(
+                "L0510",
+                "module spec implementations are deferred; use `impl Spec for Representation`",
+                self.current().span,
+            ));
             self.bump();
             let (DeclarationKind::Module { name, body }, end) = self.module_item()? else {
                 unreachable!()
             };
             return Ok((DeclarationKind::ModuleImpl { name, body }, end));
         }
-        self.no_generics()?;
+        let generics = self.generic_parameters()?;
         if !self.at_named() {
             return self.fail("expected the type an `impl` block is for");
         }
         let first = self.path()?;
         if first.text() == "Model" && self.at(K::For) {
+            if !generics.is_empty() {
+                self.diagnostics.push(Diagnostic::error(
+                    "L0116",
+                    "generic Model implementations are not supported yet",
+                    first.span,
+                ));
+                return Err(());
+            }
             self.bump();
             let source = self.ty()?;
             let opening = self.expect(K::LBrace)?;
@@ -964,6 +995,7 @@ impl Parser<'_> {
             let span = first.span.through(end.span);
             return Ok((
                 DeclarationKind::Impl {
+                    generics,
                     target,
                     model: Some(ModelImpl {
                         source,
@@ -978,24 +1010,71 @@ impl Parser<'_> {
         if first.text() == "Model" && self.at(K::Less) {
             return self.fail("write `impl Model for Source { type Logic = Destination; logic fn model(&self) -> Self::Logic { ... } }`; each source has one canonical model");
         }
-        let (target, model) = (first, None);
-        self.no_generics()?;
+        let mut arguments = Vec::new();
+        if self.at(K::Less) {
+            let opening = self.bump();
+            while !self.at_angle_close() && !self.at(K::Eof) {
+                self.step();
+                arguments.push(self.type_argument()?);
+                if self.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            self.close_angle(opening)?;
+        }
         if self.at(K::For) {
+            self.bump();
+            let representation = self.ty()?;
+            let opening = self.expect(K::LBrace)?;
+            let saved = std::mem::replace(&mut self.in_impl, true);
+            let members = self.impl_body();
+            self.in_impl = saved;
+            let members = members?;
+            let end = self.close(K::RBrace, opening)?.span;
+            let target = Type {
+                span: first.span,
+                kind: if arguments.is_empty() && first.single().is_some() {
+                    TypeKind::Named(first.segments[0].clone())
+                } else {
+                    TypeKind::Path {
+                        path: Box::new(first),
+                        arguments,
+                    }
+                },
+            };
+            return Ok((
+                DeclarationKind::SpecImpl {
+                    generics,
+                    target,
+                    representation,
+                    members,
+                },
+                end,
+            ));
+        }
+        if !arguments.is_empty() || !generics.is_empty() {
             self.diagnostics.push(Diagnostic::error(
                 "L0116",
-                "traits (`impl Trait for Type`) are not in Locus yet",
-                self.current().span,
+                "generic inherent impls require a checked spec realization for now",
+                first.span,
             ));
             return Err(());
         }
+        let (target, model) = (first, None);
         let opening = self.expect(K::LBrace)?;
         let saved = std::mem::replace(&mut self.in_impl, true);
         let methods = self.impl_body();
         self.in_impl = saved;
         let methods = methods?;
+        for method in &methods {
+            if matches!(method.kind, DeclarationKind::AssociatedType { .. }) {
+                self.diagnostics.push(Diagnostic::error("L0510", "associated type bindings require a spec implementation or Model implementation", method.span));
+            }
+        }
         let end = self.close(K::RBrace, opening)?;
         Ok((
             DeclarationKind::Impl {
+                generics,
                 model,
                 target,
                 methods,
@@ -1079,19 +1158,6 @@ impl Parser<'_> {
         }
         self.close_angle(opening)?;
         Ok(parameters)
-    }
-
-    /// `<` after the name an item declares.
-    fn no_generics(&mut self) -> ParseResult<()> {
-        if self.at(K::Less) {
-            self.diagnostics.push(Diagnostic::error(
-                "L0116",
-                "generic parameters are not in Locus yet",
-                self.current().span,
-            ));
-            return Err(());
-        }
-        Ok(())
     }
 
     #[inline(never)]

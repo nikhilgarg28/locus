@@ -1473,23 +1473,29 @@ impl<'a> Parser<'a> {
             // postfix wrappers, which do not recurse through the parser.
             let enclosing_deepest = parser.deepest;
             parser.deepest = parser.depth;
-            let mut term = parser.atom()?;
-            loop {
-                let function_depth = parser.deepest;
-                if parser.eat(".") {
-                    let index = parser.index()?;
-                    parser.postfix_node(function_depth)?;
-                    term = Term::Proj(Box::new(term), index);
-                } else if parser.peek() == Tok::Punct("(") {
-                    let arguments = parser.terms()?;
-                    parser.postfix_node(function_depth)?;
-                    term = Term::Call(Box::new(term), arguments);
-                } else {
-                    parser.deepest = parser.deepest.max(enclosing_deepest);
-                    return Ok(term);
-                }
-            }
+            let term = parser.atom()?;
+            parser.postfix(term, enclosing_deepest)
         })
+    }
+
+    // Keep postfix temporaries out of the frame that recursively reads an
+    // atom. At MAX_DEPTH, debug-build frame sizes are part of our bound.
+    fn postfix(&mut self, mut term: Term, enclosing_deepest: usize) -> Parsed<Term> {
+        loop {
+            let function_depth = self.deepest;
+            if self.eat(".") {
+                let index = self.index()?;
+                self.postfix_node(function_depth)?;
+                term = Term::Proj(Box::new(term), index);
+            } else if self.peek() == Tok::Punct("(") {
+                let arguments = self.terms()?;
+                self.postfix_node(function_depth)?;
+                term = Term::Call(Box::new(term), arguments);
+            } else {
+                self.deepest = self.deepest.max(enclosing_deepest);
+                return Ok(term);
+            }
+        }
     }
 
     fn postfix_node(&mut self, previous_depth: usize) -> Parsed<()> {
@@ -1864,7 +1870,7 @@ impl<'a> Parser<'a> {
         // Keep the small recursion frame needed at MAX_KERNEL_DEPTH, while
         // charging proof nodes just like the generic nested parser does.
         self.enter()?;
-        let result = self.proof_inner();
+        let result = self.read_proof();
         self.depth -= 1;
         result
     }
@@ -1903,27 +1909,43 @@ impl<'a> Parser<'a> {
         ("linear", Self::linear),
     ];
 
-    fn proof_inner(&mut self) -> Parsed<Proof> {
+    fn read_proof(&mut self) -> Parsed<Proof> {
+        let (rule, closed) = self.proof_rule()?;
+        let result = rule(self);
+        if closed && result.is_ok() {
+            self.expect(")")?;
+        }
+        result
+    }
+
+    // Resolve the rule before descending: diagnostics and leaf dispatch do
+    // not need to occupy a frame for every nested proof argument.
+    fn proof_rule(&mut self) -> Parsed<(Rule<'a>, bool)> {
         let word = match self.peek() {
             Tok::Ident(word) => word,
-            _ => return self.leaf_proof(),
+            _ => return Ok((Self::leaf_proof, false)),
         };
         if word == "omitted"
             || (word.starts_with('h') && word[1..].bytes().all(|byte| byte.is_ascii_digit()))
         {
-            return self.leaf_proof();
+            return Ok((Self::leaf_proof, false));
         }
         if steps::is_step_name(word) {
-            return self.proof_step(word);
+            return Ok((Self::read_proof_step, false));
         }
         let Some((_, rule)) = Self::RULES.iter().find(|(known, _)| *known == word) else {
             return self.error(format!("`{word}` is not a proof rule"));
         };
         self.bump();
         self.expect("(")?;
-        let proof = rule(self)?;
-        self.expect(")")?;
-        Ok(proof)
+        Ok((*rule, true))
+    }
+
+    fn read_proof_step(&mut self) -> Parsed<Proof> {
+        let Tok::Ident(word) = self.peek() else {
+            unreachable!()
+        };
+        self.proof_step(word)
     }
 
     /// A proof with nothing inside it: a hypothesis, or `omitted`.

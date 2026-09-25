@@ -180,6 +180,14 @@
     {
       "path": "src/elab/models.rs",
       "category": "mixed: canonical observation and derived-model privacy; proof construction untrusted"
+    },
+    {
+      "path": "src/project/specs.rs",
+      "category": "opaque spec identity, contract matching and checked adapter lowering"
+    },
+    {
+      "path": "src/project/specs/walk.rs",
+      "category": "structural substitution used by opaque spec lowering"
     }
   ]
 }

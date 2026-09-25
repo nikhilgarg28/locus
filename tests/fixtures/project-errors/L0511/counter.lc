@@ -1,1 +1,4 @@
-fn read(n: u16) -> u8 { 0 }
+struct Representation {}
+impl crate::Counter for Representation {
+    fn read(n: u16) -> u8 { 0 }
+}

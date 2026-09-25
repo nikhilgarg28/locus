@@ -349,6 +349,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             module,
             name,
             members,
+            ..
         } => {
             out.push_str(&format!(
                 "spec {} {} {{ {} members }}",
@@ -357,6 +358,24 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
                 members.len()
             ));
         }
+        DeclarationKind::SpecImpl {
+            target,
+            representation,
+            members,
+            ..
+        } => out.push_str(&format!(
+            "impl {} for {} {{ {} members }}",
+            grouped_ty(target),
+            grouped_ty(representation),
+            members.len()
+        )),
+        DeclarationKind::AssociatedType { name, value } => out.push_str(&format!(
+            "type {}{};",
+            name.text,
+            value
+                .as_ref()
+                .map_or(String::new(), |t| format!(" = {}", grouped_ty(t)))
+        )),
         DeclarationKind::ModuleImpl { name, body } | DeclarationKind::Module { name, body } => {
             out.push_str(&format!(
                 "mod {}{}",
@@ -588,7 +607,7 @@ fn impl_blocks_hold_methods_associated_functions_and_constants() {
     for (text, message) in [
         (
             "impl S { struct T { x: u8 } }",
-            "an `impl` block holds functions and constants: `fn`, `logic fn`, or `const`",
+            "an `impl` block holds functions, constants and associated type bindings",
         ),
         (
             "impl S { fn f(n: u8, self) -> u8 { 1 } }",
@@ -3335,18 +3354,13 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
 fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
     for (text, message, declarations) in [
         (
-            "impl Show for S { fn get() -> u8 { 1 } }",
-            "traits (`impl Trait for Type`) are not in Locus yet",
-            0,
-        ),
-        (
             "impl<T> S { fn get() -> u8 { 1 } }",
-            "generic parameters are not in Locus yet",
+            "generic inherent impls require a checked spec realization for now",
             0,
         ),
         (
             "impl S<T> { fn get() -> u8 { 1 } }",
-            "generic parameters are not in Locus yet",
+            "generic inherent impls require a checked spec realization for now",
             0,
         ),
         (

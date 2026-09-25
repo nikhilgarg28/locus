@@ -39,6 +39,7 @@ pub(super) fn specialize(
         return_type: None,
         model_serial: 0,
         quantifier_templates: HashSet::new(),
+        impl_templates: HashMap::new(),
     };
     for declaration in &program.declarations {
         pass.register(declaration.clone(), false);
@@ -49,9 +50,18 @@ pub(super) fn specialize(
         if let DeclarationKind::Impl {
             target,
             model: None,
+            generics,
             methods,
+            ..
         } = &declaration.kind
         {
+            if !generics.is_empty() {
+                pass.impl_templates
+                    .entry(target.text())
+                    .or_default()
+                    .push(declaration.clone());
+                continue;
+            }
             let self_type = Type {
                 span: target.span,
                 kind: TypeKind::Named(target.segments.last().expect("impl target").clone()),
@@ -153,6 +163,7 @@ struct Specializer<'a> {
     return_type: Option<Type>,
     model_serial: usize,
     quantifier_templates: HashSet<String>,
+    impl_templates: HashMap<String, Vec<Declaration>>,
 }
 
 impl Specializer<'_> {
@@ -288,7 +299,7 @@ impl Specializer<'_> {
         let mut serial = self.instances.len();
         let name = loop {
             let name = if matches!(declaration.kind, DeclarationKind::Function { .. }) {
-                format!("__locus_{template}_{serial}")
+                format!("__locus_{}_{serial}", template.trim_start_matches('_'))
             } else {
                 let stem = template
                     .split('_')
@@ -321,7 +332,36 @@ impl Specializer<'_> {
         rename_instance(&mut declaration, &name);
         self.declarations
             .insert(name.clone(), (declaration.clone(), substitutions.clone()));
-        self.queue.push_back((declaration, substitutions));
+        self.queue.push_back((declaration, substitutions.clone()));
+        if let Some(impls) = self.impl_templates.get(template).cloned() {
+            for mut implementation in impls {
+                if let DeclarationKind::Impl {
+                    target,
+                    generics,
+                    methods,
+                    ..
+                } = &mut implementation.kind
+                {
+                    target.segments = vec![Name {
+                        text: name.clone(),
+                        span: target.span,
+                    }];
+                    generics.clear();
+                    let mut method_substitutions = substitutions.clone();
+                    method_substitutions.insert("Self".into(), named_type(&target.segments[0]));
+                    for method in methods {
+                        if let Some(member) = declaration_name(method) {
+                            self.declarations.insert(
+                                format!("{name}::{}", member.text),
+                                (method.clone(), method_substitutions.clone()),
+                            );
+                        }
+                    }
+                }
+                self.queue
+                    .push_back((implementation, substitutions.clone()));
+            }
+        }
         if self.quantifier_templates.contains(template) {
             let companion = if template == "Exists" {
                 "ForAll"
@@ -357,7 +397,9 @@ impl Specializer<'_> {
     fn declaration(&mut self, declaration: &mut Declaration, substitutions: &Types) {
         let mut locals = Types::new();
         match &mut declaration.kind {
-            DeclarationKind::Spec { .. }
+            DeclarationKind::SpecImpl { .. }
+            | DeclarationKind::AssociatedType { .. }
+            | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }
             | DeclarationKind::Use { .. } => {
@@ -421,6 +463,7 @@ impl Specializer<'_> {
                 target,
                 model,
                 methods,
+                ..
             } => {
                 let mut substitutions = substitutions.clone();
                 if let Some(model) = model {
@@ -1403,7 +1446,8 @@ fn all_parameters(declaration: &Declaration) -> &[GenericParameter] {
         DeclarationKind::Function { generics, .. }
         | DeclarationKind::Struct { generics, .. }
         | DeclarationKind::Enum { generics, .. }
-        | DeclarationKind::Prop { generics, .. } => generics,
+        | DeclarationKind::Prop { generics, .. }
+        | DeclarationKind::Impl { generics, .. } => generics,
         _ => &[],
     }
 }

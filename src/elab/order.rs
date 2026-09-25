@@ -43,6 +43,7 @@ pub(super) fn units(program: &Program) -> Vec<Unit<'_>> {
                 target,
                 model,
                 methods,
+                ..
             } => {
                 units.extend(methods.iter().map(|method| Unit {
                     declaration: method,
@@ -374,6 +375,8 @@ fn declared_namespace(declaration: &Declaration) -> Option<Namespace> {
         | DeclarationKind::Enum { .. }
         | DeclarationKind::Prop { .. } => Some(Namespace::Type),
         DeclarationKind::Impl { .. }
+        | DeclarationKind::SpecImpl { .. }
+        | DeclarationKind::AssociatedType { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -390,6 +393,8 @@ pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
         | DeclarationKind::Prop { name, .. }
         | DeclarationKind::Constant { name, .. } => Some(name),
         DeclarationKind::Impl { .. }
+        | DeclarationKind::SpecImpl { .. }
+        | DeclarationKind::AssociatedType { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -586,6 +591,8 @@ impl Mentions<'_> {
             }
             // Its functions are units of their own.
             DeclarationKind::Impl { .. }
+            | DeclarationKind::SpecImpl { .. }
+            | DeclarationKind::AssociatedType { .. }
             | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }

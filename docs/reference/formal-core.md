@@ -152,3 +152,8 @@ A future `tools/validate-formal` entry point must run from a clean checkout with
 
 <!-- spec: 3.8:3 legality-rule -->
 **Natural representation.** Source `Nat` lowers to a checked Logical product `(value: Int, nonnegative: @(0 <= value))`. An unsigned observation constructs this product using its existing checked machine-range law. Nat arithmetic projects the integer values and constructs a result with checked nonnegativity evidence. Subtraction requires that evidence from the caller's context. Widening projects `value`; conversion in the other direction requires constructing the product. No new arithmetic axiom is introduced.
+
+## Opaque spec realization obligation
+
+<!-- spec: 3.9:1 informative -->
+Type-spec lowering checks a unique package-owned representation and generates a distinct nominal wrapper plus ordinary checked adapters. Signature matching retains logical mode, binders and evidence. The compiler must preserve invocation count, sequencing, mutable snapshots and ownership through wrapping/unwrapping; representation methods and fields must not become accessible through the public spec. No generated body or header is an axiom. Generic bodies are checked on instantiation; this is not a universal generic soundness claim. Unsupported borrowed/container conversions fail closed. These are compiler preservation obligations tested by spec, IR and hostile Rust-client regressions; they are not yet a mechanized lowering proof.

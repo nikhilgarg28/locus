@@ -345,6 +345,8 @@ fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
         | DeclarationKind::Prop { name, .. }
         | DeclarationKind::Constant { name, .. } => Some(&name.text),
         DeclarationKind::Impl { .. }
+        | DeclarationKind::SpecImpl { .. }
+        | DeclarationKind::AssociatedType { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -502,6 +504,8 @@ impl Env<'_> {
                 }
                 DeclarationKind::Prop { .. }
                 | DeclarationKind::Impl { .. }
+                | DeclarationKind::SpecImpl { .. }
+                | DeclarationKind::AssociatedType { .. }
                 | DeclarationKind::Spec { .. }
                 | DeclarationKind::ModuleImpl { .. }
                 | DeclarationKind::Module { .. }
@@ -825,6 +829,7 @@ impl Env<'_> {
                 target,
                 model,
                 methods,
+                ..
             } = &declaration.kind
             else {
                 continue;
@@ -1408,7 +1413,9 @@ impl Env<'_> {
                 self.refuse_derive(attributes, "a proposition");
                 self.prop(name, parameters, variants)
             }
-            DeclarationKind::Spec { .. }
+            DeclarationKind::SpecImpl { .. }
+            | DeclarationKind::AssociatedType { .. }
+            | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }
             | DeclarationKind::Use { .. } => self.fail(

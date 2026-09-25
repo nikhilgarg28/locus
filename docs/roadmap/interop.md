@@ -56,24 +56,24 @@ The delivered work is recorded in [LOC-240](#LOC-240) (projection and emission),
 
 ## Specifications and native imports
 
-The [specification design](../vision/spec-interfaces.md) and [separate import design](../vision/rust-imports.md) define this work. LOC-39 owns manual interfaces; LOC-44 owns native interoperability. Implement in this order, with an explicit stop before imports:
+The [type-spec design](../vision/spec-interfaces.md) and [import design](../vision/rust-imports.md) are separate layers. The old module/same-name-struct prototype (LOC-243–245) is superseded by the [opaque type plan](../plans/opaque-spec-types.md).
 
-1. LOC-243: parse concrete module/type spec headers and manual bodies; retain original spans and reject deferred grammar deliberately.
-2. LOC-244: completeness, exact signatures, inherited promises, privacy and alias-resistant implementation checks; pass all bodies through existing proof checking.
-3. LOC-245: real-directory positive/negative fixtures, compiled Rust and hostile clients, executable documentation and complete validation. Then discuss the import design live.
-4. LOC-246: native identity discovery and rustc validation for explicit specs under Cargo configuration. No behavioral assumptions may conceal a signature mismatch.
-5. LOC-247: audited output-proof adapters, caller-owned input obligations, result projection and effect preservation.
-6. LOC-248: generation-only CLI, inspected editable output, explicit unsupported-member diagnostics; no update command.
-7. LOC-249: packaging, changed dependency/configuration provenance, hostile callers, end-to-end Cargo tests and import documentation/gates.
-8. LOC-250: broaden manual specs after the concrete subset: elaborated/alpha-renamed matching, split implementations, generics coordinated with LOC-21/LOC-22, transparent structs/enums, proposition interfaces and logical opacity.
+1. LOC-252: resolved type-spec grammar, associated items and signature matching.
+2. LOC-253: distinct public types with checked representation adapters.
+3. LOC-254: whole-family uniqueness, package ownership and focused regressions.
+4. LOC-255: documentation migration and full validation; commit this stage independently.
+5. LOC-246: plain native imports from rustdoc JSON, preserving foreign identity independently of specs.
+6. LOC-249: stable-toolchain extraction, Cargo feature/target coherence, schema guards, readable diagnostics and acceptance tests; commit separately.
+7. LOC-247: future explicitly assumed spec realizations. No input-proof manufacture; output assumptions are audited.
+8. LOC-248 and LOC-250: optional editable spec generation and broader interface expressiveness.
 
-Success for manual specs means: an unused unimplemented declaration fails; a false promised proof still fails; signature disagreement cites both locations; implementation helpers cannot leak; aliases cannot bypass type-spec completeness; external implementation files execute after Rust generation; no new trusted proof rule is introduced. Success for imports additionally requires correct native identity and audited conditional assumptions. Those latter claims cannot be marked complete by passing manual-spec tests.
+Manual specs succeed only when missing implementations and false proofs fail, signatures cite both locations, abstraction survives generated Rust, and all generated code passes normal checking. Native imports add no behavioral proofs. The compiler must distinguish unavailable/unsupported native items from missing names.
 
 <a id="LOC-39"></a>
 ## LOC-39 · Reviewed headers and implementation separation
 <!-- task: {"id": "t47", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-The concrete implementation is delivered in LOC-243 through LOC-245, with the full design and ordered plan below. Existing source fingerprints cover header inputs. Broader signature equivalence, generic/trait interfaces and logical opacity remain in LOC-250. Module organization (LOC-41) supplies ownership and file loading.
+The first prototype in LOC-243–245 is superseded by the opaque type work in LOC-252–255. Existing source fingerprints cover header inputs. Traits and logical opacity remain in LOC-250. Module organization (LOC-41) supplies ownership and file loading.
 
 <a id="LOC-41"></a>
 ## LOC-41 · Modules, imports and cross-file resolution
@@ -143,48 +143,74 @@ Updated the manuals, checked examples, package guide, architecture, formal-core 
 
 <a id="LOC-243"></a>
 ## LOC-243 · Spec grammar and module/type realizations
-<!-- task: {"id":"interop-243","status":"done","priority":3} -->
+<!-- task: {"id": "interop-243", "status": "done", "priority": 3} -->
 
-Implemented concrete function/logic-function/constant headers, spec mod/type, inline/file-loaded module implementations and opaque private struct representations. Parser fuzz fragments and a nesting-limit regression cover the new productions.
+Historical prototype: concrete module/type headers and same-named private representations. Superseded by LOC-252–255; module specs are now deferred under LOC-250.
 
 <a id="LOC-244"></a>
 ## LOC-244 · Checked interface matching
-<!-- task: {"id":"interop-244","status":"done","priority":3} -->
+<!-- task: {"id": "interop-244", "status": "done", "priority": 3} -->
 
-Implemented exact signature checks including evidence, inherited promises, complete unique realizations and rejection of extra public members. Canonical resolution closes alias/cross-module bypasses. The 16 tests in `tests/specifications.rs` cover false outputs, mutation, input obligations, logic mode, duplicates, private fields, file discovery and generated Rust.
+Historical token-matching prototype, superseded by resolved matching and distinct nominal representations in LOC-252–255. Its regression coverage is migrated rather than discarded.
 
 <a id="LOC-245"></a>
 ## LOC-245 · Manual-spec acceptance and documentation
-<!-- task: {"id":"interop-245","status":"done","priority":3} -->
+<!-- task: {"id": "interop-245", "status": "done", "priority": 3} -->
 
-Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. Import implementation remains pending live review.
+Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. This prototype is superseded by LOC-252–255; current import work follows the revised plain-import design.
 
 <a id="LOC-246"></a>
-## LOC-246 · Bind explicit specs to native Rust interfaces
-<!-- task: {"id":"interop-246","status":"backlog","priority":3} -->
+## LOC-246 · Import physical Rust interfaces
+<!-- task: {"id": "interop-246", "status": "backlog", "priority": 3} -->
 
-Implement import path [as spec], native lookup and physical signature checks, including host visibility, constants, ownership and dependency aliases. Unsupported forms fail explicitly. Depends on live design review and LOC-245.
+Implement `import path [as alias]` independently of specs, using guarded rustdoc JSON extraction and a versioned internal representation. Retain all public entities, including traits, async and unsafe signatures, with explicit foreign provenance. Unsupported uses explain the limitation; imported names carry no behavioral proofs. Account for Cargo aliases, target/features, identity and actual native availability.
 
 <a id="LOC-247"></a>
 ## LOC-247 · Audited native proof adapters
-<!-- task: {"id":"interop-247","status":"backlog","priority":3} -->
+<!-- task: {"id": "interop-247", "status": "backlog", "priority": 3} -->
 
-Generate output-only assumptions, preserve caller proof inputs and exactly-once effects, handle mutable snapshots and panic behavior. Reject unsupported logical data/struct invariants. Inventory all native assumptions and retain export restrictions.
+Future `assume ImportedType impl Spec` requires no proof inputs in the initial contract. Match physical signatures while omitting output evidence only, then generate audited normal-return assumptions. Preserve exactly-once effects, snapshots and panic behavior; reject unsupported logical values or invariant construction. Separate from plain imports.
 
 <a id="LOC-248"></a>
 ## LOC-248 · Generate editable native spec source
-<!-- task: {"id":"interop-248","status":"backlog","priority":2} -->
+<!-- task: {"id": "interop-248", "status": "backlog", "priority": 2} -->
 
-Separate generate command; no automatic extraction in imports, no update command and no overwriting source. Test omissions, unsupported members, extraction failures and handwritten fallback against the same binder.
+Optional command to generate editable spec source from the plain-import representation. No update/merge command or automatic overwriting of user source. Plain imports themselves automatically extract physical metadata; this task only adds proof-contract scaffolding.
 
 <a id="LOC-249"></a>
 ## LOC-249 · Native import packaging and acceptance
-<!-- task: {"id":"interop-249","status":"backlog","priority":3} -->
+<!-- task: {"id": "interop-249", "status": "backlog", "priority": 3} -->
 
 Cargo-host/dependency fixtures, publication identity, configuration changes, stale metadata and receipts, same-crate/downstream hostile consumers, diagnostic snapshots, documentation and full gates. Behavioral assumptions remain visible after compatible-signature dependency updates.
 
 <a id="LOC-250"></a>
 ## LOC-250 · Expand specification expressiveness
-<!-- task: {"id":"interop-250","status":"backlog","priority":1} -->
+<!-- task: {"id": "interop-250", "status": "backlog", "priority": 1} -->
 
-Elaborated signature matching, binder renaming, separately partitioned implementation blocks, generic specs/methods and traits (including spec trait and native trait binding, with per-implementation logical laws), transparent fields/enums, nested header interfaces and uses, proposition contracts, constant value contracts, logical opacity and declaration-only checked artifacts. Each extension needs explicit completeness, identity and proof-boundary tests; coordinate rather than duplicate the generic/trait projects.
+Deferred: module specs with nested opaque types and associated items; traits, arbitrary bounds, generic methods, associated type families and chained aliases; nested/borrowed/container Self adapters; transparent layouts, proposition interfaces, exact constant contracts, logical opacity and declaration-only artifacts. Each extension needs explicit identity, ownership, completeness and proof-boundary tests. Resolved signature matching and supported generic type families are handled by LOC-252–255.
+
+Module specs must define ordinary file organization and representation bindings before restoring their syntax. Type-only constant headers do not promise a value; language-wide `const fn` is [LOC-251](generics.md#LOC-251). General lifetime-aware representation conversions and universal checking of unused generic bodies are separate work, not implied by the initial implementation.
+
+<a id="LOC-252"></a>
+## LOC-252 · Resolved type-spec contracts
+<!-- task: {"id": "interop-252", "status": "done", "priority": 3} -->
+
+Implemented `spec type` and `impl Spec for Representation`, associated bindings, resolved binder-aware signature comparison and focused deferred-grammar errors. `tests/specifications.rs` and `tests/spec_type_revision.rs` exercise matching and rejection boundaries.
+
+<a id="LOC-253"></a>
+## LOC-253 · Checked opaque representation adapters
+<!-- task: {"id": "interop-253", "status": "done", "priority": 3} -->
+
+Implemented distinct nominal wrappers and checked owned/borrowed input and owned/tuple output adapters. Tests cover mutation, evidence, private construction, dependent-package helpers, generated Rust and interpreter agreement.
+
+<a id="LOC-254"></a>
+## LOC-254 · Spec family and package acceptance
+<!-- task: {"id": "interop-254", "status": "done", "priority": 3} -->
+
+Implemented one complete realization per declared family in its owning package, including unused declarations. Tests cover aliases, modules, concrete generic instances, proof mutation and compiled Rust consumers. Unused generic bodies retain instantiation checking, as documented.
+
+<a id="LOC-255"></a>
+## LOC-255 · Migrate and validate opaque spec documentation
+<!-- task: {"id": "interop-255", "status": "done", "priority": 3} -->
+
+Updated the manual, checked examples, diagnostics, architecture, formal core and trust inventory; preserved historical IDs and tracked deferred expansions. The extended gate completed with both compiler suites, documentation/site checks and measurements. The fast suite exceeded its advisory timing target. The existing maximum-depth proof-file regression also exposed excessive debug stack use; smaller parsing frames now preserve the original bound and test.

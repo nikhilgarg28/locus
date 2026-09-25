@@ -103,3 +103,13 @@ Remaining: Add/Sub/Mul/Div/Rem/Neg/Not/comparison/Index implementations with che
 <!-- task: {"id": "t240", "status": "todo", "priority": 1, "created": "2026-09-21T20:54:27.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
 Still unresolved before traits. Rust operator syntax/signatures do not expose an extra proof argument, so decide how an operator implementation states its panic precondition and how no_panic callers discharge it. Historical candidates were conditional promises or implicit evidence holes, with the latter constrained by Rust trait signatures. Depends on [LOC-21](generics.md#LOC-21), [LOC-125](generics.md#LOC-125).
+
+<a id="LOC-251"></a>
+## LOC-251 · Const functions across the language and Rust boundary
+<!-- task: {"id": "language-251", "status": "backlog", "priority": 2} -->
+
+Implement `const fn` as a checked physical function callable both at runtime and in constant initializers. Cover free functions, inherent methods, module paths, spec headers and matching implementations, generated Rust and proof-result facades where supported. Extend trait methods and native imports when those facilities exist; unsupported combinations must report a specific limitation. Const capability is part of an interface contract: an ordinary implementation cannot satisfy a const header. Coordinate specs and native binding with [LOC-250](interop.md#LOC-250) and [LOC-246](interop.md#LOC-246).
+
+Define the permitted constant-evaluation subset and its calls, local mutation, control flow, borrowing, allocation/destruction restrictions and evaluation limits. Preserve checked machine arithmetic and target behavior. A constant-evaluation panic or resource limit needs a diagnostic; reaching an evaluation limit is not evidence of divergence or a proof. `const fn` does not imply `logic fn`, totality or absence of runtime panics, and does not by itself admit physical calls into propositions. Any use in proofs must retain the checked model/kernel boundary.
+
+Acceptance: initializer/runtime results agree with both interpreters and compiled Rust; overflow and division failures are stable across build modes; non-const calls in constant contexts, invalid effects, cycles and limits are diagnosed. Test signatures across files, visibility, exported const-callable facades, imported native constness and toolchain compatibility without assuming values or behavior from a signature. Update grammar, manual examples, diagnostics, IR/erasure contracts and import generation together. General const generics remain a separate design question.

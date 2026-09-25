@@ -222,7 +222,20 @@ pub enum DeclarationKind {
     Spec {
         module: bool,
         name: Name,
+        generics: Vec<GenericParameter>,
         members: Vec<Declaration>,
+    },
+    /// A checked realization of an opaque spec type.
+    SpecImpl {
+        generics: Vec<GenericParameter>,
+        target: Type,
+        representation: Type,
+        members: Vec<Declaration>,
+    },
+    /// An associated type slot or its implementation binding.
+    AssociatedType {
+        name: Name,
+        value: Option<Type>,
     },
     /// `impl mod name { ... }`, or an external body loaded by the project loader.
     ModuleImpl {
@@ -273,6 +286,7 @@ pub enum DeclarationKind {
     /// `impl Name { ... }`: methods, associated functions, and constants,
     /// each with its own documentation, attributes, and visibility.
     Impl {
+        generics: Vec<GenericParameter>,
         /// The compiler-known Model bridge; ordinary inherent impls have none.
         model: Option<ModelImpl>,
         /// The type, by name or by path.
