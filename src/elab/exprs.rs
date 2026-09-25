@@ -192,6 +192,16 @@ impl Env<'_> {
 
     fn expr_inner(&mut self, expr: &ast::Expr, expected: Option<&Type>) -> Elab<Value> {
         match &expr.kind {
+            ExprKind::Scoped { value, ty, contextual } => {
+                // Expected types have already been instantiated over the actual
+                // call arguments and current SSA versions by the elaborator.
+                if *contextual && let Some(expected) = expected {
+                    self.check(value, expected)
+                } else {
+                    let ty = self.ty(ty)?;
+                    self.check(value, &ty)
+                }
+            }
             ExprKind::Array(fields) => self.array_literal(fields, expected, expr.span),
             ExprKind::Subscript { value, index } => self.buffer_operation(crate::kernel::BufferOp::Get,value,&[(**index).clone()],expr.span),
             ExprKind::GenericApply { .. } => {
@@ -313,7 +323,7 @@ impl Env<'_> {
                 ..
             } => self.cast(inner, ty, *as_span),
             ExprKind::Struct { path, fields } => match path.single() {
-                Some(name) => self.struct_literal(name, fields, expr.span),
+                Some(name) => self.struct_literal(name, fields, expected, expr.span),
                 None => self.variant_literal(path, fields, expected, expr.span),
             },
             ExprKind::Path(path) => match self.associated_constant(path) {

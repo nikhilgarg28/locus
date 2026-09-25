@@ -95,7 +95,6 @@ fn duplicate_pairs_missing_models_and_wrong_signatures_are_rejected() {
         "struct Point { x: u8 } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { model!(source.x) as Int } } impl Model for Point { type Logic = Int; logic fn model(source: &Point) -> Int { 0 } }",
         "#[derive(Logical)] struct Data { n: Int } fn f(x: u8) -> Data { x as Data }",
         "struct Point { x: u8 } impl Model for Point { type Logic = Int; fn model(source: &Point) -> Int { 0 } }",
-        "struct Point { x: u8 } impl Model for Point { type Logic = Int; logic fn model(source: Point) -> Int { 0 } }",
     ] {
         let result = check(text);
         assert!(

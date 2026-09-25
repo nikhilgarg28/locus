@@ -601,6 +601,10 @@ impl Mentions<'_> {
             self.logical = true;
         }
         match &ty.kind {
+            TypeKind::Scoped { name, claims } => {
+                self.type_name(name);
+                claims.iter().for_each(|claim| self.expr(claim));
+            }
             TypeKind::Named(name) => self.type_name(name),
             TypeKind::Path { path, arguments } => {
                 self.type_name(&path.segments[0]);
@@ -722,6 +726,10 @@ impl Mentions<'_> {
             self.logical = true;
         }
         match &expr.kind {
+            ExprKind::Scoped { value, ty, .. } => {
+                self.expr(value);
+                self.ty(ty);
+            }
             ExprKind::Subscript { value, index } => {
                 self.expr(value);
                 self.expr(index);

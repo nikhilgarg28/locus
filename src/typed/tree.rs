@@ -346,11 +346,13 @@ pub enum Expr {
         fields: Vec<Expr>,
     },
     Struct {
+        indices: Vec<Term>,
         id: StructId,
         name: String,
         fields: Vec<(String, Expr)>,
     },
     Variant {
+        indices: Vec<Term>,
         id: EnumId,
         enum_name: String,
         index: usize,

@@ -26,6 +26,6 @@ logic fn id_of(t: &Token) -> Int {
 fn in_a_claim(n: u8) -> (out: u8, @(out == n)) {
     let t = Token { id: n };
     let out = consume(t);
-    let claim = prop!(id_of(&t) == n); //~ error: L0240 borrow of moved value: `t`
+    let claim = prop!(id_of(&t) == n); //~ error: L0241 `t` was moved at line 28 and cannot be mentioned in a proposition afterwards; observe `t` with a model cast before the move
     (n, prove!(n == n))
 }

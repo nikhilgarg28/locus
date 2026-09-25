@@ -408,6 +408,7 @@ impl Parser<'_> {
             let (kind, attribute, end) = self.trusted_function()?;
             attributes.push(attribute);
             return Ok(Declaration {
+                captures: Vec::new(),
                 doc,
                 attributes,
                 visibility,
@@ -427,6 +428,7 @@ impl Parser<'_> {
         }
         let (kind, end) = self.item(visibility.as_ref().map(|visibility| visibility.span))?;
         Ok(Declaration {
+            captures: Vec::new(),
             doc,
             attributes,
             visibility,

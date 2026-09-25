@@ -224,16 +224,11 @@ function markdown(text, doc) {
   );
   return { html, toc };
 }
-function code(source, label = "locus") {
-  return `<figure class="code-block"><figcaption><span>${esc(label)}</span><button class="copy-code" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>${highlightLocus(source)}</code></pre></figure>`;
-}
 function components(name, doc) {
   const link = (route) => relative(doc.route, route);
   switch (name) {
     case "home":
       return `<div class="hero-actions"><a class="button primary" href="${link("examples.html")}">Start with an example <span>↗</span></a><a class="text-link" href="${link("specification/index.html")}">Read the language manual →</a></div><div class="field-notes"><span class="overline">From the source</span><a href="${link("specification/index.html")}"><strong>${db.coverage.normative}</strong> operative rules</a><a href="${link("correctness.html")}"><strong>${db.coverage.focused_tests}</strong> focused tests cited</a><span><strong>Rust</strong> compilation target</span></div>`;
-    case "specimen":
-      return `<div class="specimen"><div class="specimen-label"><span class="overline">Example 01</span><span>increment.lc</span></div>${code(db.specimen)}<div class="specimen-notes"><p><b>01 / A result</b><span><code>out: u8</code> is an ordinary byte.</span></p><p><b>02 / A guarantee</b><span><code>@(...)</code> describes the returned evidence.</span></p><p><b>03 / A checked step</b><span>The kernel verifies the proof filling <code>_</code>.</span></p></div></div>`;
     case "specification":
       return `<ol class="chapter-index">${chapters.map((d, i) => `<li><span class="chapter-number">${String(i + 1).padStart(2, "0")}</span><div><a href="${link(d.route)}">${esc(d.title)}</a><p>${esc(d.description || "")}</p></div><span aria-hidden="true">↗</span></li>`).join("")}</ol>`;
     case "assurance":

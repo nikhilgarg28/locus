@@ -479,6 +479,7 @@ impl<'a> Oracle<'a> {
     fn prop(&mut self, term: &Term) -> Option<bool> {
         self.tick()?;
         match term {
+            Term::Instance(..) => None,
             Term::Eq(ty, left, right) => {
                 if *ty == Type::Prop {
                     // Two propositions of different truth are not equal. Of
@@ -666,6 +667,7 @@ impl<'a> Oracle<'a> {
     fn value(&mut self, term: &Term) -> Option<Value> {
         self.tick()?;
         match term {
+            Term::Instance(value, _) => self.value(value),
             Term::Boxed(value) => Some(Value::Product(vec![self.value(value)?])),
             Term::Buffer { op, arguments, .. } => {
                 use locus::kernel::BufferOp;
@@ -1169,6 +1171,7 @@ fn describe_witness(witness: &Assignment) -> String {
 
 fn term_children(term: &Term) -> Vec<&Term> {
     match term {
+        Term::Instance(value, args) => std::iter::once(&**value).chain(args).collect(),
         Term::Free(_)
         | Term::Bound(_)
         | Term::Bool(_)
@@ -1205,6 +1208,9 @@ fn term_with_children(term: &Term, children: Vec<Term>) -> Term {
     let mut next = children.into_iter();
     let mut take = || next.next().expect("one replacement per child");
     match term {
+        Term::Instance(_, args) => {
+            Term::Instance(Box::new(take()), args.iter().map(|_| take()).collect())
+        }
         Term::Free(_)
         | Term::Bound(_)
         | Term::Bool(_)

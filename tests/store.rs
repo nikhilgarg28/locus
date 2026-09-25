@@ -1932,6 +1932,8 @@ fn nesting_at_the_limit_fits_a_small_stack_and_beyond_it_is_refused() {
     let limit = locus::kernel::MAX_DEPTH;
     for (form, close, innermost, levels, over) in [
         ("int_neg(", ")", "1", 1, false),
+        ("instance(", ", ())", "1", 1, false),
+        ("instance(", ", ())", "1", 1, true),
         ("(1 => ", ")", "1", 1, false),
         ("implies_elim(omitted, ", ")", "omitted", 1, false),
         ("proof(of_term(", "))", "1", 2, false),

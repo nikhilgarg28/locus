@@ -63,6 +63,8 @@ fn every_file_is_checked_run_in_both_interpreters_compiled_and_compared() {
         [
             "examples/increment.lc",
             "examples/lock.lc",
+            "examples/optional_evidence.lc",
+            "examples/optional_search.lc",
             "examples/preserve.lc",
             "examples/proofs.lc",
             "examples/propositions.lc",

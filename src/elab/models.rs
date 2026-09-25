@@ -128,6 +128,7 @@ impl Env<'_> {
             return self.internal(error, span);
         }
         let derived = Rc::new(super::env::StructInfo {
+            captures: Vec::new(),
             origin: info.origin,
             id,
             name: name.clone(),
@@ -248,12 +249,13 @@ impl Env<'_> {
         if self.text(name.span) != "model"
             || !generics.is_empty()
             || parameters.len() != 1
-            || !matches!(
-                parameters[0].ty.kind,
-                ast::TypeKind::Ref { mutable: false, .. }
+            || parameters[0].mutable
+            || matches!(
+                parameters[0].ty.observed().kind,
+                ast::TypeKind::Ref { mutable: true, .. }
             )
         {
-            return self.fail("L0282", "the Model method takes one shared source reference: `logic fn model(source: &T) -> Self::Logic`", method.span);
+            return self.fail("L0282", "the Model method takes one read-only source observation: `logic fn model(source: T) -> Self::Logic`", method.span);
         }
         Ok(())
     }
@@ -285,11 +287,11 @@ impl Env<'_> {
         }
         if !info.logical
             || info.params.len() != 1
-            || info.passing != [Passing::Ref]
+            || info.passing != [Passing::Value]
             || info.params[0].ty != source
             || info.result != target
         {
-            return self.fail("L0282", "the Model method must take the declared source by shared reference and return the declared logical destination", model.span);
+            return self.fail("L0282", "the Model method must observe the declared source and return the declared logical destination", model.span);
         }
         let mut parameter_layout = self.session.binding_layout(info.params[0].id);
         while let ErasureLayout::Shared { inner, .. } | ErasureLayout::Borrowed { inner, .. } =
@@ -544,6 +546,7 @@ impl Env<'_> {
                 }
                 Ok(Value::new(
                     Expr::Struct {
+                        indices: Vec::new(),
                         id: info.id,
                         name: info.name.clone(),
                         fields,

@@ -16,7 +16,7 @@ A model is an immutable logical description of runtime data. It may keep only th
 ## Defining a model
 
 <!-- spec: 1.25:5 legality-rule -->
-A physical type has at most one canonical model. Declare `impl Model for T { type Logic = M; logic fn model(&self) -> Self::Logic { ... } }`. `M` must be Logical. The body is checked pure, terminating logical computation. Its defining equation supplies the meaning; registration adds no axiom. A named shared parameter may replace `&self`. Canonical observation is available wherever the source can legally be read; its implementation body checks in the defining module, including access to private representation fields. Access to the resulting model’s fields follows normal visibility.
+A physical type has at most one canonical model. Declare `impl Model for T { type Logic = M; logic fn model(&self) -> Self::Logic { ... } }`. `M` must be Logical. The body is checked pure, terminating logical computation. Its defining equation supplies the meaning; registration adds no axiom. A named observation parameter may replace `&self`; `T`, `&T`, and `&&T` use the same source observation. Canonical observation is available wherever the source can legally be read; its implementation body checks in the defining module, including access to private representation fields. Access to the resulting model’s fields follows normal visibility.
 
 <!-- spec: 1.90:56 example -->
 ~~~rust run
@@ -137,7 +137,7 @@ fn demo() -> u64 {
 ## Inspecting a model's source representation
 
 <!-- spec: 1.92:11 legality-rule -->
-A logical helper may borrow physical data explicitly. `&place` arguments retain the declared physical type. `match &place` inspects its physical constructors without invoking its model, making recursive model definitions possible. Built-in array/slice/vector `len`, `get`, and indexing are checked storage observations; they do not dispatch to a user model method. They may be used to define that model. Ordinary runtime getters remain forbidden in logic.
+A logical helper may declare a physical observation parameter, with or without outer shared references. Its arguments retain that physical type instead of selecting its model; logical parameters instead receive canonical models. See [observing arguments](08-logic.md#observing-arguments). `match &place` inspects its physical constructors without invoking its model, making recursive model definitions possible. Built-in array/slice/vector `len`, `get`, and indexing are checked storage observations; they do not dispatch to a user model method. They may be used to define that model. Ordinary runtime getters remain forbidden in logic.
 
 <!-- spec: 1.92:12 informative -->
 General associated-type traits are not yet implemented. Model destinations are named logical types, including concrete generic instances. Structural derivation currently supports structs; enums need manual models. Anonymous tuples have no implicit fieldwise model: use `model!(pair.0)` to select a physical component. These restrictions avoid silently selecting an abstraction or adding runtime work.

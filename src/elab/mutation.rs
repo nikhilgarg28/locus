@@ -196,12 +196,23 @@ pub(super) fn deref_root(expr: &ast::Expr) -> Option<&ast::Expr> {
 
 /// Whether a type mentions a context variable.
 pub(super) fn type_mentions(ty: &Type, id: VarId) -> bool {
-    let wanted = Term::var(id);
+    type_mentions_term(ty, &Term::var(id))
+}
+
+fn type_mentions_term(ty: &Type, wanted: &Term) -> bool {
     match ty {
-        Type::Proof(claim) => claim.find(&|term| same(term, &wanted)).is_some(),
-        Type::Tuple(fields) => fields.iter().any(|field| type_mentions(field, id)),
+        Type::Instance(base, args) => {
+            type_mentions_term(base, wanted)
+                || args
+                    .iter()
+                    .any(|arg| arg.find(&|term| same(term, wanted)).is_some())
+        }
+        Type::Boxed(inner) | Type::Buffer(inner) => type_mentions_term(inner, wanted),
+        Type::Proof(claim) => claim.find(&|term| same(term, wanted)).is_some(),
+        Type::Tuple(fields) => fields.iter().any(|field| type_mentions_term(field, wanted)),
         Type::Fn(params, result) => {
-            params.iter().any(|param| type_mentions(param, id)) || type_mentions(result, id)
+            params.iter().any(|param| type_mentions_term(param, wanted))
+                || type_mentions_term(result, wanted)
         }
         _ => false,
     }
@@ -501,7 +512,7 @@ impl Env<'_> {
         let mut ty = self.version_type(slot);
         let mut steps = Vec::new();
         for part in parts {
-            let (index, field_name, part_span) = match (&ty, &part) {
+            let (index, field_name, part_span) = match (ty.nominal(), &part) {
                 (Type::Struct(id), Part::Field(field)) => {
                     let info = self.struct_by_id(*id).expect("a struct type was declared");
                     let Some(index) = info.fields.iter().position(|f| f.name == field.text) else {
@@ -550,10 +561,7 @@ impl Env<'_> {
                     break;
                 }
                 let later_ty = self.type_of(&Term::proj(target.clone(), later), part_span)?;
-                let Type::Proof(claim) = &later_ty else {
-                    continue;
-                };
-                if claim.find(&|term| same(term, &assigned)).is_some() {
+                if type_mentions_term(&later_ty, &assigned) {
                     let (assigned, dependent) = (
                         self.show_path(&name, &steps, &field_name, index),
                         self.show_path(&name, &steps, &self.field_name(&ty, later), later),
@@ -658,7 +666,7 @@ impl Env<'_> {
 
     /// Which fields of a product type hold evidence; the length is its arity.
     fn proof_fields(&self, ty: &Type) -> Vec<bool> {
-        match ty {
+        match ty.nominal() {
             Type::Tuple(fields) => fields
                 .iter()
                 .map(|field| matches!(field, Type::Proof(_)))
@@ -674,7 +682,7 @@ impl Env<'_> {
     }
 
     fn field_name(&self, ty: &Type, index: usize) -> Option<String> {
-        match ty {
+        match ty.nominal() {
             Type::Struct(id) => self
                 .struct_by_id(*id)
                 .and_then(|info| info.fields.get(index).map(|field| field.name.clone())),

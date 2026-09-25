@@ -356,8 +356,19 @@ impl Session {
     }
 
     pub fn declare_struct(&mut self, item: &StructItem) -> Result<StructId, LowerError> {
-        let fields = telescope(&item.fields);
-        let id = self.program.definitions_mut().declare_struct(&fields)?;
+        self.declare_struct_family(item, &[])
+    }
+
+    pub fn declare_struct_family(
+        &mut self,
+        item: &StructItem,
+        captures: &[Binder],
+    ) -> Result<StructId, LowerError> {
+        let (parameters, fields) = family_telescope(captures, &item.fields);
+        let id = self
+            .program
+            .definitions_mut()
+            .declare_struct_family(&parameters, &fields)?;
         self.layouts.structs.insert(
             id,
             item.fields
@@ -378,12 +389,24 @@ impl Session {
     }
 
     pub fn declare_enum(&mut self, item: &EnumItem) -> Result<EnumId, LowerError> {
+        self.declare_enum_family(item, &[])
+    }
+
+    pub fn declare_enum_family(
+        &mut self,
+        item: &EnumItem,
+        captures: &[Binder],
+    ) -> Result<EnumId, LowerError> {
+        let parameters = family_telescope(captures, &[]).0;
         let variants: Vec<Type> = item
             .variants
             .iter()
-            .map(|variant| telescope(&variant.payload))
+            .map(|v| family_telescope(captures, &v.payload).1)
             .collect();
-        let id = self.program.definitions_mut().declare_enum(&variants)?;
+        let id = self
+            .program
+            .definitions_mut()
+            .declare_enum_family(&parameters, &variants)?;
         self.layouts.enums.insert(
             id,
             item.variants
@@ -1103,16 +1126,28 @@ fn pure_form(expr: &Expr) -> Result<Term, LowerError> {
         Expr::Literal(ty, value) => Term::machine_int(*ty, *value),
         Expr::Int(value) => Term::Int(value.clone()),
         Expr::Tuple { ty, fields } => Term::tuple(ty, pure_all(fields)?),
-        Expr::Struct { id, fields, .. } => Term::Struct(
-            *id,
-            fields
-                .iter()
-                .map(|(_, field)| pure(field))
-                .collect::<Result<_, _>>()?,
+        Expr::Struct {
+            id,
+            fields,
+            indices,
+            ..
+        } => indexed(
+            Term::Struct(
+                *id,
+                fields
+                    .iter()
+                    .map(|(_, field)| pure(field))
+                    .collect::<Result<_, _>>()?,
+            ),
+            indices,
         ),
         Expr::Variant {
-            id, index, payload, ..
-        } => Term::Variant(*id, *index, pure_all(payload)?),
+            id,
+            index,
+            payload,
+            indices,
+            ..
+        } => indexed(Term::Variant(*id, *index, pure_all(payload)?), indices),
         Expr::Field { target, index, .. } => Term::proj(pure(target)?, *index),
         // A lent place is the value lent.
         Expr::Lend { value, .. } | Expr::Shared { value, .. } | Expr::Deref(value) => pure(value)?,
@@ -1766,6 +1801,10 @@ pub fn rebuilt(current: Term, path: &[Step], value: Term) -> Result<Term, LowerE
     match &step.ty {
         Type::Tuple(types) if types.len() == arity => Ok(Term::tuple(&step.ty, fields)),
         Type::Struct(id) => Ok(Term::Struct(*id, fields)),
+        Type::Instance(base, indices) => match &**base {
+            Type::Struct(id) => Ok(indexed(Term::Struct(*id, fields), indices)),
+            _ => Err(LowerError::BadPlace(name)),
+        },
         _ => Err(LowerError::BadPlace(name)),
     }
 }
@@ -2022,16 +2061,28 @@ fn anf_form(
         }
         Expr::BoxDeref { value, .. } => Term::proj(anf(value, out, env)?, 0),
         Expr::Tuple { ty, fields } => Term::tuple(ty, each(fields, out, env)?),
-        Expr::Struct { id, fields, .. } => {
+        Expr::Struct {
+            id,
+            fields,
+            indices,
+            ..
+        } => {
             let values = fields
                 .iter()
                 .map(|(_, field)| anf(field, out, env))
                 .collect::<Result<_, _>>()?;
-            Term::Struct(*id, values)
+            indexed(Term::Struct(*id, values), indices)
         }
         Expr::Variant {
-            id, index, payload, ..
-        } => Term::Variant(*id, *index, each(payload, out, env)?),
+            id,
+            index,
+            payload,
+            indices,
+            ..
+        } => indexed(
+            Term::Variant(*id, *index, each(payload, out, env)?),
+            indices,
+        ),
         Expr::Field { target, index, .. } => Term::proj(anf(target, out, env)?, *index),
         Expr::Ghost(inner) => anf(inner, out, env)?,
         Expr::Method {
@@ -2589,16 +2640,28 @@ pub fn value_term(expr: &Expr) -> Result<Term, LowerError> {
     };
     let form = match expr {
         Expr::Tuple { ty, fields } => Term::tuple(ty, each(fields)?),
-        Expr::Struct { id, fields, .. } => Term::Struct(
-            *id,
-            fields
-                .iter()
-                .map(|(_, field)| value_term(field))
-                .collect::<Result<_, _>>()?,
+        Expr::Struct {
+            id,
+            fields,
+            indices,
+            ..
+        } => indexed(
+            Term::Struct(
+                *id,
+                fields
+                    .iter()
+                    .map(|(_, field)| value_term(field))
+                    .collect::<Result<_, _>>()?,
+            ),
+            indices,
         ),
         Expr::Variant {
-            id, index, payload, ..
-        } => Term::Variant(*id, *index, each(payload)?),
+            id,
+            index,
+            payload,
+            indices,
+            ..
+        } => indexed(Term::Variant(*id, *index, each(payload)?), indices),
         Expr::Field { target, index, .. } => Term::proj(value_term(target)?, *index),
         Expr::Method {
             prim,
@@ -2844,4 +2907,20 @@ fn logical_application(callee: &Term, arguments: Vec<Term>) -> Term {
         return (**body).clone();
     }
     Term::call(callee.clone(), arguments)
+}
+
+fn family_telescope(captures: &[Binder], fields: &[Binder]) -> (Vec<Type>, Type) {
+    let pairs: Vec<_> = captures.iter().map(|b| (b.id, b.ty.clone())).collect();
+    let Type::Fn(params, result) = Type::function_over(&pairs, &telescope(fields)) else {
+        unreachable!()
+    };
+    (params, *result)
+}
+
+fn indexed(value: Term, indices: &[Term]) -> Term {
+    if indices.is_empty() {
+        value
+    } else {
+        Term::Instance(Box::new(value), indices.to_vec())
+    }
 }

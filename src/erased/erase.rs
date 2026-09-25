@@ -51,6 +51,7 @@ use super::tree::{
 
 pub fn erase_type(ty: &Type) -> EType {
     match ty {
+        Type::Instance(base, _) => erase_type(base),
         Type::Boxed(element) => EType::Boxed(Box::new(erase_type(element))),
         Type::Buffer(element) => EType::Buffer(Box::new(erase_type(element))),
         Type::Bool => EType::Bool,
@@ -105,6 +106,9 @@ pub(crate) fn type_with_layout(
     layout: &ErasureLayout,
     natural: &impl Fn(&Type) -> EType,
 ) -> EType {
+    if let Type::Instance(base, _) = ty {
+        return type_with_layout(base, layout, natural);
+    }
     match (layout, ty) {
         (
             ErasureLayout::Shared { lifetime, inner } | ErasureLayout::Borrowed { lifetime, inner },
@@ -705,7 +709,9 @@ impl Eraser<'_> {
             {
                 self.effects_then(payload, EExpr::Ghost)
             }
-            Expr::Struct { id, name, fields } => EExpr::Struct {
+            Expr::Struct {
+                id, name, fields, ..
+            } => EExpr::Struct {
                 id: *id,
                 name: name.clone(),
                 fields: fields
@@ -734,6 +740,7 @@ impl Eraser<'_> {
                 index,
                 variant_name,
                 payload,
+                ..
             } => EExpr::Variant {
                 id: *id,
                 enum_name: enum_name.clone(),

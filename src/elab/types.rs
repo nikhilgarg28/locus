@@ -63,6 +63,13 @@ impl Env<'_> {
     /// A type in any other position, where `Ghost<T>` may not stand.
     pub fn ty(&mut self, ty: &ast::Type) -> Elab<Type> {
         match &ty.kind {
+            ast::TypeKind::Scoped { name, claims } => {
+                let base = self.ty(&ast::Type { kind: ast::TypeKind::Named(name.clone()), span: ty.span })?;
+                let was_total = std::mem::replace(&mut self.total, true);
+                let indices = claims.iter().map(|claim| self.formula(claim)).collect::<Elab<Vec<_>>>();
+                self.total = was_total;
+                Ok(Type::Instance(Box::new(base), indices?.into()))
+            }
             ast::TypeKind::Lifetime(_) => self.fail("L0201", "a lifetime is an argument of a nominal type, not a value type", ty.span),
             ast::TypeKind::Array { element, length } => { self.array_length(length)?; self.collection_type(element,ty.span) },
             ast::TypeKind::Slice(_) => self.fail("L0284", "slices are currently permitted only as reference parameters", ty.span),
@@ -172,12 +179,12 @@ impl Env<'_> {
             // in a proposition, and nothing runs it.
             ast::TypeKind::LogicalFunction { parameters, result } => {
                 self.require_preview(crate::preview::Feature::LogicalData, "logical callable type (LOC-225)", ty.span)?;
-                if parameters.iter().any(|field| !self.logical_spelling(&field.ty)) || !self.logical_spelling(result) {
+                if parameters.iter().any(|field| !self.logical_spelling(field.ty.observed())) || !self.logical_spelling(result) {
                     return self.fail("L0270", "a logical callable must take and return Logical types", ty.span);
                 }
                 let mark = self.mark();
                 let value = self.logical("a logical callable type", |env| {
-                    let binders = env.telescope(parameters.iter().map(|field| (field.name.as_ref(), &field.ty, field.span)), true)?;
+                    let binders = env.telescope(parameters.iter().map(|field| (field.name.as_ref(), field.ty.observed(), field.span)), true)?;
                     let result = env.ty(result)?;
                     Ok(Type::function_over(&pairs(&binders), &result))
                 });

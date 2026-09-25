@@ -234,7 +234,7 @@ impl Specializer<'_> {
         substitutions: &Types,
         locals: &Types,
         span: Span,
-    ) -> Option<String> {
+    ) -> Option<(String, Vec<Expr>)> {
         if !self.gate(span) {
             return None;
         }
@@ -255,11 +255,24 @@ impl Specializer<'_> {
             );
             return None;
         }
+        let mut claims = Vec::new();
+        let aggregate = matches!(
+            declaration.kind,
+            DeclarationKind::Struct { .. } | DeclarationKind::Enum { .. }
+        );
         for argument in &mut args {
             self.ty(argument, substitutions, locals);
-            if has_open_proof(argument, locals) {
-                self.error("a generic type argument captures a local value; open dependent type arguments are not supported yet", argument.span);
+            let unsupported = if aggregate {
+                has_unabstracted_proof(argument, locals, false)
+            } else {
+                has_open_proof(argument, locals)
+            };
+            if unsupported {
+                self.error("this dependent generic argument cannot be abstracted; use a proof argument of a struct or enum", argument.span);
                 return None;
+            }
+            if aggregate {
+                lift_claims(argument, &mut claims, false);
             }
         }
         for (parameter, argument) in params.iter().zip(&args) {
@@ -279,7 +292,7 @@ impl Specializer<'_> {
             args.iter().map(type_key).collect::<Vec<_>>().join(",")
         );
         if let Some(name) = self.instances.get(&key) {
-            return Some(name.clone());
+            return Some((name.clone(), claims));
         }
         if self.instances.len() >= MAX_GENERIC_INSTANCES {
             self.error(format!("generic specialization exceeds MAX_GENERIC_INSTANCES limit of {MAX_GENERIC_INSTANCES} distinct instances"), span);
@@ -319,6 +332,7 @@ impl Specializer<'_> {
             .map(|(parameter, argument)| (parameter.name.text.clone(), argument))
             .collect();
         rename_instance(&mut declaration, &name);
+        declaration.captures = (0..claims.len()).map(|i| capture_name(i, span)).collect();
         self.declarations
             .insert(name.clone(), (declaration.clone(), substitutions.clone()));
         self.queue.push_back((declaration, substitutions));
@@ -332,7 +346,7 @@ impl Specializer<'_> {
                 self.instantiate(companion, args, &Types::new(), &Types::new(), span);
             }
         }
-        Some(name)
+        Some((name, claims))
     }
 
     fn logical(&self, ty: &Type) -> bool {
@@ -356,6 +370,9 @@ impl Specializer<'_> {
 
     fn declaration(&mut self, declaration: &mut Declaration, substitutions: &Types) {
         let mut locals = Types::new();
+        for name in &declaration.captures {
+            locals.insert(name.text.clone(), prop_type(name.span));
+        }
         match &mut declaration.kind {
             DeclarationKind::Module { .. } | DeclarationKind::Use { .. } => {
                 self.diagnostics.push(Diagnostic::error(
@@ -387,7 +404,7 @@ impl Specializer<'_> {
             }
             DeclarationKind::Enum { variants, .. } => {
                 for variant in variants {
-                    self.fields(&mut variant.fields, substitutions, &mut Types::new());
+                    self.fields(&mut variant.fields, substitutions, &mut locals.clone());
                 }
             }
             DeclarationKind::Prop {
@@ -485,6 +502,11 @@ impl Specializer<'_> {
         }
         self.depth += 1;
         match &mut ty.kind {
+            TypeKind::Scoped { claims, .. } => {
+                for claim in claims {
+                    self.expr(claim, None, substitutions, locals);
+                }
+            }
             TypeKind::Named(name) => {
                 if let Some(replacement) = substitutions.get(&name.text) {
                     *ty = replacement.clone();
@@ -498,7 +520,7 @@ impl Specializer<'_> {
             TypeKind::Path { path, arguments }
                 if !arguments.is_empty() && self.templates.contains_key(&path.text()) =>
             {
-                if let Some(name) = self.instantiate(
+                if let Some((name, claims)) = self.instantiate(
                     &path.text(),
                     arguments.clone(),
                     substitutions,
@@ -514,7 +536,9 @@ impl Specializer<'_> {
                         text: name,
                         span: ty.span,
                     };
-                    ty.kind = if lifetimes.is_empty() {
+                    ty.kind = if !claims.is_empty() {
+                        TypeKind::Scoped { name, claims }
+                    } else if lifetimes.is_empty() {
                         TypeKind::Named(name)
                     } else {
                         TypeKind::Path {
@@ -608,30 +632,53 @@ impl Specializer<'_> {
         expected: Option<&Type>,
         substitutions: &Types,
         locals: &Types,
-    ) {
-        let Some(first) = path.segments.first() else {
-            return;
-        };
+    ) -> Option<Type> {
+        let first = path.segments.first()?;
         let template = first.text.clone();
         if let Some(replacement) = substitutions.get(&template).and_then(type_name) {
             path.segments[0].text = replacement.text.clone();
-            return;
+            return None;
         }
         if !self.templates.contains_key(&template) {
-            return;
+            return None;
         }
         let args = args.or_else(|| expected.and_then(|ty| self.expected_instance(ty, &template)));
         let Some(args) = args else {
             self.error(format!("cannot infer type arguments for `{template}`; write `::<...>` or provide an expected type"), path.span);
-            return;
+            return None;
         };
-        if let Some(name) = self.instantiate(&template, args, substitutions, locals, path.span) {
-            path.segments[0].text = name;
+        let (name, claims) = self.instantiate(&template, args, substitutions, locals, path.span)?;
+        path.segments[0].text = name;
+        if claims.is_empty() {
+            None
+        } else {
+            Some(Type {
+                kind: TypeKind::Scoped {
+                    name: path.segments[0].clone(),
+                    claims,
+                },
+                span: path.span,
+            })
         }
     }
 
     fn expected_instance(&self, expected: &Type, template: &str) -> Option<Vec<Type>> {
         match &expected.kind {
+            TypeKind::Scoped { name, claims } => {
+                let (origin, args) = self.origins.get(&name.text)?;
+                if origin != template {
+                    return None;
+                }
+                Some(
+                    args.iter()
+                        .cloned()
+                        .map(|mut ty| {
+                            restore_claims(&mut ty, claims);
+                            ty
+                        })
+                        .collect(),
+                )
+            }
             TypeKind::Group(inner) => self.expected_instance(inner, template),
             TypeKind::Path { path, arguments }
                 if arguments
@@ -738,6 +785,10 @@ impl Specializer<'_> {
         locals: &Types,
     ) -> Option<Vec<Type>> {
         let declaration = self.templates.get(name)?.clone();
+        let logical = matches!(
+            &declaration.kind,
+            DeclarationKind::Function { logical: true, .. }
+        );
         let (generics, parameters, result) = match declaration.kind {
             DeclarationKind::Function {
                 generics,
@@ -770,7 +821,18 @@ impl Specializer<'_> {
         }
         for (argument, parameter) in arguments.iter_mut().zip(&parameters) {
             if let Some(actual) = self.expr(argument, None, substitutions, locals) {
-                infer_type_arguments(&parameter.ty, &actual, &names, &mut inferred, &self.origins);
+                let (parameter_ty, actual_ty) = if logical {
+                    (parameter.ty.observed(), actual.observed())
+                } else {
+                    (&parameter.ty, &actual)
+                };
+                infer_type_arguments(
+                    parameter_ty,
+                    actual_ty,
+                    &names,
+                    &mut inferred,
+                    &self.origins,
+                );
             }
         }
         generics
@@ -786,6 +848,8 @@ impl Specializer<'_> {
         substitutions: &Types,
         locals: &Types,
     ) -> Option<Type> {
+        let mut scoped = None;
+        let mut contextual = !matches!(expr.kind, ExprKind::GenericApply { .. });
         {
             if let ExprKind::Forall { parameters, body } | ExprKind::Exists { parameters, body } =
                 &expr.kind
@@ -824,24 +888,28 @@ impl Specializer<'_> {
                     expr.span,
                 )
             {
-                name.text = instance;
+                name.text = instance.0;
             }
             // Struct paths and boxed path expressions have different storage.
             match &mut callee.kind {
-                ExprKind::Path(path) => self.specialize_path(
-                    path,
-                    Some(arguments.clone()),
-                    expected,
-                    substitutions,
-                    locals,
-                ),
-                ExprKind::Struct { path, .. } => self.specialize_path(
-                    path,
-                    Some(arguments.clone()),
-                    expected,
-                    substitutions,
-                    locals,
-                ),
+                ExprKind::Path(path) => {
+                    scoped = self.specialize_path(
+                        path,
+                        Some(arguments.clone()),
+                        expected,
+                        substitutions,
+                        locals,
+                    )
+                }
+                ExprKind::Struct { path, .. } => {
+                    scoped = self.specialize_path(
+                        path,
+                        Some(arguments.clone()),
+                        expected,
+                        substitutions,
+                        locals,
+                    )
+                }
                 ExprKind::Name(_) => {}
                 _ => self.error(
                     "explicit type arguments require a named declaration",
@@ -869,19 +937,24 @@ impl Specializer<'_> {
                     ],
                     span: expr.span,
                 };
-                self.specialize_path(&mut path, None, expected, substitutions, locals);
+                scoped = self
+                    .specialize_path(&mut path, None, expected, substitutions, locals)
+                    .or(scoped);
                 expr.kind = ExprKind::Path(Box::new(path));
             }
         }
         let span = expr.span;
         let inferred = match &mut expr.kind {
+            ExprKind::Scoped { ty, .. } => return Some(*ty.clone()),
             ExprKind::Name(name) => {
                 if self.templates.contains_key(&name.text) {
                     let mut path = Path {
                         segments: vec![name.clone()],
                         span,
                     };
-                    self.specialize_path(&mut path, None, expected, substitutions, locals);
+                    scoped = self
+                        .specialize_path(&mut path, None, expected, substitutions, locals)
+                        .or(scoped);
                     *name = path.segments.remove(0);
                 }
                 locals.get(&name.text).cloned().or_else(|| {
@@ -894,7 +967,9 @@ impl Specializer<'_> {
                 })
             }
             ExprKind::Path(path) => {
-                self.specialize_path(path, None, expected, substitutions, locals);
+                scoped = self
+                    .specialize_path(path, None, expected, substitutions, locals)
+                    .or(scoped);
                 if let Some((declaration, substitutions)) =
                     self.declarations.get(&path.text()).cloned()
                     && let DeclarationKind::Constant { mut ty, .. } = declaration.kind
@@ -1011,13 +1086,24 @@ impl Specializer<'_> {
                         && let Some(instance) =
                             self.instantiate(&name_text, args, substitutions, locals, span)
                     {
-                        name.text = instance;
+                        name.text = instance.0;
                     }
                 }
                 self.expr(callee, expected, substitutions, locals);
+                if let ExprKind::Scoped {
+                    value,
+                    ty,
+                    contextual: from_context,
+                } = &callee.kind
+                {
+                    contextual = *from_context;
+                    scoped = Some(*ty.clone());
+                    *callee = value.clone();
+                }
                 let signature =
                     expr_path(callee).and_then(|path| self.signature(&path.text(), locals));
-                let payload = expr_path(callee).and_then(|path| self.payload(&path, locals));
+                let mut payload = expr_path(callee).and_then(|path| self.payload(&path, locals));
+                restore_payload(&mut payload, scoped.as_ref().or(expected));
                 for (index, argument) in arguments.iter_mut().enumerate() {
                     let ty = signature
                         .as_ref()
@@ -1037,8 +1123,11 @@ impl Specializer<'_> {
                 })
             }
             ExprKind::Struct { path, fields } => {
-                self.specialize_path(path, None, expected, substitutions, locals);
-                let payload = self.payload(path, locals);
+                scoped = self
+                    .specialize_path(path, None, expected, substitutions, locals)
+                    .or(scoped);
+                let mut payload = self.payload(path, locals);
+                restore_payload(&mut payload, scoped.as_ref().or(expected));
                 for field in fields {
                     let name = field.name.as_ref().or(match &field.value.kind {
                         ExprKind::Name(name) => Some(name),
@@ -1301,6 +1390,17 @@ impl Specializer<'_> {
                 expected.cloned()
             }
         };
+        if let Some(ty) = scoped {
+            *expr = Expr {
+                span,
+                kind: ExprKind::Scoped {
+                    value: Box::new(expr.clone()),
+                    ty: Box::new(ty.clone()),
+                    contextual,
+                },
+            };
+            return Some(ty);
+        }
         inferred.or_else(|| expected.cloned())
     }
 
@@ -1352,7 +1452,8 @@ impl Specializer<'_> {
             }
             PatternKind::Variant { path, arguments } => {
                 self.specialize_path(path, None, expected, substitutions, locals);
-                let fields = self.payload(path, locals);
+                let mut fields = self.payload(path, locals);
+                restore_payload(&mut fields, expected);
                 if let Some(arguments) = arguments {
                     for (index, pattern) in arguments.iter_mut().enumerate() {
                         self.pattern(
@@ -1369,7 +1470,8 @@ impl Specializer<'_> {
             }
             PatternKind::Struct { path, fields, .. } => {
                 self.specialize_path(path, None, expected, substitutions, locals);
-                let payload = self.payload(path, locals);
+                let mut payload = self.payload(path, locals);
+                restore_payload(&mut payload, expected);
                 for field in fields {
                     let name = field.name.as_ref().or(match &field.pattern.kind {
                         PatternKind::Name { name, .. } => Some(name),
@@ -1441,7 +1543,7 @@ fn named_type(name: &Name) -> Type {
 }
 fn type_name(ty: &Type) -> Option<&Name> {
     match &ty.kind {
-        TypeKind::Named(name) => Some(name),
+        TypeKind::Scoped { name, .. } | TypeKind::Named(name) => Some(name),
         TypeKind::Path { path, arguments }
             if arguments
                 .iter()
@@ -1578,8 +1680,14 @@ fn type_key(ty: &Type) -> String {
 
 fn has_open_proof(ty: &Type, locals: &Types) -> bool {
     match &ty.kind {
+        TypeKind::Scoped { claims, .. } => claims.iter().any(|expr| {
+            let debug = format!("{expr:?}");
+            locals
+                .keys()
+                .any(|name| debug.contains(&format!("text: {name:?},")))
+        }),
         TypeKind::Proof(expr) => {
-            // Conservative until scoped dependent generic instances exist.
+            // Binders inside callable or tuple type arguments are not lifted yet.
             let debug = format!("{expr:?}");
             locals
                 .keys()
@@ -1677,6 +1785,122 @@ fn stores_parameter(declaration: &Declaration, name: &str) -> bool {
         DeclarationKind::Enum { variants, .. } => variants
             .iter()
             .any(|variant| variant.fields.iter().any(|field| mentions(&field.ty, name))),
+        _ => false,
+    }
+}
+
+fn capture_name(index: usize, span: Span) -> Name {
+    Name {
+        text: format!("$locus_claim_{index}"),
+        span,
+    }
+}
+fn prop_type(span: Span) -> Type {
+    named_type(&Name {
+        text: "Prop".into(),
+        span,
+    })
+}
+fn lift_claims(ty: &mut Type, claims: &mut Vec<Expr>, under_binder: bool) {
+    let mut lift = |expr: &mut Expr| {
+        let name = capture_name(claims.len(), expr.span);
+        claims.push(expr.clone());
+        expr.kind = ExprKind::Name(name);
+    };
+    match &mut ty.kind {
+        TypeKind::Proof(expr) if !under_binder => lift(expr),
+        TypeKind::Scoped { claims: args, .. } if !under_binder => args.iter_mut().for_each(lift),
+        TypeKind::Group(inner) | TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => {
+            lift_claims(inner, claims, under_binder)
+        }
+        TypeKind::Array { element, .. } => lift_claims(element, claims, under_binder),
+        TypeKind::Tuple(fields) => {
+            let mut bound = under_binder;
+            for field in fields {
+                lift_claims(&mut field.ty, claims, bound);
+                bound |= field.name.is_some();
+            }
+        }
+        TypeKind::Path { arguments, .. } => {
+            for arg in arguments {
+                lift_claims(arg, claims, under_binder);
+            }
+        }
+        _ => {}
+    }
+}
+fn restore_claims(ty: &mut Type, claims: &[Expr]) {
+    fn restore(expr: &mut Expr, claims: &[Expr]) {
+        if let ExprKind::Name(name) = &expr.kind
+            && let Some(index) = name
+                .text
+                .strip_prefix("$locus_claim_")
+                .and_then(|n| n.parse::<usize>().ok())
+            && let Some(claim) = claims.get(index)
+        {
+            *expr = claim.clone();
+        }
+    }
+    match &mut ty.kind {
+        TypeKind::Proof(expr) => restore(expr, claims),
+        TypeKind::Scoped { claims: args, .. } => {
+            for arg in args {
+                restore(arg, claims);
+            }
+        }
+        TypeKind::Group(inner) | TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => {
+            restore_claims(inner, claims)
+        }
+        TypeKind::Array { element, .. } => restore_claims(element, claims),
+        TypeKind::Tuple(fields) => {
+            for field in fields {
+                restore_claims(&mut field.ty, claims);
+            }
+        }
+        TypeKind::Path { arguments, .. } => {
+            for arg in arguments {
+                restore_claims(arg, claims);
+            }
+        }
+        _ => {}
+    }
+}
+fn restore_payload(payload: &mut Option<Vec<TypeField>>, expected: Option<&Type>) {
+    if let Some(Type {
+        kind: TypeKind::Scoped { claims, .. },
+        ..
+    }) = expected
+        && let Some(fields) = payload
+    {
+        for field in fields {
+            restore_claims(&mut field.ty, claims);
+        }
+    }
+}
+
+// A whole claim can become one Prop parameter only outside binders owned by
+// the type argument itself. Inspect the original syntax before introducing
+// capture placeholders, which may intentionally reuse an enclosing family's
+// normalized parameter names.
+fn has_unabstracted_proof(ty: &Type, locals: &Types, under_binder: bool) -> bool {
+    match &ty.kind {
+        TypeKind::Proof(_) | TypeKind::Scoped { .. } => under_binder && has_open_proof(ty, locals),
+        TypeKind::Function { .. } | TypeKind::LogicalFunction { .. } => has_open_proof(ty, locals),
+        TypeKind::Tuple(fields) => {
+            let mut bound = under_binder;
+            fields.iter().any(|field| {
+                let bad = has_unabstracted_proof(&field.ty, locals, bound);
+                bound |= field.name.is_some();
+                bad
+            })
+        }
+        TypeKind::Group(inner) | TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => {
+            has_unabstracted_proof(inner, locals, under_binder)
+        }
+        TypeKind::Array { element, .. } => has_unabstracted_proof(element, locals, under_binder),
+        TypeKind::Path { arguments, .. } => arguments
+            .iter()
+            .any(|arg| has_unabstracted_proof(arg, locals, under_binder)),
         _ => false,
     }
 }

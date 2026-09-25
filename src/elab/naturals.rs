@@ -36,6 +36,7 @@ pub(super) fn declare(session: &mut Session) -> Rc<StructInfo> {
         .mark_logical_type(&Type::Struct(id))
         .expect("Nat has logical fields only");
     Rc::new(StructInfo {
+        captures: Vec::new(),
         origin: None,
         id,
         name: "Nat".into(),
@@ -91,6 +92,7 @@ impl Env<'_> {
         };
         Ok(Value::new(
             Expr::Struct {
+                indices: Vec::new(),
                 id,
                 name: "Nat".into(),
                 fields: vec![

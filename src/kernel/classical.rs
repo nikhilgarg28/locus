@@ -81,6 +81,7 @@ pub(super) fn term_is_classical(definitions: &Definitions, term: &Term) -> bool 
     };
     let sub = |term: &Term| term_is_classical(definitions, term);
     match term {
+        Term::Instance(value, args) => sub(value) || any(args),
         Term::Boxed(value) => term_is_classical(definitions, value),
         Term::Buffer { arguments, .. } => arguments
             .iter()

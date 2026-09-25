@@ -10,6 +10,29 @@ use super::env::{Elab, EnumInfo, Env, Global};
 use super::exprs::Value;
 
 impl Env<'_> {
+    fn family_expected(
+        &mut self,
+        base: Type,
+        captures: &[Binder],
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Elab<Type> {
+        if captures.is_empty() {
+            return Ok(base);
+        }
+        if let Some(ty @ Type::Instance(..)) = expected
+            && ty.nominal() == &base
+            && ty.indices().len() == captures.len()
+        {
+            return Ok(ty.clone());
+        }
+        self.fail(
+            "L0281",
+            "this constructor needs an expected type with its proof arguments",
+            span,
+        )
+    }
+
     pub(super) fn tuple(
         &mut self,
         items: &[ast::Expr],
@@ -53,6 +76,7 @@ impl Env<'_> {
         &mut self,
         name: &ast::Name,
         fields: &[ast::ValueField],
+        expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
         // `Self { .. }` inside an `impl` block is the block's type.
@@ -80,7 +104,12 @@ impl Env<'_> {
         let what = format!("`{}`", info.name);
         let values = self.values_by_name(&what, &info.fields, fields, span)?;
         let mut exprs = Vec::new();
-        let mut tys: Vec<Type> = info.fields.iter().map(|field| field.ty.clone()).collect();
+        let ty = self.family_expected(Type::Struct(info.id), &info.captures, expected, span)?;
+        let mut tys: Vec<Type> = info
+            .fields
+            .iter()
+            .map(|field| substitute_captures(&field.ty, &info.captures, ty.indices()))
+            .collect();
         for (index, (declared, value)) in info.fields.iter().zip(values).enumerate() {
             self.expect_layout(value, &self.session.binding_layout(declared.id));
             let value = self.argument(value, &tys[index].clone(), declared.ghost)?;
@@ -90,13 +119,15 @@ impl Env<'_> {
             }
             exprs.push((declared.name.clone(), value.expr));
         }
+        let ty = self.at_current_exit(&ty).into_owned();
         Ok(Value::new(
             Expr::Struct {
+                indices: ty.indices().to_vec(),
                 id: info.id,
                 name: info.name.clone(),
                 fields: exprs,
             },
-            Type::Struct(info.id),
+            ty,
         ))
     }
 
@@ -298,7 +329,7 @@ impl Env<'_> {
                 .suggest(crate::diagnostic::Suggestion { message: "observe this physical field explicitly".into(), span: expr.span, replacement: format!("model!({})", self.text(expr.span)), applicability: crate::diagnostic::Applicability::MaybeIncorrect }));
             return Err(());
         }
-        let Type::Struct(id) = &target.ty else {
+        let Type::Struct(id) = target.ty.nominal() else {
             let shown = self.show_type(&target.ty);
             self.diagnostics.push(
                 crate::diagnostic::Diagnostic::error(
@@ -357,7 +388,7 @@ impl Env<'_> {
         name: Option<String>,
         span: Span,
     ) -> Elab<Value> {
-        if let Type::Struct(id) = &target.ty {
+        if let Type::Struct(id) = target.ty.nominal() {
             let info = self.struct_by_id(*id).expect("declared struct");
             self.field_visible(&info, index, span)?;
         }
@@ -471,7 +502,7 @@ impl Env<'_> {
         let what = format!("`{}::{}`", info.name, variant.name);
         self.variant_shape(&what, &variant.payload, variant.named, false, span)?;
         let arguments: Vec<&ast::Expr> = arguments.iter().collect();
-        self.variant_value(&info, index, &arguments, span)
+        self.variant_value(&info, index, &arguments, expected, span)
     }
 
     /// `E::V { a: x, b }`, a variant with named fields, or a proposition's.
@@ -497,7 +528,7 @@ impl Env<'_> {
         let what = format!("`{}::{}`", info.name, variant.name);
         self.variant_shape(&what, &variant.payload, variant.named, true, span)?;
         let values = self.values_by_name(&what, &variant.payload, fields, span)?;
-        self.variant_value(&info, index, &values, span)
+        self.variant_value(&info, index, &values, expected, span)
     }
 
     fn variant_value(
@@ -505,27 +536,40 @@ impl Env<'_> {
         info: &EnumInfo,
         index: usize,
         arguments: &[&ast::Expr],
+        expected: Option<&Type>,
         span: Span,
     ) -> Elab<Value> {
         let variant = &info.variants[index];
+        let ty = self.family_expected(Type::Enum(info.id), &info.captures, expected, span)?;
         let ids: Vec<VarId> = variant.payload.iter().map(|binder| binder.id).collect();
         let mut tys: Vec<Type> = variant
             .payload
             .iter()
-            .map(|binder| binder.ty.clone())
+            .map(|binder| substitute_captures(&binder.ty, &info.captures, ty.indices()))
             .collect();
         let ghosts: Vec<bool> = variant.payload.iter().map(|binder| binder.ghost).collect();
         let what = format!("`{}::{}`", info.name, variant.name);
         let payload = self.arguments_by_ref(arguments, &ids, &mut tys, &ghosts, &what, span)?;
+        let ty = self.at_current_exit(&ty).into_owned();
         Ok(Value::new(
             Expr::Variant {
+                indices: ty.indices().to_vec(),
                 id: info.id,
                 enum_name: info.name.clone(),
                 index,
                 variant_name: variant.name.clone(),
                 payload,
             },
-            Type::Enum(info.id),
+            ty,
         ))
     }
+}
+
+pub(super) fn substitute_captures(ty: &Type, captures: &[Binder], indices: &[Term]) -> Type {
+    captures
+        .iter()
+        .zip(indices)
+        .fold(ty.clone(), |ty, (binder, value)| {
+            ty.replace_var(binder.id, value)
+        })
 }

@@ -207,6 +207,8 @@ pub struct Program {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
+    /// Compiler-generated logical parameters on a specialized aggregate.
+    pub captures: Vec<Name>,
     pub doc: Vec<DocComment>,
     pub attributes: Vec<Attribute>,
     pub visibility: Option<Visibility>,
@@ -382,8 +384,31 @@ pub struct Type {
     pub span: Span,
 }
 
+impl Type {
+    /// The observed value type at a logical call boundary. Only outer shared
+    /// references and grouping are transparent; wrappers and their fields stay.
+    pub(crate) fn observed(&self) -> &Self {
+        let mut ty = self;
+        while let TypeKind::Ref {
+            mutable: false,
+            inner,
+            ..
+        }
+        | TypeKind::Group(inner) = &ty.kind
+        {
+            ty = inner;
+        }
+        ty
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
+    /// Internal scoped application; not a separately exposed source syntax.
+    Scoped {
+        name: Name,
+        claims: Vec<Expr>,
+    },
     Named(Name),
     /// A nominal lifetime argument, written with its leading apostrophe.
     Lifetime(Name),
@@ -553,6 +578,12 @@ impl Expr {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExprKind {
+    /// Internal expected type for a specialized aggregate constructor.
+    Scoped {
+        value: Box<Expr>,
+        ty: Box<Type>,
+        contextual: bool,
+    },
     Name(Name),
     Path(Box<Path>),
     Integer(IntegerLiteral),

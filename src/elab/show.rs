@@ -41,6 +41,14 @@ impl Env<'_> {
 
     fn type_at(&mut self, ty: &Type, bound: &mut Vec<String>) -> String {
         match ty {
+            Type::Instance(base, args) => {
+                let base = self.type_at(base, bound);
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|t| self.term_at(t, Level::Implies, bound))
+                    .collect();
+                format!("{base}[{}]", args.join(", "))
+            }
             Type::Boxed(element) => format!("Box<{}>", self.type_at(element, bound)),
             Type::Buffer(element) => format!("Buffer<{}>", self.type_at(element, bound)),
             Type::Bool => "bool".into(),
@@ -161,6 +169,7 @@ impl Env<'_> {
     fn term_at(&mut self, term: &Term, at: Level, bound: &mut Vec<String>) -> String {
         let prelude = self.prelude;
         match term {
+            Term::Instance(value, _) => self.term_at(value, at, bound),
             Term::Boxed(value) => format!("box({})", self.term_at(value, Level::Implies, bound)),
             Term::Buffer { op, arguments, .. } => format!(
                 "buffer::{op:?}({})",

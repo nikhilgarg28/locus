@@ -102,10 +102,6 @@ def prepare():
         "revision": revision,
         "dirty": dirty,
         "repository": "https://github.com/nikhilgarg28/locus",
-        "specimen": (ROOT / "examples/increment.lc")
-        .read_text()
-        .split("\nfn consume")[0]
-        .strip(),
     }
 
 

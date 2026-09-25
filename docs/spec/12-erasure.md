@@ -53,7 +53,7 @@ The [Rust export facade](17-modules.md#proof-returning-functions) is a separate,
 ## Runtime choices with proof payloads
 
 <!-- spec: 1.18:4 dynamic-semantics -->
-Runtime code cannot observe proof contents. Proof matches establish further evidence; they do not extract witnesses as data. Physical enums keep their discriminants while proof payloads erase. This includes `Option<@P>` for a closed claim `P`; use dependent fields for claims about payload values.
+Runtime code cannot observe proof contents. Proof matches establish further evidence; they do not extract witnesses as data. Physical enums keep their discriminants while proof payloads erase. This includes `Option<@P>` when `P` mentions an in-scope snapshot. Only the payload erases: `Some` and `None` remain distinct. Logical type arguments add no runtime storage or computation; ordinary calls inside payload construction still run.
 
 <!-- spec: 1.90:61 example -->
 ~~~rust run

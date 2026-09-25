@@ -277,6 +277,13 @@ impl Printer<'_> {
 
     fn ty(&mut self, ty: &Type) -> Printed {
         match ty {
+            Type::Instance(base, args) => {
+                self.push("instance_type(");
+                self.ty(base)?;
+                self.push(", ");
+                self.terms(args)?;
+                self.push(")");
+            }
             Type::Boxed(element) => {
                 self.push("box_type(");
                 self.ty(element)?;
@@ -334,8 +341,18 @@ impl Printer<'_> {
         Ok(())
     }
 
+    fn instance_term(&mut self, value: &Term, args: &[Term]) -> Printed {
+        self.push("instance(");
+        self.term(value)?;
+        self.push(", ");
+        self.terms(args)?;
+        self.push(")");
+        Ok(())
+    }
+
     fn term_inner(&mut self, term: &Term) -> Printed {
         match term {
+            Term::Instance(value, args) => self.instance_term(value, args),
             Term::Boxed(value) => self.boxed_term(value),
             Term::Buffer {
                 op,
@@ -1426,6 +1443,15 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn instance_type(&mut self) -> Parsed<Type> {
+        self.expect("(")?;
+        let base = Box::new(self.ty()?);
+        self.expect(",")?;
+        let args = self.terms()?;
+        self.expect(")")?;
+        Ok(Type::Instance(base, args.into()))
+    }
+
     fn ty_inner(&mut self) -> Parsed<Type> {
         match self.peek() {
             Tok::Punct("@") => {
@@ -1436,6 +1462,7 @@ impl<'a> Parser<'a> {
             Tok::Ident(name) => {
                 self.bump();
                 match name {
+                    "instance_type" => self.instance_type(),
                     "box_type" => self.container_type(true),
                     "buffer" => self.container_type(false),
                     "bool" => Ok(Type::Bool),
@@ -1638,8 +1665,18 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn instance_term(&mut self) -> Parsed<Term> {
+        self.expect("(")?;
+        let value = Box::new(self.term()?);
+        self.expect(",")?;
+        let args = self.terms()?;
+        self.expect(")")?;
+        Ok(Term::Instance(value, args))
+    }
+
     fn keyword_term(&mut self, word: &str) -> Parsed<Term> {
         match word {
+            "instance" => self.instance_term(),
             "boxed" => self.boxed_term(),
             "buffer_literal" | "buffer_length" | "buffer_get" | "buffer_set" | "buffer_push" => {
                 self.buffer_term(word)
