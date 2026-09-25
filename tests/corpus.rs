@@ -452,6 +452,11 @@ fn plant_in_block(block: &mut EBlock) {
 
 fn plant(expr: &mut EExpr) {
     match expr {
+        EExpr::NativeCall { arguments, .. } => {
+            for a in arguments {
+                plant(a);
+            }
+        }
         EExpr::Call {
             name, arguments, ..
         } if name == "returns" => {

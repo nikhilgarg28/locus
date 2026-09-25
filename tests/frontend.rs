@@ -345,6 +345,17 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             .join(", ")
     };
     match &declaration.kind {
+        DeclarationKind::RustImport { path, alias } => out.push_str(&format!(
+            "import {}{};",
+            path.text(),
+            alias
+                .as_ref()
+                .map(|a| format!(" as {}", a.text))
+                .unwrap_or_default()
+        )),
+        DeclarationKind::ImportedModule { .. } | DeclarationKind::Foreign { .. } => {
+            panic!("native metadata is not a parsed source declaration")
+        }
         DeclarationKind::Spec {
             module,
             name,
@@ -4299,4 +4310,22 @@ fn associated_proposition_constant_is_a_named_proof_target() {
         panic!()
     };
     assert_eq!(path.text(), "Self::CLAIM");
+}
+
+#[test]
+#[doc = "spec: 1.30:1"]
+fn native_import_is_a_contextual_declaration_with_an_optional_alias() {
+    let parsed = parse_text(
+        "import dep::module; import dep::item as renamed; fn import()->u8{1} fn call()->u8{import()}",
+    );
+    assert!(parsed.is_success(), "{:?}", parsed.diagnostics);
+    assert!(matches!(
+        &parsed.program.declarations[0].kind,
+        DeclarationKind::RustImport { alias: None, .. }
+    ));
+    assert!(
+        matches!(&parsed.program.declarations[1].kind,DeclarationKind::RustImport{alias:Some(name),..} if name.text=="renamed")
+    );
+    assert!(!parse_text("import dep::*;").is_success());
+    assert!(!parse_text("import dep::{a,b};").is_success());
 }

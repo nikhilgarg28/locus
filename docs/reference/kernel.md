@@ -1155,6 +1155,9 @@ All limits are counted, never elapsed-time decisions. An oversized source is rej
 <!-- spec: 2.40:2 normative -->
 | Name | Value | Counted scope | On exhaustion |
 |---|---:|---|---|
+| `MAX_RUSTDOC_BYTES` | 134217728 | one rustdoc JSON interface | L0512; no interface accepted |
+| `MAX_RUSTC_CAPTURE_BYTES` | 16777216 | one captured compiler invocation | L0512; no interface accepted |
+| `MAX_RUSTC_CAPTURE_STRINGS` | 100000 | one captured argument or environment string list | L0512; no interface accepted |
 | `MAX_SOURCE_BYTES` | 67108864 | one source unit, including assembled libraries | L0010; no tokenization or elaboration |
 | `MAX_DIAGNOSTICS` | 1000 | retained diagnostics in one compilation phase | L0011 replaces the final diagnostic; explicit suppression notice |
 | `MAX_DIAGNOSTIC_FACTS` | 6 | distinct facts printed for one failed obligation | explicit omission note; proof search still receives all facts |

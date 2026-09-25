@@ -302,6 +302,7 @@ impl<'p> CheckInterpreter<'p> {
             }
         }
         match &block.tail {
+            Tail::Foreign { path, .. } => Err(RunError::Native(path.clone()).into()),
             Tail::Value(value) => Ok(Flow::Value(self.term(value)?)),
             Tail::Break(value) => Ok(Flow::Break(self.term(value)?)),
             Tail::Continue(next) => Ok(Flow::Continue(self.terms(next)?)),

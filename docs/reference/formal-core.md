@@ -29,7 +29,7 @@ Stmt   ::= Let(x,h,T?,t) | Have(h,P,p) | Call(x,f,args)
          | Buffer(x,h,op,storage,T,logical_payload,args,bounds,learned)
          | BoxNew(x,h,t,logical_payload)
 Tail   ::= Value(t) | Break(t) | Continue(ts) | Match(t,arms)
-         | Return(t) | Panic(message,unreachable?)
+         | Return(t) | Panic(message,unreachable?) | Foreign(path,args,T)
 Arm    ::= (payload identities, branch hypothesis identity, Block)
 Storage::= Array(n) | Slice | Vector
 BufferOp ::= Literal | Length | Get | Set | Push
@@ -76,6 +76,9 @@ This grammar covers every variant of `exec::Stmt`, `exec::Tail`, `BufferStorage`
 
 <!-- spec: 3.2:10 legality-rule -->
 **IR-Promises.** All calls satisfy promise inclusion. `terminates` additionally rejects every `Loop` and `For`, even an obviously finite one; there is no ordinary recursion. `no_panic` checks the endings/operators/storage rules above. `no_alloc` rejects allocating storage operations; `no_io` allows only callees promising no I/O. Native implementation/specification assumptions are recorded separately. This is the implemented rule, not an inference of the strongest effects. [Language 1.9:2–4, 1.26:3; Architecture “Lowering ordinary execution”, “Explicit trust boundary and audit”. Implementation: `exec/check.rs`, `exec/buffer.rs`.]
+
+<!-- spec: 3.2:11 legality-rule -->
+**IR-Foreign.** `Foreign(path,args,T)` has no effect promises. Every argument and `T` must be a physical bool, supported machine integer or a tuple recursively containing those types; `T` equals the expected result. The boundary cannot return proofs, logical values or nominal invariant-bearing data. A fresh native result carries no equation to a logical function. Native signature attestation and path identity are compiler/toolchain obligations; this form adds no kernel rule. Erasure yields `NativeCall` with the same ordered physical arguments and result. Its independent checker rejects logical positions again. Generated Rust performs the actual call. Both interpreters report `RunError::Native` after argument evaluation, an unsupported execution observation rather than a language panic or agreement result. [Language 1.30:3–8; Architecture “Plain Rust imports”.]
 
 ## 3. Dynamic interpretation
 

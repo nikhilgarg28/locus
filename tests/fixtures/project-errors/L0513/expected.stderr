@@ -1,0 +1,5 @@
+error[L0513]: Rust crate `absent` is not an active ordinary Cargo dependency. Use its Cargo alias, or `crate` for the host's native library. Sysroot imports need a separate adapter and are not available yet.
+ --> <fixture>/export.lc:1:8
+  |
+1 | import absent;
+  |        ^^^^^^

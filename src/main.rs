@@ -34,6 +34,8 @@ Usage: locus <command> <file.lc> [arguments]
   rust    Check, then print the generated Rust
   build   Check, then write a Rust crate: locus build <file.lc>... --out <dir> [--name <crate>]
           The crate's root defines the markers and holds one module per file
+  import  Inspect a physical Rust interface: locus import crate_or_dependency::item --manifest-path Cargo.toml
+          --json prints retained metadata; --out FILE writes it. No spec or proof is assumed
   tokens  Print tokens and their original source spans
   parse   Validate syntax only
   ast     Print the syntax tree of a syntactically valid file
@@ -341,6 +343,19 @@ fn run(arguments: Vec<OsString>, format: DiagnosticFormat) -> io::Result<u8> {
                 return Ok(2);
             }
         }
+    }
+    if command == "import" {
+        return match locus::imports::command::run(&arguments[1..]) {
+            Ok(text) => {
+                write!(output, "{text}")?;
+                output.flush()?;
+                Ok(0)
+            }
+            Err(message) => {
+                emit_driver(format, Level::Error, "L0512", &message)?;
+                Ok(1)
+            }
+        };
     }
     if command == "explain" {
         if arguments.len() != 2 || !libraries.is_empty() {
@@ -1166,10 +1181,13 @@ fn uses_project_driver(arguments: &[OsString]) -> bool {
     tokens.iter().any(|t| {
         t.kind == lexer::TokenKind::Keyword
             && matches!(sources.get(file).slice(t.span), Some("mod" | "use"))
-    }) || tokens.windows(2).any(|pair| {
-        sources.get(file).slice(pair[0].span) == Some("spec")
-            && sources.get(file).slice(pair[1].span) == Some("type")
-    })
+    }) || tokens
+        .iter()
+        .any(|t| sources.get(file).slice(t.span) == Some("import"))
+        || tokens.windows(2).any(|pair| {
+            sources.get(file).slice(pair[0].span) == Some("spec")
+                && sources.get(file).slice(pair[1].span) == Some("type")
+        })
 }
 fn project_command(
     arguments: &[OsString],

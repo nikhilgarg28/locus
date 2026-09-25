@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum Namespace {
     Type,
     Value,
+    Macro,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -23,6 +24,7 @@ pub struct Binding {
 }
 #[derive(Clone, Debug)]
 pub struct Scope {
+    pub native_path: Option<String>,
     pub parent: Option<usize>,
     pub name: String,
     pub span: Span,
@@ -224,6 +226,15 @@ pub fn resolve_units(
     graph.access.scopes[0].1.end = usize::MAX;
     graph.imports(&mut errors);
     graph.export_cycles(&mut errors);
+    let mut foreign_uses = BTreeSet::new();
+    for root in &graph.package_roots {
+        for export in graph.exports(*root) {
+            foreign_uses.insert(export.item);
+        }
+    }
+    for export in graph.exports(graph.export_root) {
+        foreign_uses.insert(export.item);
+    }
     let mut declarations = Vec::new();
     for index in 0..graph.items.len() {
         let item = &graph.items[index];
@@ -237,6 +248,7 @@ pub fn resolve_units(
             values: Vec::new(),
             types: Vec::new(),
             errors: &mut errors,
+            foreign_uses: &mut foreign_uses,
         };
         rewrite.declaration(&mut d);
         if let Some(name) = declared_name_mut(&mut d.kind) {
@@ -244,6 +256,27 @@ pub fn resolve_units(
         }
         declarations.push(d);
     }
+    declarations.retain(|d| {
+        if let DeclarationKind::Foreign { name, foreign } = &d.kind {
+            let used = graph
+                .items
+                .iter()
+                .position(|item| item.canonical == name.text)
+                .is_some_and(|id| foreign_uses.contains(&id));
+            if used && let Some(why) = &foreign.entity.unavailable {
+                let message = format!("cannot use imported `{}`: {why}", foreign.path);
+                if !errors
+                    .iter()
+                    .any(|e| e.code == "L0514" && e.message == message)
+                {
+                    errors.push(Diagnostic::error("L0514", message, d.span));
+                }
+            }
+            used && foreign.entity.signature.is_some()
+        } else {
+            true
+        }
+    });
     let mut program = Program {
         declarations,
         ..Program::default()
@@ -266,6 +299,14 @@ fn program_span(program: &Program) -> Span {
         .unwrap_or(Span::new(crate::source::FileId(0), 0, 0))
 }
 impl Graph {
+    /// Language provenance is distinct from the owning Cargo package. A
+    /// dependency's Locus declaration remains native Locus source.
+    pub fn origin(&self, item: usize) -> crate::imports::model::Origin {
+        match &self.items[item].declaration.kind {
+            DeclarationKind::Foreign { foreign, .. } => foreign.entity.origin.clone(),
+            _ => crate::imports::model::Origin::Locus,
+        }
+    }
     pub fn package_of(&self, module: usize) -> usize {
         let root = self.access.root(module);
         self.package_roots.iter().position(|r| *r == root).unwrap()
@@ -319,6 +360,7 @@ impl Graph {
     ) -> usize {
         let module = self.scopes.len();
         self.scopes.push(Scope {
+            native_path: None,
             parent,
             name,
             span,
@@ -356,6 +398,26 @@ impl Graph {
                         errors,
                     );
                 }
+                DeclarationKind::ImportedModule { name, path, body } => {
+                    let child = self.collect(body, Some(module), name.text.clone(), d.span, errors);
+                    self.scopes[child].native_path = Some(path);
+                    self.bind(
+                        module,
+                        name.text,
+                        Namespace::Type,
+                        Binding {
+                            target: Target::Module(child),
+                            visibility: d.visibility,
+                            span: d.span,
+                        },
+                        errors,
+                    );
+                }
+                DeclarationKind::RustImport { .. } => errors.push(Diagnostic::error(
+                    "L0512",
+                    "Rust imports require the Cargo project loader",
+                    d.span,
+                )),
                 DeclarationKind::Module { body: None, .. } => errors.push(Diagnostic::error(
                     "L0501",
                     "external module was not loaded",
@@ -376,13 +438,17 @@ impl Graph {
                     }
                 }
                 _ => {
-                    let ns = if matches!(
+                    let ns = if matches!(&d.kind,DeclarationKind::Foreign{foreign,..} if matches!(foreign.entity.kind.as_str(),"macro"|"proc_macro"))
+                    {
+                        Namespace::Macro
+                    } else if matches!(
                         d.kind,
                         DeclarationKind::Struct { .. }
                             | DeclarationKind::Enum { .. }
                             | DeclarationKind::Prop { .. }
                             | DeclarationKind::Spec { .. }
-                    ) {
+                    ) || matches!(&d.kind,DeclarationKind::Foreign {foreign,..} if foreign.is_type())
+                    {
                         Namespace::Type
                     } else {
                         Namespace::Value
@@ -448,6 +514,23 @@ impl Graph {
         errors: &mut Vec<Diagnostic>,
     ) {
         if let Some(first) = self.scopes[module].bindings.get(&(name.clone(), ns)) {
+            // `import` binds a public Rust entity privately. `pub use name`
+            // may expose that same binding without creating a second item.
+            let native = match first.target {
+                Target::Item(i) => matches!(
+                    self.items[i].declaration.kind,
+                    DeclarationKind::Foreign { .. }
+                ),
+                Target::Module(m) => self.scopes[m].native_path.is_some(),
+            };
+            if native
+                && first.target == binding.target
+                && first.visibility.is_none()
+                && binding.visibility.is_some()
+            {
+                self.scopes[module].bindings.insert((name, ns), binding);
+                return;
+            }
             errors.push(
                 Diagnostic::error(
                     "L0502",
@@ -493,7 +576,20 @@ impl Graph {
                                 self.items[i].declaration.visibility.as_ref(),
                             ),
                         };
-                        let target_scope = self.access.extent(target_vis, owner);
+                        // Native entities are public in Rust; the private import is
+                        // a local binding, not a new private declaration.
+                        let native = match target {
+                            Target::Item(i) => matches!(
+                                self.items[i].declaration.kind,
+                                DeclarationKind::Foreign { .. }
+                            ),
+                            Target::Module(m) => self.scopes[m].native_path.is_some(),
+                        };
+                        let target_scope = if native {
+                            None
+                        } else {
+                            self.access.extent(target_vis, owner)
+                        };
                         let alias_scope = self.access.extent(visibility.as_ref(), module);
                         let widens = match (target_scope, alias_scope) {
                             (None, _) => false,
@@ -597,6 +693,16 @@ impl Graph {
                 continue;
             }
             let Some(binding) = binding else {
+                if let Some(native) = &self.scopes[module].native_path {
+                    return Err(Diagnostic::error(
+                        "L0513",
+                        format!(
+                            "Rust item `{}` was not found in imported `{native}` for the selected target/features",
+                            name.text
+                        ),
+                        name.span,
+                    ));
+                }
                 return Err(Diagnostic::error(
                     "L0502",
                     format!(
@@ -704,7 +810,8 @@ pub fn is_public(v: Option<&Visibility>) -> bool {
 }
 pub fn declared_name(k: &DeclarationKind) -> Option<&Name> {
     match k {
-        DeclarationKind::Spec { name, .. }
+        DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Spec { name, .. }
         | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
         | DeclarationKind::Enum { name, .. }
@@ -715,7 +822,8 @@ pub fn declared_name(k: &DeclarationKind) -> Option<&Name> {
 }
 fn declared_name_mut(k: &mut DeclarationKind) -> Option<&mut Name> {
     match k {
-        DeclarationKind::Spec { name, .. }
+        DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Spec { name, .. }
         | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
         | DeclarationKind::Enum { name, .. }
@@ -731,6 +839,7 @@ struct Rewriter<'a> {
     values: Vec<String>,
     types: Vec<String>,
     errors: &'a mut Vec<Diagnostic>,
+    foreign_uses: &'a mut BTreeSet<usize>,
 }
 impl Rewriter<'_> {
     fn path(&mut self, path: &mut Path, ns: Namespace) {
@@ -766,6 +875,31 @@ impl Rewriter<'_> {
         });
         match result {
             Ok((Target::Item(i), tail)) => {
+                if let DeclarationKind::Foreign { foreign, .. } =
+                    &self.graph.items[i].declaration.kind
+                {
+                    self.foreign_uses.insert(i);
+                    if let Some(why) = &foreign.entity.unavailable {
+                        self.errors.push(Diagnostic::error(
+                            "L0514",
+                            format!("cannot use imported `{}`: {why}", foreign.path),
+                            path.span,
+                        ));
+                        return;
+                    }
+                    if !tail.is_empty() {
+                        self.errors.push(Diagnostic::error(
+                            "L0513",
+                            format!(
+                                "Rust function `{}` has no member `{}`",
+                                foreign.path, tail[0].text
+                            ),
+                            path.span,
+                        ));
+                        return;
+                    }
+                }
+
                 let mut name = path.segments[0].clone();
                 name.text = self.graph.items[i].canonical.clone();
                 path.segments = vec![name];

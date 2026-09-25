@@ -368,9 +368,9 @@ enum Namespace {
 /// none of its own.
 fn declared_namespace(declaration: &Declaration) -> Option<Namespace> {
     match &declaration.kind {
-        DeclarationKind::Function { .. } | DeclarationKind::Constant { .. } => {
-            Some(Namespace::Value)
-        }
+        DeclarationKind::Foreign { .. }
+        | DeclarationKind::Function { .. }
+        | DeclarationKind::Constant { .. } => Some(Namespace::Value),
         DeclarationKind::Struct { .. }
         | DeclarationKind::Enum { .. }
         | DeclarationKind::Prop { .. } => Some(Namespace::Type),
@@ -380,14 +380,17 @@ fn declared_namespace(declaration: &Declaration) -> Option<Namespace> {
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
-        | DeclarationKind::Use { .. } => None,
+        | DeclarationKind::Use { .. }
+        | DeclarationKind::ImportedModule { .. }
+        | DeclarationKind::RustImport { .. } => None,
     }
 }
 
 /// The name an item declares. An `impl` block declares none of its own.
 pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
     match &declaration.kind {
-        DeclarationKind::Function { name, .. }
+        DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
         | DeclarationKind::Enum { name, .. }
         | DeclarationKind::Prop { name, .. }
@@ -398,7 +401,9 @@ pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
-        | DeclarationKind::Use { .. } => None,
+        | DeclarationKind::Use { .. }
+        | DeclarationKind::ImportedModule { .. }
+        | DeclarationKind::RustImport { .. } => None,
     }
 }
 
@@ -596,7 +601,10 @@ impl Mentions<'_> {
             | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }
-            | DeclarationKind::Use { .. } => {}
+            | DeclarationKind::Use { .. }
+            | DeclarationKind::ImportedModule { .. }
+            | DeclarationKind::RustImport { .. }
+            | DeclarationKind::Foreign { .. } => {}
         }
     }
 

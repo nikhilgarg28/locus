@@ -31,6 +31,7 @@ mod loops;
 mod models;
 mod moves;
 mod mutation;
+mod native;
 mod naturals;
 mod operators;
 mod order;

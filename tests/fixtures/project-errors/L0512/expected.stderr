@@ -1,0 +1,5 @@
+error[L0512]: Rust imports require the Cargo project loader
+ --> <fixture>/export.lc:1:1
+  |
+1 | pub import absent;
+  | ^^^^^^^^^^^^^^^^^^

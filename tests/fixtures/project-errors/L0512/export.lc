@@ -1,0 +1,2 @@
+pub import absent;
+//~ error: L0512

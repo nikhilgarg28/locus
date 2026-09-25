@@ -4,7 +4,7 @@
 // editors/highlight/locus.js is the tokenizer that knows the language better.
 export default function locus(hljs) {
   const KEYWORDS = {
-    keyword: 'fn const let if else struct enum match loop for in break continue while return mut as impl pub prop logic spec mod type use forall exists',
+    keyword: 'fn const let if else struct enum match loop for in break continue while return mut as impl pub prop logic spec import mod type use forall exists',
     literal: 'true false',
     type: 'bool u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize Int Nat Bool Prop Seq Map Ghost Option Result Vec Box',
     built_in: 'prove! prop! rewrite! unfold! fold! old! snapshot! model! recurse! assert! debug_assert! unreachable! todo! panic! matches! vec!',

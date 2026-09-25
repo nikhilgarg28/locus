@@ -8,7 +8,7 @@ order = 45
 
 # Rust imports and native identity
 
-Plain imports and proof-bearing specs are separate layers. This replaces the earlier proposal in which `import` selected and assumed a spec. Manual opaque specs are the first implementation stage; native imports follow in a separate commit.
+Plain imports and proof-bearing specs are separate layers. This replaces the earlier proposal in which `import` selected and assumed a spec. Manual opaque specs and the initial plain-import bridge are implemented separately. The [current manual](../spec/19-native-imports.md) states their precise limits; the broader design below includes future sysroot, native type and assumed-realization work.
 
 ## Import the physical interface
 

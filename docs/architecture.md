@@ -156,3 +156,12 @@ Canonical Markdown specifications carry permanent rule IDs, which tests cite. Th
 ## Concrete interface checking
 
 `src/project/specs.rs` checks resolved `spec type` declarations against their unique package-owned `impl Spec for Representation`. It compares binder-normalized signatures including proofs, inherits effect promises, and generates a private nominal wrapper plus ordinary checked adapters. The parser reserves generated identifiers so source cannot address the hidden representation. Completeness and family ownership are checked even for unused specs; generic bodies are checked only at instantiation. Both the manual body and each adapter pass the existing elaborator, kernel and IR pipeline. This lowering is a compiler-correctness assumption, not a new kernel rule. Module specs and assumed native realizations remain deferred.
+
+
+## Plain Rust imports
+
+`src/imports` captures Cargo's actual compiler invocations and runs matching rustdoc with their feature/cfg/target arguments. A private temporary wrapper forwards rustc unchanged; only the rustdoc child gets experimental JSON support. Environment values remain in private temporary files, not published interfaces. Format and identity validation produce a versioned inventory with foreign provenance and normalized callable signatures; other item shapes remain inspectable. Captures and native metadata are rebuilt on each load. Recursive extraction, ambiguous library instances and incompatible toolchains fail explicitly.
+
+Resolution expands native namespaces before ordinary Locus resolution. Unused unsupported entities remain in the inventory and never become fake kernel types. Used safe scalar/tuple functions undergo a Rust function-pointer assertion against the native Cargo metadata, so `cfg(doc)` cannot authorize unavailable calls. Dependency aliases are resolved by package identity before choosing an emitted host path.
+
+`elab/native.rs` and `typed/native.rs` introduce a physical execution declaration with `Tail::Foreign` and `EExpr::NativeCall`. It has no behavioral contract, logical definition or effect promises. Both checking IR and erased IR validate its physical-only boundary. Rust emission retains normal call evaluation; the interpreters stop with an explicit unsupported-native observation. The audit lists native paths as physical signatures only. The metadata adapter and emission bridge belong to the whole-compiler trusted base; the proof kernel is unchanged. This boundary differs from registered `trusted` adapters, whose behavioral contracts are assumptions.

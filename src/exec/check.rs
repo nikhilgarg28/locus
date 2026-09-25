@@ -20,6 +20,7 @@ use super::ir::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
+    InvalidForeign,
     InvalidBuffer(&'static str),
     /// The kernel rejected a term, a type, or a proof.
     Kernel(KernelError),
@@ -74,6 +75,7 @@ impl From<KernelError> for ExecError {
 impl fmt::Display for ExecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidForeign => write!(f, "native calls require physical scalar/tuple types and make no effect promises"),
             Self::InvalidBuffer(reason) => write!(f, "invalid collection operation: {reason}"),
             Self::Kernel(error) => write!(f, "{error}"),
             Self::UnknownFunction => f.write_str("function is not declared"),
@@ -311,6 +313,23 @@ impl Program {
             self.check_stmt(ctx, stmt, declared, loops)?;
         }
         match &block.tail {
+            Tail::Foreign {
+                arguments, result, ..
+            } => {
+                if declared.promises != Promises::default()
+                    || !foreign_type(result)
+                    || expected.is_none_or(|e| !same_type(e, result))
+                {
+                    return Err(ExecError::InvalidForeign);
+                }
+                for argument in arguments {
+                    if !foreign_type(&infer_term(ctx, argument, Mode::Executable)?) {
+                        return Err(ExecError::InvalidForeign);
+                    }
+                }
+                check_type(ctx, result)?;
+                Ok(())
+            }
             Tail::Value(value) => {
                 let expected = expected.ok_or(ExecError::FallsThrough)?;
                 expect(ctx, value, expected, &self.definitions)
@@ -730,4 +749,12 @@ fn expect(
             found,
         }))
     }
+}
+
+/// Native signatures cannot contain erased fields, functions or invariant-
+/// carrying nominal types. Their Rust identity is checked at the import edge.
+fn foreign_type(ty: &Type) -> bool {
+    ty.as_machine().is_some()
+        || matches!(ty, Type::Bool)
+        || matches!(ty, Type::Tuple(fields) if fields.iter().all(foreign_type))
 }

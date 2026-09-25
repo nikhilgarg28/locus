@@ -217,6 +217,20 @@ pub struct Declaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
+    RustImport {
+        path: Path,
+        alias: Option<Name>,
+    },
+    ImportedModule {
+        name: Name,
+        path: String,
+        body: Program,
+    },
+    /// Synthesized only by the native metadata importer.
+    Foreign {
+        name: Name,
+        foreign: crate::imports::Foreign,
+    },
     /// A concrete interface. Its function/constant members are signatures only;
     /// their placeholder bodies must never reach elaboration.
     Spec {

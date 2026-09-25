@@ -1,0 +1,5 @@
+error[L0514]: cannot use imported `crate::future`: async Rust functions are retained, but Locus has no async/await execution yet
+ --> <fixture>/export.lc:2:15
+  |
+2 | fn call()->u8{future()}
+  |               ^^^^^^

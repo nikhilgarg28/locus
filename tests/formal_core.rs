@@ -49,7 +49,11 @@ fn calculus_grammar_covers_every_check_ir_constructor() {
             "Stmt",
             "Let Have Call Match Loop For Operate Buffer BoxNew",
         ),
-        (ir, "Tail", "Value Break Continue Match Return Panic"),
+        (
+            ir,
+            "Tail",
+            "Value Break Continue Match Return Panic Foreign",
+        ),
         (ir, "BufferStorage", "Array Slice Vector"),
         (native, "BufferOp", "Literal Length Get Set Push"),
     ] {
@@ -66,6 +70,7 @@ fn calculus_grammar_covers_every_check_ir_constructor() {
     for rule in [
         "IR-Bind",
         "IR-Call",
+        "IR-Foreign",
         "IR-Match",
         "IR-Loop",
         "IR-For",

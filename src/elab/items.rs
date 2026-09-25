@@ -339,7 +339,8 @@ pub fn elaborate_with_options(
 /// The name a declaration declares, by its kind.
 fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
     match kind {
-        DeclarationKind::Function { name, .. }
+        DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
         | DeclarationKind::Enum { name, .. }
         | DeclarationKind::Prop { name, .. }
@@ -350,7 +351,9 @@ fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
-        | DeclarationKind::Use { .. } => None,
+        | DeclarationKind::Use { .. }
+        | DeclarationKind::ImportedModule { .. }
+        | DeclarationKind::RustImport { .. } => None,
     }
 }
 
@@ -509,7 +512,10 @@ impl Env<'_> {
                 | DeclarationKind::Spec { .. }
                 | DeclarationKind::ModuleImpl { .. }
                 | DeclarationKind::Module { .. }
-                | DeclarationKind::Use { .. } => {}
+                | DeclarationKind::Use { .. }
+                | DeclarationKind::ImportedModule { .. }
+                | DeclarationKind::RustImport { .. }
+                | DeclarationKind::Foreign { .. } => {}
             }
         }
         visibilities
@@ -1157,6 +1163,15 @@ impl Env<'_> {
     ) -> Elab<Global> {
         let attributes = &declaration.attributes;
         match &declaration.kind {
+            DeclarationKind::Foreign { name, foreign } => {
+                self.foreign_function(name, foreign, declaration.visibility.clone())
+            }
+            DeclarationKind::ImportedModule { .. } | DeclarationKind::RustImport { .. } => self
+                .fail(
+                    "L0512",
+                    "Rust imports require the Cargo project loader",
+                    declaration.span,
+                ),
             DeclarationKind::Struct {
                 name,
                 fields,

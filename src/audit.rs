@@ -150,6 +150,16 @@ fn walk(block: &Block, path: &str, definitions: &Definitions, entries: &mut Vec<
     }
     let site = format!("{path}/end");
     match &block.tail {
+        Tail::Foreign {
+            path, arguments, ..
+        } => {
+            entries.push(format!(
+                "native {site}: Rust {path}; physical signature only, no behavioral contract"
+            ));
+            for value in arguments {
+                term(value, &site, definitions, entries);
+            }
+        }
         Tail::Value(value) | Tail::Return(value) | Tail::Break(value) => {
             term(value, &site, definitions, entries)
         }

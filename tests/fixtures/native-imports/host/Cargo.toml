@@ -1,0 +1,15 @@
+[package]
+name = "native_host"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+renamed = { package = "native_provider", path = "../provider" }
+
+[features]
+extra = ["renamed/extra"]
+
+[workspace]
+
+[dependencies.native_macros]
+path = "../macros"

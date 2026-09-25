@@ -14,6 +14,7 @@ pub mod diagnostic;
 pub mod elab;
 pub mod erased;
 pub mod exec;
+pub mod imports;
 pub mod kernel;
 pub mod lexer;
 pub mod limits;

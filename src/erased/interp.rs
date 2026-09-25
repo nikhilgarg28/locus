@@ -107,6 +107,7 @@ impl Outcome {
 /// the program.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RunError {
+    Native(String),
     /// Calls nested more deeply than the interpreter allows.
     TooDeep,
     /// Control reached a point the program was shown never to reach.
@@ -118,6 +119,10 @@ pub enum RunError {
 impl fmt::Display for RunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Native(path) => write!(
+                f,
+                "native call `{path}` cannot run in the Locus interpreter; compile the generated Rust"
+            ),
             Self::TooDeep => write!(
                 f,
                 "MAX_INTERPRETER_CALL_DEPTH limit of {} was exceeded",
@@ -529,6 +534,14 @@ impl<'m> Interpreter<'m> {
             // The arguments in order, a lend reading its place; then the
             // call, and its `&mut` places written back, whether it returned
             // or panicked.
+            EExpr::NativeCall {
+                path, arguments, ..
+            } => {
+                for arg in arguments {
+                    let _ = value!(self.expr(arg));
+                }
+                return Err(RunError::Native(path.clone()).into());
+            }
             EExpr::Call {
                 callee, arguments, ..
             } => match self.all(arguments)? {

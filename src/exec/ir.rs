@@ -208,6 +208,13 @@ pub struct Arm {
 
 #[derive(Clone, Debug)]
 pub enum Tail {
+    /// A Rust-native operation. The boundary admits only physical scalar/tuple
+    /// types and supplies no logical contract or effect promise.
+    Foreign {
+        path: String,
+        arguments: Vec<Term>,
+        result: Type,
+    },
     /// The block's result.
     Value(Term),
     /// Leaves the nearest enclosing loop or `for` with its result; in a

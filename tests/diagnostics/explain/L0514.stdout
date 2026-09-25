@@ -1,0 +1,12 @@
+L0514: Imported Rust feature is not usable yet
+
+The native item exists and is retained for inspection, but Locus cannot currently use its type or operation. The diagnostic identifies the missing capability. Initial calls support safe non-generic free functions over bool, supported machine integers and tuples. Native types, references, traits, constants, async, unsafe, generics and macros need further checking rules.
+
+Importing a module with such members is permitted; only their use is rejected. Inspect the complete interface with `locus import dependency --json`. A small physical Rust wrapper can expose a supported signature, but it does not establish any proof or effect promise.
+
+```text prose cargo-fixture-diagnostic
+import dependency::future;
+fn call() -> u8 { future() } // async execution is unavailable.
+```
+
+Language, as built: [1.30:5](../spec/19-native-imports.md).

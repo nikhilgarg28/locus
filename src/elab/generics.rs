@@ -397,6 +397,9 @@ impl Specializer<'_> {
     fn declaration(&mut self, declaration: &mut Declaration, substitutions: &Types) {
         let mut locals = Types::new();
         match &mut declaration.kind {
+            DeclarationKind::ImportedModule { .. }
+            | DeclarationKind::RustImport { .. }
+            | DeclarationKind::Foreign { .. } => {}
             DeclarationKind::SpecImpl { .. }
             | DeclarationKind::AssociatedType { .. }
             | DeclarationKind::Spec { .. }

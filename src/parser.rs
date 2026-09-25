@@ -327,6 +327,7 @@ impl Parser<'_> {
             || self.at_keyword("impl")
             || self.at_keyword("mod")
             || self.at_keyword("use")
+            || (self.at_word("import") && self.peek(1) != K::LParen)
             || self.at_word("trusted")
             || (self.at_word("spec")
                 && self
@@ -432,6 +433,23 @@ impl Parser<'_> {
                 ));
                 return Err(());
             }
+        }
+        if self.at_word("import") {
+            self.bump();
+            let path = self.path()?;
+            let alias = if self.eat(K::As).is_some() {
+                Some(self.name()?)
+            } else {
+                None
+            };
+            let end = self.expect(K::Semicolon)?.span;
+            return Ok(Declaration {
+                doc,
+                attributes,
+                visibility,
+                kind: DeclarationKind::RustImport { path, alias },
+                span: start.through(end),
+            });
         }
         if self.at_word("trusted") {
             let (kind, attribute, end) = self.trusted_function()?;

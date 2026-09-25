@@ -901,6 +901,9 @@ impl Printer<'_> {
                 ),
                 _ => unreachable!("a row has one or two operands"),
             },
+            EExpr::NativeCall {
+                path, arguments, ..
+            } => format!("{path}({})", self.all(arguments).join(", ")),
             EExpr::Call {
                 callee,
                 name,
@@ -1173,6 +1176,9 @@ fn contains_divergence(expr: &EExpr) -> bool {
         }
         | EExpr::Tuple(exprs)
         | EExpr::Variant { payload: exprs, .. }
+        | EExpr::NativeCall {
+            arguments: exprs, ..
+        }
         | EExpr::Call {
             arguments: exprs, ..
         } => any(exprs),

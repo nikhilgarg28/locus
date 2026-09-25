@@ -19,6 +19,10 @@ macro_rules! limits {
 }
 
 limits! {
+    MAX_RUSTDOC_BYTES: usize = 134217728; "one rustdoc JSON interface"; "L0512; no interface accepted";
+    MAX_RUSTC_CAPTURE_BYTES: usize = 16777216; "one captured compiler invocation"; "L0512; no interface accepted";
+    MAX_RUSTC_CAPTURE_STRINGS: usize = 100000; "one captured argument or environment string list"; "L0512; no interface accepted";
+
     MAX_SOURCE_BYTES: usize = 64 << 20; "one source unit, including assembled libraries"; "L0010; no tokenization or elaboration";
     MAX_DIAGNOSTICS: usize = 1000; "retained diagnostics in one compilation phase"; "L0011 replaces the final diagnostic; explicit suppression notice";
     MAX_DIAGNOSTIC_FACTS: usize = 6; "distinct facts printed for one failed obligation"; "explicit omission note; proof search still receives all facts";

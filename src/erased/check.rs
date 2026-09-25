@@ -500,6 +500,21 @@ impl Checker<'_> {
                 }
                 EType::Int(*ty)
             }
+            EExpr::NativeCall {
+                arguments, result, ..
+            } => {
+                let types = needed!(self.values(arguments)?);
+                fn physical(ty: &EType) -> bool {
+                    matches!(ty, EType::Bool | EType::Int(_))
+                        || matches!(ty,EType::Tuple(fields) if fields.iter().all(physical))
+                }
+                if !physical(result) || !types.iter().all(physical) {
+                    return fail(
+                        "native call cannot inspect or create erased/invariant-bearing values",
+                    );
+                }
+                result.clone()
+            }
             EExpr::Call {
                 callee,
                 name,

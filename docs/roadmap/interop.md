@@ -97,13 +97,13 @@ Remaining: supported cfg/feature syntax and checking of selected configurations,
 ## LOC-44 · Broader Rust ecosystem interoperability
 <!-- task: {"id": "t53", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Readable generated crates and protected exports are delivered ([LOC-183](core-build.md#LOC-183)); explicit trusted Rust contracts, reasons and audit are delivered ([LOC-229](reconciliation.md#LOC-229), [LOC-196](process.md#LOC-196)). Module/package builds now preserve concrete dependency identities. Remaining: arbitrary native Rust types/traits, generic cross-package ABI mappings and reviewed cross-crate contracts. In particular current Option/Result are generated specialized enums, not std ABI aliases. The documentation audit also found that `Option<PrivateStruct>` can expose its private payload type through a generated public variant and trigger rustc’s `private_interfaces` warning. Make specialization visibility respect the source boundary and add a warning-denied regression; the current examples use a public type with private invariant-bearing fields. Coordinate [LOC-21](generics.md#LOC-21), [LOC-41](interop.md#LOC-41) and [LOC-63](interop.md#LOC-63).
+Readable generated crates and protected exports are delivered ([LOC-183](core-build.md#LOC-183)); explicit trusted Rust contracts, reasons and audit are delivered ([LOC-229](reconciliation.md#LOC-229), [LOC-196](process.md#LOC-196)). Module/package builds now preserve concrete dependency identities. Remaining: executing imported opaque native types/references, traits, constants, generics, async/unsafe functions and macros; sysroot metadata and external-crate re-export loading; generic cross-package ABI mappings and reviewed cross-crate contracts. Plain imports retain those item kinds but only execute the physical scalar/tuple free-function subset. In particular current Option/Result are generated specialized enums, not std ABI aliases. The documentation audit also found that `Option<PrivateStruct>` can expose its private payload type through a generated public variant and trigger rustc’s `private_interfaces` warning. Make specialization visibility respect the source boundary and add a warning-denied regression; the current examples use a public type with private invariant-bearing fields. Coordinate [LOC-21](generics.md#LOC-21), [LOC-41](interop.md#LOC-41) and [LOC-63](interop.md#LOC-63).
 
 <a id="LOC-63"></a>
 ## LOC-63 · Cargo and build.rs integration
 <!-- task: {"id": "t78", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Implemented standalone module builds and the shared `locus::project::Build` API for build.rs, including OUT_DIR generation and rerun directives. Real Cargo hosts compile and execute a producer and consumer. Generation is deterministic; receipts validate artifacts but never skip proof checking. `cargo locus` and automatic inference of all host feature settings remain deferred.
+Implemented standalone module builds and the shared `locus::project::Build` API for build.rs, including OUT_DIR generation and rerun directives. Real Cargo hosts compile and execute a producer and consumer. Generation is deterministic; receipts validate artifacts but never skip proof checking. `cargo locus` and automatic inference of all host feature settings remain deferred. Native imports currently require a host that compiles before extraction; staged dependency/host introspection for recursive build scripts needs an extension of this completed base, with explicit cycle/configuration tests.
 
 <a id="LOC-237"></a>
 ## LOC-237 · Reachable Rust interfaces and export diagnostics
@@ -161,9 +161,9 @@ Added real directories, two source-aware diagnostic fixtures with JSON/text/expl
 
 <a id="LOC-246"></a>
 ## LOC-246 · Import physical Rust interfaces
-<!-- task: {"id": "interop-246", "status": "backlog", "priority": 3} -->
+<!-- task: {"id": "interop-246", "status": "done", "priority": 3} -->
 
-Implement `import path [as alias]` independently of specs, using guarded rustdoc JSON extraction and a versioned internal representation. Retain all public entities, including traits, async and unsafe signatures, with explicit foreign provenance. Unsupported uses explain the limitation; imported names carry no behavioral proofs. Account for Cargo aliases, target/features, identity and actual native availability.
+Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); sysroot/native-type expansion and staged host builds remain in LOC-44 and LOC-63.
 
 <a id="LOC-247"></a>
 ## LOC-247 · Audited native proof adapters
@@ -179,9 +179,9 @@ Optional command to generate editable spec source from the plain-import represen
 
 <a id="LOC-249"></a>
 ## LOC-249 · Native import packaging and acceptance
-<!-- task: {"id": "interop-249", "status": "backlog", "priority": 3} -->
+<!-- task: {"id": "interop-249", "status": "done", "priority": 3} -->
 
-Cargo-host/dependency fixtures, publication identity, configuration changes, stale metadata and receipts, same-crate/downstream hostile consumers, diagnostic snapshots, documentation and full gates. Behavioral assumptions remain visible after compatible-signature dependency updates.
+Implemented real Cargo fixtures and eleven import regressions covering entity retention, namespaces, aliases across Locus dependencies, cfg/features/target selection, source/receipt changes, schema drift, native signature mismatch, diagnostics and preserved Rust effects. Independent IR checks reject logical/native crossings. Updated the manual, package guide, architecture, formal core, trust inventory, diagnostics and highlighting; inspected desktop/mobile layouts. The full extended gate passed, including 10,000 generated programs and 82,209 execution cases with no disagreement. The standard suite took 305 seconds, over the advisory 120-second target. Assumed spec adapters remain LOC-247; current unsupported forms are documented and tracked separately.
 
 <a id="LOC-250"></a>
 ## LOC-250 · Expand specification expressiveness

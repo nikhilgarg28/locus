@@ -1,0 +1,3 @@
+import crate::future;
+fn call()->u8{future()}
+//~ error: L0514

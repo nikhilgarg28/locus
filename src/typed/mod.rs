@@ -9,6 +9,7 @@
 mod buffer;
 mod layout;
 mod lower;
+mod native;
 mod shared;
 mod tree;
 mod trusted;

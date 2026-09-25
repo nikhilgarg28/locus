@@ -20,6 +20,7 @@ pub struct Loaded {
     pub entry: PathBuf,
     pub cargo: Option<super::cargo::Workspace>,
     pub packages: Vec<usize>,
+    pub native: crate::imports::Imports,
 }
 
 impl Loaded {
@@ -135,12 +136,17 @@ pub fn load(path: &Path) -> Result<Loaded, Error> {
         entry: entry.canonicalize().unwrap_or(entry),
         cargo: None,
         packages: Vec::new(),
+        native: crate::imports::Imports::default(),
     })
 }
 
 /// Assemble one package graph into one checked unit. Each Cargo package has a
 /// distinct crate root; export entries are children of their library root.
-pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Result<Loaded, Error> {
+pub(super) fn load_cargo(
+    path: &Path,
+    workspace: super::cargo::Workspace,
+    options: &super::cargo::CargoOptions,
+) -> Result<Loaded, Error> {
     let entry = entry_file(path);
     let mut packages = vec![workspace.host];
     let mut next = 0;
@@ -232,10 +238,19 @@ pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Res
             _ => unreachable!("synthetic module"),
         });
     let mut units = Vec::new();
+    let mut native = crate::imports::Imports::default();
     for (index, shape) in shapes.into_iter().enumerate() {
         let package = &workspace.packages[packages[index]];
-        let program = bodies.next().unwrap();
-        let exports = shape
+        let mut program = bodies.next().unwrap();
+        if let Err(diagnostics) =
+            native.expand(&mut program, Some(&workspace), packages[index], options)
+        {
+            return Err(Error {
+                sources: loader.sources,
+                diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),
+            });
+        }
+        let mut exports: Vec<Option<ast::Program>> = shape
             .into_iter()
             .skip(1)
             .map(|present| present.then(|| bodies.next().unwrap()))
@@ -250,6 +265,16 @@ pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Res
                     .map(|i| (alias.clone(), i))
             })
             .collect();
+        for export in exports.iter_mut().flatten() {
+            if let Err(diagnostics) =
+                native.expand(export, Some(&workspace), packages[index], options)
+            {
+                return Err(Error {
+                    sources: loader.sources,
+                    diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),
+                });
+            }
+        }
         units.push(super::resolve::Unit {
             program,
             name: package.name.clone(),
@@ -265,6 +290,12 @@ pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Res
             diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),
         });
     }
+    if let Err(diagnostics) = native.validate(&program) {
+        return Err(Error {
+            sources: loader.sources,
+            diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),
+        });
+    }
     Ok(Loaded {
         sources: loader.sources,
         bundle,
@@ -274,6 +305,7 @@ pub(super) fn load_cargo(path: &Path, workspace: super::cargo::Workspace) -> Res
         entry: entry.canonicalize().unwrap_or(entry),
         cargo: Some(workspace),
         packages,
+        native,
     })
 }
 fn same_path(a: &Path, b: &Path) -> bool {

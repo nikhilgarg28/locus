@@ -44,6 +44,9 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
             for (target, root) in dependency.targets.iter().zip(&graph.export_roots[index]) {
                 for exposed in graph.exports(*root) {
                     let item = &graph.items[exposed.item];
+                    if matches!(item.declaration.kind, DeclarationKind::Foreign { .. }) {
+                        continue;
+                    }
                     let prefix = if target.rust_module.is_empty() {
                         format!("::{alias}")
                     } else {
@@ -57,6 +60,11 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
             }
         }
         for item in &graph.items {
+            // Plain native imports already carry a validated host Rust path.
+            // Their one-line call adapters are not dependency implementations.
+            if matches!(item.declaration.kind, DeclarationKind::Foreign { .. }) {
+                continue;
+            }
             if graph.package_of(item.module) != 0 {
                 foreign.insert(item.canonical.clone());
                 export.visibility.hide(&item.canonical);

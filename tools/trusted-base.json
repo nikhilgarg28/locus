@@ -188,6 +188,30 @@
     {
       "path": "src/project/specs/walk.rs",
       "category": "structural substitution used by opaque spec lowering"
+    },
+    {
+      "path": "src/imports/model.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/imports/extract.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/imports/capture.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/imports/mod.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/elab/native.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
+    },
+    {
+      "path": "src/typed/native.rs",
+      "category": "native signature extraction, provenance and physical-only execution boundary"
     }
   ]
 }

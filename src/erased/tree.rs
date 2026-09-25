@@ -169,6 +169,11 @@ pub enum EPattern {
 
 #[derive(Clone, Debug)]
 pub enum EExpr {
+    NativeCall {
+        path: String,
+        arguments: Vec<EExpr>,
+        result: EType,
+    },
     BoxNew(Box<EExpr>),
     BoxDeref(Box<EExpr>),
     Shared {

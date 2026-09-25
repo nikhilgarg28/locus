@@ -82,7 +82,7 @@ impl Build {
         let workspace = cargo::discover(&self.entry, &self.cargo)
             .map_err(|e| driver("L0505", &self.entry, e))?;
         if let Some(workspace) = workspace {
-            super::load::load_cargo(&self.entry, workspace)
+            super::load::load_cargo(&self.entry, workspace, &self.cargo)
         } else {
             super::load(&self.entry)
         }
@@ -222,7 +222,7 @@ impl Build {
         Ok(record["outputs"][format!("{}.rs", self.name)] == hash(&source))
     }
     fn configuration(&self, loaded: &Loaded) -> serde_json::Value {
-        serde_json::json!({"entry":loaded.entry.canonicalize().unwrap_or_else(|_|loaded.entry.clone()),"previews":self.options.previews.iter().map(|p|p.name()).collect::<Vec<_>>(),"cargo":loaded.cargo.as_ref().map(|w|&w.selection),"check_moves":self.options.check_moves})
+        serde_json::json!({"entry":loaded.entry.canonicalize().unwrap_or_else(|_|loaded.entry.clone()),"previews":self.options.previews.iter().map(|p|p.name()).collect::<Vec<_>>(),"cargo":loaded.cargo.as_ref().map(|w|&w.selection),"check_moves":self.options.check_moves,"native_imports":loaded.native.receipt()})
     }
 }
 fn owned_receipt(path: &Path, name: &str) -> bool {

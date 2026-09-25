@@ -91,3 +91,10 @@ Canonical models obey that source boundary as well: their bodies may inspect rep
 ## Checked spec adapters
 
 A type spec supplies a contract, not evidence. Both the manual representation body and its generated opaque adapter pass the ordinary compiler and kernel checks. Tests cover missing/duplicate implementations, changed propositions, false evidence, mutable effects and hostile Rust clients. Resolved signature matching and adapter/privacy lowering are counted in the compiler trust inventory. Generic bodies remain checked at concrete instantiation; declarations alone do not certify all instantiations. Module specs and more general representation conversions remain deferred.
+
+
+## Native Rust interfaces
+
+Plain imports retain all public item kinds and distinguish native provenance from checked Locus source. Only the supported physical signatures become executable declarations; no imported metadata supplies a proof, model or effect promise. Used calls are checked against actual Cargo metadata as well as rustdoc output. Tests deliberately expose mismatched and `cfg(doc)`-only signatures to ensure documentation cannot authorize a native call.
+
+The extractor, schema normalizer and native execution bridge are whole-compiler correctness assumptions, together with Cargo/rustc/rustdoc. Experimental JSON output is enabled only in the rustdoc child. Schema drift fails closed. Real package tests exercise aliases, features, target selection, source changes, macro/trait retention, diagnostics, output ownership and executed Rust side effects. Both interpreters explicitly decline arbitrary native execution; that refusal is not evidence of runtime agreement. Native correctness remains conditional on Rust's type/safety guarantees, without stronger behavioral assumptions. See [native imports](spec/19-native-imports.md) for current restrictions.
