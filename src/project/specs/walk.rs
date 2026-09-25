@@ -369,7 +369,42 @@ pub fn member<W: Walk + ?Sized>(w: &mut W, d: &mut Declaration) {
             w.ty(ty);
             w.expr(value);
         }
-        DeclarationKind::AssociatedType { name, value } => {
+        DeclarationKind::Struct { fields, .. } => {
+            for f in fields {
+                w.ty(&mut f.ty);
+            }
+        }
+        DeclarationKind::Enum { variants, .. } => {
+            for v in variants {
+                fields(w, &mut v.fields);
+            }
+        }
+        DeclarationKind::Prop {
+            parameters,
+            variants,
+            ..
+        } => {
+            for p in parameters {
+                parameter(w, p);
+            }
+            for v in variants {
+                fields(w, &mut v.fields);
+                if let Some(e) = &mut v.target {
+                    w.expr(e);
+                }
+                if let Some(b) = &mut v.body {
+                    w.block(b);
+                }
+            }
+        }
+        DeclarationKind::Spec { members, .. }
+        | DeclarationKind::Trait { members, .. }
+        | DeclarationKind::SpecImpl { members, .. } => {
+            for m in members {
+                member(w, m);
+            }
+        }
+        DeclarationKind::AssociatedType { name, value, .. } => {
             w.name(name);
             if let Some(t) = value {
                 w.ty(t);

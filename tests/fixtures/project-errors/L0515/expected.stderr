@@ -1,0 +1,8 @@
+error[L0515]: implementation of `read` does not match its trait signature
+ --> <fixture>/export.lc:4:5
+  |
+1 | trait Read { fn read(&self) -> u8; }
+  |              --------------------- required signature, including receiver, logical mode and proof slots
+...
+4 |     fn read(&self) -> bool { true }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

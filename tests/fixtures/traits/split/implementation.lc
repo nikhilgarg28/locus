@@ -1,0 +1,8 @@
+use crate::api::Step;
+pub struct Arithmetic {}
+impl Step for Arithmetic {
+    fn next(x: u8) -> (y: u8, @(y == x.wrapping_add(1))) {
+        let y = x.wrapping_add(1);
+        (y, _)
+    }
+}

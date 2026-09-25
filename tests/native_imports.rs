@@ -571,3 +571,77 @@ fn a_dependency_import_uses_host_package_identity_not_its_local_alias() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+#[test]
+#[doc = "spec: 1.31:10"]
+fn imported_trait_implementation_and_native_identity() {
+    let root = fixture("trait_impl");
+    let provider = root.join("provider/src/lib.rs");
+    let source = fs::read_to_string(&provider).unwrap();
+    fs::write(
+        &provider,
+        source.replace("fn read(&self) -> u8;", "fn read(&self) -> Self::Item;"),
+    )
+    .unwrap();
+    let code = r#"
+import renamed::Surface;
+pub struct Counter {pub n:u8}
+impl Surface for Counter {
+ type Item=u8;
+ const LIMIT:u8=10;
+ fn read(&self)->u8{self.n}
+}
+pub fn answer()->u8 {let c=Counter{n:42};c.read()}
+"#;
+    let b = build(&root, code);
+    let rust = b.rust().unwrap();
+    fs::write(root.join("host/src/generated.rs"), rust).unwrap();
+    fs::write(root.join("host/src/main.rs"),"mod generated; use renamed::Surface; fn main(){let c=generated::Counter{n:42};assert_eq!(c.read(),42);assert_eq!(generated::answer(),42);assert_eq!(generated::Counter::LIMIT,10);}").unwrap();
+    let result = Command::new("cargo")
+        .args(["run", "--quiet", "--offline", "--manifest-path"])
+        .arg(root.join("host/Cargo.toml"))
+        .env("RUSTFLAGS", "-Dwarnings")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let source = format!(
+        "{code}\nimport renamed::Surface as Alias; impl Alias for Counter{{type Item=u8;const LIMIT:u8=1;fn read(&self)->u8{{1}}}}"
+    );
+    let error = build(&root, &source).check().err().unwrap();
+    assert!(
+        error.to_string().contains("conflicting implementations"),
+        "{error}"
+    );
+}
+#[test]
+fn trait_cfg_doc_mismatch_and_unsupported_members_fail_closed() {
+    let root = fixture("trait_cfg");
+    let provider = root.join("provider/src/lib.rs");
+    let source = fs::read_to_string(&provider).unwrap();
+    fs::write(&provider,format!("{source}\n#[cfg(doc)] pub trait Conditional {{ fn f(n:u8)->u8; }}\n#[cfg(not(doc))] pub trait Conditional {{ fn f(n:bool)->bool; }}\npub trait AsyncTrait {{async fn f()->u8;}}\n#[allow(non_camel_case_types)] pub trait r#type {{fn value()->u8;}}\npub use r#type as KeywordTrait;\n")).unwrap();
+    let error = build(
+        &root,
+        "import renamed::Conditional;struct S{}impl Conditional for S{fn f(n:u8)->u8{n}}",
+    )
+    .check()
+    .err()
+    .unwrap();
+    assert!(error.to_string().contains("L0512"), "{error}");
+    build(&root, "import renamed;fn f()->u8{1}")
+        .check()
+        .unwrap();
+    build(&root, "import renamed;import renamed::KeywordTrait;struct S{}impl KeywordTrait for S{fn value()->u8{3}}fn f()->u8{S::value()}")
+        .rust()
+        .unwrap();
+    let error = build(
+        &root,
+        "import renamed::AsyncTrait;struct S{}impl AsyncTrait for S{}",
+    )
+    .check()
+    .err()
+    .unwrap();
+    assert!(error.to_string().contains("L0514"), "{error}");
+}

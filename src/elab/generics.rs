@@ -419,6 +419,7 @@ impl Specializer<'_> {
             | DeclarationKind::Foreign { .. } => {}
             DeclarationKind::SpecImpl { .. }
             | DeclarationKind::AssociatedType { .. }
+            | DeclarationKind::Trait { .. }
             | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }

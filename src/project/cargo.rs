@@ -284,7 +284,7 @@ fn source_path(root: &Path, value: &str) -> Result<PathBuf, String> {
     }
     Ok(joined)
 }
-pub(super) fn identifier(value: &str) -> Result<(), String> {
+pub(crate) fn identifier(value: &str) -> Result<(), String> {
     let mut sources = crate::source::SourceMap::default();
     let id = sources.add("identifier", value);
     let tokens = crate::lexer::lex(sources.get(id));

@@ -219,6 +219,13 @@ pub struct Declaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeclarationKind {
+    /// A reusable interface; required members have no default body.
+    Trait {
+        native: Option<crate::imports::Foreign>,
+        name: Name,
+        members: Vec<Declaration>,
+        required: Vec<String>,
+    },
     RustImport {
         path: Path,
         alias: Option<Name>,
@@ -251,6 +258,7 @@ pub enum DeclarationKind {
     /// An associated type slot or its implementation binding.
     AssociatedType {
         name: Name,
+        logical: bool,
         value: Option<Type>,
     },
     /// `impl mod name { ... }`, or an external body loaded by the project loader.

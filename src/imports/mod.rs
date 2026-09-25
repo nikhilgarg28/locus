@@ -3,6 +3,7 @@
 pub mod command;
 mod extract;
 pub mod model;
+pub(crate) mod traits;
 use crate::{
     ast::*,
     diagnostic::Diagnostic,
@@ -143,7 +144,11 @@ impl Imports {
             Err(errors)
         }
     }
-    pub fn validate(&self, program: &Program) -> Result<(), Vec<Diagnostic>> {
+    pub fn validate(
+        &self,
+        program: &Program,
+        graph: &crate::project::Graph,
+    ) -> Result<(), Vec<Diagnostic>> {
         let mut errors = Vec::new();
         let mut seen = BTreeSet::new();
         if let Some(extraction) = &self.extraction {
@@ -157,6 +162,38 @@ impl Imports {
                     errors.push(Diagnostic::error(
                         "L0512",
                         format!("cannot use imported `{}`: {e}", foreign.path),
+                        d.span,
+                    ));
+                }
+            }
+        }
+        if let Some(extraction) = &self.extraction {
+            let exported: BTreeSet<_> = graph
+                .exports(graph.export_root)
+                .iter()
+                .map(|e| graph.items[e.item].canonical.clone())
+                .collect();
+            for (id, d) in &graph.traits.definitions {
+                if !exported.contains(id)
+                    && !graph
+                        .traits
+                        .implementations
+                        .iter()
+                        .any(|i| i.interface == *id)
+                {
+                    continue;
+                }
+                if let DeclarationKind::Trait {
+                    native: Some(foreign),
+                    ..
+                } = &d.kind
+                    && let Some(interface) = &foreign.entity.trait_interface
+                    && let Err(e) =
+                        extraction.validate_trait(foreign.package, &foreign.members, interface)
+                {
+                    errors.push(Diagnostic::error(
+                        "L0512",
+                        format!("cannot use imported trait `{}`: {e}", foreign.path),
                         d.span,
                     ));
                 }
@@ -187,6 +224,16 @@ fn bind(
         .get(id)
         .ok_or_else(|| format!("public Rust reference {id} has no metadata"))?
         .clone();
+    // Rust permits raw-keyword names which source Locus cannot spell. Keep
+    // such members in an imported namespace without trying to parse a trait
+    // declaration for them. A spellable Rust re-export alias remains usable.
+    if entity.trait_interface.is_some() && crate::project::cargo::identifier(&name.text).is_err() {
+        entity.trait_interface = None;
+        entity.unavailable = Some(format!(
+            "Rust trait name `{}` has no supported Locus spelling; use a Rust re-export alias",
+            name.text
+        ));
+    }
     let kind = if entity.kind == "module"
         && entity.unavailable.is_none()
         && ancestors.insert(id.into())
@@ -228,6 +275,55 @@ fn bind(
                 members: path[1..].to_vec(),
             },
         }
+    };
+    let kind = if let DeclarationKind::Foreign { name, foreign } = &kind
+        && let Some(interface) = &foreign.entity.trait_interface
+    {
+        let source = format!(
+            "trait {} {{ {} }}",
+            name.text,
+            interface.declarations(false)
+        );
+        let mut sources = crate::source::SourceMap::default();
+        let file = sources.add("Rust trait interface", source);
+        let parsed = crate::parser::parse(sources.get(file));
+        if !parsed.is_success() {
+            return Err(format!(
+                "Rust trait `{}` uses a signature outside the supported Locus trait grammar: {}",
+                foreign.path,
+                parsed
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+        let mut declaration = parsed
+            .program
+            .declarations
+            .into_iter()
+            .next()
+            .ok_or("missing normalized trait declaration")?;
+        struct At(crate::source::Span);
+        impl crate::project::specs::walk::Walk for At {
+            fn span(&mut self, s: &mut crate::source::Span) {
+                *s = self.0;
+            }
+        }
+        crate::project::specs::walk::member(&mut At(span), &mut declaration);
+        if let DeclarationKind::Trait {
+            native,
+            name: parsed_name,
+            ..
+        } = &mut declaration.kind
+        {
+            *native = Some(foreign.clone());
+            *parsed_name = name.clone();
+        }
+        declaration.kind
+    } else {
+        kind
     };
     Ok(Declaration {
         captures: Vec::new(),

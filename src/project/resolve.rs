@@ -49,6 +49,7 @@ pub struct Export {
 }
 #[derive(Clone, Debug, Default)]
 pub struct Graph {
+    pub traits: super::traits::Registry,
     pub scopes: Vec<Scope>,
     pub items: Vec<Item>,
     pub access: Access,
@@ -59,6 +60,7 @@ pub struct Graph {
 }
 #[derive(Clone, Debug, Default)]
 pub struct Access {
+    pub traits: Vec<super::traits::Method>,
     pub scopes: Vec<(Option<usize>, Span)>,
     pub names: Vec<String>,
 }
@@ -281,6 +283,7 @@ pub fn resolve_units(
         declarations,
         ..Program::default()
     };
+    super::traits::lower(&mut program, &mut graph, &mut errors);
     super::specs::lower(&mut program, &mut graph, &mut errors);
     (
         Program {
@@ -303,9 +306,29 @@ impl Graph {
     /// dependency's Locus declaration remains native Locus source.
     pub fn origin(&self, item: usize) -> crate::imports::model::Origin {
         match &self.items[item].declaration.kind {
-            DeclarationKind::Foreign { foreign, .. } => foreign.entity.origin.clone(),
+            DeclarationKind::Foreign { foreign, .. }
+            | DeclarationKind::Trait {
+                native: Some(foreign),
+                ..
+            } => foreign.entity.origin.clone(),
             _ => crate::imports::model::Origin::Locus,
         }
+    }
+    pub(crate) fn traits_in_scope(&self, module: usize) -> BTreeSet<String> {
+        self.scopes[module]
+            .bindings
+            .values()
+            .filter_map(|b| {
+                let Target::Item(i) = b.target else {
+                    return None;
+                };
+                matches!(
+                    self.items[i].declaration.kind,
+                    DeclarationKind::Trait { .. }
+                )
+                .then(|| self.items[i].canonical.clone())
+            })
+            .collect()
     }
     pub fn package_of(&self, module: usize) -> usize {
         let root = self.access.root(module);
@@ -377,6 +400,13 @@ impl Graph {
                     method.attributes.splice(0..0, program.attributes.clone());
                 }
             }
+            // Rust aliases retain the defining entity identity. Import spelling
+            // must not permit a second implementation of the same native trait.
+            if let DeclarationKind::Trait {name,native:Some(foreign),..}=&d.kind
+                && let Some(id)=self.items.iter().position(|i| matches!(&i.declaration.kind,DeclarationKind::Trait {native:Some(f),..} if f.entity.origin==foreign.entity.origin)) {
+                self.bind(module,name.text.clone(),Namespace::Type,Binding {target:Target::Item(id),visibility:d.visibility.clone(),span:d.span},errors);
+                continue;
+            }
             match d.kind.clone() {
                 DeclarationKind::Module {
                     name,
@@ -446,6 +476,7 @@ impl Graph {
                         DeclarationKind::Struct { .. }
                             | DeclarationKind::Enum { .. }
                             | DeclarationKind::Prop { .. }
+                            | DeclarationKind::Trait { .. }
                             | DeclarationKind::Spec { .. }
                     ) || matches!(&d.kind,DeclarationKind::Foreign {foreign,..} if foreign.is_type())
                     {
@@ -832,6 +863,7 @@ pub fn is_public(v: Option<&Visibility>) -> bool {
 pub fn declared_name(k: &DeclarationKind) -> Option<&Name> {
     match k {
         DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Trait { name, .. }
         | DeclarationKind::Spec { name, .. }
         | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
@@ -844,6 +876,7 @@ pub fn declared_name(k: &DeclarationKind) -> Option<&Name> {
 fn declared_name_mut(k: &mut DeclarationKind) -> Option<&mut Name> {
     match k {
         DeclarationKind::Foreign { name, .. }
+        | DeclarationKind::Trait { name, .. }
         | DeclarationKind::Spec { name, .. }
         | DeclarationKind::Function { name, .. }
         | DeclarationKind::Struct { name, .. }
@@ -864,6 +897,29 @@ struct Rewriter<'a> {
 }
 impl Rewriter<'_> {
     fn path(&mut self, path: &mut Path, ns: Namespace) {
+        if path
+            .segments
+            .first()
+            .is_some_and(|n| n.text == "<qualified>")
+        {
+            for i in [1, 2] {
+                let n = &path.segments[i];
+                let mut part = Path {
+                    segments: n
+                        .text
+                        .split("::")
+                        .map(|s| Name {
+                            text: s.into(),
+                            span: n.span,
+                        })
+                        .collect(),
+                    span: n.span,
+                };
+                self.path(&mut part, Namespace::Type);
+                path.segments[i].text = part.text();
+            }
+            return;
+        }
         if path.segments.len() == 1
             && (self.types.contains(&path.segments[0].text)
                 || (ns == Namespace::Value && self.values.contains(&path.segments[0].text)))
@@ -952,6 +1008,11 @@ impl Rewriter<'_> {
         let old_v = self.values.len();
         let old_t = self.types.len();
         match &mut d.kind {
+            DeclarationKind::Trait { members, .. } => {
+                for member in members {
+                    self.declaration(member);
+                }
+            }
             DeclarationKind::Spec {
                 generics, members, ..
             } => {

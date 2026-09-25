@@ -216,6 +216,18 @@
     {
       "path": "src/target.rs",
       "category": "whole-compiler target layout selection"
+    },
+    {
+      "path": "src/project/traits.rs",
+      "category": "trait identity, coherence, contract matching and concrete selection"
+    },
+    {
+      "path": "src/imports/traits.rs",
+      "category": "normalized physical Rust trait interfaces and native validation"
+    },
+    {
+      "path": "src/project/export/traits.rs",
+      "category": "physical trait export and forwarding boundary"
     }
   ]
 }

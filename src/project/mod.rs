@@ -36,3 +36,5 @@ pub fn command_error(path: &std::path::Path, message: String) -> Error {
 pub(crate) mod specs;
 
 pub(crate) use resolve::resolve as resolve_inline;
+
+pub(crate) mod traits;

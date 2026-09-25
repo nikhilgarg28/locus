@@ -487,20 +487,6 @@ impl Extraction {
         path: &[String],
         signature: &super::model::Signature,
     ) -> Result<(), String> {
-        let native = self
-            .interfaces
-            .get(&package)
-            .ok_or("missing native interface")?;
-        let inv = &self.invocations[native.invocation];
-        let metadata = native.metadata.as_ref().ok_or(
-            "this Rust library has no callable native type metadata; only inspection is supported",
-        )?;
-        let dir = self
-            .temp
-            .0
-            .join(format!("probe-{}", NEXT.fetch_add(1, Ordering::Relaxed)));
-        fs::create_dir(&dir).map_err(|e| e.to_string())?;
-        let source = dir.join("probe.rs");
         let path = path
             .iter()
             .map(|p| format!("r#{p}"))
@@ -512,14 +498,50 @@ impl Extraction {
             .map(|t| t.spelling())
             .collect::<Vec<_>>()
             .join(",");
-        fs::write(
-            &source,
-            format!(
+        self.validate_source(
+            package,
+            &format!(
                 "const _: fn({params}) -> {} = __locus_native::{path};\n",
                 signature.output.spelling()
             ),
         )
-        .map_err(|e| e.to_string())?;
+    }
+    pub fn validate_trait(
+        &self,
+        package: usize,
+        path: &[String],
+        interface: &super::traits::Interface,
+    ) -> Result<(), String> {
+        let path = path
+            .iter()
+            .map(|p| format!("r#{p}"))
+            .collect::<Vec<_>>()
+            .join("::");
+        self.validate_source(
+            package,
+            &format!(
+                "struct Probe; impl __locus_native::{path} for Probe {{ {} }}",
+                interface.declarations(true)
+            ),
+        )
+    }
+    fn validate_source(&self, package: usize, text: &str) -> Result<(), String> {
+        let native = self
+            .interfaces
+            .get(&package)
+            .ok_or("missing native interface")?;
+        let inv = &self.invocations[native.invocation];
+        let metadata = native
+            .metadata
+            .as_ref()
+            .ok_or("this Rust library has no native type metadata; only inspection is supported")?;
+        let dir = self
+            .temp
+            .0
+            .join(format!("probe-{}", NEXT.fetch_add(1, Ordering::Relaxed)));
+        fs::create_dir(&dir).map_err(|e| e.to_string())?;
+        let source = dir.join("probe.rs");
+        fs::write(&source, text).map_err(|e| e.to_string())?;
         let mut command = Command::new(&inv.compiler);
         command
             .current_dir(&inv.cwd)

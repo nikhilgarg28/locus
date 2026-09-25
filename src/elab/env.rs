@@ -370,17 +370,40 @@ impl Env<'_> {
     /// the `impl` block: a function of an `impl` block, or nothing.
     pub fn path_function(&self, path: &ast::Path) -> Option<Rc<FnInfo>> {
         let (prefix, name) = path.pair()?;
-        let qualified = format!("{}::{}", self.type_text(prefix), name.text);
-        match self.values.get(&qualified) {
+        let candidates = self.method_names(&self.type_text(prefix), &name.text, path.span);
+        let [qualified] = candidates.as_slice() else {
+            return None;
+        };
+        match self.values.get(qualified) {
             Some(Global::Fn(info)) => Some(Rc::clone(info)),
             _ => None,
         }
     }
 
     /// The function `name` of the `impl` block of the type, if it has one.
-    pub fn method_of(&self, ty: &Type, name: &str) -> Option<Rc<FnInfo>> {
+    pub fn method_names(&self, owner: &str, name: &str, span: Span) -> Vec<String> {
+        let inherent = format!("{owner}::{name}");
+        if self.values.contains_key(&inherent) || name.starts_with("__locus_trait_") {
+            return vec![inherent];
+        }
+        let Some(access) = &self.module_access else {
+            return Vec::new();
+        };
+        let module = access.module_at(span);
+        access
+            .traits
+            .iter()
+            .filter(|m| m.owner == owner && m.name == name && m.scopes.contains(&module))
+            .map(|m| format!("{owner}::{}", m.lowered))
+            .collect()
+    }
+    pub fn method_of(&self, ty: &Type, name: &str, span: Span) -> Option<Rc<FnInfo>> {
         let owner = self.type_name(ty)?;
-        match self.values.get(&format!("{owner}::{name}")) {
+        let candidates = self.method_names(&owner, name, span);
+        let [selected] = candidates.as_slice() else {
+            return None;
+        };
+        match self.values.get(selected) {
             Some(Global::Fn(info)) => Some(Rc::clone(info)),
             _ => None,
         }

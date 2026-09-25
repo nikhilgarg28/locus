@@ -356,6 +356,17 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
         DeclarationKind::ImportedModule { .. } | DeclarationKind::Foreign { .. } => {
             panic!("native metadata is not a parsed source declaration")
         }
+        DeclarationKind::Trait {
+            name,
+            members,
+            required,
+            ..
+        } => out.push_str(&format!(
+            "trait {} {{ {} members, {} required }}",
+            name.text,
+            members.len(),
+            required.len()
+        )),
         DeclarationKind::Spec {
             module,
             name,
@@ -380,7 +391,7 @@ fn rendered_item(declaration: &locus::ast::Declaration) -> String {
             grouped_ty(representation),
             members.len()
         )),
-        DeclarationKind::AssociatedType { name, value } => out.push_str(&format!(
+        DeclarationKind::AssociatedType { name, value, .. } => out.push_str(&format!(
             "type {}{};",
             name.text,
             value
@@ -3372,11 +3383,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
         (
             "impl S<T> { fn get() -> u8 { 1 } }",
             "generic inherent impls require a checked spec realization for now",
-            0,
-        ),
-        (
-            "trait T { fn f() -> u8; }",
-            "traits are not in Locus yet",
             0,
         ),
         (

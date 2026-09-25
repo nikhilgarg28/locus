@@ -14,7 +14,7 @@ kind = "project"
 
 ## Current project: reusable Locus components
 
-This round implements source modules, explicit Rust export roots, Cargo package discovery, checked dependency interfaces, generated build receipts, and build-script integration. Traits and `cargo locus` are deferred. The standalone compiler remains the entry point. This work is isolated from the canonical-model/arithmetic project; LOC-233 through LOC-236 remain reserved for that project.
+This round implements source modules, explicit Rust export roots, Cargo package discovery, checked dependency interfaces, generated build receipts, and build-script integration. Concrete traits are delivered separately by [LOC-21](generics.md#LOC-21); `cargo locus` remains deferred. The standalone compiler remains the entry point. This work is isolated from the canonical-model/arithmetic project; LOC-233 through LOC-236 remain reserved for that project.
 
 ### Accepted design
 
@@ -97,7 +97,7 @@ Remaining: supported cfg/feature syntax and checking of selected configurations,
 ## LOC-44 · Broader Rust ecosystem interoperability
 <!-- task: {"id": "t53", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Readable generated crates and protected exports are delivered ([LOC-183](core-build.md#LOC-183)); explicit trusted Rust contracts, reasons and audit are delivered ([LOC-229](reconciliation.md#LOC-229), [LOC-196](process.md#LOC-196)). Module/package builds now preserve concrete dependency identities. Remaining: executing imported opaque native types/references, traits, constants, generics, async/unsafe functions and macros; sysroot metadata and external-crate re-export loading; generic cross-package ABI mappings and reviewed cross-crate contracts. Plain imports retain those item kinds but only execute the physical scalar/tuple free-function subset. In particular current Option/Result are generated specialized enums, not std ABI aliases. The documentation audit also found that `Option<PrivateStruct>` can expose its private payload type through a generated public variant and trigger rustc’s `private_interfaces` warning. Make specialization visibility respect the source boundary and add a warning-denied regression; the current examples use a public type with private invariant-bearing fields. Coordinate [LOC-21](generics.md#LOC-21), [LOC-41](interop.md#LOC-41) and [LOC-63](interop.md#LOC-63).
+Readable generated crates and protected exports are delivered ([LOC-183](core-build.md#LOC-183)); explicit trusted Rust contracts, reasons and audit are delivered ([LOC-229](reconciliation.md#LOC-229), [LOC-196](process.md#LOC-196)). Module/package builds now preserve concrete dependency identities. Remaining: executing imported opaque native types/references, broader trait support, constants, generics, async/unsafe functions and macros; sysroot metadata and external-crate re-export loading; generic cross-package ABI mappings and reviewed cross-crate contracts. Plain imports retain those item kinds. Executable free-function calls use the physical scalar/tuple subset; supported Rust traits also accept checked concrete local implementations through [LOC-21](generics.md#LOC-21). In particular current Option/Result are generated specialized enums, not std ABI aliases. The documentation audit also found that `Option<PrivateStruct>` can expose its private payload type through a generated public variant and trigger rustc’s `private_interfaces` warning. Make specialization visibility respect the source boundary and add a warning-denied regression; the current examples use a public type with private invariant-bearing fields. Coordinate [LOC-21](generics.md#LOC-21), [LOC-41](interop.md#LOC-41) and [LOC-63](interop.md#LOC-63).
 
 <a id="LOC-63"></a>
 ## LOC-63 · Cargo and build.rs integration
@@ -121,7 +121,7 @@ Implemented SHA-256 receipts, compiler/configuration/Cargo selection provenance,
 ## LOC-239 · Module/package acceptance and documentation
 <!-- task: {"id": "interop-239", "status": "done", "priority": 3} -->
 
-Implemented the module/package manual, package/build guide, diagnostic explanations, and checked examples. Acceptance includes qualified types, independent-target identity, generic-dependency ABI rejection, canonical and derived models across modules/packages, associated constants, and checked arithmetic after proof erasure. The filesystem, Cargo, diagnostic and resource-limit suites cover these boundaries; the extended compiler/site gate is the integration requirement. See the freshness-aware [generated status](../generated-status.md) for measured results. Traits remain the next project.
+Implemented the module/package manual, package/build guide, diagnostic explanations, and checked examples. Acceptance includes qualified types, independent-target identity, generic-dependency ABI rejection, canonical and derived models across modules/packages, associated constants, and checked arithmetic after proof erasure. The filesystem, Cargo, diagnostic and resource-limit suites cover these boundaries; the extended compiler/site gate is the integration requirement. See the freshness-aware [generated status](../generated-status.md) for measured results. Concrete traits are delivered separately by [LOC-21](generics.md#LOC-21).
 
 <a id="LOC-240"></a>
 ## LOC-240 · Define and emit proof-returning Rust facades
@@ -207,7 +207,7 @@ Added real directories, two source-aware diagnostic fixtures with JSON/text/expl
 ## LOC-259 · Import physical Rust interfaces
 <!-- task: {"id": "interop-246", "status": "done", "priority": 3} -->
 
-Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); sysroot/native-type expansion and staged host builds remain in LOC-44 and LOC-63.
+Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); A concrete Rust trait adapter is covered by LOC-21. Sysroot/native-type expansion, cross-package Locus trait/method ABI mapping, and staged host builds remain in LOC-44 and LOC-63.
 
 <a id="LOC-260"></a>
 ## LOC-260 · Audited native proof adapters

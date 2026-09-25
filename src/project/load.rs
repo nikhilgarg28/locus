@@ -28,16 +28,39 @@ impl Loaded {
     pub fn diagnostic(&self, diagnostic: &Diagnostic) -> Diagnostic {
         let mut d = self.bundle.diagnostic(diagnostic);
         // Canonical compiler names are never useful in a source diagnostic.
-        let mut names: Vec<_> = self
+        let mut names: Vec<(String, String)> = self
             .graph
             .items
             .iter()
             .filter(|i| !i.original.is_empty())
+            .map(|i| (i.canonical.clone(), i.original.clone()))
             .collect();
-        names.sort_by_key(|i| std::cmp::Reverse(i.canonical.len()));
-        for item in names {
+        for m in &self.graph.access.traits {
+            let original = |s: &str| {
+                self.graph
+                    .items
+                    .iter()
+                    .find(|i| i.canonical == s)
+                    .map_or(s.to_string(), |i| i.original.clone())
+            };
+            names.push((
+                format!("{}::{}", m.owner, m.lowered),
+                format!(
+                    "<{} as {}>::{}",
+                    original(&m.owner),
+                    original(&m.interface),
+                    m.name
+                ),
+            ));
+            names.push((
+                m.lowered.clone(),
+                format!("{}::{}", original(&m.interface), m.name),
+            ));
+        }
+        names.sort_by_key(|(canonical, _)| std::cmp::Reverse(canonical.len()));
+        for (canonical, original) in names {
             let replace = |text: &mut String| {
-                *text = text.replace(&item.canonical, &item.original);
+                *text = text.replace(&canonical, &original);
             };
             replace(&mut d.message);
             for label in &mut d.labels {
@@ -292,7 +315,7 @@ pub(super) fn load_cargo(
             diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),
         });
     }
-    if let Err(diagnostics) = native.validate(&program) {
+    if let Err(diagnostics) = native.validate(&program, &graph) {
         return Err(Error {
             sources: loader.sources,
             diagnostics: diagnostics.iter().map(|d| bundle.diagnostic(d)).collect(),

@@ -116,7 +116,7 @@ Locus invokes `cargo metadata` and follows the alias `verified` to the resolved 
 
 A runtime dependency must actually compile and include its declared generated interface. As with the host build, Cargo/build-script wiring, rustc, and the compiled dependency are part of the build trust boundary. Metadata alone does not certify arbitrary handwritten Rust behind a matching name. Receipts make the intended inputs and outputs reviewable; they do not establish what a malicious build script compiled.
 
-Current limits include generic runtime ABI exports, proof-bearing runtime functions across packages, and specialized collection-enum ABI mappings. Expose a concrete runtime wrapper or keep the logical API in the Locus library. General trait support is a later project.
+Current limits include generic runtime ABI exports, proof-bearing runtime functions across packages, and specialized collection-enum ABI mappings. Expose a concrete runtime wrapper or keep the logical API in the Locus library. Concrete [traits](spec/20-traits.md) are supported. Generic bounds and cross-package Locus trait ABI mapping remain follow-up work.
 
 ## Review and reproduce a build
 

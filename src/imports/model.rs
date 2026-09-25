@@ -38,7 +38,7 @@ impl PhysicalType {
             }
         }
     }
-    fn read(v: &Value) -> Result<Self, String> {
+    pub(crate) fn read(v: &Value) -> Result<Self, String> {
         if let Some(p) = v.get("primitive").and_then(Value::as_str) {
             if matches!(p, "bool" | "usize" | "isize")
                 || crate::kernel::MachineInt::from_name(p).is_some()
@@ -90,6 +90,7 @@ impl Signature {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entity {
+    pub trait_interface: Option<super::traits::Interface>,
     pub name: String,
     pub kind: String,
     pub origin: Origin,
@@ -115,6 +116,7 @@ impl Entity {
             .unwrap_or("")
             .to_owned();
         let mut entity = Self {
+            trait_interface: None,
             name,
             kind: kind.clone(),
             origin: Origin::Rust {
@@ -143,7 +145,7 @@ impl Entity {
                 json!({"language":"rust","package":package,"item":item})
             }
         };
-        json!({"name":self.name,"kind":self.kind,"origin":origin,"signature":self.signature.as_ref().map(Signature::json),"unavailable":self.unavailable,"rustdoc":self.rustdoc})
+        json!({"name":self.name,"kind":self.kind,"origin":origin,"signature":self.signature.as_ref().map(Signature::json),"trait_interface":self.trait_interface.as_ref().map(super::traits::Interface::json),"unavailable":self.unavailable,"rustdoc":self.rustdoc})
     }
 }
 fn read_signature(body: &Value) -> Result<Signature, String> {
@@ -244,6 +246,21 @@ impl Interface {
                 Ok((key.clone(), Entity::read(key, value, package)?))
             })
             .collect::<Result<BTreeMap<_, _>, String>>()?;
+        let normalized: Vec<_> = entities
+            .iter()
+            .filter(|(_, e)| e.kind == "trait")
+            .map(|(id, e)| (id.clone(), super::traits::Interface::read(e, &entities)))
+            .collect();
+        for (id, result) in normalized {
+            let e = entities.get_mut(&id).unwrap();
+            match result {
+                Ok(interface) => {
+                    e.trait_interface = Some(interface);
+                    e.unavailable = None;
+                }
+                Err(why) => e.unavailable = Some(why),
+            }
+        }
         // rustdoc uses external references for re-exports. Keep those
         // names rather than silently dropping them or inventing a body.
         if let Some(paths) = v["paths"].as_object() {
@@ -264,7 +281,7 @@ impl Interface {
                     .ok_or("external Rust path has no kind")?
                     .to_owned();
                 entities.insert(key.clone(),Entity {
-                    name,kind,
+                    name,kind,trait_interface:None,
                     origin:Origin::Rust{package:format!("{}:external:{}",package,summary["crate_id"]),item:key.clone()},
                     signature:None,
                     unavailable:Some(format!("this public re-export refers to another Rust crate ({summary}); its defining metadata is not loaded yet")),

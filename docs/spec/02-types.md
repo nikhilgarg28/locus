@@ -335,7 +335,7 @@ logic fn add_two(n: Int) -> Int { twice(|x: Int| x + 1, n) }
 ## Generic types and functions
 
 <!-- spec: 1.3:3 legality-rule -->
-Generic structs, enums, propositions, and functions are checked templates. Each concrete instantiation is elaborated and kernel-checked; an unused body is not universally verified. `T: Logical` is the supported bound. Generic methods in inherent `impl` blocks and general trait definitions are unsupported; [Model](11-models.md#defining-a-model) is a dedicated built-in interface.
+Generic structs, enums, propositions, and functions are checked templates. Each concrete instantiation is elaborated and kernel-checked; an unused body is not universally verified. `T: Logical` is the supported bound. Generic methods and general trait bounds are deferred. Concrete [traits](20-traits.md) are supported; [Model](11-models.md#defining-a-model) remains a dedicated built-in interface.
 
 <!-- spec: 1.90:16 example -->
 ~~~rust check

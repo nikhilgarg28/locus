@@ -1,0 +1,8 @@
+mod api;
+mod implementation;
+use api::Step;
+use implementation::Arithmetic;
+pub fn answer() -> u8 {
+    let (out, evidence) = Arithmetic::next(41);
+    out
+}

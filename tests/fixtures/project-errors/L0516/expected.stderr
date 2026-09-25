@@ -1,0 +1,7 @@
+error[L0516]: multiple traits supply method `read`
+ --> <fixture>/export.lc:6:59
+  |
+6 | fn call() -> u8 { let counter = Counter { n: 1 }; counter.read() }
+  |                                                           ^^^^
+  |
+  = note: select explicitly with `<Type as Trait>::method(&value, ...)`

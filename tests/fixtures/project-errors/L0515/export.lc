@@ -1,0 +1,6 @@
+trait Read { fn read(&self) -> u8; }
+struct Counter { n: u8 }
+impl Read for Counter {
+    fn read(&self) -> bool { true }
+}
+//~ error: L0515

@@ -104,7 +104,7 @@ fn value() -> u8 { Limits::ROLLED }
 ## Methods
 
 <!-- spec: 1.14:1 syntax -->
-`impl T` contains associated constants, functions and methods. Call an associated function as `T::name(args)` and a method as `value.name(args)`. `Self` denotes `T` in types, literals, and variant paths. A logical method remains a logical function, selectable by path in `fold!` and `unfold!`. General trait implementations are unsupported except the dedicated Model interface.
+`impl T` contains associated constants, functions and methods. Call an associated function as `T::name(args)` and a method as `value.name(args)`. `Self` denotes `T` in types, literals, and variant paths. A logical method remains a logical function, selectable by path in `fold!` and `unfold!`. Concrete [trait implementations](20-traits.md) share these receiver and proof rules. The compiler-owned Model interface remains separate.
 
 <!-- spec: 1.27:4 syntax -->
 A receiver may be `self`, `mut self`, `&self`, or `&mut self`. For runtime methods, by-value receivers move unless `Copy`; shared receivers lend for reading; mutable receivers require mutable storage. Logical methods instead [observe their receivers](08-logic.md#observing-arguments), whether declared with `self` or `&self`. `*self` reads a reference receiver, or replaces it whole through `&mut self`. The equivalent path call supplies the receiver explicitly.

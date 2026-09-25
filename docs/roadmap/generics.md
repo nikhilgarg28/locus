@@ -12,7 +12,7 @@ kind = "project"
 
 # Language abstractions and syntax
 
-Extend the implemented generic/syntax subset without conflating parsing with semantics. General traits ([LOC-21](generics.md#LOC-21)) precede where/impl bounds ([LOC-22](generics.md#LOC-22)), user operators ([LOC-125](generics.md#LOC-125), [LOC-126](generics.md#LOC-126)), dynamic objects ([LOC-34](generics.md#LOC-34)) and runtime callable traits ([LOC-24](generics.md#LOC-24)). Logical closures, type specialization and fixed-width integers are already complete. Independent ergonomic additions remain explicitly scoped below; floating-point and bitwise operations need their own logical models.
+Extend the implemented generic/syntax subset without conflating parsing with semantics. Concrete traits ([LOC-21](generics.md#LOC-21)) establish the base for where/impl bounds ([LOC-22](generics.md#LOC-22)), user operators ([LOC-125](generics.md#LOC-125), [LOC-126](generics.md#LOC-126)), dynamic objects ([LOC-34](generics.md#LOC-34)) and runtime callable traits ([LOC-24](generics.md#LOC-24)). Logical closures, type specialization and fixed-width integers are already complete. Independent ergonomic additions remain explicitly scoped below; floating-point and bitwise operations need their own logical models.
 
 <a id="LOC-20"></a>
 ## LOC-20 · Floating-point types and proof models
@@ -22,9 +22,9 @@ Fixed-width integers are complete ([LOC-171](core-build.md#LOC-171)). Remaining:
 
 <a id="LOC-21"></a>
 ## LOC-21 · User-defined traits and checked implementations
-<!-- task: {"id": "t26", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+<!-- task: {"id": "t26", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-25T17:27:33.366974+00:00"} -->
 
-Remaining: trait declarations, implementation selection/coherence, associated types/items and proof/effect contracts. The built-in Logical classification, Model registration and closed derives do not constitute a general trait system. Required by [LOC-22](generics.md#LOC-22), [LOC-125](generics.md#LOC-125) and iterator integration ([LOC-30](memory-layout.md#LOC-30)).
+Implemented and validated on `feat/native-traits`: concrete traits and implementations, associated types/constants, logical methods, explicit proof slots, inherited defaults checked per implementation, scoped selection and qualification, and physical Rust trait exports/imports. No new proof axiom or execution IR form is introduced. See the [plan](../plans/native-traits.md) and [manual](../spec/20-traits.md). Validation covers focused edge cases, real Cargo/directory fixtures, warning-denied Rust runs, checked documentation and a completed extended gate. Generic bounds, compiler-integrated traits, supertraits and dynamic dispatch remain separate follow-ups. The built-in Logical classification, Model registration and closed derives remain compiler-owned. Required by [LOC-22](generics.md#LOC-22), [LOC-125](generics.md#LOC-125) and iterator integration ([LOC-30](memory-layout.md#LOC-30)).
 
 <a id="LOC-22"></a>
 ## LOC-22 · General generic bounds and where clauses
@@ -102,7 +102,7 @@ Remaining: Add/Sub/Mul/Div/Rem/Neg/Not/comparison/Index implementations with che
 ## LOC-126 · Contracts for fallible user-defined operators
 <!-- task: {"id": "t240", "status": "todo", "priority": 1, "created": "2026-09-21T20:54:27.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Still unresolved before traits. Rust operator syntax/signatures do not expose an extra proof argument, so decide how an operator implementation states its panic precondition and how no_panic callers discharge it. Historical candidates were conditional promises or implicit evidence holes, with the latter constrained by Rust trait signatures. Depends on [LOC-21](generics.md#LOC-21), [LOC-125](generics.md#LOC-125).
+Still unresolved before user-defined operator traits. Rust operator syntax/signatures do not expose an extra proof argument, so decide how an operator implementation states its panic precondition and how no_panic callers discharge it. Historical candidates were conditional promises or implicit evidence holes, with the latter constrained by Rust trait signatures. Depends on [LOC-21](generics.md#LOC-21), [LOC-125](generics.md#LOC-125).
 
 ## Scoped proof arguments
 
@@ -167,3 +167,19 @@ Implement `const fn` as a checked physical function callable both at runtime and
 Define the permitted constant-evaluation subset and its calls, local mutation, control flow, borrowing, allocation/destruction restrictions and evaluation limits. Preserve checked machine arithmetic and target behavior. A constant-evaluation panic or resource limit needs a diagnostic; reaching an evaluation limit is not evidence of divergence or a proof. `const fn` does not imply `logic fn`, totality or absence of runtime panics, and does not by itself admit physical calls into propositions. Any use in proofs must retain the checked model/kernel boundary.
 
 Acceptance: initializer/runtime results agree with both interpreters and compiled Rust; overflow and division failures are stable across build modes; non-const calls in constant contexts, invalid effects, cycles and limits are diagnosed. Test signatures across files, visibility, exported const-callable facades, imported native constness and toolchain compatibility without assuming values or behavior from a signature. Update grammar, manual examples, diagnostics, IR/erasure contracts and import generation together. General const generics remain a separate design question.
+
+<a id="LOC-261"></a>
+## LOC-261 · Trait promises and universal defaults
+<!-- task: {"id": "traits-261", "status": "backlog", "priority": 2} -->
+
+Revisit the language's promise design and define which effect/termination guarantees a trait interface may impose on all implementations. Keep exporting traits with promises forbidden until Rust implementations can satisfy the same obligations through a defined boundary. Decide whether sealing, checked adapters or a different contract model is appropriate; do not infer guarantees from `&self`.
+
+Defaults currently receive checks for each concrete implementation. Before exporting reusable Rust default bodies or claiming universal checking of unused defaults, check them against the abstract trait interface, including override-dependent logical definitions, associated bindings and cycles. Today generated Rust implementations contain the checked defaults while the exported Rust trait exposes required signatures. Coordinate general bounds in LOC-22 and interior mutability in LOC-47.
+
+<a id="LOC-262"></a>
+## LOC-262 · Trait implementations beyond named local types
+<!-- task: {"id": "traits-262", "status": "backlog", "priority": 1} -->
+
+Concrete implementations currently lower to checked inherent helpers on named Locus structs, enums and opaque spec types. Extend dispatch and emission to primitives, references and built-in containers without generating illegal Rust inherent implementations. Preserve trait/type identity, coherence, scoped lookup, ownership and erasure; keep compiler-integrated traits separate. Generic implementations belong to [LOC-22](#LOC-22), native opaque types and cross-package ABI work to [LOC-44](interop.md#LOC-44).
+
+Acceptance: positive and conflicting implementations, qualified and method-call selection, proof contracts, interpreter agreement and warning-denied generated Rust for each admitted target family. Do not admit a target merely because its type grammar parses.

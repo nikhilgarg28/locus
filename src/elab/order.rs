@@ -76,6 +76,7 @@ pub(super) fn unit_name(unit: &Unit<'_>) -> Option<String> {
 pub(super) fn dependency_order(
     units: &[Unit<'_>],
     quantifiers: &[super::generics::QuantifierNames],
+    access: Option<&crate::project::Access>,
 ) -> (Vec<Vec<usize>>, Vec<usize>) {
     let names: Vec<Option<String>> = units.iter().map(unit_name).collect();
     let mut index_of: HashMap<(Namespace, &str), usize> = units
@@ -103,6 +104,13 @@ pub(super) fn dependency_order(
             && let Some(name) = declared_name(unit.declaration)
         {
             methods.entry(&name.text).or_default().push(index);
+            if let Some(access) = access {
+                for m in &access.traits {
+                    if m.lowered == name.text {
+                        methods.entry(&m.name).or_default().push(index);
+                    }
+                }
+            }
         }
     }
     let mut models: HashMap<String, Vec<usize>> = HashMap::new();
@@ -377,6 +385,7 @@ fn declared_namespace(declaration: &Declaration) -> Option<Namespace> {
         DeclarationKind::Impl { .. }
         | DeclarationKind::SpecImpl { .. }
         | DeclarationKind::AssociatedType { .. }
+        | DeclarationKind::Trait { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -398,6 +407,7 @@ pub(super) fn declared_name(declaration: &Declaration) -> Option<&Name> {
         DeclarationKind::Impl { .. }
         | DeclarationKind::SpecImpl { .. }
         | DeclarationKind::AssociatedType { .. }
+        | DeclarationKind::Trait { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -598,6 +608,7 @@ impl Mentions<'_> {
             DeclarationKind::Impl { .. }
             | DeclarationKind::SpecImpl { .. }
             | DeclarationKind::AssociatedType { .. }
+            | DeclarationKind::Trait { .. }
             | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }

@@ -1,5 +1,6 @@
 //! Check the complete reachable Rust interface before granting any Rust visibility.
 //! Source visibility never directly grants visibility in the generated backend.
+mod traits;
 use super::resolve::is_public;
 use super::{Checked, Error};
 use crate::{
@@ -25,8 +26,11 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
     for root in &exports {
         let item = &graph.items[root.item];
         let path = root.path.join("::");
-        export.item(item, &path, root.span);
+        if !matches!(item.declaration.kind, DeclarationKind::Trait { .. }) {
+            export.item(item, &path, root.span);
+        }
     }
+    let trait_source = traits::interfaces(&unit, &mut export, &exports);
     let mut external_names = BTreeMap::new();
     let mut foreign = BTreeSet::new();
     export
@@ -133,7 +137,8 @@ pub fn rust(unit: Checked) -> Result<String, Error> {
             sources: unit.loaded.sources,
         });
     }
-    let body = erased::print_module_with(module, &export.visibility, erased::Markers::Here);
+    let mut body = erased::print_module_with(module, &export.visibility, erased::Markers::Here);
+    body.push_str(&trait_source);
     // Any surviving foreign symbol must name an actual exported Rust item.
     // Hidden dependency bodies are never copied into the consumer.
     let mut sources = crate::source::SourceMap::default();
@@ -466,6 +471,9 @@ impl Interface<'_> {
                     let Some(n) = super::resolve::declared_name(&m.kind) else {
                         continue;
                     };
+                    if n.text.starts_with("__locus_trait_") {
+                        continue;
+                    }
                     let name = format!("{owner}::{}", n.text);
                     if let Some(f) = self.module.fns.iter().find(|f| f.name == name) {
                         self.function(f, &format!("{path} -> method `{}`", n.text), at);

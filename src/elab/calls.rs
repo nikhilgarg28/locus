@@ -405,7 +405,7 @@ impl Env<'_> {
                 probe.moves.checked = false;
                 crate::store::without_store(|| probe.infer(receiver))
                     .ok()
-                    .and_then(|value| probe.method_of(&value.ty, &name.text))
+                    .and_then(|value| probe.method_of(&value.ty, &name.text, name.span))
                     .map(|method| method.logical)
             } else {
                 None
@@ -417,7 +417,21 @@ impl Env<'_> {
             };
             (value.ty.clone(), Some(value))
         };
-        let Some(info) = self.method_of(&ty, &name.text) else {
+        if let Some(owner) = self.type_name(&ty) {
+            let candidates = self.method_names(&owner, &name.text, name.span);
+            if candidates.len() > 1 {
+                self.diagnostics.push(
+                    crate::diagnostic::Diagnostic::error(
+                        "L0516",
+                        format!("multiple traits supply method `{}`", name.text),
+                        name.span,
+                    )
+                    .note("select explicitly with `<Type as Trait>::method(&value, ...)`"),
+                );
+                return Err(());
+            }
+        }
+        let Some(info) = self.method_of(&ty, &name.text, name.span) else {
             let shown = self.show_type(&ty);
             let qualified = self
                 .type_name(&ty)

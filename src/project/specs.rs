@@ -1,6 +1,6 @@
 //! Checked opaque spec types. Generated adapters are ordinary checked Locus AST.
 //! Neither declarations nor implementation matching introduce kernel assumptions.
-mod walk;
+pub(crate) mod walk;
 use super::resolve::Graph;
 use crate::{ast::*, diagnostic::Diagnostic, source::Span};
 use std::collections::{BTreeMap, BTreeSet};
@@ -8,7 +8,8 @@ use walk::Walk;
 
 pub fn present(program: &Program) -> bool {
     program.declarations.iter().any(|d| match &d.kind {
-        DeclarationKind::Spec { .. }
+        DeclarationKind::Trait { .. }
+        | DeclarationKind::Spec { .. }
         | DeclarationKind::SpecImpl { .. }
         | DeclarationKind::ModuleImpl { .. } => true,
         DeclarationKind::Module { body: Some(p), .. } => present(p),
@@ -330,7 +331,7 @@ impl Canon {
     }
 }
 
-fn signature(d: &Declaration) -> DeclarationKind {
+pub(crate) fn signature(d: &Declaration) -> DeclarationKind {
     let mut d = d.clone();
     let mut c = Canon::default();
     if let DeclarationKind::Function {
@@ -780,7 +781,7 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
         match &d.kind{
   DeclarationKind::Spec{..}|DeclarationKind::SpecImpl{..}=>{},
   DeclarationKind::ModuleImpl{..}=>errors.push(Diagnostic::error("L0510","module spec implementations are deferred",d.span)),
-  DeclarationKind::Impl{target,..} if specs.contains_key(&target.text())=>errors.push(error("spec methods belong in the unique `impl Spec for Representation`; extra inherent impls are forbidden",d.span)),
+  DeclarationKind::Impl{target,..} if specs.contains_key(&target.text()) && !graph.traits.implementations.iter().any(|i| i.span==d.span)=>errors.push(error("spec methods belong in the unique `impl Spec for Representation`; extra inherent impls are forbidden",d.span)),
   _=>generated.push(d)
  }
     }

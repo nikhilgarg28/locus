@@ -256,7 +256,7 @@ pub fn elaborate_with_options(
         }
     }
 
-    let (order, cyclic) = dependency_order(&units, &quantifiers);
+    let (order, cyclic) = dependency_order(&units, &quantifiers, options.module_access.as_deref());
     for index in cyclic {
         let name = declared_name(units[index].declaration).expect("a unit has a name");
         let qualified = names[index].clone().expect("a unit has a name");
@@ -362,6 +362,7 @@ fn declared_name_of(kind: &DeclarationKind) -> Option<&str> {
         DeclarationKind::Impl { .. }
         | DeclarationKind::SpecImpl { .. }
         | DeclarationKind::AssociatedType { .. }
+        | DeclarationKind::Trait { .. }
         | DeclarationKind::Spec { .. }
         | DeclarationKind::ModuleImpl { .. }
         | DeclarationKind::Module { .. }
@@ -523,6 +524,7 @@ impl Env<'_> {
                 | DeclarationKind::Impl { .. }
                 | DeclarationKind::SpecImpl { .. }
                 | DeclarationKind::AssociatedType { .. }
+                | DeclarationKind::Trait { .. }
                 | DeclarationKind::Spec { .. }
                 | DeclarationKind::ModuleImpl { .. }
                 | DeclarationKind::Module { .. }
@@ -1479,6 +1481,7 @@ impl Env<'_> {
             }
             DeclarationKind::SpecImpl { .. }
             | DeclarationKind::AssociatedType { .. }
+            | DeclarationKind::Trait { .. }
             | DeclarationKind::Spec { .. }
             | DeclarationKind::ModuleImpl { .. }
             | DeclarationKind::Module { .. }

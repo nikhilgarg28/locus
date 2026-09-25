@@ -66,7 +66,7 @@ Explicitly deferred beyond the current trusted-declaration boundary. Design poin
 ## LOC-47 · Interior mutability and observation validity
 <!-- task: {"id": "t57", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Explicitly deferred. Define Cell/RefCell/atomic or shared-mutable models and when a logical observation remains valid despite aliases. Existing SSA snapshots/shared-reference checks do not justify hidden writes. Depends on an aliasing/concurrency model and interacts with [LOC-31](memory-layout.md#LOC-31), [LOC-48](memory-layout.md#LOC-48).
+Explicitly deferred. Define Cell/RefCell/atomic or shared-mutable models and when a logical observation remains valid despite aliases. Existing SSA snapshots/shared-reference checks do not justify hidden writes. Cover native and Locus trait calls, observer stability, stored proofs, shared aliases and facts surviving a call. A shared receiver is not evidence of purity. Acceptance includes hostile implementations that mutate through shared references; old immutable snapshots remain historical, while claims about current storage must be invalidated or re-established. Depends on an aliasing/concurrency model and interacts with [LOC-31](memory-layout.md#LOC-31), [LOC-48](memory-layout.md#LOC-48).
 
 <a id="LOC-48"></a>
 ## LOC-48 · Drop and unwinding-safe resource invariants

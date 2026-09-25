@@ -1,0 +1,7 @@
+trait A { fn read(&self) -> u8; }
+trait B { fn read(&self) -> u8; }
+struct Counter { n: u8 }
+impl A for Counter { fn read(&self) -> u8 { self.n } }
+impl B for Counter { fn read(&self) -> u8 { self.n } }
+fn call() -> u8 { let counter = Counter { n: 1 }; counter.read() }
+//~ error: L0516

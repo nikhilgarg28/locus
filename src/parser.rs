@@ -85,6 +85,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
         formula: false,
         in_impl: false,
         in_spec: false,
+        in_trait: false,
         in_method: false,
         closers: None,
         diagnostics: lexed.diagnostics.into(),
@@ -117,6 +118,7 @@ struct Parser<'a> {
     in_impl: bool,
     /// Function and constant declarations end in semicolons inside a spec.
     in_spec: bool,
+    in_trait: bool,
     /// Set in the body of a method with a `self` parameter, where `self`
     /// is a value.
     in_method: bool,
@@ -325,6 +327,7 @@ impl Parser<'_> {
             || (self.at(K::Prop) && self.peek(1) != K::Bang)
             || self.at_keyword("pub")
             || self.at_keyword("impl")
+            || self.at_keyword("trait")
             || self.at_keyword("mod")
             || self.at_keyword("use")
             || (self.at_word("import") && self.peek(1) != K::LParen)
@@ -413,22 +416,30 @@ impl Parser<'_> {
         let start = self.current().span;
         let (doc, mut attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
-        if self.in_spec {
+        if self.in_spec || self.in_trait {
             if visibility.is_some()
                 || (!matches!(self.current().kind, K::Fn | K::Logic | K::Const)
                     && !self.at_keyword("type"))
             {
                 self.diagnostics.push(Diagnostic::error(
-                    "L0510",
-                    "spec members are implicitly public fn, logic fn, const, or type headers",
+                    if self.in_trait { "L0515" } else { "L0510" },
+                    if self.in_trait {
+                        "trait members are implicitly public fn, logic fn, const, or type declarations"
+                    } else {
+                        "spec members are implicitly public fn, logic fn, const, or type headers"
+                    },
                     start,
                 ));
                 return Err(());
             }
             if attributes.iter().any(|a| !a.kind.is_promise()) {
                 self.diagnostics.push(Diagnostic::error(
-                    "L0510",
-                    "only function promises are allowed in a spec header",
+                    if self.in_trait { "L0515" } else { "L0510" },
+                    if self.in_trait {
+                        "only function promises are allowed in a trait header"
+                    } else {
+                        "only function promises are allowed in a spec header"
+                    },
                     start,
                 ));
                 return Err(());
@@ -659,7 +670,7 @@ impl Parser<'_> {
                 let name = self.name()?;
                 self.expect(K::Colon)?;
                 let ty = self.ty()?;
-                let (value, end) = if self.in_spec {
+                let (value, end) = if self.in_spec || self.in_trait && self.at(K::Semicolon) {
                     let end = self.expect(K::Semicolon)?;
                     (
                         Expr {
@@ -678,16 +689,34 @@ impl Parser<'_> {
             }
             K::Keyword if self.source.slice(start.span) == Some("type") && self.in_impl => {
                 let name = self.name()?;
-                let value = if self.in_spec {
+                let logical = if self.in_trait && self.eat(K::Colon).is_some() {
+                    if !self.at_word("Logical") {
+                        return self
+                            .fail("only `Logical` associated-type bounds are supported yet");
+                    }
+                    self.bump();
+                    true
+                } else {
+                    false
+                };
+                let value = if self.in_spec || self.in_trait {
                     None
                 } else {
                     self.expect(K::Equal)?;
                     Some(self.ty()?)
                 };
                 let end = self.expect(K::Semicolon)?.span;
-                Ok((DeclarationKind::AssociatedType { name, value }, end))
+                Ok((
+                    DeclarationKind::AssociatedType {
+                        name,
+                        logical,
+                        value,
+                    },
+                    end,
+                ))
             }
             K::Name if self.source.slice(start.span) == Some("spec") => self.spec_item(),
+            K::Keyword if self.source.slice(start.span) == Some("trait") => self.trait_item(),
             K::Keyword if self.source.slice(start.span) == Some("impl") => self.impl_block(visible),
             K::Keyword if self.source.slice(start.span) == Some("mod") => self.module_item(),
             K::Keyword if self.source.slice(start.span) == Some("use") => {
@@ -701,6 +730,54 @@ impl Parser<'_> {
             // `declaration_start` leaves the contextual word `prop`.
             _ => self.prop(),
         }
+    }
+
+    fn trait_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
+        self.nested(|this| {
+            let name = this.name()?;
+            if this.at(K::Less) || this.at(K::Colon) {
+                this.diagnostics.push(Diagnostic::error(
+                    "L0515",
+                    "generic traits and supertraits are deferred",
+                    this.current().span,
+                ));
+                return Err(());
+            }
+            let open = this.expect(K::LBrace)?;
+            let saved = (this.in_trait, this.in_impl);
+            this.in_trait = true;
+            this.in_impl = true;
+            let members = this.impl_body();
+            (this.in_trait, this.in_impl) = saved;
+            let members = members?;
+            let required = members
+                .iter()
+                .filter_map(|d| match &d.kind {
+                    DeclarationKind::Function { name, body, .. }
+                        if this.source.slice(body.span) == Some(";") =>
+                    {
+                        Some(name.text.clone())
+                    }
+                    DeclarationKind::Constant { name, value, .. }
+                        if this.source.slice(value.span) == Some(";") =>
+                    {
+                        Some(name.text.clone())
+                    }
+                    DeclarationKind::AssociatedType { name, .. } => Some(name.text.clone()),
+                    _ => None,
+                })
+                .collect();
+            let end = this.close(K::RBrace, open)?.span;
+            Ok((
+                DeclarationKind::Trait {
+                    native: None,
+                    name,
+                    members,
+                    required,
+                },
+                end,
+            ))
+        })
     }
 
     fn spec_item(&mut self) -> ParseResult<(DeclarationKind, Span)> {
@@ -898,11 +975,13 @@ impl Parser<'_> {
             Ok((self_param, parameters, result))
         })();
         let body = match &signature {
-            Ok(_) if self.in_spec => self.expect(K::Semicolon).map(|end| Block {
-                statements: Vec::new(),
-                tail: None,
-                span: end.span,
-            }),
+            Ok(_) if self.in_spec || self.in_trait && self.at(K::Semicolon) => {
+                self.expect(K::Semicolon).map(|end| Block {
+                    statements: Vec::new(),
+                    tail: None,
+                    span: end.span,
+                })
+            }
             Ok(_) => self.block(),
             Err(()) => Err(()),
         };
@@ -1526,6 +1605,16 @@ impl Parser<'_> {
     fn ty_inner(&mut self) -> ParseResult<Type> {
         let start = self.current();
         match start.kind {
+            K::Less => {
+                let path = self.qualified_path()?;
+                Ok(Type {
+                    span: path.span,
+                    kind: TypeKind::Path {
+                        path: Box::new(path),
+                        arguments: vec![],
+                    },
+                })
+            }
             K::Fn => self.function_type(start),
             K::Logic => self.logical_function_type(),
             K::Name | K::Keyword if self.at_named() => self.named_type(false),
@@ -2128,6 +2217,36 @@ impl Parser<'_> {
     }
 
     /// `a::b::c` from a token that `at_named` accepted: one segment or more.
+    /// Qualified trait selection uses an internal path marker that is not a
+    /// user identifier. Resolution checks both independent type paths.
+    fn qualified_path(&mut self) -> ParseResult<Path> {
+        let open = self.expect(K::Less)?;
+        let owner = self.path()?;
+        self.expect(K::As)?;
+        let interface = self.path()?;
+        self.expect(K::Greater)?;
+        self.expect(K::PathSep)?;
+        let member = self.name()?;
+        Ok(Path {
+            span: open.span.through(member.span),
+            segments: vec![
+                Name {
+                    text: "<qualified>".into(),
+                    span: open.span,
+                },
+                Name {
+                    text: owner.text(),
+                    span: owner.span,
+                },
+                Name {
+                    text: interface.text(),
+                    span: interface.span,
+                },
+                member,
+            ],
+        })
+    }
+
     fn path(&mut self) -> ParseResult<Path> {
         let first = self.first_segment()?;
         let mut span = first.span;
@@ -2561,6 +2680,13 @@ impl Parser<'_> {
 
     fn prefix(&mut self) -> ParseResult<Expr> {
         match self.current().kind {
+            K::Less => {
+                let path = self.qualified_path()?;
+                Ok(Expr {
+                    span: path.span,
+                    kind: ExprKind::Path(Box::new(path)),
+                })
+            }
             K::Name | K::Prop if self.at_form() => self.form(),
             K::Logic => self.logic_expression(),
             K::Or | K::OrOr => self.closure_expression(),
@@ -3619,7 +3745,7 @@ fn keyword_construct(keyword: &str) -> Option<&'static str> {
         "move" => "closures (`move`) are not in Locus yet",
         "ref" => "`ref` bindings are not in Locus yet",
         "static" => "`static` items are not in Locus yet",
-        "trait" => "traits are not in Locus yet",
+        "trait" => "trait declarations belong at module scope",
         "type" => "type aliases (`type`) are not in Locus yet",
         "unsafe" => "`unsafe` is not in Locus yet",
         "use" => "`use` is only supported at module scope",

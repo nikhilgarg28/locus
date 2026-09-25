@@ -161,10 +161,7 @@ A future `tools/validate-formal` entry point must run from a clean checkout with
 <!-- spec: 3.9:1 informative -->
 Type-spec lowering checks a unique package-owned representation and generates a distinct nominal wrapper plus ordinary checked adapters. Signature matching retains logical mode, binders and evidence. The compiler must preserve invocation count, sequencing, mutable snapshots and ownership through wrapping/unwrapping; representation methods and fields must not become accessible through the public spec. No generated body or header is an axiom. Generic bodies are checked on instantiation; this is not a universal generic soundness claim. Unsupported borrowed/container conversions fail closed. These are compiler preservation obligations tested by spec, IR and hostile Rust-client regressions; they are not yet a mechanized lowering proof.
 
-## Target parameter and positional structs
+## Concrete trait elaboration
 
-<!-- spec: 3.10:1 legality-rule -->
-All judgments above are relative to an immutable selected pointer width (32 or 64). Definitions, Program and erased Module share it. Machine types record pointer width explicitly; buffer bounds and index/result types use the selected usize. The erased checker rejects physical types for a different width. A generated compile-time Rust guard enforces the same width even when all dependent proofs erase. Proof-store keys include width, and certificates still undergo kernel checking in the actual context.
-
-<!-- spec: 3.10:2 dynamic-semantics -->
-Tuple/unit structs add source/erased shapes but no check-IR form or proof rule. A successful irrefutable pattern substitutes checked field projections in declaration order. The source checker establishes field privacy and move permissions. Erasure replaces an entirely logical pattern with a wildcard and erases its bound values, preserving evaluation of any ordinary producer. Physical constructor/pattern syntax retains the nominal declaration's shape.
+<!-- spec: 3.12:1 informative -->
+For each selected pair `(Trait, ConcreteType)`, substitute Self and associated bindings, match the declared parameter/result telescope, and check the actual body, including inherited defaults. Replace each selected call with that checked function identity before the existing lowering judgment. The trait header alone adds no axiom to the logical environment. Correctness requires selection to preserve trait provenance, scope and coherence before erasure; Rust trait forwarding must call the same checked body once. Physical-only export does not apply proof-result projection to trait signatures. This is an additional source-to-IR preservation obligation, not a new kernel proof rule.

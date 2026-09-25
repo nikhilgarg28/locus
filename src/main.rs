@@ -1181,7 +1181,10 @@ fn uses_project_driver(arguments: &[OsString]) -> bool {
     let tokens = lexer::lex(sources.get(file)).tokens;
     tokens.iter().any(|t| {
         t.kind == lexer::TokenKind::Keyword
-            && matches!(sources.get(file).slice(t.span), Some("mod" | "use"))
+            && matches!(
+                sources.get(file).slice(t.span),
+                Some("mod" | "use" | "trait")
+            )
     }) || tokens
         .iter()
         .any(|t| sources.get(file).slice(t.span) == Some("import"))
