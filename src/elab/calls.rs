@@ -101,6 +101,140 @@ impl Env<'_> {
         })
     }
 
+    /// A logical call observes referents, independent of reference spelling.
+    /// Suppress receiver modeling while locating the argument; the expected
+    /// parameter then determines whether its physical value or model is wanted.
+    pub(super) fn observation_argument(
+        &mut self,
+        argument: &ast::Expr,
+        expected: &Type,
+        ghost: bool,
+        layout: Option<&crate::typed::ErasureLayout>,
+    ) -> Elab<Value> {
+        let mut inner = argument;
+        while let ExprKind::Ref {
+            mutable: false,
+            expr,
+        }
+        | ExprKind::Group(expr) = &inner.kind
+        {
+            inner = expr;
+        }
+        let physical = !ghost
+            && !self
+                .session
+                .program()
+                .definitions()
+                .is_erased_type(expected);
+        // A physical parameter selects the raw representation. Logical
+        // parameters keep normal logical receiver/field semantics: observing
+        // point.x is different from explicitly selecting model!(point.x).
+        if physical {
+            self.suppress_models += 1;
+        }
+        let value = self.ghost(|env| env.expr(inner, Some(expected)));
+        if physical {
+            self.suppress_models -= 1;
+        }
+        self.finish_observation(value?, expected, ghost, layout, argument.span)
+    }
+
+    fn finish_observation(
+        &mut self,
+        mut value: Value,
+        expected: &Type,
+        ghost: bool,
+        layout: Option<&crate::typed::ErasureLayout>,
+        span: Span,
+    ) -> Elab<Value> {
+        while matches!(
+            self.session.expression_layout(&value.expr),
+            crate::typed::ErasureLayout::Shared { .. }
+        ) {
+            value.expr = Expr::Deref(Box::new(value.expr));
+        }
+        let logical = ghost
+            || self
+                .session
+                .program()
+                .definitions()
+                .is_erased_type(expected);
+        if logical {
+            // Structural models may project the same input more than once.
+            // Name eager execution before constructing its erased description.
+            if !crate::typed::is_pure(&value.expr) {
+                let mark = self.mark();
+                let result = (|| {
+                    let source = self.term(&value, span)?;
+                    let pattern = self.bind_pattern(
+                        &ast::Pattern {
+                            kind: ast::PatternKind::Name {
+                                name: ast::Name {
+                                    text: "__locus_observation".into(),
+                                    span,
+                                },
+                                mutable: false,
+                            },
+                            span,
+                        },
+                        source,
+                        false,
+                    )?;
+                    self.register_pattern_layout(
+                        &pattern,
+                        &self.session.expression_layout(&value.expr),
+                    );
+                    let crate::typed::Pattern::Bind { binder, .. } = &pattern else {
+                        unreachable!()
+                    };
+                    let observed = Value::new(
+                        Expr::Var {
+                            id: binder.id,
+                            name: binder.name.clone(),
+                            ty: binder.ty.clone(),
+                        },
+                        binder.ty.clone(),
+                    );
+                    let modeled = self.ghost(|env| env.logical_value(observed, span))?;
+                    let modeled = self.coerce(modeled, expected, span)?;
+                    Ok(Value::new(
+                        Expr::Block(crate::typed::Block {
+                            stmts: vec![crate::typed::Stmt::Let {
+                                pattern,
+                                value: value.expr,
+                            }],
+                            tail: Some(Box::new(modeled.expr)),
+                        }),
+                        modeled.ty,
+                    ))
+                })();
+                self.close_names(mark);
+                value = result?;
+            } else {
+                value = self.ghost(|env| env.logical_value(value, span))?;
+            }
+        }
+        let value = self.coerce(value, expected, span)?;
+        if layout.is_some_and(|layout| {
+            !super::layout::borrow_compatible(
+                expected,
+                &self.session.expression_layout(&value.expr),
+                layout,
+            )
+        }) {
+            return self.fail(
+                "L0272",
+                "an observed argument must have the parameter's logical and physical contents",
+                span,
+            );
+        }
+        Ok(if logical {
+            Value::new(ghost_value(value.expr), value.ty)
+        } else {
+            value
+        })
+    }
+
     pub(super) fn call(
         &mut self,
         callee: &ast::Expr,
@@ -428,6 +562,28 @@ impl Env<'_> {
             let passing = info.passing.get(index).copied().unwrap_or_default();
             let (value, argument_span) = match argument {
                 // A value elaborated already, which is no place.
+                Argument::Value(value, span) if info.logical => {
+                    let value = self.finish_observation(
+                        Value::new(value.expr.clone(), value.ty.clone()),
+                        &expected,
+                        ghosts[index],
+                        Some(&self.session.binding_layout(ids[index])),
+                        *span,
+                    )?;
+                    places.push(None);
+                    (value, *span)
+                }
+                Argument::Written(argument) if info.logical => {
+                    let layout = self.session.binding_layout(ids[index]);
+                    let value = self.observation_argument(
+                        argument,
+                        &expected,
+                        ghosts[index],
+                        Some(&layout),
+                    )?;
+                    places.push(None);
+                    (value, argument.span)
+                }
                 Argument::Value(value, span) => {
                     let value = self.coerce(
                         Value::new(value.expr.clone(), value.ty.clone()),

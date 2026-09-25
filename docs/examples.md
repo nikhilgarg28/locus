@@ -8,16 +8,102 @@ order = 51
 
 # Useful code. Specific guarantees.
 
-Each example answers three questions: what runs, what is promised, and where the evidence comes from. Every Locus block on this page is checked. Run directives exercise the interpreters and generated Rust; they are test annotations, not language syntax.
+Each example answers three questions: what runs, what is promised, and where the evidence comes from. All executable examples are checked. Run directives exercise the interpreters and generated Rust; they are test annotations, not language syntax.
 
 | Start here | What it demonstrates |
 |---|---|
+| [Choose an algorithm with optional evidence](#choose-an-algorithm-with-optional-evidence) | Scoped proof transport and a runtime choice. |
 | [Return a value and its proof](#return-a-value-and-its-proof) | The smallest complete contract. |
 | [Compute a midpoint without overflow](#compute-a-midpoint-without-overflow) | A specification that catches a familiar arithmetic bug. |
 | [Validate once, then carry the invariant](#validate-once-then-carry-the-invariant) | Evidence across a constructor, a type, and a consumer. |
 | [Read only an available element](#read-only-an-available-element) | A bounds proof obtained from control flow. |
 | [Keep a counter bounded](#keep-a-counter-bounded) | A loop invariant maintained as evidence. |
 | [Prove a sequence operation](#prove-a-sequence-operation) | Structural recursion and an induction proof. |
+
+## Choose an algorithm with optional evidence
+
+Suppose `Sorted(items)` claims that the input’s contents are in ascending order. `@Sorted(items)` is its proof type; `Option<@Sorted(items)>` lets the caller supply that evidence when available. The functions return an optional index for the requested key.
+
+~~~rust run
+// docs:hide
+logic fn ordered_prefix(items: &[u32], count: Int, bounds: @(0 <= count && count <= items.len())) -> Bool {
+    if count <= 1 { true } else {
+        let remaining = count - 1;
+        let smaller: @(0 <= remaining && remaining < count) = And::Intro(prove!(0 <= remaining), prove!(remaining < count));
+        let within: @(0 <= remaining && remaining <= items.len()) = And::Intro(prove!(0 <= remaining), prove!(remaining <= items.len()));
+        let prefix = recurse!(smaller, ordered_prefix(items, remaining, within));
+        prefix && items.get(count - 2) <= items.get(count - 1)
+    }
+}
+logic fn Sorted(items: &[u32]) -> Prop {
+    let count = items.len();
+    let within: @(0 <= count && count <= items.len()) = And::Intro(prove!(0 <= count), prove!(count <= items.len()));
+    prop!(ordered_prefix(items, count, within))
+}
+// docs:show
+#[no_panic]
+fn binary_search(items: &[u32], key: u32, sorted: @Sorted(items)) -> Option<u64> {
+    let mut lo: u64 = 0;
+    let mut hi = items.len();
+    let mut bounded: @(lo <= hi && hi <= items.len()) = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
+    loop {
+        if lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let value = items.get(mid);
+            if value == key { break Option::<u64>::Some(mid); } else {
+                if value < key {
+                    lo = mid + 1;
+                    bounded = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
+                } else {
+                    hi = mid;
+                    bounded = And::Intro(prove!(lo <= hi), prove!(hi <= items.len()));
+                }
+            }
+        } else { break Option::<u64>::None; }
+    }
+}
+// docs:hide
+#[no_panic]
+fn linear_search(items: &[u32], key: u32) -> Option<u64> {
+    let mut i: u64 = 0;
+    loop {
+        if i < items.len() {
+            if items.get(i) == key { break Option::<u64>::Some(i); } else { i = i + 1; }
+        } else { break Option::<u64>::None; }
+    }
+}
+// docs:show
+#[no_panic]
+fn search(items: &[u32], key: u32, sorted: Option<@Sorted(items)>) -> Option<u64> {
+    match sorted {
+        Option::Some(proof) => binary_search(&items, key, proof),
+        Option::None => linear_search(&items, key),
+    }
+}
+// docs:hide
+fn example() -> Option<u64> {
+    let xs: [u32; 3] = [1, 3, 5];
+    let sorted: @Sorted(xs) = fold!(Sorted, prove!(ordered_prefix(xs, 3, And::Intro(prove!(0 <= 3), prove!(3 <= xs.len())))));
+    search(&xs, 3, Some(sorted))
+}
+// Sorted means every adjacent pair is nondecreasing. Empty/singleton inputs
+// satisfy it. Its computation and evidence erase; Some/None does not.
+// The checked contract here is sorted input plus panic-free index arithmetic
+// and reads. Search-result completeness and termination are tested, not yet
+// stated as return proofs.
+//~ run: example() => Some(1)
+// docs:show
+~~~
+
+- `Some(proof)` forwards evidence for this particular input to binary search. That function’s signature makes sortedness a required precondition.
+- `None` leaves sortedness unknown. Linear search accepts the input without that precondition.
+- The `Option` tag controls the runtime branch. Its proof payload is checked before execution and erased; dispatch does not inspect a proof or recheck the list’s order.
+
+A caller could obtain the evidence from a verified sort or a validator, then reuse it for searches of the same unchanged contents. Evidence about an earlier snapshot does not certify a list after its contents change.
+
+**What is proved:** the caller must supply sortedness evidence to enter binary search, and both algorithms satisfy `no_panic`, including arithmetic and index bounds. The tracked `bounded` proof maintains `lo <= hi <= items.len()` through the loop. Sortedness means adjacent elements are nondecreasing; its recursive logical definition and a checked concrete caller are in the complete source.
+
+**What is tested:** search results on empty, singleton, duplicate, unsorted and boundary-valued lists, through both dispatch paths. This example does not yet state or prove result completeness or termination as a function contract. [Full source](../examples/optional_search.lc) and `tests/scoped_generics.rs` provide the implementation and differential tests.
 
 ## Return a value and its proof
 

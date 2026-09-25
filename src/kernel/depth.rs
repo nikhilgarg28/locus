@@ -71,6 +71,10 @@ pub(super) fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             | Type::Prop
             | Type::Struct(_)
             | Type::Enum(_) => {}
+            Type::Instance(base, args) => {
+                out.push(Node::Type(base));
+                out.extend(args.iter().map(Node::Term));
+            }
             Type::Proof(prop) => out.push(Node::Term(prop)),
             Type::Tuple(fields) => out.extend(fields.iter().map(Node::Type)),
             Type::Fn(params, result) => {
@@ -79,6 +83,10 @@ pub(super) fn push_children<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
             }
         },
         Node::Term(term) => match term {
+            Term::Instance(value, args) => {
+                out.push(Node::Term(value));
+                out.extend(args.iter().map(Node::Term));
+            }
             Term::Boxed(value) => out.push(Node::Term(value)),
             Term::Buffer {
                 element, arguments, ..

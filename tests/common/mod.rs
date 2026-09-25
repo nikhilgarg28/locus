@@ -525,6 +525,7 @@ pub fn classify(classified: EnumId) -> FnItem {
         )
     };
     let variant = |index: usize, name: &str, evidence: Proof| Expr::Variant {
+        indices: Vec::new(),
         id: classified,
         enum_name: "Classified".into(),
         index,

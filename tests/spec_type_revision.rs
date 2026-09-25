@@ -324,3 +324,65 @@ fn generic_model_impl_is_rejected_instead_of_silently_dropped() {
     .unwrap();
     assert!(error.contains("generic Model implementations"), "{error}");
 }
+
+#[test]
+#[doc = "spec: 1.29:5"]
+fn spec_adapters_preserve_scoped_evidence_and_logical_observations() {
+    check(
+        "scoped_evidence",
+        r#"
+spec type Claims {
+    fn certify(n: u8, proof: @(n > 0)) -> Option<@(n > 0)>;
+    logic fn positive(n: &&u8) -> Prop;
+}
+struct Representation {}
+impl Claims for Representation {
+    fn certify(value: u8, evidence: @(value > 0)) -> Option<@(value > 0)> {
+        Some(evidence)
+    }
+    logic fn positive(n: &&u8) -> Prop { prop!(n > 0) }
+}
+fn client(n: u8, proof: @(n > 0)) -> @(n > 0) {
+    match Claims::certify(n, proof) {
+        Option::Some(evidence) => evidence,
+        Option::None => proof,
+    }
+}
+fn observed(n: u8, proof: @(n > 0)) -> @Claims::positive(n) {
+    let reference = &n;
+    let evidence: @Claims::positive(&reference) = fold!(Claims::positive, proof);
+    evidence
+}
+"#,
+    )
+    .unwrap();
+    let error = check(
+        "scoped_wrong_contract",
+        r#"
+spec type Claims { fn certify(n: u8, proof: @(n > 0)) -> Option<@(n > 0)>; }
+struct Representation {}
+impl Claims for Representation {
+    fn certify(value: u8, evidence: @(value > 0)) -> Option<@(value == 0)> { None }
+}
+"#,
+    )
+    .err()
+    .unwrap();
+    assert!(error.contains("L0511"), "{error}");
+    let error = check(
+        "scoped_wrong_snapshot",
+        r#"
+spec type Claims { fn certify(n: u8, proof: @(n > 0)) -> Option<@(n > 0)>; }
+struct Representation {}
+impl Claims for Representation {
+    fn certify(value: u8, evidence: @(value > 0)) -> Option<@(value > 0)> { Some(evidence) }
+}
+fn bad(n: u8, other: u8, proof: @(n > 0)) -> @(other > 0) {
+    match Claims::certify(n, proof) { Option::Some(evidence) => evidence, Option::None => proof }
+}
+"#,
+    )
+    .err()
+    .unwrap();
+    assert!(error.contains("L02"), "{error}");
+}

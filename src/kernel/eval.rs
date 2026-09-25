@@ -65,6 +65,7 @@ impl<'d> Evaluator<'d> {
 
     fn eval_form(&mut self, term: &Term) -> Result<Term, KernelError> {
         match term {
+            Term::Instance(..) => self.eval_instance(term),
             Term::Bool(_)
             | Term::U8(_)
             | Term::Int(_)
@@ -118,6 +119,14 @@ impl<'d> Evaluator<'d> {
     }
 
     #[inline(never)]
+    fn eval_instance(&mut self, term: &Term) -> Result<Term, KernelError> {
+        let Term::Instance(value, args) = term else {
+            unreachable!("dispatched on this form")
+        };
+        Ok(Term::Instance(Box::new(self.eval(value)?), args.clone()))
+    }
+
+    #[inline(never)]
     fn eval_prim(&mut self, term: &Term) -> Result<Term, KernelError> {
         let Term::Prim(prim, arguments) = term else {
             unreachable!("dispatched on this form")
@@ -166,7 +175,12 @@ impl<'d> Evaluator<'d> {
         let Term::Proj(target, index) = term else {
             unreachable!("dispatched on this form")
         };
-        match self.eval(target)? {
+        let target = self.eval(target)?;
+        let target = match target {
+            Term::Instance(value, _) => *value,
+            other => other,
+        };
+        match target {
             Term::Boxed(value) if *index == 0 => Ok(*value),
             Term::Tuple(_, values) | Term::Struct(_, values) => {
                 values.into_iter().nth(*index).ok_or_else(|| stuck(term))
@@ -204,7 +218,12 @@ impl<'d> Evaluator<'d> {
         else {
             unreachable!("dispatched on this form")
         };
-        let (index, payload) = match self.eval(scrutinee)? {
+        let scrutinee = self.eval(scrutinee)?;
+        let scrutinee = match scrutinee {
+            Term::Instance(value, _) => *value,
+            other => other,
+        };
+        let (index, payload) = match scrutinee {
             Term::Bool(value) => (usize::from(value), Vec::new()),
             Term::Variant(_, index, payload) => (index, payload),
             _ => return Err(stuck(term)),
@@ -257,6 +276,7 @@ pub(super) fn is_plain_data(definitions: &Definitions, ty: &Type) -> bool {
         }
         active.push(ty.clone());
         let result = match ty {
+            Type::Instance(base, _) => visit(definitions, base, active),
             Type::Bool | Type::U8 | Type::Int | Type::Machine(_) => true,
             Type::Prop | Type::Proof(_) | Type::Fn(..) => false,
             Type::Boxed(element) | Type::Buffer(element) => visit(definitions, element, active),

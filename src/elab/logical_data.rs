@@ -236,6 +236,7 @@ impl Env<'_> {
                 (
                     name.clone(),
                     Global::Enum(Rc::new(EnumInfo {
+                        captures: Vec::new(),
                         id,
                         name,
                         variants: item
@@ -358,6 +359,7 @@ impl Env<'_> {
             Err(error) => return self.internal(error, name.span),
         };
         Ok(Global::Enum(Rc::new(EnumInfo {
+            captures: Vec::new(),
             id,
             name: name.text.clone(),
             variants: item
@@ -414,7 +416,9 @@ impl Env<'_> {
         for (index, argument) in arguments.iter().enumerate() {
             let ty =
                 crate::kernel::telescope_entry(&telescope, index, &terms).expect("known argument");
-            let value = self.argument(argument, &ty, true)?;
+            let ghost = self.session.program().definitions().is_erased_type(&ty)
+                || matches!(ty, Type::Bool | Type::Fn(..));
+            let value = self.observation_argument(argument, &ty, ghost, None)?;
             terms.push(self.term(&value, argument.span)?);
             exprs.push(value.expr);
         }

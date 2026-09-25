@@ -31,19 +31,20 @@ Type ::= bool | Prop
        | (A_0, A_1, ..., A_n)     a telescope: A_i may mention fields 0..i-1
        | struct S                 a declared struct, by identity
        | enum E                   a declared enum, by identity
+       | instance_type(N, args)   a struct/enum family with logical indices
        | box_type(A)              immutable contents of a physical Box
        | buffer_type(A)           immutable contents of an array, slice, or Vec
        | fn(A_0, ..., A_n) -> R     the type of a function of the logic: parameters form a telescope; R may mention all of them
 ~~~
 
 <!-- spec: 2.1:3 syntax -->
-`Prop`, `@P` and `Int` are intrinsically erased types. Checked nominal declarations may also be marked logical, and a function type is erased when its result is. The kernel has one bool representation; source bool/Bool classification and nested physical layouts require the separate checked layout layer. Box and Buffer are physical containers even when their payloads erase. The eight machine integer types are data, with `u8` represented by Type::U8 and the other seven by Type::Machine(T); their integer observations use the primitive view schema. Kernel function types describe total logical terms, never ordinary source fn execution. Term dependencies in types occur inside propositions of proof types, so they may alter an evidence claim but not select a physical layout. In this contract, “ghost” is an internal erasure classification, not a source qualifier or a supported Ghost<T> type.
+`Prop`, `@P` and `Int` are intrinsically erased types. Checked nominal declarations may also be marked logical, and a function type is erased when its result is. The kernel has one bool representation; source bool/Bool classification and nested physical layouts require the separate checked layout layer. Box and Buffer are physical containers even when their payloads erase. The eight machine integer types are data, with `u8` represented by Type::U8 and the other seven by Type::Machine(T); their integer observations use the primitive view schema. Kernel function types describe total logical terms, never ordinary source fn execution. Term dependencies in types occur inside propositions of proof types and nominal family indices, so they may alter an evidence claim but not select a physical layout. In this contract, “ghost” is an internal erasure classification, not a source qualifier or a supported Ghost<T> type.
 
 <!-- spec: 2.1:4 syntax -->
 In a telescope, field `i` is under `i` binders: `#0` in it is field `i - 1`, `#1` is field `i - 2`, and so on. `A_i[v_0, ..., v_{i-1}]` below means field `i`'s type with each earlier field replaced by the given term.
 
 <!-- spec: 2.1:5 syntax -->
-A struct declaration is a closed telescope; an enum declaration is a list of payload telescopes. A function declaration supplies a closed dependent function type and a checked body. The basic declaration APIs accept references only to earlier declarations. Dedicated APIs additionally admit atomic recursive enum groups, strictly positive inductive predicates, and functions whose self-calls satisfy structural or nonnegative-Int descent. They publish no unchecked candidate declarations. The bounded For term is a separate total iteration rule. These are the supported recursion principles; ordinary runtime calls and unbounded source loops live outside the logical kernel. Structs and enums are nominal, while tuples are structural and discard source field names.
+A struct declaration is a closed telescope; an enum declaration is a list of payload telescopes. A nominal family additionally binds a checked parameter telescope outside each payload telescope (2.28:5). A function declaration supplies a closed dependent function type and a checked body. The basic declaration APIs accept references only to earlier declarations. Dedicated APIs additionally admit atomic recursive enum groups, strictly positive inductive predicates, and functions whose self-calls satisfy structural or nonnegative-Int descent. They publish no unchecked candidate declarations. The bounded For term is a separate total iteration rule. These are the supported recursion principles; ordinary runtime calls and unbounded source loops live outside the logical kernel. Structs and enums are nominal, while tuples are structural and discard source field names.
 
 <!-- spec: 2.1:6 syntax -->
 Terms. A proposition is a term of type `Prop`; there is no separate syntactic class.
@@ -70,6 +71,7 @@ t ::= x                     a context variable, by identity
     | forall (#: A) { t }   binds #0 in its body
     | (t_0, ..., t_n) : (A_0, ..., A_n)     a tuple value carries its telescope
     | S { t_0, ..., t_n }
+    | instance(constructor, args)   an indexed struct or enum constructor
     | t.i                   positional projection
     | proof(p)              a proof used as a value
     | f                     a declared function of the logic, as a value
@@ -951,6 +953,12 @@ Instantiation supplies exactly one well-formed, closed type per parameter. It ch
 
 <!-- spec: 2.28:4 legality-rule -->
 Substitution preserves all term and hypothesis binders: type arguments contain no free term variables, and replacing a type parameter does not introduce or remove a term binder. Nominal declaration references in terms remain nominal; using a placeholder as a value constructor or leaking it into a referenced declaration cannot forge an instance and is rejected by ordinary checking.
+
+<!-- spec: 2.28:5 legality-rule -->
+A nominal family binds parameters outside its struct-field or enum-payload telescope. Check the entire dependent signature against earlier declarations, even for an empty enum. `Instance(N,args)` requires a declared family, exact arity and arguments of the instantiated parameter types in logical mode. Bare family types/constructors are invalid. Substitute indices under payload binders without capture. An indexed constructor must be a literal struct/variant constructor; check every payload against the instantiated telescope. It is not a cast of an arbitrary value.
+
+<!-- spec: 2.28:6 legality-rule -->
+Projection and case analysis use that same instantiated payload telescope; arm equations retain the indices. Equality compares nominal identity and indices, using existing proof irrelevance only where already permitted. Binding, substitution, recursion scans, certificate serialization and depth limits traverse indices. Indices never select physical layouts or runtime tags. Source specialization uses Prop parameters to abstract proof claims; the closed generic-template API remains governed by 2.28:2.
 
 ## Finite logical enums and structural induction
 

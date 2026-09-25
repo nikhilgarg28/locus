@@ -73,6 +73,7 @@ fn block(e: Expr) -> Block {
 }
 fn declaration(kind: DeclarationKind, span: Span) -> Declaration {
     Declaration {
+        captures: Vec::new(),
         kind,
         span,
         doc: vec![],

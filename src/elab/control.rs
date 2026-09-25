@@ -211,7 +211,20 @@ impl Env<'_> {
         if matches!(scrutinee_value.ty, Type::Proof(_)) {
             return self.match_evidence(scrutinee_value, scrutinee.span, arms, expected, span);
         }
-        let Type::Enum(id) = &scrutinee_value.ty else {
+        if !self.total
+            && self
+                .session
+                .program()
+                .definitions()
+                .is_erased_type(&scrutinee_value.ty)
+        {
+            return self.fail(
+                "L0272",
+                "a runtime match cannot inspect a logical enum; match it inside a logic block",
+                scrutinee.span,
+            );
+        }
+        let Type::Enum(id) = scrutinee_value.ty.nominal() else {
             let shown = self.show_type(&scrutinee_value.ty);
             let message = format!("`match` takes apart an enum or evidence, and this is `{shown}`");
             return self.fail("L0212", message, scrutinee.span);

@@ -8,7 +8,7 @@ order = 6
 
 # Native Rust imports implementation plan
 
-This follows the locally committed opaque-spec implementation. Plain `import path [as alias]` acquires a physical Rust interface; it does not implement a spec or manufacture evidence. LOC-246 and LOC-249 in [interoperability](../roadmap/interop.md) own this work. Assumed spec realizations remain LOC-247.
+This follows the locally committed opaque-spec implementation. Plain `import path [as alias]` acquires a physical Rust interface; it does not implement a spec or manufacture evidence. LOC-259 and LOC-249 in [interoperability](../roadmap/interop.md) own this work. Assumed spec realizations remain LOC-260.
 
 ## Ordered implementation
 
@@ -25,4 +25,4 @@ A supported call reaches the original Rust function and makes no behavioral clai
 
 ## Delivered slice
 
-LOC-246 and LOC-249 are complete for the boundary described above. The full extended gate passed; the standard suite exceeded its advisory timing target. Eleven focused import regressions and the existing compiler/package suites exercise this implementation. The [current manual](../spec/19-native-imports.md) is authoritative; broader native types, sysroot/external metadata loading and staged build-script extraction remain explicit follow-ups.
+LOC-259 and LOC-249 are complete for the boundary described above. The full extended gate passed; the standard suite exceeded its advisory timing target. Eleven focused import regressions and the existing compiler/package suites exercise this implementation. The [current manual](../spec/19-native-imports.md) is authoritative; broader native types, sysroot/external metadata loading and staged build-script extraction remain explicit follow-ups.

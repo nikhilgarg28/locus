@@ -1501,6 +1501,7 @@ impl Generator {
             Type::Struct(id) => {
                 let item = self.program.struct_item(*id).clone();
                 Expr::Struct {
+                    indices: Vec::new(),
                     id: *id,
                     name: item.name,
                     fields: item
@@ -1515,6 +1516,7 @@ impl Generator {
                 let index = self.rng.range(0..item.variants.len());
                 let variant = &item.variants[index];
                 Expr::Variant {
+                    indices: Vec::new(),
                     id: *id,
                     enum_name: item.name.clone(),
                     index,
@@ -1544,6 +1546,7 @@ impl Generator {
             Type::Struct(id) => {
                 let item = self.program.struct_item(*id).clone();
                 Expr::Struct {
+                    indices: Vec::new(),
                     id: *id,
                     name: item.name,
                     fields: item
@@ -1558,6 +1561,7 @@ impl Generator {
                 let index = self.rng.range(0..item.variants.len());
                 let variant = &item.variants[index];
                 Expr::Variant {
+                    indices: Vec::new(),
                     id: *id,
                     enum_name: item.name.clone(),
                     index,
@@ -3172,6 +3176,7 @@ fn literals_of(ty: &Type, tables: &Tables) -> Vec<Expr> {
                 .map(|(field, ty)| first(ty).map(|value| (field.clone(), value)))
                 .collect::<Option<Vec<(String, Expr)>>>()
                 .map(|fields| Expr::Struct {
+                    indices: Vec::new(),
                     id: *id,
                     name: name.clone(),
                     fields,
@@ -3188,6 +3193,7 @@ fn literals_of(ty: &Type, tables: &Tables) -> Vec<Expr> {
                 .enumerate()
                 .filter_map(|(index, (variant, payload))| {
                     Some(Expr::Variant {
+                        indices: Vec::new(),
                         id: *id,
                         enum_name: name.clone(),
                         index,

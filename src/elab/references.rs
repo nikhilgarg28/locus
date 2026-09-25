@@ -111,6 +111,25 @@ impl Env<'_> {
         }
     }
 
+    pub(super) fn observation_parameter(&mut self, parameter: &ast::Parameter) -> Elab<Written> {
+        let ty = parameter.ty.observed();
+        if parameter.mutable || matches!(ty.kind, ast::TypeKind::Ref { mutable: true, .. }) {
+            return self.fail(
+                "L0270",
+                "logical parameters are read-only observations",
+                parameter.span,
+            );
+        }
+        if let ast::TypeKind::Slice(element) = &ty.kind {
+            Ok(Written {
+                ty: self.collection_type(element, ty.span)?,
+                ghost: false,
+            })
+        } else {
+            self.written(ty)
+        }
+    }
+
     /// What a parameter's passing means in the body: a `mut` or `&mut`
     /// parameter is a mutable binding, and a reference parameter is one
     /// nothing is moved out of.

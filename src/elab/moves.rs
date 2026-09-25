@@ -187,6 +187,7 @@ impl Env<'_> {
     /// derived.
     pub(super) fn derives_trait(&self, ty: &Type, derive: Derive) -> bool {
         match ty {
+            Type::Instance(base, _) => self.derives_trait(base, derive),
             Type::Boxed(element) | Type::Buffer(element) => {
                 derive != Derive::Copy && self.derives_trait(element, derive)
             }
@@ -212,6 +213,7 @@ impl Env<'_> {
     /// so a type holding one has no equality at runtime.
     pub(super) fn logic_only_data(&self, ty: &Type) -> Option<String> {
         match ty {
+            Type::Instance(base, _) => self.logic_only_data(base),
             Type::Boxed(element) | Type::Buffer(element) => self
                 .logic_only_data(element)
                 .map(|inner| format!("[]{inner}")),
@@ -308,13 +310,13 @@ impl Env<'_> {
         let mut ty = self.names[slot].ty.clone();
         let mut names = Vec::new();
         for &index in path {
-            let name = match &ty {
+            let name = match ty.nominal() {
                 Type::Struct(id) => self
                     .struct_by_id(*id)
                     .and_then(|info| info.fields.get(index).map(|field| field.name.clone())),
                 _ => None,
             };
-            ty = match &ty {
+            ty = match ty.nominal() {
                 Type::Struct(id) => self
                     .struct_by_id(*id)
                     .and_then(|info| info.fields.get(index).map(|field| field.ty.clone()))
@@ -458,7 +460,7 @@ impl Env<'_> {
             ty: ty.clone(),
         };
         for index in path {
-            ty = match &ty {
+            ty = match ty.nominal() {
                 Type::Tuple(fields) => fields.get(*index).cloned(),
                 Type::Struct(id) => self
                     .struct_by_id(*id)

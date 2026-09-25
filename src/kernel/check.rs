@@ -34,6 +34,7 @@ pub fn same(left: &Term, right: &Term) -> bool {
             },
         ) => lo == ro && same_type(le, re) && all(la, ra),
         (Term::Boxed(l), Term::Boxed(r)) => same(l, r),
+        (Term::Instance(l, la), Term::Instance(r, ra)) => same(l, r) && all(la, ra),
         (Term::Proof(_), Term::Proof(_)) => true,
         (Term::Free(l), Term::Free(r)) => l == r,
         (Term::Bound(l), Term::Bound(r)) => l == r,
@@ -114,6 +115,9 @@ pub fn same_type(left: &Type, right: &Type) -> bool {
         | (Type::Int, Type::Int)
         | (Type::Prop, Type::Prop) => true,
         (Type::Machine(l), Type::Machine(r)) => l == r,
+        (Type::Instance(l, la), Type::Instance(r, ra)) => {
+            same_type(l, r) && la.len() == ra.len() && la.iter().zip(ra).all(|(l, r)| same(l, r))
+        }
         (Type::Proof(l), Type::Proof(r)) => same(l, r),
         (Type::Tuple(l), Type::Tuple(r)) => same_types(l, r),
         (Type::Struct(l), Type::Struct(r)) => l == r,
@@ -137,14 +141,15 @@ pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
         Type::Machine(_) => Ok(()),
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
         Type::Tuple(fields) => check_telescope(ctx, fields),
+        Type::Instance(base, args) => check_family(ctx, base, args),
         Type::Struct(id) => ctx
             .definitions()
-            .struct_fields(*id)
+            .instance_fields(&Type::Struct(*id))
             .map(|_| ())
             .ok_or(KernelError::UnknownStruct),
         Type::Enum(id) => ctx
             .definitions()
-            .enum_variants(*id)
+            .instance_variants(&Type::Enum(*id))
             .map(|_| ())
             .ok_or(KernelError::UnknownEnum),
         Type::Fn(params, result) => {
@@ -153,6 +158,62 @@ pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
             check_telescope(ctx, &telescope)
         }
     }
+}
+
+fn check_family(ctx: &mut Context, base: &Type, args: &[Term]) -> Result<(), KernelError> {
+    let definitions = ctx.definitions();
+    let params = definitions
+        .family_parameters(base)
+        .ok_or_else(|| KernelError::NotAProduct(base.clone()))?;
+    if params.is_empty() {
+        return Err(KernelError::WrongArity {
+            expected: 0,
+            found: args.len(),
+        });
+    }
+    check_fields(ctx, params, args, Mode::Logical)
+}
+
+fn type_of_instance(
+    ctx: &mut Context,
+    value: &Term,
+    args: &[Term],
+    mode: Mode,
+) -> Result<Type, KernelError> {
+    let base = match value {
+        Term::Struct(id, _) => Type::Struct(*id),
+        Term::Variant(id, _, _) => Type::Enum(*id),
+        _ => return Err(KernelError::NotCaseable(value.clone())),
+    };
+    check_family(ctx, &base, args)?;
+    let ty = Type::Instance(Box::new(base), args.into());
+    let definitions = ctx.definitions();
+    let (fields, values) = match value {
+        Term::Struct(_, values) => (
+            definitions
+                .instance_fields(&ty)
+                .ok_or(KernelError::UnknownStruct)?,
+            values,
+        ),
+        Term::Variant(_, index, values) => {
+            let variants = definitions
+                .instance_variants(&ty)
+                .ok_or(KernelError::UnknownEnum)?;
+            (
+                variants
+                    .get(*index)
+                    .cloned()
+                    .ok_or(KernelError::NoSuchVariant {
+                        index: *index,
+                        variants: variants.len(),
+                    })?,
+                values,
+            )
+        }
+        _ => unreachable!(),
+    };
+    check_fields(ctx, &fields, values, mode)?;
+    Ok(ty)
 }
 
 /// Each field type must be well formed given variables for the earlier ones.
@@ -175,6 +236,7 @@ pub(super) fn check_telescope(ctx: &mut Context, fields: &[Type]) -> Result<(), 
 /// Infers the type of a term, rejecting ill-formed terms.
 pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, KernelError> {
     let found = match term {
+        Term::Instance(value, args) => type_of_instance(ctx, value, args, mode),
         Term::Boxed(value) => {
             if mode == Mode::Executable {
                 return Err(KernelError::InvalidRecursion(
@@ -369,9 +431,9 @@ fn type_of_struct(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Ke
     };
     let definitions = ctx.definitions();
     let fields = definitions
-        .struct_fields(*id)
+        .instance_fields(&Type::Struct(*id))
         .ok_or(KernelError::UnknownStruct)?;
-    check_fields(ctx, fields, values, mode)?;
+    check_fields(ctx, &fields, values, mode)?;
     Ok(Type::Struct(*id))
 }
 
@@ -382,12 +444,13 @@ fn type_of_proj(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, Kern
     };
     let target_type = term_type(ctx, target, mode)?;
     let definitions = ctx.definitions();
+    let instantiated = definitions.instance_fields(&target_type);
     let fields = match &target_type {
         Type::Boxed(element) => std::slice::from_ref(&**element),
         Type::Tuple(fields) => fields.as_slice(),
-        Type::Struct(id) => definitions
-            .struct_fields(*id)
-            .ok_or(KernelError::UnknownStruct)?,
+        Type::Struct(_) | Type::Instance(..) => {
+            instantiated.as_deref().ok_or(KernelError::UnknownStruct)?
+        }
         _ => return Err(KernelError::NotAProduct(target_type)),
     };
     if *index >= fields.len() {
@@ -465,7 +528,7 @@ fn type_of_variant(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Type, K
     };
     let definitions = ctx.definitions();
     let variants = definitions
-        .enum_variants(*id)
+        .instance_variants(&Type::Enum(*id))
         .ok_or(KernelError::UnknownEnum)?;
     let fields = variants.get(*index).ok_or(KernelError::NoSuchVariant {
         index: *index,
@@ -649,10 +712,7 @@ fn bound_type(ctx: &mut Context, bound: &Term, mode: Mode) -> Result<MachineInt,
 fn data_variants(ctx: &Context, ty: &Type) -> Option<Vec<Vec<Type>>> {
     match ty {
         Type::Bool => Some(vec![Vec::new(), Vec::new()]),
-        Type::Enum(id) => ctx
-            .definitions()
-            .enum_variants(*id)
-            .map(<[Vec<Type>]>::to_vec),
+        Type::Enum(_) | Type::Instance(..) => ctx.definitions().instance_variants(ty),
         _ => None,
     }
 }
@@ -660,6 +720,9 @@ fn data_variants(ctx: &Context, ty: &Type) -> Option<Vec<Vec<Type>>> {
 /// Variant `index` of a case-able data type, applied to a payload.
 fn constructor(ty: &Type, index: usize, payload: Vec<Term>) -> Term {
     match ty {
+        Type::Instance(base, args) => {
+            Term::Instance(Box::new(constructor(base, index, payload)), args.to_vec())
+        }
         Type::Enum(id) => Term::Variant(*id, index, payload),
         _ => Term::Bool(index == 1),
     }
@@ -684,6 +747,7 @@ fn constructor_of_vars(ty: &Type, index: usize, vars: &[VarId], payload: &[Type]
 /// The variant index and payload of a term that is literally a constructor.
 fn known_constructor(term: &Term) -> Option<(usize, &[Term])> {
     match term {
+        Term::Instance(value, _) => known_constructor(value),
         Term::Bool(value) => Some((usize::from(*value), &[])),
         Term::Variant(_, index, payload) => Some((*index, payload)),
         _ => None,
@@ -1215,7 +1279,11 @@ fn claim_of_projection(ctx: &mut Context, proof: &Proof) -> Result<Term, KernelE
     let Term::Proj(target, index) = term else {
         return Err(KernelError::NoComputationStep(term.clone()));
     };
-    let values: &[Term] = match &**target {
+    let raw = match &**target {
+        Term::Instance(value, _) => &**value,
+        other => other,
+    };
+    let values: &[Term] = match raw {
         Term::Tuple(_, values) | Term::Struct(_, values) => values,
         Term::Boxed(value) => std::slice::from_ref(&**value),
         _ => return Err(KernelError::NoComputationStep(term.clone())),

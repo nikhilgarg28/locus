@@ -127,6 +127,12 @@ An Erased value carries no claim identity in Rust. Export safety therefore comes
 
 Project exports add a one-way return projection after ordinary erasure. `erased/facade.rs` describes proof omission and tuple projection; `project/export.rs` validates all surviving types and retains source tuple indices in diagnostics. The Rust printer emits both a private implementation with the original erased result and a public forwarding entry with the projected result. Internal calls target the private implementation; public methods keep the original source spelling. The wrapper calls once and destructures the completed result, preserving physical values, references and effects. No kernel proof rule or logical assumption is added.
 
+## Scoped generic evidence
+
+The AST specializer abstracts proof claims in nonrecursive aggregate arguments into hygienic Prop parameters. A nominal family is declared once per concrete type shape; each use carries logical arguments in `Type::Instance`. `Term::Instance` supplies them to literal constructors. Kernel checking substitutes indices under the field telescope and validates payloads, projections and match arms. Calls and returns use the existing dependent parameter/result substitution. Scope escape, tracked evidence and sibling-mutation checks inspect indices too. The erased tree keeps the base nominal identity and physical tag, with proof fields reduced to markers.
+
+This is deliberately narrower than arbitrary value-dependent generic types. Generic function/proposition specialization still requires closed type arguments, and recursive families and mixed inner/outer type-argument binders remain future work.
+
 ## Proof construction, persistence and diagnostics
 
 A hole tries stored evidence, exact facts, checked computation, closed evaluation and bounded linear arithmetic. Every successful tier produces an explicit proof checked by the kernel. Implicit unfolding, arbitrary rewrite search and general induction search are not performed. Diagnostics can suggest the missing explicit step without silently taking it.
@@ -153,10 +159,13 @@ Canonical Markdown specifications carry permanent rule IDs, which tests cite. Th
 
 `src/project` expands declared module files while retaining source spans, resolves lexical and Cargo package namespaces, then supplies canonical names and source privacy information to elaboration. Each package keeps its own crate root. The existing typed/kernel pipeline checks the combined program. Derived model names participate in the same module namespace; their definitions are still created and checked by elaboration. Canonical observations invoke the checked model body without treating it as a private inherent method, while model field selection retains source privacy. Reachable Rust interface checking grants emission visibility independently from Locus visibility; foreign runtime identities map to dependency paths. The shared build API emits an includable component and an input/output receipt. See the [package guide](packages.md).
 
+### Logical argument observation
+
+The frontend normalizes only outer shared references in logical parameter types, layouts, and generic inference. Calls read the actual referent before selecting a canonical model for a logical parameter. Typed dereferences preserve reference provenance for the permission checker; pure lowering records the existing snapshot term. Runtime call conventions are unchanged. Effectful inputs are named once before structural modeling can project multiple fields. No kernel term or axiom is added for reference transparency.
+
 ## Concrete interface checking
 
 `src/project/specs.rs` checks resolved `spec type` declarations against their unique package-owned `impl Spec for Representation`. It compares binder-normalized signatures including proofs, inherits effect promises, and generates a private nominal wrapper plus ordinary checked adapters. The parser reserves generated identifiers so source cannot address the hidden representation. Completeness and family ownership are checked even for unused specs; generic bodies are checked only at instantiation. Both the manual body and each adapter pass the existing elaborator, kernel and IR pipeline. This lowering is a compiler-correctness assumption, not a new kernel rule. Module specs and assumed native realizations remain deferred.
-
 
 ## Plain Rust imports
 

@@ -48,6 +48,7 @@ impl Definitions {
         let mut candidate = self.clone();
         for variants in &checked {
             candidate.enums.push(EnumDecl {
+                parameters: Vec::new(),
                 variants: variants.clone(),
                 logical: true,
                 group: ids.clone(),
@@ -113,6 +114,7 @@ impl Definitions {
                 checked.push(fields);
             }
             candidate.enums.push(EnumDecl {
+                parameters: Vec::new(),
                 variants: checked,
                 logical: false,
                 group: ids.clone(),

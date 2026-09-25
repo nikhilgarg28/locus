@@ -22,6 +22,7 @@ pub(super) type Elab<T> = Result<T, ()>;
 
 #[derive(Debug)]
 pub(super) struct StructInfo {
+    pub captures: Vec<Binder>,
     pub origin: Option<Span>,
     pub id: StructId,
     pub name: String,
@@ -37,6 +38,7 @@ pub(super) struct StructInfo {
 
 #[derive(Debug)]
 pub(super) struct EnumInfo {
+    pub captures: Vec<Binder>,
     pub id: EnumId,
     pub name: String,
     pub variants: Vec<VariantInfo>,
@@ -534,17 +536,9 @@ impl Env<'_> {
                     }
                 }
             }
-            Type::Struct(id) => {
-                let Some(info) = self.struct_by_id(*id) else {
-                    return;
-                };
-                for (index, field) in info.fields.iter().enumerate() {
-                    let mut field_ty = field.ty.clone();
-                    for (earlier, binder) in info.fields[..index].iter().enumerate() {
-                        field_ty =
-                            field_ty.replace_var(binder.id, &Term::proj(value.clone(), earlier));
-                    }
-                    self.learn_from(&Term::proj(value.clone(), index), &field_ty);
+            Type::Struct(_) | Type::Instance(..) => {
+                if let Some(fields) = self.session.program().definitions().instance_fields(ty) {
+                    self.learn_from(value, &Type::Tuple(fields));
                 }
             }
             _ => {}

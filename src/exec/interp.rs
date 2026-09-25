@@ -512,6 +512,7 @@ impl<'p> CheckInterpreter<'p> {
     fn term(&mut self, term: &Term) -> Result<Value, Stop> {
         self.spend()?;
         Ok(match term {
+            Term::Instance(value, _) => self.term(value)?,
             // Buffer terms are logical snapshots; physical operations have explicit IR.
             Term::Boxed(_) | Term::Buffer { .. } => Value::Ghost,
             Term::Free(id) => match self.free.iter().rev().find(|(var, _)| var == id) {

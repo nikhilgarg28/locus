@@ -84,6 +84,10 @@ The host and dependencies must compile the generated interface at the Rust path 
 
 Canonical models obey that source boundary as well: their bodies may inspect representation fields in the defining module, while consumers can select only visible model fields. Derived models retain their source module and field visibility. Module and Cargo fixtures exercise these rules together with associated constants and checked arithmetic.
 
+Scoped generic evidence adds no axiom. Its trusted check is nominal-family instantiation: constructor payloads and match arms must agree on logical arguments. Direct kernel tests reject malformed indices and changed claims; source tests cover scope escape, stale snapshots, mutation and export restrictions. The optional-search test compares checked IR, erased execution and Rust with overflow checks both on and off over finite lists, while independently checking each answer against list membership and logical sortedness against adjacent-pair comparison. This is evidence for the implementation, not a proof of search completeness.
+
+Logical observation regressions cross declaration and argument reference depths, compare claim identities, and reject stale references, stale proofs, moved values and invalid runtime calls. Custom-model and structural-model cases check that observation preserves physical read permissions and evaluates ordinary argument computations once. These checks exercise frontend normalization and existing typed permission checking; they introduce no trusted equality between different snapshots.
+
 ## Reviewed interfaces still need proofs
 
 [Concrete specs](spec/18-specifications.md) do not turn declarations into assumptions. Tests in `tests/specifications.rs` reject missing bodies, altered proof signatures, false output evidence, weakened effect promises and alias-based extra implementations. Real files exercise split headers/definitions and original diagnostic locations; generated Rust runs under warning denial and rejects private representation access. Kernel checking of the implementation remains necessary after matching the header.
@@ -91,7 +95,6 @@ Canonical models obey that source boundary as well: their bodies may inspect rep
 ## Checked spec adapters
 
 A type spec supplies a contract, not evidence. Both the manual representation body and its generated opaque adapter pass the ordinary compiler and kernel checks. Tests cover missing/duplicate implementations, changed propositions, false evidence, mutable effects and hostile Rust clients. Resolved signature matching and adapter/privacy lowering are counted in the compiler trust inventory. Generic bodies remain checked at concrete instantiation; declarations alone do not certify all instantiations. Module specs and more general representation conversions remain deferred.
-
 
 ## Native Rust interfaces
 

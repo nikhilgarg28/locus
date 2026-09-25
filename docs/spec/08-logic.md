@@ -57,6 +57,27 @@ fn demo() -> u8 {
 <!-- spec: 1.5:5 dynamic-semantics -->
 Operand types select operators: addition on `Nat` or `Int` is logical; addition on `u8` is runtime arithmetic. Logical `Bool` and runtime `bool` stay distinct through fields, parameters, results, and control-flow joins. A shared internal kernel representation does not make the two source types interchangeable.
 
+## Observing arguments
+
+<!-- spec: 1.95:1 legality-rule -->
+Logical function parameters observe values without moving them. Outer shared references are transparent: declarations using `T`, `&T`, or `&&T` accept the same observed contents, supplied by a value or any shared-reference depth. Groups and outer lifetimes do not change that observation. Generic inference uses the underlying observed argument type. Arrays and vectors can supply a slice observation. Other wrappers, nested reference fields, and ordinary runtime calling conventions retain their distinctions.
+
+<!-- spec: 1.95:2 dynamic-semantics -->
+An observation requires permission to read its source and captures the current snapshot. It neither copies storage nor retains a borrow. Different reference paths to the same contents and version give the same claim; mutation does not update old evidence. An active `&mut` parameter can be read, but logical declarations still cannot request mutable access. Ordinary argument-producing calls retain their moves, effects, and left-to-right evaluation exactly once, even when modeling projects several fields.
+
+<!-- spec: 1.95:3 legality-rule -->
+Resolve a logical call's observed argument before applying a model. A physical parameter observes physical contents; a logical parameter uses the canonical model when conversion is needed. Changing outer reference depth never selects another model. `model!(path)` still explicitly resolves a physical read path before modeling the selected value; it is not a borrow operation.
+
+<!-- spec: 1.95:4 example -->
+~~~rust check
+logic fn Positive(value: &&u8) -> Prop { prop!(value > 0) }
+fn evidence(value: u8, positive: @(value > 0)) -> @Positive(value) {
+    let reference = &value;
+    let proof: @Positive(&reference) = fold!(Positive, positive);
+    proof // The same claim as Positive(value).
+}
+~~~
+
 ## Logical data
 
 <!-- spec: 1.25:1 legality-rule -->
@@ -104,7 +125,7 @@ logic fn steps(n: Int) -> Int {
 ## Logical closures
 
 <!-- spec: 1.25:3 legality-rule -->
-Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures need a canonical model, inferred for simple logical uses such as `|x: Int| x + n`. Use `model!(s.n)` to capture a physical field of an unmodeled enclosing value. Captures retain the observed versions. Closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
+Logical closures use typed parameters, inferred captures, and logical results, including dependent proof results. Runtime captures need a canonical model, inferred for simple logical uses such as `|x: Int| x + n`. Use `model!(s.n)` to capture a physical field of an unmodeled enclosing value. Captures retain the observed versions. After normalizing outer shared references, closure inputs and outputs must be Logical; named logical functions may additionally observe physical inputs. Logical callable evaluation in ordinary code preserves eager runtime argument effects.
 
 <!-- spec: 1.90:44 example -->
 ~~~rust check

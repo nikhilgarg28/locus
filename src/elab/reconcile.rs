@@ -35,7 +35,7 @@ pub(super) fn is_logical_expr(expr: &Expr) -> bool {
 impl Env<'_> {
     pub(super) fn logical_spelling(&self, ty: &ast::Type) -> bool {
         match &ty.kind {
-            ast::TypeKind::Named(name) => {
+            ast::TypeKind::Scoped { name, .. } | ast::TypeKind::Named(name) => {
                 matches!(name.text.as_str(), "Bool" | "Int" | "Nat" | "Prop")
                     || match self.types.get(&self.type_text(name)) {
                         Some(Global::Struct(info)) => self

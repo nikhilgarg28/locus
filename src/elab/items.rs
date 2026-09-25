@@ -619,6 +619,7 @@ impl Env<'_> {
             seen.push(ty.clone());
         }
         match ty {
+            Type::Instance(base, _) => self.carries_evidence_seen(base, seen),
             Type::Boxed(element) | Type::Buffer(element) => {
                 self.carries_evidence_seen(element, seen)
             }
@@ -657,6 +658,7 @@ impl Env<'_> {
 
     fn speaks_of_siblings(&self, ty: &Type) -> bool {
         match ty {
+            Type::Instance(base, _) => self.carries_evidence(base),
             Type::Boxed(element) | Type::Buffer(element) => self.speaks_of_siblings(element),
             Type::Proof(_) => true,
             Type::Tuple(fields) => fields.iter().any(|field| self.speaks_of_siblings(field)),
@@ -689,6 +691,11 @@ impl Env<'_> {
             seen.push(ty.clone());
         }
         match ty {
+            Type::Instance(_, _) => Some(Forgery {
+                path: String::new(),
+                reason: "is indexed by erased logical arguments that Rust cannot distinguish"
+                    .into(),
+            }),
             Type::Boxed(element) | Type::Buffer(element) => self
                 .forgery_seen(element, seen)
                 .map(|forgery| forgery.under("[]")),
@@ -1156,6 +1163,21 @@ impl Env<'_> {
         result
     }
 
+    fn capture_binders(&mut self, names: &[ast::Name]) -> Elab<Vec<Binder>> {
+        let mut result = Vec::new();
+        for name in names {
+            let binder = Binder {
+                id: crate::kernel::VarId::fresh(),
+                name: name.text.clone(),
+                ty: Type::Prop,
+                ghost: true,
+            };
+            self.declare(&binder, true, name.span)?;
+            result.push(binder);
+        }
+        Ok(result)
+    }
+
     fn declaration(
         &mut self,
         declaration: &ast::Declaration,
@@ -1179,6 +1201,7 @@ impl Env<'_> {
             } => {
                 self.refuse_promises(attributes, name, "a struct");
                 self.start_item(&name.text, true, LOGICAL);
+                let captures = self.capture_binders(&declaration.captures)?;
                 let field_visibility: Vec<Option<ast::Visibility>> = fields
                     .iter()
                     .map(|field| field.visibility.clone())
@@ -1196,7 +1219,7 @@ impl Env<'_> {
                     fields: fields.clone(),
                     derives: derives.clone(),
                 };
-                let id = match self.session.declare_struct(&item) {
+                let id = match self.session.declare_struct_family(&item, &captures) {
                     Ok(id) => id,
                     Err(error) => return self.internal(error, name.span),
                 };
@@ -1214,6 +1237,7 @@ impl Env<'_> {
                     return self.internal(error, name.span);
                 }
                 let info = Rc::new(StructInfo {
+                    captures,
                     origin: Some(name.span),
                     id,
                     name: name.text.clone(),
@@ -1245,7 +1269,9 @@ impl Env<'_> {
                 generics,
             } => {
                 self.refuse_promises(attributes, name, "an enum");
-                if super::logical_data::has_logical_derive(attributes) {
+                if super::logical_data::has_logical_derive(attributes)
+                    && declaration.captures.is_empty()
+                {
                     return self.logical_enum(declaration, name, variants);
                 }
                 if variants.iter().any(|v| {
@@ -1255,6 +1281,8 @@ impl Env<'_> {
                 }) {
                     return self.runtime_recursive_enum(declaration, name, variants);
                 }
+                self.start_item(&name.text, true, LOGICAL);
+                let captures = self.capture_binders(&declaration.captures)?;
                 let mut items: Vec<VariantInfo> = Vec::new();
                 for variant in variants {
                     if items
@@ -1265,6 +1293,9 @@ impl Env<'_> {
                         return self.fail("L0202", message, variant.name.span);
                     }
                     self.start_item(&name.text, true, LOGICAL);
+                    for capture in &captures {
+                        self.declare(capture, true, name.span)?;
+                    }
                     let payload = self.telescope(
                         variant
                             .fields
@@ -1300,7 +1331,7 @@ impl Env<'_> {
                         .collect(),
                     derives: derives.clone(),
                 };
-                let id = match self.session.declare_enum(&item) {
+                let id = match self.session.declare_enum_family(&item, &captures) {
                     Ok(id) => id,
                     Err(error) => return self.internal(error, name.span),
                 };
@@ -1318,6 +1349,7 @@ impl Env<'_> {
                     return self.internal(error, name.span);
                 }
                 Ok(Global::Enum(Rc::new(EnumInfo {
+                    captures,
                     id,
                     name: name.text.clone(),
                     variants: items,
@@ -1632,7 +1664,11 @@ impl Env<'_> {
             self.declare(&binder, false, receiver.span)?;
             self.declare_passing(binder.id, receiver.passing);
             params.push(binder);
-            passing.push(receiver.passing);
+            passing.push(if logical {
+                Passing::Value
+            } else {
+                receiver.passing
+            });
         }
         for parameter in parameters {
             if params
@@ -1642,13 +1678,26 @@ impl Env<'_> {
                 let message = format!("parameter `{}` is declared twice", parameter.name.text);
                 return self.fail("L0202", message, parameter.name.span);
             }
-            let (written, mode) = self.parameter_type(parameter)?;
+            let (written, mode) = if logical {
+                (self.observation_parameter(parameter)?, Passing::Value)
+            } else {
+                self.parameter_type(parameter)?
+            };
             let mut binder = Binder::new(&parameter.name.text, written.ty);
             binder.ghost = written.ghost;
-            self.session
-                .register_binding_layout(binder.id, self.written_parameter_layout(&parameter.ty));
+            let layout = if logical {
+                self.written_layout(parameter.ty.observed())
+            } else {
+                self.written_parameter_layout(&parameter.ty)
+            };
+            self.session.register_binding_layout(binder.id, layout);
             self.declare(&binder, false, parameter.span)?;
             self.declare_passing(binder.id, mode);
+            // Preserve explicit dereference syntax in existing logical bodies;
+            // the callable signature itself has no reference passing mode.
+            if logical && !std::ptr::eq(parameter.ty.observed(), &parameter.ty) {
+                self.borrowed.push(binder.id);
+            }
             params.push(binder);
             passing.push(mode);
         }

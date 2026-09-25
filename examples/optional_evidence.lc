@@ -1,0 +1,10 @@
+fn require(n: u8, p: @(n > 0)) -> u8 { n }
+fn keep(n: u8, p: Option<@(n > 0)>) -> u8 {
+    match p {
+        Option::Some(h) => require(n, h),
+        Option::None => 0,
+    }
+}
+fn make(n: u8, h: @(n > 0)) -> Option<@(n > 0)> { Some(h) }
+fn run() -> u8 { let n:u8 = 3; keep(n, make(n, prove!(n > 0))) }
+//~ run: run() => 3

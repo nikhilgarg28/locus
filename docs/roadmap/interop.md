@@ -56,15 +56,15 @@ The delivered work is recorded in [LOC-240](#LOC-240) (projection and emission),
 
 ## Specifications and native imports
 
-The [type-spec design](../vision/spec-interfaces.md) and [import design](../vision/rust-imports.md) are separate layers. The old module/same-name-struct prototype (LOC-243–245) is superseded by the [opaque type plan](../plans/opaque-spec-types.md).
+The [type-spec design](../vision/spec-interfaces.md) and [import design](../vision/rust-imports.md) are separate layers. The old module/same-name-struct prototype (LOC-256–258) is superseded by the [opaque type plan](../plans/opaque-spec-types.md).
 
 1. LOC-252: resolved type-spec grammar, associated items and signature matching.
 2. LOC-253: distinct public types with checked representation adapters.
 3. LOC-254: whole-family uniqueness, package ownership and focused regressions.
 4. LOC-255: documentation migration and full validation; commit this stage independently.
-5. LOC-246: plain native imports from rustdoc JSON, preserving foreign identity independently of specs.
+5. LOC-259: plain native imports from rustdoc JSON, preserving foreign identity independently of specs.
 6. LOC-249: stable-toolchain extraction, Cargo feature/target coherence, schema guards, readable diagnostics and acceptance tests; commit separately.
-7. LOC-247: future explicitly assumed spec realizations. No input-proof manufacture; output assumptions are audited.
+7. LOC-260: future explicitly assumed spec realizations. No input-proof manufacture; output assumptions are audited.
 8. LOC-248 and LOC-250: optional editable spec generation and broader interface expressiveness.
 
 Manual specs succeed only when missing implementations and false proofs fail, signatures cite both locations, abstraction survives generated Rust, and all generated code passes normal checking. Native imports add no behavioral proofs. The compiler must distinguish unavailable/unsupported native items from missing names.
@@ -73,7 +73,7 @@ Manual specs succeed only when missing implementations and false proofs fail, si
 ## LOC-39 · Reviewed headers and implementation separation
 <!-- task: {"id": "t47", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-The first prototype in LOC-243–245 is superseded by the opaque type work in LOC-252–255. Existing source fingerprints cover header inputs. Traits and logical opacity remain in LOC-250. Module organization (LOC-41) supplies ownership and file loading.
+The first prototype in LOC-256–258 is superseded by the opaque type work in LOC-252–255. Existing source fingerprints cover header inputs. Traits and logical opacity remain in LOC-250. Module organization (LOC-41) supplies ownership and file loading.
 
 <a id="LOC-41"></a>
 ## LOC-41 · Modules, imports and cross-file resolution
@@ -141,32 +141,32 @@ Implemented six facade integration tests and a real multi-file fixture, with mod
 
 Updated the manuals, checked examples, package guide, architecture, formal-core obligation, correctness account, trusted-file inventory and L0504 diagnostics. New operative rules have focused citations. The complete extended compiler/site gate passed on 24 September 2026, with 917 tests passing in each of the standard and release suites, including 81,944 generated-program execution cases with no disagreements; the standard suite exceeded its advisory timing target. Desktop and narrow layouts were inspected. This completion-note edit follows that gate, so the generated measurement display is invalidated rather than relabeled fresh. Nominal/container projection, legacy emission, cross-package proof ABIs and imports remain outside this extension.
 
-<a id="LOC-243"></a>
-## LOC-243 · Spec grammar and module/type realizations
+<a id="LOC-256"></a>
+## LOC-256 · Spec grammar and module/type realizations
 <!-- task: {"id": "interop-243", "status": "done", "priority": 3} -->
 
 Historical prototype: concrete module/type headers and same-named private representations. Superseded by LOC-252–255; module specs are now deferred under LOC-250.
 
-<a id="LOC-244"></a>
-## LOC-244 · Checked interface matching
+<a id="LOC-257"></a>
+## LOC-257 · Checked interface matching
 <!-- task: {"id": "interop-244", "status": "done", "priority": 3} -->
 
 Historical token-matching prototype, superseded by resolved matching and distinct nominal representations in LOC-252–255. Its regression coverage is migrated rather than discarded.
 
-<a id="LOC-245"></a>
-## LOC-245 · Manual-spec acceptance and documentation
+<a id="LOC-258"></a>
+## LOC-258 · Manual-spec acceptance and documentation
 <!-- task: {"id": "interop-245", "status": "done", "priority": 3} -->
 
 Added real directories, two source-aware diagnostic fixtures with JSON/text/explain goldens, executable manual examples and traceability. Updated architecture and trust-boundary documentation; inspected the page at desktop and narrow widths. All regression tests pass; current full-gate measurements belong in the freshness-checked [generated status](../generated-status.md), including the advisory timing target. This prototype is superseded by LOC-252–255; current import work follows the revised plain-import design.
 
-<a id="LOC-246"></a>
-## LOC-246 · Import physical Rust interfaces
+<a id="LOC-259"></a>
+## LOC-259 · Import physical Rust interfaces
 <!-- task: {"id": "interop-246", "status": "done", "priority": 3} -->
 
 Implemented `import path [as alias]` independently of specs, with guarded rustdoc JSON extraction, a versioned inventory and foreign provenance. Traits, async, unsafe, generic and macro entities remain inspectable; unsupported uses name the limitation. Safe scalar/tuple free functions receive native signature attestation and make no behavioral claims. `locus import` inspects or saves the interface. See the [manual](../spec/19-native-imports.md) and [implementation plan](../plans/native-imports.md); sysroot/native-type expansion and staged host builds remain in LOC-44 and LOC-63.
 
-<a id="LOC-247"></a>
-## LOC-247 · Audited native proof adapters
+<a id="LOC-260"></a>
+## LOC-260 · Audited native proof adapters
 <!-- task: {"id": "interop-247", "status": "backlog", "priority": 3} -->
 
 Future `assume ImportedType impl Spec` requires no proof inputs in the initial contract. Match physical signatures while omitting output evidence only, then generate audited normal-return assumptions. Preserve exactly-once effects, snapshots and panic behavior; reject unsupported logical values or invariant construction. Separate from plain imports.
@@ -181,7 +181,7 @@ Optional command to generate editable spec source from the plain-import represen
 ## LOC-249 · Native import packaging and acceptance
 <!-- task: {"id": "interop-249", "status": "done", "priority": 3} -->
 
-Implemented real Cargo fixtures and eleven import regressions covering entity retention, namespaces, aliases across Locus dependencies, cfg/features/target selection, source/receipt changes, schema drift, native signature mismatch, diagnostics and preserved Rust effects. Independent IR checks reject logical/native crossings. Updated the manual, package guide, architecture, formal core, trust inventory, diagnostics and highlighting; inspected desktop/mobile layouts. The full extended gate passed, including 10,000 generated programs and 82,209 execution cases with no disagreement. The standard suite took 305 seconds, over the advisory 120-second target. Assumed spec adapters remain LOC-247; current unsupported forms are documented and tracked separately.
+Implemented real Cargo fixtures and eleven import regressions covering entity retention, namespaces, aliases across Locus dependencies, cfg/features/target selection, source/receipt changes, schema drift, native signature mismatch, diagnostics and preserved Rust effects. Independent IR checks reject logical/native crossings. Updated the manual, package guide, architecture, formal core, trust inventory, diagnostics and highlighting; inspected desktop/mobile layouts. The full extended gate passed, including 10,000 generated programs and 82,209 execution cases with no disagreement. The standard suite took 305 seconds, over the advisory 120-second target. Assumed spec adapters remain LOC-260; current unsupported forms are documented and tracked separately.
 
 <a id="LOC-250"></a>
 ## LOC-250 · Expand specification expressiveness

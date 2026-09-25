@@ -82,19 +82,36 @@ pub enum Type {
     Proof(Box<Term>),
     /// A telescope of field types. Field `i` is under `i` binders:
     /// `Bound(0)` in it is field `i - 1`, `Bound(1)` is field `i - 2`, and so
-    /// on. A term occurs in a type only inside a `Proof`, so a value can
-    /// influence what a later proof field says and never what data is stored.
+    /// on. Terms occur in proof claims and nominal-family indices; they can
+    /// influence evidence claims, never select a physical layout.
     Tuple(Vec<Type>),
     /// A declared struct. Nominal: two declarations are different types.
     Struct(StructId),
     /// A declared enum. Nominal.
     Enum(EnumId),
+    /// A nominal family applied to erased logical indices. A boxed slice
+    /// keeps this variant smaller than Fn, preserving Type/Term/Proof sizes
+    /// and the small-stack guarantees of the kernel and certificate reader.
+    Instance(Box<Type>, Box<[Term]>),
     /// A total function type. The parameters form a telescope and the result
     /// type is under all of them. Ordinary `fn` never reaches the kernel.
     Fn(Vec<Type>, Box<Type>),
 }
 
 impl Type {
+    pub fn nominal(&self) -> &Type {
+        match self {
+            Self::Instance(base, _) => base,
+            _ => self,
+        }
+    }
+    pub fn indices(&self) -> &[Term] {
+        match self {
+            Self::Instance(_, args) => args,
+            _ => &[],
+        }
+    }
+
     pub fn replace_predicate(&self, variable: VarId, predicate: PropId) -> Self {
         self.rebind(Depth::default(), Rebind::Predicate(variable, predicate))
     }
@@ -102,6 +119,7 @@ impl Type {
     /// A ghost type has no runtime representation.
     pub fn is_ghost(&self) -> bool {
         match self {
+            Self::Instance(base, _) => base.is_ghost(),
             Self::Prop | Self::Proof(_) | Self::Int => true,
             // A function into a ghost type is a proof or a predicate.
             Self::Fn(_, result) => result.is_ghost(),
@@ -233,6 +251,10 @@ impl Type {
             | Self::Prop
             | Self::Struct(_)
             | Self::Enum(_) => self.clone(),
+            Self::Instance(base, args) => Self::Instance(
+                Box::new(base.rebind(depth, op)),
+                args.iter().map(|t| t.rebind(depth, op)).collect(),
+            ),
             Self::Boxed(element) => Self::Boxed(Box::new(element.rebind(depth, op))),
             Self::Buffer(element) => Self::Buffer(Box::new(element.rebind(depth, op))),
             Self::Proof(prop) => Self::Proof(Box::new(prop.rebind(depth, op))),
@@ -652,6 +674,9 @@ pub enum Term {
         result: Type,
         arms: Vec<TermArm>,
     },
+    /// A nominal constructor with erased family arguments. The enclosed term
+    /// must be a Struct or Variant constructor, never an arbitrary coercion.
+    Instance(Box<Term>, Vec<Term>),
     /// A declared proposition applied to its arguments.
     PropApp(PropId, Vec<Term>),
     /// Binds `Bound(0)` in its body.
@@ -1338,6 +1363,7 @@ impl Term {
             Self::Forall(_, body) => body.closed_at(depth + 1),
             Self::Tuple(_, values) | Self::Struct(_, values) => all(values),
             Self::Proj(target, _) => target.closed_at(depth),
+            Self::Instance(value, args) => value.closed_at(depth) && all(args),
             Self::Call(callee, arguments) => callee.closed_at(depth) && all(arguments),
             Self::Variant(_, _, payload) => all(payload),
             Self::Case {
@@ -1404,6 +1430,7 @@ impl Term {
             Self::Forall(_, body) => body.find(wanted),
             Self::Tuple(_, values) | Self::Struct(_, values) => first(values, wanted),
             Self::Proj(target, _) => target.find(wanted),
+            Self::Instance(value, args) => value.find(wanted).or_else(|| first(args, wanted)),
             Self::Call(callee, arguments) => {
                 callee.find(wanted).or_else(|| first(arguments, wanted))
             }
@@ -1495,6 +1522,7 @@ impl Term {
             Self::Tuple(fields, values) => Self::Tuple(fields.clone(), each(values)),
             Self::Struct(id, values) => Self::Struct(*id, each(values)),
             Self::Proj(target, index) => Self::Proj(boxed(target, depth), *index),
+            Self::Instance(value, args) => Self::Instance(boxed(value, depth), each(args)),
             Self::Call(callee, arguments) => Self::Call(boxed(callee, depth), each(arguments)),
         }
     }
@@ -1555,6 +1583,10 @@ impl Term {
                     body: Box::new(body.rebind(depth.under_vars(params.len() as u32), op)),
                 }
             }
+            Self::Instance(value, args) => Self::Instance(
+                Box::new(value.rebind(depth, op)),
+                rebind_each(depth, op, args),
+            ),
             Self::Call(..) => self.rebind_call(depth, op),
             Self::Variant(..) => self.rebind_variant(depth, op),
             Self::Case { .. } => self.rebind_case(depth, op),
@@ -2374,6 +2406,7 @@ impl fmt::Display for Type {
             }
             Self::Struct(StructId(id)) => write!(f, "struct#{id}"),
             Self::Enum(EnumId(id)) => write!(f, "enum#{id}"),
+            Self::Instance(base, args) => write!(f, "{base}[{args:?}]"),
             Self::Fn(params, result) => {
                 f.write_str("fn(")?;
                 for param in params {
@@ -2405,6 +2438,7 @@ impl fmt::Display for Term {
                 arguments,
             } => write!(f, "buffer_{op:?}[{element}]({arguments:?})"),
             Self::Free(VarId(id)) => write!(f, "v{id}"),
+            Self::Instance(value, args) => write!(f, "{value}[{args:?}]"),
             Self::Bound(index) => write!(f, "#{index}"),
             Self::Bool(value) => write!(f, "{value}"),
             Self::U8(value) => write!(f, "{value}"),

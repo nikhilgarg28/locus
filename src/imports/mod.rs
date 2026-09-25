@@ -230,6 +230,7 @@ fn bind(
         }
     };
     Ok(Declaration {
+        captures: Vec::new(),
         doc: vec![],
         attributes: vec![],
         visibility: public.then_some(Visibility {

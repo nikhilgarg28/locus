@@ -16,6 +16,7 @@ use super::term::{EnumId, FnId, PropId, StructId, Term, Type, VarId, field_type}
 
 #[derive(Clone, Debug)]
 pub(super) struct StructDecl {
+    pub(super) parameters: Vec<Type>,
     /// A telescope, as in `Type::Tuple`.
     pub(super) fields: Vec<Type>,
     pub(super) logical: bool,
@@ -23,6 +24,7 @@ pub(super) struct StructDecl {
 
 #[derive(Clone, Debug)]
 pub(super) struct EnumDecl {
+    pub(super) parameters: Vec<Type>,
     /// One payload telescope per variant.
     pub(super) variants: Vec<Vec<Type>>,
     pub(super) logical: bool,
@@ -229,17 +231,34 @@ impl Definitions {
     /// Declares an enum with one payload tuple type per variant. Payloads
     /// must be well formed with no variables in scope.
     pub fn declare_enum(&mut self, variants: &[Type]) -> Result<EnumId, KernelError> {
+        self.declare_enum_family(&[], variants)
+    }
+
+    pub fn declare_enum_family(
+        &mut self,
+        parameters: &[Type],
+        variants: &[Type],
+    ) -> Result<EnumId, KernelError> {
+        // Bound borrowed input before cloning it into a telescope. Even a
+        // rejected declaration must not recurse through an oversized type.
+        check_depth(parameters.iter().map(Into::into))?;
         let mut ctx = Context::with_definitions(Rc::new(self.clone()));
+        let signature = Type::Fn(parameters.to_vec(), Box::new(Type::Tuple(Vec::new())));
+        check_depth([(&signature).into()])?;
+        type_ok(&mut ctx, &signature)?;
         let mut payloads = Vec::new();
         for variant in variants {
             check_depth([variant.into()])?;
             let Type::Tuple(fields) = variant else {
                 return Err(KernelError::NotAProduct(variant.clone()));
             };
-            check_telescope(&mut ctx, fields)?;
+            let signature = Type::Fn(parameters.to_vec(), Box::new(variant.clone()));
+            check_depth([(&signature).into()])?;
+            type_ok(&mut ctx, &signature)?;
             payloads.push(fields.clone());
         }
         self.enums.push(EnumDecl {
+            parameters: parameters.to_vec(),
             variants: payloads,
             logical: false,
             group: Vec::new(),
@@ -363,13 +382,27 @@ impl Definitions {
     /// Declares a struct with the fields of the given tuple type. The fields
     /// must be well formed with no variables in scope.
     pub fn declare_struct(&mut self, fields: &Type) -> Result<StructId, KernelError> {
+        self.declare_struct_family(&[], fields)
+    }
+
+    pub fn declare_struct_family(
+        &mut self,
+        parameters: &[Type],
+        fields: &Type,
+    ) -> Result<StructId, KernelError> {
+        // Bound borrowed input before cloning it into a telescope. Even a
+        // rejected declaration must not recurse through an oversized type.
+        check_depth(parameters.iter().map(Into::into))?;
         check_depth([fields.into()])?;
         let Type::Tuple(fields) = fields else {
             return Err(KernelError::NotAProduct(fields.clone()));
         };
         let mut ctx = Context::with_definitions(Rc::new(self.clone()));
-        check_telescope(&mut ctx, fields)?;
+        let signature = Type::Fn(parameters.to_vec(), Box::new(Type::Tuple(fields.clone())));
+        check_depth([(&signature).into()])?;
+        type_ok(&mut ctx, &signature)?;
         self.structs.push(StructDecl {
+            parameters: parameters.to_vec(),
             fields: fields.clone(),
             logical: false,
         });
@@ -433,7 +466,7 @@ impl Definitions {
     pub fn is_erased_type(&self, ty: &Type) -> bool {
         ty.is_ghost()
             || match ty {
-                Type::Struct(_) | Type::Enum(_) => self.is_logical_type(ty),
+                Type::Struct(_) | Type::Enum(_) | Type::Instance(..) => self.is_logical_type(ty),
                 Type::Fn(_, result) => self.is_erased_type(result),
                 _ => false,
             }
@@ -443,6 +476,7 @@ impl Definitions {
     /// surface checker separately distinguishes logical Bool from bool.
     pub fn is_logical_type(&self, ty: &Type) -> bool {
         match ty {
+            Type::Instance(base, _) => self.is_logical_type(base),
             Type::Int | Type::Bool | Type::Prop | Type::Proof(_) => true,
             Type::Fn(_, result) => self.is_logical_type(result),
             Type::Struct(id) => self.structs.get(id.0).is_some_and(|decl| decl.logical),
@@ -525,6 +559,49 @@ impl Definitions {
         self.fns
             .get(id.0)
             .map(|decl| (decl.params.len(), &decl.body))
+    }
+
+    pub fn family_parameters(&self, base: &Type) -> Option<&[Type]> {
+        match base {
+            Type::Struct(id) => self.structs.get(id.0).map(|d| d.parameters.as_slice()),
+            Type::Enum(id) => self.enums.get(id.0).map(|d| d.parameters.as_slice()),
+            _ => None,
+        }
+    }
+
+    fn instantiate_payload(&self, ty: &Type, fields: &[Type]) -> Option<Vec<Type>> {
+        let parameters = self.family_parameters(ty.nominal())?;
+        if parameters.len() != ty.indices().len() {
+            return None;
+        }
+        let mut telescope = parameters.to_vec();
+        telescope.push(Type::Tuple(fields.to_vec()));
+        let Type::Tuple(fields) =
+            field_type(&telescope, parameters.len(), |i| ty.indices()[i].clone())
+        else {
+            unreachable!()
+        };
+        Some(fields)
+    }
+
+    pub fn instance_fields(&self, ty: &Type) -> Option<Vec<Type>> {
+        let Type::Struct(id) = ty.nominal() else {
+            return None;
+        };
+        self.instantiate_payload(ty, self.struct_fields(*id)?)
+    }
+
+    pub fn instance_variants(&self, ty: &Type) -> Option<Vec<Vec<Type>>> {
+        let Type::Enum(id) = ty.nominal() else {
+            return None;
+        };
+        if self.family_parameters(ty.nominal())?.len() != ty.indices().len() {
+            return None;
+        }
+        self.enum_variants(*id)?
+            .iter()
+            .map(|fields| self.instantiate_payload(ty, fields))
+            .collect()
     }
 
     pub(super) fn enum_variants(&self, id: EnumId) -> Option<&[Vec<Type>]> {

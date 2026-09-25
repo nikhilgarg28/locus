@@ -53,7 +53,7 @@ impl Env<'_> {
         let loops = std::mem::take(&mut self.loops);
         let result = self.logical("a logical closure", |env| {
             for parameter in parameters {
-                if !env.logical_spelling(&parameter.ty) {
+                if !env.logical_spelling(parameter.ty.observed()) {
                     return env.fail(
                         "L0283",
                         "a logical closure's parameters must have Logical types",
@@ -62,9 +62,13 @@ impl Env<'_> {
                 }
             }
             let binders = env.telescope(
-                parameters
-                    .iter()
-                    .map(|parameter| (Some(&parameter.name), &parameter.ty, parameter.span)),
+                parameters.iter().map(|parameter| {
+                    (
+                        Some(&parameter.name),
+                        parameter.ty.observed(),
+                        parameter.span,
+                    )
+                }),
                 true,
             )?;
             let terms: Vec<_> = binders.iter().map(|binder| binder.term()).collect();

@@ -30,7 +30,7 @@ Remaining: trait declarations, implementation selection/coherence, associated ty
 ## LOC-22 · General generic bounds and where clauses
 <!-- task: {"id": "t27", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Delivered: concrete type specialization, inference and Logical bounds ([LOC-218](reconciliation.md#LOC-218), [LOC-219](reconciliation.md#LOC-219); tests/reconcile_generics.rs). Remaining: general where clauses, trait-bound checking, generic impl blocks and a stated policy for checking generic bodies. Current unused templates are not universal proofs. Type arguments must also be closed over local values: `Option<@True>` works, but `Option<@(n > 0)>` for a local `n` is rejected (tests/reconcile_generics.rs). Dependent aggregate fields are the current alternative.
+Delivered: concrete type specialization, inference and Logical bounds ([LOC-218](reconciliation.md#LOC-218), [LOC-219](reconciliation.md#LOC-219); tests/reconcile_generics.rs). Remaining: general where clauses, trait-bound checking, generic impl blocks and a stated policy for checking generic bodies. Current unused templates are not universal proofs. Scoped proof arguments of nonrecursive aggregates are implemented by [LOC-243–246](#LOC-243). Remaining dependent-generic work includes generic functions/propositions with open type arguments, recursive families and arguments combining inner binders with outer dependencies.
 
 <a id="LOC-24"></a>
 ## LOC-24 · Runtime closures and callable traits
@@ -108,8 +108,62 @@ Still unresolved before traits. Rust operator syntax/signatures do not expose an
 ## LOC-251 · Const functions across the language and Rust boundary
 <!-- task: {"id": "language-251", "status": "backlog", "priority": 2} -->
 
-Implement `const fn` as a checked physical function callable both at runtime and in constant initializers. Cover free functions, inherent methods, module paths, spec headers and matching implementations, generated Rust and proof-result facades where supported. Extend trait methods and native imports when those facilities exist; unsupported combinations must report a specific limitation. Const capability is part of an interface contract: an ordinary implementation cannot satisfy a const header. Coordinate specs and native binding with [LOC-250](interop.md#LOC-250) and [LOC-246](interop.md#LOC-246).
+Implement `const fn` as a checked physical function callable both at runtime and in constant initializers. Cover free functions, inherent methods, module paths, spec headers and matching implementations, generated Rust and proof-result facades where supported. Extend trait methods and native imports when those facilities exist; unsupported combinations must report a specific limitation. Const capability is part of an interface contract: an ordinary implementation cannot satisfy a const header. Coordinate specs and native binding with [LOC-250](interop.md#LOC-250) and [LOC-259](interop.md#LOC-259).
 
 Define the permitted constant-evaluation subset and its calls, local mutation, control flow, borrowing, allocation/destruction restrictions and evaluation limits. Preserve checked machine arithmetic and target behavior. A constant-evaluation panic or resource limit needs a diagnostic; reaching an evaluation limit is not evidence of divergence or a proof. `const fn` does not imply `logic fn`, totality or absence of runtime panics, and does not by itself admit physical calls into propositions. Any use in proofs must retain the checked model/kernel boundary.
 
 Acceptance: initializer/runtime results agree with both interpreters and compiled Rust; overflow and division failures are stable across build modes; non-const calls in constant contexts, invalid effects, cycles and limits are diagnosed. Test signatures across files, visibility, exported const-callable facades, imported native constness and toolchain compatibility without assuming values or behavior from a signature. Update grammar, manual examples, diagnostics, IR/erasure contracts and import generation together. General const generics remain a separate design question.
+
+## Scoped proof arguments
+
+Support `Option<@Sorted(items)>`: a runtime container whose proof payload refers to the input's immutable logical snapshot. Its runtime tag survives; its proof payload and logical type parameters erase. This extends generic checking, not the runtime layout language. Implementation proceeds on `scoped-proof-generics`.
+
+The compiler must preserve the proposition in the type through construction, matching, arguments, results, nested containers, and substitution. Different claims remain different checking types even when their Rust layout is identical. SSA identities distinguish shadowed names and changed contents. Old immutable evidence retains its old claim; it cannot certify changed data without a checked transport. Tracked evidence must retain its invalidation rules through the new type forms.
+
+Use explicitly bound logical parameters on nominal type families, with checked applications of those families. Abstract proof claims during generic specialization rather than emitting global declarations containing free local names. Constructors and eliminators instantiate their payload types with the application's arguments. The kernel and independent execution-IR checker must reject dangling parameters, wrong arguments, and payloads of another claim. All existing proof/ownership/export restrictions continue to apply.
+
+Acceptance: a checked `binary_search(items, key, sorted: @Sorted(items))` and `search(items, key, sorted: Option<@Sorted(items)>)`, with `Some` forwarding the proof and `None` executing linear search. Define sortedness and the algorithms in source, state precisely which correctness properties are proved, and exercise empty inputs, duplicates, absent keys, endpoints, and both dispatch paths. The short website excerpt hides supporting definitions but links/discloses the complete checked program.
+
+<a id="LOC-243"></a>
+## LOC-243 · Scoped nominal families and independent checking
+<!-- task: {"id": "t243-scoped", "status": "done", "priority": 1} -->
+
+Add logical parameters/applications to the checking representation, bind/substitute them capture-free, and validate constructor and match payloads independently. Keep kernel scope/depth/positivity checks and equality rules explicit. Add direct adversarial kernel and execution-IR tests. Update the kernel and formal-core contracts and trusted-base inventory where needed.
+
+Implemented in `src/kernel/term.rs`, `defs.rs`, and `check.rs`, with certificate encoding in `src/store/text.rs`. Eight direct tests in `tests/kernel_scoped.rs` check constructors, projections, substitution, corrupt certificates, independent execution-IR matches, and forbidden recursion hidden in indices. Kernel depth regressions pass without changing the resource limits.
+
+<a id="LOC-244"></a>
+## LOC-244 · Generic elaboration, snapshots, and erasure
+<!-- task: {"id": "t244-scoped", "status": "done", "priority": 1} -->
+
+Replace the closed-proof-argument restriction with scoped application checking for supported generic aggregates. Cover expected-type inference for Some/None, calls and returns, nested containers, shadowing, branch joins, mutation, and stale tracked evidence. Separate logical argument identity from runtime representation; retain enum tags and ordinary effects. Preserve export rejection for externally supplied evidence. Document precise unsupported cases rather than accepting unchecked fallbacks.
+
+Implemented in generic specialization and the typed/checking/erased representations. `tests/scoped_generics.rs` covers nested containers, exact snapshot identity, expected-type inference, normal-return mutation, scope escape, tracked invalidation, effects, and export rejection. The manual lists the remaining restrictions on recursive families and open arguments to generic functions.
+
+<a id="LOC-245"></a>
+## LOC-245 · Checked optional-evidence search example
+<!-- task: {"id": "t245-scoped", "status": "done", "priority": 1} -->
+
+Write a source definition of Sorted, binary search requiring its proof, and the optional-evidence dispatcher with linear fallback. Test real search behavior and proof transport, reject mismatched/stale evidence and false correctness claims. Replace homepage/examples design sketches with checked excerpts whose complete sources are tested by the documentation harness.
+
+`examples/optional_search.lc` defines sortedness, both algorithms, and the dispatcher without trusted assumptions. Logical sortedness agrees with an independent adjacent-pair oracle for 341 finite lists. Both interpreters and generated Rust with overflow checks enabled/disabled agree on 2,055 input/key/dispatch scenarios. The proof contract establishes the sorted input and no-panic bounds/arithmetic; result completeness and termination are tested, not claimed as proved. Homepage and examples excerpts are checked by the documentation harness.
+
+<a id="LOC-246"></a>
+## LOC-246 · Scoped evidence validation and documentation
+<!-- task: {"id": "t246-scoped", "status": "done", "priority": 1} -->
+
+Add focused source regressions and generated-Rust tests for positive/negative cases, erasure and export boundaries. Run affected suites, executable documentation checks, website checks, and the extended compiler gate, including differential interpreter/Rust runs. Review diagnostics and public examples on desktop/mobile. Record only actual passing validation and leave incomplete work open.
+
+Completed: `tools/check.sh --extended` passed the standard and release stress suites, spec/test traceability, checked documentation, website/link checks, highlighting, formatting and clippy. Desktop/mobile browser review covered both excerpts, search and complete-source disclosures. The standard suite exceeded its advisory 120-second target; this is not represented as a performance pass. The small-stack evaluator and certificate-reader regressions pass at their original bounds. Final validation is recorded by the gate receipt and freshness-aware generated status.
+
+<a id="LOC-247"></a>
+## LOC-247 · Reference-transparent logical observation
+<!-- task: {"id": "t247-observation", "status": "done", "priority": 1} -->
+
+Normalize outer shared references in logical function declarations and arguments: `T`, `&T`, and `&&T` describe the same observed contents. Preserve exact snapshots and read permissions, leave nested reference fields and runtime calling conventions unchanged, and apply canonical models only for logical parameter types. Model implementations follow the same observation convention; `model!(path)` continues to select a physical path explicitly.
+
+Implementation: normalize parameter types/layouts and generic inference; check observed arguments without consuming places; preserve eager runtime effects and validate reference provenance before erasure. Update the sorted-search example and public excerpts to use `Sorted(items)`.
+
+Acceptance: cross-product tests of declaration/argument reference depths, equivalent proof identities, generic inference, custom models, logical methods, mutation and stale references, non-Copy reuse, nested runtime moves/effects, wrapper rejection, and unchanged runtime calls. Run focused tests, checked documentation and the full compiler gate. No new kernel axiom or proof rule is required.
+
+Implemented in logical parameter/call elaboration, model registration, callable checking and generic inference. `tests/logical_observations.rs` adds fifteen focused regression groups, including a declaration/argument depth matrix and interpreter/Rust comparisons for eager effects and structural models. The checked search example now uses `Sorted(items)` and replays its existing certificates. Desktop/mobile review covers the public example and spec test disclosures. The final validation gate is `tools/check.sh`; timings and generated status remain governed by the normal freshness policy.

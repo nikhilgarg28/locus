@@ -130,10 +130,10 @@ impl ErasureLayouts {
                     return target_layout.field(*index);
                 }
                 expression_type(target)
-                    .and_then(|ty| match ty {
+                    .and_then(|ty| match ty.nominal() {
                         Type::Struct(id) => self
                             .structs
-                            .get(&id)
+                            .get(id)
                             .and_then(|fields| fields.get(*index))
                             .cloned(),
                         _ => None,

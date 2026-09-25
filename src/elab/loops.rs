@@ -147,6 +147,7 @@ impl Scan {
 
     fn expr(&mut self, expr: &ast::Expr) {
         match &expr.kind {
+            ExprKind::Scoped { value, .. } => self.expr(value),
             // Closure bodies are logical code, checked independently; their
             // local updates never become an enclosing runtime loop's state.
             ExprKind::Closure { .. } => {}

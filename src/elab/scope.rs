@@ -20,6 +20,13 @@ pub(super) struct ResultScope {
 
 fn type_variables(ty: &Type, result: &mut HashSet<VarId>) {
     match ty {
+        Type::Instance(base, args) => {
+            type_variables(base, result);
+            for argument in args {
+                result.extend(free_variables(argument));
+            }
+        }
+        Type::Boxed(inner) | Type::Buffer(inner) => type_variables(inner, result),
         Type::Proof(claim) => result.extend(free_variables(claim)),
         Type::Tuple(fields) => {
             for field in fields {

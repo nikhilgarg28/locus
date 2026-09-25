@@ -43,6 +43,12 @@ pub fn fields<W: Walk + ?Sized>(w: &mut W, fs: &mut [TypeField]) {
 pub fn ty<W: Walk + ?Sized>(w: &mut W, t: &mut Type) {
     w.span(&mut t.span);
     match &mut t.kind {
+        TypeKind::Scoped { name, claims } => {
+            w.name(name);
+            for claim in claims {
+                w.expr(claim);
+            }
+        }
         TypeKind::Named(n) | TypeKind::Lifetime(n) => w.name(n),
         TypeKind::Path { path, arguments } => {
             w.path(path);
@@ -158,6 +164,10 @@ pub fn pattern<W: Walk + ?Sized>(w: &mut W, p: &mut Pattern) {
 pub fn expr<W: Walk + ?Sized>(w: &mut W, e: &mut Expr) {
     w.span(&mut e.span);
     match &mut e.kind {
+        ExprKind::Scoped { value, ty, .. } => {
+            w.expr(value);
+            w.ty(ty);
+        }
         ExprKind::Name(n) => w.name(n),
         ExprKind::Path(p) => w.path(p),
         ExprKind::Group(e) | ExprKind::Not(e) => w.expr(e),

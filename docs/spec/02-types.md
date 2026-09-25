@@ -136,7 +136,7 @@ fn demo() -> Option<u8> { to_option(ReadOutcome::Byte(42)) }
 ~~~
 
 <!-- spec: 1.91:5 informative -->
-The prelude supplies `Option<T>` (`Some`, `None`) and `Result<T, E>` (`Ok`, `Err`). They describe runtime alternatives. For example, `Option<@True>` stores a runtime choice with erased evidence. Generic arguments must be closed: a proof type capturing a local `n` cannot yet be an Option argument. Use a struct or enum with a value field and a dependent proof field instead. These are Locus templates emitted as specialized enums; they are not yet Rust’s standard-library generic ABI.
+The prelude supplies `Option<T>` (`Some`, `None`) and `Result<T, E>` (`Ok`, `Err`). They describe runtime alternatives. For example, `Option<@True>` stores a runtime choice with erased evidence. Proof arguments may capture in-scope snapshots: `Option<@(n > 0)>` carries evidence about this `n` in its `Some` arm. `None` supplies no evidence either way. These are Locus templates emitted as specialized enums; they are not yet Rust’s standard-library generic ABI.
 
 ## Arrays: [T; n]
 
@@ -304,4 +304,21 @@ logic fn example() -> Pair<Int> { duplicate(3) }
 ~~~
 
 <!-- spec: 1.27:13 legality-rule -->
-Generic type arguments must be closed with respect to local value bindings. `Option<@True>` is supported; `Option<@(n > 0)>` for a parameter `n` is not. A named aggregate can bind its own value field and use that field in a later proof type.
+Proof arguments of nonrecursive generic structs and enums may mention values in scope, including earlier parameters or fields. Construction checks that exact claim; matching and projection recover it. Function calls substitute actual arguments into dependent input and output types. Shadowing or mutation never changes an existing immutable argument's snapshot. Scope, tracked-evidence, ownership and export checks include these dependencies.
+
+<!-- spec: 1.94:1 example -->
+~~~rust check
+fn positive(n: u8, proof: @(n > 0)) -> u8 { n }
+fn choose(n: u8, evidence: Option<@(n > 0)>) -> u8 {
+    match evidence {
+        Option::Some(proof) => positive(n, proof),
+        Option::None => 0,
+    }
+}
+fn certify(n: u8, proof: @(n > 0)) -> Option<@(n > 0)> {
+    Some(proof)
+}
+~~~
+
+<!-- spec: 1.94:2 informative -->
+This also works inside nested aggregates and unnamed tuple fields. Generic functions and propositions still require closed type arguments. A type argument combining its own tuple/callable binders with outer value dependencies is not yet supported; bind those dependencies as fields of a named aggregate. Logical arguments do not change a nominal type's physical representation. An indexed private-field wrapper is not an export loophole: Rust cannot distinguish two applications that differ only in erased claims.
