@@ -88,6 +88,7 @@ fn struct_field_layout_is_available_through_a_projection() {
     session.register_binding_layout(field.id, layout.clone());
     let id = session
         .declare_struct(&StructItem {
+            shape: locus::ast::VariantShape::Struct,
             name: "Packet".into(),
             fields: vec![field.clone()],
             derives: vec![],

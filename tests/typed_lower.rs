@@ -944,6 +944,7 @@ fn a_field_that_evidence_depends_on_cannot_be_assigned_alone() {
     let in_range = Binder::new("in_range", Type::proof(u8_le(value.term(), Term::U8(100))));
     let percent = session
         .declare_struct(&StructItem {
+            shape: locus::ast::VariantShape::Struct,
             name: "Percent".into(),
             fields: vec![value.clone(), in_range],
             derives: Vec::new(),

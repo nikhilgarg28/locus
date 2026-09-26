@@ -52,7 +52,7 @@ pub use linear::{
     CertificateText, LINEAR_TEXT_VERSION, LinearError, MAX_LINEAR_ATOMS, MAX_LINEAR_BITS,
     MAX_LINEAR_PAIRS,
 };
-pub use machine::MachineInt;
+pub use machine::{MachineInt, PointerWidth};
 pub use nat::{Natural, ParseNumberError};
 pub use ops::{Op, Panic, Row};
 pub use quantifiers::Quantifiers;

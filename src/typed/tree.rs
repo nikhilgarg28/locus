@@ -78,6 +78,7 @@ impl Derive {
 /// fields before it, by their binders' identities.
 #[derive(Clone, Debug)]
 pub struct StructItem {
+    pub shape: crate::ast::VariantShape,
     pub name: String,
     pub fields: Vec<Binder>,
     /// `#[derive(...)]`, as written and in that order.
@@ -291,6 +292,12 @@ pub enum Pattern {
     },
     Wildcard,
     Tuple(Vec<Pattern>),
+    Struct {
+        id: StructId,
+        name: String,
+        tuple: bool,
+        parts: Vec<Pattern>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

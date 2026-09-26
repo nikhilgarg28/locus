@@ -33,7 +33,7 @@ fn at_least(a: u8, b: u8) -> (out: u8, @(a <= out && b <= out)) {
 ## Matching enums
 
 <!-- spec: 1.27:5 legality-rule -->
-A runtime `match` covers each enum variant, or supplies a `_` arm. Patterns use the variant’s unit, tuple, or named-field shape, with names or `_` for fields; named patterns allow renaming and `..`. Nested runtime patterns are unsupported. Each arm knows its constructor equation. Use `if` for booleans and comparisons for integers.
+A runtime `match` covers each enum variant, or supplies a `_` arm. Patterns use the variant’s unit, tuple, or named-field shape, with names or `_` for fields; named patterns allow renaming and `..`. Nested enum patterns are unsupported; irrefutable tuple/unit struct patterns may nest. Each arm knows its constructor equation. Use `if` for booleans and comparisons for integers.
 
 <!-- spec: 1.90:27 example -->
 ~~~rust check

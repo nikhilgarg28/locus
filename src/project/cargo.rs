@@ -51,7 +51,10 @@ pub fn manifest_for(entry: &Path, explicit: Option<&Path>) -> Result<Option<Path
     let path = if entry.is_dir() {
         entry
     } else {
-        entry.parent().unwrap_or(Path::new("."))
+        entry
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
     };
     let path = path
         .canonicalize()

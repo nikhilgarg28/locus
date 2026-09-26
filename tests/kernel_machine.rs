@@ -28,9 +28,9 @@ use locus::kernel::{
 mod rng;
 use rng::{Rng, case_seed};
 
-use MachineInt::{I8, I16, I32, I64, U8, U16, U32, U64};
+use MachineInt::{I8, I16, I32, I64, Isize32, Isize64, U8, U16, U32, U64, Usize32, Usize64};
 
-const ALL: [MachineInt; 8] = MachineInt::ALL;
+const ALL: [MachineInt; 8] = MachineInt::FIXED;
 
 fn setup() -> (Context, Prelude) {
     let (definitions, prelude) = Definitions::with_prelude();
@@ -232,12 +232,12 @@ macro_rules! rust_wrap {
         match $ty {
             U8 => $value as u8 as i128,
             U16 => $value as u16 as i128,
-            U32 => $value as u32 as i128,
-            U64 => $value as u64 as i128,
+            U32 | Usize32 => $value as u32 as i128,
+            U64 | Usize64 => $value as u64 as i128,
             I8 => $value as i8 as i128,
             I16 => $value as i16 as i128,
-            I32 => $value as i32 as i128,
-            I64 => $value as i64 as i128,
+            I32 | Isize32 => $value as i32 as i128,
+            I64 | Isize64 => $value as i64 as i128,
         }
     };
 }
@@ -250,12 +250,12 @@ fn rust_cast(from: MachineInt, to: MachineInt, value: i128) -> i128 {
     match from {
         U8 => rust_wrap!(to, value as u8),
         U16 => rust_wrap!(to, value as u16),
-        U32 => rust_wrap!(to, value as u32),
-        U64 => rust_wrap!(to, value as u64),
+        U32 | Usize32 => rust_wrap!(to, value as u32),
+        U64 | Usize64 => rust_wrap!(to, value as u64),
         I8 => rust_wrap!(to, value as i8),
         I16 => rust_wrap!(to, value as i16),
-        I32 => rust_wrap!(to, value as i32),
-        I64 => rust_wrap!(to, value as i64),
+        I32 | Isize32 => rust_wrap!(to, value as i32),
+        I64 | Isize64 => rust_wrap!(to, value as i64),
     }
 }
 

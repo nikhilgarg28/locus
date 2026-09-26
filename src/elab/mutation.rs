@@ -515,12 +515,30 @@ impl Env<'_> {
             let (index, field_name, part_span) = match (ty.nominal(), &part) {
                 (Type::Struct(id), Part::Field(field)) => {
                     let info = self.struct_by_id(*id).expect("a struct type was declared");
-                    let Some(index) = info.fields.iter().position(|f| f.name == field.text) else {
+                    let Some(index) = (info.shape == ast::VariantShape::Struct)
+                        .then(|| info.fields.iter().position(|f| f.name == field.text))
+                        .flatten()
+                    else {
                         let message = format!("`{}` has no field `{}`", info.name, field.text);
                         return self.fail("L0210", message, field.span);
                     };
                     self.field_visible(&info, index, field.span)?;
                     (index, Some(field.text.clone()), field.span)
+                }
+                (Type::Struct(id), Part::Index(index, index_span)) => {
+                    let info = self.struct_by_id(*id).expect("declared struct");
+                    let position = index.parse::<usize>().ok().filter(|i| {
+                        info.shape == ast::VariantShape::Tuple && *i < info.fields.len()
+                    });
+                    let Some(position) = position else {
+                        return self.fail(
+                            "L0210",
+                            format!("`{}` has no field `{index}`", info.name),
+                            *index_span,
+                        );
+                    };
+                    self.field_visible(&info, position, *index_span)?;
+                    (position, None, *index_span)
                 }
                 (Type::Tuple(fields), Part::Index(index, index_span)) => {
                     match index.parse::<usize>() {

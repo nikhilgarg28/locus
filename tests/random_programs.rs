@@ -743,7 +743,7 @@ impl Generator {
         if self.rng.chance(1, 3) {
             MachineInt::U8
         } else {
-            *self.rng.choose(&MachineInt::ALL)
+            *self.rng.choose(&MachineInt::FIXED)
         }
     }
 
@@ -791,6 +791,7 @@ impl Generator {
             .map(|field| Binder::new(&format!("f{field}"), self.random_type(1)))
             .collect();
         let item = StructItem {
+            shape: locus::ast::VariantShape::Struct,
             name: format!("S{index}"),
             fields,
             derives: Derive::ALL.to_vec(),
@@ -2894,6 +2895,7 @@ type Visit<'a> = dyn FnMut(&mut Expr, Option<&Type>, &Scope) -> bool + 'a;
 fn pattern_type(pattern: &Pattern) -> Option<Type> {
     match pattern {
         Pattern::Bind { binder, .. } => Some(binder.ty.clone()),
+        Pattern::Struct { id, .. } => Some(Type::Struct(*id)),
         Pattern::Wildcard => None,
         Pattern::Tuple(patterns) => patterns
             .iter()

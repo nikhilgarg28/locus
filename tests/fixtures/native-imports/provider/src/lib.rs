@@ -39,3 +39,5 @@ pub struct shared { pub value: u8 }
 pub fn shared(n:u8)->u8 {n}
 #[macro_export]
 macro_rules! shared { ($e:expr) => {$e}; }
+
+pub fn pointer_values(n: usize, s: isize) -> (usize, isize) { (n, s) }

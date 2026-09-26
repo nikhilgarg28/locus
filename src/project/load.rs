@@ -12,6 +12,7 @@ use std::{
 };
 
 pub struct Loaded {
+    pub target: Option<crate::target::TargetLayout>,
     pub sources: SourceMap,
     pub bundle: SourceBundle,
     pub program: ast::Program,
@@ -128,6 +129,7 @@ pub fn load(path: &Path) -> Result<Loaded, Error> {
         });
     }
     Ok(Loaded {
+        target: None,
         sources: loader.sources,
         bundle,
         program,
@@ -297,6 +299,7 @@ pub(super) fn load_cargo(
         });
     }
     Ok(Loaded {
+        target: None,
         sources: loader.sources,
         bundle,
         program,

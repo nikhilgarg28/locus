@@ -24,7 +24,7 @@ use locus::exec::CheckInterpreter;
 use locus::kernel::{HypId, MachineInt, Op, Type, VarId};
 use locus::typed::{Binder, Block, CompareOp, Expr, FnItem, FnRef, Session};
 
-use MachineInt::{I8, I16, I32, I64, U8, U16, U32, U64};
+use MachineInt::{I8, I16, I32, I64, Isize32, Isize64, U8, U16, U32, U64, Usize32, Usize64};
 
 const FUEL: u64 = 10_000;
 
@@ -63,12 +63,12 @@ fn rust(op: Op, ty: MachineInt, operands: &[i128]) -> Rust {
     match ty {
         U8 => rust_row!(u8, op, operands),
         U16 => rust_row!(u16, op, operands),
-        U32 => rust_row!(u32, op, operands),
-        U64 => rust_row!(u64, op, operands),
+        U32 | Usize32 => rust_row!(u32, op, operands),
+        U64 | Usize64 => rust_row!(u64, op, operands),
         I8 => rust_row!(i8, op, operands),
         I16 => rust_row!(i16, op, operands),
-        I32 => rust_row!(i32, op, operands),
-        I64 => rust_row!(i64, op, operands),
+        I32 | Isize32 => rust_row!(i32, op, operands),
+        I64 | Isize64 => rust_row!(i64, op, operands),
     }
 }
 
@@ -165,7 +165,7 @@ fn run(session: &Session, callee: FnRef, arguments: Vec<Value>, mode: Overflow) 
 fn every_row_agrees_with_rust_in_both_modes_at_the_boundary_set() {
     let (mut session, _, _) = setup();
     let mut rows = Vec::new();
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         for op in [Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Rem, Op::Neg] {
             let Some(row) = op.row(ty) else {
                 continue;

@@ -1,7 +1,7 @@
 // Parameter slices borrow storage; proofs observe its current contents.
 fn head(xs: &[u8], available: @(0 < xs.len())) -> u8 { xs[0] }
-fn size(xs: &[u8]) -> (out: u64, @(out as Int == xs.len())) { (xs.len(), _) }
-fn replace(xs: &mut [u8], i: u64, present: @(i < xs.len()), v: u8) -> @(xs.len() == old!(xs).len()) {
+fn size(xs: &[u8]) -> (out: usize, @(out as Int == xs.len())) { (xs.len(), _) }
+fn replace(xs: &mut [u8], i: usize, present: @(i < xs.len()), v: u8) -> @(xs.len() == old!(xs).len()) {
     xs[i] = v;
     _
 }

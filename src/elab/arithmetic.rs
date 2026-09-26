@@ -981,7 +981,7 @@ impl Env<'_> {
                 .map_or(digits, |at| &digits[..at]);
             if !number.is_empty()
                 && number.chars().all(|c| c.is_ascii_digit() || c == '_')
-                && MachineInt::from_name(&digits[number.len()..]).is_some()
+                && self.machine_type(&digits[number.len()..]).is_some()
             {
                 return format!("{}{number}", &text[..text.len() - digits.len()]);
             }

@@ -60,6 +60,7 @@ use crate::store::ProofStore;
 /// Options for one elaboration; never shared across independent checks.
 #[derive(Clone, Debug)]
 pub struct Options {
+    pub pointer_width: crate::kernel::PointerWidth,
     pub previews: crate::preview::Previews,
     pub check_moves: bool,
     pub module_access: Option<std::sync::Arc<crate::project::Access>>,
@@ -68,6 +69,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            pointer_width: crate::kernel::PointerWidth::HOST,
             previews: crate::preview::Previews::default(),
             check_moves: true,
             module_access: None,
@@ -76,6 +78,10 @@ impl Default for Options {
 }
 
 impl env::Env<'_> {
+    pub(super) fn machine_type(&self, name: &str) -> Option<crate::kernel::MachineInt> {
+        self.pointer_width.machine(name)
+    }
+
     pub(super) fn require_preview(
         &mut self,
         feature: crate::preview::Feature,

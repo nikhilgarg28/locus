@@ -198,7 +198,7 @@ impl Env<'_> {
             Pattern::Bind { binder, .. } => self
                 .session
                 .register_binding_layout(binder.id, layout.clone()),
-            Pattern::Tuple(fields) => {
+            Pattern::Tuple(fields) | Pattern::Struct { parts: fields, .. } => {
                 for (index, field) in fields.iter().enumerate() {
                     self.register_pattern_layout(field, &layout.field(index));
                 }

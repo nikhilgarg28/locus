@@ -37,7 +37,7 @@ pub struct Theory {
     pub int_mul_le_mul_nonneg: FnId,
     /// The family of lemmas about each machine type, in the order of
     /// `MachineInt::ALL`; `Theory::machine` looks one up.
-    pub machine: [MachineLemmas; 8],
+    pub machine: [MachineLemmas; 12],
 }
 
 /// Declares `MachineLemmas`, the lemmas about one machine type `T`, and
@@ -92,6 +92,10 @@ macro_rules! machine_lemmas {
                     MachineInt::I16 => at!("i16_"),
                     MachineInt::I32 => at!("i32_"),
                     MachineInt::I64 => at!("i64_"),
+                    MachineInt::Usize32=>at!("usize32_"),
+                    MachineInt::Usize64=>at!("usize64_"),
+                    MachineInt::Isize32=>at!("isize32_"),
+                    MachineInt::Isize64=>at!("isize64_"),
                 }
             }
         }
@@ -287,7 +291,7 @@ fn cmp_true_of(comparison: &Term, proof: Proof) -> Proof {
 fn declare_int_and_machine(
     definitions: &mut Definitions,
     prelude: &Prelude,
-) -> Result<([FnId; 6], [MachineLemmas; 8]), KernelError> {
+) -> Result<([FnId; 6], [MachineLemmas; 12]), KernelError> {
     let prelude = *prelude;
     let le = |a: &Term, b: &Term| Term::int_le(a.clone(), b.clone());
     let lt = |a: &Term, b: &Term| Term::int_lt(a.clone(), b.clone());
@@ -869,7 +873,7 @@ fn declare_int_and_machine(
             unsigned,
         });
     }
-    let machine: [MachineLemmas; 8] = families
+    let machine: [MachineLemmas; 12] = families
         .try_into()
         .unwrap_or_else(|_| unreachable!("one family per machine type"));
 

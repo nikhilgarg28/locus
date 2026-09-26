@@ -643,9 +643,10 @@ impl Parser<'_> {
             K::Struct => {
                 let name = self.name()?;
                 let generics = self.generic_parameters()?;
-                let (fields, end) = self.struct_fields()?;
+                let (shape, fields, end) = self.struct_declaration_fields()?;
                 Ok((
                     DeclarationKind::Struct {
+                        shape,
                         generics,
                         name,
                         fields,
@@ -838,8 +839,7 @@ impl Parser<'_> {
         let name = self.name()?;
         let generics = self.generic_parameters()?;
         let (self_param, parameters) = self.parameter_list(true, false)?;
-        self.expect(K::Arrow)?;
-        let result = self.ty()?;
+        let result = self.return_type()?;
         self.expect(K::Equal)?;
         let implementation = self.path()?;
         let end = self
@@ -872,6 +872,19 @@ impl Parser<'_> {
         ))
     }
 
+    /// Omission is syntax for unit; it never requests result-type inference.
+    fn return_type(&mut self) -> ParseResult<Type> {
+        if self.eat(K::Arrow).is_some() {
+            self.ty()
+        } else {
+            let next = self.current().span;
+            Ok(Type {
+                kind: TypeKind::Unit,
+                span: Span::new(next.file, next.start, next.start),
+            })
+        }
+    }
+
     fn function(&mut self, logical: bool) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         let generics = self.generic_parameters()?;
@@ -881,8 +894,7 @@ impl Parser<'_> {
         let saved = std::mem::replace(&mut self.in_method, method);
         let signature = (|| {
             let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
-            self.expect(K::Arrow)?;
-            let result = self.ty()?;
+            let result = self.return_type()?;
             Ok((self_param, parameters, result))
         })();
         let body = match &signature {
@@ -1324,6 +1336,42 @@ impl Parser<'_> {
         Ok((fields, end))
     }
 
+    fn struct_declaration_fields(&mut self) -> ParseResult<(VariantShape, Vec<Field>, Token)> {
+        if let Some(end) = self.eat(K::Semicolon) {
+            return Ok((VariantShape::Unit, Vec::new(), end));
+        }
+        if !self.at(K::LParen) {
+            let (fields, end) = self.struct_fields()?;
+            return Ok((VariantShape::Struct, fields, end));
+        }
+        let opening = self.expect(K::LParen)?;
+        let mut fields = Vec::new();
+        while !self.at(K::RParen) && !self.at(K::Eof) {
+            self.step();
+            let doc = self.doc_comments()?;
+            let visibility = self.visibility()?;
+            let field = self.type_field()?;
+            // An unnameable binder still gives every field a stable position.
+            let name = field.name.unwrap_or(Name {
+                text: format!("$field{}", fields.len()),
+                span: field.span,
+            });
+            fields.push(Field {
+                doc,
+                visibility,
+                name,
+                ty: field.ty,
+                span: field.span,
+            });
+            if self.eat(K::Comma).is_none() {
+                break;
+            }
+        }
+        self.close(K::RParen, opening)?;
+        let end = self.expect(K::Semicolon)?;
+        Ok((VariantShape::Tuple, fields, end))
+    }
+
     /// `{ pub name: Type, ... }`: the fields of a struct.
     #[inline(never)]
     fn struct_fields(&mut self) -> ParseResult<(Vec<Field>, Token)> {
@@ -1762,8 +1810,7 @@ impl Parser<'_> {
     fn function_type(&mut self, start: Token) -> ParseResult<Type> {
         self.expect(K::Fn)?;
         let (parameters, _) = self.type_fields()?;
-        self.expect(K::Arrow)?;
-        let result = self.ty()?;
+        let result = self.return_type()?;
         Ok(Type {
             span: start.span.through(result.span),
             kind: TypeKind::Function {
@@ -1782,8 +1829,7 @@ impl Parser<'_> {
         }
         self.bump();
         let (parameters, _) = self.type_fields()?;
-        self.expect(K::Arrow)?;
-        let result = self.ty()?;
+        let result = self.return_type()?;
         Ok(Type {
             span: start.span.through(result.span),
             kind: TypeKind::LogicalFunction {

@@ -124,6 +124,13 @@ impl Walk for Rewrite {
         }
     }
     fn expr(&mut self, e: &mut Expr) {
+        if let ExprKind::Name(name) = &e.kind
+            && name.text == "Self"
+            && let Some(ty) = self.types.get("Self")
+            && let Some(repr) = type_name(ty)
+        {
+            e.kind = ExprKind::Name(n(&repr, e.span));
+        }
         if let ExprKind::Call { callee, arguments } = &mut e.kind
             && let ExprKind::Member { value, name } = &callee.kind
             && matches!(&value.kind,ExprKind::Name(n) if n.text=="self")
@@ -742,6 +749,7 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
         }
         let wrapper = Declaration {
             kind: DeclarationKind::Struct {
+                shape: VariantShape::Struct,
                 generics: generics.clone(),
                 name: spec_name.clone(),
                 fields: vec![Field {

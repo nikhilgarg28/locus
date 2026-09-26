@@ -22,6 +22,7 @@ pub(super) type Elab<T> = Result<T, ()>;
 
 #[derive(Debug)]
 pub(super) struct StructInfo {
+    pub shape: crate::ast::VariantShape,
     pub captures: Vec<Binder>,
     pub origin: Option<Span>,
     pub id: StructId,
@@ -243,6 +244,7 @@ impl Mark {
 
 #[derive(Clone)]
 pub(super) struct Env<'a> {
+    pub pointer_width: crate::kernel::PointerWidth,
     pub module_access: Option<std::sync::Arc<crate::project::Access>>,
     pub models: Vec<super::models::ModelEntry>,
     pub quantifiers: Vec<crate::kernel::Quantifiers>,

@@ -116,6 +116,7 @@ import renamed as native;
 import crate::own;
 pub fn answer()->u8 { let (out, yes)=native::api::pair(6); if yes { native::echo(out) } else { 0 } }
 pub fn host_value()->u16 {own(8)}
+pub fn pointer_values(n:usize,s:isize)->(usize,isize){native::pointer_values(n,s)}
 pub fn namespaces()->u8{native::shared(4)}
 pub fn argument_once()->u8{let (out,b)=native::pair(native::tick());out}
 pub fn observable()->@(1==1) {native::tick();_}
@@ -143,7 +144,7 @@ pub fn fails()->u8 {native::fail()}
     fs::write(root.join("host/src/main.rs"),r#"
 fn own(value:u16)->u16 {value.wrapping_add(1)}
 mod generated {include!("generated.rs");}
-fn main(){assert_eq!(generated::answer(),7);assert_eq!(generated::namespaces(),4);assert_eq!(generated::host_value(),9);let before=renamed::count();generated::observable();assert_eq!(renamed::count(),before+1);let next=renamed::count();assert_eq!(generated::argument_once(),next+1);assert_eq!(renamed::count(),next+1);assert!(std::panic::catch_unwind(generated::fails).is_err());}
+fn main(){assert_eq!(generated::pointer_values(usize::MAX,isize::MIN),(usize::MAX,isize::MIN));assert_eq!(generated::answer(),7);assert_eq!(generated::namespaces(),4);assert_eq!(generated::host_value(),9);let before=renamed::count();generated::observable();assert_eq!(renamed::count(),before+1);let next=renamed::count();assert_eq!(generated::argument_once(),next+1);assert_eq!(renamed::count(),next+1);assert!(std::panic::catch_unwind(generated::fails).is_err());}
 "#).unwrap();
     let result = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--manifest-path"])

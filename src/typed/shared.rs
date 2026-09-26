@@ -434,7 +434,7 @@ impl Check<'_> {
                     },
                 );
             }
-            Pattern::Tuple(fields) => {
+            Pattern::Tuple(fields) | Pattern::Struct { parts: fields, .. } => {
                 for (i, f) in fields.iter().enumerate() {
                     self.bind(f, projected(refs.clone(), i))?
                 }

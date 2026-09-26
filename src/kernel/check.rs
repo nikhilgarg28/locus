@@ -281,6 +281,15 @@ pub(super) fn term_type(ctx: &mut Context, term: &Term, mode: Mode) -> Result<Ty
     if mode == Mode::Executable && ctx.definitions().is_erased_type(&found) {
         return Err(KernelError::GhostTypeInExecutable(found));
     }
+    if mode == Mode::Executable
+        && let Type::Machine(ty) = &found
+        && ty.pointer_width().is_some_and(|w| w != ctx.pointer_width())
+    {
+        return Err(KernelError::WrongPointerWidth(
+            *ty,
+            ctx.pointer_width().bits(),
+        ));
+    }
     Ok(found)
 }
 

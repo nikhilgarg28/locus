@@ -37,7 +37,7 @@ The compiler-owned interface has its own version and normalized callable signatu
 ## Executable calls
 
 <!-- spec: 1.30:3 legality-rule -->
-Calls currently accept safe, non-generic Rust free functions with the Rust ABI, using `bool`, `u8`–`u64`, `i8`–`i64`, and nested tuples of those types by value. Unit is the empty tuple. Native types, references, traits, generics, constants, macro expansion, async and unsafe calls remain unavailable. Sysroot imports such as `std::vec::Vec` also require a future adapter; the built-in Locus Vec remains separate.
+Calls currently accept safe, non-generic Rust free functions with the Rust ABI, using `bool`, `u8`–`u64`, `i8`–`i64`, `usize`, `isize`, and nested tuples of those types by value. Unit is the empty tuple. Native types, references, traits, generics, constants, macro expansion, async and unsafe calls remain unavailable. Sysroot imports such as `std::vec::Vec` also require a future adapter; the built-in Locus Vec remains separate.
 
 <!-- spec: 1.30:4 dynamic-semantics -->
 A native call evaluates arguments once in source order and calls the original Rust path. Its effects remain even when a surrounding function returns only evidence. Native panic, abort and divergence yield no normal-return result. The two Locus interpreters report unsupported native execution; they do not simulate arbitrary Rust or treat that report as a program panic.

@@ -81,7 +81,7 @@ fn nonnegative_x(point: Point) -> @(point.x >= 0) { _ }
 ## Collections
 
 <!-- spec: 1.26:1 dynamic-semantics -->
-Arrays, slices, and vectors have immutable logical content snapshots and separately checked physical layouts. Runtime lengths and indices use `u64`; logical lengths are `Nat` values bounded by `u64::MAX`. Access requires bounds evidence. Updates and push produce new snapshots and normal-return equations. Allocation failure or panic is outside a normal-return guarantee. `Vec::new` and `Vec::from` use registered Rust implementations.
+Arrays, slices, and vectors have immutable logical content snapshots and separately checked physical layouts. Runtime lengths and indices use `usize`; logical lengths are `Nat` values bounded by the selected target’s `usize::MAX`. Array lengths must fit that bound. A `u64` index needs an explicit conversion; it is not implicitly a `usize`. Access requires bounds evidence. Updates and push produce new snapshots and normal-return equations. Allocation failure or panic is outside a normal-return guarantee. `Vec::new` and `Vec::from` use registered Rust implementations.
 
 <!-- spec: 1.90:57 example -->
 ~~~rust run
@@ -109,7 +109,7 @@ A physical Vec, array, or parameter slice may contain Logical elements. Its payl
 
 <!-- spec: 1.90:58 example -->
 ~~~rust run
-fn logical_payloads() -> u64 {
+fn logical_payloads() -> usize {
     let values: Vec<Int> = Vec::from([logic { 3 }, logic { 4 }]);
     values.len()
 }
@@ -124,8 +124,8 @@ fn logical_payloads() -> u64 {
 <!-- spec: 1.90:59 example -->
 ~~~rust run
 trusted "Rust Vec::len returns the number of stored elements"
-fn length(values: &Vec<u8>) -> (out: u64, @(out == values.len())) = Vec::len;
-fn demo() -> u64 {
+fn length(values: &Vec<u8>) -> (out: usize, @(out == values.len())) = Vec::len;
+fn demo() -> usize {
     let values: Vec<u8> = Vec::from([4, 5]);
     let (count, correct) = length(&values);
     count

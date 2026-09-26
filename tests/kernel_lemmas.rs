@@ -187,18 +187,18 @@ fn the_lemma_names_are_stable() {
     let mut expected: Vec<String> = INT_LEMMAS.iter().map(|name| name.to_string()).collect();
     for ty in MachineInt::ALL {
         for lemma in MACHINE_LEMMAS {
-            expected.push(format!("{}_{lemma}", ty.name()));
+            expected.push(format!("{}_{lemma}", ty.kernel_name()));
         }
         if !ty.signed() {
             for lemma in UNSIGNED_LEMMAS {
-                expected.push(format!("{}_{lemma}", ty.name()));
+                expected.push(format!("{}_{lemma}", ty.kernel_name()));
             }
         }
     }
     let names = theory.lemma_names();
     let found: Vec<String> = names.iter().map(|(name, _)| name.to_string()).collect();
     assert_eq!(found, expected);
-    assert_eq!(names.len(), 6 + 8 * 18 + 4 * 3);
+    assert_eq!(names.len(), 6 + 12 * 18 + 6 * 3);
 
     // Distinct names, distinct identities, each a declared function.
     let mut distinct = found.clone();
@@ -230,7 +230,7 @@ fn the_lemma_names_are_stable() {
             (
                 names
                     .iter()
-                    .find(|(name, _)| *name == format!("{}_le_refl", ty.name()))
+                    .find(|(name, _)| *name == format!("{}_le_refl", ty.kernel_name()))
                     .expect("in the table")
                     .0,
                 family.le_refl
@@ -545,7 +545,7 @@ fn use_machine_family_at_literals(
 #[doc = "spec: 2.12:11, 2.14:4, 2.14:5, 2.14:6, 2.14:7"]
 fn every_machine_lemma_is_used_once_at_every_type() {
     let (definitions, prelude, theory) = setup();
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         let family = theory.machine(ty);
         use_machine_family_at_variables(&definitions, prelude, ty, family);
         use_machine_family_at_literals(&definitions, prelude, ty, family);
@@ -809,7 +809,7 @@ fn cmp_agrees_with_rust_on_every_pair_of_bytes() {
 fn cmp_agrees_with_rust_at_the_boundaries_of_every_type() {
     let (definitions, _, _) = setup();
     let mut ctx = Context::with_definitions(definitions);
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         let values = boundary(ty);
         for &a in &values {
             for &b in &values {
@@ -885,7 +885,7 @@ fn cmp_is_typed_at_its_type_in_either_mode_and_refused_otherwise() {
 #[doc = "spec: 2.13:3, 2.13:4, 2.13:5"]
 fn cmp_reflect_is_used_both_ways_at_every_type_and_near_missed() {
     let (definitions, prelude, _) = setup();
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         for op in CmpOp::ALL {
             let mut s = Scene::new(&definitions, prelude);
             let over = Type::machine(ty);
@@ -1004,7 +1004,7 @@ fn cmp_reflect_agrees_with_evaluation_on_every_pair_of_bytes() {
 #[test]
 fn the_bounds_and_the_ends_of_every_range() {
     let (definitions, prelude, theory) = setup();
-    for ty in MachineInt::ALL {
+    for ty in MachineInt::FIXED {
         let mut s = Scene::new(&definitions, prelude);
         let family = theory.machine(ty);
         let (min, max) = (

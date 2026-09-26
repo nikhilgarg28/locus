@@ -14,6 +14,9 @@ pub fn check(path: &Path, options: &Options) -> Result<Checked, Error> {
 
 pub(super) fn check_loaded(loaded: Loaded, options: &Options) -> Result<Checked, Error> {
     let mut options = options.clone();
+    if let Some(target) = &loaded.target {
+        options.pointer_width = target.pointer_width;
+    }
     options.module_access = Some(Arc::new(loaded.graph.access.clone()));
     let checked = elab::elaborate_with_options(
         loaded.sources.get(loaded.bundle.file),

@@ -153,6 +153,7 @@ pub(super) struct FnDecl {
 
 #[derive(Clone, Debug, Default)]
 pub struct Definitions {
+    pointer_width: super::PointerWidth,
     structs: Vec<StructDecl>,
     pub(super) enums: Vec<EnumDecl>,
     pub(super) props: Vec<PropDecl>,
@@ -163,6 +164,16 @@ pub struct Definitions {
 }
 
 impl Definitions {
+    pub fn pointer_width(&self) -> super::PointerWidth {
+        self.pointer_width
+    }
+    pub fn with_pointer_width(pointer_width: super::PointerWidth) -> Self {
+        Self {
+            pointer_width,
+            ..Self::default()
+        }
+    }
+
     /// No declarations at all, not even the prelude. Excluded middle is
     /// unavailable, because it has no `Or` and `False` to be stated with.
     pub fn new() -> Self {
@@ -178,7 +189,10 @@ impl Definitions {
     /// prop Or(p: Prop, q: Prop)  { Left(@p), Right(@q) }
     /// ~~~
     pub fn with_prelude() -> (Self, Prelude) {
-        let mut definitions = Self::default();
+        Self::with_prelude_for(super::PointerWidth::HOST)
+    }
+    pub fn with_prelude_for(width: super::PointerWidth) -> (Self, Prelude) {
+        let mut definitions = Self::with_pointer_width(width);
         let proof_of = |term: &Term| Type::proof(term.clone());
         let truth = definitions
             .declare_prop(vec![], vec![PropVariant::Params(Type::Tuple(vec![]))])

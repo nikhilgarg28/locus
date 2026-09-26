@@ -857,6 +857,38 @@ impl Specializer<'_> {
                     span: declaration.span,
                 }),
             ),
+            DeclarationKind::Struct {
+                generics,
+                name,
+                fields,
+                ..
+            } => {
+                let arguments = generics
+                    .iter()
+                    .filter(|g| !g.lifetime)
+                    .map(|g| named_type(&g.name))
+                    .collect();
+                let result = Type {
+                    span: name.span,
+                    kind: TypeKind::Path {
+                        path: Box::new(Path {
+                            span: name.span,
+                            segments: vec![name],
+                        }),
+                        arguments,
+                    },
+                };
+                let parameters = fields
+                    .into_iter()
+                    .map(|f| Parameter {
+                        name: f.name,
+                        ty: f.ty,
+                        span: f.span,
+                        mutable: false,
+                    })
+                    .collect();
+                (generics, parameters, result)
+            }
             _ => return None,
         };
         let generics: Vec<_> = generics

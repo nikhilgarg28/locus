@@ -2,7 +2,7 @@
 use locus::{
     erased::{self, Interpreter, Outcome, Value},
     exec::{BufferStorage, CheckInterpreter},
-    kernel::{BufferOp, Definitions, MachineInt, Type},
+    kernel::{BufferOp, Definitions, Type},
     typed::{BufferFunction, ErasureLayout, Session},
 };
 use std::process::Command;
@@ -32,8 +32,8 @@ fn run(session: &Session, function: &BufferFunction, args: Vec<Value>) -> (Outco
 fn bytes(values: &[u8]) -> Value {
     Value::Buffer(values.iter().copied().map(Value::u8).collect())
 }
-fn index(value: u64) -> Value {
-    Value::Int(MachineInt::U64, i128::from(value))
+fn index(value: usize) -> Value {
+    Value::Int(locus::kernel::PointerWidth::HOST.usize(), value as i128)
 }
 
 #[test]

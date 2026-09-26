@@ -7,12 +7,11 @@
 //! sufficient to authorize a borrow: the source permission checker tracks
 //! the storage root, alias path, lifetime, and its current SSA version.
 //!
-//! `Buffer<T>` contains at most `u64::MAX` elements. Physical storage is
-//! further bounded by the Rust target's `usize::MAX`; the mathematical bound
-//! works on every supported target with at most 64-bit addresses. `length(b)` is an Int
+//! `Buffer<T>` contains at most the selected `usize::MAX` elements. Physical storage is
+//! governed by the immutable pointer width carried by the checking context. `length(b)` is an Int
 //! in that range. A literal checks every entry against T. A read or update
 //! requires kernel-checked evidence of `0 <= i && i < length(b)`. A push
-//! requires evidence of `length(b) < u64::MAX`; ordinary executable push
+//! requires evidence of `length(b) < usize::MAX`; ordinary executable push
 //! supplies that fact only on normal return, after its capacity/allocator
 //! failure paths have been accounted for by the exec checker. The buffer
 //! language contains no unchecked read and no source annotation is allowed
@@ -54,7 +53,7 @@
 //! and records the current root version without retaining a Rust reference.
 
 use super::check::{check_proof, expect_type, same, term_type, type_ok};
-use super::{Context, KernelError, MachineInt, Mode, Term, Type};
+use super::{Context, KernelError, Mode, Term, Type};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BufferOp {
@@ -97,8 +96,10 @@ pub(super) fn infer(
     type_ok(ctx, element)?;
     let buffer = Type::Buffer(Box::new(element.clone()));
     if op == BufferOp::Literal {
-        if (args.len() as u128) > u64::MAX as u128 {
-            return Err(KernelError::InvalidBuffer("buffer exceeds u64::MAX"));
+        if super::Integer::from(args.len() as u128) > ctx.pointer_width().usize().max() {
+            return Err(KernelError::InvalidBuffer(
+                "buffer exceeds target usize::MAX",
+            ));
         }
         for value in args {
             entry(ctx, value, element)?;
@@ -138,7 +139,7 @@ pub(super) fn infer(
             entry(ctx, &args[1], element)?;
             let room = Term::int_lt(
                 length(element.clone(), args[0].clone()),
-                Term::Int(MachineInt::U64.max()),
+                Term::Int(ctx.pointer_width().usize().max()),
             );
             entry(ctx, &args[2], &Type::proof(room))?;
             Ok(buffer)
@@ -317,7 +318,7 @@ pub(super) fn proof_bound(
     };
     let len = length(*element, value.clone());
     Ok(if upper {
-        Term::int_le(len, Term::Int(MachineInt::U64.max()))
+        Term::int_le(len, Term::Int(ctx.pointer_width().usize().max()))
     } else {
         Term::int_le(Term::int(0), len)
     })

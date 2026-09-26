@@ -253,10 +253,13 @@ impl std::fmt::Debug for {name} {{
 
 /// The items, before indentation.
 fn items(module: &Module, visibilities: &Visibilities) -> String {
+    let width = module.pointer_width.bits();
     let mut printer = Printer {
         module,
         proof_outputs: &visibilities.proof_outputs,
-        out: String::new(),
+        out: format!(
+            "#[cfg(not(target_pointer_width = \"{width}\"))]\ncompile_error!(\"Locus checked this module for {width}-bit pointers; regenerate it for the selected Rust target\");\n"
+        ),
         refs: HashSet::new(),
     };
     for item in &module.structs {
@@ -266,21 +269,44 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         printer.derives(&item.derives);
         let visibility = visibilities.of_type(&item.name);
         printer.private_item(&visibility);
-        let _ = writeln!(
-            printer.out,
-            "{visibility}struct {}{} {{",
-            item.name,
-            lifetime_parameters(item.fields.iter().map(|(_, ty)| ty))
-        );
-        for (name, ty) in &item.fields {
-            let ty = printer.ty(ty);
-            let visibility = visibilities.of_field(&item.name, name);
-            if visibility != "pub " {
-                printer.out.push_str("    // Preserve this private source field even when runtime code never reads it.\n    #[allow(dead_code)]\n");
+        let shape = item.shape;
+        let name = &item.name;
+        let lifetimes = lifetime_parameters(item.fields.iter().map(|(_, ty)| ty));
+        match shape {
+            crate::ast::VariantShape::Unit => {
+                let _ = writeln!(printer.out, "{visibility}struct {name};");
             }
-            let _ = writeln!(printer.out, "    {visibility}{name}: {ty},");
+            _ => {
+                let open = if shape == crate::ast::VariantShape::Tuple {
+                    "("
+                } else {
+                    " {"
+                };
+                let _ = writeln!(printer.out, "{visibility}struct {name}{lifetimes}{open}");
+                for (name, ty) in &item.fields {
+                    let ty = printer.ty(ty);
+                    let visibility = visibilities.of_field(&item.name, name);
+                    if visibility != "pub " {
+                        printer.out.push_str(
+                            "    // Preserve private source fields.\n    #[allow(dead_code)]\n",
+                        );
+                    }
+                    let field = if shape == crate::ast::VariantShape::Tuple {
+                        ty
+                    } else {
+                        format!("{name}: {ty}")
+                    };
+                    let _ = writeln!(printer.out, "    {visibility}{field},");
+                }
+                printer
+                    .out
+                    .push_str(if shape == crate::ast::VariantShape::Tuple {
+                        ");\n"
+                    } else {
+                        "}\n"
+                    });
+            }
         }
-        printer.out.push_str("}\n");
     }
     for item in &module.enums {
         if visibilities.hidden.contains(&item.name) {
@@ -641,6 +667,7 @@ impl Printer<'_> {
     /// type will do, since no value ever reaches the pattern: it is `()`.
     fn pattern_type(&self, pattern: &EPattern, diverges: bool) -> String {
         match pattern {
+            EPattern::Struct { name, .. } => name.clone(),
             EPattern::Bind { ty, .. } => self.ty(ty),
             EPattern::Wildcard if diverges => "()".into(),
             EPattern::Wildcard => "_".into(),
@@ -748,7 +775,7 @@ impl Printer<'_> {
                 crate::exec::BufferStorage::Vector => format!("vec![{}]", args.join(", ")),
                 _ => format!("[{}]", args.join(", ")),
             },
-            BufferOp::Length => format!("({}).len() as u64", args[0]),
+            BufferOp::Length => format!("({}).len()", args[0]),
             BufferOp::Get => format!(
                 "({})[usize::try_from({}).expect(\"collection index does not fit usize\")]",
                 args[0], args[1]
@@ -798,12 +825,23 @@ impl Printer<'_> {
                 format!("{name}!({condition}, \"{{}}\", {message:?})")
             }
             EExpr::Tuple(fields) => tuple_of(&self.all(fields)),
-            EExpr::Struct { name, fields, .. } => {
-                let fields: Vec<String> = fields
+            EExpr::Struct {
+                id, name, fields, ..
+            } => {
+                let shape = self
+                    .module
+                    .structs
                     .iter()
-                    .map(|(field, value)| format!("{field}: {}", self.expr(value)))
-                    .collect();
-                format!("{name} {{ {} }}", fields.join(", "))
+                    .find(|s| s.id == *id)
+                    .expect("declared struct")
+                    .shape;
+                let values: Vec<_> = fields.iter().map(|(_, v)| self.expr(v)).collect();
+                struct_of(
+                    shape,
+                    name,
+                    &fields.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(),
+                    &values,
+                )
             }
             EExpr::Variant {
                 enum_name,
@@ -1246,6 +1284,18 @@ fn pattern_of(pattern: &EPattern) -> String {
             ..
         } => format!("mut {name}"),
         EPattern::Bind { name, .. } => name.clone(),
+        EPattern::Struct {
+            name, tuple, parts, ..
+        } => {
+            if *tuple {
+                format!(
+                    "{name}({})",
+                    parts.iter().map(pattern_of).collect::<Vec<_>>().join(", ")
+                )
+            } else {
+                name.clone()
+            }
+        }
         EPattern::Wildcard => "_".into(),
         EPattern::Tuple(patterns) => {
             let patterns: Vec<String> = patterns.iter().map(pattern_of).collect();
@@ -1271,13 +1321,19 @@ impl Value {
                 let Some(item) = module.structs.iter().find(|item| item.id == *id) else {
                     return "UnknownStruct".into();
                 };
-                let fields: Vec<String> = item
-                    .fields
-                    .iter()
-                    .zip(all(fields))
-                    .map(|((name, _), value)| format!("{name}: {value}"))
-                    .collect();
-                format!("{} {{ {} }}", item.name, fields.join(", "))
+                if item.shape == crate::ast::VariantShape::Tuple && fields.is_empty() {
+                    return item.name.clone();
+                }
+                struct_of(
+                    item.shape,
+                    &item.name,
+                    &item
+                        .fields
+                        .iter()
+                        .map(|(n, _)| n.clone())
+                        .collect::<Vec<_>>(),
+                    &all(fields),
+                )
             }
             Self::Variant(id, index, payload) => {
                 let variant = module
@@ -1400,5 +1456,26 @@ fn lifetime_parameters<'a>(types: impl Iterator<Item = &'a EType>) -> String {
         String::new()
     } else {
         format!("<{}>", names.join(", "))
+    }
+}
+
+fn struct_of(
+    shape: crate::ast::VariantShape,
+    name: &str,
+    fields: &[String],
+    values: &[String],
+) -> String {
+    match shape {
+        crate::ast::VariantShape::Unit => name.into(),
+        crate::ast::VariantShape::Tuple => format!("{name}({})", values.join(", ")),
+        crate::ast::VariantShape::Struct => format!(
+            "{name} {{ {} }}",
+            fields
+                .iter()
+                .zip(values)
+                .map(|(n, v)| format!("{n}: {v}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }

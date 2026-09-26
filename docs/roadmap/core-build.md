@@ -158,7 +158,7 @@ Delivered. [LOC-179](core-build.md#LOC-179); `src/elab/loops.rs`, `tests/exec_ch
 ## LOC-32 · Arrays, slices and Vec in the supported collection tier
 <!-- task: {"id": "t39", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Delivered. [LOC-228](reconciliation.md#LOC-228) and [LOC-229](reconciliation.md#LOC-229); `tests/collections.rs`, `tests/logical_containers.rs` and `tests/reconcile_collection.rs` cover lengths, checked bounds, reads, writes, push and element erasure. Native indices are currently u64; a complete standard Vec API and target-sized indices remain [LOC-55](memory-layout.md#LOC-55) and [LOC-103](memory-layout.md#LOC-103).
+Delivered. [LOC-228](reconciliation.md#LOC-228) and [LOC-229](reconciliation.md#LOC-229); `tests/collections.rs`, `tests/logical_containers.rs` and `tests/reconcile_collection.rs` cover lengths, checked bounds, reads, writes, push and element erasure. Runtime lengths and indices migrate to usize under [LOC-103](memory-layout.md#LOC-103). A complete standard Vec API remains [LOC-55](memory-layout.md#LOC-55).
 
 <a id="LOC-37"></a>
 ## LOC-37 · Owned values, moves and closed Clone/Copy derivation

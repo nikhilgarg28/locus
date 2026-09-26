@@ -140,11 +140,12 @@ pub fn elaborate_with_options(
         }
         return result;
     }
-    let (mut definitions, prelude) = Definitions::with_prelude();
+    let (mut definitions, prelude) = Definitions::with_prelude_for(options.pointer_width);
     let theory = theory::declare(&mut definitions, &prelude).expect("the theory is checked");
-    let mut session = Session::new(definitions);
+    let mut session = Session::with_pointer_width(definitions, options.pointer_width);
     let natural = super::naturals::declare(&mut session);
     let mut env = Env {
+        pointer_width: options.pointer_width,
         module_access: options.module_access.clone(),
         models: super::models::primitive_models(Type::Struct(natural.id)),
         quantifiers: Vec::new(),
@@ -220,25 +221,38 @@ pub fn elaborate_with_options(
             duplicates.insert(index);
             continue;
         }
-        let earlier = seen
-            .get(&(is_type, qualified.as_str()))
-            .copied()
-            .or_else(|| {
-                unit.owner
-                    .and_then(|owner| variant_named(program, owner, name))
-            });
-        if let Some(first) = earlier {
-            env.diagnostics.push(
-                Diagnostic::error(
-                    "L0202",
-                    format!("`{qualified}` is declared twice"),
-                    name.span,
-                )
-                .label(first, "first declared here"),
-            );
-            duplicates.insert(index);
+        let constructor = matches!(
+            unit.declaration.kind,
+            DeclarationKind::Struct {
+                shape: ast::VariantShape::Tuple | ast::VariantShape::Unit,
+                ..
+            }
+        );
+        for is_type in if constructor {
+            vec![true, false]
         } else {
-            seen.insert((is_type, qualified), name.span);
+            vec![is_type]
+        } {
+            let earlier = seen
+                .get(&(is_type, qualified.as_str()))
+                .copied()
+                .or_else(|| {
+                    unit.owner
+                        .and_then(|owner| variant_named(program, owner, name))
+                });
+            if let Some(first) = earlier {
+                env.diagnostics.push(
+                    Diagnostic::error(
+                        "L0202",
+                        format!("`{qualified}` is declared twice"),
+                        name.span,
+                    )
+                    .label(first, "first declared here"),
+                );
+                duplicates.insert(index);
+            } else {
+                seen.insert((is_type, qualified), name.span);
+            }
         }
     }
 
@@ -1195,6 +1209,7 @@ impl Env<'_> {
                     declaration.span,
                 ),
             DeclarationKind::Struct {
+                shape,
                 name,
                 fields,
                 generics,
@@ -1215,6 +1230,7 @@ impl Env<'_> {
                 let derives =
                     self.derives(attributes, &name.text, &[(name.text.clone(), &fields)])?;
                 let item = StructItem {
+                    shape: *shape,
                     name: name.text.clone(),
                     fields: fields.clone(),
                     derives: derives.clone(),
@@ -1237,6 +1253,7 @@ impl Env<'_> {
                     return self.internal(error, name.span);
                 }
                 let info = Rc::new(StructInfo {
+                    shape: *shape,
                     captures,
                     origin: Some(name.span),
                     id,

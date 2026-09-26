@@ -32,9 +32,9 @@ use locus::kernel::{
 mod rng;
 use rng::{Rng, case_seed};
 
-use MachineInt::{I8, I16, I32, I64, U8, U16, U32, U64};
+use MachineInt::{I8, I16, I32, I64, Isize32, Isize64, U8, U16, U32, U64, Usize32, Usize64};
 
-const ALL: [MachineInt; 8] = MachineInt::ALL;
+const ALL: [MachineInt; 8] = MachineInt::FIXED;
 const SIGNED: [MachineInt; 4] = [I8, I16, I32, I64];
 const UNSIGNED: [MachineInt; 4] = [U8, U16, U32, U64];
 const WIDER: [MachineInt; 6] = [U16, U32, U64, I16, I32, I64];
@@ -239,12 +239,12 @@ fn rust(op: Op, ty: MachineInt, operands: &[i128]) -> Rust {
     match ty {
         U8 => rust_row!(u8, op, operands),
         U16 => rust_row!(u16, op, operands),
-        U32 => rust_row!(u32, op, operands),
-        U64 => rust_row!(u64, op, operands),
+        U32 | Usize32 => rust_row!(u32, op, operands),
+        U64 | Usize64 => rust_row!(u64, op, operands),
         I8 => rust_row!(i8, op, operands),
         I16 => rust_row!(i16, op, operands),
-        I32 => rust_row!(i32, op, operands),
-        I64 => rust_row!(i64, op, operands),
+        I32 | Isize32 => rust_row!(i32, op, operands),
+        I64 | Isize64 => rust_row!(i64, op, operands),
     }
 }
 
@@ -370,7 +370,7 @@ fn the_table_has_the_rows_it_says_and_no_others() {
     // Ten operations at each signed type, eight at each unsigned one, and
     // `Row::all` lists exactly those.
     let all = Row::all();
-    assert_eq!(all.len(), 4 * 10 + 4 * 8);
+    assert_eq!(all.len(), 6 * 10 + 6 * 8);
     for ty in ALL {
         for op in Op::ALL {
             let exists = ty.signed() || !matches!(op, Op::Neg | Op::WrappingNeg);
@@ -763,12 +763,12 @@ fn random_value(rng: &mut Rng, ty: MachineInt) -> i128 {
     let value = match ty {
         U8 => i128::from(raw as u8),
         U16 => i128::from(raw as u16),
-        U32 => i128::from(raw as u32),
-        U64 => i128::from(raw),
+        U32 | Usize32 => i128::from(raw as u32),
+        U64 | Usize64 => i128::from(raw),
         I8 => i128::from(raw as i8),
         I16 => i128::from(raw as i16),
-        I32 => i128::from(raw as i32),
-        I64 => i128::from(raw as i64),
+        I32 | Isize32 => i128::from(raw as i32),
+        I64 | Isize64 => i128::from(raw as i64),
     };
     assert!(ty.contains(&Integer::from(value)));
     value
@@ -1103,7 +1103,7 @@ struct Vars {
 
 impl Vars {
     fn new(ctx: &mut Context) -> Self {
-        let machine = ALL
+        let machine = MachineInt::ALL
             .iter()
             .map(|ty| {
                 (

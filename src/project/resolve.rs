@@ -473,8 +473,27 @@ impl Graph {
                     if !name.is_empty() {
                         self.bind(
                             module,
-                            name,
+                            name.clone(),
                             ns,
+                            Binding {
+                                target: Target::Item(id),
+                                visibility: d.visibility.clone(),
+                                span: d.span,
+                            },
+                            errors,
+                        );
+                    }
+                    if matches!(
+                        d.kind,
+                        DeclarationKind::Struct {
+                            shape: VariantShape::Tuple | VariantShape::Unit,
+                            ..
+                        }
+                    ) {
+                        self.bind(
+                            module,
+                            name,
+                            Namespace::Value,
                             Binding {
                                 target: Target::Item(id),
                                 visibility: d.visibility.clone(),
@@ -796,6 +815,8 @@ impl Graph {
         }
         let mut out = Vec::new();
         visit(self, module, &[], &mut BTreeSet::new(), &mut out);
+        let mut emitted = BTreeSet::new();
+        out.retain(|e| emitted.insert((e.path.clone(), e.item)));
         out
     }
     pub fn display_name(&self, canonical: &str) -> String {
@@ -1147,6 +1168,32 @@ impl Rewriter<'_> {
         self.values.truncate(n);
     }
     fn pattern(&mut self, p: &mut Pattern) {
+        if let PatternKind::Name {
+            name,
+            mutable: false,
+        } = &p.kind
+        {
+            let path = Path {
+                segments: vec![name.clone()],
+                span: p.span,
+            };
+            if let Ok((Target::Item(i), tail)) =
+                self.graph.lookup(self.module, &path, Namespace::Type)
+                && tail.is_empty()
+                && matches!(
+                    self.graph.items[i].declaration.kind,
+                    DeclarationKind::Struct {
+                        shape: VariantShape::Unit,
+                        ..
+                    }
+                )
+            {
+                p.kind = PatternKind::Variant {
+                    path: Box::new(path),
+                    arguments: None,
+                };
+            }
+        }
         match &mut p.kind {
             PatternKind::Name { name, .. } => self.values.push(name.text.clone()),
             PatternKind::Binding { name, pattern, .. } => {
@@ -1335,6 +1382,8 @@ fn builtin(s: &str) -> bool {
         "u8" | "u16"
             | "u32"
             | "u64"
+            | "usize"
+            | "isize"
             | "i8"
             | "i16"
             | "i32"

@@ -356,7 +356,11 @@ impl<'p> CheckInterpreter<'p> {
                         crate::kernel::BufferOp::Get | crate::kernel::BufferOp::Length => {}
                     }
                 }
-                let mut value = crate::erased::buffer_operation(operation.op, &values)?;
+                let mut value = crate::erased::buffer_operation(
+                    operation.op,
+                    &values,
+                    self.program.pointer_width(),
+                )?;
                 if let Some(projection) = self
                     .frames
                     .last()

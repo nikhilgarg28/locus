@@ -107,3 +107,11 @@ A build receipt records compiler identity, configuration, input hashes, resolved
 
 <!-- spec: 1.28:17 dynamic-semantics -->
 Project proof storage belongs to the host package's `Locus.lock`, keyed by the relative entry path; standalone projects use the entry's directory. Dependency sources are read without writing their lockfiles. `check` may update the host proof store, while build-script generation reads it without modifying sources. Locked proof checking rejects missing or stale certificates. Cargo's dependency lockfile is separate.
+
+## Target layout
+
+<!-- spec: 1.96:9 legality-rule -->
+Project checking selects one Rust target: `--target` (or `Build::target`), then Cargo's build-script `TARGET`, then `CARGO_BUILD_TARGET`, then the nearest Cargo `build.target` setting, then rustc's host. Multi-target settings need an explicit selection. The compiler queries rustc's configuration without requiring that target's standard library. Unsupported pointer widths and failed queries are errors.
+
+<!-- spec: 1.96:10 dynamic-semantics -->
+Target layout and Rust compiler identity participate in build receipts; read Cargo configuration and custom-target files are tracked inputs. Proof-store keys include the selected pointer width. Every emitted Rust module rejects compilation with a different pointer width, even if target-dependent reasoning was entirely erased. Regenerate and recheck for another target. The legacy flat-file API defaults to host width; use `--target` for cross-target project checking.

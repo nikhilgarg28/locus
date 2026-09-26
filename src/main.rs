@@ -41,6 +41,7 @@ Usage: locus <command> <file.lc> [arguments]
   ast     Print the syntax tree of a syntactically valid file
 
   --error-format <text|json>  Render diagnostics as text (default) or schema-versioned JSON
+  --target <triple>  Select the Rust target for project checking and generation
   --library <file.lc>  Include checked declarations (repeat for multiple libraries)
   --preview <name>  Enable an unfinished feature (repeat for multiple features)
   -h, --help     Show this help
@@ -1155,7 +1156,7 @@ fn uses_project_driver(arguments: &[OsString]) -> bool {
     if arguments.iter().any(|a| {
         matches!(
             a.to_str(),
-            Some("--out-dir" | "--manifest-path" | "--check-receipt")
+            Some("--out-dir" | "--manifest-path" | "--check-receipt" | "--target")
         )
     }) {
         return true;

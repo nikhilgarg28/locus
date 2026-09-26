@@ -26,8 +26,8 @@ Locus is tested through independent checks, hostile inputs, interpreter comparis
 <!-- spec: 1.24:1 legality-rule -->
 - General runtime recursion, runtime closures, arbitrary traits, and dynamic dispatch.
 - Stored mutable references, interior mutability, raw pointers, unsafe code, and async.
-- Platform-sized and 128-bit integers, floats, characters, and byte strings.
-- Bit operators, compound assignment, iterator-based `for`, `while let`, `if let`, `?`, labels, and deep runtime patterns.
+- 128-bit integers, floats, characters, and byte strings.
+- Bit operators, compound assignment, iterator-based `for`, `while let`, `if let`, `?`, labels, and deep enum patterns.
 - General Rust trait/type import, generic cross-package runtime ABI, and user macros or attributes.
 
 <!-- spec: 1.91:33 informative -->

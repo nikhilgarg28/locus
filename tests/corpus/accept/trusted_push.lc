@@ -6,7 +6,7 @@ fn grow(items: &mut Vec<u8>, item: u8) -> @(items.len() == old!(items).len() + 1
     let (length, _) = append(&mut items, item);
     length
 }
-fn run() -> u64 {
+fn run() -> usize {
     let mut items: Vec<u8> = Vec::new();
     grow(&mut items, 7);
     items.len()

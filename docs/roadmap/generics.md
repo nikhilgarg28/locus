@@ -58,9 +58,9 @@ panic!, assert!, unreachable!, todo! and debug_assert! are implemented ([LOC-190
 
 <a id="LOC-104"></a>
 ## LOC-104 · Omit -> () for unit-returning functions
-<!-- task: {"id": "t198", "status": "backlog", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+<!-- task: {"id": "t198", "status": "done", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-25T17:07:25.165396+00:00"} -->
 
-Still open: src/parser.rs::function explicitly requires -> and a result type. Add the Rust-compatible omission with parser/diagnostic and generated-output tests.
+Delivered: Rust-compatible unit-result omission for declarations, methods and headers, with parser/diagnostic, spec matching and generated-output tests. The complete extended gate passed; see the [implementation and validation record](../plans/platform-types-and-structs.md).
 
 <a id="LOC-106"></a>
 ## LOC-106 · Struct update syntax
@@ -82,9 +82,9 @@ Remaining: parsing, type/layout constraints, Rust output and logical case semant
 
 <a id="LOC-112"></a>
 ## LOC-112 · Tuple and unit structs
-<!-- task: {"id": "t206", "status": "backlog", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+<!-- task: {"id": "t206", "status": "done", "priority": 0, "created": "2026-09-21T20:29:22.000Z", "updated": "2026-09-25T17:07:25.165396+00:00"} -->
 
-Named structs already support the newtype pattern manually. Remaining: tuple-struct and unit-struct declarations/constructors/patterns, visibility and proof-bearing fields. Enum tuple/unit variants are not completion of this task.
+Delivered: nominal tuple/unit declarations, constructors, positional access and irrefutable patterns; dependent proof fields, privacy, moves, logical erasure, models, specs and Rust exports share the existing checked product semantics. `tests/struct_forms.rs` covers positive cases and hostile clients. The complete extended gate passed; see the [implementation and validation record](../plans/platform-types-and-structs.md).
 
 <a id="LOC-116"></a>
 ## LOC-116 · Bit operators and shifts with a checked model

@@ -355,6 +355,22 @@ impl ProofStore {
         self.canonical = canonical;
     }
 
+    /// Version-1 sidecars have no recorded claim and predate layout-keying.
+    /// Rekey only such candidates. This supplies a hint, not evidence: the
+    /// ordinary parse/check/accept path still checks it against today's goal.
+    pub(crate) fn rekey_legacy(&mut self, old: Key, new: Key) {
+        if !self.entries.contains_key(&new)
+            && self
+                .entries
+                .get(&old)
+                .is_some_and(|h| h.entry.claim.is_empty())
+            && let Some(mut held) = self.entries.remove(&old)
+        {
+            held.entry.key = new;
+            self.entries.insert(new, held);
+        }
+    }
+
     /// The stored proof text of an obligation, if there is one. Whether it
     /// is accepted is for the caller to decide with `accept` or `refuse`;
     /// the ordinal of the obligation is consumed either way.

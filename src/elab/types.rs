@@ -6,7 +6,7 @@
 //! to emit a migration diagnostic; it is never a type constructor.
 
 use crate::ast;
-use crate::kernel::{MachineInt, Type, VarId};
+use crate::kernel::{Type, VarId};
 use crate::typed::Binder;
 
 use super::env::{Elab, Env, Global};
@@ -27,9 +27,7 @@ impl Env<'_> {
                 if path.single().is_some_and(|name| name.text == "Ghost") =>
             {
                 let replacement = arguments.first().and_then(|inner| match &inner.kind {
-                    ast::TypeKind::Named(name)
-                        if crate::kernel::MachineInt::from_name(&name.text).is_some() =>
-                    {
+                    ast::TypeKind::Named(name) if self.machine_type(&name.text).is_some() => {
                         Some("Int".to_string())
                     }
                     ast::TypeKind::Named(name) if name.text == "bool" => Some("Bool".to_string()),
@@ -80,15 +78,15 @@ impl Env<'_> {
                     Ok(Type::Bool)
                 },
                 "Prop" => Ok(Type::Prop),
-                machine if MachineInt::from_name(machine).is_some() => {
-                    Ok(Type::machine(MachineInt::from_name(machine).unwrap()))
+                machine if self.machine_type(machine).is_some() => {
+                    Ok(Type::machine(self.machine_type(machine).unwrap()))
                 }
                 // The integers of the logic have no runtime form: they are
                 // written where nothing runs, in a proposition, a function
                 // of the logic, or a proof type.
                 "Int" => Ok(Type::Int),
 
-                wide @ ("u128" | "usize" | "i128" | "isize") => self.fail(
+                wide @ ("u128" | "i128") => self.fail(
                     "L0290",
                     format!("the type `{wide}` is not in Locus yet"),
                     name.span,
