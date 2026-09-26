@@ -145,6 +145,7 @@ pub fn elaborate_with_options(
     let mut session = Session::with_pointer_width(definitions, options.pointer_width);
     let natural = super::naturals::declare(&mut session);
     let mut env = Env {
+        dynamics: vec![],
         pointer_width: options.pointer_width,
         module_access: options.module_access.clone(),
         models: super::models::primitive_models(Type::Struct(natural.id)),
@@ -192,6 +193,7 @@ pub fn elaborate_with_options(
     env.module_access = access.map(std::sync::Arc::new);
     env.diagnostics.extend(diagnostics);
     let program = &specialized;
+    env.initialize_dynamics(program);
     env.report_unchecked_syntax(program);
     env.file_promises = env.promises_of(&program.attributes, Promises::default());
 

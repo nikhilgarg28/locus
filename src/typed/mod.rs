@@ -7,6 +7,7 @@
 //! lowering is accepted.
 
 mod buffer;
+mod dynamic;
 mod layout;
 mod lower;
 mod native;

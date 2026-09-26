@@ -647,3 +647,24 @@ fn trait_cfg_doc_mismatch_and_unsupported_members_fail_closed() {
     .unwrap();
     assert!(error.to_string().contains("L0514"), "{error}");
 }
+
+#[test]
+#[doc = "spec: 1.31:56"]
+fn imported_trait_objects_fail_with_a_source_level_boundary_error() {
+    let root = fixture("dyn_boundary");
+    let provider = root.join("provider/src/lib.rs");
+    let mut source = fs::read_to_string(&provider).unwrap();
+    source.push_str("\npub trait DynReader { fn read(&self)->u8; }\n");
+    fs::write(provider, source).unwrap();
+    let error = build(
+        &root,
+        "import renamed::DynReader as Reader;fn read(r:&dyn Reader)->u8{r.read()}",
+    )
+    .check()
+    .err()
+    .expect("foreign object ABI is deferred")
+    .to_string();
+    assert!(error.contains("L0518"), "{error}");
+    assert!(error.contains("imported Rust traits"), "{error}");
+    assert!(error.contains("export.lc"), "{error}");
+}

@@ -142,6 +142,7 @@ pub(super) fn type_ok(ctx: &mut Context, ty: &Type) -> Result<(), KernelError> {
         Type::Proof(prop) => expect_type(ctx, prop, &Type::Prop, Mode::Logical),
         Type::Tuple(fields) => check_telescope(ctx, fields),
         Type::Instance(base, args) => check_family(ctx, base, args),
+        Type::Struct(id) if ctx.definitions().is_opaque(*id) => Ok(()),
         Type::Struct(id) => ctx
             .definitions()
             .instance_fields(&Type::Struct(*id))

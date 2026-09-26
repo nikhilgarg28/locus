@@ -244,6 +244,7 @@ impl Mark {
 
 #[derive(Clone)]
 pub(super) struct Env<'a> {
+    pub dynamics: Vec<super::dynamic::Dynamic>,
     pub pointer_width: crate::kernel::PointerWidth,
     pub module_access: Option<std::sync::Arc<crate::project::Access>>,
     pub models: Vec<super::models::ModelEntry>,

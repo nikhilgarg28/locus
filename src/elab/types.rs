@@ -60,7 +60,11 @@ impl Env<'_> {
 
     /// A type in any other position, where `Ghost<T>` may not stand.
     pub fn ty(&mut self, ty: &ast::Type) -> Elab<Type> {
+        if super::dynamic::borrowed_dyn(ty).is_some() {
+            return self.dynamic_reference(ty).map(|w| w.ty);
+        }
         match &ty.kind {
+            ast::TypeKind::Dyn(_) => self.fail("L0518", "dyn Trait is unsized; this tier requires &dyn Trait", ty.span),
             ast::TypeKind::Scoped { name, claims } => {
                 let base = self.ty(&ast::Type { kind: ast::TypeKind::Named(name.clone()), span: ty.span })?;
                 let was_total = std::mem::replace(&mut self.total, true);

@@ -141,6 +141,10 @@ impl Env<'_> {
         as_span: Span,
     ) -> Elab<Value> {
         let to = self.ty(target)?;
+        if super::dynamic::borrowed_dyn(target).is_some() {
+            let value = self.infer(inner)?;
+            return self.coerce(value, &to, as_span);
+        }
         if self.logical_spelling(target) {
             return self.model_cast(inner, &to, as_span);
         }

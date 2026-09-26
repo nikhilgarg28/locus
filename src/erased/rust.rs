@@ -265,6 +265,7 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         refs: HashSet::new(),
         erased_owner: false,
     };
+    printer.dynamic_interfaces();
     for item in &module.structs {
         if visibilities.hidden.contains(&item.name) {
             continue;
@@ -548,6 +549,67 @@ impl Printer<'_> {
         self.out.push('\n');
     }
 
+    fn dynamic_interfaces(&mut self) {
+        for d in &self.module.dynamics {
+            let _ = writeln!(self.out, "#[allow(dead_code)]\ntrait {} {{", d.name);
+            for m in &d.methods {
+                let args: Vec<_> = m
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| format!("arg{i}: {}", self.ty(t)))
+                    .collect();
+                let rest = if args.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {}", args.join(", "))
+                };
+                let result = self.ty(&m.result);
+                let _ = writeln!(self.out, "    fn {}(&self{rest}) -> {result};", m.name);
+            }
+            self.out.push_str("}\n");
+            for table in self
+                .module
+                .dyn_tables
+                .iter()
+                .filter(|t| t.interface == d.id)
+            {
+                let concrete = self.ty(&table.concrete);
+                let _ = writeln!(self.out, "impl {} for {concrete} {{", d.name);
+                for (m, target) in d.methods.iter().zip(&table.methods) {
+                    let f = self
+                        .module
+                        .fns
+                        .iter()
+                        .find(|f| f.reference == *target)
+                        .expect("checked implementation");
+                    let args: Vec<_> = m
+                        .params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| format!("arg{i}: {}", self.ty(t)))
+                        .collect();
+                    let rest = if args.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {}", args.join(", "))
+                    };
+                    let mut forwarded = vec!["self".to_string()];
+                    forwarded.extend((0..args.len()).map(|i| format!("arg{i}")));
+                    let result = self.ty(&m.result);
+                    let _ = writeln!(
+                        self.out,
+                        "    fn {}(&self{rest}) -> {result} {{ {}({}) }}",
+                        m.name,
+                        f.name,
+                        forwarded.join(", ")
+                    );
+                }
+                self.out.push_str("}\n");
+            }
+        }
+    }
+
     fn private_item(&mut self, visibility: &str) {
         if visibility != "pub " {
             self.out.push_str("// This source item need not have a caller in this generated crate.\n#[allow(dead_code)]\n");
@@ -597,7 +659,14 @@ impl Printer<'_> {
                 .structs
                 .iter()
                 .find(|item| item.id == *id)
-                .map_or_else(|| "UnknownStruct".into(), |item| item.name.clone()),
+                .map(|item| item.name.clone())
+                .unwrap_or_else(|| {
+                    self.module
+                        .dynamics
+                        .iter()
+                        .find(|d| d.id == *id)
+                        .map_or_else(|| "UnknownStruct".into(), |d| format!("dyn {}", d.name))
+                }),
             EType::Enum(id) => self
                 .module
                 .enums
@@ -963,6 +1032,29 @@ impl Printer<'_> {
                 ),
                 _ => unreachable!("a row has one or two operands"),
             },
+            EExpr::Dynamic {
+                operation,
+                arguments,
+            } => {
+                let args = self.all(arguments);
+                match operation {
+                    super::DynOperation::Pack(_) => args[0].clone(),
+                    super::DynOperation::Call { interface, slot } => {
+                        let d = self
+                            .module
+                            .dynamics
+                            .iter()
+                            .find(|d| d.id == *interface)
+                            .expect("checked interface");
+                        format!(
+                            "({}).{}({})",
+                            args[0],
+                            d.methods[*slot].name,
+                            args[1..].join(", ")
+                        )
+                    }
+                }
+            }
             EExpr::NativeCall {
                 path, arguments, ..
             } => format!("{path}({})", self.all(arguments).join(", ")),
@@ -1238,6 +1330,9 @@ fn contains_divergence(expr: &EExpr) -> bool {
         }
         | EExpr::Tuple(exprs)
         | EExpr::Variant { payload: exprs, .. }
+        | EExpr::Dynamic {
+            arguments: exprs, ..
+        }
         | EExpr::NativeCall {
             arguments: exprs, ..
         }
@@ -1336,6 +1431,7 @@ impl Value {
             values.iter().map(|value| value.debug(module)).collect()
         };
         match self {
+            Self::Dynamic(..) => "<dyn>".into(),
             Self::Buffer(items) => format!("[{}]", all(items).join(", ")),
             Self::Bool(flag) => flag.to_string(),
             Self::Int(_, value) => value.to_string(),

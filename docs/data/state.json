@@ -1053,21 +1053,21 @@
   ],
   "measurements": {
     "schema_version": 1,
-    "generated_at": "2026-09-25T17:06:42.789743+00:00",
-    "source_fingerprint": "f2f9476df8bbb59882d485fd6b83adf30f1ddd28881a92a455f873f24cdde71f",
-    "fast_seconds": 539,
+    "generated_at": "2026-09-26T06:03:13.148161+00:00",
+    "source_fingerprint": "91b03b0237454c1d23e8a746c51b2e8a37fdedbcf59d5c6785bfebe2667b44d5",
+    "fast_seconds": 537,
     "fast_limit_seconds": 120,
     "fast_tests": {
-      "passed": 1018,
+      "passed": 1102,
       "ignored": 0,
-      "targets": 90
+      "targets": 93
     },
     "extended_tests": {
-      "passed": 1018,
+      "passed": 1102,
       "ignored": 0,
-      "targets": 90
+      "targets": 93
     },
-    "corpus_files": 265,
+    "corpus_files": 266,
     "proof_tiers": {
       "tests/corpus/target/library_buffer_model.lc": {
         "computed": 8,
@@ -1208,7 +1208,7 @@
       {
         "path": "src/kernel/check.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 2030
+        "physical_lines": 2031
       },
       {
         "path": "src/kernel/context.rs",
@@ -1218,7 +1218,7 @@
       {
         "path": "src/kernel/defs.rs",
         "category": "kernel acceptance and primitive meaning",
-        "physical_lines": 636
+        "physical_lines": 661
       },
       {
         "path": "src/kernel/depth.rs",
@@ -1313,7 +1313,7 @@
       {
         "path": "src/exec/check.rs",
         "category": "check IR acceptance and native contracts",
-        "physical_lines": 781
+        "physical_lines": 823
       },
       {
         "path": "src/exec/buffer.rs",
@@ -1323,22 +1323,22 @@
       {
         "path": "src/exec/ir.rs",
         "category": "check IR acceptance and native contracts",
-        "physical_lines": 272
+        "physical_lines": 282
       },
       {
         "path": "src/erased/check.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 832
+        "physical_lines": 988
       },
       {
         "path": "src/erased/erase.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 1040
+        "physical_lines": 1067
       },
       {
         "path": "src/erased/cleanup.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 676
+        "physical_lines": 682
       },
       {
         "path": "src/erased/facade.rs",
@@ -1348,17 +1348,17 @@
       {
         "path": "src/erased/rust.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 1481
+        "physical_lines": 1601
       },
       {
         "path": "src/erased/tree.rs",
         "category": "erasure, independent layout checker, cleanup and Rust generation",
-        "physical_lines": 329
+        "physical_lines": 359
       },
       {
         "path": "src/elab/items.rs",
         "category": "mixed: Rust export/forgery boundary; remainder elaboration untrusted",
-        "physical_lines": 2215
+        "physical_lines": 2221
       },
       {
         "path": "src/build.rs",
@@ -1368,12 +1368,12 @@
       {
         "path": "src/project/load.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 520
+        "physical_lines": 543
       },
       {
         "path": "src/project/resolve.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 1406
+        "physical_lines": 1508
       },
       {
         "path": "src/project/check.rs",
@@ -1383,7 +1383,7 @@
       {
         "path": "src/project/export.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 638
+        "physical_lines": 650
       },
       {
         "path": "src/project/cargo.rs",
@@ -1403,12 +1403,12 @@
       {
         "path": "src/elab/env.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 635
+        "physical_lines": 659
       },
       {
         "path": "src/elab/calls.rs",
         "category": "module identity, source privacy, Cargo identity and Rust export boundary",
-        "physical_lines": 820
+        "physical_lines": 834
       },
       {
         "path": "src/elab/data.rs",
@@ -1428,22 +1428,22 @@
       {
         "path": "src/project/specs.rs",
         "category": "opaque spec identity, contract matching and checked adapter lowering",
-        "physical_lines": 1143
+        "physical_lines": 1175
       },
       {
         "path": "src/project/specs/walk.rs",
         "category": "structural substitution used by opaque spec lowering",
-        "physical_lines": 380
+        "physical_lines": 436
       },
       {
         "path": "src/imports/model.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
-        "physical_lines": 376
+        "physical_lines": 393
       },
       {
         "path": "src/imports/extract.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
-        "physical_lines": 567
+        "physical_lines": 589
       },
       {
         "path": "src/imports/capture.rs",
@@ -1453,7 +1453,7 @@
       {
         "path": "src/imports/mod.rs",
         "category": "native signature extraction, provenance and physical-only execution boundary",
-        "physical_lines": 243
+        "physical_lines": 340
       },
       {
         "path": "src/elab/native.rs",
@@ -1469,20 +1469,60 @@
         "path": "src/target.rs",
         "category": "whole-compiler target layout selection",
         "physical_lines": 124
+      },
+      {
+        "path": "src/project/traits.rs",
+        "category": "trait identity, coherence, contract matching and concrete selection",
+        "physical_lines": 694
+      },
+      {
+        "path": "src/imports/traits.rs",
+        "category": "normalized physical Rust trait interfaces and native validation",
+        "physical_lines": 246
+      },
+      {
+        "path": "src/project/export/traits.rs",
+        "category": "physical trait export and forwarding boundary",
+        "physical_lines": 391
+      },
+      {
+        "path": "src/project/trait_bounds.rs",
+        "category": "generic selection, obligations and source preservation",
+        "physical_lines": 1267
+      },
+      {
+        "path": "src/elab/generics/bounds.rs",
+        "category": "generic selection, obligations and source preservation",
+        "physical_lines": 352
+      },
+      {
+        "path": "src/exec/dynamic.rs",
+        "category": "checking IR and dynamic signature validation",
+        "physical_lines": 118
+      },
+      {
+        "path": "src/typed/dynamic.rs",
+        "category": "checked dynamic adapters and reference layouts",
+        "physical_lines": 183
+      },
+      {
+        "path": "src/elab/dynamic.rs",
+        "category": "source dynamic interface and implementation selection",
+        "physical_lines": 376
       }
     ],
     "specification": {
-      "paragraphs": 570,
-      "normative": 381,
-      "citations": 644,
-      "focused_tests": 386
+      "paragraphs": 622,
+      "normative": 412,
+      "citations": 701,
+      "focused_tests": 435
     },
     "benchmark": {
       "epoch": "4798fc0b00fbe1bb59179d8dd9d3903af00a8877d0bc2c4279a397c3a1519b69",
-      "records": 10,
-      "observed_days": 1.3976154003935184,
+      "records": 15,
+      "observed_days": 1.936854687337963,
       "two_week_window_complete": false,
-      "headline_index": 164.60033148675558,
+      "headline_index": 157.5943718894582,
       "freshness": {
         "status": "current",
         "commits": 0
@@ -1500,14 +1540,19 @@
             398596125,
             412923125,
             433914375,
-            441843292
+            441843292,
+            403221542,
+            401339375,
+            402442791,
+            400760709,
+            429620292
           ],
-          "sparkline": "▄▂▆▁▃▇▂▄▇█",
+          "sparkline": "▄▂▆▁▃▇▂▄▇█▂▂▂▂▆",
           "comparison": {
-            "baseline_median_ns": 410144583,
+            "baseline_median_ns": 405706312.0,
             "k": 6,
-            "median_ns": 441843292,
-            "pooled_dispersion_ns": 14254385.885752482,
+            "median_ns": 429620292,
+            "pooled_dispersion_ns": 7875751.841999016,
             "status": "stable"
           }
         },
@@ -1523,14 +1568,19 @@
             23534750,
             25995459,
             25774791,
-            46090541
+            46090541,
+            23221500,
+            23712749,
+            24022167,
+            23818667,
+            43798292
           ],
-          "sparkline": "▁▁▂▁▁▂▁▂▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█▁▁▁▁▇",
           "comparison": {
-            "baseline_median_ns": 24446376,
+            "baseline_median_ns": 24271541.5,
             "k": 6,
-            "median_ns": 46090541,
-            "pooled_dispersion_ns": 1183230.1943828552,
+            "median_ns": 43798292,
+            "pooled_dispersion_ns": 853605.822026649,
             "status": "slowdown"
           }
         },
@@ -1546,14 +1596,19 @@
             44869876,
             47535542,
             47412583,
-            70085876
+            70085876,
+            42880583,
+            45190582,
+            44101376,
+            42902750,
+            66250917
           ],
-          "sparkline": "▂▁▂▁▁▂▁▂▂█",
+          "sparkline": "▂▁▂▁▁▂▂▂▂█▁▂▁▁▇",
           "comparison": {
-            "baseline_median_ns": 46503500,
+            "baseline_median_ns": 44973938.0,
             "k": 6,
-            "median_ns": 70085876,
-            "pooled_dispersion_ns": 1532431.34634947,
+            "median_ns": 66250917,
+            "pooled_dispersion_ns": 2138924.6040439284,
             "status": "slowdown"
           }
         },
@@ -1569,14 +1624,19 @@
             24709083,
             25968000,
             26749125,
-            47938542
+            47938542,
+            24185584,
+            25252959,
+            24797625,
+            24220583,
+            45599375
           ],
-          "sparkline": "▁▁▂▁▁▂▁▁▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█▁▁▁▁▇",
           "comparison": {
-            "baseline_median_ns": 25183750,
+            "baseline_median_ns": 25149292.5,
             "k": 6,
-            "median_ns": 47938542,
-            "pooled_dispersion_ns": 907949.1467493693,
+            "median_ns": 45599375,
+            "pooled_dispersion_ns": 964037.6185422391,
             "status": "slowdown"
           }
         },
@@ -1592,14 +1652,19 @@
             44094208,
             45014416,
             48401792,
-            70705709
+            70705709,
+            43438291,
+            45206167,
+            44621042,
+            43250166,
+            66720750
           ],
-          "sparkline": "▂▁▂▁▁▂▁▁▂█",
+          "sparkline": "▂▁▂▁▁▂▁▁▂█▁▁▁▁▇",
           "comparison": {
-            "baseline_median_ns": 45415166,
+            "baseline_median_ns": 45004728.5,
             "k": 6,
-            "median_ns": 70705709,
-            "pooled_dispersion_ns": 1775039.5547975488,
+            "median_ns": 66720750,
+            "pooled_dispersion_ns": 1716233.9774820479,
             "status": "slowdown"
           }
         },
@@ -1615,14 +1680,19 @@
             57783334,
             63369291,
             64792292,
-            91266251
+            91266251,
+            58017625,
+            61244876,
+            58869958,
+            58221417,
+            84792166
           ],
-          "sparkline": "▁▁▂▁▁▂▁▂▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█▁▂▁▁▇",
           "comparison": {
-            "baseline_median_ns": 60328583,
+            "baseline_median_ns": 60080562.0,
             "k": 6,
-            "median_ns": 91266251,
-            "pooled_dispersion_ns": 2659997.372175356,
+            "median_ns": 84792166,
+            "pooled_dispersion_ns": 2246434.09645746,
             "status": "slowdown"
           }
         },
@@ -1638,14 +1708,19 @@
             24698666,
             26314208,
             27070500,
-            45085000
+            45085000,
+            24437083,
+            25804625,
+            24805208,
+            24796043,
+            44389333
           ],
-          "sparkline": "▁▁▂▁▂▂▁▂▂█",
+          "sparkline": "▁▁▂▁▂▂▁▂▂█▁▁▁▁█",
           "comparison": {
-            "baseline_median_ns": 25815917,
+            "baseline_median_ns": 25923458.5,
             "k": 6,
-            "median_ns": 45085000,
-            "pooled_dispersion_ns": 922092.2533200928,
+            "median_ns": 44389333,
+            "pooled_dispersion_ns": 1178542.8269856907,
             "status": "slowdown"
           }
         },
@@ -1661,14 +1736,19 @@
             22253125,
             22845167,
             24183709,
-            43446000
+            43446000,
+            21994000,
+            23136708,
+            21979667,
+            21536416,
+            41393376
           ],
-          "sparkline": "▁▁▂▁▁▂▁▁▂█",
+          "sparkline": "▂▁▂▁▁▂▁▁▂█▁▂▁▁▇",
           "comparison": {
-            "baseline_median_ns": 22733999,
+            "baseline_median_ns": 22526875.5,
             "k": 6,
-            "median_ns": 43446000,
-            "pooled_dispersion_ns": 946485.7888976207,
+            "median_ns": 41393376,
+            "pooled_dispersion_ns": 885368.8913323375,
             "status": "slowdown"
           }
         },
@@ -1684,14 +1764,19 @@
             31076417,
             33619000,
             34161000,
-            51895667
+            51895667,
+            30740542,
+            32075333,
+            31286083,
+            30689958,
+            50699416
           ],
-          "sparkline": "▁▁▂▁▁▂▁▂▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█▁▁▁▁█",
           "comparison": {
-            "baseline_median_ns": 32116917,
+            "baseline_median_ns": 31528792.0,
             "k": 6,
-            "median_ns": 51895667,
-            "pooled_dispersion_ns": 1120476.9923809145,
+            "median_ns": 50699416,
+            "pooled_dispersion_ns": 882616.7064451565,
             "status": "slowdown"
           }
         },
@@ -1707,19 +1792,24 @@
             18724208,
             20512041,
             20711416,
-            39720083
+            39720083,
+            18895793,
+            19553041,
+            19092583,
+            18678209,
+            38517791
           ],
-          "sparkline": "▁▁▂▁▁▂▁▂▂█",
+          "sparkline": "▁▁▂▁▁▂▁▂▂█▁▁▁▁█",
           "comparison": {
-            "baseline_median_ns": 19856292,
+            "baseline_median_ns": 19491478.5,
             "k": 6,
-            "median_ns": 39720083,
-            "pooled_dispersion_ns": 1511541.8466201553,
+            "median_ns": 38517791,
+            "pooled_dispersion_ns": 803155.8656884106,
             "status": "slowdown"
           }
         }
       ]
     },
-    "benchmark_record_sha256": "a713d777e1c4d78e3b364fe9027789a3c0c5b931167f85ccb2042d87294713ab"
+    "benchmark_record_sha256": "4509ebadab32a93e286db7477052c2186edaf7634f87c2caf90ed47d73b2b1f8"
   }
 }

@@ -52,7 +52,7 @@ fn calculus_grammar_covers_every_check_ir_constructor() {
         (
             ir,
             "Tail",
-            "Value Break Continue Match Return Panic Foreign",
+            "Value Break Continue Match Return Panic Foreign DynPack DynCall",
         ),
         (ir, "BufferStorage", "Array Slice Vector"),
         (native, "BufferOp", "Literal Length Get Set Push"),
@@ -71,6 +71,7 @@ fn calculus_grammar_covers_every_check_ir_constructor() {
         "IR-Bind",
         "IR-Call",
         "IR-Foreign",
+        "IR-Dynamic",
         "IR-Match",
         "IR-Loop",
         "IR-For",

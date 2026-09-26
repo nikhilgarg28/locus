@@ -208,6 +208,16 @@ pub struct Arm {
 
 #[derive(Clone, Debug)]
 pub enum Tail {
+    DynPack {
+        table: super::DynTableId,
+        value: Term,
+    },
+    DynCall {
+        interface: crate::kernel::StructId,
+        slot: usize,
+        receiver: Term,
+        arguments: Vec<Term>,
+    },
     /// A Rust-native operation. The boundary admits only physical scalar/tuple
     /// types and supplies no logical contract or effect promise.
     Foreign {

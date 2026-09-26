@@ -24,7 +24,7 @@ Locus is tested through independent checks, hostile inputs, interpreter comparis
 ## Not in the language
 
 <!-- spec: 1.24:1 legality-rule -->
-- General runtime recursion, runtime closures, generic trait bounds, and dynamic dispatch.
+- General runtime recursion, runtime closures, and dynamic dispatch beyond the shared physical trait-object tier.
 - Stored mutable references, interior mutability, raw pointers, unsafe code, and async.
 - 128-bit integers, floats, characters, and byte strings.
 - Bit operators, compound assignment, iterator-based `for`, `while let`, `if let`, `?`, labels, and deep enum patterns.

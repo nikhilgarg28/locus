@@ -68,6 +68,11 @@ impl Env<'_> {
         &mut self,
         parameter: &ast::Parameter,
     ) -> Elab<(Written, Passing)> {
+        if super::dynamic::borrowed_dyn(&parameter.ty).is_some() {
+            return self
+                .dynamic_reference(&parameter.ty)
+                .map(|w| (w, Passing::Value));
+        }
         match &parameter.ty.kind {
             ast::TypeKind::Ref { mutable, inner, .. } => {
                 if parameter.mutable {

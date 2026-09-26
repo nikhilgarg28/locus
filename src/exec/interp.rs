@@ -302,6 +302,34 @@ impl<'p> CheckInterpreter<'p> {
             }
         }
         match &block.tail {
+            Tail::DynPack { table, value } => Ok(Flow::Value(Value::Dynamic(
+                *table,
+                Box::new(self.term(value)?),
+            ))),
+            Tail::DynCall {
+                interface,
+                slot,
+                receiver,
+                arguments,
+            } => {
+                let Value::Dynamic(table, concrete) = self.term(receiver)? else {
+                    return stuck("dynamic receiver required");
+                };
+                let table = self
+                    .program
+                    .dyn_table(table)
+                    .filter(|t| t.interface == *interface)
+                    .ok_or_else(|| RunError::Stuck("dynamic table mismatch".into()))?;
+                let callee = *table
+                    .methods
+                    .get(*slot)
+                    .ok_or_else(|| RunError::Stuck("dynamic slot missing".into()))?;
+                let mut values = vec![*concrete];
+                for argument in arguments {
+                    values.push(self.term(argument)?);
+                }
+                self.enter(FnRef::Exec(callee), values).map(Flow::Value)
+            }
             Tail::Foreign { path, .. } => Err(RunError::Native(path.clone()).into()),
             Tail::Value(value) => Ok(Flow::Value(self.term(value)?)),
             Tail::Break(value) => Ok(Flow::Break(self.term(value)?)),

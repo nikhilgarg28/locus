@@ -125,6 +125,14 @@ impl Env<'_> {
         if same_type(&value.ty, expected) {
             return Ok(value);
         }
+        if !value.never
+            && self
+                .dynamics
+                .iter()
+                .any(|d| *expected == Type::Struct(d.id))
+        {
+            return self.dynamic_coercion(value, expected, span);
+        }
         if self.is_natural(&value.ty) && *expected == Type::Int {
             return self.natural_integer(value, span);
         }

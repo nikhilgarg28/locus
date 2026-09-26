@@ -35,11 +35,37 @@ impl EType {
 #[derive(Clone, Debug, Default)]
 pub struct Module {
     pub pointer_width: crate::kernel::PointerWidth,
+    pub dynamics: Vec<EDynInterface>,
+    pub dyn_tables: Vec<EDynTable>,
     pub structs: Vec<EStruct>,
     pub enums: Vec<EEnum>,
     pub fns: Vec<EFn>,
 }
 
+#[derive(Clone, Debug)]
+pub struct EDynInterface {
+    pub id: StructId,
+    pub name: String,
+    pub methods: Vec<EDynMethod>,
+}
+#[derive(Clone, Debug)]
+pub struct EDynMethod {
+    pub name: String,
+    pub params: Vec<EType>,
+    pub result: EType,
+}
+#[derive(Clone, Debug)]
+pub struct EDynTable {
+    pub id: crate::exec::DynTableId,
+    pub interface: StructId,
+    pub concrete: EType,
+    pub methods: Vec<FnRef>,
+}
+#[derive(Clone, Debug)]
+pub enum DynOperation {
+    Pack(crate::exec::DynTableId),
+    Call { interface: StructId, slot: usize },
+}
 #[derive(Clone, Debug)]
 pub struct EStruct {
     pub shape: crate::ast::VariantShape,
@@ -177,6 +203,10 @@ pub enum EPattern {
 
 #[derive(Clone, Debug)]
 pub enum EExpr {
+    Dynamic {
+        operation: DynOperation,
+        arguments: Vec<EExpr>,
+    },
     NativeCall {
         path: String,
         arguments: Vec<EExpr>,

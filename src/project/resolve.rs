@@ -1201,6 +1201,12 @@ impl Rewriter<'_> {
     }
     fn ty(&mut self, t: &mut Type) {
         match &mut t.kind {
+            TypeKind::Dyn(bound) => {
+                self.path(&mut bound.path, Namespace::Type);
+                for (_, ty) in &mut bound.associated {
+                    self.ty(ty);
+                }
+            }
             TypeKind::Named(n) => self.name(n, Namespace::Type),
             TypeKind::Path { path, arguments } => {
                 self.path(path, Namespace::Type);

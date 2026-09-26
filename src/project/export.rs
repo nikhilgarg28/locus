@@ -389,6 +389,10 @@ impl Interface<'_> {
                 self.ty(r, &format!("{path} -> callback result"), at);
             }
             EType::Struct(id) | EType::StructApplied(id, _) => {
+                if self.module.dynamics.iter().any(|d| d.id == *id) {
+                    self.error(path, at, at, "trait objects are internal to Locus in this tier; Rust export of dyn signatures is deferred");
+                    return;
+                }
                 let Some(s) = self.module.structs.iter().find(|s| s.id == *id) else {
                     return;
                 };

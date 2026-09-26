@@ -21,6 +21,7 @@ use super::ir::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecError {
     InvalidForeign,
+    InvalidDyn(&'static str),
     InvalidBuffer(&'static str),
     /// The kernel rejected a term, a type, or a proof.
     Kernel(KernelError),
@@ -75,6 +76,7 @@ impl From<KernelError> for ExecError {
 impl fmt::Display for ExecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidDyn(reason) => write!(f, "invalid dynamic dispatch: {reason}"),
             Self::InvalidForeign => write!(f, "native calls require physical scalar/tuple types and make no effect promises"),
             Self::InvalidBuffer(reason) => write!(f, "invalid collection operation: {reason}"),
             Self::Kernel(error) => write!(f, "{error}"),
@@ -138,6 +140,8 @@ impl std::error::Error for ExecError {}
 #[derive(Clone, Debug)]
 pub struct Program {
     pointer_width: crate::kernel::PointerWidth,
+    pub(super) dynamics: Vec<super::DynInterface>,
+    pub(super) dyn_tables: Vec<super::DynTable>,
     definitions: Definitions,
     fns: Vec<ExecFn>,
     trusted: Vec<TrustedContract>,
@@ -192,6 +196,8 @@ impl Program {
         Self {
             pointer_width,
             definitions,
+            dynamics: Vec::new(),
+            dyn_tables: Vec::new(),
             fns: Vec::new(),
             trusted: Vec::new(),
         }
@@ -330,6 +336,42 @@ impl Program {
             self.check_stmt(ctx, stmt, declared, loops)?;
         }
         match &block.tail {
+            Tail::DynPack { table, value } => {
+                let table = self
+                    .dyn_table(*table)
+                    .ok_or(ExecError::InvalidDyn("unknown table"))?;
+                if expected.is_none_or(|e| !same_type(e, &Type::Struct(table.interface))) {
+                    return Err(ExecError::InvalidDyn("pack result type"));
+                }
+                expect(ctx, value, &table.concrete, &self.definitions)
+            }
+            Tail::DynCall {
+                interface,
+                slot,
+                receiver,
+                arguments,
+            } => {
+                if declared.promises != Promises::default() {
+                    return Err(ExecError::InvalidDyn(
+                        "dynamic calls make no effect promises",
+                    ));
+                }
+                let method = self
+                    .dyn_interface(*interface)
+                    .and_then(|d| d.methods.get(*slot))
+                    .ok_or(ExecError::InvalidDyn("unknown interface or slot"))?;
+                expect(ctx, receiver, &Type::Struct(*interface), &self.definitions)?;
+                let result = check_call(
+                    ctx,
+                    &Type::Fn(method.params.clone(), Box::new(method.result.clone())),
+                    arguments,
+                    Mode::Executable,
+                )?;
+                if expected.is_none_or(|e| !same_type(e, &result)) {
+                    return Err(ExecError::InvalidDyn("dispatch result type"));
+                }
+                Ok(())
+            }
             Tail::Foreign {
                 arguments, result, ..
             } => {

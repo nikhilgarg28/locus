@@ -1,0 +1,4 @@
+//~ spec: 1.31:55
+trait Read { fn read(&self) -> u8; }
+fn bad(value: dyn Read) {}
+//~^ error: L0518

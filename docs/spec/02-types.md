@@ -229,6 +229,11 @@ fn demo() -> Option<u8> {
 //~ run: demo() => Some(8)
 ~~~
 
+## Borrowed trait objects: &dyn Trait
+
+<!-- spec: 1.31:64 informative -->
+A shared trait object holds a borrow and the selected implementation of a physical interface. Its concrete type is hidden; calls dispatch at runtime. Associated types must be fixed, and only the supported physical methods are available. See [shared trait objects](20-traits.md#shared-trait-objects) for examples and the initial restrictions.
+
 ## Owned indirection: Box<T>
 
 <!-- spec: 1.91:9 informative -->

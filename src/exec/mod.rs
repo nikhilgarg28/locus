@@ -7,6 +7,8 @@
 //! the kernel statements of specification section 6.3. It is trusted.
 
 mod buffer;
+mod dynamic;
+pub use dynamic::{DynInterface, DynMethod, DynTable, DynTableId};
 mod check;
 mod interp;
 mod ir;

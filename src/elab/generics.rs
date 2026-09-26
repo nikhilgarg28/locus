@@ -611,6 +611,11 @@ impl Specializer<'_> {
             return;
         }
         match &mut ty.kind {
+            TypeKind::Dyn(bound) => {
+                for (_, ty) in &mut bound.associated {
+                    self.ty(ty, substitutions, locals);
+                }
+            }
             TypeKind::Scoped { claims, .. } => {
                 for claim in claims {
                     self.expr(claim, None, substitutions, locals);

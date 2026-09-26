@@ -36,6 +36,7 @@ use super::tree::{EBlock, EExpr, EPattern, EPlace, EStmt, Module};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
+    Dynamic(crate::exec::DynTableId, Box<Value>),
     Buffer(Vec<Value>),
     Bool(bool),
     /// A machine integer with its type. An `i128` holds every value of
@@ -542,6 +543,37 @@ impl<'m> Interpreter<'m> {
             // The arguments in order, a lend reading its place; then the
             // call, and its `&mut` places written back, whether it returned
             // or panicked.
+            EExpr::Dynamic {
+                operation,
+                arguments,
+            } => {
+                let mut args = match self.all(arguments)? {
+                    Ok(v) => v,
+                    Err(flow) => return Ok(flow),
+                };
+                match operation {
+                    super::DynOperation::Pack(table) => {
+                        Value::Dynamic(*table, Box::new(args.remove(0)))
+                    }
+                    super::DynOperation::Call { interface, slot } => {
+                        let Value::Dynamic(table, concrete) = args.remove(0) else {
+                            return stuck("dynamic receiver required");
+                        };
+                        let table = self
+                            .module
+                            .dyn_tables
+                            .iter()
+                            .find(|t| t.id == table && t.interface == *interface)
+                            .ok_or_else(|| RunError::Stuck("dynamic table mismatch".into()))?;
+                        let callee = *table
+                            .methods
+                            .get(*slot)
+                            .ok_or_else(|| RunError::Stuck("dynamic slot missing".into()))?;
+                        args.insert(0, *concrete);
+                        self.enter(callee, args)?.0
+                    }
+                }
+            }
             EExpr::NativeCall {
                 path, arguments, ..
             } => {

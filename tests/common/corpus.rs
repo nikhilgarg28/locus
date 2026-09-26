@@ -777,6 +777,28 @@ pub fn examine_inner(name: &str, text: &str) -> Examined {
             compiled: None,
         };
     };
+    // Module/trait resolution gives executable items canonical names. Run lines
+    // use source names; resolve through the elaborator's identity mapping rather
+    // than guessing a generated-name suffix (which can select another module).
+    let found = found
+        .into_iter()
+        .map(|(at, mut directive)| {
+            if let Directive::Run { call, .. } = &mut directive
+                && let Some((name, arguments)) = call.split_once('(')
+                && let Some((_, reference)) =
+                    elaborated.functions.iter().find(|(n, _)| n == name.trim())
+                && let Some(function) = elaborated
+                    .session
+                    .erased()
+                    .fns
+                    .iter()
+                    .find(|f| f.reference == *reference)
+            {
+                *call = format!("{}({arguments}", function.name);
+            }
+            (at, directive)
+        })
+        .collect();
     let subject = Subject {
         module: elaborated.session.erased(),
         program: Some(elaborated.session.program()),
@@ -1345,6 +1367,9 @@ pub fn rust_value(value: &Value, module: &Module, path: &str) -> String {
     match value {
         // A bare number: the parameter's type fixes it, a negative one
         // included.
+        Value::Dynamic(..) => {
+            panic!("borrowed trait objects must be constructed inside the Locus test program")
+        }
         Value::Buffer(items) => format!("vec![{}]", all(items).join(", ")),
         Value::Bool(_) | Value::Int(..) => value.debug(module),
         Value::Proved | Value::Ghost => format!("{path}::{}", value.debug(module)),

@@ -41,10 +41,10 @@ Explicit follow-ups: generic trait parameters/supertraits (LOC-263), method-loca
 Logical closures with immutable captures and dependent results are complete ([LOC-225](reconciliation.md#LOC-225); tests/reconcile_closures.rs). Remaining: runtime capture ownership, Fn/FnMut/FnOnce calls and emitted Rust closure behavior. Depends on traits ([LOC-21](generics.md#LOC-21)) and broader borrowing ([LOC-33](memory-layout.md#LOC-33)).
 
 <a id="LOC-34"></a>
-## LOC-34 · Dynamic trait objects and their proof boundary
-<!-- task: {"id": "t41", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+## LOC-34 · Shared dynamic trait objects
+<!-- task: {"id": "t41", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
 
-Deferred until traits and runtime callable/layout rules exist. Decide supported object-safe contracts, vtables, erased evidence and ownership before adding dyn. [LOC-23](core-build.md#LOC-23) records the earlier non-goal; it is not a second implementation backlog.
+Implemented the [borrowed dyn plan](../plans/borrowed-dyn.md): shared physical interfaces, fixed associated types, checked implementation selection, opaque snapshots, both interpreters and real Rust trait-object emission. Shared locals, fields and input-linked results reuse the existing provenance checker. Validation covers hostile tables, lifetime/ownership failures, runtime branch selection and a completed extended gate. The plan records the coverage and measured validation results. Broader interface shapes and ownership are LOC-269; proof-bearing objects are LOC-270; external Rust object identities are LOC-271. [LOC-23](core-build.md#LOC-23) records the earlier non-goal.
 
 <a id="LOC-69"></a>
 ## LOC-69 · Question-mark propagation and let-else
@@ -221,3 +221,21 @@ Extend complete named-family implementations to partial type patterns, bare-para
 <!-- task: {"id": "bounds-268", "status": "backlog", "priority": 1} -->
 
 Extend the independent checking-IR interpreter to recognize logical callable values through bindings and projections. A literal lambda already skips its logical computation; `let f = |x: T| x; f(value)` can instead report `a call through a function value`. Source checking and erased execution support this form. `tests/trait_bounds.rs` pins the exact interpreter limitation while checking the accepted program and erased result; an unexpected pass must remove the known-bug marker. Cover proof-valued results and preserve ordinary callee/argument effects before claiming differential coverage for this case.
+
+<a id="LOC-269"></a>
+## LOC-269 · Broader dyn compatibility and ownership
+<!-- task: {"id": "dyn-269", "status": "backlog", "priority": 1} -->
+
+Extend shared physical objects to generic implementation families and nominal/reference method signatures. Add compiler-owned Sized bounds and Self: Sized method exclusions before supporting general ?Sized helpers; reject unsized value positions independently of trait lookup. Coordinate supertrait/upcasting and generic methods with LOC-263–264, general DSTs with LOC-50, mutable receivers/objects with LOC-33 and owned objects/destruction with LOC-48. Define auto-trait, downcasting and lifetime rules before admitting those forms. Each added form must agree in both interpreters and warning-denied Rust, with hostile borrow/layout cases.
+
+<a id="LOC-270"></a>
+## LOC-270 · Logical observers and proof-bearing dyn interfaces
+<!-- task: {"id": "dyn-270", "status": "backlog", "priority": 1} -->
+
+Define abstract logical observations, method input/output evidence and hidden concrete type identity for dynamic interfaces. Keep proofs tied to the selected implementation and the right snapshots; erasure must not permit substituting an unrelated marker or observer. Decide admissible associated logical types and laws, and account for mutation/interior mutability (LOC-47) and promises (LOC-261). The physical dyn slice supplies no such facts or assumptions.
+
+<a id="LOC-271"></a>
+## LOC-271 · Rust trait-object import and export identity
+<!-- task: {"id": "dyn-271", "status": "backlog", "priority": 1} -->
+
+Preserve original native/source trait identity across a public dyn ABI, including associated bindings, supported receivers, default methods and lifetime bounds. Admit arbitrary Rust implementors only for interfaces whose guarantees Rust actually enforces. Reject logical/proof/promise leakage throughout reachable public types. Test rustdoc imports, Cargo target/features, native caller-provided objects and hostile reimplementations. Internal specialized Rust dyn traits from LOC-34 are deliberately private and cannot be reused as an exported source-trait identity.

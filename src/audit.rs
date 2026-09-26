@@ -150,6 +150,17 @@ fn walk(block: &Block, path: &str, definitions: &Definitions, entries: &mut Vec<
     }
     let site = format!("{path}/end");
     match &block.tail {
+        Tail::DynPack { value, .. } => term(value, &site, definitions, entries),
+        Tail::DynCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            term(receiver, &site, definitions, entries);
+            for value in arguments {
+                term(value, &site, definitions, entries);
+            }
+        }
         Tail::Foreign {
             path, arguments, ..
         } => {

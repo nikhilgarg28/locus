@@ -84,6 +84,14 @@ Run `cargo test --locked --offline --test atlas_fences` when executable document
 
 For visible site changes, inspect desktop and narrow/mobile layouts, navigation, code blocks, search, and test disclosures in a real browser. Keep the site readable without JavaScript and working below a path prefix such as `/locus/`. Validate links and source escaping. Keep dependencies pinned and avoid unnecessary client-side frameworks or external assets.
 
+## Test new language machinery across its boundaries
+
+For every new language construct, write a coverage matrix before calling the work complete. Include accepted and rejected syntax, name/type resolution, interactions with existing control flow and data shapes, ownership and snapshot failures, erasure/effects, export/import boundaries, diagnostics, and source-file/package boundaries where relevant. Explain any deferred part in the owning plan or task.
+
+Exercise the independent checking IR and erased checker with malformed inputs as well as compiler-produced inputs. For executable behavior, compare both interpreters and warning-denied Rust, including overflow modes, panics, evaluation order and deterministic generated cases where relevant. Proof-related changes need both valid evidence and near-miss/stale evidence tests, plus stored-proof replay when affected. A parser test or one happy-path example is not sufficient evidence for a new feature.
+
+Prefer tests of observable behavior and soundness boundaries over tests mirroring helper implementations. Keep minimal regressions for discovered bugs; do not convert failures to expected errors just to make the suite pass. Use isolated temporary projects for CLI/build tests so they cannot alter a developer’s proof lockfiles. Report the coverage and material omissions, not merely a test count.
+
 ## Keep measured claims honest
 
 Never invent timings, test counts, or historical samples. Do not hand-edit generated measurements to make status look current. The compiler benchmarks use the `locus-bench-data` branch; local gate timing history is separate. Compare only compatible benchmark epochs and disclose revision, date, and dirty status.

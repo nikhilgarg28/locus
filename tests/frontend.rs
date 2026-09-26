@@ -2723,7 +2723,7 @@ const RUST_KEYWORDS: &[&str] = &[
 #[test]
 fn every_rust_keyword_is_reserved_in_every_name_position() {
     assert_eq!(RUST_KEYWORDS.len(), 38 + 14);
-    // `true` and `false` are patterns, and `fn` begins a type.
+    // `true` and `false` are patterns; `fn` and `dyn` begin types.
     let positions: &[(&str, &str, &[&str])] = &[
         ("a function", "fn {}() -> u8 { 1 }", &[]),
         ("a parameter", "fn f({}: u8) -> u8 { 1 }", &[]),
@@ -2739,7 +2739,7 @@ fn every_rust_keyword_is_reserved_in_every_name_position() {
             "fn f() -> ({}: u8, bool) { (1, true) }",
             &[],
         ),
-        ("a type", "fn f(x: {}) -> u8 { 1 }", &["fn"]),
+        ("a type", "fn f(x: {}) -> u8 { 1 }", &["fn", "dyn"]),
         (
             "a binding",
             "fn f() -> u8 { let {} = 1; 1 }",
@@ -3392,11 +3392,6 @@ fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
             1,
         ),
         ("async fn f() -> u8 { 1 }", "`async` is not in Locus yet", 1),
-        (
-            "fn f(x: dyn T) -> u8 { 1 }",
-            "`dyn` trait objects are not in Locus yet",
-            0,
-        ),
         (
             "fn f(x: impl T) -> u8 { 1 }",
             "`impl Trait` types are not in Locus yet",
@@ -4380,4 +4375,33 @@ fn trait_bound_headers_and_complete_inherent_families_parse() {
                 .contains("cover its type family exactly")
         );
     }
+}
+
+#[test]
+#[doc = "spec: 1.31:50"]
+fn shared_dyn_types_parse_paths_lifetimes_and_associated_bindings() {
+    let parsed = parse_text("fn f<'a>(x: &'a dyn crate::Reader<Item = (u8, bool)>) {}");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    let locus::ast::DeclarationKind::Function { parameters, .. } =
+        &parsed.program.declarations[0].kind
+    else {
+        panic!("function");
+    };
+    let TypeKind::Ref {
+        lifetime,
+        mutable,
+        inner,
+    } = &parameters[0].ty.kind
+    else {
+        panic!("reference");
+    };
+    assert!(!mutable);
+    assert!(lifetime.is_some());
+    let TypeKind::Dyn(bound) = &inner.kind else {
+        panic!("dyn");
+    };
+    assert_eq!(bound.path.text(), "crate::Reader");
+    assert_eq!(bound.associated.len(), 1);
+    assert_eq!(bound.associated[0].0.text, "Item");
+    assert!(matches!(&bound.associated[0].1.kind, TypeKind::Tuple(fields) if fields.len() == 2));
 }

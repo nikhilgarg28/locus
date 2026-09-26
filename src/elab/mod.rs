@@ -17,6 +17,7 @@ mod closures;
 mod collections;
 mod control;
 mod data;
+mod dynamic;
 mod env;
 mod explain;
 mod exprs;

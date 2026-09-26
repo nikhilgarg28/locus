@@ -188,6 +188,7 @@ pub(super) fn dependency_order(
                             Vec::new()
                         } else { models.get(name).into_iter().flatten().copied().filter(|found| *found != index).collect() }
                     },
+                    Namespace::Dynamic => access.into_iter().flat_map(|a| a.traits.iter()).filter(|m| m.interface == *name).flat_map(|m| methods.get(m.lowered.as_str()).into_iter().flatten().copied()).collect(),
                     Namespace::Method => methods
                         .get(name.as_str())
                         .into_iter()
@@ -365,6 +366,7 @@ fn strongly_connected(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
 /// `Method` is a call `x.f(..)`, which is every `f` an `impl` block has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Namespace {
+    Dynamic,
     Type,
     Value,
     Applied,
@@ -633,6 +635,12 @@ impl Mentions<'_> {
             self.logical = true;
         }
         match &ty.kind {
+            TypeKind::Dyn(bound) => {
+                self.names.insert((Namespace::Dynamic, bound.path.text()));
+                for (_, ty) in &bound.associated {
+                    self.ty(ty);
+                }
+            }
             TypeKind::Scoped { name, claims } => {
                 self.type_name(name);
                 claims.iter().for_each(|claim| self.expr(claim));

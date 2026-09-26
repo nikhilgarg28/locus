@@ -30,6 +30,7 @@ Stmt   ::= Let(x,h,T?,t) | Have(h,P,p) | Call(x,f,args)
          | BoxNew(x,h,t,logical_payload)
 Tail   ::= Value(t) | Break(t) | Continue(ts) | Match(t,arms)
          | Return(t) | Panic(message,unreachable?) | Foreign(path,args,T)
+         | DynPack(table,t) | DynCall(interface,slot,receiver,args)
 Arm    ::= (payload identities, branch hypothesis identity, Block)
 Storage::= Array(n) | Slice | Vector
 BufferOp ::= Literal | Length | Get | Set | Push
@@ -178,3 +179,14 @@ For each selected pair `(Trait, ConcreteType)`, substitute Self and associated b
 
 <!-- spec: 3.12:2 legality-rule -->
 A generic instantiation substitutes source types only after satisfying its declared trait and associated-type requirements. Calls selected through an abstract bound retain that trait member identity across substitution; unrelated inherent members cannot replace them. Conditional implementations and methods become available only when their requirements hold. Each resulting body still passes the ordinary checking, ownership, logical classification and erasure judgments. Associated Logical requirements remain obligations even without method calls. No runtime dictionary or kernel axiom is introduced, and this does not establish universal checking of unused templates. Open generic Rust exports must not silently discard these constraints.
+
+## Borrowed dynamic dispatch
+
+<!-- spec: 3.12:3 legality-rule -->
+A dynamic interface declares a fresh opaque kernel snapshot type and fixed scalar/tuple method signatures. A dispatch table binds one physical nominal receiver type to previously checked functions. The checker requires one table per interface/concrete-type pair, exactly one target per slot, and exact parameter/result types after replacing the receiver with that concrete type.
+
+<!-- spec: 3.12:4 dynamic-semantics -->
+**IR-Dynamic.** `Tail::DynPack` checks its operand against the table's concrete type and returns the interface snapshot type. `Tail::DynCall` checks the opaque receiver, slot and arguments, and returns that slot's physical result. A dynamic call permits no effect promises and creates no observer equation or evidence.
+
+<!-- spec: 3.12:5 dynamic-semantics -->
+The erased checker independently validates interface identities, target signatures, shared receiver passing, argument/result layouts and unsized positions. A pack adapter maps an input shared reference to an output shared reference with the same lifetime. Existing provenance checking governs all callers. Rust emission creates a private trait per fixed interface shape and checked forwarding implementations; both interpreters retain the concrete value and table identity.

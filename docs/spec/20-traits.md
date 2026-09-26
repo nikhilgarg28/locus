@@ -265,6 +265,90 @@ Body, ownership and proof checking still run for each concrete instantiation. An
 <!-- spec: 1.31:37 legality-rule -->
 Trait-bound calls preserve argument evaluation, runtime effects and snapshot dependencies through specialization and erasure. Open generic Rust exports remain unsupported: export must not remove a bound and thereby admit unchecked implementations. Trait method `where` clauses and generic trait-implementation forwarding are also rejected at the Rust export boundary. Concrete checked wrappers may be exported under the existing physical-interface rules.
 
+## Shared trait objects
+
+<!-- spec: 1.31:50 syntax -->
+`&dyn Trait` is a shared reference that hides its concrete implementing type. Fix every associated type explicitly, as in `&dyn Source<Item = u8>`. Trait paths and aliases use ordinary module resolution; aliases do not create new trait identities.
+
+<!-- spec: 1.31:51 legality-rule -->
+This tier admits ordinary `&self` methods whose explicit arguments and result contain only machine integers, `bool`, unit and tuples of those types. All associated types must have the same physical forms. Constructors, associated constants, method bounds, logical methods, proof slots and effect promises make the interface unavailable as `dyn`.
+
+<!-- spec: 1.31:60 example -->
+~~~rust run
+trait Reading {
+    fn read(&self) -> u8;
+}
+struct Sensor { value: u8 }
+impl Reading for Sensor {
+    fn read(&self) -> u8 { self.value }
+}
+fn read_twice(sensor: &dyn Reading) -> u8 {
+    sensor.read() + sensor.read()
+}
+fn main() -> u8 {
+    let sensor = Sensor { value: 12 };
+    read_twice(&sensor)
+}
+//~ run: main() => 24
+~~~
+
+<!-- spec: 1.31:52 legality-rule -->
+A shared borrow of a physical, non-generic named implementation coerces to the expected trait object. An explicit `&value as &dyn Trait` performs the same conversion. The concrete implementation and every fixed associated type must match. Conversion borrows the value; it does not move or allocate it.
+
+<!-- spec: 1.31:53 dynamic-semantics -->
+A call selects the checked implementation carried by the object at runtime. An inherited default uses the body checked for that implementation; a same-name inherent method cannot replace a trait slot. The object reference can be copied, passed directly to another object parameter, or selected by an `if` or `match`.
+
+<!-- spec: 1.31:61 example -->
+~~~rust run
+trait Reading { fn read(&self) -> u8; }
+struct Low {}
+struct High {}
+impl Reading for Low { fn read(&self) -> u8 { 3 } }
+impl Reading for High { fn read(&self) -> u8 { 9 } }
+fn choose(high: bool) -> u8 {
+    let low = Low {};
+    let upper = High {};
+    let reading: &dyn Reading = if high { &upper } else { &low };
+    reading.read()
+}
+fn main() -> (u8, u8) { (choose(false), choose(true)) }
+//~ run: main() => (3, 9)
+~~~
+
+<!-- spec: 1.31:54 legality-rule -->
+Object references follow the existing shared-borrow provenance rules, including locals, fields and explicitly lifetime-linked results. A live borrow prevents moving or mutating its referent. A conversion cannot extend the storage lifetime; returning a local borrow fails.
+
+<!-- spec: 1.31:62 example -->
+~~~rust check
+trait Source {
+    type Item;
+    fn read(&self) -> Self::Item;
+}
+struct Byte { value: u8 }
+impl Source for Byte {
+    type Item = u8;
+    fn read(&self) -> u8 { self.value }
+}
+fn observe<'a>(byte: &'a Byte) -> &'a dyn Source<Item = u8> {
+    &byte
+}
+~~~
+
+<!-- spec: 1.31:55 legality-rule -->
+The hidden `dyn Trait` referent is unsized and cannot be materialized or stored by value. Only shared object references are supported. Owned objects, mutable objects, upcasting, auto-trait bounds, generic implementation families, and general `Sized`/`?Sized` bounds remain deferred.
+
+<!-- spec: 1.31:63 example -->
+~~~rust reject L0518
+trait Reading { fn read(&self) -> u8; }
+fn consume(value: dyn Reading) {}
+~~~
+
+<!-- spec: 1.31:56 legality-rule -->
+Trait-object interfaces are internal to Locus in this tier. An object of an imported Rust trait is rejected, and a Rust export may not expose an object through its signature or public fields. Internal calls still emit real borrowed Rust trait objects. Broader object interoperability is tracked in [LOC-271](../roadmap/generics.md#LOC-271).
+
+<!-- spec: 1.31:57 dynamic-semantics -->
+Dynamic calls preserve runtime evaluation and panics, including calls returning unit. They supply no logical observation, proof contract, purity or termination promise. A shared receiver alone does not establish any such guarantee.
+
 ## Rust interoperability
 
 <!-- spec: 1.31:9 legality-rule -->
@@ -285,7 +369,7 @@ impl Surface for Counter {
 ~~~
 
 <!-- spec: 1.31:11 informative -->
-Implementations for primitives, references and built-in containers are deferred under [LOC-262](../roadmap/generics.md#LOC-262). Generic trait parameters, method-local type parameters, supertraits, blanket implementations, specialization, `dyn`, and compiler-integrated trait bounds other than `Logical` remain deferred. Rust named-type instantiation and arbitrary native implementations remain outside this slice. See [language abstractions](../roadmap/generics.md#LOC-22) and its explicit follow-ups and [native interoperability](../roadmap/interop.md#LOC-44).
+Implementations for primitives, references and built-in containers are deferred under [LOC-262](../roadmap/generics.md#LOC-262). Generic trait parameters, method-local type parameters, supertraits, blanket implementations, specialization, broader `dyn` interfaces, and compiler-integrated trait bounds other than `Logical` remain deferred. Rust named-type instantiation and arbitrary native implementations remain outside this slice. See [language abstractions](../roadmap/generics.md#LOC-22) and its explicit follow-ups and [native interoperability](../roadmap/interop.md#LOC-44).
 
 <!-- spec: 1.31:12 informative -->
 Interior mutability needs a broader observation and aliasing model; shared receivers must not be treated as proof of state preservation. That work stays in [LOC-47](../roadmap/memory-layout.md#LOC-47). Trait promises and the export restriction are tracked in [LOC-261](../roadmap/generics.md#LOC-261).

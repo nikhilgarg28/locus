@@ -162,6 +162,15 @@ impl Env<'_> {
             );
         }
         let actual = self.session.expression_layout(&value.expr);
+        if matches!(&value.ty, Type::Struct(id) if self.session.program().definitions().is_opaque(*id))
+            && !matches!(actual, ErasureLayout::Shared { .. })
+        {
+            return self.fail(
+                "L0518",
+                "an unsized dyn referent cannot be materialized by value; use its shared reference",
+                span,
+            );
+        }
         if let Some(expected) = self.layout_hints.get(&span).cloned() {
             if expected.is_logical() && matches!(value.ty, Type::Bool) {
                 value.expr = super::calls::ghost_value(value.expr);
@@ -179,6 +188,9 @@ impl Env<'_> {
     }
 
     pub(super) fn written_parameter_layout(&self, ty: &ast::Type) -> ErasureLayout {
+        if super::dynamic::borrowed_dyn(ty).is_some() {
+            return self.written_layout(ty);
+        }
         match &ty.kind {
             ast::TypeKind::Ref {
                 lifetime: Some(lifetime),

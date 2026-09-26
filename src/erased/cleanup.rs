@@ -503,6 +503,9 @@ pub(super) fn walk_expr(visitor: &mut impl Visit, expr: &EExpr) {
         | EExpr::Operate {
             operands: parts, ..
         }
+        | EExpr::Dynamic {
+            arguments: parts, ..
+        }
         | EExpr::NativeCall {
             arguments: parts, ..
         }
@@ -593,6 +596,9 @@ fn map_children(expr: &mut EExpr, visit: &mut impl FnMut(&mut EExpr)) {
         | EExpr::Variant { payload: parts, .. }
         | EExpr::Operate {
             operands: parts, ..
+        }
+        | EExpr::Dynamic {
+            arguments: parts, ..
         }
         | EExpr::NativeCall {
             arguments: parts, ..

@@ -1,0 +1,5 @@
+error[L0518]: dyn Trait is unsized; this tier requires &dyn Trait
+ --> tests/corpus/reject/dyn_unsized.lc:3:15
+  |
+3 | fn bad(value: dyn Read) {}
+  |               ^^^^^^^^

@@ -17,6 +17,11 @@ This document states every rule the proof kernel implements, with exact premises
 <!-- spec: 2.0:2 informative -->
 Read this as a technical reference alongside the [language manual](../spec/01-introduction.md). The representation and basic checking rules come first; later sections give logical comparisons, checked recursion, library quantifiers, physical snapshots, permissions and resource limits. Internal forms are not automatically source syntax: for example, the kernel retains native quantifier certificates and bounded range terms while source quantifiers use checked library predicates and source loops use the check IR. `tests/kernel_int.rs` checks that every implemented primitive, axiom and proof rule is named in this Markdown contract, using `Prim::name`, `Axiom::name` and `Proof::rule_name`. Focused suites cover each rule family. The historical implementation gates are listed separately below.
 
+## Opaque execution snapshots
+
+<!-- spec: 2.1:16 legality-rule -->
+`Definitions::declare_opaque` allocates a fresh nominal snapshot identity, represented internally by `Type::Struct`. Unlike a record, it has no fields or constructor: both ordinary and indexed struct introduction fail. It cannot be marked logical. The type may occur in contexts and signatures, but carries no observations or assumed laws; checked dynamic-dispatch operations create physical values of it outside the logical kernel.
+
 ## Representation
 
 <!-- spec: 2.1:1 informative -->

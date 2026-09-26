@@ -1674,6 +1674,14 @@ impl Parser<'_> {
 
     fn ty_inner(&mut self) -> ParseResult<Type> {
         let start = self.current();
+        if self.at_keyword("dyn") {
+            self.bump();
+            let bound = self.generic_bound()?;
+            return Ok(Type {
+                span: start.span.through(bound.path.span),
+                kind: TypeKind::Dyn(Box::new(bound)),
+            });
+        }
         match start.kind {
             K::Less => {
                 let path = self.qualified_path()?;
@@ -3808,7 +3816,7 @@ fn keyword_construct(keyword: &str) -> Option<&'static str> {
     Some(match keyword {
         "async" => "`async` is not in Locus yet",
         "await" => "`await` is not in Locus yet",
-        "dyn" => "`dyn` trait objects are not in Locus yet",
+        "dyn" => "`dyn` is only supported in shared trait-object types",
         "extern" => "`extern` is not in Locus yet",
         "impl" => "`impl Trait` types are not in Locus yet",
         "mod" => "modules (`mod`) are not in Locus yet",

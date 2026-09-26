@@ -34,3 +34,5 @@ pub use tree::{
 pub(crate) use interp::buffer_operation;
 
 pub(crate) use erase::type_with_layout;
+
+pub use tree::{DynOperation, EDynInterface, EDynMethod, EDynTable};

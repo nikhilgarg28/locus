@@ -479,6 +479,7 @@ impl Type {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
+    Dyn(Box<GenericBound>),
     /// Internal scoped application; not a separately exposed source syntax.
     Scoped {
         name: Name,

@@ -106,6 +106,9 @@ pub fn rust_value(value: &Value, module: &Module, path: &str) -> String {
             .collect()
     };
     match value {
+        Value::Dynamic(..) => panic!(
+            "construct borrowed trait objects in the Locus test program, not as external harness literals"
+        ),
         // A bare number: the parameter's type fixes it, a negative one
         // included.
         Value::Buffer(items) => format!("vec![{}]", all(items).join(", ")),

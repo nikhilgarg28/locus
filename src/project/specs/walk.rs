@@ -43,6 +43,12 @@ pub fn fields<W: Walk + ?Sized>(w: &mut W, fs: &mut [TypeField]) {
 pub fn ty<W: Walk + ?Sized>(w: &mut W, t: &mut Type) {
     w.span(&mut t.span);
     match &mut t.kind {
+        TypeKind::Dyn(bound) => {
+            w.path(&mut bound.path);
+            for (_, ty) in &mut bound.associated {
+                w.ty(ty);
+            }
+        }
         TypeKind::Scoped { name, claims } => {
             w.name(name);
             for claim in claims {

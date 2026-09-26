@@ -74,7 +74,11 @@ macro_rules! needed {
 }
 
 pub fn check_module(module: &Module) -> Result<(), TypeError> {
+    check_dynamics(module)?;
     for item in &module.structs {
+        if item.fields.iter().any(|(_, t)| !sized(t, module)) {
+            return fail("an unsized trait object cannot be stored by value");
+        }
         if item.shape == crate::ast::VariantShape::Unit && !item.fields.is_empty() {
             return fail("unit struct has fields");
         }
@@ -83,6 +87,15 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         }
     }
     for item in &module.enums {
+        if item
+            .variants
+            .iter()
+            .flat_map(|v| &v.payload)
+            .any(|t| !sized(t, module))
+        {
+            return fail("an unsized trait object cannot be stored by value");
+        }
+
         for variant in &item.variants {
             for ty in &variant.payload {
                 target_type(ty, module.pointer_width)?;
@@ -90,6 +103,15 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         }
     }
     for function in &module.fns {
+        if !sized(&function.result, module)
+            || function
+                .params
+                .iter()
+                .enumerate()
+                .any(|(i, (_, _, t))| !function.passing_of(i).is_reference() && !sized(t, module))
+        {
+            return fail("an unsized trait object cannot be passed or returned by value");
+        }
         for (_, _, ty) in &function.params {
             target_type(ty, module.pointer_width)?;
         }
@@ -253,6 +275,9 @@ impl Checker<'_> {
                 mutable,
             } => {
                 target_type(ty, self.module.pointer_width)?;
+                if !sized(ty, self.module) {
+                    return fail("an unsized trait object cannot be bound by value");
+                }
                 if *ty == EType::Ghost && !self.borrowed.contains(id) {
                     return fail(format!(
                         "{name} is bound to a value with no runtime form, which erasure leaves out"
@@ -605,6 +630,49 @@ impl Checker<'_> {
                 }
                 EType::Int(*ty)
             }
+            EExpr::Dynamic {
+                operation,
+                arguments,
+            } => {
+                let actual = needed!(self.values(arguments)?);
+                match operation {
+                    super::DynOperation::Pack(id) => {
+                        let table = self
+                            .module
+                            .dyn_tables
+                            .iter()
+                            .find(|t| t.id == *id)
+                            .ok_or_else(|| TypeError("unknown dynamic table".into()))?;
+                        if !matches!(actual.as_slice(), [EType::Ref(_, inner)] if **inner == table.concrete)
+                        {
+                            return fail(
+                                "dynamic pack requires a shared reference to the concrete receiver",
+                            );
+                        }
+                        EType::Ref(None, Box::new(EType::Struct(table.interface)))
+                    }
+                    super::DynOperation::Call { interface, slot } => {
+                        let method = self
+                            .module
+                            .dynamics
+                            .iter()
+                            .find(|d| d.id == *interface)
+                            .and_then(|d| d.methods.get(*slot))
+                            .ok_or_else(|| TypeError("unknown dynamic slot".into()))?;
+                        let mut expected =
+                            vec![EType::Ref(None, Box::new(EType::Struct(*interface)))];
+                        expected.extend(method.params.clone());
+                        if actual.len() != expected.len()
+                            || !actual.iter().zip(&expected).all(|(a, b)| same_shape(a, b))
+                        {
+                            return fail(
+                                "dynamic call arguments differ from slot or receiver is not shared",
+                            );
+                        }
+                        method.result.clone()
+                    }
+                }
+            }
             EExpr::NativeCall {
                 arguments, result, ..
             } => {
@@ -844,5 +912,77 @@ fn same_shape(left: &EType, right: &EType) -> bool {
             a == b
         }
         _ => left == right,
+    }
+}
+
+fn check_dynamics(module: &Module) -> Result<(), TypeError> {
+    let mut ids = HashSet::new();
+    fn scalar(ty: &EType) -> bool {
+        matches!(ty, EType::Bool | EType::Int(_))
+            || matches!(ty, EType::Tuple(ts) if ts.iter().all(scalar))
+    }
+    for d in &module.dynamics {
+        if !ids.insert(d.id) || module.structs.iter().any(|s| s.id == d.id) {
+            return fail("duplicate dynamic/struct identity");
+        }
+        let mut names = HashSet::new();
+        for m in &d.methods {
+            for ty in m.params.iter().chain(std::iter::once(&m.result)) {
+                target_type(ty, module.pointer_width)?;
+            }
+            if !names.insert(&m.name) || !scalar(&m.result) || !m.params.iter().all(scalar) {
+                return fail("dynamic methods require unique names and scalar/tuple signatures");
+            }
+        }
+    }
+    let mut tables = HashSet::new();
+    for (index, table) in module.dyn_tables.iter().enumerate() {
+        if module.dyn_tables[..index].iter().any(|existing| {
+            existing.interface == table.interface && existing.concrete == table.concrete
+        }) {
+            return fail("duplicate concrete implementation for dynamic interface");
+        }
+        let d = module
+            .dynamics
+            .iter()
+            .find(|d| d.id == table.interface)
+            .ok_or_else(|| TypeError("unknown dynamic interface".into()))?;
+        if !tables.insert(table.id) || table.methods.len() != d.methods.len() {
+            return fail("dynamic table shape or identity");
+        }
+        if !matches!(&table.concrete, EType::Struct(id) if module.structs.iter().any(|s| s.id == *id))
+            && !matches!(&table.concrete, EType::Enum(id) if module.enums.iter().any(|e| e.id == *id))
+        {
+            return fail("dynamic table requires a physical concrete nominal receiver");
+        }
+        for (slot, target) in d.methods.iter().zip(&table.methods) {
+            let f = module
+                .fns
+                .iter()
+                .find(|f| f.reference == *target)
+                .ok_or_else(|| TypeError("dynamic implementation was not emitted".into()))?;
+            let mut params = vec![table.concrete.clone()];
+            params.extend(slot.params.clone());
+            if f.params.iter().map(|p| &p.2).ne(params.iter())
+                || f.result != slot.result
+                || f.passing_of(0) != crate::typed::Passing::Ref
+                || (1..params.len()).any(|i| f.passing_of(i).is_reference())
+            {
+                return fail("dynamic implementation does not match physical slot");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn sized(ty: &EType, module: &Module) -> bool {
+    match ty {
+        EType::Struct(id) | EType::StructApplied(id, _) => {
+            !module.dynamics.iter().any(|d| d.id == *id)
+        }
+        EType::Tuple(fields) => fields.iter().all(|t| sized(t, module)),
+        EType::Boxed(t) | EType::Buffer(t) | EType::Array(t, _) => sized(t, module),
+        EType::Ref(_, _) => true,
+        _ => true,
     }
 }

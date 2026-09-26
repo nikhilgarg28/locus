@@ -16,6 +16,7 @@ use super::term::{EnumId, FnId, PropId, StructId, Term, Type, VarId, field_type}
 
 #[derive(Clone, Debug)]
 pub(super) struct StructDecl {
+    pub(super) opaque: bool,
     pub(super) parameters: Vec<Type>,
     /// A telescope, as in `Type::Tuple`.
     pub(super) fields: Vec<Type>,
@@ -393,6 +394,23 @@ impl Definitions {
         Ok(PropId(self.props.len() - 1))
     }
 
+    /// An uninterpreted snapshot type. It has no logical constructor or
+    /// eliminator; execution IR operations may supply values of this type.
+    pub fn declare_opaque(&mut self) -> StructId {
+        let id = StructId(self.structs.len());
+        self.structs.push(StructDecl {
+            opaque: true,
+            parameters: vec![],
+            fields: vec![],
+            logical: false,
+        });
+        id
+    }
+
+    pub fn is_opaque(&self, id: StructId) -> bool {
+        self.structs.get(id.0).is_some_and(|d| d.opaque)
+    }
+
     /// Declares a struct with the fields of the given tuple type. The fields
     /// must be well formed with no variables in scope.
     pub fn declare_struct(&mut self, fields: &Type) -> Result<StructId, KernelError> {
@@ -416,6 +434,7 @@ impl Definitions {
         check_depth([(&signature).into()])?;
         type_ok(&mut ctx, &signature)?;
         self.structs.push(StructDecl {
+            opaque: false,
             parameters: parameters.to_vec(),
             fields: fields.clone(),
             logical: false,
@@ -504,6 +523,9 @@ impl Definitions {
     /// Register an aggregate as logical only after checking every field.
     /// This is checked derivation, never an unchecked user assertion.
     pub fn mark_logical(&mut self, ty: &Type) -> Result<(), KernelError> {
+        if matches!(ty, Type::Struct(id) if self.is_opaque(*id)) {
+            return Err(KernelError::NotLogicalType(ty.clone()));
+        }
         let fields: Vec<&Type> = match ty {
             Type::Struct(id) => self
                 .structs
@@ -631,6 +653,9 @@ impl Definitions {
     }
 
     pub(super) fn struct_fields(&self, id: StructId) -> Option<&[Type]> {
-        self.structs.get(id.0).map(|decl| decl.fields.as_slice())
+        self.structs
+            .get(id.0)
+            .filter(|d| !d.opaque)
+            .map(|decl| decl.fields.as_slice())
     }
 }

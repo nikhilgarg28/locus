@@ -1,0 +1,10 @@
+L0518: Unsupported or incompatible shared trait object
+
+Use `&dyn Trait` with ordinary shared-receiver methods and physical scalar/tuple signatures. Fix every associated type. Coercions need a shared borrow of a checked implementation with matching associated types. Bare, owned and mutable objects, logical members, proof contracts and imported object interfaces are not supported in this tier.
+
+```rust reject L0518
+trait Reading { fn read(&self) -> u8; }
+fn consume(value: dyn Reading) {}
+```
+
+Language, as built: [1.31:55](../spec/20-traits.md#shared-trait-objects).
