@@ -1,1 +1,1 @@
-struct Wrapper<T: Debug> { value: T } //~ error: L0281 only the `Logical` generic bound
+struct Wrapper<T: Debug> { value: T } //~ error: L0281 unknown or unsupported trait bound `Debug`

@@ -23,9 +23,10 @@
 //! A binding with no runtime form, declared `Ghost<T>` or of type `Prop`
 //! or `Int`, is not bound: a mention of it is the marker, and its `let`
 //! is left out, or kept as `let _ = value;` when the value still does
-//! something. A parameter or a field of such a type is the marker, as
+//! something. A runtime-borrowed logical local retains zero-sized marker
+//! storage for its address. A parameter or a field of such a type is the marker, as
 //! evidence is. The erased check refuses a `let` of a marker-typed value,
-//! so that this rule is judged twice (`check.rs`).
+//! unless its address is borrowed, so that this rule is judged twice (`check.rs`).
 //!
 //! The versions lowering gives a mutable binding have no runtime form
 //! either: an assignment stays an assignment, and every mention of a version
@@ -264,6 +265,7 @@ pub(crate) fn erase_fn_with_layout(
         loop_layouts: Vec::new(),
         binding: HashMap::new(),
         assigned: assigned_bindings(&item.body),
+        borrowed: borrowed_bindings(&item.body),
         ghost: item
             .params
             .iter()
@@ -338,6 +340,27 @@ fn assigned_bindings(body: &Block) -> HashSet<VarId> {
     assigned
 }
 
+/// A runtime borrow needs marker storage even when its contents erase.
+fn borrowed_bindings(body: &Block) -> HashSet<VarId> {
+    let mut borrowed = HashSet::new();
+    let mut visit = |expr: &Expr| {
+        if let Expr::Lend { place, .. } = expr {
+            borrowed.insert(place.binding);
+        }
+    };
+    for stmt in &body.stmts {
+        match stmt {
+            Stmt::Let { value, .. } | Stmt::Expr(value) | Stmt::Assign { value, .. } => {
+                each_expr(value, &mut visit)
+            }
+        }
+    }
+    if let Some(tail) = &body.tail {
+        each_expr(tail, &mut visit);
+    }
+    borrowed
+}
+
 /// The place of an assignment or a lend, its root at the binding.
 fn place(place: &Place) -> EPlace {
     EPlace {
@@ -360,6 +383,7 @@ struct Eraser<'p> {
     /// the versions are met, which is before any mention of them.
     binding: HashMap<VarId, VarId>,
     assigned: HashSet<VarId>,
+    borrowed: HashSet<VarId>,
     /// The bindings with no runtime form (`vanishes`), filled as they are
     /// met: a mention of one is the marker, and nothing binds it.
     ghost: HashSet<VarId>,
@@ -624,7 +648,10 @@ impl Eraser<'_> {
                 self.erase_pattern_bindings(pattern);
                 EPattern::Wildcard
             }
-            Pattern::Bind { binder, .. } if vanishes(self.program, binder, self.layouts) => {
+            Pattern::Bind { binder, .. }
+                if vanishes(self.program, binder, self.layouts)
+                    && !self.borrowed.contains(&binder.id) =>
+            {
                 self.ghost.insert(binder.id);
                 EPattern::Wildcard
             }

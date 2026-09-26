@@ -45,7 +45,7 @@ The ordinary block passed as an argument runs and clears `value`. The subsequent
 ## Removing unused markers
 
 <!-- spec: 1.18:3 dynamic-semantics -->
-Generated Rust removes unused marker bindings and unused erased pattern components. An initializer with runtime effects remains as a statement. An initializer that transfers control remains the block’s terminal expression. Cleanup must preserve behavior and produce warning-clean Rust, rather than suppressing unused-variable warnings globally.
+Generated Rust removes unused marker bindings and unused erased pattern components. A logical local borrowed by runtime code retains zero-sized marker storage for that borrow. An initializer with runtime effects remains as a statement. An initializer that transfers control remains the block’s terminal expression. Cleanup must preserve behavior and produce warning-clean Rust, rather than suppressing unused-variable warnings globally.
 
 <!-- spec: 1.93:1 informative -->
 The [Rust export facade](17-modules.md#proof-returning-functions) is a separate, one-way return projection. Internal erased signatures and layouts remain intact; only the additional public entry omits the supported proof result positions.

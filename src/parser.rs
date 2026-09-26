@@ -87,6 +87,7 @@ pub fn parse(source: &SourceFile) -> Parsed {
         in_spec: false,
         in_trait: false,
         in_method: false,
+        where_stack: Vec::new(),
         closers: None,
         diagnostics: lexed.diagnostics.into(),
     }
@@ -122,6 +123,7 @@ struct Parser<'a> {
     /// Set in the body of a method with a `self` parameter, where `self`
     /// is a value.
     in_method: bool,
+    where_stack: Vec<Vec<WherePredicate>>,
     /// For each opening delimiter, the token that closes it; built by the
     /// first `for` header or attribute that asks, so that the lookahead is
     /// not a rescan.
@@ -413,6 +415,16 @@ impl Parser<'_> {
     /// An item: its doc comments, attributes, and visibility, then one of
     /// the declaration forms. An `impl` holds functions and constants.
     fn declaration(&mut self) -> ParseResult<Declaration> {
+        self.where_stack.push(Vec::new());
+        let result = self.declaration_inner();
+        let constraints = self.where_stack.pop().unwrap();
+        result.map(|mut d| {
+            d.constraints = constraints;
+            d
+        })
+    }
+
+    fn declaration_inner(&mut self) -> ParseResult<Declaration> {
         let start = self.current().span;
         let (doc, mut attributes) = self.outer_attributes()?;
         let visibility = self.visibility()?;
@@ -455,6 +467,7 @@ impl Parser<'_> {
             };
             let end = self.expect(K::Semicolon)?.span;
             return Ok(Declaration {
+                constraints: Vec::new(),
                 captures: Vec::new(),
                 doc,
                 attributes,
@@ -467,6 +480,7 @@ impl Parser<'_> {
             let (kind, attribute, end) = self.trusted_function()?;
             attributes.push(attribute);
             return Ok(Declaration {
+                constraints: Vec::new(),
                 captures: Vec::new(),
                 doc,
                 attributes,
@@ -489,6 +503,7 @@ impl Parser<'_> {
         }
         let (kind, end) = self.item(visibility.as_ref().map(|visibility| visibility.span))?;
         Ok(Declaration {
+            constraints: Vec::new(),
             captures: Vec::new(),
             doc,
             attributes,
@@ -654,6 +669,7 @@ impl Parser<'_> {
             K::Struct => {
                 let name = self.name()?;
                 let generics = self.generic_parameters()?;
+                self.where_clause()?;
                 let (shape, fields, end) = self.struct_declaration_fields()?;
                 Ok((
                     DeclarationKind::Struct {
@@ -972,6 +988,7 @@ impl Parser<'_> {
         let signature = (|| {
             let (self_param, parameters) = self.parameter_list(true, self.in_impl)?;
             let result = self.return_type()?;
+            self.where_clause()?;
             Ok((self_param, parameters, result))
         })();
         let body = match &signature {
@@ -1137,6 +1154,7 @@ impl Parser<'_> {
         if self.at(K::For) {
             self.bump();
             let representation = self.ty()?;
+            self.where_clause()?;
             let opening = self.expect(K::LBrace)?;
             let saved = std::mem::replace(&mut self.in_impl, true);
             let members = self.impl_body();
@@ -1164,14 +1182,17 @@ impl Parser<'_> {
                 end,
             ));
         }
-        if !arguments.is_empty() || !generics.is_empty() {
-            self.diagnostics.push(Diagnostic::error(
-                "L0116",
-                "generic inherent impls require a checked spec realization for now",
-                first.span,
-            ));
-            return Err(());
+        if arguments.len() != generics.len()
+            || arguments
+                .iter()
+                .zip(&generics)
+                .any(|(a, g)| !matches!(&a.kind, TypeKind::Named(n) if n.text == g.name.text))
+        {
+            return self.fail(
+                "an inherent implementation must cover its type family exactly: `impl<T> Name<T>`",
+            );
         }
+        self.where_clause()?;
         let (target, model) = (first, None);
         let opening = self.expect(K::LBrace)?;
         let saved = std::mem::replace(&mut self.in_impl, true);
@@ -1213,6 +1234,53 @@ impl Parser<'_> {
         Ok(methods)
     }
 
+    fn generic_bound(&mut self) -> ParseResult<GenericBound> {
+        let mut path = self.path()?;
+        let mut associated = Vec::new();
+        if let Some(open) = self.eat(K::Less) {
+            while !self.at_angle_close() && !self.at(K::Eof) {
+                self.step();
+                let name = self.name()?;
+                if self.eat(K::Equal).is_none() {
+                    return self.fail("generic trait arguments are deferred; use an associated constraint such as `Item = u8`");
+                }
+                let ty = self.ty()?;
+                associated.push((name, ty));
+                if self.eat(K::Comma).is_none() {
+                    break;
+                }
+            }
+            path.span = path.span.through(self.close_angle(open)?);
+        }
+        Ok(GenericBound { path, associated })
+    }
+
+    fn where_clause(&mut self) -> ParseResult<()> {
+        if !self.at_keyword("where") {
+            return Ok(());
+        }
+        self.bump();
+        loop {
+            self.step();
+            let subject = self.ty()?;
+            self.expect(K::Colon)?;
+            let mut bounds = vec![self.generic_bound()?];
+            while self.eat(K::Plus).is_some() {
+                bounds.push(self.generic_bound()?);
+            }
+            let span = subject.span.through(bounds.last().unwrap().span);
+            self.where_stack.last_mut().unwrap().push(WherePredicate {
+                subject,
+                bounds,
+                span,
+            });
+            if self.eat(K::Comma).is_none() || self.at(K::LBrace) || self.at(K::Semicolon) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     #[inline(never)]
     fn generic_parameters(&mut self) -> ParseResult<Vec<GenericParameter>> {
         let Some(opening) = self.eat(K::Less) else {
@@ -1250,7 +1318,7 @@ impl Parser<'_> {
                     if !self.at_named() {
                         return self.fail("expected a generic bound such as `Logical`");
                     }
-                    let bound = self.path()?;
+                    let bound = self.generic_bound()?;
                     end = bound.span;
                     bounds.push(bound);
                     if self.eat(K::Plus).is_none() {
@@ -1276,6 +1344,7 @@ impl Parser<'_> {
     fn enum_declaration(&mut self) -> ParseResult<(DeclarationKind, Span)> {
         let name = self.name()?;
         let generics = self.generic_parameters()?;
+        self.where_clause()?;
         let opening = self.expect(K::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(K::RBrace) && !self.at(K::Eof) {
@@ -1316,6 +1385,7 @@ impl Parser<'_> {
         } else {
             Vec::new()
         };
+        self.where_clause()?;
         let opening = self.expect(K::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(K::RBrace) && !self.at(K::Eof) {
@@ -3749,7 +3819,7 @@ fn keyword_construct(keyword: &str) -> Option<&'static str> {
         "type" => "type aliases (`type`) are not in Locus yet",
         "unsafe" => "`unsafe` is not in Locus yet",
         "use" => "`use` is only supported at module scope",
-        "where" => "`where` clauses are not in Locus yet",
+        "where" => "a `where` clause belongs after a declaration signature",
         _ => return None,
     })
 }

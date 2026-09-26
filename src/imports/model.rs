@@ -130,7 +130,7 @@ impl Entity {
         entity.unavailable=Some(match kind.as_str() {
             "module" => return Ok(entity),
             "function" => match read_signature(body) { Ok(sig)=>{entity.signature=Some(sig);return Ok(entity)}, Err(why)=>why },
-            "trait" => "imported Rust traits are retained, but trait bounds and implementations are not supported yet".into(),
+            "trait" => "this imported Rust trait is outside the supported interface subset".into(),
             "struct"|"enum"|"union"|"type_alias" => "opaque Rust types are retained, but native type instantiation and methods are not supported yet".into(),
             "constant"|"static" => "native constants and statics are retained, but using their values is not supported yet".into(),
             "macro"|"proc_macro" => "Rust macro expansion is not supported in Locus".into(),

@@ -187,8 +187,9 @@ pub fn elaborate_with_options(
 
     env.declare_builtin_props();
     env.declare_builtin_lemmas();
-    let (specialized, diagnostics, quantifiers) =
-        super::generics::specialize(program, &options.previews);
+    let (specialized, diagnostics, quantifiers, access) =
+        super::generics::specialize(program, &options.previews, options.module_access.as_deref());
+    env.module_access = access.map(std::sync::Arc::new);
     env.diagnostics.extend(diagnostics);
     let program = &specialized;
     env.report_unchecked_syntax(program);
@@ -256,7 +257,7 @@ pub fn elaborate_with_options(
         }
     }
 
-    let (order, cyclic) = dependency_order(&units, &quantifiers, options.module_access.as_deref());
+    let (order, cyclic) = dependency_order(&units, &quantifiers, env.module_access.as_deref());
     for index in cyclic {
         let name = declared_name(units[index].declaration).expect("a unit has a name");
         let qualified = names[index].clone().expect("a unit has a name");

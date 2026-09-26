@@ -13,7 +13,7 @@ impl Counter {
     fn get(&self) -> u8 { self.count }
 }
 
-impl<T> Counter<T> { } //~ error: L0116 generic inherent impls
+impl<T> Counter<u8> { } //~ error: L0100 an inherent implementation must cover its type family exactly
 
 fn assigned(n: u8) -> u8 {
     let mut total = n;

@@ -139,6 +139,132 @@ Implementations currently target named Locus structs, enums and opaque spec type
 <!-- spec: 1.31:8 dynamic-semantics -->
 Selected methods lower to ordinary checked functions before erasure. Arguments and runtime effects are preserved once, including mutation in proof-returning methods. Logical results erase without changing the selected implementation. Existing ownership, historical snapshots and tracked-proof invalidation rules apply unchanged.
 
+## Generic bounds
+
+<!-- spec: 1.31:30 legality-rule -->
+`T: Trait` requires an implementation for each concrete type argument. `where T: Trait` states the same requirement; `+` combines requirements. Bounds use normal module visibility and imported trait identity. Functions, logical functions, structs, enums and propositions may declare them.
+
+<!-- spec: 1.31:40 example -->
+~~~rust check
+trait Read { fn read(&self) -> u8; }
+struct Counter { value: u8 }
+impl Read for Counter {
+    fn read(&self) -> u8 { self.value }
+}
+fn read<T>(value: &T) -> u8 where T: Read {
+    value.read()
+}
+fn example() -> u8 {
+    let value = Counter { value: 7 };
+    read(&value)
+}
+~~~
+
+<!-- spec: 1.31:31 legality-rule -->
+Generic member selection uses declared bounds before substitution. An inherent method on the eventual concrete type cannot replace that selection. Multiple applicable bounds require qualification. Locals, destructuring and returned values retain the type information used for this selection.
+
+<!-- spec: 1.31:41 example -->
+~~~rust check
+trait Left { fn value(&self) -> u8; }
+trait Right { fn value(&self) -> u8; }
+struct Choice {}
+impl Left for Choice { fn value(&self) -> u8 { 1 } }
+impl Right for Choice { fn value(&self) -> u8 { 2 } }
+fn choose<T: Left + Right>(value: &T) -> u8 {
+    <T as Right>::value(&*value)
+}
+fn example() -> u8 { let c = Choice {}; choose(&c) }
+~~~
+
+<!-- spec: 1.31:32 legality-rule -->
+`T: Source<Item = u8>` fixes an associated type. Without an equality, use `T::Item` or `<T as Source>::Item`. A `where T::Item: Read` predicate constrains that projection. Equality constraints compare types, not propositions. Missing, ambiguous, conflicting or cyclic obligations fail checking.
+
+<!-- spec: 1.31:42 example -->
+~~~rust check
+trait Source {
+    type Item;
+    fn item(&self) -> Self::Item;
+}
+struct Bytes {}
+impl Source for Bytes {
+    type Item = u8;
+    fn item(&self) -> u8 { 9 }
+}
+fn item<S: Source<Item = u8>>(source: &S) -> S::Item {
+    source.item()
+}
+fn example() -> u8 { let source = Bytes {}; item(&source) }
+~~~
+
+<!-- spec: 1.31:33 legality-rule -->
+A generic trait implementation covers a complete named family: `impl<T: Read> Read for Wrapper<T>`. Its conditions must hold before that implementation is available. There is at most one implementation per trait and named family, including implementations with different bounds. Partial patterns, blanket implementations over a bare parameter and specialization are deferred.
+
+<!-- spec: 1.31:43 example -->
+~~~rust check
+trait Read { fn read(&self) -> u8; }
+struct Byte { value: u8 }
+impl Read for Byte { fn read(&self) -> u8 { self.value } }
+struct Wrapper<T> { inner: T }
+impl<T: Read> Read for Wrapper<T> {
+    fn read(&self) -> u8 { self.inner.read() }
+}
+fn read<T: Read>(value: &T) -> u8 { value.read() }
+fn example() -> u8 {
+    let wrapped: Wrapper<Byte> = Wrapper { inner: Byte { value: 4 } };
+    read(&wrapped)
+}
+~~~
+
+<!-- spec: 1.31:34 legality-rule -->
+A generic inherent implementation may add conditions on its block or individual methods. A method is available only when its conditions hold. This does not add conditions to construction of the containing type or change the method's result shape. Method-local type parameters remain deferred.
+
+<!-- spec: 1.31:44 example -->
+~~~rust check
+trait Read { fn read(&self) -> u8; }
+struct Byte { value: u8 }
+impl Read for Byte { fn read(&self) -> u8 { self.value } }
+struct Holder<T> { inner: T }
+impl<T> Holder<T> {
+    fn read(&self) -> u8 where T: Read { self.inner.read() }
+    fn tag(&self) -> u8 { 1 }
+}
+fn example() -> u8 {
+    let holder: Holder<Byte> = Holder { inner: Byte { value: 7 } };
+    holder.read()
+}
+~~~
+
+<!-- spec: 1.31:35 legality-rule -->
+Bounds supply callable signatures, not evidence. Callers still supply input proofs; implementations establish output proofs on normal return. `logic fn` retains purity, totality and erasure requirements. Use a declared proof-bearing law to reason about an abstract operation; explicitly folding or unfolding that operation in a generic template is rejected.
+
+<!-- spec: 1.31:45 example -->
+~~~rust check
+trait Step {
+    fn next(n: u8, room: @(n < 255)) -> (out: u8, @(out == n + 1));
+}
+struct Arithmetic {}
+impl Step for Arithmetic {
+    fn next(n: u8, room: @(n < 255)) -> (out: u8, @(out == n + 1)) {
+        let out = n + 1;
+        (out, _)
+    }
+}
+fn advance<S: Step>(n: u8, room: @(n < 255))
+    -> (out: u8, @(out == n + 1)) {
+    S::next(n, room)
+}
+fn example() -> u8 {
+    let (out, evidence) = advance::<Arithmetic>(7, prove!(7 < 255));
+    out
+}
+~~~
+
+<!-- spec: 1.31:36 legality-rule -->
+Body, ownership and proof checking still run for each concrete instantiation. An unused generic body is not a universal theorem. Logical classification belongs to the selected source types; an associated `Logical` requirement is checked even when no associated method is called. Distinct source types remain distinct when both erase to the same marker.
+
+<!-- spec: 1.31:37 legality-rule -->
+Trait-bound calls preserve argument evaluation, runtime effects and snapshot dependencies through specialization and erasure. Open generic Rust exports remain unsupported: export must not remove a bound and thereby admit unchecked implementations. Trait method `where` clauses and generic trait-implementation forwarding are also rejected at the Rust export boundary. Concrete checked wrappers may be exported under the existing physical-interface rules.
+
 ## Rust interoperability
 
 <!-- spec: 1.31:9 legality-rule -->
@@ -159,7 +285,7 @@ impl Surface for Counter {
 ~~~
 
 <!-- spec: 1.31:11 informative -->
-Implementations for primitives, references and built-in containers are deferred under [LOC-262](../roadmap/generics.md#LOC-262). Generic traits/methods and bounds, blanket implementations, supertraits, specialization, `dyn`, and compiler-integrated trait implementations are also deferred. Rust named-type instantiation and arbitrary native implementations remain outside this slice. See [language abstractions](../roadmap/generics.md#LOC-22) and [native interoperability](../roadmap/interop.md#LOC-44).
+Implementations for primitives, references and built-in containers are deferred under [LOC-262](../roadmap/generics.md#LOC-262). Generic trait parameters, method-local type parameters, supertraits, blanket implementations, specialization, `dyn`, and compiler-integrated trait bounds other than `Logical` remain deferred. Rust named-type instantiation and arbitrary native implementations remain outside this slice. See [language abstractions](../roadmap/generics.md#LOC-22) and its explicit follow-ups and [native interoperability](../roadmap/interop.md#LOC-44).
 
 <!-- spec: 1.31:12 informative -->
 Interior mutability needs a broader observation and aliasing model; shared receivers must not be treated as proof of state preservation. That work stays in [LOC-47](../roadmap/memory-layout.md#LOC-47). Trait promises and the export restriction are tracked in [LOC-261](../roadmap/generics.md#LOC-261).

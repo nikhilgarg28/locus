@@ -326,6 +326,7 @@ fn bind(
         kind
     };
     Ok(Declaration {
+        constraints: Vec::new(),
         captures: Vec::new(),
         doc: vec![],
         attributes: vec![],

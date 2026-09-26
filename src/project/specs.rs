@@ -74,6 +74,7 @@ fn block(e: Expr) -> Block {
 }
 fn declaration(kind: DeclarationKind, span: Span) -> Declaration {
     Declaration {
+        constraints: Vec::new(),
         captures: Vec::new(),
         kind,
         span,
@@ -354,6 +355,10 @@ pub(crate) fn signature(d: &Declaration) -> DeclarationKind {
             c.span(&mut g.span);
             for b in &mut g.bounds {
                 c.path(b);
+                for (n, t) in &mut b.associated {
+                    c.name(n);
+                    c.ty(t);
+                }
             }
         }
         if let Some(s) = self_param {
@@ -500,11 +505,12 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
             ));
         }
         if generics.len() != ig.len()
-            || generics.iter().zip(ig).any(|(a, b)| {
-                a.lifetime != b.lifetime
-                    || a.bounds.iter().map(Path::text).collect::<Vec<_>>()
-                        != b.bounds.iter().map(Path::text).collect::<Vec<_>>()
-            })
+            || generics
+                .iter()
+                .zip(ig)
+                .any(|(a, b)| a.lifetime != b.lifetime)
+            || canonical_bounds(generics) != canonical_bounds(ig)
+            || !implementation.constraints.is_empty()
             || arguments(target).len() != generics.len()
             || arguments(target).iter().zip(ig).any(|(t, g)| {
                 type_name(t).as_deref() != Some(&g.name.text) || !arguments(t).is_empty()
@@ -1141,4 +1147,29 @@ fn check_self_family(
         errors,
     };
     walk::member(&mut c, &mut member.clone());
+}
+
+/// Family equality includes associated constraints, with binder names and spans normalized.
+fn canonical_bounds(parameters: &[GenericParameter]) -> Vec<Vec<GenericBound>> {
+    let mut canon = Canon::default();
+    for (i, p) in parameters.iter().enumerate() {
+        canon.types.insert(p.name.text.clone(), format!("T{i}"));
+    }
+    parameters
+        .iter()
+        .map(|p| {
+            p.bounds
+                .iter()
+                .cloned()
+                .map(|mut b| {
+                    canon.path(&mut b.path);
+                    for (n, t) in &mut b.associated {
+                        canon.name(n);
+                        canon.ty(t);
+                    }
+                    b
+                })
+                .collect()
+        })
+        .collect()
 }

@@ -25,6 +25,8 @@ pub struct Registry {
 }
 #[derive(Clone, Debug)]
 pub struct Implementation {
+    pub generics: Vec<GenericParameter>,
+    pub constraints: Vec<WherePredicate>,
     pub interface: String,
     pub owner: String,
     pub span: Span,
@@ -58,15 +60,6 @@ fn type_name(t: &Type) -> Option<String> {
         _ => None,
     }
 }
-fn named(s: &str, span: Span) -> Type {
-    Type {
-        kind: TypeKind::Named(Name {
-            text: s.into(),
-            span,
-        }),
-        span,
-    }
-}
 fn path(owner: &str, member: &str, span: Span) -> Path {
     Path {
         segments: [owner, member]
@@ -79,7 +72,7 @@ fn path(owner: &str, member: &str, span: Span) -> Path {
         span,
     }
 }
-pub(super) fn lowered(interface: &str, member: &str) -> String {
+pub(crate) fn lowered(interface: &str, member: &str) -> String {
     // Case-folding alone merges distinct Rust/Locus identifiers. Encode the
     // canonical identity injectively while keeping generated methods snake_case.
     let identity = interface
@@ -93,6 +86,7 @@ pub(super) fn lowered(interface: &str, member: &str) -> String {
 /// retain type-directed method selection at elaboration.
 struct Substitute<'a> {
     owner: &'a str,
+    self_type: &'a Type,
     interface: &'a str,
     associated: &'a BTreeMap<String, Type>,
     names: &'a BTreeSet<String>,
@@ -101,7 +95,7 @@ impl Walk for Substitute<'_> {
     fn ty(&mut self, t: &mut Type) {
         if let Some(key) = type_name(t) {
             if key == "Self" {
-                *t = named(self.owner, t.span);
+                *t = self.self_type.clone();
                 return;
             }
             if let Some(key) = key.strip_prefix("Self::")
@@ -243,20 +237,27 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
         else {
             unreachable!()
         };
-        let Some(owner) = type_name(representation) else {
+        let owner_name = match &representation.kind {
+            TypeKind::Path { path, arguments } if !generics.is_empty() => {
+                if arguments.len() != generics.len()
+                    || arguments.iter().zip(generics).any(
+                        |(t, g)| !matches!(&t.kind,TypeKind::Named(n) if n.text == g.name.text),
+                    )
+                {
+                    errors.push(error("a generic trait implementation must cover one complete named family: `impl<T> Trait for Name<T>`", representation.span));
+                    continue;
+                }
+                Some(path.text())
+            }
+            _ => type_name(representation),
+        };
+        let Some(owner) = owner_name else {
             errors.push(error(
                 "trait implementations currently require a concrete named type",
                 representation.span,
             ));
             continue;
         };
-        if !generics.is_empty() {
-            errors.push(error(
-                "generic and blanket trait implementations are deferred",
-                d.span,
-            ));
-            continue;
-        }
         let type_item = graph.items.iter().find(|i| i.canonical == owner);
         let Some(type_item) = type_item.filter(|i| {
             matches!(
@@ -382,6 +383,7 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
                 ..
             } = &h.kind
                 && let Some(ty) = associated.get(&name.text)
+                && generics.is_empty()
             {
                 let parameter = Name {
                     text: "value".into(),
@@ -437,14 +439,17 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
             let mut expected = header.clone();
             let mut actual = selected;
             let mut substitution = Substitute {
-                owner: &owner,
+                owner: if generics.is_empty() { &owner } else { "Self" },
+                self_type: representation,
                 interface: &interface,
                 associated: &associated,
                 names: &names,
             };
             walk::member(&mut substitution, &mut expected);
             walk::member(&mut substitution, &mut actual);
-            if specs::signature(&expected) != specs::signature(&actual) {
+            if specs::signature(&expected) != specs::signature(&actual)
+                || constraints(&expected) != constraints(&actual)
+            {
                 errors.push(
                     error(
                         format!(
@@ -490,6 +495,8 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
             methods.push(actual);
         }
         graph.traits.implementations.push(Implementation {
+            generics: generics.clone(),
+            constraints: d.constraints.clone(),
             interface: interface.clone(),
             owner: owner.clone(),
             span: d.span,
@@ -498,7 +505,7 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
         });
         generated.push(Declaration {
             kind: DeclarationKind::Impl {
-                generics: vec![],
+                generics: generics.clone(),
                 target: Path {
                     segments: vec![Name {
                         text: owner,
@@ -549,6 +556,7 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
         .collect();
     struct Qualified<'a> {
         registry: &'a Registry,
+        abstract_types: BTreeSet<String>,
         access: &'a super::Access,
         inherent: &'a BTreeSet<String>,
         errors: &'a mut Vec<Diagnostic>,
@@ -588,6 +596,9 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
                 return;
             }
             let owner = &p.segments[1].text;
+            if self.abstract_types.contains(owner) {
+                return;
+            }
             let interface = &p.segments[2].text;
             let member = &p.segments[3].text;
             let Some(implementation) = self
@@ -619,6 +630,9 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
             if let TypeKind::Path { path: p, .. } = &t.kind
                 && p.segments.first().is_some_and(|n| n.text == "<qualified>")
             {
+                if self.abstract_types.contains(&p.segments[1].text) {
+                    return;
+                }
                 let found = self
                     .registry
                     .implementations
@@ -641,11 +655,22 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
     }
     let mut rewrite = Qualified {
         registry: &graph.traits,
+        abstract_types: BTreeSet::new(),
         access: &graph.access,
         inherent: &inherent,
         errors,
     };
     for d in &mut program.declarations {
+        rewrite.abstract_types = match &d.kind {
+            DeclarationKind::Function { generics, .. }
+            | DeclarationKind::Struct { generics, .. }
+            | DeclarationKind::Enum { generics, .. }
+            | DeclarationKind::Prop { generics, .. }
+            | DeclarationKind::Impl { generics, .. } => {
+                generics.iter().map(|g| g.name.text.clone()).collect()
+            }
+            _ => BTreeSet::new(),
+        };
         if let DeclarationKind::Impl { methods, .. } = &mut d.kind {
             for m in methods {
                 walk::member(&mut rewrite, m);
@@ -654,4 +679,16 @@ pub fn lower(program: &mut Program, graph: &mut Graph, errors: &mut Vec<Diagnost
             walk::member(&mut rewrite, d);
         }
     }
+}
+
+fn constraints(d: &Declaration) -> Vec<WherePredicate> {
+    struct Clear;
+    impl Walk for Clear {
+        fn span(&mut self, s: &mut Span) {
+            *s = Span::new(crate::source::FileId(0), 0, 0);
+        }
+    }
+    let mut d = d.clone();
+    walk::member(&mut Clear, &mut d);
+    d.constraints
 }

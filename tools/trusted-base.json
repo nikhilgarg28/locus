@@ -228,6 +228,14 @@
     {
       "path": "src/project/export/traits.rs",
       "category": "physical trait export and forwarding boundary"
+    },
+    {
+      "path": "src/project/trait_bounds.rs",
+      "category": "generic selection, obligations and source preservation"
+    },
+    {
+      "path": "src/elab/generics/bounds.rs",
+      "category": "generic selection, obligations and source preservation"
     }
   ]
 }

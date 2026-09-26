@@ -33,7 +33,7 @@ The lexer and Pratt/recursive-descent parser carry byte spans, bounded nesting a
 
 Free and associated constants share one checking path. Associated names retain their owner through dependency ordering and Rust emission. Physical constant arithmetic checks the operator's safety premises and evaluates its closed term through the existing kernel rules, then lowers the resulting literal. Logical observations model this checked physical value; neither execution interpreter participates in acceptance.
 
-Generic declarations are templates. Specialization substitutes concrete types throughout signatures, field types, propositions and bodies, then sends the result through the normal pipeline. Instance count and type-depth limits stop expanding polymorphic recursion. Uninstantiated generic bodies are not claimed to have passed universal checking. Runtime/logical mode is fixed by each declaration, not inferred anew per instance.
+Generic declarations are templates. Specialization substitutes concrete types throughout signatures, field types, propositions and bodies, then sends the result through the normal pipeline. Before substitution, a capability pass resolves abstract member selections from declared trait bounds. Specialization checks bound obligations and associated projections, selects conditional named-family implementations, and preserves the selected trait member identity. Instance count, obligation-cycle and type-depth limits stop expanding recursion. Uninstantiated generic bodies are not claimed to have passed universal checking. Runtime/logical mode is fixed by each declaration, not inferred anew per instance.
 
 ## Logical classification and physical layout
 
@@ -174,6 +174,12 @@ The frontend normalizes only outer shared references in logical parameter types,
 Resolution expands native namespaces before ordinary Locus resolution. Unused unsupported entities remain in the inventory and never become fake kernel types. Used safe scalar/tuple functions undergo a Rust function-pointer assertion against the native Cargo metadata, so `cfg(doc)` cannot authorize unavailable calls. Dependency aliases are resolved by package identity before choosing an emitted host path.
 
 `elab/native.rs` and `typed/native.rs` introduce a physical execution declaration with `Tail::Foreign` and `EExpr::NativeCall`. It has no behavioral contract, logical definition or effect promises. Both checking IR and erased IR validate its physical-only boundary. Rust emission retains normal call evaluation; the interpreters stop with an explicit unsupported-native observation. The audit lists native paths as physical signatures only. The metadata adapter and emission bridge belong to the whole-compiler trusted base; the proof kernel is unchanged. This boundary differs from registered `trusted` adapters, whose behavioral contracts are assumptions.
+
+## Target layout and struct forms
+
+`target.rs` resolves the Rust target through the project/build entry point. An immutable `PointerWidth` is carried by kernel definitions, checking IR and erased modules. Kernel machine identities distinguish `usize32` from `usize64` (and the signed counterparts); source and Rust spell both `usize`. Buffer bounds, operation checks, proof keys and emitted guards use that same layout. This parameter is part of the compiler's correctness boundary, not a new axiom or mutable global setting.
+
+Tuple/unit structs reuse nominal dependent product semantics. Source and erased declarations additionally retain their Rust constructor shape. Irrefutable patterns lower to checked projections; logical patterns erase, while ordinary patterns preserve moves and field visibility. The independent erased checker checks declaration shape, arity and target-sized physical types before Rust emission.
 
 ## Concrete traits
 

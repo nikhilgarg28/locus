@@ -1,8 +1,8 @@
-error[L0116]: generic inherent impls require a checked spec realization for now
-  --> tests/corpus/reject/rust_not_yet.lc:16:9
+error[L0100]: an inherent implementation must cover its type family exactly: `impl<T> Name<T>`
+  --> tests/corpus/reject/rust_not_yet.lc:16:21
    |
-16 | impl<T> Counter<T> { } //~ error: L0116 generic inherent impls
-   |         ^^^^^^^
+16 | impl<T> Counter<u8> { } //~ error: L0100 an inherent implementation must cover its type family exactly
+   |                     ^
 error[L0116]: compound assignment (`+=`) is not in Locus yet
   --> tests/corpus/reject/rust_not_yet.lc:20:11
    |

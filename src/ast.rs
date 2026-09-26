@@ -207,6 +207,8 @@ pub struct Program {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
+    /// Explicit generic obligations, checked before specializing this item.
+    pub constraints: Vec<WherePredicate>,
     /// Compiler-generated logical parameters on a specialized aggregate.
     pub captures: Vec<Name>,
     pub doc: Vec<DocComment>,
@@ -335,7 +337,31 @@ pub struct GenericParameter {
     /// Lifetime parameters are checked scopes, never type specializations.
     pub lifetime: bool,
     pub name: Name,
-    pub bounds: Vec<Path>,
+    pub bounds: Vec<GenericBound>,
+    pub span: Span,
+}
+
+/// One trait requirement, optionally fixing associated types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GenericBound {
+    pub path: Path,
+    pub associated: Vec<(Name, Type)>,
+}
+impl std::ops::Deref for GenericBound {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.path
+    }
+}
+impl std::ops::DerefMut for GenericBound {
+    fn deref_mut(&mut self) -> &mut Path {
+        &mut self.path
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WherePredicate {
+    pub subject: Type,
+    pub bounds: Vec<GenericBound>,
     pub span: Span,
 }
 

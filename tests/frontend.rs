@@ -3376,16 +3376,6 @@ fn operators_of_rust_are_reported_as_not_in_locus_yet() {
 fn constructs_of_rust_are_reported_as_not_in_locus_yet() {
     for (text, message, declarations) in [
         (
-            "impl<T> S { fn get() -> u8 { 1 } }",
-            "generic inherent impls require a checked spec realization for now",
-            0,
-        ),
-        (
-            "impl S<T> { fn get() -> u8 { 1 } }",
-            "generic inherent impls require a checked spec realization for now",
-            0,
-        ),
-        (
             "type Byte = u8;",
             "type aliases (`type`) are not in Locus yet",
             0,
@@ -4361,4 +4351,33 @@ fn omitted_return_types_are_unit_in_declarations_and_headers() {
     // An explicit arrow still requires a type, and omission cannot hide a typo.
     assert!(!parse_text("fn broken() -> {}").is_success());
     assert!(!parse_text("fn broken() u8 {}").is_success());
+}
+
+#[test]
+fn trait_bound_headers_and_complete_inherent_families_parse() {
+    for source in [
+        "fn read<T: A + B<Item = u8>>(x: T) -> T::Item where T::Item: C { x.read() }",
+        "impl<T: A> Holder<T> where T: B { fn read(&self) -> u8 where T: C { 0 } }",
+        "prop Valid<T>(x: T) where T: A { Check => { prop!(true) } }",
+    ] {
+        let parsed = parse_text(source);
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "{source}: {:?}",
+            parsed.diagnostics
+        );
+    }
+    for source in [
+        "impl<T> Holder {}",
+        "impl Holder<T> {}",
+        "impl<T> Holder<u8> {}",
+    ] {
+        let parsed = parse_text(source);
+        assert_eq!(parsed.diagnostics[0].code, "L0100", "{source}");
+        assert!(
+            parsed.diagnostics[0]
+                .message
+                .contains("cover its type family exactly")
+        );
+    }
 }

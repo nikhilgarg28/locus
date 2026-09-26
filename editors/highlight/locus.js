@@ -13,10 +13,10 @@
   'use strict';
 
   var KEYWORDS = new Set(['fn', 'const', 'let', 'if', 'else', 'struct', 'enum', 'match', 'loop', 'for', 'in',
-    'break', 'continue', 'while', 'return', 'mut', 'as', 'impl', 'pub', 'prop', 'logic', 'spec', 'import', 'trait']);
+    'break', 'continue', 'while', 'return', 'mut', 'as', 'impl', 'pub', 'prop', 'logic', 'spec', 'import', 'trait', 'where']);
   var QUANTIFIERS = new Set(['forall', 'exists']);
   var RESERVED = new Set(['async', 'await', 'crate', 'dyn', 'extern', 'mod', 'move', 'ref', 'static', 'super',
-    'type', 'unsafe', 'use', 'where', 'abstract', 'become', 'box', 'do', 'final', 'gen', 'macro', 'override', 'priv',
+    'type', 'unsafe', 'use', 'abstract', 'become', 'box', 'do', 'final', 'gen', 'macro', 'override', 'priv',
     'try', 'typeof', 'unsized', 'virtual', 'yield']);
   var LITERALS = new Set(['true', 'false', '_']);
   var SELF = new Set(['self', 'Self']);

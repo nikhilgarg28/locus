@@ -6,11 +6,13 @@
 //! It is a second judge of erasure's rule for values with no runtime form:
 //! a `let` may not bind a name to a value of type `Ghost`, the erasure of
 //! a proposition, an `Int`, or a `Ghost<T>`, since `erase` leaves such a
-//! binding out and replaces every mention of it by the marker. A parameter
+//! binding out and replaces every mention of it by the marker. A local
+//! borrowed by runtime code retains marker storage for the borrow. A parameter
 //! or a field of that type is a position and is allowed; evidence, of type
 //! `Proved`, is bound as any value is.
 
-use std::collections::HashMap;
+use super::cleanup::Visit;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::kernel::{Prim, VarId};
@@ -48,6 +50,7 @@ struct Checker<'m> {
     /// Each name in scope with its type and whether it may be assigned.
     env: Vec<(VarId, EType, bool)>,
     targets: Vec<Target>,
+    borrowed: HashSet<VarId>,
 }
 
 /// The type of an expression, or `None` when it never yields a value
@@ -111,6 +114,7 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
         result: EType::unit(),
         env: Vec::new(),
         targets: Vec::new(),
+        borrowed: HashSet::new(),
     };
     for function in &module.fns {
         // A `mut` or `&mut` parameter may be assigned.
@@ -127,6 +131,18 @@ pub fn check_module(module: &Module) -> Result<(), TypeError> {
             })
             .collect();
         checker.targets.clear();
+        struct Borrowed(HashSet<VarId>);
+        impl Visit for Borrowed {
+            fn expr(&mut self, expr: &EExpr) {
+                if let EExpr::Lend { place, .. } = expr {
+                    self.0.insert(place.id);
+                }
+                super::cleanup::walk_expr(self, expr);
+            }
+        }
+        let mut borrowed = Borrowed(HashSet::new());
+        borrowed.block(&function.body);
+        checker.borrowed = borrowed.0;
         checker.result = function.result.clone();
         let found = checker.block(&function.body)?;
         expect(
@@ -237,7 +253,7 @@ impl Checker<'_> {
                 mutable,
             } => {
                 target_type(ty, self.module.pointer_width)?;
-                if *ty == EType::Ghost {
+                if *ty == EType::Ghost && !self.borrowed.contains(id) {
                     return fail(format!(
                         "{name} is bound to a value with no runtime form, which erasure leaves out"
                     ));

@@ -303,7 +303,7 @@ fn unsupported_shapes_and_trait_type_misuse() {
         "trait A<T>{}",
         "trait A:B{}",
         "trait A{fn f<T>(x:T)->T;}",
-        "trait A{}struct S<T>{x:T}impl<T>A for S<T>{}",
+        "trait A{}struct S<T>{x:T}impl<T>A for S<u8>{}",
         "trait A{}fn f(x:A)->A{x}",
         "trait A{}struct Bad{x:A}",
         "trait A{type X;}struct S{}impl A for S{type X=Self::X;}",

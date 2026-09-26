@@ -14,6 +14,7 @@ use crate::source::{SourceMap, Span};
 use crate::limits::MAX_GENERIC_INSTANCES;
 use crate::limits::MAX_GENERIC_TYPE_DEPTH;
 type Types = HashMap<String, Type>;
+mod bounds;
 
 #[derive(Clone)]
 pub(super) struct QuantifierNames {
@@ -25,9 +26,17 @@ pub(super) struct QuantifierNames {
 pub(super) fn specialize(
     program: &Program,
     previews: &Previews,
-) -> (Program, Vec<Diagnostic>, Vec<QuantifierNames>) {
+    access: Option<&crate::project::Access>,
+) -> (
+    Program,
+    Vec<Diagnostic>,
+    Vec<QuantifierNames>,
+    Option<crate::project::Access>,
+) {
     let mut pass = Specializer {
         previews,
+        access: access.cloned(),
+        obligations: Vec::new(),
         templates: HashMap::new(),
         declarations: HashMap::new(),
         instances: HashMap::new(),
@@ -147,11 +156,14 @@ pub(super) fn specialize(
         },
         pass.diagnostics.into_vec(),
         quantifiers,
+        pass.access,
     )
 }
 
 struct Specializer<'a> {
     previews: &'a Previews,
+    access: Option<crate::project::Access>,
+    obligations: Vec<String>,
     templates: HashMap<String, Declaration>,
     declarations: HashMap<String, (Declaration, Types)>,
     instances: HashMap<String, String>,
@@ -187,6 +199,11 @@ impl Specializer<'_> {
     }
 
     fn register(&mut self, declaration: Declaration, builtin: bool) {
+        for predicate in bounds::requirements(&declaration) {
+            for bound in predicate.bounds {
+                self.validate_bound(&bound);
+            }
+        }
         let Some(name) = declaration_name(&declaration) else {
             return;
         };
@@ -214,13 +231,11 @@ impl Specializer<'_> {
             if !seen.insert(parameter.name.text.clone()) {
                 self.error("a generic parameter is declared twice", parameter.span);
             }
-            for bound in &parameter.bounds {
-                if bound.text() != "Logical" {
-                    self.error("only the `Logical` generic bound is supported", bound.span);
-                }
-            }
             if derives_logical(&declaration)
-                && parameter.bounds.is_empty()
+                && !bounds::requirements(&declaration).iter().any(|p| {
+                    matches!(&p.subject.kind, TypeKind::Named(n) if n.text == parameter.name.text)
+                        && p.bounds.iter().any(|b| b.text() == "Logical")
+                })
                 && stores_parameter(&declaration, &parameter.name.text)
             {
                 self.error(
@@ -287,7 +302,7 @@ impl Specializer<'_> {
             }
         }
         for (parameter, argument) in params.iter().zip(&args) {
-            if !parameter.bounds.is_empty() && !self.logical(argument) {
+            if parameter.bounds.iter().any(|b| b.text() == "Logical") && !self.logical(argument) {
                 self.error(
                     format!(
                         "type argument for `{}` does not satisfy `Logical`",
@@ -297,6 +312,14 @@ impl Specializer<'_> {
                 );
                 return None;
             }
+        }
+        let bindings: Types = params
+            .iter()
+            .zip(&args)
+            .map(|(p, a)| (p.name.text.clone(), a.clone()))
+            .collect();
+        if !self.requirements(&declaration, &bindings, locals, true) {
+            return None;
         }
         let key = format!(
             "{template}<{}>",
@@ -347,8 +370,36 @@ impl Specializer<'_> {
         self.declarations
             .insert(name.clone(), (declaration.clone(), substitutions.clone()));
         self.queue.push_back((declaration, substitutions.clone()));
+        self.associated_obligations(template, &name, locals, span);
         if let Some(impls) = self.impl_templates.get(template).cloned() {
             for mut implementation in impls {
+                let impl_substitutions: Types = all_parameters(&implementation)
+                    .iter()
+                    .filter(|p| !p.lifetime)
+                    .zip(&args)
+                    .map(|(p, a)| (p.name.text.clone(), a.clone()))
+                    .collect();
+                if !self.requirements(&implementation, &impl_substitutions, locals, false) {
+                    continue;
+                }
+                if let Some(access) = &mut self.access {
+                    let methods = access
+                        .traits
+                        .iter()
+                        .filter(|m| m.owner == template)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    for mut m in methods {
+                        m.owner = name.clone();
+                        if !access
+                            .traits
+                            .iter()
+                            .any(|n| n.owner == m.owner && n.lowered == m.lowered)
+                        {
+                            access.traits.push(m);
+                        }
+                    }
+                }
                 if let DeclarationKind::Impl {
                     target,
                     generics,
@@ -361,8 +412,11 @@ impl Specializer<'_> {
                         span: target.span,
                     }];
                     generics.clear();
-                    let mut method_substitutions = substitutions.clone();
+                    let mut method_substitutions = impl_substitutions.clone();
                     method_substitutions.insert("Self".into(), named_type(&target.segments[0]));
+                    methods.retain(|method| {
+                        self.requirements(method, &method_substitutions, locals, false)
+                    });
                     for method in methods {
                         if let Some(member) = declaration_name(method) {
                             self.declarations.insert(
@@ -372,8 +426,7 @@ impl Specializer<'_> {
                         }
                     }
                 }
-                self.queue
-                    .push_back((implementation, substitutions.clone()));
+                self.queue.push_back((implementation, impl_substitutions));
             }
         }
         if self.quantifier_templates.contains(template) {
@@ -410,6 +463,7 @@ impl Specializer<'_> {
 
     fn declaration(&mut self, declaration: &mut Declaration, substitutions: &Types) {
         let mut locals = Types::new();
+        self.requirements(declaration, substitutions, &locals, true);
         for name in &declaration.captures {
             locals.insert(name.text.clone(), prop_type(name.span));
         }
@@ -551,6 +605,11 @@ impl Specializer<'_> {
             return;
         }
         self.depth += 1;
+        if let Some(resolved) = self.projection(ty, substitutions, locals) {
+            *ty = resolved;
+            self.depth -= 1;
+            return;
+        }
         match &mut ty.kind {
             TypeKind::Scoped { claims, .. } => {
                 for claim in claims {
@@ -1182,8 +1241,16 @@ impl Specializer<'_> {
                     scoped = Some(*ty.clone());
                     *callee = value.clone();
                 }
-                let signature =
-                    expr_path(callee).and_then(|path| self.signature(&path.text(), locals));
+                let signature = if let ExprKind::Member { value, name } = &mut callee.kind {
+                    let receiver = self.expr(value, None, substitutions, locals);
+                    receiver
+                        .as_ref()
+                        .and_then(type_name)
+                        .map(|owner| format!("{}::{}", owner.text, name.text))
+                        .and_then(|path| self.signature(&path, locals))
+                } else {
+                    expr_path(callee).and_then(|path| self.signature(&path.text(), locals))
+                };
                 let mut payload = expr_path(callee).and_then(|path| self.payload(&path, locals));
                 restore_payload(&mut payload, scoped.as_ref().or(expected));
                 for (index, argument) in arguments.iter_mut().enumerate() {
@@ -1323,6 +1390,20 @@ impl Specializer<'_> {
                         span,
                     })
             }
+            ExprKind::Unary {
+                operator: UnaryOp::Deref,
+                expr: inner,
+                ..
+            } => self
+                .expr(inner, None, substitutions, locals)
+                .and_then(|ty| match ty.kind {
+                    TypeKind::Ref { inner, .. } => Some(*inner),
+                    TypeKind::Path {
+                        path,
+                        mut arguments,
+                    } if path.text() == "Box" && arguments.len() == 1 => Some(arguments.remove(0)),
+                    _ => expected.cloned(),
+                }),
             ExprKind::Not(inner) | ExprKind::Unary { expr: inner, .. } => {
                 self.expr(inner, expected, substitutions, locals)
             }
@@ -1700,7 +1781,9 @@ fn infer_type_arguments(
         (_, TypeKind::Group(inner)) => {
             infer_type_arguments(template, inner, parameters, inferred, origins)
         }
-        (TypeKind::Ref { inner: left, .. }, TypeKind::Ref { inner: right, .. }) => {
+        (TypeKind::Ref { inner: left, .. }, TypeKind::Ref { inner: right, .. })
+        | (TypeKind::Array { element: left, .. }, TypeKind::Array { element: right, .. })
+        | (TypeKind::Slice(left), TypeKind::Slice(right)) => {
             infer_type_arguments(left, right, parameters, inferred, origins)
         }
         (
@@ -2003,7 +2086,7 @@ mod lifetime_tests {
                 previews.enable(feature.name()).unwrap();
             }
         }
-        let (program, diagnostics, _) = specialize(&parsed.program, &previews);
+        let (program, diagnostics, _, _) = specialize(&parsed.program, &previews, None);
         assert!(diagnostics.is_empty(), "{diagnostics:#?}");
         let structs: Vec<_> = program
             .declarations

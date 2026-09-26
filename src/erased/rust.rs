@@ -160,6 +160,8 @@ struct Printer<'m> {
     /// The reference parameters of the function being printed: a mention
     /// of one as a whole is written through `*`.
     refs: HashSet<VarId>,
+    /// Logical owners have a namespace but no physical Self representation.
+    erased_owner: bool,
 }
 
 /// The module as Rust source with every item and field `pub` and the
@@ -261,6 +263,7 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
             "#[cfg(not(target_pointer_width = \"{width}\"))]\ncompile_error!(\"Locus checked this module for {width}-bit pointers; regenerate it for the selected Rust target\");\n"
         ),
         refs: HashSet::new(),
+        erased_owner: false,
     };
     for item in &module.structs {
         if visibilities.hidden.contains(&item.name) {
@@ -367,6 +370,14 @@ fn items(module: &Module, visibilities: &Visibilities) -> String {
         }
     }
     for owner in owners {
+        printer.erased_owner = !module.structs.iter().any(|s| s.name == owner)
+            && !module.enums.iter().any(|e| e.name == owner);
+        if printer.erased_owner {
+            // This zero-sized namespace is never used as a value. Logical
+            // arguments/results still use Erased; no source representation leaks.
+            printer.private_item("");
+            let _ = writeln!(printer.out, "struct {owner};");
+        }
         let _ = write!(printer.out, "\nimpl {owner} {{");
         for function in module.fns.iter().filter(|function| {
             function.owner.as_deref() == Some(owner)
@@ -491,6 +502,7 @@ impl Printer<'_> {
                     _ => None,
                 };
                 let ty = self.ty(ty);
+                let name = self.binding_name(name);
                 if let Some((lifetime, inner)) = reference_ty {
                     let lifetime = lifetime
                         .as_ref()
@@ -503,7 +515,10 @@ impl Printer<'_> {
                     };
                     return format!("{name}: &{lifetime}{mutable}{}", self.ty(inner));
                 }
-                match (function.receiver && index == 0, function.passing_of(index)) {
+                match (
+                    function.receiver && !self.erased_owner && index == 0,
+                    function.passing_of(index),
+                ) {
                     (true, Passing::Value) => "self".into(),
                     (true, Passing::MutValue) => "mut self".into(),
                     (true, Passing::Ref) => "&self".into(),
@@ -707,15 +722,22 @@ impl Printer<'_> {
     /// written bare.
     fn through_reference(&mut self, operand: &EExpr) -> String {
         match operand {
-            EExpr::Var { id, name } if self.refs.contains(id) => name.clone(),
+            EExpr::Var { id, name } if self.refs.contains(id) => self.binding_name(name),
             other => self.postfix_operand(other),
         }
     }
 
-    /// A place, as the left side of an assignment or the operand of a
-    /// lend: `x.f.0`, or `*x` for the whole of a reference parameter.
+    /// A logical receiver is an explicit marker argument, not Rust's Self.
+    fn binding_name(&self, name: &str) -> String {
+        if self.erased_owner && name == "self" {
+            "__locus_self".into()
+        } else {
+            name.into()
+        }
+    }
+    /// A place, as an assignment target or borrow operand.
     fn place(&self, place: &EPlace) -> String {
-        let mut target = place.name.clone();
+        let mut target = self.binding_name(&place.name);
         for (index, name) in &place.path {
             match name {
                 Some(name) => target.push_str(&format!(".{name}")),
@@ -805,8 +827,10 @@ impl Printer<'_> {
             } => self.buffer(*op, *storage, arguments),
             // A reference parameter mentioned as a whole is the value
             // behind it.
-            EExpr::Var { id, name } if self.refs.contains(id) => format!("*{name}"),
-            EExpr::Var { name, .. } => name.clone(),
+            EExpr::Var { id, name } if self.refs.contains(id) => {
+                format!("*{}", self.binding_name(name))
+            }
+            EExpr::Var { name, .. } => self.binding_name(name),
             EExpr::Bool(value) => value.to_string(),
             EExpr::Literal(ty, value) => literal(*ty, *value),
             EExpr::Proved | EExpr::Ghost => "Erased".into(),

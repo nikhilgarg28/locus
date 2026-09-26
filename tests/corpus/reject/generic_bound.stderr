@@ -1,5 +1,5 @@
-error[L0281]: only the `Logical` generic bound is supported
+error[L0281]: unknown or unsupported trait bound `Debug`
  --> tests/corpus/reject/generic_bound.lc:1:19
   |
-1 | struct Wrapper<T: Debug> { value: T } //~ error: L0281 only the `Logical` generic bound
+1 | struct Wrapper<T: Debug> { value: T } //~ error: L0281 unknown or unsupported trait bound `Debug`
   |                   ^^^^^

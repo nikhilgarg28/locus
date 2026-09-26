@@ -584,13 +584,15 @@ fn imported_trait_implementation_and_native_identity() {
     .unwrap();
     let code = r#"
 import renamed::Surface;
+import renamed::Surface as Readable;
 pub struct Counter {pub n:u8}
 impl Surface for Counter {
  type Item=u8;
  const LIMIT:u8=10;
  fn read(&self)->u8{self.n}
 }
-pub fn answer()->u8 {let c=Counter{n:42};c.read()}
+fn generic_read<T: Readable<Item=u8>>(c: &T)->u8 { c.read() }
+pub fn answer()->u8 {let c=Counter{n:42};generic_read(&c)}
 "#;
     let b = build(&root, code);
     let rust = b.rust().unwrap();

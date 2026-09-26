@@ -331,6 +331,17 @@ pub fn expr<W: Walk + ?Sized>(w: &mut W, e: &mut Expr) {
 }
 pub fn member<W: Walk + ?Sized>(w: &mut W, d: &mut Declaration) {
     w.span(&mut d.span);
+    for predicate in &mut d.constraints {
+        w.ty(&mut predicate.subject);
+        w.span(&mut predicate.span);
+        for bound in &mut predicate.bounds {
+            w.path(&mut bound.path);
+            for (name, ty) in &mut bound.associated {
+                w.name(name);
+                w.ty(ty);
+            }
+        }
+    }
     for a in &mut d.attributes {
         w.span(&mut a.span);
         if let AttributeKind::Terminates { decreases: Some(e) } = &mut a.kind {
@@ -352,6 +363,10 @@ pub fn member<W: Walk + ?Sized>(w: &mut W, d: &mut Declaration) {
                 w.span(&mut g.span);
                 for p in &mut g.bounds {
                     w.path(p);
+                    for (name, ty) in &mut p.associated {
+                        w.name(name);
+                        w.ty(ty);
+                    }
                 }
             }
             w.name(name);

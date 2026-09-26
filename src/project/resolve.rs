@@ -60,6 +60,7 @@ pub struct Graph {
 }
 #[derive(Clone, Debug, Default)]
 pub struct Access {
+    pub trait_registry: super::traits::Registry,
     pub traits: Vec<super::traits::Method>,
     pub scopes: Vec<(Option<usize>, Span)>,
     pub names: Vec<String>,
@@ -283,8 +284,10 @@ pub fn resolve_units(
         declarations,
         ..Program::default()
     };
+    super::trait_bounds::prepare(&mut program, &mut errors);
     super::traits::lower(&mut program, &mut graph, &mut errors);
     super::specs::lower(&mut program, &mut graph, &mut errors);
+    graph.access.trait_registry = graph.traits.clone();
     (
         Program {
             declarations: program.declarations,
@@ -920,9 +923,10 @@ impl Rewriter<'_> {
             }
             return;
         }
-        if path.segments.len() == 1
-            && (self.types.contains(&path.segments[0].text)
-                || (ns == Namespace::Value && self.values.contains(&path.segments[0].text)))
+        if self.types.contains(&path.segments[0].text)
+            || (path.segments.len() == 1
+                && ns == Namespace::Value
+                && self.values.contains(&path.segments[0].text))
         {
             return;
         }
@@ -1004,9 +1008,40 @@ impl Rewriter<'_> {
         self.path(&mut p, ns);
         *name = p.segments.remove(0);
     }
+    fn bound(&mut self, bound: &mut GenericBound) {
+        self.path(&mut bound.path, Namespace::Type);
+        for (_, ty) in &mut bound.associated {
+            self.ty(ty);
+        }
+    }
     fn declaration(&mut self, d: &mut Declaration) {
         let old_v = self.values.len();
         let old_t = self.types.len();
+        let generics = match &mut d.kind {
+            DeclarationKind::Function { generics, .. }
+            | DeclarationKind::Struct { generics, .. }
+            | DeclarationKind::Enum { generics, .. }
+            | DeclarationKind::Prop { generics, .. }
+            | DeclarationKind::Impl { generics, .. }
+            | DeclarationKind::Spec { generics, .. }
+            | DeclarationKind::SpecImpl { generics, .. } => Some(generics),
+            _ => None,
+        };
+        if let Some(generics) = generics {
+            self.types
+                .extend(generics.iter().map(|g| g.name.text.clone()));
+            for g in generics {
+                for b in &mut g.bounds {
+                    self.bound(b);
+                }
+            }
+        }
+        for predicate in &mut d.constraints {
+            self.ty(&mut predicate.subject);
+            for b in &mut predicate.bounds {
+                self.bound(b);
+            }
+        }
         match &mut d.kind {
             DeclarationKind::Trait { members, .. } => {
                 for member in members {

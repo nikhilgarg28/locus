@@ -35,6 +35,14 @@ pub(super) fn interfaces(
         let start_errors = export.errors.len();
         let path = root.path.join("::");
         for member in members {
+            if !member.constraints.is_empty() {
+                export.error(
+                    &path,
+                    root.span,
+                    member.span,
+                    "trait method bounds cannot yet cross the Rust implementation boundary",
+                );
+            }
             if member.attributes.iter().any(|a| a.kind.is_promise()) {
                 export.error(
                     &path,
@@ -67,6 +75,11 @@ pub(super) fn interfaces(
         );
         for implementation in &registry.implementations {
             if implementation.interface != item.canonical {
+                continue;
+            }
+            if !implementation.generics.is_empty() || !implementation.constraints.is_empty() {
+                export.error(&path, root.span, implementation.span,
+                    "generic trait implementation export requires preserving its bounds; export a concrete checked wrapper instead");
                 continue;
             }
             // Check actual bindings too: an unconstrained associated slot may
@@ -159,6 +172,11 @@ pub(super) fn interfaces(
             foreign.path
         );
         for implementation in implementations {
+            if !implementation.generics.is_empty() || !implementation.constraints.is_empty() {
+                export.error(&foreign.path, implementation.span, implementation.span,
+                    "generic native trait forwarding is not supported yet; use a concrete implementation");
+                continue;
+            }
             for ty in implementation.associated.values() {
                 let _ = trait_type(ty, unit, export, implementation.span, &foreign.path);
             }

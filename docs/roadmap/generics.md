@@ -24,13 +24,15 @@ Fixed-width integers are complete ([LOC-171](core-build.md#LOC-171)). Remaining:
 ## LOC-21 · User-defined traits and checked implementations
 <!-- task: {"id": "t26", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-25T17:27:33.366974+00:00"} -->
 
-Implemented and validated on `feat/native-traits`: concrete traits and implementations, associated types/constants, logical methods, explicit proof slots, inherited defaults checked per implementation, scoped selection and qualification, and physical Rust trait exports/imports. No new proof axiom or execution IR form is introduced. See the [plan](../plans/native-traits.md) and [manual](../spec/20-traits.md). Validation covers focused edge cases, real Cargo/directory fixtures, warning-denied Rust runs, checked documentation and a completed extended gate. Generic bounds, compiler-integrated traits, supertraits and dynamic dispatch remain separate follow-ups. The built-in Logical classification, Model registration and closed derives remain compiler-owned. Required by [LOC-22](generics.md#LOC-22), [LOC-125](generics.md#LOC-125) and iterator integration ([LOC-30](memory-layout.md#LOC-30)).
+Implemented and validated on `feat/native-traits`: concrete traits and implementations, associated types/constants, logical methods, explicit proof slots, inherited defaults checked per implementation, scoped selection and qualification, and physical Rust trait exports/imports. No new proof axiom or execution IR form is introduced. See the [plan](../plans/native-traits.md) and [manual](../spec/20-traits.md). Validation covers focused edge cases, real Cargo/directory fixtures, warning-denied Rust runs, checked documentation and a completed extended gate. Generic bounds are implemented by LOC-22; compiler-integrated traits, supertraits and dynamic dispatch remain separate follow-ups. The built-in Logical classification, Model registration and closed derives remain compiler-owned. Required by [LOC-22](generics.md#LOC-22), [LOC-125](generics.md#LOC-125) and iterator integration ([LOC-30](memory-layout.md#LOC-30)).
 
 <a id="LOC-22"></a>
 ## LOC-22 · General generic bounds and where clauses
-<!-- task: {"id": "t27", "status": "backlog", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-23T05:30:08.935417+00:00"} -->
+<!-- task: {"id": "t27", "status": "done", "priority": 0, "created": "2026-09-21T19:19:39.000Z", "updated": "2026-09-26T02:51:53.048858+00:00"} -->
 
-Delivered: concrete type specialization, inference and Logical bounds ([LOC-218](reconciliation.md#LOC-218), [LOC-219](reconciliation.md#LOC-219); tests/reconcile_generics.rs). Remaining: general where clauses, trait-bound checking, generic impl blocks and a stated policy for checking generic bodies. Current unused templates are not universal proofs. Scoped proof arguments of nonrecursive aggregates are implemented by [LOC-243–246](#LOC-243). Remaining dependent-generic work includes generic functions/propositions with open type arguments, recursive families and arguments combining inner binders with outer dependencies.
+Static trait bounds are implemented on `feat/native-traits`: inline and where requirements, associated equality/projection bounds, bound-directed member selection, conditional complete-family implementations and inherent methods, and checked concrete instantiation. Proof and effect semantics reuse the ordinary checker. See the [plan](../plans/trait-bounds.md), [manual](../spec/20-traits.md#generic-bounds) and `tests/trait_bounds.rs`. Validation includes 27 focused regression groups, real module/Cargo fixtures, warning-denied generated Rust, checked documentation, desktop/mobile manual review and a completed extended gate. The debug suite exceeded its advisory 120-second target. The independent checking-interpreter gap for indirect logical callable values is pinned and tracked in LOC-268; that case is not claimed as successful differential coverage. Final timings and freshness are recorded in generated status.
+
+Explicit follow-ups: generic trait parameters/supertraits (LOC-263), method-local parameters (LOC-264), universal generic checking and Rust export (LOC-265), compiler-owned Model/other bound integration (LOC-266), and broader implementation patterns/projection normalization (LOC-267). Scoped proof arguments of nonrecursive aggregates remain implemented by LOC-243–246. Generic functions/propositions with open proof arguments and recursive dependent families remain separate work.
 
 <a id="LOC-24"></a>
 ## LOC-24 · Runtime closures and callable traits
@@ -183,3 +185,39 @@ Defaults currently receive checks for each concrete implementation. Before expor
 Concrete implementations currently lower to checked inherent helpers on named Locus structs, enums and opaque spec types. Extend dispatch and emission to primitives, references and built-in containers without generating illegal Rust inherent implementations. Preserve trait/type identity, coherence, scoped lookup, ownership and erasure; keep compiler-integrated traits separate. Generic implementations belong to [LOC-22](#LOC-22), native opaque types and cross-package ABI work to [LOC-44](interop.md#LOC-44).
 
 Acceptance: positive and conflicting implementations, qualified and method-call selection, proof contracts, interpreter agreement and warning-denied generated Rust for each admitted target family. Do not admit a target merely because its type grammar parses.
+
+<a id="LOC-263"></a>
+## LOC-263 · Generic trait parameters and supertraits
+<!-- task: {"id": "bounds-263", "status": "backlog", "priority": 1} -->
+
+Add trait type parameters and inherited requirements, including associated-item bounds beyond Logical. Preserve trait argument identity through native imports, selection, ambiguity/coherence and erasure. Check implied obligations without unbounded recursive expansion; test diamond inheritance and defaults. Generic associated types, negative bounds and specialization require separate designs.
+
+<a id="LOC-264"></a>
+## LOC-264 · Method-local type parameters
+<!-- task: {"id": "bounds-264", "status": "backlog", "priority": 1} -->
+
+Add independent generic parameters to inherent, trait and spec methods. Existing method `where` clauses can constrain enclosing family parameters. Extend inference, receiver handling, explicit method turbofish, signature matching and concrete specialization without changing borrow/evaluation order. Cover a generic method on a generic owner and logical/proof-dependent results.
+
+<a id="LOC-265"></a>
+## LOC-265 · Universal generic checking and open Rust exports
+<!-- task: {"id": "bounds-265", "status": "backlog", "priority": 1} -->
+
+Represent abstract types, projections and logical trait operations throughout checking. Check unused generic bodies and proofs from interface laws once, independent of concrete definitions. Preserve explicit proof slots and total logical calls. Define when an open generic Rust export may admit arbitrary Rust implementations without dropping logical bounds. Coordinate default checking and promises with LOC-261; retain concrete instantiation checking until this is complete.
+
+<a id="LOC-266"></a>
+## LOC-266 · Compiler-owned interfaces as bounds
+<!-- task: {"id": "bounds-266", "status": "backlog", "priority": 1} -->
+
+Integrate canonical Model registration and other compiler-known capabilities into the ordinary obligation machinery. Logical classification is already supported. Define `<T as Model>::Logic` for primitives, registered/derived models and native storage observations without inventing a second model or admitting runtime reads from erased data. Copy, operator and derive integration must preserve their existing compiler rules; source trait declarations cannot impersonate them.
+
+<a id="LOC-267"></a>
+## LOC-267 · Broader implementation patterns and projection normalization
+<!-- task: {"id": "bounds-267", "status": "backlog", "priority": 2} -->
+
+Extend complete named-family implementations to partial type patterns, bare-parameter blanket implementations, and nested/chained associated projections. Define conservative overlap checking across packages and recursive obligations. Normalize equivalent associated constraints for spec-family matching. Keep specialization and proof-driven implementation selection out unless separately designed. Coordinate primitive/reference targets with LOC-262 and native generic forwarding with LOC-44.
+
+<a id="LOC-268"></a>
+## LOC-268 · Indirect logical calls in the checking interpreter
+<!-- task: {"id": "bounds-268", "status": "backlog", "priority": 1} -->
+
+Extend the independent checking-IR interpreter to recognize logical callable values through bindings and projections. A literal lambda already skips its logical computation; `let f = |x: T| x; f(value)` can instead report `a call through a function value`. Source checking and erased execution support this form. `tests/trait_bounds.rs` pins the exact interpreter limitation while checking the accepted program and erased result; an unexpected pass must remove the known-bug marker. Cover proof-valued results and preserve ordinary callee/argument effects before claiming differential coverage for this case.

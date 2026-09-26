@@ -38,3 +38,5 @@ pub(crate) mod specs;
 pub(crate) use resolve::resolve as resolve_inline;
 
 pub(crate) mod traits;
+
+mod trait_bounds;

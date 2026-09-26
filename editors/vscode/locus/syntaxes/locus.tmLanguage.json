@@ -270,7 +270,7 @@
           "name": "keyword.control.locus"
         },
         {
-          "match": "\\b(fn|let|mut|struct|enum|impl|const|pub|prop|logic|spec|import|trait|as)\\b",
+          "match": "\\b(fn|let|mut|struct|enum|impl|const|pub|prop|logic|spec|import|trait|where|as)\\b",
           "name": "keyword.other.locus"
         },
         {
@@ -291,7 +291,7 @@
         },
         {
           "comment": "Reserved: every keyword of Rust that Locus does not use, refused with a diagnostic",
-          "match": "\\b(async|await|crate|dyn|extern|mod|move|ref|static|super|type|unsafe|use|where|abstract|become|box|do|final|gen|macro|override|priv|try|typeof|unsized|virtual|yield)\\b",
+          "match": "\\b(async|await|crate|dyn|extern|mod|move|ref|static|super|type|unsafe|use|abstract|become|box|do|final|gen|macro|override|priv|try|typeof|unsized|virtual|yield)\\b",
           "name": "keyword.other.reserved.locus"
         }
       ]

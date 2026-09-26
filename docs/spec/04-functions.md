@@ -16,7 +16,7 @@ A signature tells the caller what to supply and what a successful return establi
 ## Parameters and results
 
 <!-- spec: 1.9:1 syntax -->
-Declare an ordinary function as `fn name(parameters) -> Result { body }`. Omitting the result annotation means `-> ()`; it does not infer the result from the body. This applies to methods and spec headers too. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
+Declare an ordinary function as `fn name(parameters) -> Result { body }`. Omitting the result annotation means `-> ()`; it does not infer the result from the body. This applies to methods and spec headers too. [Generic bounds](20-traits.md#generic-bounds) use `fn name<T: Trait>(...)` or a `where` clause after the result type. Parameters may be mutable or borrowed. A result type can mention input values, and named tuple fields bind returned values for later evidence fields. Ordinary runtime recursion is not yet supported.
 
 <!-- spec: 1.90:22 example -->
 ~~~rust run

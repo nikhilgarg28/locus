@@ -40,6 +40,8 @@ for (const [cls, text] of expect) {
   const needle = '<span class="' + cls + '">' + text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '</span>';
   if (!lock.includes(needle)) { failures++; console.error('expected ' + needle + ' in lock.lc'); }
 }
+const bounds = highlightLocus('fn read<T>(x: T) -> u8 where T: Read { x.read() }');
+if (!bounds.includes('<span class="hljs-keyword">where</span>')) { failures++; console.error('where is not an active keyword'); }
 const directive = highlightLocus('//~ run: step(3) => 4\n');
 if (!directive.includes('<span class="hljs-meta">//~ run:</span>')) { failures++; console.error('directive head not marked: ' + directive); }
 console.log((failures ? 'FAILED ' : 'ok ') + files.length + ' files highlighted losslessly' + (failures ? ', ' + failures + ' failures' : ''));
