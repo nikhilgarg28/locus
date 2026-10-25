@@ -1,0 +1,21 @@
+//~ question: Does a glob-imported macro named `prove` keep its Rust meaning?
+//~ spec: compat.names.shadowable
+//~ rfc: 0001
+
+mod checks {
+    macro_rules! prove {
+        ($condition:expr) => {
+            $condition
+        };
+    }
+    pub(crate) use prove;
+}
+
+use checks::*;
+
+fn is_even(x: u32) -> bool {
+    prove!(x % 2 == 0)
+}
+
+//~ run: is_even(4) => true
+//~ run: is_even(5) => false

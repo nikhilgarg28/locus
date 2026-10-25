@@ -1,0 +1,13 @@
+//~ question: Does `@` in a pattern keep its Rust meaning, rather than being read as a proof?
+//~ spec: compat.syntax.not-rust
+//~ rfc: 0001
+
+fn bucket(n: u32) -> u32 {
+    match n {
+        small @ 0..=9 => small,
+        other => other / 10,
+    }
+}
+
+//~ run: bucket(7) => 7
+//~ run: bucket(42) => 4

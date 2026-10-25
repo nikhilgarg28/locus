@@ -1,0 +1,20 @@
+//~ question: Does `_` keep its Rust meaning where Rust accepts it, rather than being read as a proof hole?
+//~ spec: compat.syntax.not-rust
+//~ rfc: 0001
+
+fn first_of(pair: (u32, u32)) -> u32 {
+    let a;
+    (a, _) = pair;
+    a
+}
+
+fn zeros() -> usize {
+    let xs: [u8; 4] = [0; _];
+    let ys = Vec::<_>::from(xs);
+    match ys.len() {
+        _ => ys.len(),
+    }
+}
+
+//~ run: first_of((7, 9)) => 7
+//~ run: zeros() => 4

@@ -9,6 +9,6 @@ fn consume(v: Vec<u32>) -> usize {
 fn f() -> usize {
     let v = vec![1, 2, 3];
     let count = consume(v);
-    let n = @{ v.len() }; //~ error: logical code reads `v` after `v` was moved
+    let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved
     count
 }

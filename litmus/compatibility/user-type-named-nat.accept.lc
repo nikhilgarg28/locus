@@ -1,0 +1,15 @@
+//~ question: Does a program's own type named `Nat` take precedence over Locus's?
+//~ spec: compat.names.shadowable
+//~ rfc: 0001
+
+struct Nat(u8);
+
+fn next(n: Nat) -> Nat {
+    Nat(n.0 + 1)
+}
+
+fn value() -> u8 {
+    next(Nat(4)).0
+}
+
+//~ run: value() => 5

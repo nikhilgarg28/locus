@@ -1,8 +1,0 @@
-//~ question: Is `prove!` a built-in macro?
-//~ spec: compat.macros.none-built-in
-//~ rfc: 0001
-
-fn half(x: u32) -> u32 {
-    prove!(x % 2 == 0); //~ error: cannot find macro `prove` in this scope
-    x / 2
-}

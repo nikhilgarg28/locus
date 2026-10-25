@@ -1,0 +1,13 @@
+//~ question: May `logic` and `prop` be used as names, raw or not, even before a call?
+//~ spec: compat.syntax.contextual-keywords
+//~ rfc: 0001
+
+fn r#logic(prop: u32) -> u32 {
+    prop + 1
+}
+
+fn call() -> u32 {
+    logic(1) + r#logic(2)
+}
+
+//~ run: call() => 5

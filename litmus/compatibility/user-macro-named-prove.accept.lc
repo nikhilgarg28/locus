@@ -1,5 +1,5 @@
 //~ question: Does a program's own macro named `prove` keep its Rust meaning?
-//~ spec: compat.macros.none-built-in
+//~ spec: compat.names.shadowable
 //~ rfc: 0001
 
 macro_rules! prove {

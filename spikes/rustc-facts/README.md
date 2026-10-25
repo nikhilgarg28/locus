@@ -20,20 +20,20 @@ Can Locus hand a crate to rustc as a *checking program*, in which logical types 
   - logical types become `__locus::Proof` and `__locus::Nat`;
   - the logic function becomes a stub;
   - each proof becomes `__locus::observe(&place)` for every place it reads, plus `__locus::resolve(path)` for every item it names.
-- `sample/src/lib.rs` is the runtime program Locus would emit, also by hand. Cargo builds this file normally.
+- `sample/src/lib.rs` is the runtime program Locus would emit, also by hand. Cargo builds this file normally. Its `pub struct Erased` is a shortcut of the spike: a real runtime program keeps its proof stand-in private to the crate, as RFC 0001 requires.
 - `sample/dep` is a path dependency providing `Meters`.
 - `driver/` is a rustc driver, about 150 lines. Cargo runs it as `RUSTC_WORKSPACE_WRAPPER`.
   - For the target crate, it replaces the crate root `src/lib.rs` with `check/lib.rs`.
   - After macro expansion, it asks rustc's type checker about every `observe` and `resolve` call and writes the answers as JSON lines.
   - For one function, `first`, it also writes each expression of rustc's typed body (THIR) with its type.
   - It then lets compilation continue, so rustc's own checks, including the borrow checker, run as usual.
-  - For every other crate, it behaves exactly like rustc.
+  - For every other crate, it behaves exactly like rustc. If the crate name does not match, it silently compiles the crate as it is, which a real driver must not do: RFC 0001 requires it to fail instead.
 
 Run `./run.sh`. It needs `rustup component add rustc-dev llvm-tools --toolchain stable`.
 
 ## Results
 
-With stable rustc 1.97.0, run on 2026-10-25:
+With stable rustc 1.97.0, the stable release installed here, run on 2026-10-25:
 
 ```text
 cargo check exit status: 101
@@ -90,7 +90,7 @@ The full run took 2.2 seconds of wall time, including building the driver from s
    - The same source built against nightly 2026-10-20 (1.101), four releases later, after one change: `rustc_driver::run_compiler` is now `rustc_driver::compiler_entrypoint`.
    - Everything else this spike uses was unchanged: `after_expansion`, `hir_body_owners`, `typeck`, `qpath_res`, the HIR visitor, and `thir_body`.
    - A driver that translates whole THIR or MIR bodies would touch a much larger surface, which changes faster.
-7. **Synthesized code produces warnings.** rustc warned about unused names that exist only in the checking program, or are used only by proofs (`xs`, `nonempty`, `kept`, `late`). Locus must decide which rustc warnings to forward.
+7. **The checking program produces spurious warnings.** rustc warned about unused names: a stub's parameter (`xs`), a proof parameter (`nonempty`), and two proof bindings (`kept`, `late`). All four spans are in copied text, so span position alone cannot tell spurious warnings from real ones. RFC 0001 therefore compiles the checking program with lints off and takes lints from the runtime program.
 8. **Mapping is needed even when lines align.** Lines match between `lib.lc` and `check/lib.rs` here, but columns do not: `v` is at column 51 in the checking program and column 17 in the source. Real lowering needs an origin map from generated spans to source spans.
 
 ## Not tested

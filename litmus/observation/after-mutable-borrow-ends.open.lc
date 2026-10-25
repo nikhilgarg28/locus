@@ -1,12 +1,13 @@
 //~ question: May logical code read a vector once a mutable borrow of it has ended?
 //~ spec: observe.place.readable
+//~ issue: #4
 //~ rfc: 0001
 
 fn f() -> usize {
     let mut v = vec![1, 2, 3];
     let r = &mut v;
     r.push(4);
-    let n = @{ v.len() };
+    let n = logic! { v.len() };
     v.len()
 }
 

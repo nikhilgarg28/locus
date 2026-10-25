@@ -8,6 +8,6 @@ fn consume(v: Vec<u32>) -> usize {
 
 fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
     let count = consume(v);
-    let again: @(v.len() > 0) = nonempty; //~ error: the proof reads `v` after `v` was moved
+    let again: @(v.len() > 0) = nonempty; //~ error: logical code reads `v` after `v` was moved
     count
 }
