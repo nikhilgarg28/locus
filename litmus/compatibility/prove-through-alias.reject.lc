@@ -1,0 +1,10 @@
+//~ question: May Locus's `prove!` be invoked under another name?
+//~ spec: compat.names.direct-only
+//~ rfc: 0001
+
+use prove as check;
+
+fn same(x: u32) -> u32 {
+    let proof = check!(x == x); //~ error: Locus's `prove!` can be invoked only by its own name
+    x
+}

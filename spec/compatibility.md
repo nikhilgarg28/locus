@@ -29,5 +29,8 @@ Locus's macros (`logic!`, `prop!`, `prove!`), its `Logical` derive, its `Model` 
 r[compat.names.shadowable]
 A program's own definitions and imports take precedence over Locus's names, as they would over the standard prelude's, including a glob-imported macro with the same name as one of Locus's.
 
-r[compat.names.not-in-macro-input]
-A Locus macro invoked inside another macro's input is rejected.
+r[compat.names.no-methods]
+Traits among Locus's names have no methods, associated functions, or associated constants, so that having them in scope never changes what a method call or path in Rust code resolves to.
+
+r[compat.names.direct-only]
+Locus's macros take effect only where they are invoked directly, by their own names, outside any other macro's input or output. An invocation of one of Locus's macros that rustc expands anywhere else, such as inside another macro's input, in a macro's output, or under another name, is rejected. A Locus macro name that is never expanded, as inside `stringify!`, is only tokens.

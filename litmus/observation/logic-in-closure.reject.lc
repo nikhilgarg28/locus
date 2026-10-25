@@ -1,5 +1,5 @@
 //~ question: May logical code appear inside a closure body?
-//~ spec: observe.closures.rejected
+//~ spec: observe.captures.rejected
 //~ rfc: 0001
 
 fn f() -> usize {

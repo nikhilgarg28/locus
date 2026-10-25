@@ -1,0 +1,12 @@
+//~ question: Is a proposition in a `let` annotation read after the `let`'s initializer has run?
+//~ spec: observe.let.after-initializer, observe.place.readable
+//~ rfc: 0001
+
+fn consume(v: Vec<u32>) -> usize {
+    v.len()
+}
+
+fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
+    let (count, again): (usize, @(v.len() > 0)) = (consume(v), nonempty); //~ error: logical code reads `v` after `v` was moved
+    count
+}

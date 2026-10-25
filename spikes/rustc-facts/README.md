@@ -84,7 +84,8 @@ The full run took 2.2 seconds of wall time, including building the driver from s
    - v0 captured Cargo invocations through `RUSTC_WRAPPER` for the same reason.
 5. **Stable: yes, through `RUSTC_BOOTSTRAP=1`.**
    - The driver built against stable 1.97's `rustc-dev` component and ran under stable Cargo.
-   - `RUSTC_BOOTSTRAP` is needed only to build the driver, not when it runs, and the crate being checked never sees it.
+   - In this spike, `RUSTC_BOOTSTRAP` is needed only to build the driver, not when it runs, and the crate being checked never sees it.
+   - RFC 0001's checking program goes further: it declares Locus's prelude with rustc's internal `prelude_import` feature, which stable rustc accepts only when unstable features are enabled. The driver must enable them for the checking program, and only for it. This was tested with plain rustc (E0554 without `RUSTC_BOOTSTRAP=1`, accepted with it), not through this driver.
    - The Rust project does not support `RUSTC_BOOTSTRAP` for this use. In practice it means the driver is tied to one exact rustc release, just as a nightly driver is tied to one nightly.
 6. **API churn: small here, but real.**
    - The same source built against nightly 2026-10-20 (1.101), four releases later, after one change: `rustc_driver::run_compiler` is now `rustc_driver::compiler_entrypoint`.
