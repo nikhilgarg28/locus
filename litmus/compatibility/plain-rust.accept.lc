@@ -1,0 +1,18 @@
+//~ question: Is a plain Rust program accepted, and does it behave as Rust says?
+//~ spec: compat.superset.same-meaning
+//~ rfc: 0001
+
+fn checked_double(x: u8) -> Option<u8> {
+    x.checked_mul(2)
+}
+
+fn label(n: u32) -> &'static str {
+    match n % 3 {
+        0 => "fizz",
+        _ => "other",
+    }
+}
+
+//~ run: checked_double(100) => Some(200)
+//~ run: checked_double(200) => None
+//~ run: label(9) => "fizz"
