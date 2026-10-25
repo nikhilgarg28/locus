@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__github__merge_pull_request",
+      "Bash(git push origin main:*)",
+      "Bash(git push -u origin main:*)"
+    ]
+  }
+}
