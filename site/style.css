@@ -1,0 +1,94 @@
+:root {
+    --bg: #fbfaf7;
+    --fg: #1d1c1a;
+    --muted: #6b675f;
+    --card: #ffffff;
+    --border: #e4e0d8;
+    --accent: #8a3b12;
+    color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #161514;
+        --fg: #ebe8e2;
+        --muted: #a29d93;
+        --card: #1f1e1c;
+        --border: #34322e;
+        --accent: #e8955f;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0 auto;
+    max-width: 58rem;
+    padding: 4rem 1.5rem 3rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+h1 {
+    margin: 0;
+    font-size: 3.2rem;
+    letter-spacing: -0.02em;
+}
+
+.tagline {
+    margin: 0.5rem 0 0;
+    font-size: 1.35rem;
+}
+
+.status {
+    margin: 0.75rem 0 0;
+    color: var(--muted);
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 1rem;
+    margin-top: 3rem;
+}
+
+.cards a {
+    display: block;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s;
+}
+
+.cards a:hover,
+.cards a:focus-visible {
+    border-color: var(--accent);
+}
+
+.cards h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.1rem;
+    color: var(--accent);
+}
+
+.cards p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+footer {
+    margin-top: 3.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+footer a {
+    color: inherit;
+}

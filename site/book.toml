@@ -1,0 +1,17 @@
+[book]
+title = "Locus"
+description = "A Rust-like language with explicit, kernel-checked proofs"
+language = "en"
+src = "src"
+
+[build]
+create-missing = false
+
+[output.html]
+site-url = "/locus/docs/"
+git-repository-url = "https://github.com/nikhilgarg28/locus"
+additional-css = ["book.css"]
+no-section-label = true
+
+[output.html.playground]
+runnable = false
