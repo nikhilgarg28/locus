@@ -1,6 +1,6 @@
 [book]
 title = "Locus"
-description = "A Rust-like language with explicit, kernel-checked proofs"
+description = "A superset of Rust with kernel-checked proofs that cost nothing at run time"
 language = "en"
 src = "src"
 

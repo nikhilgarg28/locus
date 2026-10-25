@@ -1,6 +1,6 @@
 # Locus
 
-A Rust-like language with explicit, kernel-checked proofs. It is being designed in the open; the compiler does not exist yet.
+A superset of Rust with explicit, kernel-checked proofs that cost nothing at run time, inspired by Lean. It is being designed in the open; the compiler does not exist yet.
 
 - [Vision](VISION.md): what Locus is for
 - [Specification](spec/README.md): the accepted rules, each with its examples

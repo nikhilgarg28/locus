@@ -1,6 +1,6 @@
 # Locus
 
-Locus is a Rust-like language with explicit, kernel-checked proofs. It is being designed in the open, and the compiler does not exist yet.
+Locus is a superset of Rust with explicit, kernel-checked proofs that cost nothing at run time, inspired by Lean. It is being designed in the open, and the compiler does not exist yet.
 
 This site is built from [the repository](https://github.com/nikhilgarg28/locus) on every change to `main`. This copy is from commit [{{commit}}]({{commit-url}}), {{date}}.
 

@@ -1,6 +1,6 @@
 # Working on Locus
 
-Locus is a Rust-like language with explicit, kernel-checked proofs. It is being designed in the open, starting from a vision and a small set of decisions, before most of the compiler exists. This file is the map, the rules, and the commands. Read it in full; read other files only as your task needs them.
+Locus is a superset of Rust with explicit, kernel-checked proofs that are erased before the program runs. It is being designed in the open, starting from a vision and a small set of decisions, before most of the compiler exists. This file is the map, the rules, and the commands. Read it in full; read other files only as your task needs them.
 
 ## The map
 
