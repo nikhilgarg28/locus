@@ -41,7 +41,7 @@ r[logic.ghost.runtime-code-kept]
 Erasure removes only logical code. A runtime call, condition, or statement runs as written, even when the expression it belongs to has a ghost value.
 
 r[logic.ghost.forgotten]
-Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code, or turned into a trait object of a trait without a specification, holds markers in place of its logical values when it comes back, and no proof. So does a value read through a raw pointer, or given another type by a pointer cast or by `transmute`.
+Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code, or turned into a trait object of a trait without a specification, holds markers in place of its logical values when it comes back, and no proof. So does a value read through a raw pointer, given another type by a pointer cast or by `transmute`, made by `mem::zeroed` or `MaybeUninit::assume_init`, or returned by foreign code or inline assembly.
 
 r[logic.ghost.generic-instantiations]
 The program's own generic code is checked again at each instantiation whose type arguments contain logical types.
@@ -76,7 +76,15 @@ r[logic.boundary.writable]
 A place holding logical values can be written through a value when it is behind a `&mut` or `*mut` in the value's type or its type arguments, at any depth, or inside a type that Locus's library specifies as writable through a shared handle: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, and the sending halves of channels. What a closure, or a value of the program's own type, holds in fields whose types its own definition fixes does not count; its type arguments always do.
 
 r[logic.boundary.writes]
-No value through which a place holding logical values that are not completable can be written reaches unchecked code, as an argument or inside another value, and no raw borrow of such a place is taken. A completable value that unchecked code may have written comes back as any value of its type: Locus forgets what it knew about it.
+No value through which a place holding logical values that are not completable can be written reaches unchecked code, as an argument or inside another value, and no raw pointer to such a place is made: no raw borrow, no cast or coercion of a reference to it into a raw pointer, and no call that returns a raw pointer into it, such as `as_mut_ptr`. A completable value that unchecked code may have written comes back as any value of its type: Locus forgets what it knew about it.
+
+## Unsafe code
+
+r[logic.unsafe.exposed]
+A place is *exposed* from the point where its address reaches a raw pointer, by a raw borrow, by a cast or coercion of a reference to it, or by a call that returns a raw pointer into it, such as `as_mut_ptr`, and from the point where an address into it is exposed as an integer. A `static mut`, and a static declared in an `extern` block, is always exposed. From then on, Locus knows an exposed place, the whole local, static, or referent it is part of, and everything they own, only by their types and the invariants of their types.
+
+r[logic.unsafe.no-conjuring]
+Code that Locus checks never makes a value of a type that holds logical values that are not completable from memory of another type: where the source names such a type, it is not the target of a `transmute` or of a cast from a pointer to another type, and no value of it is taken from `mem::zeroed` or `MaybeUninit::assume_init`.
 
 ## Logical code
 

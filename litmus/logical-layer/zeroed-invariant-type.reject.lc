@@ -1,0 +1,12 @@
+//~ question: May checked code make a value of a type with proof fields by `mem::zeroed`?
+//~ spec: logic.unsafe.no-conjuring
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+fn nothing() -> Positive {
+    unsafe { std::mem::zeroed::<Positive>() } //~ error: `Positive` holds a proof, so checked code cannot take one from `mem::zeroed`
+}

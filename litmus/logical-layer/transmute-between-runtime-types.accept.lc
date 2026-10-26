@@ -1,0 +1,9 @@
+//~ question: May checked code `transmute` between types that hold no logical values?
+//~ spec: logic.unsafe.no-conjuring
+//~ rfc: 0002
+
+fn bits(x: f32) -> u32 {
+    unsafe { std::mem::transmute::<f32, u32>(x) }
+}
+
+//~ run: bits(1.0) => 1065353216

@@ -193,7 +193,7 @@ How the names are found:
 There is no wall between Rust and Locus inside a crate. Plain Rust and Locus code mix freely, and every file goes through the pipeline. Soundness comes instead from the only four ways facts about runtime values can enter the logic:
 
 1. **Snapshots and models:** observing a runtime value as what it is, its snapshot, or through its type's model, what it means.
-2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic, together with what Rust's ownership rules guarantee: a call changes only what it is given mutable access to, and a mutable borrow's final value is what its place holds when the borrow ends.
+2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic, together with what Rust's ownership and aliasing rules guarantee: a call changes only what it is given mutable access to and what raw pointers can reach, and a mutable borrow's final value is what its place holds when the borrow ends.
 3. **Assumed specifications:** each declared with a reason, and listed by the audit.
 4. **Invariants of the program's own types,** stated by their proof fields, as described below.
 
@@ -205,10 +205,11 @@ Each is sound no matter who wrote the code.
   - `Cell`, `RefCell`, `Mutex`, and the atomics have no model, and their snapshots hold nothing of their contents.
 
   So **a call Locus knows nothing about, taking `&x`, never changes `x`'s snapshot or model**: Rust freezes what they hold, and they never hold what Rust does not freeze.
+- **What raw pointers can reach is known only by its type.** `unsafe` code can write a place through a raw pointer, with no write that Locus sees, so a place whose address reaches a raw pointer, foreign code, or inline assembly is *exposed*, and Locus knows it from then on only by its type. Rust's provenance rules make that enough: code reaches memory only through a pointer derived from one it was given ([RFC 0002](0002-logical-layer.md#unsafe-code)).
 - **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns a field that a proof field reads must keep that proof field true. Locus proves it for the new value as if a hole were written there, and rejects the assignment when it cannot.
 - **Code Locus cannot translate is opaque:** dependencies, trait objects, inline assembly, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
 - **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): both programs hold them only as zero-sized markers, `Erased` and `LogicalData`, which carry no proposition and no value. Locus tracks what a value holds itself, only through code it checks and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
-- **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only checked code constructs the type or writes the fields its proofs read. In build mode, every crate that can name the type is checked. In export mode, other crates can neither construct it nor reach those fields. So a value that comes back from opaque code still satisfies its invariant: opaque code can only move it, copy it, drop it, or call the type's own checked functions.
+- **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only checked code constructs the type or writes the fields its proofs read. In build mode, every crate that can name the type is checked. In export mode, other crates can neither construct it nor reach those fields. So a value that comes back from opaque code still satisfies its invariant: opaque code can only move it, copy it, drop it, or call the type's own checked functions. `unsafe` code could do more, and the invariant is part of the type's safety invariant, which sound `unsafe` code keeps ([RFC 0002](0002-logical-layer.md#unsafe-code)).
 - **Statics.** Logical code may read only immutable statics, and no static that code outside the program can write, a `static mut` or one that is `extern`, `#[no_mangle]`, or `#[export_name]`, holds logical values that are not completable ([RFC 0002](0002-logical-layer.md#logical-code)).
 
 The details of models are [RFC 0002](0002-logical-layer.md).
@@ -461,7 +462,7 @@ Each stage has one representation, and each representation has one owner.
    - the interfaces of the dependencies, by hash;
    - the version of the semantic translation, and of the facts format;
    - the models and specifications from Locus's library that the proofs used;
-   - the assumed specifications, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.invariants` when it relies on an invariant that `unsafe` code can reach;
+   - the assumed specifications, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.invariants` with the types whose invariants it relies on, and `assumed.rust.aliasing`;
    - the certificate: the proofs, stored or found, that the kernel checked.
 
    The audit command prints it, and the vision's promise that a result can report its assumptions (commitment 4) is this list. Its format, and how stored proofs are found again, are [#13](https://github.com/nikhilgarg28/locus/issues/13).

@@ -1,0 +1,13 @@
+//~ question: After a local's address reaches a raw pointer, does Locus still know its value?
+//~ spec: logic.unsafe.exposed
+//~ rfc: 0002
+
+fn raw() -> u32 {
+    let mut n: u32 = 1;
+    let p = &mut n as *mut u32;
+    unsafe {
+        *p = 0;
+    }
+    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `n`'s address reached a raw pointer, so Locus knows only that it is a `u32`
+    100 / n
+}
