@@ -1,0 +1,3 @@
+# file name ghost|runtime start end
+snapshot-shadowed.rs before ghost 8:5 18:1
+snapshot-shadowed.rs before runtime 10:9 15:5

@@ -1,0 +1,11 @@
+// Hard case 10: operators outside logic! on lexically ghost operands.
+fn both(x: u32) -> u32 {
+    let p = prop!(x > 0);
+    let q = prop!(x < 10);
+    let both = p && q;
+    x
+}
+
+fn main() {
+    println!("both(3) = {}", both(3));
+}

@@ -1,0 +1,17 @@
+// Hard case 8: the `()` trap. A proof made from nothing by `Default`.
+fn make<T: Default>(_: T) -> T {
+    T::default()
+}
+
+fn positive(x: u32) -> @(x > 0) {
+    if x == 0 {
+        panic!("zero");
+    }
+    _
+}
+
+fn forge(x: u32) {
+    let p = make(positive(x)); //~ error: must be rejected
+}
+
+fn main() {}

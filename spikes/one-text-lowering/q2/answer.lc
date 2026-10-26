@@ -1,0 +1,13 @@
+// Question 2: an attribute macro that is sensitive to ghost bindings.
+use token_sensitive::token_sensitive;
+
+#[token_sensitive]
+fn answer() -> u32 {
+    let x = 0;
+    let h = prove!(x == x);
+    x
+}
+
+fn main() {
+    println!("answer() = {}", answer());
+}

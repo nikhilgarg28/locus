@@ -1,0 +1,10 @@
+// Hard case 4c: handing a function with a proof parameter to array map.
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn mapped() -> [u32; 1] {
+    [7].map(halve) //~ error: must be rejected
+}
+
+fn main() {}

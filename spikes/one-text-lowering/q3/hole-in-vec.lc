@@ -1,0 +1,9 @@
+// Question 3: a proof hole inside another macro's input is only a token.
+fn holes() -> usize {
+    let proofs: Vec<@(1 > 0)> = vec![_]; //~ error: rustc rejects `_` as an expression
+    proofs.len()
+}
+
+fn main() {
+    println!("holes() = {}", holes());
+}

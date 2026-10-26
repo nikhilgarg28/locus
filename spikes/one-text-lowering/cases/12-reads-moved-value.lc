@@ -1,0 +1,9 @@
+// Borrow case 12: logical code reads a value after it has moved.
+fn late() -> usize {
+    let v = vec![1, 2, 3];
+    let moved = v;
+    let h = prove!(v.len() == 3); //~ error: v has moved
+    moved.len()
+}
+
+fn main() {}

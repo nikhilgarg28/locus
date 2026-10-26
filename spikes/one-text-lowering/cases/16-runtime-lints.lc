@@ -1,0 +1,24 @@
+// Case 16: lints of the runtime flavor, which RFC 0001 says are the real ones.
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn uses() -> u32 {
+    let n = 4;
+    let even = prove!(n % 2 == 0);
+    let k = 6;
+    let unused = prove!(k > 0);
+    let m = 7;
+    let in_vec: Vec<@(m > 0)> = vec![prove!(m > 0)];
+    let p = Positive { value: 1, nonzero: _ };
+    halve(n, even) + p.value + in_vec.len() as u32
+}
+
+fn main() {
+    println!("uses() = {}", uses());
+}

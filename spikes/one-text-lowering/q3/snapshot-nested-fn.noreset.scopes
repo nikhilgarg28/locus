@@ -1,0 +1,3 @@
+# file name ghost|runtime start end
+snapshot-nested-fn.noreset.rs before ghost 9:5 17:1
+snapshot-nested-fn.noreset.rs before runtime 10:14 15:5

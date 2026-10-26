@@ -1,0 +1,14 @@
+// Borrow case 13b: logical code reads the field that is mutably borrowed.
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn bump(p: &mut Pair) -> u32 {
+    let a = &mut p.a;
+    let h = prove!(p.a > 0); //~ error: p.a is mutably borrowed
+    *a += 1;
+    p.b
+}
+
+fn main() {}

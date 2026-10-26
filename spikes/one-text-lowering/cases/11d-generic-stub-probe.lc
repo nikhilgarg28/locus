@@ -1,0 +1,16 @@
+// Hard case 11c: a logical value of a generic logical type, with no annotation
+// to give its type argument.
+#[derive(Logical)]
+enum List<T> {
+    Nil,
+    Cons(T, List<T>),
+}
+
+fn empty() -> u32 {
+    let l = logic! { List::Nil };
+    0
+}
+
+fn main() {
+    println!("empty() = {}", empty());
+}

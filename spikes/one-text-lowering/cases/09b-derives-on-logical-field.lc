@@ -1,0 +1,8 @@
+// Hard case 9b: derives of PartialEq and Hash on a struct with a Nat field.
+#[derive(PartialEq, Hash)] //~ error: must be rejected
+struct Counted {
+    items: u32,
+    count: Nat,
+}
+
+fn main() {}

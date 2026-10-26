@@ -1,0 +1,23 @@
+// Question 3: the hard case inside a function whose attribute macro rebuilds
+// every token with its own call-site span, which moves every position.
+use respan::respan;
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+#[respan]
+fn respanned(pair: &mut Pair) -> usize {
+    let before = logic! { pair };
+    let b = &mut pair.b;
+    let proofs: Vec<@(before.a == before.a)> = vec![prove!(before.a == before.a)];
+    let more: Vec<@(pair.a == before.a)> = vec![prove!(pair.a == before.a)];
+    *b += 1;
+    proofs.len() + more.len()
+}
+
+fn main() {
+    let mut pair = Pair { a: 1, b: 2 };
+    println!("respanned = {}", respanned(&mut pair));
+}

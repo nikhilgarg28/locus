@@ -1,0 +1,6 @@
+// Hard case 9a: `==` on vectors of logical data, in runtime code.
+fn same(a: &Vec<Nat>, b: &Vec<Nat>) -> bool {
+    a == b //~ error: must be rejected
+}
+
+fn main() {}

@@ -1,0 +1,13 @@
+// Hard case 10b: operators whose operands lowering cannot see are ghost.
+// `ok` is bound by a pattern from a runtime value, so it is not lexically
+// ghost, and `ok && ok` is left as runtime code.
+fn twice(checked: Vec<(i: usize, @(i < 3))>) -> usize {
+    let mut n = 0;
+    for (i, ok) in checked {
+        let both = ok && ok; //~ error: Locus should say: write logic! { ok && ok }
+        n += i;
+    }
+    n
+}
+
+fn main() {}

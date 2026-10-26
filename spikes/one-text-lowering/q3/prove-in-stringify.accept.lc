@@ -1,0 +1,9 @@
+//~ question: Is `prove!` written inside `stringify!` only tokens?
+//~ spec: compat.names.macros-expand
+//~ rfc: 0001
+
+fn shown() -> &'static str {
+    stringify!(prove!(x > 0))
+}
+
+//~ run: shown() => "prove!(x > 0)"

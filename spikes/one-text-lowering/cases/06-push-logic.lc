@@ -1,0 +1,22 @@
+// Hard case 6: pushing logical values, with and without an annotation.
+fn annotated() -> usize {
+    let mut values: Vec<Nat> = Vec::new();
+    values.push(logic! { 3 });
+    values.len()
+}
+
+fn unannotated() -> usize {
+    let mut values = Vec::new(); // RFC 0002: logical types flow forward only
+    values.push(logic! { 3 });
+    values.len()
+}
+
+fn conflated() -> usize {
+    let naturals: Vec<Nat> = Vec::new();
+    let sequences: Vec<Seq<Int>> = naturals; //~ error: Locus must reject: Vec<Nat> is not Vec<Seq<Int>>
+    sequences.len()
+}
+
+fn main() {
+    println!("{} {} {}", annotated(), unannotated(), conflated());
+}
