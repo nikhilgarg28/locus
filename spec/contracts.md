@@ -14,6 +14,3 @@ r[contracts.final]
 
 r[contracts.invariants]
 Every value of a type with proof fields satisfies them. Each construction of the type, including in code that macros and derives generate, proves them. A field that a proof field reads is not assigned or mutably borrowed on its own.
-
-r[contracts.option-proof]
-An `Option` or `Result` whose payload holds a proof keeps its tag at run time. A `Some`, `Ok`, or `Err` built from a proof gives back a proof of the same proposition when it is matched.

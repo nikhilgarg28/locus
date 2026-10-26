@@ -9,7 +9,7 @@
 Locus compiles a Cargo crate in four steps:
 
 1. **Parse.** Locus parses its `.lc` sources, Rust plus Locus syntax, into lossless syntax trees.
-2. **Check with rustc.** Locus lowers the crate to a **checking program**: ordinary Rust in which proofs and logical values are removed, logical items are stubs that only resolve names, and every place logical code reads becomes a borrow. rustc compiles it through a small driver. The driver reports what Locus needs: the types of the places logical code reads, what the names in logical code refer to, and the typed bodies of the functions being verified. rustc's borrow checker decides whether logical code may read what it reads.
+2. **Check with rustc.** Locus lowers the crate to a **checking program**: ordinary Rust in which proofs and logical values are removed, or become `()` where a runtime type holds them; proof parameters take a token that only checked code supplies; logical items are stubs that only resolve names; and every place logical code reads becomes a borrow. rustc compiles it through a small driver. The driver reports what Locus needs: the types of the places logical code reads, what the names in logical code refer to, and the typed bodies of the functions being verified. rustc's borrow checker decides whether logical code may read what it reads.
 3. **Check the logic.** Locus checks the logical layer against those facts, constructs proofs, and has the kernel check them.
 4. **Emit.** Locus erases the logical layer by editing each `.lc` file into the `.rs` file beside it: readable Rust, which Cargo builds like any other crate. The `.rs` file is written only when the check passes.
 
@@ -107,7 +107,7 @@ Locus compiles one Cargo crate at a time, in the crate's real Cargo context: its
   - `cargo locus check` fails when a generated file does not match what its source would produce, whether it is stale or was edited by hand.
   - An optional, dependency-free build-script helper can warn during a plain `cargo build` when a `.lc` file has changed since its `.rs` was generated.
   - rustfmt formats every module file, so `cargo fmt` can make a generated file stale. rustfmt leaves a module alone when its `mod` declaration is marked `#[rustfmt::skip]` (tested), and erasure adds that mark where the declaration is in a `.lc` file. Protecting the rest, a generated crate root or a declaration in plain Rust, is [#7](https://github.com/nikhilgarg28/locus/issues/7).
-- **Each crate has one generated module,** a generated file that the crate root declares. In the runtime program it holds the configuration guard (see [Configurations](#configurations)). In the checking program it also holds the prelude that makes Locus's names visible (see [Locus syntax and Locus names](#locus-syntax-and-locus-names)).
+- **Each crate has one generated module,** a generated file that the crate root declares. In both programs it holds the proof token type ([RFC 0002](0002-logical-layer.md)) and the configuration guard (see [Configurations](#configurations)). In the checking program it also holds the prelude that makes Locus's names visible (see [Locus syntax and Locus names](#locus-syntax-and-locus-names)).
   - When the root is a `.lc` file, erasure adds the declaration.
   - When the root is plain Rust, the user adds one line, such as `mod locus_erased;`, under a name the crate does not otherwise use, and `cargo locus check` says exactly which line.
 - **The checking program is never committed.** It lives under `target/locus/check/` and mirrors the crate: each `name.lc` lowered, each `.rs` copied.
@@ -127,7 +127,7 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 | Form | Where | Example | Why Rust cannot mean it |
 |---|---|---|---|
 | Logic function | Item | `logic fn total(xs: &[u32]) -> Nat { ... }` | Rust has no item beginning `logic fn` |
-| Proposition declaration | Item | `prop Sorted(xs: Seq<u32>) { ... }` | Rust has no item beginning `prop Name(` |
+| Proposition declaration | Item | `prop Sorted(xs: Seq<Nat>) { ... }` | Rust has no item beginning `prop Name(` |
 | Proof type | Type | `h: @(x > 0)`, `@Sorted(xs)` | `@` cannot begin a type |
 | Named result | Return type | `-> (out: u8, @(out > n))` | Tuple types have no field names |
 | Proof hole | Expression | `(out, _)` | rustc rejects `_` as an expression except as an assignment target, an array length, or a generic argument, and the hole is recognized nowhere else |
@@ -183,7 +183,7 @@ Each is sound no matter who wrote the code.
   So **a call Locus knows nothing about, taking `&x`, never changes `x`'s model**: Rust freezes what the model reads, and the model never reads what Rust does not freeze.
 - **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns on its own to a field that a proof field reads is rejected; it must replace the whole value, with a new proof.
 - **Code Locus cannot translate is opaque:** dependencies, trait objects, inline assembly, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
-- **Opaque code never sees a proof.** Proofs and logical values are ghost: neither program contains them, and they never instantiate a generic parameter ([RFC 0002](0002-logical-layer.md)). So no Rust code, through `Any`, specialization, or anything else, can copy, convert, or forge one, and Locus never relies on Rust's generics being parametric.
+- **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): neither program has them, except as `()` inside runtime types and as tokens for proof parameters, which carry no proposition. Locus tracks what a value holds itself, only through code it checks and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
 - **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only the crate's checked code constructs the type or writes the fields its proofs read, which are not public. So a value that comes back from opaque code still satisfies its invariant: opaque code can only move it, copy it, drop it, or call the type's own checked functions.
 - **Statics.** Logical code may read only immutable statics whose types have models.
 
@@ -204,8 +204,9 @@ Logical code is never given to rustc: its operators mean different things from R
 | In the source | In the checking program |
 |---|---|
 | Runtime code | Copied unchanged |
-| A parameter, result component, local, or field whose type is logical, proofs included, and every argument for one | Removed; see below |
-| `Option<@P>`, and a `Result` with a proof payload | `Option<()>`, and `Result` with `()` in place of the proof |
+| A parameter, result component, local, or field whose type is logical, and every argument for one | Removed; see below |
+| A proof parameter, and the argument for it | A parameter of the crate's proof token type, and the token |
+| A logical type argument of a runtime type, such as `Vec<Nat>` or `Option<@P>`, and a ghost value where Rust needs one | `()`, and a tuple without its logical components: `Vec<()>`, `Option<()>` |
 | A named result `(out: T, @P)` | `T` |
 | A call of a runtime function whose result is entirely ghost | The call, as a statement |
 | A logic function, `prop` declaration, `#[derive(Logical)]` type, or `Model` implementation | A stub: an empty type, or a function with the same name, generics, and signature, whose body panics if it is ever run |
@@ -216,10 +217,10 @@ Logical code is never given to rustc: its operators mean different things from R
 **Stubs exist only to resolve names.**
 - Runtime code never refers to a stub, so no stub is ever a runtime value. Only probes and other stubs mention them.
 - A stub type is an empty, zero-sized type whose generic parameters are carried in a `PhantomData` field.
-- Proofs in stub signatures all use one placeholder type, which exists only in the checking program and never runs.
+- Proofs in stub signatures use the proof token type.
 - Stub functions are `const fn` where Rust allows, so that probes work in constant contexts. Probes are type-checked but never evaluated, and stub bodies panic rather than loop, so that a mistake fails rather than hangs constant evaluation.
 
-**Proofs and logical values never reach rustc.** Ghost values are removed from the checking program as they are from the runtime program ([RFC 0002](0002-logical-layer.md)). So rustc never computes a type that involves a proof, and Locus alone checks every proof against the proposition its position requires.
+**Proofs and logical values never reach rustc as values.** Ghost values are removed from the checking program, or become `()`, as they do in the runtime program, and proof parameters take tokens, which carry no proposition ([RFC 0002](0002-logical-layer.md)). So rustc never computes a type that involves a proposition, and Locus alone checks every proof against the proposition its position requires.
 
 **Logical and proof fields are removed** from structs and enum variants, in both programs. A type's derives and its Rust API then see only its runtime fields, and no lint fires for them.
 - Where a generic parameter would otherwise be unused, a `PhantomData` field under a fresh name takes its place.
@@ -384,12 +385,12 @@ Erasure edits each `.lc` file into its `.rs` file. Locus syntax is removed or re
 
 **Readable by construction.** A `.lc` file with no Locus syntax becomes an identical `.rs` file, apart from its header. Comments, formatting, and names survive everywhere. Where there is Locus syntax, what remains is the Rust a programmer would have written without proofs.
 
-**No logical values.** The runtime program contains no proofs, no logical values, and no logical items, so it has no stand-in types. Both programs remove the same ghost constructs, so macros and derives see the same tokens in both, and both have identical types.
+**No logical values.** The runtime program contains no proofs, no logical values, and no logical items. Ghost values inside runtime types are `()`, and proof parameters take the crate's token. Both programs erase ghost constructs the same way, so macros and derives see the same tokens in both, and both have identical types.
 
 **What the edits do:**
 - **Removed:**
   - logic functions, `prop` declarations, `#[derive(Logical)]` types, `Model` implementations, and `impl` blocks holding only those;
-  - parameters, result components, locals, and fields of logical type, proofs included, with every argument for them and every `logic!`, `prop!`, `prove!`, and proof hole;
+  - parameters, result components, locals, and fields of logical type, except proof parameters, with every argument for them and every `logic!`, `prop!`, `prove!`, and proof hole;
   - `use` declarations and private items that only logical code uses;
   - code that no checked configuration enables.
 
@@ -397,7 +398,8 @@ Erasure edits each `.lc` file into its `.rs` file. Locus syntax is removed or re
 - **Kept:** a call of a runtime function whose result is entirely ghost, as a statement.
 - **Simplified:**
   - A named result becomes its runtime components.
-  - `Option<@P>` becomes `Option<()>`, and `Some(h)` becomes `Some(())` or `Some(_)`; `Result` with a proof payload likewise.
+  - A logical type argument becomes `()`, and so does a ghost value that Rust needs: `Vec<Nat>` becomes `Vec<()>`, `Option<@P>` becomes `Option<()>`, and `Some(h)` becomes `Some(())` or `Some(_)`.
+  - A proof parameter becomes a parameter of the token type, and each checked call passes the token.
   - `cfg` attributes that every checked configuration satisfies are dropped.
 
 **Erasure adds no warnings of its own.**
@@ -418,14 +420,16 @@ Building the runtime program is how Locus reports lints and confirms its own out
 So the runtime program borrow-checks whenever the checking program does. Building it confirms this.
 
 **There is nothing to forge.** No proof exists at run time. What Rust code outside the crate could do instead is call a function without meeting its precondition, or build a value without its invariant. So the exported surface protects those:
-- **A function with a precondition is `pub unsafe fn`,** with its proposition in its `# Safety` documentation, as Rust's own `get_unchecked` is. That covers proof parameters, and proofs inside an `Option` or `Result` parameter. The vision's `find(xs, target, sorted: Option<@Sorted(xs)>)` becomes `unsafe fn find(xs: &[u32], target: u32, sorted: Option<()>)`, which keeps the `Some` or `None`, with the safety condition "if `sorted` is `Some`, `xs` is sorted".
-  - A Locus crate that depends on it calls it inside `unsafe`, with a generated `// SAFETY:` comment naming the proof Locus checked.
-  - A plain Rust caller can call it too, but only by writing `unsafe` and taking responsibility for the precondition.
+- **A function with proof parameters takes tokens.** Code that Locus did not check cannot make a token, so it cannot call the function.
+  - Other crates obtain tokens only through an `unsafe` constructor, by which the caller takes responsibility for the precondition.
+  - A Locus crate that depends on it uses that constructor at calls Locus checked, with a generated `// SAFETY:` comment naming the proof.
+  - A plain Rust caller can use it too, but only by writing `unsafe`.
+- **A function whose precondition sits inside a parameter's data is `pub unsafe fn`,** with its proposition in its `# Safety` documentation, as Rust's own `get_unchecked` is. The vision's `find(xs, target, sorted: Option<@Sorted(xs)>)` becomes `unsafe fn find(xs: &[u32], target: u32, sorted: Option<()>)`, which keeps the `Some` or `None`, with the safety condition "if `sorted` is `Some`, `xs` is sorted".
 - **A function that returns proofs** simply returns its data. It needs no wrapper.
 - **A field that a proof field reads is not a public Rust field,** so a value with an invariant can be built only through the crate's own functions.
 - **A trait with contracts is `unsafe` to implement.**
 
-The details, including how calls inside the crate are written, are [#7](https://github.com/nikhilgarg28/locus/issues/7).
+The details, including how the token type is exported, are [#7](https://github.com/nikhilgarg28/locus/issues/7).
 
 ### Diagnostics
 
@@ -503,12 +507,12 @@ The observation examples use provisional syntax for propositions ([#5](https://g
 
 | Area | Effect |
 |---|---|
-| Types | rustc is the authority on every runtime type. Logical types reach rustc only as stubs that resolve names, and proofs and logical values never reach it ([RFC 0002](0002-logical-layer.md)). Locus types the logical layer itself. |
+| Types | rustc is the authority on every runtime type. Logical types reach rustc only as stubs that resolve names, and as `()` inside runtime types; proofs reach it only as tokens that carry no proposition ([RFC 0002](0002-logical-layer.md)). Locus types the logical layer itself. |
 | Propositions and proofs | rustc never sees a proposition. It sees an observation for each place logical code reads, and a probe for each name it uses. |
 | Ownership and mutation | rustc checks all ownership, including what logical code reads. How mutation is modeled in the logic is built from rustc's typed bodies ([#6](https://github.com/nikhilgarg28/locus/issues/6)). |
-| Erasure and runtime behavior | Erasure edits the source. Runtime code is untouched, logical code does no runtime evaluation, ghost values are removed from both programs alike, and only source locations change. |
+| Erasure and runtime behavior | Erasure edits the source. Runtime code is untouched, logical code does no runtime evaluation, ghost values are erased from both programs alike, and only source locations change. |
 | Configurations | Each configuration is a separate program. A crate is checked in the configurations it declares, and its generated code refuses to compile in any other ([#9](https://github.com/nikhilgarg28/locus/issues/9)). |
-| Rust interoperability | Generated `.rs` files sit beside their `.lc` sources, so the crate builds with plain Cargo. Rust code never sees a proof, and anything that needs one is `unsafe` at the Rust boundary ([#7](https://github.com/nikhilgarg28/locus/issues/7)). |
+| Rust interoperability | Generated `.rs` files sit beside their `.lc` sources, so the crate builds with plain Cargo. Rust code never sees a proof. A function that needs one takes a token, which Rust gets only through `unsafe` ([#7](https://github.com/nikhilgarg28/locus/issues/7)). |
 | Diagnostics | Rust's errors keep their codes and messages, with spans mapped to the source. Errors that involve logical code are explained in Locus's terms. Lints come from the runtime program. |
 | Trust model | New trusted components: rustc's type checker and borrow checker, `locus-driver`, the facts format, Locus's library, the parser, the lowering, obligation generation, erasure, and the orchestration. New assumptions: toolchains, dependencies, macro inputs, and published generated files. [RFC 0002](0002-logical-layer.md) adds the rest. See [design/TRUST.md](../TRUST.md). |
 
@@ -571,7 +575,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 5. Generated `.rs` files beside their `.lc` sources by default, with `OUT_DIR` as an opt-in mode.
 6. Declared configurations with a guard. The default is dev, release, and test builds with default features and 64-bit pointers, independent of the host. Erasure removes code no checked configuration enables.
 7. At the Rust boundary, anything that needs a proof is `unsafe`, with proofs inside data exported as `()`.
-8. Proofs and logical values are ghost: neither program contains them ([RFC 0002](0002-logical-layer.md)). This replaces an earlier rule about `'static` bounds.
+8. Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): removed, or `()` inside runtime types, with tokens for proof parameters. This replaces an earlier rule about `'static` bounds.
 9. Logical and proof fields are removed from types in both programs.
 10. Traits among Locus's names have no methods.
 11. The parser starts from a fork of rust-analyzer's. The owner left the choice to this RFC.

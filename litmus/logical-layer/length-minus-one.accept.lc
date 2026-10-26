@@ -1,0 +1,7 @@
+//~ question: Is the length of an empty vector minus one equal to -1, rather than to 0?
+//~ spec: logic.arith.nat-subtraction
+//~ rfc: 0002
+
+fn last_index(v: &Vec<u32>) -> @(v.len() == 0 ==> v.len() - 1 == -1) {
+    _
+}

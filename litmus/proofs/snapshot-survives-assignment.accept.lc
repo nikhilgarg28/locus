@@ -1,5 +1,5 @@
 //~ question: Does a proof about a snapshot stay valid after the variable it came from is assigned?
-//~ spec: proofs.snapshot
+//~ spec: proofs.versions
 //~ rfc: 0002
 
 fn snapshot() -> u8 {

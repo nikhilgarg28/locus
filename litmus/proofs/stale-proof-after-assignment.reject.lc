@@ -1,11 +1,11 @@
-//~ question: Does a proof about a variable carry over to its value after an assignment?
-//~ spec: proofs.snapshot
+//~ question: Does a proof about a variable carry over to its next version?
+//~ spec: proofs.versions
 //~ rfc: 0002
 
 fn stale() -> u8 {
     let mut n: u8 = 3;
     let positive: @(n > 0) = _;
-    n = 0;
-    let again: @(n > 0) = positive; //~ error: `positive` proves `n > 0` about the value `n` had before it was assigned
+    n = n + 1;
+    let again: @(n > 0) = positive; //~ error: `positive` proves `n > 0` about an earlier version of `n`
     n
 }

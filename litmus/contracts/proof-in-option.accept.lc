@@ -1,5 +1,5 @@
 //~ question: Does an `Option` holding a proof keep its tag at run time, and give back the proof when matched?
-//~ spec: contracts.option-proof, logic.ghost.not-type-argument, logic.ghost.no-runtime-control
+//~ spec: logic.ghost.runtime-parts-kept, logic.ghost.no-runtime-control
 //~ rfc: 0002
 
 fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {

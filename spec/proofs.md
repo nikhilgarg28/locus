@@ -4,8 +4,10 @@ A proposition is a claim, of type `Prop`; forming one proves nothing. A proof is
 
 ## Propositions
 
-r[proofs.snapshot]
-A proposition is about the values that the runtime places it reads hold where it is formed. A proof of it remains a proof about those values, and is not a proof of the same formula about later values.
+Each local and parameter is a binding, and every write to a binding or to any part of it gives the binding a new version, as in SSA form.
+
+r[proofs.versions]
+A proposition is about the versions of the places it reads where it is formed. A write gives a binding a new version even when it writes the value the binding already had. A proof of a proposition about one version is not a proof of the same formula about another version.
 
 r[proofs.props.positive]
 A proposition declaration refers to itself only in strictly positive positions: not under a negation, and not in the premise of an implication.
