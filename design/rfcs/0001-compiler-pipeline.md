@@ -96,7 +96,7 @@ Locus compiles one Cargo crate at a time, in the crate's real Cargo context: its
 - **`.rs` files are plain Rust.** They are compiled as they are, and they may not name logical items: no logic functions, logical types, or proofs. The driver reports what every path resolves to, and a `.rs` path that resolves to a logical item is an error.
 - **`.lc` files may also contain Locus syntax and use Locus names.** Renaming a `.rs` file to `.lc` changes nothing about the program.
 - **Modules work as in Rust.** `mod name;` finds `name.lc` or `name.rs` by Rust's usual rules. When both exist, `name.rs` is the file exported from `name.lc` (below), and Locus reads `name.lc`. A crate whose root is a `.lc` file names it in its manifest, as `[lib] path = "src/lib.lc"`. Cargo accepts that (tested), and needs it, since it finds no target when `src/lib.rs` is missing.
-- **Each crate has one generated module,** under a fresh name, declared by the crate root. In the checking program it holds the prelude that makes Locus's names visible (see [Locus syntax and Locus names](#locus-syntax-and-locus-names)). In an exported program it holds the marker type `Erased` and the configuration guard (see [Configurations](#configurations)).
+- **Each crate has one generated module,** under a fresh name, declared by the crate root. In the checking program it holds the prelude that makes Locus's names visible (see [Locus syntax and Locus names](#locus-syntax-and-locus-names)). In export mode, both programs' copies of it hold the crate's own marker type `Erased`, and the exported program's holds the configuration guard too (see [Configurations](#configurations)).
 - **The checking program is never committed.** It lives under `target/locus/check/` and mirrors the crate: each `name.lc` lowered, each `.rs` copied.
 
 **Build mode** is the default. It is for code whose builders have Locus: applications, internal workspaces, and Locus crates that other Locus crates use.
@@ -209,7 +209,7 @@ The checking program is what rustc sees.
 
 - **It is written as ordinary `.rs` files** under `target/locus/check/`, and rustc parses them like any crate. Files on disk can be opened, compared, and compiled by hand when something goes wrong. If disk access ever matters, the driver can serve the same text from memory through rustc's file-loader hook, without changing anything else.
 - **Lowering keeps each source line on the same line of the checking program where it can,** and appends synthesized items at the end. Raw rustc output is then readable when debugging Locus itself. The origin maps, not the alignment, are the authority.
-- **Locus's library crate holds its macros, its probes, the stubs of its logical items,** such as `Nat` and `Model`, and the marker `Erased` that build mode uses. rustc receives it under a crate name the program does not use.
+- **Locus's library crate holds its macros, its probes, the stubs of its logical items,** such as `Nat` and `Model`, and the marker `Erased` that both programs use in build mode. rustc receives it under a crate name the program does not use.
 - **New names are fresh.** Every name Locus introduces, such as the library's crate name and the generated module, is chosen so that it appears nowhere in the crate's sources, so generated items cannot collide with the user's, even under `#![no_implicit_prelude]`.
 - **The checking program is compiled with `--cap-lints allow`.** Lints there would be artifacts of the lowering, and a user's `#![deny(warnings)]` or `forbid` must not turn synthesized code into errors. This was tested. Real lints come from building the runtime program.
 
@@ -403,8 +403,9 @@ Erasure edits each `.lc` file into a `.rs` file of the runtime program: under `t
 **Readable by construction.** A `.lc` file with no Locus syntax becomes an identical `.rs` file, apart from its header. Comments, formatting, and names survive everywhere. Where there is Locus syntax, what remains is the Rust a programmer would have written without proofs.
 
 **No logical values.** The runtime program contains no proofs, no logical values, and no logical items. Ghost values inside runtime types are the zero-sized marker `Erased`, which carries no proposition. Both programs erase ghost constructs the same way, so macros and derives see the same tokens in both, and both have identical types.
-- **In build mode, `Erased` is Locus's library's,** so every checked crate shares one type, and a value such as an `Option<@P>` keeps its type between crates.
-- **In export mode, `Erased` is private to the crate,** in its generated module. No exported signature mentions it.
+- **Both programs use the same `Erased`,** so they have identical types in either mode.
+- **In build mode, it is Locus's library's,** so every checked crate shares one type, and a value such as an `Option<@P>` keeps its type between crates.
+- **In export mode, it is the crate's own,** private, in its generated module. No exported signature mentions it.
 - **Erasure writes it as `Erased`,** through an import that it appends to each file that needs one, under a fresh name where `Erased` is taken.
 
 **Expansions of Locus's macros** that rustc performs, rather than lowering, need no edits in build mode: Locus's library expands them to `Erased` there. Export mode allows only invocations that erasure can remove as text.
