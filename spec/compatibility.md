@@ -2,7 +2,7 @@
 
 Locus is a superset of Rust. This chapter states what that promises: Rust programs keep their meaning, Rust's errors stay Rust's, and Locus's syntax and names never take a meaning away from Rust code. How the compiler keeps these promises is described in [RFC 0001](../design/rfcs/0001-compiler-pipeline.md).
 
-In this chapter, *rustc* means the release of rustc that Locus is pinned to, and a program is checked in each of the configurations its crate declares.
+In this chapter, *rustc* means the release of rustc that Locus is pinned to. A program is checked in the configuration being built, or, when its crate is exported, in each of the configurations the crate declares ([Exporting to Rust](export.md)).
 
 ## Rust programs
 

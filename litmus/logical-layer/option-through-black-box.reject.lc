@@ -16,7 +16,7 @@ fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
 
 fn hundred_over(n: u32) -> u32 {
     match std::hint::black_box(check(n)) {
-        Some(p) => divide(100, n, p), //~ error: `p` is not a proof of `n > 0`: `black_box` forgets what its argument held, and gives back an `Option<()>`
+        Some(p) => divide(100, n, p), //~ error: `p` is not a proof of `n > 0`: `black_box` forgets what its argument held, and gives back an `Option<Erased>`
         None => 0,
     }
 }

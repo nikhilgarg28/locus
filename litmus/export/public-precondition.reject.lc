@@ -1,0 +1,8 @@
+//~ question: May an exported crate's public function have a precondition?
+//~ spec: export.no-contracts
+//~ rfc: 0002
+//~ mode: export
+
+pub fn halve(n: u32, even: @(n % 2 == 0)) -> u32 { //~ error: `halve` is reachable from other crates, so it cannot have the proof parameter `even`; export a wrapper that checks it instead
+    n / 2
+}

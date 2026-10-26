@@ -15,5 +15,5 @@ r[contracts.final]
 r[contracts.invariants]
 Every value of a type with proof fields satisfies them. Each construction of the type, including in code that macros and derives generate, proves them. No place based on a field that a proof field reads is assigned or mutably borrowed, nor is a proof field itself mutably borrowed. A field whose type holds a proof counts as a proof field. The same holds for a tuple component that a later component's proposition reads.
 
-r[contracts.closed-to-rust]
-No `unsafe impl` other than `Send` and `Sync` is allowed on a type with proof fields. A public enum whose proof fields read its payload fields is rejected.
+r[contracts.unsafe-impls]
+No `unsafe impl` other than `Send` and `Sync` is allowed on a type with proof fields.

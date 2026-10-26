@@ -1,0 +1,27 @@
+//~ question: May a private enum of an exported crate have a proof field that reads one of its payload fields?
+//~ spec: export.no-logical-values
+//~ rfc: 0002
+//~ mode: export
+
+enum Reading {
+    Valid { x: u32, ok: @(x > 0) },
+    Missing,
+}
+
+fn read(x: u32) -> Reading {
+    if x > 0 {
+        Reading::Valid { x, ok: _ }
+    } else {
+        Reading::Missing
+    }
+}
+
+pub fn is_valid(x: u32) -> bool {
+    match read(x) {
+        Reading::Valid { .. } => true,
+        Reading::Missing => false,
+    }
+}
+
+//~ run: is_valid(0) => false
+//~ run: is_valid(3) => true

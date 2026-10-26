@@ -1,5 +1,5 @@
 //~ question: May an `unsafe impl` other than `Send` or `Sync` be written for a type with proof fields?
-//~ spec: contracts.closed-to-rust
+//~ spec: contracts.unsafe-impls
 //~ rfc: 0002
 
 unsafe trait Zeroable {}

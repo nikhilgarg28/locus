@@ -1,5 +1,5 @@
 //~ question: May `Send` be implemented with `unsafe impl` for a type with proof fields?
-//~ spec: contracts.closed-to-rust
+//~ spec: contracts.unsafe-impls
 //~ rfc: 0002
 
 struct Positive {

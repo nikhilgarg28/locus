@@ -57,3 +57,4 @@ Each chapter is a file in this directory, listed here in reading order.
 4. [Models](models.md)
 5. [Propositions and proofs](proofs.md)
 6. [Contracts](contracts.md)
+7. [Exporting to Rust](export.md)

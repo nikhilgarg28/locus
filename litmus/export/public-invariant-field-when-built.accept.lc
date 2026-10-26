@@ -1,0 +1,14 @@
+//~ question: May a public struct have a public field that its invariant reads when its crate is built rather than exported?
+//~ spec: export.invariants-closed, contracts.invariants
+//~ rfc: 0002
+//~ mode: build
+
+pub struct Interval {
+    pub lo: u32,
+    pub hi: u32,
+    ordered: @(lo <= hi),
+}
+
+pub fn width(iv: &Interval) -> u32 {
+    iv.hi - iv.lo
+}
