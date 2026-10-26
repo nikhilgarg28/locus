@@ -1,0 +1,12 @@
+//~ question: May two values of a type without a model be compared with `===`?
+//~ spec: models.no-default
+//~ rfc: 0002
+
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(p === q) { //~ error: `Point` has no model, so `p` cannot be used as a value in logical code; derive a model, or compare `snap(p) === snap(q)`
+    _
+}

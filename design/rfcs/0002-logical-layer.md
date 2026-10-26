@@ -27,7 +27,7 @@ The design in brief:
   - Locus believes what a value holds only through code it checked, or through standard library code whose specification it has. Everywhere else ghost contents are forgotten, so no Rust code can forge or convert a proof.
   - Contracts are visible only to code that Locus checks. In build mode, every crate that uses a Locus crate is checked. In export mode, what other crates can reach is plain Rust, with no logical values and no contracts.
 - **Logical code is pure and total.** This covers logic functions, `logic!` blocks, propositions, and proofs. It computes only with logical values, reads runtime values through their **models**, and never calls runtime code.
-- **Every runtime type has one model:** declared by hand, derived with `#[derive(Model)]` from its fields' models, or by default an opaque identity about which nothing is known. Equal models never imply equal runtime values, and logical code reads a value's fields through places, whatever its model.
+- **Snapshots and models.** Every runtime value has a **snapshot**, `Snap<T>`, which is what it is, field by field. A type may also have a **model**, which is what it means: declared by hand, derived with `#[derive(Model)]` from its fields' models, or declared by Locus's library. There is no default model. Logical code reads places as snapshots, uses values through their models, and writes `snap(x)` to compare whole values. Equal models never imply equal snapshots.
 - **A proposition is about versions.** Every write to a place makes a new version of it, as in SSA. A proposition is about the versions it read, so a proof never silently carries over to a later value.
 - **A runtime function states its contract in its signature.** Proof parameters are preconditions, and proofs in the result are postconditions.
   - In a signature, every parameter means its value at entry.
@@ -131,7 +131,7 @@ Inside logical code, which Locus parses itself, it also uses `===`, `!==`, `==>`
 
 It adds these names to Locus's prelude, which programs shadow as they do std's (`compat.names.shadowable`):
 - the logic function `model`;
-- the logical types `Int`, `Nat`, `Bool`, `Seq`, `Opaque`, and the others of Locus's library;
+- the logical types `Int`, `Nat`, `Bool`, `Seq`, `Snap`, and the others of Locus's library, and the logic functions `snap` and `model`;
 - the derive `Model`, beside the trait of that name;
 - the propositions `True`, `False`, `And`, `Or`, and `Exists`.
 
@@ -154,8 +154,8 @@ Every type is either a runtime type or a logical type.
 - logical function types, written `logic fn(A) -> B`;
 - tuples with at least one component, all of them logical. The unit type `()` is a runtime type;
 - structs and enums declared with `#[derive(Logical)]`, which may be recursive without `Box` and describe finite values;
-- `Opaque<T>`, for each runtime type `T`: the default model of a type that has no other ([Models](#models)). It is an opaque identity of a value at a version, about which Locus knows only that equal values have equal identities;
-- the model types that `#[derive(Model)]` generates, one for each type it is derived for ([Models](#models));
+- `Snap<T>`, for each runtime type `T`: the type of `T`'s snapshots, whose values are exactly the values `T` can have ([Snapshots and models](#snapshots-and-models));
+- the model types that `#[derive(Model)]` generates, one for each type it is derived for;
 - the logical types of Locus's library, which it builds from these: `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and others. This RFC uses them in examples, and assumes only what it says about them; their definitions and operations are for the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
 
 `Nat` is an `Int` with a proof that it is not negative:
@@ -168,10 +168,10 @@ struct Nat {
 }
 ```
 
-**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [model](#models). The one exception is `Opaque<T>`, whose argument names the runtime type whose identities it holds.
+**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [model](#snapshots-and-models) or its snapshot. The one exception is `Snap<T>`, whose argument names the runtime type whose values it holds.
 
 **A logical type refers to itself only positively.** A recursive `#[derive(Logical)]` type, or group of types, may contain itself as a field, a payload, a type argument of a positive logical type, or the result of a logical function type, but never as the parameter of a logical function type. Otherwise `struct Bad { f: logic fn(Bad) -> @False }` would prove `False` without recursion. This is Lean's strict positivity, the same rule as for [inductive propositions](#inductive-propositions).
-- It counts the types a logical type reaches through derived models. With `#[derive(Model)] struct Holder { b: Bad }`, the field `f: logic fn(<Holder as Model>::Logic) -> @False` mentions `Bad` in a parameter, and is rejected.
+- It counts the types a logical type reaches through snapshots and derived models. With `#[derive(Model)] struct Holder { b: Bad }`, the field `f: logic fn(Holder::Logic) -> @False` mentions `Bad` in a parameter, and is rejected, and so is `logic fn(Snap<Holder>) -> @False`.
 - The parameters and results of a logical function type are logical types. A logic function may take a runtime value ([Logic functions](#logical-code)), but a logical function type may not, so no runtime type's fields hide a negative occurrence.
 - The domain of `forall` or `exists` counts as a parameter of a logical function type. So `struct Bad { h: @(forall |b: Bad| False) }` is rejected too.
 - Through a library type, a logical type may refer to itself only in the arguments that the library declares positive. `Seq`, `Maybe`, and tuples are positive in their arguments. A set, which is a predicate on its elements, is not ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
@@ -197,7 +197,7 @@ Values of logical types, proofs included, exist only for checking. They are *gho
 - **The runtime parts of a type are all kept.** An `Option` keeps its tag, and a `Vec` its length.
 - **A reference to a logical value is that value.** Matching `&Option<@P>` with `Some(p)` binds `p` to the proof.
 - **Logical types flow forward.** rustc infers types over the markers, so it knows that a value is a marker but not which logical type it stands for. Locus works that out itself, and never infers a logical type backward from a later use. A local whose type holds logical values gets that type from its annotation, or from what initializes it: a call's result, Locus syntax such as `logic! { 3 }`, or another value whose type is known. Write `let mut v: Vec<Nat> = Vec::new();`, not `let mut v = Vec::new();` followed by ghost pushes.
-- **Types with interior mutability may hold logical values.** Their contents are part of no version and no model ([Models](#models)), so Locus knows only their types. That is enough for proofs, which are irrelevant: a proof taken out of a `Cell<Option<@P>>` is a proof of `P`, because every value of type `@P` is one. A `Nat` taken out of a `Cell<Nat>` is some `Nat`. [The boundary with unchecked code](#the-boundary-with-unchecked-code) keeps code that Locus does not check from writing them, and Locus's library specifies that the methods of `Cell`, `RefCell`, and `Mutex` keep their contents' types ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
+- **Types with interior mutability may hold logical values.** Their contents are part of no version, no snapshot, and no model ([Snapshots and models](#snapshots-and-models)), so Locus knows only their types. That is enough for proofs, which are irrelevant: a proof taken out of a `Cell<Option<@P>>` is a proof of `P`, because every value of type `@P` is one. A `Nat` taken out of a `Cell<Nat>` is some `Nat`. [The boundary with unchecked code](#the-boundary-with-unchecked-code) keeps code that Locus does not check from writing them, and Locus's library specifies that the methods of `Cell`, `RefCell`, and `Mutex` keep their contents' types ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
 
 **Runtime code runs as written.** Erasure removes logical code and nothing else.
 - A `let`, block, `if`, or `match` whose value is ghost keeps its runtime calls, conditions, and statements, and its patterns keep their runtime parts.
@@ -303,9 +303,9 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 **Reading runtime values.**
 - **Place expressions keep their Rust meaning.** A place is a local or parameter, a field or tuple field visible at that point, or the target of a reference or `Box`. Indexing and overloaded `Deref` do not form places in logical code.
 - **Runtime values cross into logical code only where it reads a place,** and become logical values there, so logical code computes only with logical values.
-- **A runtime value used as a value is its type's model.** That covers an operand, an argument of logical type, a method receiver, and either side of `===` or `==`. For a type with neither a declared nor a derived model, that is its opaque identity `Opaque<T>` ([Models](#models)), which can be compared with `===` and passed on, and nothing else. Its fields can still be read as places.
-- **Logical code never reads data that changes without a write it sees.** The contents of an `UnsafeCell`, on which `Cell`, `RefCell`, `Mutex`, and the atomics are built, sit in a private field, and the target of a raw pointer is not a place in logical code. So no logical value changes while Locus sees no write. Only the trusted models of Locus's library, such as `Vec`'s, look through raw pointers.
-- **Methods and indexing work on models.** A method call or index on a runtime value works on its model, never on a runtime method, as RFC 0001 requires. For `v: &Vec<u32>`, `v.len()` is `Seq::len` of `v`'s model, and `v[i]` indexes that model. A logic function declared on the runtime type itself is found first, then those of its model's type.
+- **Reading a place gives a snapshot, and using a runtime value as a value takes it to its model.** Using it as a value covers an operand, an argument of a logical parameter, a method receiver, and either side of `===` or `==`. A value whose type has no model cannot be used that way; `snap(x)` gives its snapshot instead ([Snapshots and models](#snapshots-and-models)). Its fields can still be read, and used through their own models.
+- **Logical code never reads data that changes without a write it sees.** A snapshot holds no contents of an `UnsafeCell`, on which `Cell`, `RefCell`, `Mutex`, and the atomics are built, and no target of a raw pointer, which is not a place in logical code. So no logical value changes while Locus sees no write. Only the trusted snapshots and models of Locus's library, such as `Vec`'s, look through raw pointers.
+- **Methods and indexing work on models.** A method call or index on a runtime value works on its model, never on a runtime method, as RFC 0001 requires. For `v: &Vec<u32>`, `v.len()` is `Seq::len` of `v`'s model, and `v[i]` indexes that model. A logic function declared on the runtime type itself is found first, then those of its model's type. On a snapshot, they work on the snapshot: `snap(v).len()` for a `Vec` of values without a model.
 - **Indexing a sequence,** as in `xs[i]`, is a placeholder until the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)) decides the index type and what an index outside the sequence means. Whatever it decides, indexing a sequence whose elements might have no values, such as a `Seq<@False>`, needs a proof that the index is in bounds, or indexing an empty one would prove `False`.
 - **Constants and const generic parameters** may appear in logical code, through their models. A constant of logical type is logical code ([Ghost values](#ghost-values)).
 - **References are transparent.** A `&T`, `&mut T`, or `Box<T>` used as a value is the current value of its target. For a `&mut` parameter in a signature, "current" means at entry; see [Contracts](#contracts).
@@ -319,10 +319,10 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
   - Turning an `Int` into a `Nat` needs a proof that it is not negative.
   - An integer literal is an `Int`, or a `Nat` where a `Nat` is expected.
   - `as` in logical code converts between logical types, such as a `Nat` to an `Int`; a cast between machine integers is runtime code.
-  - The model of a machine integer lies in its type's range, which proofs may use: for `x: u8`, `x <= 255`. For `usize` and `isize`, the range is that of the configuration being checked.
+  - A machine integer's snapshot, and so its model, lies in its type's range, which proofs may use: for `x: u8`, `x <= 255`. For `usize` and `isize`, the range is that of the configuration being checked.
 - **`===` is equality.** `a === b` is the proposition that `a` and `b` are equal: Lean's `Eq`, on two values of the same logical type. `a !== b` is its negation. It is built in, every logical type has it, and it cannot be overloaded.
-  - On runtime values, `===` compares their models, and nothing else. Two runtime values whose models are equal need not be equal values, and their fields need not be equal: a `Vec`'s capacity is not part of its model, and a hand-written model may forget fields entirely. So equality of models never gives equality of the values, or of fields read as places.
-  - Two opaque identities are equal when they are the identities of the same value, as two versions that no write separates are. Nothing else is known about them: two values with equal fields need not have equal identities. To compare values by their fields, derive their model ([Models](#models)).
+  - On runtime values, `===` compares their models, and nothing else. Two runtime values whose models are equal need not be equal values, and their fields need not be equal: a hand-written model may forget fields entirely. So equality of models never gives equality of snapshots, or of fields read as places.
+  - On snapshots, `===` is equality of values: two snapshots are equal exactly when they are the same variant with equal fields, and their opaque parts, such as a `Cell`'s, are equal only when they come from one version.
   - Any two proofs of one proposition are equal, so `h === k` always holds for them.
   - A type declared with `#[derive(Logical)]` gets the facts that its constructors are injective and distinct, as Lean's inductive types do.
 - **`==`, `!=`, `<`, `<=`, `>`, and `>=` are comparisons, which give a `Bool`,** as Rust's give a `bool`.
@@ -346,9 +346,9 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 
 **Logic blocks.** `logic! { e }` in a runtime body evaluates logical code at that point and gives a ghost value, usually bound to a name: `let before = logic! { v.len() };`.
 
-### Models
+### Snapshots and models
 
-A model maps a runtime type to the logical type that describes it:
+Logical code sees a runtime value in two ways: as what it is, its **snapshot**, and as what it means, its **model**.
 
 ```rust
 struct Stack {
@@ -361,21 +361,46 @@ impl Model for Stack {
         stack.items
     }
 }
+
+fn top(s: &Stack, nonempty: @(s.len() > 0)) -> u32 { ... }
 ```
 
-Here `stack.items` is a `Vec<u32>` used as a value, so it means the vector's model, a `Seq<Nat>`. Inside `model`, logical code reads `stack`'s fields, and never takes `stack` itself to the model that `model` defines.
+Here `s.len()` uses `s` as a value, so it is `Seq::len` of `s`'s model. Inside `model`, `stack.items` reads a field of `stack`'s snapshot, and uses it as a value, so it means the vector's model, a `Seq<Nat>`.
 
-**Every runtime type has exactly one model,** in one of four ways:
-- **declared by hand,** with `impl Model`, as above;
+**Snapshots.** Every runtime type `T` has a snapshot type `Snap<T>`, a logical type whose values are exactly the values that `T` can have. Locus derives it from `T`'s definition, with no declaration:
+
+| `T` | `Snap<T>` |
+|---|---|
+| a struct or enum | a logical struct or enum with the same fields and variants, each field of its field type's snapshot type, proof fields included |
+| `u8` … `u128`, `usize`, and the signed integers | a bounded integer: a `Nat` or `Int` within the type's range |
+| `bool`, a tuple | `Bool`, the tuple of its components' snapshots |
+| `&T`, `&mut T`, `Box<T>` | `Snap<T>` itself: references are transparent, and a `&mut`'s final value is `final!` ([Contracts](#contracts)) |
+| `[T; N]`, `[T]`, `Vec<T>` | `Seq<Snap<T>>`. Locus's library declares it for `Vec`, whose fields are raw pointers, and leaves out its capacity |
+| `UnsafeCell<T>`, and so `Cell`, `RefCell`, `Mutex`, and the atomics | an opaque type: a snapshot never holds what is inside |
+| a raw pointer | its address, not its target |
+| a trait object, a closure, a function pointer | opaque |
+| a type parameter `T` | `Snap<T>`, abstract, and substituted at each instantiation |
+
+- **A snapshot holds every field, private ones included,** so that two values that differ anywhere have different snapshots. Rust's privacy decides who may name a field: logical code reads `s.f` only where Rust code could read `f`. Outside the crate that defines a type with private fields, its snapshots can be held, passed on, and compared, but not looked into; what they mean is known through the type's model and its contracts.
+- **Snapshots never change unseen.** A snapshot belongs to a version ([Versions](#versions)). It holds no contents of an `UnsafeCell`, which change without a write, and no target of a raw pointer, only its address. So interior mutation, and any write through a raw pointer, leaves every snapshot as it was, by the aliasing rules that `unsafe` code must already obey.
+- **`UnsafeCell` is special because Rust makes it so.** It is a language item, and the only way Rust lets a value change through `&`. Every other type's snapshot is built from its fields, however much `unsafe` code the type uses. A type of the program's own built on raw pointers therefore has a snapshot that holds only addresses. Giving it a meaningful one, as the library does for `Vec`, needs an assumed specification or ghost permissions, which are for later.
+- **Two snapshots are equal exactly when they are the same variant with equal fields.** Their opaque parts are equal only when they come from one version.
+- **`snap(x)`** is a logic function in Locus's library that gives `x`'s snapshot, of type `Snap<T>`.
+
+**Models.** A type's model is a logic function from its snapshots to a logical type, `T::Logic`. A type has one in exactly three ways:
+- **declared by hand,** with `impl Model`, as `Stack` does;
 - **derived,** with `#[derive(Model)]`, from the models of its fields;
-- **declared by Locus's library,** for the standard library's types;
-- **otherwise, by default, its opaque identity `Opaque<T>`,** about which Locus knows only that equal values have equal identities.
+- **declared by Locus's library,** for the standard library's types.
 
-**The default identity is of a value, not of an object.** Every write makes a new version ([Versions](#versions)), and a new version's identity is unrelated to the old one's. So after `let b = a;`, `a` and `b` have equal identities, because they hold the same value; after a write to `a`, nothing is known about how their identities compare. Equal identities give nothing but other equalities of identities, so they never reach a field. A Rust value has no identity of its own to mint one from: a move changes its address, and a copy duplicates its bits.
+**A type has no model by default.** Using a value of a type without one as a value, as in `p === q` or `p.len()`, is an error that suggests deriving a model or writing `snap(p)`. Its fields can still be read, and used as values through their own models. This can be relaxed later, for example by making a type's snapshot its default model.
 
-The default exists for what contains a value, more than for the value itself. `Vec<Point>`'s model is a sequence of its elements' models, so `v.len()` works without a model for `Point`, and generic code can state `final!(v)[i] === v[j]` for a `T` without a `Model` bound, which is how a `swap` says what it did.
+**How logical code uses runtime values.**
+- **Reading a place gives a snapshot.** `p`, `p.x`, and `*r` read places, as RFC 0001 observes.
+- **Using a runtime value as a value takes it to its model:** as an operand, either side of `===`, a method receiver, or an argument of a logical parameter, other than one of snapshot type.
+- **Where a snapshot is expected, it stays a snapshot:** as the argument of a parameter of type `Snap<T>`, under an annotation of that type, or through `snap(x)`. A snapshot is a logical value, so it is never taken further.
+- So `x + 1`, for `x: u32`, adds `x`'s model, a `Nat`, and never overflows. `sorted(xs)`, for `xs: &[u32]`, receives `xs`'s model, a `Seq<Nat>`. And `snap(a) === snap(b)` compares two whole values.
 
-A derived model is a logical type with the same fields and variants, each field taken to its model:
+A derived model has the same fields and variants as the type, each taken to its model:
 
 ```rust
 #[derive(Model)]
@@ -389,18 +414,17 @@ fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(p === q
 }
 ```
 
-- `Point`'s model is a logical struct with fields `x: Nat` and `y: Nat`, written `<Point as Model>::Logic`. In logical code, `model(p).x` is `model(p.x)`.
-- Two values have equal derived models exactly when they are the same variant and their fields' models are equal, as for any logical struct or enum. So `same` is accepted. Without the derive, `p === q` compares opaque identities, and is not provable from the fields.
-- **Deriving needs a real model for every field:** each field's type has a model that is declared, derived, or given by Locus's library, not the default. A field of type `Cell<u32>`, whose model is only its identity, makes the derive an error.
-- **Proof fields are left out:** they carry no information.
-- **For now, only types without type parameters** derive a model. A generic derive would need a `Model` bound on its `impl`, which [below](#models) rules out.
-- **A derived model is still a model,** not the value. If a field's own model forgets something, as a hand-written one may, the derived model forgets it too. Equal derived models give equal models of the fields, never equal fields.
+- `Point::Logic` is a logical struct with fields `x: Nat` and `y: Nat`. In logical code, `model(p).x` is `model(p.x)`.
+- Two values have equal derived models exactly when they are the same variant and their fields' models are equal, as for any logical struct or enum. So `same` is accepted. Without the derive, `p === q` is an error, and `snap(p) === snap(q)` follows from the fields instead.
+- **Deriving needs a model for every field.** A field of type `Cell<u32>`, which has none, makes the derive an error. Proof fields are left out, because they carry no information.
+- **For now, only types without type parameters** derive a model. A generic derive would need a `Model` bound on its `impl`, which is ruled out below.
+- **A model may forget,** and a derived model forgets whatever its fields' models forget. So equal models never give equal snapshots, or equal fields: with `Inner { x }` modeled as `0` inside a derived `Outer { inner }`, two `Outer`s have equal models whatever their `x`.
 
 The rest:
 - **A type has at most one model.** A program that wants another interpretation of a type writes a logic function for it.
-- **A model is declared or derived by the crate that defines the type,** following Rust's orphan rule, or declared by Locus's library for the standard library's types. Every other type has its opaque identity as its model, and logical code can still read its visible fields as places.
+- **A model is declared or derived by the crate that defines the type,** following Rust's orphan rule, or declared by Locus's library for the standard library's types. The model of a type with private fields is how its crate tells other crates what its values mean: they cannot look into its snapshots, so they reason through its model and the contracts its functions state in terms of it. This is data refinement in Hoare's sense, with proof fields as the representation invariant and the model as the abstraction function.
 - **`impl Model` is a real implementation** of the library's `Model` trait, with its logic function as a stub beside it, and `#[derive(Model)]` generates one.
-  - So rustc checks `T: Model` bounds. A type whose model is its default identity does not implement `Model`: `T: Model` holds exactly for types with a declared, derived, or library model.
+  - So rustc checks `T: Model` bounds, and `T: Model` holds exactly for types with a model.
   - Its coherence errors, conflicting implementations (E0119) and the orphan rule (E0117), are reported as Locus's errors about models.
   - In build mode both programs keep it. An exported program has no `Model`: implementations and `T: Model` bounds are removed.
 - **A `Model` bound appears only on a function's type parameters.** On an `impl` or a trait, removing it from an exported program could change which implementation a method call selects, so the exported program would behave differently from the one checked.
@@ -409,23 +433,20 @@ The rest:
   - In the exported program, where the bound is gone, it calls `Foo`'s.
   - So such a bound is rejected, in both modes, so that a crate that builds also exports.
 - **The models of standard types** are declared by Locus's library, and each is trusted:
-  - unsigned integers, `Nat`; signed integers, `Int`; `bool`, `Bool`;
+  - unsigned integers, `Nat`; signed integers, `Int`; `bool`, `Bool`; each the integer or boolean its snapshot holds;
   - `&T`, `&mut T`, and `Box<T>`, the model of `T`;
-  - `[T; N]`, `[T]`, and `Vec<T>`, a `Seq` of `T`'s model;
-  - `Option<T>`, a `Maybe` of `T`'s model;
-  - a tuple, the tuple of its components' models;
-  - a logical type, itself, so `Vec<Nat>` is a `Seq<Nat>`;
-  - a type with interior mutability, such as `Cell<u32>`, has no model but its identity, and logic knows nothing of its contents;
-  - `()` has no model but its identity, which, having no fields, tells nothing anyway.
+  - `[T; N]`, `[T]`, and `Vec<T>`, a `Seq` of `T`'s model, for a `T` with a model;
+  - `Option<T>`, a `Maybe` of `T`'s model, for a `T` with a model;
+  - a tuple, the tuple of its components' models, when each has one;
+  - `()`, the logical `Unit`;
+  - a logical type, itself, so `Vec<Nat>`'s model is a `Seq<Nat>`.
 
-  Others, such as `String`, `char`, maps, `Rc`, and `Arc`, are for the library's RFC ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
-- **A model reads only what logical code can reach.** Inside a model's own definition, logical code reads its parameter's fields, and never takes the parameter to the model being defined. Everywhere else, a value of the type used as a value is its model.
-  - Logical code cannot read inside an `UnsafeCell` or through a raw pointer ([Logical code](#logical-code)), so no model reads data that can change while the value is shared, and `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
-  - So a call that Locus knows nothing about, taking `&x`, never changes `x`'s model, as RFC 0001 relies on.
-- **`model(x)`** is a logic function in Locus's library that gives `x`'s model explicitly, for example to compare two values of a struct by their models.
-- **In Rust's terms, `Model` has no methods,** as `compat.names.no-methods` requires. Its function takes the value as an ordinary argument, and is called either through `model(x)` or implicitly.
-- **In generic code, a type parameter `T` without a `Model` bound has an unknown model.** Logical code can compare its values' models with `===` and pass them on, and facts proven about them hold at every instantiation, whatever the instantiating type's model is. With `T: Model`, logical code can use `T::Logic`.
+  `Cell`, `RefCell`, `Mutex`, and the atomics have none. Others, such as `String`, `char`, maps, `Rc`, and `Arc`, are for the library's RFC ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
+- **A container works for every element type through its snapshot.** `Vec<T>` has a model only when `T` has one, but `snap(v)` is a `Seq<Snap<T>>` for every `T`. So `snap(v).len()` works for a vector of `Point`s without a model, and generic code without a `Model` bound writes `snap(final!(v))[i] === snap(v)[j]` to say what a `swap` did.
+- **In generic code, a value of a type parameter `T` without a `Model` bound cannot be used as a value;** its snapshot can. Facts proven about snapshots hold at every instantiation. With `T: Model`, logical code can use `T::Logic`.
+- **A model is a function of the snapshot,** so it never reads the contents of an `UnsafeCell` or the target of a raw pointer, and a call that Locus knows nothing about, taking `&x`, never changes `x`'s model, as RFC 0001 relies on.
 - **A model's definition never depends on itself.** Inside a hand-written model, and inside every logic function it calls, a value of the type is read through its fields, never taken to the model being defined. So a model cannot reach itself through a helper.
+- **`model(x)`** gives `x`'s model explicitly. **In Rust's terms, `Model` has no methods,** as `compat.names.no-methods` requires. Its function takes the value as an ordinary argument, and is called either through `model(x)` or implicitly.
 - **Models are interpretations.** Declaring one proves nothing about any operation. What runtime operations do to models is the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)), together with the specifications of the standard library that Locus's library declares.
 
 ### Versions
@@ -455,7 +476,7 @@ let before = logic! { n };      // names the value of n₁, which later writes l
   - The logical value of a place is that of its binding's current version.
   - A field is a projection of it.
   - Owned heap data, such as a `Box`'s target or a `Vec`'s elements, is part of it.
-  - Data behind an `UnsafeCell` is part of no version (see [Models](#models)).
+  - Data behind an `UnsafeCell` is part of no version (see [Snapshots and models](#snapshots-and-models)).
 - **Propositions are about versions.**
   - Logical code reads the versions current where it is evaluated, and a proposition is a term over those versions.
   - A proposition never changes: later writes make new versions, and leave the old ones as they were.
@@ -758,20 +779,23 @@ The rules below go into five new chapters of the specification: [The logical lay
 | `logic.boundary.writes` | `logical-layer/completable-holder-to-unchecked.accept.lc`, `logical-layer/lend-proof-holder-to-specified.accept.lc`, `logical-layer/own-type-with-invariant-to-unchecked.accept.lc`, `logical-layer/proof-free-logical-to-unchecked.accept.lc`, `logical-layer/share-proof-holder-with-unchecked.accept.lc`, `logical-layer/completable-holder-forgotten-after-lending.reject.lc`, `logical-layer/lend-proof-cell-to-unchecked.reject.lc`, `logical-layer/lend-proof-holder-to-unchecked.reject.lc`, `logical-layer/own-generic-type-to-unchecked.reject.lc`, `logical-layer/proof-only-logical-to-unchecked.reject.lc`, `logical-layer/proof-sender-to-unchecked.reject.lc`, `logical-layer/rc-cell-to-unchecked.reject.lc` |
 | `logic.code.logical-values` | `logical-layer/logic-fn-model-result.accept.lc`, `logical-layer/logic-fn-runtime-result.reject.lc`, `logical-layer/logic-fn-unit-result.reject.lc` |
 | `logic.eq.same` | `logical-layer/same-is-a-proposition.accept.lc`, `logical-layer/sameness-on-sequences.accept.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
-| `logic.eq.runtime-values` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/default-model-equal-fields.reject.lc` |
+| `logic.eq.runtime-values` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc` |
+| `logic.eq.snapshots` | `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `logical-layer/cell-contents-unknown.reject.lc` |
 | `logic.eq.comparisons` | `logical-layer/comparison-is-a-bool.accept.lc`, `logical-layer/comparison-on-sequences.reject.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
 | `logic.code.no-runtime-calls` | `logical-layer/logic-calls-logic-function.accept.lc`, `logical-layer/logic-calls-runtime-function.reject.lc` |
 | `logic.fn.total` | `logical-layer/measure-recursion.accept.lc`, `logical-layer/structural-recursion.accept.lc`, `logical-layer/measure-increases.reject.lc`, `logical-layer/nonterminating-logic-fn.reject.lc`, `proofs/diverging-logic-proof.reject.lc` |
 | `logic.const.well-founded` | `logical-layer/logical-constant-chain.accept.lc`, `logical-layer/logical-constant-cycle.reject.lc` |
+| `models.snapshots` | `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc` |
+| `models.snapshot-privacy` | `models/private-field-in-own-module.accept.lc`, `models/private-field-of-snapshot.reject.lc` |
+| `models.frozen-data` | `models/hand-written-model.accept.lc`, `logical-layer/cell-contents-unknown.reject.lc`, `models/model-reads-cell.reject.lc` |
 | `models.observation` | `models/integer-model-no-overflow.accept.lc`, `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `models/wrapping-is-not-the-model.reject.lc` |
+| `models.no-default` | `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `models/equal-fields-without-model.reject.lc`, `models/vector-without-element-model.reject.lc` |
 | `models.integer-range` | `models/integer-range.accept.lc`, `models/integer-range-tighter.reject.lc` |
 | `models.one-per-type` | `models/hand-written-model.accept.lc`, `models/two-models.reject.lc` |
-| `models.default-identity` | `models/default-identity-unchanged.accept.lc`, `logical-layer/cell-contents-unknown.reject.lc`, `models/default-model-equal-fields.reject.lc` |
 | `models.derived` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/derive-model-for-generic.reject.lc`, `models/derive-model-with-cell-field.reject.lc` |
 | `models.bounds-on-functions` | `models/model-bound-on-function.accept.lc`, `models/model-bound-on-impl.reject.lc` |
 | `models.declared-by-owner` | `models/hand-written-model.accept.lc`, `models/model-for-foreign-type.reject.lc` |
 | `models.own-definition` | `models/hand-written-model.accept.lc`, `models/model-helper-reads-fields.accept.lc`, `models/model-of-itself.reject.lc`, `models/model-through-helper.reject.lc` |
-| `models.frozen-data` | `models/hand-written-model.accept.lc`, `models/model-reads-cell.reject.lc` |
 | `proofs.versions` | `observation/proof-before-move.accept.lc`, `proofs/reproved-after-assignment.accept.lc`, `proofs/snapshot-survives-assignment.accept.lc`, `proofs/stale-proof-across-iterations.reject.lc`, `proofs/stale-proof-after-assignment.reject.lc`, `proofs/stale-proof-after-same-value.reject.lc`, `proofs/stale-proof-through-reference.reject.lc`, `proofs/stored-proof-after-clear.reject.lc` |
 | `proofs.connectives` | `proofs/connectives.accept.lc`, `proofs/conjunction-needs-both.reject.lc` |
 | `proofs.props.constructors` | `proofs/positive-proposition.accept.lc`, `proofs/wrong-arm.reject.lc` |
@@ -794,7 +818,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 | Area | Effect |
 |---|---|
-| Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which are markers at run time: `Erased` for proofs and `ErasedData` for other logical data. `Int` is built in, and `Nat` is a library type whose difference is an `Int`. Every runtime type has one model: declared, derived, from the library, or its opaque identity. |
+| Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which are markers at run time: `Erased` for proofs and `ErasedData` for other logical data. `Int` is built in, and `Nat` is a library type whose difference is an `Int`. Every runtime type has a snapshot type `Snap<T>`, and a model only when one is declared, derived, or given by the library. |
 | Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. `===` is Lean's equality, and comparisons give `Bool`s, as Rust's give `bool`s. Propositions are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
 | Ownership and mutation | Logical code reads places under RFC 0001's observation rules. Every write makes a new version. A `&mut` reference has a current value and a final value, `final!`. How runtime code changes values in the logic is [#6](https://github.com/nikhilgarg28/locus/issues/6). |
 | Erasure and runtime behavior | In build mode, every ghost value is a zero-sized marker in both programs, and nothing is erased. An exported program removes ghost parameters and locals, and keeps markers inside runtime types and fields. Runtime parts such as tags and lengths are kept, every call of a function with a precondition is checked, and calls of runtime functions are kept even when their results are ghost. |
@@ -841,15 +865,17 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 - Rejected at the owner's direction. In Rust, `==` is a programmable comparison that gives a `bool`, and a reader expects the same in logical code.
 - Lean also separates `==` (`BEq`, a `Bool`) from `=` (`Eq`, a `Prop`), and ties them together with `LawfulBEq`. Here `===` is Lean's `=`.
 
-**A view of every runtime value, its frozen part,** as the input to models and the meaning of values without a model.
-- Rejected. "The part of a value that Rust freezes under a shared borrow" describes memory, not values, and is useless for containers built on raw pointers, whose elements it would leave out.
-- Logical code reaches runtime data only through places, which already keeps it away from what can change unseen.
+**A view of every runtime value, its frozen part,** as the input to models. Replaced by snapshots, which are the same idea stated as values: what Rust's aliasing rules freeze, with containers built on raw pointers given their contents by Locus's library.
 
-**`Opaque<T>` as the value itself,** with two values equal when their visible fields are. This was the previous draft. Rejected: it is unsound when a field's model forgets something. With `Inner { x }` modeled as `0` inside `Outer { inner }`, two `Outer`s whose `x` differ have equal fields, so they would be equal, and reading `o.inner.x` from each would prove `0 === 1`. Patching it by allowing field-wise equality only through models that lose nothing would add a trusted list of such models. Separating the model from the value, with an opaque default and `#[derive(Model)]` for structure, needs no list.
+**A value without a model as an `Opaque<T>`, equal to another when their visible fields are equal.** This was the previous draft. Rejected: it is unsound when a field's model forgets something. With `Inner { x }` modeled as `0` inside `Outer { inner }`, two `Outer`s whose `x` differ have equal fields, so they would be equal, and reading `o.inner.x` from each would prove `0 === 1`. The flaw was building equality from fields' models. Snapshots are built from fields' snapshots, so their equality is the values' own.
+
+**An opaque identity as the default model.** Rejected. It is consistent, because a write makes a new version, and interior mutation makes none and is never in a snapshot. But it tells almost nothing: two identities are equal only when they come from one version.
 
 **An identity minted per object,** which a clone or a copy would change and a write would keep. Rejected for now. A Rust value has no identity of its own: a move changes its address, and a copy duplicates its bits, so the identity would have to live in the value, and a copy would carry it. An identity for reasoning about aliasing, such as which `Cell` two references share, can come later beside values.
 
-**No model by default,** so that a type without a declared or derived model could not be used as a logical value at all. Rejected: `Vec<Point>` would have no model, so `v.len()` would not work in logical code for a vector of structs, and generic code could not state `v.len() > 0`, or `final!(v)[i] === v[j]`, without a `Model` bound.
+**A type's snapshot as its default model.** Deferred at the owner's direction. It would let `p === q` compare whole values for any type without a model, and give `Vec<T>` a model for every `T`. But adding `impl Model` to a type later would silently change what `===` means in its clients' specifications. Explicit `snap(x)` keeps the two meanings apart, and the restriction can be lifted later.
+
+**Snapshots by default in logical code, and models only through `model(x)`,** as Creusot's `View` and Verus's views work. Rejected at the owner's direction. Specifications are about what values mean more often than what they are, and models by default let `x + 1` and `v.len()` read as they do now.
 
 **One marker for proofs and logical data.** Rejected. A marker that implements `PartialEq` and `Hash`, as proofs need, lets rustc accept `==` on two `Vec<Nat>`s, which would compare only their lengths, and a derived `PartialEq` that ignores a `Nat` field. The alternatives were for Locus to check every trait use that rustc satisfied through the marker, which makes it a second trait solver, or to give up `==` and `Hash` on values that hold proofs.
 
@@ -861,9 +887,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 **No `unsafe impl` but `Send` and `Sync`** on a type with proof fields. Rejected: a hand-written `unsafe impl` is the programmer's own promise, which the trust model already covers. Only a generated one bypasses it.
 
-**`mint`, an unspecified `Int` for each value of a type without a model,** in place of `Opaque<T>`.
-- Rejected: it tells logic nothing more than an uninterpreted type does, and loses the type, so logic could do meaningless arithmetic on the integers.
-- Lean gives every type equality, so no logical type can lack it. What matters is which facts exist, and logic has none about an opaque value except where it came from.
+**`mint`, an unspecified `Int` for each value of a type without a model.** Rejected: it tells logic nothing that a snapshot does not, and loses the type, so logic could do meaningless arithmetic on the integers.
 
 **Inferring ghost bindings from types before rustc runs,** so that `let k = v[0]; let m = k + 1;` would work without `logic!`. Rejected: lowering would need `v`'s type, and so type inference and method resolution over the standard library, which is rustc's work. A wrong guess can compile with another meaning ([RFC 0001](0001-compiler-pipeline.md#alternatives)).
 
@@ -903,7 +927,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 5. **Inductive propositions with named arms,** built and matched as `Arm(witnesses) @ proof`, and `&&`, `||`, and `!` on propositions.
 6. **Equality.** `===` is Lean's equality, a proposition. `==` and the orderings give a `Bool`, and are built in only on `Int`, `Nat`, and `Bool` until [#12](https://github.com/nikhilgarg28/locus/issues/12).
 7. **Naming.** Logic functions in snake_case, and `prop` declarations in CamelCase.
-8. **Models by default and by derive.** Every runtime type has one model. A type with no declared, derived, or library model has its opaque identity `Opaque<T>`, of a value at a version, about which nothing else is known. `#[derive(Model)]` gives a model with the same fields, each taken to its model, for a type all of whose fields have models of their own. On runtime values, `===` compares models, and never implies equal fields. Logical code reaches runtime data only through places and models, so it never reads inside an `UnsafeCell` or through a raw pointer, and every logical computation produces a logical value.
+8. **Snapshots and models.** Every runtime type has a snapshot type `Snap<T>`, derived from its definition, which holds every field and nothing behind an `UnsafeCell` or a raw pointer. A type has a model only when it is declared, derived with `#[derive(Model)]` from its fields' models, or declared by Locus's library; there is no default, for now. Logical code reads places as snapshots and uses values through their models, and `snap(x)` gives a snapshot explicitly. On runtime values, `===` compares models; on snapshots, values. Every logical computation produces a logical value.
 9. **Interior mutability.** Types with interior mutability may hold logical values.
 10. **The traits logical types implement:** `Clone`, `Copy`, and `Debug`, plus comparison and hashing for proofs. So proofs and logical data have separate markers, `Erased` and `ErasedData`, and rustc itself rejects comparing, ordering, or hashing logical data.
 11. **Export mode's rules.** What other crates can reach states no contracts, postconditions included, has no logical values in its types or fields, and has no `Model` bounds. Other crates can neither construct a struct with proof fields nor reach a field that its proofs read.

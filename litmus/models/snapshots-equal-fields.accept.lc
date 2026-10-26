@@ -1,0 +1,12 @@
+//~ question: Are two snapshots equal when all their fields are?
+//~ spec: logic.eq.snapshots, models.no-default, models.snapshots
+//~ rfc: 0002
+
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(snap(p) === snap(q)) {
+    _
+}

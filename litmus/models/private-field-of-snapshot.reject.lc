@@ -1,0 +1,13 @@
+//~ question: May logical code read a private field of a snapshot from outside the field's module?
+//~ spec: models.snapshot-privacy
+//~ rfc: 0002
+
+mod shapes {
+    pub struct Circle {
+        radius: u32,
+    }
+}
+
+fn wide(c: &shapes::Circle, big: @(snap(c).radius > 10)) -> u32 { //~ error: field `radius` of `Circle` is private, so logical code here cannot read it, as Rust code here could not
+    0
+}

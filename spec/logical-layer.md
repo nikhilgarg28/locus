@@ -2,18 +2,18 @@
 
 Locus adds logical types, whose values exist only for checking, and logical code, which computes with them. This chapter says what is logical, where logical values may appear, and what logical code may do. [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the design.
 
-Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the model types that `#[derive(Model)]` generates, `Opaque<T>` for each runtime type `T`, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
+Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the model types that `#[derive(Model)]` generates, the snapshot type `Snap<T>` of each runtime type `T`, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
 
 ## Logical types
 
 r[logic.types.contents-logical]
-The fields, payloads, and type arguments of a logical type are logical types, and so are the parameters and results of a logical function type. The one exception is `Opaque<T>`, whose argument names a runtime type.
+The fields, payloads, and type arguments of a logical type are logical types, and so are the parameters and results of a logical function type. The one exception is `Snap<T>`, whose argument names a runtime type.
 
 r[logic.types.tuples]
 A tuple type is logical when it has at least one component and all its components are logical. The unit type `()` is a runtime type.
 
 r[logic.types.positive]
-A logical type, or a proposition declared with `prop`, refers to itself, directly or through other logical types, derived model types included, only in strictly positive positions: never in a parameter of a logical function type, which includes the premise of `==>`, the operand of `!`, and the domain of `forall` and `exists`.
+A logical type, or a proposition declared with `prop`, refers to itself, directly or through other logical types, snapshot types and derived model types included, only in strictly positive positions: never in a parameter of a logical function type, which includes the premise of `==>`, the operand of `!`, and the domain of `forall` and `exists`.
 
 r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
@@ -77,16 +77,19 @@ No value through which a place holding logical values that are not completable c
 
 ## Logical code
 
-Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on ghost bindings that the source shows. In it, a runtime place keeps its Rust meaning, and a runtime value used as a value is its type's [model](models.md).
+Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on ghost bindings that the source shows. In it, reading a runtime place gives its [snapshot](models.md), and a runtime value used as a value is its type's model.
 
 r[logic.code.logical-values]
-Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its type's model, which for a type with no other is its opaque identity.
+Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its snapshot, which is taken to its type's model wherever it is used as a value.
 
 r[logic.eq.same]
 `a === b` is the proposition that the logical values `a` and `b` are equal, and `a !== b` its negation. Every logical type has it, and it cannot be overloaded.
 
 r[logic.eq.runtime-values]
-On runtime values, `a === b` is the equality of their models. It implies nothing about the values beyond their models: not that their fields are equal, nor anything that reading their fields as places could show.
+On runtime values, `a === b` is the equality of their models. It implies nothing about the values beyond their models: not that their snapshots or their fields are equal.
+
+r[logic.eq.snapshots]
+Two snapshots are equal exactly when they are the same variant and their fields' snapshots are equal. The opaque parts of two snapshots, such as a `Cell`'s, are equal only when the snapshots come from one version.
 
 r[logic.eq.comparisons]
 `==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, where `a == b` is true exactly when `a === b`, and each ordering agrees with the order of the integers. A `Bool` used as a proposition stands for the proposition that it is true.

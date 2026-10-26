@@ -54,7 +54,7 @@ Each chapter is a file in this directory, listed here in reading order.
 1. [Compatibility with Rust](compatibility.md)
 2. [Observing runtime values](observation.md)
 3. [The logical layer](logical-layer.md)
-4. [Models](models.md)
+4. [Snapshots and models](models.md)
 5. [Propositions and proofs](proofs.md)
 6. [Contracts](contracts.md)
 7. [Exporting to Rust](export.md)

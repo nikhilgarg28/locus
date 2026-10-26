@@ -183,19 +183,19 @@ How the names are found:
 
 There is no wall between Rust and Locus inside a crate. Plain Rust and Locus code mix freely, and every file goes through the pipeline. Soundness comes instead from the only four ways facts about runtime values can enter the logic:
 
-1. **Models:** observing a runtime value through its type's model.
+1. **Snapshots and models:** observing a runtime value as what it is, its snapshot, or through its type's model, what it means.
 2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic, together with what Rust's ownership rules guarantee: a call changes only what it is given mutable access to, and a mutable borrow's final value is what its place holds when the borrow ends.
 3. **Assumed specifications:** each declared with a reason, and listed by the audit.
 4. **Invariants of the program's own types,** stated by their proof fields, as described below.
 
 Each is sound no matter who wrote the code.
 
-- **Models read only data that cannot change while the value is shared.** Rust's type system guarantees this, except for the contents of an `UnsafeCell` and the targets of raw pointers.
-  - Models are logic code, and they can read fields only through those fields' models.
-  - Types from the standard library with `unsafe` internals (`Vec`, `Rc`, `String`) get models declared by Locus's library, each as a trusted entry with its reason.
-  - `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
+- **Snapshots and models read only data that cannot change while the value is shared.** Rust's aliasing rules guarantee this, except for the contents of an `UnsafeCell` and the targets of raw pointers, and a snapshot holds neither.
+  - A snapshot is derived from a type's definition, field by field. A model is a logic function of the snapshot.
+  - Types from the standard library with `unsafe` internals (`Vec`, `Rc`, `String`) get snapshots and models declared by Locus's library, each as a trusted entry with its reason.
+  - `Cell`, `RefCell`, `Mutex`, and the atomics have no model, and their snapshots hold nothing of their contents.
 
-  So **a call Locus knows nothing about, taking `&x`, never changes `x`'s model**: Rust freezes what the model reads, and the model never reads what Rust does not freeze.
+  So **a call Locus knows nothing about, taking `&x`, never changes `x`'s snapshot or model**: Rust freezes what they hold, and they never hold what Rust does not freeze.
 - **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns a field that a proof field reads must keep that proof field true. Locus proves it for the new value as if a hole were written there, and rejects the assignment when it cannot.
 - **Code Locus cannot translate is opaque:** dependencies, trait objects, inline assembly, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
 - **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): both programs hold them only as zero-sized markers, `Erased` and `ErasedData`, which carry no proposition and no value. Locus tracks what a value holds itself, only through code it checks and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
@@ -609,7 +609,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 **Decided by the owner while this RFC was drafted.** Recorded here; accepting the RFC confirms them.
 1. Locus syntax only for proofs, logic functions, and propositions. Names for blocks, derives, and traits, resolved like std's prelude.
 2. `#[derive(Logical)]`, never implemented by hand, and a `Model` trait, in place of `logic struct` and `logic enum`.
-3. The four ways facts enter the logic. `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
+3. The four ways facts enter the logic. `Cell`, `RefCell`, `Mutex`, and the atomics have no model, and their snapshots hold nothing of their contents.
 4. The current stable release with `RUSTC_BOOTSTRAP=1` preferred; a pinned nightly acceptable.
 5. Two modes. Build mode, the default, compiles the runtime program under `target/`, in one Cargo run, and checks every crate that depends on a Locus crate. Export mode writes `.rs` files beside the sources for Rust users. `pub(locus)` marks what only Locus crates see: public in build mode, and `pub(crate)` in export mode.
 6. In build mode, the configuration being built is checked. In export mode, declared configurations with a guard; the default is dev, release, and test builds with default features and 64-bit pointers, independent of the host. Erasure removes code no checked configuration enables.

@@ -11,6 +11,6 @@ struct Counter {
 impl Model for Counter {
     type Logic = Nat;
     logic fn model(c: &Counter) -> Nat {
-        c.hits //~ error: expected `Nat`, found `Opaque<Cell<u32>>`: a `Cell`'s contents can change while it is shared, so its only model is its identity
+        c.hits //~ error: `Cell<u32>` has no model: a `Cell`'s contents can change while it is shared, so no snapshot or model holds them
     }
 }

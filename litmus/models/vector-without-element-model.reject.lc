@@ -1,0 +1,12 @@
+//~ question: Does a vector whose elements have no model have a model?
+//~ spec: models.no-default
+//~ rfc: 0002
+
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn first(points: &Vec<Point>, nonempty: @(points.len() > 0)) -> u32 { //~ error: `Vec<Point>` has no model, because `Point` has none; write `snap(points).len()`, or derive a model for `Point`
+    points[0].x
+}
