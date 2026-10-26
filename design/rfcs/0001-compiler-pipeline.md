@@ -10,9 +10,9 @@ Locus compiles a Cargo crate in four steps:
 
 1. **Parse.** Locus parses its `.lc` sources, Rust plus Locus syntax, into lossless syntax trees.
 2. **Lower.** Locus writes each `.lc` file as one Rust text, the **lowered program**. In it, proofs and logical values are zero-sized markers, `Erased` and `ErasedData`, in every position they occupy; logical items are stubs that only resolve names; and logical code is an invocation of a macro from Locus's library. Lowering decides only what the source shows, never an expression's type.
-3. **Check.** rustc compiles the lowered program against the *checking* version of Locus's library, through a small driver. That is the **checking program**: its macros turn every place logical code reads into a borrow, and the driver reports what Locus needs: the types of those places, what names resolve to, and the typed bodies of the functions being verified. rustc's borrow checker decides whether logical code may read what it reads. Locus then checks the logical layer against those facts, constructs proofs, and has the kernel check them.
+3. **Check.** rustc compiles the lowered program through a small driver, with the *checking* expansions of Locus's macros selected. That is the **checking program**: its macros turn every place logical code reads into a borrow, and the driver reports what Locus needs: the types of those places, what names resolve to, and the typed bodies of the functions being verified. rustc's borrow checker decides whether logical code may read what it reads. Locus then checks the logical layer against those facts, constructs proofs, and has the kernel check them.
 4. **Build or export.** Only when the check passes, Locus produces the **runtime program**, and validates that it has the typed bodies of the program it checked, apart from logical code:
-   - **Build mode,** the default: rustc compiles the same lowered program against the *runtime* version of Locus's library, whose macros expand to the markers and nothing else. `cargo locus build` builds it under `target/`, in the configuration being built. Every crate in the build that depends on a Locus crate is checked too, so contracts hold across crates.
+   - **Build mode,** the default: rustc compiles the same lowered program again, with the *runtime* expansions, in which Locus's macros give the markers and nothing else. `cargo locus build` builds it under `target/`, in the configuration being built. Every crate in the build that depends on a Locus crate is checked too, so contracts hold across crates.
    - **Export mode:** `cargo locus export` erases the logical layer by editing each `.lc` file into readable Rust, written beside the sources as `.rs` files that Rust users build with plain Cargo. The crate's public interface must then be plain Rust: it has no logical values and states no contracts.
 
 Locus writes its own parser, the lowering, the logical layer, the kernel, erasure, and diagnostics. Everything else that Rust already does is rustc's: name resolution, macro expansion, type inference, trait resolution, ownership and borrow checking, lints, and code generation.
@@ -214,11 +214,11 @@ The details of models are [RFC 0002](0002-logical-layer.md).
 
 ### The lowered program
 
-The lowered program is what rustc compiles: once against the checking version of Locus's library, as the checking program, and in build mode once more against the runtime version, as the runtime program. A [spike](../../spikes/one-text-lowering/README.md) lowered 30 cases by hand, and compiled every one against both versions with stable rustc 1.97.
+The lowered program is what rustc compiles: once with the checking expansions of Locus's macros, as the checking program, and in build mode once more with the runtime expansions, as the runtime program. A [spike](../../spikes/one-text-lowering/README.md) lowered 30 cases by hand, and compiled every one both ways with stable rustc 1.97.
 
 - **It is written as ordinary `.rs` files** under `target/locus/lowered/`, and rustc parses them like any crate. Files on disk can be opened, compared, and compiled by hand when something goes wrong. If disk access ever matters, the driver can serve the same text from memory through rustc's file-loader hook, without changing anything else.
 - **Lowering keeps each source line on the same line of the lowered program where it can,** and appends synthesized items at the end. Raw rustc output is then readable when debugging Locus itself. The origin map, not the alignment, is the authority.
-- **Locus's library crate holds its markers, its macros, its probes, and the stubs of its logical items,** such as `Nat` and `Model`. Its two versions differ only in what its macros expand to. rustc receives it under a crate name the program does not use.
+- **Locus's library crate holds its markers, its macros, its probes, and the stubs of its logical items,** such as `Nat` and `Model`. Its macros expand one way in the checking program and another in the runtime program, selected by a `cfg` that only the checking compile sets ([Running rustc](#running-rustc-locus-driver)). rustc receives it under a crate name the program does not use.
 - **New names are fresh.** Every name Locus introduces, such as the library's crate name and the generated module, is chosen so that it appears nowhere in the crate's sources, so generated items cannot collide with the user's, even under `#![no_implicit_prelude]`.
 - **The checking program is compiled with `--cap-lints allow`.** Lints there would be artifacts of the lowering, and a user's `#![deny(warnings)]` or `forbid` must not turn synthesized code into errors. This was tested. Real lints come from building the runtime program, where lowering marks the items it synthesizes, and ghost bindings and fields, with `#[allow]` for the lints they would otherwise cause.
 
@@ -355,18 +355,42 @@ rustc removes code whose `cfg` is false before it type-checks anything, so check
   - the compiler that builds the exported program;
   - the versions and features of dependencies.
 
-  The distribution RFC ([#7](https://github.com/nikhilgarg28/locus/issues/7)) will narrow these. The inputs to macros are an assumption in both modes, because the checking and runtime programs expand macros separately.
+  The distribution RFC ([#7](https://github.com/nikhilgarg28/locus/issues/7)) will narrow these. The inputs to macros that read the environment or files are an assumption for exported crates, which Rust users build in environments Locus never sees. In build mode, validation compares the two compiles, so a macro whose input changed between them is an error.
 - **Corner cases.** [#9](https://github.com/nikhilgarg28/locus/issues/9) collects the cases this design does not yet settle, among them `cargo test --release`, docs.rs's `docsrs`, target features, build-script `cfg`s, and `cfg`s written by other crates' macros.
 
 ### Running rustc: `locus-driver`
 
 `locus-driver` is a small program linked against rustc's internal crates, the way Clippy is.
 
-- **How Cargo runs it.** Cargo runs it in place of rustc, through `RUSTC_WORKSPACE_WRAPPER` for workspace members, or through `RUSTC_WRAPPER` when dependencies must be checked too, as Locus dependencies are in build mode. Either way, Cargo does the orchestration, as for any build, and Locus gets the exact compiler invocation, with its edition, `cfg`s, features, and `--extern` paths.
-- **For a crate Locus checks,** the driver substitutes the checking program's root for the crate's root, and records facts after type checking. It then lets rustc continue so that the borrow checker runs, and stops before code generation.
-- **In build mode, one Cargo run checks and builds every crate.** For a checked crate, the driver compiles the checking program as above, hands the facts to Locus, which runs as a separate process, and waits for the logical pass and erasure. It then compiles the runtime program in the same invocation, with code generation, as the artifact Cargo asked for. Cargo builds a crate's dependencies first, so their checked interfaces are ready. A crate's checking program is compiled against its dependencies' checking programs, and its runtime program against their runtime programs.
+- **How Cargo runs it.** Cargo runs it in place of rustc, through `RUSTC_WRAPPER`, so that it sees every crate in the build, including Locus dependencies outside the workspace, which `RUSTC_WORKSPACE_WRAPPER` does not wrap ([spike](../../spikes/cargo-graph/README.md)). Cargo does the orchestration, as for any build, and Locus gets the exact compiler invocation, with its edition, `cfg`s, features, and `--extern` paths.
+- **For a crate Locus checks, one invocation compiles twice.**
+  1. **The checking program.** The driver compiles the lowered program with Cargo's own arguments, changed only in its root, in emitting metadata to a directory of Locus's own, in its incremental directory, in capped lints, and in the `cfg` that selects the checking expansions. It records facts after type checking, and lets rustc continue, so that the borrow checker runs, before code generation. This compile must send Cargo no notification that an artifact is ready: in the spike, one that did made Cargo start a dependent before its dependency had an interface, and Cargo then panicked.
+  2. **The logical pass.** Locus, as a separate process, checks the crate against the facts and its dependencies' interfaces, and writes the crate's interface.
+  3. **The runtime program.** Only if the pass succeeds, the driver compiles the same lowered program with Cargo's own arguments, changed only in its root, with code generation, as the artifact Cargo asked for. Locus validates it against the checking program, then lets Cargo have it.
+
+  In the spike, the two programs' items had identical definition hashes in every crate, so validation can pair them by those hashes.
+- **One library, two expansions.** The spike compared four ways for both programs to share Locus's library across crates:
+  - **Two libraries of one name,** swapped through `--extern`. The markers of a dependency's runtime artifact are then not those of a checking program (E0308). It works only when every checking program is compiled against its dependencies' checking metadata, kept twice.
+  - **One crate of markers, with each version's macros in another.** It silently loses proofs: a dependency's macro that invokes Locus's through `$crate` expanded to the runtime version, so a proof that read a moved value was accepted.
+  - **A procedural macro** that reads which program it is in from the environment. It works, at the cost of an input rustc does not track.
+  - **One library whose macros expand under a `cfg` that only the checking compile sets.** It works, with one artifact per dependency, because a `cfg` is evaluated where a macro expands, whoever wrote the macro.
+
+  This RFC proposes the last. The `cfg`'s name is fresh, like every name Locus introduces, so a crate's own code cannot test it, and validation catches a macro that tries.
+- **Cargo must never take an unchecked artifact for a checked one.**
+  - `RUSTC_WRAPPER` is not part of Cargo's fingerprint. In the spike, after a plain `cargo build`, the build with the driver was entirely Fresh, and a crate whose check fails built with exit status 0.
+  - What Cargo does fingerprint is the wrapper's `rustc -vV` output. So the driver adds a line to it that identifies itself, Locus's library, and `locus`. Cargo then gives build mode artifacts of their own, distinct for every version of Locus.
+  - Build mode also uses a target directory of its own, under `target/locus/`.
+  - After a failed check, Cargo had already removed the crate's artifact, and the next run checked it again.
+- **Every input is in the dep-info.** The driver rewrites the dep-info file that Cargo reads to list every `.lc` file of the crate, its dependencies' interfaces, Locus's library, and `locus`. With rustc's own, which lists only the lowered files, the spike's Cargo missed an edit to a `.lc` module, and left every crate Fresh with a contract its dependent no longer met.
+- **Invalidation is conservative.** Cargo rebuilds every dependent of a rebuilt crate, so an edit to a body alone checks its dependents again. Skipping dependents whose dependency's interface is unchanged is an optimization for later.
+- **The cost, in the spike's small debug builds,** was 1.8 to 3.8 times the wall time of the same builds without the check. The logical pass is on the critical path, because a dependent starts only once its dependency's runtime program, and so its interface, is ready. Overlapping them would need the interface before the pass ends, which is for later.
+- **Kinds of crates:**
+  - a build script that depends on a Locus crate is checked like any crate, and the `cfg`s it sets reach the checking program;
+  - an integration test, and every harness `cargo test` builds, is a crate of its own, checked with no interface;
+  - a procedural macro crate is compiled as plain Rust;
+  - doctests are compiled by rustdoc outside any wrapper, and are [#9](https://github.com/nikhilgarg28/locus/issues/9).
 - **For every other crate,** it behaves exactly like rustc.
-- **It fails closed.** If it was asked to check a crate and cannot produce facts for it, the check fails. The spike's silent fallback to plain compilation is not acceptable.
+- **It fails closed.** If it was asked to check a crate and cannot produce facts for it, the check fails. The first spike's silent fallback to plain compilation is not acceptable.
 - **Facts are tied to their program.** The driver records an identity of the checking program it compiled, and Locus rejects facts that do not match the program it generated.
 
 **Only `locus-driver` touches rustc's internals.** It writes facts in a format that Locus owns and versions. The rest of Locus reads that format, builds on stable Rust, and never links rustc. This keeps rustc's API churn in one small crate; the spike measured one renamed function across four releases, for the part of the API it uses. It also lets another producer replace the driver later without touching anything else.
@@ -422,7 +446,8 @@ Each stage has one representation, and each representation has one owner.
    }
    ```
 
-   - **Items are identified by their definitions, not their paths.** An `ItemRef` names a definition by its crate's stable identity and its definition's path hash, both of which rustc computes, together with the generic arguments it is instantiated with. Impls, closures, and other anonymous items get identities the same way, and an associated item is named through its trait and `Self` type. A path is display text only: two paths can name one item, and one path can name different items in different crates.
+   - **Within one build, items are identified by their definitions, not their paths.** An `ItemRef` names a definition by its definition path hash, which rustc computes from the crate's stable identity and the item's path, together with the generic arguments it is instantiated with. A path written in the source is display text only: two paths can name one item, and the spike's calls through a re-export resolved to the defining item.
+   - **Across builds, names must survive edits.** A crate's stable identity changes with Cargo's metadata, which depends on the wrapper and on whether the crate is a test harness, and an impl's hash depends on its position in its file. So an interface, which dependents rely on and hash, names an item by its crate's name and its definition path, and a trait impl by its trait and its `Self` type ([spike](../../spikes/cargo-graph/README.md)).
    - `Ty` describes Rust types in the same terms, independently of rustc's own data structures. Where the semantic translation needs lifetimes or hygiene ([#6](https://github.com/nikhilgarg28/locus/issues/6)), facts carry them too.
    - `TypedBody` is derived from rustc's THIR. Every dereference, borrow, coercion, and call is explicit. A call to a trait method names the method and its `Self` type; where the types are concrete, the driver also resolves the implementation with rustc's instance resolution. In generic code the call stays a trait method. The semantic translation decides whether THIR is enough or MIR is needed ([#6](https://github.com/nikhilgarg28/locus/issues/6)).
    - Facts are serialized, as JSON at first, so that the driver and the rest of Locus can run as separate processes.
@@ -442,7 +467,7 @@ Each stage has one representation, and each representation has one owner.
 
 ### The runtime program
 
-The runtime program is what runs: in build mode, the lowered program compiled against the runtime version of Locus's library; in export mode, the `.rs` files that erasure writes. Either way, Locus produces it only after the check passes, and validates it against the checking program before using it.
+The runtime program is what runs: in build mode, the lowered program compiled with the runtime expansions; in export mode, the `.rs` files that erasure writes. Either way, Locus produces it only after the check passes, and validates it against the checking program before using it.
 
 **In build mode, it is the same text.**
 - Every Locus macro expands to its marker, so logical code leaves nothing at run time: no borrow, no evaluation.
@@ -530,6 +555,31 @@ The pipeline suggests these components, each with one job. Build tasks create th
 | `locus-erase` | Export mode's runtime program, export surface, guard, and origin maps | No | No for bodies, which validation checks; yes for the guard and visibilities |
 | `locus-diagnostics` | Mapping, wording, rendering | No | No |
 | `locus` | Command line, both modes, Cargo orchestration, validation, and manifests | No | Yes: it pairs facts with programs, decides which crates are checked, decides when to stop, and validates the runtime program |
+
+### Spikes
+
+Three spikes tested this design. Nothing depends on them, and each states what it did not test.
+
+- **[Facts from rustc](../../spikes/rustc-facts/README.md).** A 150-line driver run by Cargo reported the types of observed places, resolutions, and a typed body, on stable 1.97 with `RUSTC_BOOTSTRAP=1` and on a nightly, and rustc's borrow checker rejected a proof that read a moved value.
+- **[One lowered text](../../spikes/one-text-lowering/README.md).** 30 hand-lowered cases and 78 rows of macro cases, each compiled both ways:
+  - the runtime program needed no edit beyond the other expansions;
+  - lowering needed no expression's type;
+  - an attribute macro that saw different tokens under the previous design returned the same value in both programs;
+  - expansions that rustc performs observed precisely with the combined record of ghost bindings.
+- **[The Cargo graph](../../spikes/cargo-graph/README.md).** Two Locus libraries, an application, a build script, a procedural macro, and tests, built by Cargo through a wrapper that compiles twice, with a stand-in for the logical pass. It showed:
+  - which ways of sharing Locus's library work;
+  - that the dep-info must be rewritten and the wrapper must identify itself to Cargo's fingerprints;
+  - what the check costs;
+  - that definition hashes pair the two programs within a build, but interfaces need names that survive edits.
+
+**Not yet tested:**
+- real lowering from `.lc` files, and the real prelude;
+- reporting the logical code of expansions rustc performs to the driver;
+- cross-compilation, registry dependencies, and procedural macros that depend on Locus crates;
+- release builds and `cargo check`;
+- crates of realistic size.
+
+The semantic slice, one mutable function verified end to end, goes with the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)).
 
 ## Rules
 
@@ -653,7 +703,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 12. Locus's macros are real macros, which rustc expands wherever it expands macros. Export mode accepts only invocations written directly in the crate's own code.
 13. An exported crate uses its Locus dependencies through their exported interfaces, so contracts between crates work only in build mode.
 14. Build mode checks Locus dependencies from their sources, so a Locus crate published for Locus users includes its `.lc` files.
-15. **One lowered text for build mode.** The checking and runtime programs of build mode are one lowered text, compiled against two versions of Locus's library, with every ghost position kept as a marker. Lowering decides only what the source shows, and confirms every assumption against the facts. This revisits decision 8 of the previous draft, that proof parameters are removed, for build mode only, whose runtime program no one reads; an exported program still removes them. It is subject to [the spikes](#spikes) below.
+15. **One lowered text for build mode.** The checking and runtime programs of build mode are one lowered text, compiled twice with different expansions of Locus's macros, with every ghost position kept as a marker. Lowering decides only what the source shows, and confirms every assumption against the facts. This revisits decision 8 of the previous draft, that proof parameters are removed, for build mode only, whose runtime program no one reads; an exported program still removes them. The [spikes](#spikes) support it.
 16. **Validation.** In both modes, Locus compares the runtime program's items and typed bodies with the checking program's, for everything the facts describe, and fails on any difference. Export mode keeps erasure textual, so its output stays readable.
 17. **Interfaces and manifests.** Each checked crate gets an interface that its dependents are checked against, and each result a manifest of what it relies on.
 18. **Acceptance waits for the spikes** of build mode's lowering and of the Cargo graph. A semantic slice, verifying one mutable function with a reborrow and a destructor end to end, goes with the RFC for the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)).
@@ -663,6 +713,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
 3. Traits among Locus's names also have no associated functions or constants (an extension of 10 above).
 4. Until [#9](https://github.com/nikhilgarg28/locus/issues/9) decides more, an exported crate whose checked code tests target properties other than pointer width must declare its configurations.
+5. **One library, with its macros' expansions selected by a `cfg`,** rather than two versions of the library swapped per program. The Cargo spike found it the simplest way that works across crates; two libraries need every dependency's checking metadata kept and passed separately.
 
 **Left to other RFCs**, each with its issue:
 - Logical types, propositions, proofs, models, and contracts: [RFC 0002](0002-logical-layer.md), proposed with this one.
