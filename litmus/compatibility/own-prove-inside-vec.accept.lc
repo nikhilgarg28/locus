@@ -1,5 +1,5 @@
 //~ question: May a program's own macro named `prove` be used inside another macro's input?
-//~ spec: compat.names.shadowable, compat.names.direct-only
+//~ spec: compat.names.shadowable
 //~ rfc: 0001
 
 macro_rules! prove {

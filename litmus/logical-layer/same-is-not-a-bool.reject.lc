@@ -1,0 +1,7 @@
+//~ question: May `===` be used where a `Bool` is expected?
+//~ spec: logic.eq.same, logic.eq.comparisons
+//~ rfc: 0002
+
+logic fn is_zero(n: Int) -> Bool {
+    n === 0 //~ error: `n === 0` is a proposition, not a `Bool`; `n == 0` compares and gives a `Bool`
+}

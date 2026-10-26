@@ -1,8 +1,0 @@
-//~ question: May a Locus macro be invoked inside another macro's input?
-//~ spec: compat.names.direct-only
-//~ rfc: 0001
-
-fn check(x: u32) -> usize {
-    let proofs = vec![prove!(x == x)]; //~ error: Locus's `prove!` cannot be used inside another macro's input
-    proofs.len()
-}

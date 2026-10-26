@@ -1,0 +1,14 @@
+//~ question: Inside its own model, is a value its model rather than its view?
+//~ spec: models.from-view
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: &Stack) -> Seq<Nat> {
+        stack //~ error: inside `model`, `stack` is the view of a `Stack`, an `Opaque<Stack>`, not the `Seq<Nat>` being defined
+    }
+}

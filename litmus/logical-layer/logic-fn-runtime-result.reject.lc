@@ -1,0 +1,7 @@
+//~ question: May a logic function give a value of a runtime type?
+//~ spec: logic.code.logical-values
+//~ rfc: 0002
+
+logic fn count(xs: &[u32]) -> usize { //~ error: a logic function's result must be logical, and `usize` is a runtime type; its model is `Nat`
+    xs.len()
+}

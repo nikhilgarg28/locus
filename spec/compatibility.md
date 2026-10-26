@@ -24,7 +24,7 @@ r[compat.syntax.contextual-keywords]
 
 ## Locus names
 
-Locus's macros (`logic!`, `prop!`, `prove!`, `fold!`, `unfold!`, `rewrite!`), its `Logical` derive, its `Model` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are.
+Locus's macros (`logic!`, `prop!`, `prove!`), its `Logical` derive, its `Model` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are.
 
 r[compat.names.shadowable]
 A program's own definitions and imports take precedence over Locus's names, as they would over the standard prelude's, including a glob-imported macro with the same name as one of Locus's.
@@ -32,5 +32,5 @@ A program's own definitions and imports take precedence over Locus's names, as t
 r[compat.names.no-methods]
 Traits among Locus's names have no methods, associated functions, or associated constants, so that having them in scope never changes what a method call or path in Rust code resolves to.
 
-r[compat.names.direct-only]
-Locus's macros take effect only where they are invoked directly, by their own names, outside any other macro's input or output. An invocation of one of Locus's macros that rustc expands anywhere else, such as inside another macro's input, in a macro's output, or under another name, is rejected. A Locus macro name that is never expanded, as inside `stringify!`, is only tokens.
+r[compat.names.macros-expand]
+Locus's macros are expanded like any other macro, wherever rustc expands macros: directly, inside another macro's input, in a macro's output, and under another name. A Locus macro name that is never expanded, as inside `stringify!`, is only tokens.

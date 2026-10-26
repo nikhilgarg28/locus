@@ -1,9 +1,9 @@
-//~ question: May an exported crate keep a function with a precondition private and export a wrapper that checks it?
-//~ spec: export.no-contracts
+//~ question: May an exported crate keep a function with a precondition `pub(locus)` and export a wrapper that checks it?
+//~ spec: export.no-contracts, export.locus-visibility
 //~ rfc: 0002
 //~ mode: export
 
-fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+pub(locus) fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
     n / 2
 }
 

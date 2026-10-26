@@ -3,6 +3,6 @@
 //~ rfc: 0002
 //~ mode: export
 
-pub fn clamp(n: u32) -> (out: u32, @(out <= 100)) { //~ error: `clamp` is reachable from other crates, so its result cannot hold a proof; export a wrapper that drops it instead
+pub fn clamp(n: u32) -> (out: u32, @(out <= 100)) { //~ error: `clamp` is reachable from other crates, so its result cannot hold a proof; declare it `pub(locus)`, and export a wrapper that drops it
     if n > 100 { (100, _) } else { (n, _) }
 }

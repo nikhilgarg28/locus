@@ -3,6 +3,6 @@
 //~ rfc: 0002
 //~ mode: export
 
-pub fn halve(n: u32, even: @(n % 2 == 0)) -> u32 { //~ error: `halve` is reachable from other crates, so it cannot have the proof parameter `even`; export a wrapper that checks it instead
+pub fn halve(n: u32, even: @(n % 2 == 0)) -> u32 { //~ error: `halve` is reachable from other crates, so it cannot have the proof parameter `even`; declare it `pub(locus)`, and export a wrapper that checks it
     n / 2
 }

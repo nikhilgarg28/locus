@@ -1,0 +1,17 @@
+//~ question: Is `===` a proposition that a logical type has without declaring it?
+//~ spec: logic.eq.same
+//~ rfc: 0002
+
+#[derive(Logical)]
+enum Light {
+    Red,
+    Green,
+}
+
+logic fn red_is_red() -> @(Light::Red === Light::Red) {
+    _
+}
+
+logic fn red_is_not_green() -> @(Light::Red !== Light::Green) {
+    _
+}

@@ -3,7 +3,7 @@
 //~ rfc: 0002
 
 fn first_mut(pair: &mut (u32, u32))
-    -> (r: &mut u32, @(r == pair.0 && final!(pair) == (final!(r), pair.1)))
+    -> (r: &mut u32, @(r == pair.0 && final!(pair) === (final!(r), pair.1)))
 {
     (&mut pair.0, _)
 }

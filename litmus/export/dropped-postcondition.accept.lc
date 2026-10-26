@@ -3,7 +3,7 @@
 //~ rfc: 0002
 //~ mode: export
 
-fn clamp_proven(n: u32) -> (out: u32, @(out <= 100)) {
+pub(locus) fn clamp_proven(n: u32) -> (out: u32, @(out <= 100)) {
     if n > 100 { (100, _) } else { (n, _) }
 }
 

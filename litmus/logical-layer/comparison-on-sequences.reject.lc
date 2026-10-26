@@ -1,0 +1,7 @@
+//~ question: May `==` compare two sequences before programmable comparisons exist?
+//~ spec: logic.eq.comparisons
+//~ rfc: 0002
+
+logic fn same_items(a: Seq<Nat>, b: Seq<Nat>) -> Prop {
+    a == b //~ error: `==` is not yet defined on `Seq<Nat>`; `a === b` states that they are equal
+}

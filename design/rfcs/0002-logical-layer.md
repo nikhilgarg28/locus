@@ -25,7 +25,7 @@ The design in brief:
   - Both programs of [RFC 0001](0001-compiler-pipeline.md) remove them, or replace them with the zero-sized marker `Erased` where a runtime type holds them. So `Vec<Nat>` is a `Vec<Erased>` at run time, and keeps its length.
   - Locus believes what a value holds only through code it checked, or through standard library code whose specification it has. Everywhere else ghost contents are forgotten, so no Rust code can forge or convert a proof.
   - Contracts are visible only to code that Locus checks. In build mode, every crate that uses a Locus crate is checked. In export mode, what other crates can reach is plain Rust, with no logical values and no contracts.
-- **Logical code is pure and total.** This covers logic functions, `logic!` blocks, propositions, and proofs. It reads runtime values through their **models**, and never calls runtime code.
+- **Logical code is pure and total.** This covers logic functions, `logic!` blocks, propositions, and proofs. It computes only with logical values, reads runtime values through their **models**, and never calls runtime code.
 - **A proposition is about versions.** Every write to a place makes a new version of it, as in SSA. A proposition is about the versions it read, so a proof never silently carries over to a later value.
 - **A runtime function states its contract in its signature.** Proof parameters are preconditions, and proofs in the result are postconditions.
   - In a signature, every parameter means its value at entry.
@@ -63,15 +63,15 @@ At run time both proof types would be the same Rust type, so the downcast would 
 ### A first look
 
 ```rust
-logic fn Sorted(xs: Seq<Nat>) -> Prop {
+logic fn sorted(xs: Seq<Nat>) -> Prop {
     forall |i: Nat, j: Nat| i <= j && j < xs.len() ==> xs[i] <= xs[j]
 }
 
-fn binary_search(xs: &[u32], target: u32, sorted: @Sorted(xs)) -> Option<usize> { ... }
+fn binary_search(xs: &[u32], target: u32, ordered: @sorted(xs)) -> Option<usize> { ... }
 fn linear_search(xs: &[u32], target: u32) -> Option<usize> { ... }
 
-fn find(xs: &[u32], target: u32, sorted: Option<@Sorted(xs)>) -> Option<usize> {
-    match sorted {
+fn find(xs: &[u32], target: u32, ordered: Option<@sorted(xs)>) -> Option<usize> {
+    match ordered {
         Some(proof) => binary_search(xs, target, proof),
         None => linear_search(xs, target),
     }
@@ -83,7 +83,7 @@ fn bump(counter: &mut u32, room: @(counter < 100)) -> @(final!(counter) == count
 }
 ```
 
-- `Sorted` is a logic function that defines a proposition about a sequence of naturals. A `&[u32]` passed to it is seen through its model, a `Seq<Nat>`.
+- `sorted` is a logic function that defines a proposition about a sequence of naturals. A `&[u32]` passed to it is seen through its model, a `Seq<Nat>`.
 - `binary_search` needs a proof that `xs` is sorted. Calling it on unsorted data is a compile-time error.
 - `find` takes a proof that may be absent. At run time it still knows whether one was passed.
 - `bump` promises that the counter's final value is one more than its value at entry, given room below 100. `_` asks proof search for the proof, and the kernel checks it.
@@ -94,8 +94,8 @@ The runtime program is what remains, with `Erased` for the proof that `find` may
 fn binary_search(xs: &[u32], target: u32) -> Option<usize> { ... }
 fn linear_search(xs: &[u32], target: u32) -> Option<usize> { ... }
 
-fn find(xs: &[u32], target: u32, sorted: Option<Erased>) -> Option<usize> {
-    match sorted {
+fn find(xs: &[u32], target: u32, ordered: Option<Erased>) -> Option<usize> {
+    match ordered {
         Some(_) => binary_search(xs, target),
         None => linear_search(xs, target),
     }
@@ -121,13 +121,16 @@ This RFC adds these forms to [RFC 0001's](0001-compiler-pipeline.md#locus-syntax
 | Measure | Attribute of a logic function | `#[decreases(n)]` | It appears only on a logic function, which is itself Locus syntax |
 | Named tuple component | Type | `(i: usize, @(i < n))` | Tuple types have no field names |
 
-Inside logical code, which Locus parses itself, it also uses `==>`, `forall |x: T| P`, and `exists |x: T| P`.
+Inside logical code, which Locus parses itself, it also uses `===`, `!==`, `==>`, `forall |x: T| P`, and `exists |x: T| P`. rustc rejects `===` as an invalid comparison operator (tested).
 
 It adds these names to Locus's prelude, which programs shadow as they do std's (`compat.names.shadowable`):
-- the macros `fold!`, `unfold!`, and `rewrite!`;
 - the logic function `model`;
 - the logical types `Int`, `Nat`, `Bool`, `Seq`, `Opaque`, and the others of Locus's library;
 - the propositions `True`, `False`, `And`, `Or`, and `Exists`.
+
+**Naming.** By convention, logic functions are named in snake_case, as Rust's functions are, and `prop` declarations in CamelCase, as Rust's enums are. So a reader can tell how a proposition is used: a logic function by its definition, and a declared proposition by matching its arms.
+
+How proofs are built beyond the forms this RFC fixes, including using a logic function's definition and rewriting along an equality, is for a third foundational RFC ([#15](https://github.com/nikhilgarg28/locus/issues/15)).
 
 ### Logical types
 
@@ -144,7 +147,7 @@ Every type is either a runtime type or a logical type.
 - logical function types, written `logic fn(A) -> B`;
 - tuples whose components are all logical;
 - structs and enums declared with `#[derive(Logical)]`, which may be recursive without `Box` and describe finite values;
-- `Opaque<T>`, for each runtime type `T` without a model: the values of `T`, which logical code can compare for equality and pass on, and whose visible fields it can read;
+- `Opaque<T>`, for each runtime type `T`: the *views* of `T`'s values, which is how a runtime value enters logical code ([Logical code](#logical-code)). Logical code can read a view's visible fields, compare views with `===`, and pass them on, and knows nothing else about them;
 - the logical types of Locus's library, which it builds from these: `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and others. This RFC uses them in examples, and assumes only what it says about them; their definitions and operations are for the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
 
 `Nat` is an `Int` with a proof that it is not negative:
@@ -157,7 +160,7 @@ struct Nat {
 }
 ```
 
-**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [model](#models). The one exception is `Opaque<T>`, whose argument names the runtime type whose values it holds.
+**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [model](#models), or as its view. The one exception is `Opaque<T>`, whose argument names the runtime type whose views it holds.
 
 **A logical type refers to itself only positively.** A recursive `#[derive(Logical)]` type, or group of types, may contain itself as a field, a payload, a type argument of a positive logical type, or the result of a logical function type, but never as the parameter of a logical function type. Otherwise `struct Bad { f: logic fn(Bad) -> @False }` would prove `False` without recursion. This is Lean's strict positivity, the same rule as for [inductive propositions](#inductive-propositions).
 - The domain of `forall` or `exists` counts as a parameter of a logical function type. So `struct Bad { h: @(forall |b: Bad| False) }` is rejected too.
@@ -182,7 +185,7 @@ Values of logical types, proofs included, exist only for checking. They are *gho
 - **The runtime parts of a type are all kept.** An `Option` keeps its tag, and a `Vec` its length.
 - **A reference to a logical value is that value.** Matching `&Option<@P>` with `Some(p)` binds `p` to the proof.
 - **Locus does not infer logical types.** rustc infers types, and ghost values are erased before it sees them. So every local and expression whose type holds logical values has that type written, or is Locus syntax such as `logic! { 3 }`. Write `let mut v: Vec<Nat> = Vec::new();`, not `let mut v = Vec::new();` followed by ghost pushes.
-- **Types with interior mutability hold no logical values.** `Cell<Option<@P>>` is rejected, because the contents of a `Cell` are part of no logical value ([Models](#models)).
+- **Types with interior mutability may hold logical values.** Their contents are part of no version and no model ([Models](#models)), so Locus knows only their types. That is enough for proofs, which are irrelevant: a proof taken out of a `Cell<Option<@P>>` is a proof of `P`, because every value of type `@P` is one. A `Nat` taken out of a `Cell<Nat>` is some `Nat`. Rule 4 below keeps code that Locus does not check from writing them, and Locus's library specifies that the methods of `Cell`, `RefCell`, and `Mutex` keep their contents' types ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
 
 **Runtime code runs as written.** Erasure removes logical code and nothing else.
 - A `let`, block, `if`, or `match` whose value is ghost keeps its runtime calls, conditions, and statements, and its patterns keep their runtime parts.
@@ -229,10 +232,11 @@ Further rules:
    Logical code does no runtime evaluation, so erasing it removes nothing that runs, and evaluation order is unchanged. A runtime function that returns a proof is called in a statement or `let` of its own. Write `let even = checked_even(n); halve(n, even)`, not `halve(n, checked_even(n))`.
 3. **A call is kept even when its result is ghost.** A call to a runtime function whose whole result is ghost stays in the runtime program, as a statement.
 4. **Unchecked code never writes a place that holds logical values.**
-   - No value whose type contains a `&mut` or `*mut` to such a place reaches code that Locus neither checks nor has a specification for. That covers passing it as an argument, and putting it inside another value such as `Some(&mut found)`.
+   - No value whose type contains a reference or pointer through which such a place can be written reaches code that Locus neither checks nor has a specification for. That means a `&mut` or `*mut`, or a `&` or `*const` to a type with interior mutability, such as `&Cell<Option<@P>>`. It covers passing such a value as an argument, and putting it inside another value such as `Some(&mut found)`.
    - No raw borrow of such a place, `&raw mut`, is taken.
    - Otherwise that code could write a value whose ghost contents Locus has forgotten into a place whose type promises a proof, such as turning `None` into a `Some(Erased)` that it cloned from another value.
-   - Shared borrows are harmless, because such places have no interior mutability.
+   - Other shared borrows are harmless, because nothing can write through them.
+   - For now this counts a closure that captures such a reference, although unchecked code can only call the closure. Relaxing that is [#8](https://github.com/nikhilgarg28/locus/issues/8).
 5. **Functions whose parameters hold logical values are called directly.**
    - Such a function is called by name in a `.lc` file, outside any macro's input or output. This covers proof parameters, logical parameters, and parameter types such as `Option<@P>`.
    - It is not used as a value, coerced to a function pointer, or passed to generic code, and it is not `async`.
@@ -262,7 +266,8 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 
 **Reading runtime values.**
 - **Place expressions keep their Rust meaning.** A place is a local or parameter, a field or tuple field visible at that point, or the target of a reference or `Box`. Indexing and overloaded `Deref` do not form places in logical code.
-- **A runtime value used as a logical value is its type's model.** That covers an operand, an argument of logical type, a method receiver, and either side of `==`. If the type has no model, the value is *opaque*: logical code can compare it for equality and pass it on, and nothing else.
+- **Runtime values cross into logical code only where it reads them,** and become logical values there, so logical code computes only with logical values. A runtime value read there is its *view*, of type `Opaque<T>`: the part of it that Rust freezes under a shared borrow ([Models](#models)). Logical code reads the view's visible fields as places.
+- **A runtime value used as a value is its type's model.** That covers an operand, an argument of logical type, a method receiver, and either side of `===` or `==`: the view is taken to the model. If the type has no model, the value stays its view, which logical code can compare with `===` and pass on, and nothing else.
 - **Methods and indexing work on models.** A method call or index on a runtime value works on its model, never on a runtime method, as RFC 0001 requires. For `v: &Vec<u32>`, `v.len()` is `Seq::len` of `v`'s model, and `v[i]` indexes that model. A logic function declared on the runtime type itself is found first, then those of its model's type.
 - **Indexing a sequence,** as in `xs[i]`, is a placeholder until the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)) decides the index type and what an index outside the sequence means. Whatever it decides, indexing a sequence whose elements might have no values, such as a `Seq<@False>`, needs a proof that the index is in bounds, or indexing an empty one would prove `False`.
 - **Constants and const generic parameters** may appear in logical code, through their models. A constant of logical type is logical code ([Ghost values](#ghost-values)).
@@ -270,26 +275,36 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 
 **Logical expressions.**
 - **Arithmetic is exact:** it never overflows.
-  - `Int` has `+`, `-`, and `*`. Division and remainder truncate toward zero, as Rust's do. Dividing by zero gives zero, and the remainder of a division by zero is the dividend, so `a == (a / b) * b + a % b` always holds.
+  - `Int` has `+`, `-`, and `*`. Division and remainder truncate toward zero, as Rust's do, so a machine integer's division agrees with its model's. Dividing by zero gives zero, and the remainder of a division by zero is the dividend, as in Lean, so `a === (a / b) * b + a % b` always holds.
+  - Lean's own `/` on integers is Euclidean instead: its remainder is never negative, so `-7 / 2` is `-4` there and `-3` in Rust. Locus's library provides that as `div_euclid` and `rem_euclid`, the names Rust gives it ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
   - A `Nat` is used as an `Int` wherever an `Int` is expected.
   - `+`, `*`, `/`, and `%` on `Nat`s give a `Nat`, and `-` gives an `Int`. So for an empty `v`, `v.len() - 1` is `-1`.
   - Turning an `Int` into a `Nat` needs a proof that it is not negative.
   - An integer literal is an `Int`, or a `Nat` where a `Nat` is expected.
   - `as` in logical code converts between logical types, such as a `Nat` to an `Int`; a cast between machine integers is runtime code.
   - The model of a machine integer lies in its type's range, which proofs may use: for `x: u8`, `x <= 255`. For `usize` and `isize`, the range is that of the configuration being checked.
-- **Comparisons and `==` are propositions.** `==` is equality of logical values, Lean's `Eq`.
+- **`===` is equality.** `a === b` is the proposition that `a` and `b` are equal: Lean's `Eq`, on two values of the same logical type. `a !== b` is its negation. It is built in, every logical type has it, and it cannot be overloaded.
+  - Two runtime values whose models are equal need not be equal values. A `Vec`'s capacity, for example, is not part of its model.
+  - Any two proofs of one proposition are equal, so `h === k` always holds for them.
+  - A type declared with `#[derive(Logical)]` gets the facts that its constructors are injective and distinct, as Lean's inductive types do.
+- **`==`, `!=`, `<`, `<=`, `>`, and `>=` are comparisons, which give a `Bool`,** as Rust's give a `bool`.
+  - For now they are built in only on `Int`, `Nat`, and `Bool`, where each agrees with the proposition it suggests: `a == b` is true exactly when `a === b`, and `a < b` exactly when `a` is less than `b`.
+  - On other logical types, `==` waits for programmable comparisons, which are [#12](https://github.com/nikhilgarg28/locus/issues/12), together with the laws that tie a comparison to `===` (Lean's `LawfulBEq`) and decidable equality.
+  - On runtime values they compare models, like every operator in logical code. Runtime `PartialEq` and `PartialOrd` are never called in logical code; how they relate to models is a specification ([#12](https://github.com/nikhilgarg28/locus/issues/12)).
+- **A `Bool` used as a proposition means that it is true:** `b` stands for `b === true`. So `@(n % 2 == 0)` is the type of proofs that `n % 2 == 0` is true, which for `Int` is the same as `n % 2 === 0`.
 - **Connectives and quantifiers:** `&&`, `||`, `!`, `==>`, `forall |x: T| P`, and `exists |x: T| P`, over logical types `T`. See [Propositions](#propositions).
-- **`if` and `match` choose between logical values.** `if` accepts any proposition, because classical logic decides every proposition (Lean's `Classical.propDecidable`). A `Bool` used as a proposition means that it is true.
+- **`if` and `match` choose between logical values.** `if` accepts a `Bool`, or any proposition, because classical logic decides every proposition (Lean's `Classical.propDecidable`).
 - **`let`** binds a logical value.
 - **Closures**, such as `|x: Int| x + 1`, are values of logical function types.
 
 **Logic functions** are declared as `logic fn name(parameters) -> T { body }`.
-- The result type is logical. Each parameter is logical, or a runtime type that the function observes.
+- **Every logical computation produces a logical value.** A logic function's result type is logical, and so is the value of every `logic!`, `prop!`, and `prove!`, every proposition, and every proof. So erasing logical code never removes a value that runtime code uses.
+- Each parameter is logical. A parameter written with a runtime type `T`, such as `xs: &[u32]`, receives a view, `Opaque<T>`, which is taken to `T`'s model where the body uses it as a value.
 - The body is logical code. Logic functions never run, so they need not be computable.
 - **They are total.** Every recursive call is on a structurally smaller part of a parameter, exposed by a `match`, or decreases a measure declared with `#[decreases(e)]`, where `e` is an `Int`. At each recursive call, the measure at the call's arguments must be nonnegative and smaller than at the parameters, which is a proof obligation. Mutual recursion is left for later.
 - **Their type parameters range over logical types,** unless bounded by `Model`, which lets them stand for runtime types seen through their models.
 - **They can belong to the program's own types,** in inherent `impl` blocks, and are then called as methods in logical code.
-- **A logic function that returns a proof is a lemma:** `logic fn add_zero(n: Int) -> @(n + 0 == n)`.
+- **A logic function that returns a proof is a lemma:** `logic fn add_zero(n: Int) -> @(n + 0 === n)`.
 
 **Logic blocks.** `logic! { e }` in a runtime body evaluates logical code at that point and gives a ghost value, usually bound to a name: `let before = logic! { v.len() };`.
 
@@ -310,10 +325,10 @@ impl Model for Stack {
 }
 ```
 
-Here `stack.items` is a `Vec<u32>` used as a logical value, so it means the vector's model, a `Seq<Nat>`.
+Here `stack.items` is a `Vec<u32>` used as a value, so it means the vector's model, a `Seq<Nat>`. Inside `model`, `stack` is the stack's view: logical code reads its fields, and never takes it to the model that `model` defines.
 
-- **A type has at most one model.** A program that wants another view of a type writes a logic function for it.
-- **A model is declared by the crate that defines the type,** following Rust's orphan rule, or by Locus's library for the standard library's types. Values of other types are opaque in logic, apart from their visible fields.
+- **A type has at most one model.** A program that wants another interpretation of a type writes a logic function for it.
+- **A model is declared by the crate that defines the type,** following Rust's orphan rule, or by Locus's library for the standard library's types. Values of other types stay their views in logic, `Opaque<T>`, of which logical code can read the visible fields.
 - **In the checking program, `impl Model` is a real implementation** of the library's `Model` trait, with its logic function as a stub beside it.
   - So rustc checks `T: Model` bounds.
   - Its coherence errors, conflicting implementations (E0119) and the orphan rule (E0117), are reported as Locus's errors about models.
@@ -330,13 +345,13 @@ Here `stack.items` is a `Vec<u32>` used as a logical value, so it means the vect
   - `Option<T>`, a `Maybe` of `T`'s model;
   - a tuple, the tuple of its components' models;
   - a logical type, itself, so `Vec<Nat>` is a `Seq<Nat>`;
-  - any other type `T` without a model, `Opaque<T>`, so `Vec<T>` for a generic `T` is a `Seq<Opaque<T>>`. A type with interior mutability, such as `Cell<u32>`, is `Opaque` too, and its value includes nothing of its contents.
+  - any other type `T` without a model stays its view, `Opaque<T>`, so `Vec<T>` for a generic `T` is a `Seq<Opaque<T>>`. A type with interior mutability, such as `Cell<u32>`, is `Opaque` too, and its view includes nothing of its contents.
 
   Others, such as `String`, `char`, maps, `Rc`, and `Arc`, are for the library's RFC ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
-- **A model reads only what cannot change while the value is shared.** More generally, the *logical value* of a runtime value is the part of it that Rust freezes under a shared borrow: everything except the contents of `UnsafeCell`s and the targets of raw pointers.
-  - Models are functions of logical values, and opaque values are logical values.
+- **A model is a logic function of the view.** The *view* of a runtime value, of type `Opaque<T>`, is the part of it that Rust freezes under a shared borrow: everything except the contents of `UnsafeCell`s and the targets of raw pointers.
+  - Inside a model's own definition, its parameter is the view, and is never taken to the model being defined. Everywhere else, a value of the type used as a value is its model. So every logical computation, models included, takes logical values and gives logical values.
   - So `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
-  - So a call that Locus knows nothing about, taking `&x`, never changes `x`'s logical value, as RFC 0001 relies on.
+  - So a call that Locus knows nothing about, taking `&x`, never changes `x`'s view, or its model, as RFC 0001 relies on.
 - **`model(x)`** is a logic function in Locus's library that gives `x`'s model explicitly, for example to compare two values of a struct by their models.
 - **In Rust's terms, `Model` has no methods,** as `compat.names.no-methods` requires. Its function takes the value as an ordinary argument, and is called either through `model(x)` or implicitly.
 - **In generic code, a type parameter `T` without a `Model` bound is opaque:** its values are `Opaque<T>`. Facts proven about them hold at every instantiation, through the instantiating type's model when it has one. With `T: Model`, logical code can use `T::Logic`.
@@ -389,22 +404,22 @@ let before = logic! { n };      // names the value of n₁, which later writes l
 
 ### Propositions
 
-`Prop` is the type of propositions. Forming one proves nothing; `2 + 2 == 5` is a proposition.
+`Prop` is the type of propositions. Forming one proves nothing; `2 + 2 === 5` is a proposition.
 
 - **Writing propositions.**
   - `prop!(e)` in a runtime body forms a proposition value.
   - `@(e)` is the type of proofs of `prop!(e)`.
-  - `@P` is the type of proofs of `P`, for any expression `P` of type `Prop`, such as `@Sorted(xs)`.
+  - `@P` is the type of proofs of `P`, for any expression `P` of type `Prop`, such as `@sorted(xs)`.
 - **Three ways to define one:**
   - a formula, built with connectives and quantifiers;
-  - a *defined predicate*, which is a logic function returning `Prop`, such as `Sorted` above;
+  - a *defined predicate*, which is a logic function returning `Prop`, such as `sorted` above;
   - an *inductive proposition*, declared with `prop` ([below](#inductive-propositions)).
 - **Snapshots.** A proposition in a body is formed where RFC 0001 places its observation, and is about the versions it read there. A proposition in a signature is about entry values. `let before = logic! { n };` names a snapshot explicitly.
 
-**Connectives.** `&&`, `||`, `!`, and `==>` combine propositions into propositions, and `forall` and `exists` quantify them. The operands may be formulas or values of type `Prop`:
+**Connectives.** `&&`, `||`, `!`, and `==>` combine propositions into propositions, and `forall` and `exists` quantify them. The operands may be formulas, values of type `Prop`, or `Bool`s, each of which stands for the proposition that it is true:
 
 ```rust
-logic fn Between(low: Int, x: Int, high: Int) -> Prop {
+logic fn between(low: Int, x: Int, high: Int) -> Prop {
     low <= x && x < high
 }
 
@@ -414,6 +429,7 @@ fn check(x: u8, p: Prop, hp: @p, low: @(x > 1)) -> @(p && x > 1) {
 ```
 
 - **On runtime `bool`s, the same operators keep their Rust meaning.** Which meaning applies follows from the operands' types, as it does for `+` on `u8` and on `Int`.
+- **On logical `Bool`s, `&&`, `||`, and `!` give a `Bool`,** except in a proposition: inside `@(...)`, `prop!`, or `prove!`, or where a `Prop` is expected. There they are connectives, so a proof of `@(x > 1 && x < 9)` is a conjunction of two proofs.
 - **An operator whose operands are all logical is logical code,** wherever it appears. So `let both = p && q;` in a runtime body binds a ghost `Prop`, and `if p && q { ... }` is rejected, because runtime control flow never depends on a logical value.
 - **Each connective has its proofs:**
 
@@ -434,8 +450,8 @@ A `prop` declaration defines a proposition by the ways it can be proven, as an `
 
 ```rust
 prop Reachable(from: State, to: State) {
-    Same => { from == to }
-    Via(middle: State) => { Transition(from, middle) && Reachable(middle, to) }
+    Same => { from === to }
+    Via(middle: State) => { transition(from, middle) && Reachable(middle, to) }
 }
 ```
 
@@ -458,9 +474,9 @@ prop Reachable(from: State, to: State) {
   - A match on a proof produces a proof (`proofs.elimination`), so witnesses never leave the reasoning.
   - A declaration with one arm can be destructured with `let`: `let Contains::At { index } @ found = membership;`.
 - **Indices.**
-  - Every parameter is shared by all arms. An arm that holds only at particular values says so with an equality in its condition, as `Same` does with `from == to`. This is how Lean's indexed families are written here.
-  - Matching gives the equality as a proof, which `rewrite!` uses.
-- **No definition to unfold.** A declared proposition has no defining equation, so `fold!` and `unfold!` do not apply. It is proved by an arm, and used by matching. Even a declaration with one arm is not the same proposition as that arm's condition.
+  - Every parameter is shared by all arms. An arm that holds only at particular values says so with an equality in its condition, as `Same` does with `from === to`. This is how Lean's indexed families are written here.
+  - Matching gives the equality as a proof, which later proofs can rewrite along ([#15](https://github.com/nikhilgarg28/locus/issues/15)).
+- **No definition to unfold.** A declared proposition has no defining equation. It is proved by an arm, and used by matching. Even a declaration with one arm is not the same proposition as that arm's condition.
 - **Induction.**
   - A logic function that matches a proof of a recursive declaration, and calls itself on a proof found inside an arm, is a proof by induction.
   - The call is on a structurally smaller value, so it satisfies `logic.fn.total`:
@@ -495,14 +511,12 @@ A proof is a value of a proof type. Proofs are irrelevant: any two proofs of a p
 | `lemma(arguments)` | A call of a logic function that returns a proof |
 | `Even::Step(m) @ h` | A constructor of an inductive proposition: its witnesses, then after `@` a proof of the arm's body |
 | `match h { Even::Zero @ z => ..., Even::Step(m) @ k => ... }` | Reasoning by cases on a proof |
-| `fold!(f, h)`, `unfold!(f, h)` | Using the definition of a logic function |
-| `rewrite!(e, h)` | Transporting a proof along a proof `e` of an equality |
 | `And::Intro(h, k)`, `Or::Left @ h`, `Or::Right @ k`, `True::Intro` | The connectives' constructors ([Connectives](#propositions)) |
 | `Exists::Witness(v) @ h` | A proof of `exists \|x: T\| P`, from a witness `v` and a proof `h` of `P` at `v` |
 | `\|x: T\| proof`, `\|h: @P\| proof` | A proof of `forall \|x: T\| Q`, or of `P ==> Q`: a logical function from each `x`, or each proof of `P`, to a proof of `Q` |
 | `all(v)`, `imp(h)` | Using a proof `all` of a `forall` at `v`, or a proof `imp` of an implication on a proof `h` of its premise |
 
-The connectives' constructors and eliminators are listed under [Propositions](#propositions).
+The connectives' constructors and eliminators are listed under [Propositions](#propositions). Forms for using a logic function's definition and for rewriting along an equality are for RFC 0003 ([#15](https://github.com/nikhilgarg28/locus/issues/15)).
 
 - **A match on a proof produces a proof.** A witness inside a proof, such as an existential's, can be used to build other proofs, but never becomes a logical or runtime value. This is Lean's rule for eliminating propositions; Lean's exceptions for propositions with at most one proof can come later.
 - **Search proposes, and the kernel decides.**
@@ -535,7 +549,7 @@ A runtime function states its contract in its signature.
 
     ```rust
     fn first_mut(pair: &mut (u32, u32))
-        -> (r: &mut u32, @(r == pair.0 && final!(pair) == (final!(r), pair.1)))
+        -> (r: &mut u32, @(r == pair.0 && final!(pair) === (final!(r), pair.1)))
     ```
 
   - **Inside a body,** logical code reads current versions: `*x` at a point in the body is its value there. A local borrow has a final value too. When the borrow ends, the place it borrowed from gets a new version, which holds `final!(r)`.
@@ -589,29 +603,37 @@ struct Interval {
 
 In build mode, every crate that depends on a Locus crate is checked, so a crate's whole interface, contracts included, is available to the crates that use it. In export mode, Rust users build the crate, and Locus never sees their code ([RFC 0001](0001-compiler-pipeline.md#sources-and-modes)). So what other crates can reach must be plain Rust, and must not let them break what was proven. This restricts only the exported interface: inside the crate, everything above applies unchanged.
 
-What other crates can reach is what is reachable through the crate's export root, `src/export.lc` unless its manifest names another, together with the public fields and methods of the types they can reach. A `pub` item that nothing outside the crate can reach is not restricted.
+What other crates can reach is the crate's public interface in the exported program, together with the public fields and methods of the types in it. Items and fields declared `pub(locus)` are not part of it ([RFC 0001](0001-compiler-pipeline.md#sources-and-modes)), and neither is a `pub` item that nothing outside the crate can reach. A plain `pub` item that breaks the rules below is an error, which suggests `pub(locus)`.
 
 - **No contracts.** A function or method that other crates can reach has no proof parameters and no proofs in its result. A Rust caller cannot supply a proof for a precondition, and could not use one from a postcondition.
 - **No logical values.** No parameter, result, constant, static, or type alias that other crates can reach has a type that holds logical values, such as `Nat`, `Option<@P>`, or `Vec<(usize, @P)>`. Nor does such a function have a `Model` bound: the exported program removes it, so a Rust caller could use a type at which the function was never checked.
-- **No public logical fields.** No field that other crates can reach holds logical values, proof fields included. Rust makes every field of an enum's variants public, so an enum that other crates can reach has no logical or proof fields.
+- **No public logical fields.** No field that other crates can reach holds logical values, proof fields included. Such a field can be `pub(locus)`. Rust makes every field of an enum's variants public, so an enum that other crates can reach has no logical or proof fields.
 - **Invariants stay closed.** Other crates can neither construct a struct that has proof fields, nor reach a field that a proof field reads.
-  - Erasure marks `#[non_exhaustive]` every reachable struct from which it removes a private field. So, as in the source, other crates can match it, but not build it. A struct with proof fields always loses one, since its proof fields are private.
+  - Erasure marks `#[non_exhaustive]` every reachable struct from which it removes a field that is not plain `pub`. So, as in the source, other crates can match it, but not build it. A struct with proof fields always loses one, since its proof fields cannot be plain `pub`.
   - Its other fields may be public, so long as no proof field reads them.
-- **Wrappers.** What cannot be exported as it is gets a wrapper, usually in the export root, and the wrapper is checked like any other code:
+- **Locus's macros only where erasure can remove them.** Every invocation of `logic!`, `prop!`, or `prove!` is written directly in the crate's own code, by its name or an imported alias, and not inside another macro's input or output, because the exported program cannot depend on Locus's library (RFC 0001).
+- **Wrappers.** What cannot be exported as it is stays `pub(locus)`, and gets a plain `pub` wrapper, which is checked like any other code:
 
-  ```rust prose a file of a crate whose root defines halve_even and clamp_proven
-  // src/export.lc
+  ```rust
+  pub(locus) fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+      n / 2
+  }
+
   pub fn halve(n: u32) -> Option<u32> {
-      if n % 2 == 0 { Some(crate::halve_even(n, _)) } else { None }
+      if n % 2 == 0 { Some(halve_even(n, _)) } else { None }
+  }
+
+  pub(locus) fn clamp_proven(n: u32) -> (out: u32, @(out <= 100)) {
+      if n > 100 { (100, _) } else { (n, _) }
   }
 
   pub fn clamp(n: u32) -> u32 {
-      let (out, _bounded) = crate::clamp_proven(n);
+      let (out, _bounded) = clamp_proven(n);
       out
   }
   ```
 
-  `halve` checks the precondition at run time, and `clamp` drops the postcondition. Rust users see two plain functions; Locus users, building in build mode, can also call `halve_even` and `clamp_proven` themselves.
+  `halve` checks the precondition at run time, and `clamp` drops the postcondition. Rust users see two plain functions. Locus users, building in build mode, see all four.
 - **In every declared configuration.** These rules hold in each configuration that the crate is checked in.
 
 ### Erasure, in summary
@@ -626,8 +648,9 @@ RFC 0001 defines erasure. For this RFC's constructs:
 | A call of a runtime function whose result is entirely ghost | The call, as a statement |
 | A named result `(out: T, @P)` | `(T, Erased)` |
 | Logic functions, proposition declarations, `#[derive(Logical)]` types, `impl Model` | Stubs in the checking program; nothing in the runtime program |
-| `logic!`, `prop!`, `prove!`, `_`, `final!` | Removed with the ghost value they produce, or `Erased` where one is needed |
-| In export mode, a struct that other crates can reach, when erasure removes a private field from it | Marked `#[non_exhaustive]` |
+| `logic!`, `prop!`, `prove!`, `_`, `final!` | Removed with the ghost value they produce, or `Erased` where one is needed. A Locus macro inside another macro's input or output is expanded to `Erased` by Locus's library, in build mode only |
+| `pub(locus)` | `pub` in build mode, `pub(crate)` in export mode |
+| In export mode, a struct that other crates can reach, when erasure removes a field from it that is not plain `pub` | Marked `#[non_exhaustive]` |
 
 ## Rules
 
@@ -640,23 +663,27 @@ The rules below go into five new chapters of the specification: [The logical lay
 | `logic.arith.nat-subtraction` | `logical-layer/length-minus-one.accept.lc`, `logical-layer/nat-difference-is-int.accept.lc`, `logical-layer/nat-difference-as-nat.reject.lc` |
 | `logic.ghost.erased` | `logical-layer/ghost-parameters.accept.lc`, `logical-layer/logical-values-in-vec.accept.lc`, `logical-layer/runtime-call-bound-first.accept.lc` |
 | `logic.ghost.types-written` | `logical-layer/logical-values-in-vec.accept.lc`, `logical-layer/types-not-written.reject.lc` |
-| `logic.ghost.no-interior-mutability` | `logical-layer/cell-of-proof.reject.lc` |
+| `logic.ghost.interior-mutability` | `logical-layer/cell-of-proof.accept.lc`, `logical-layer/lend-proof-cell-to-unchecked.reject.lc` |
 | `logic.ghost.runtime-parts-kept` | `contracts/checked-indices.accept.lc`, `contracts/proof-in-option.accept.lc`, `logical-layer/logical-values-in-vec.accept.lc`, `contracts/some-without-proof.reject.lc` |
 | `logic.ghost.runtime-code-kept` | `logical-layer/runtime-check-kept.accept.lc` |
 | `logic.ghost.forgotten` | `logical-layer/proof-through-own-generic.accept.lc`, `logical-layer/option-through-black-box.reject.lc`, `logical-layer/own-generic-with-any.reject.lc`, `logical-layer/proof-through-any.reject.lc`, `logical-layer/proof-through-black-box.reject.lc` |
 | `logic.ghost.generic-instantiations` | `logical-layer/proof-through-own-generic.accept.lc`, `logical-layer/own-generic-with-any.reject.lc` |
 | `logic.ghost.no-runtime-control` | `contracts/proof-in-option.accept.lc`, `logical-layer/branch-on-logical.reject.lc` |
 | `logic.ghost.positions-logical` | `logical-layer/runtime-call-bound-first.accept.lc`, `logical-layer/runtime-call-in-proof-argument.reject.lc`, `logical-layer/runtime-call-in-proof-field.reject.lc` |
-| `logic.ghost.mutable-lending` | `logical-layer/share-proof-holder-with-unchecked.accept.lc`, `logical-layer/lend-proof-holder-to-unchecked.reject.lc`, `logical-layer/proof-field-borrowed-for-rust.reject.lc` |
+| `logic.ghost.mutable-lending` | `logical-layer/share-proof-holder-with-unchecked.accept.lc`, `logical-layer/lend-proof-cell-to-unchecked.reject.lc`, `logical-layer/lend-proof-holder-to-unchecked.reject.lc`, `logical-layer/proof-field-borrowed-for-rust.reject.lc` |
 | `logic.ghost.direct-calls` | `logical-layer/ghost-parameters.accept.lc`, `logical-layer/ghost-function-as-value.reject.lc`, `logical-layer/proof-payload-function-as-value.reject.lc` |
 | `logic.ghost.no-trait-impls` | `logical-layer/trait-impl-on-invariant-type.accept.lc`, `logical-layer/proof-in-trait-impl.reject.lc` |
 | `logic.code.no-runtime-calls` | `logical-layer/logic-calls-logic-function.accept.lc`, `logical-layer/logic-calls-runtime-function.reject.lc` |
 | `logic.fn.total` | `logical-layer/measure-recursion.accept.lc`, `logical-layer/structural-recursion.accept.lc`, `logical-layer/measure-increases.reject.lc`, `logical-layer/nonterminating-logic-fn.reject.lc`, `proofs/diverging-logic-proof.reject.lc` |
+| `logic.code.logical-values` | `logical-layer/logic-fn-model-result.accept.lc`, `logical-layer/logic-fn-runtime-result.reject.lc` |
+| `logic.eq.same` | `logical-layer/same-is-a-proposition.accept.lc`, `logical-layer/sameness-on-sequences.accept.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
+| `logic.eq.comparisons` | `logical-layer/comparison-is-a-bool.accept.lc`, `logical-layer/comparison-on-sequences.reject.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
 | `models.observation` | `models/integer-model-no-overflow.accept.lc`, `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `models/wrapping-is-not-the-model.reject.lc` |
 | `models.integer-range` | `models/integer-range.accept.lc`, `models/integer-range-tighter.reject.lc` |
 | `models.one-per-type` | `models/hand-written-model.accept.lc`, `models/two-models.reject.lc` |
 | `models.bounds-on-functions` | `models/model-bound-on-function.accept.lc`, `models/model-bound-on-impl.reject.lc` |
 | `models.declared-by-owner` | `models/hand-written-model.accept.lc`, `models/model-for-foreign-type.reject.lc` |
+| `models.from-view` | `models/hand-written-model.accept.lc`, `models/model-of-itself.reject.lc` |
 | `models.frozen-data` | `models/hand-written-model.accept.lc`, `models/model-reads-cell.reject.lc` |
 | `proofs.versions` | `observation/proof-before-move.accept.lc`, `proofs/reproved-after-assignment.accept.lc`, `proofs/snapshot-survives-assignment.accept.lc`, `proofs/stale-proof-across-iterations.reject.lc`, `proofs/stale-proof-after-assignment.reject.lc`, `proofs/stale-proof-after-same-value.reject.lc`, `proofs/stale-proof-through-reference.reject.lc` |
 | `proofs.connectives` | `proofs/connectives.accept.lc`, `proofs/conjunction-needs-both.reject.lc` |
@@ -670,7 +697,7 @@ The rules below go into five new chapters of the specification: [The logical lay
 | `contracts.invariants` | `contracts/invariant-constructed.accept.lc`, `contracts/invariant-replaced-whole.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `contracts/dependent-tuple-component-written.reject.lc`, `contracts/invariant-default-derive.reject.lc`, `contracts/invariant-field-assigned.reject.lc`, `contracts/option-proof-field.reject.lc`, `contracts/proof-field-through-box.reject.lc`, `logical-layer/proof-field-borrowed-for-rust.reject.lc` |
 | `contracts.unsafe-impls` | `contracts/unsafe-send-on-invariant-type.accept.lc`, `contracts/unsafe-impl-on-invariant-type.reject.lc` |
 | `export.no-contracts` | `export/dropped-postcondition.accept.lc`, `export/public-precondition-when-built.accept.lc`, `export/wrapped-precondition.accept.lc`, `export/public-postcondition.reject.lc`, `export/public-precondition.reject.lc` |
-| `export.no-logical-values` | `export/private-enum-with-invariant.accept.lc`, `export/private-logical-field.accept.lc`, `export/model-bound.reject.lc`, `export/public-enum-with-invariant.reject.lc`, `export/public-logical-field.reject.lc`, `export/public-proof-in-option.reject.lc` |
+| `export.no-logical-values` | `export/locus-logical-field.accept.lc`, `export/private-enum-with-invariant.accept.lc`, `export/private-logical-field.accept.lc`, `export/model-bound.reject.lc`, `export/public-enum-with-invariant.reject.lc`, `export/public-logical-field.reject.lc`, `export/public-proof-in-option.reject.lc` |
 | `export.invariants-closed` | `export/private-invariant-fields.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `export/public-invariant-field.reject.lc` |
 
 The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/locus/issues/5) later respells something, their outcomes stay the same.
@@ -680,10 +707,10 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 | Area | Effect |
 |---|---|
 | Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which become `Erased`. `Int` is built in, and `Nat` is a library type whose difference is an `Int`. |
-| Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. They are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
+| Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. `===` is Lean's equality, and comparisons give `Bool`s, as Rust's give `bool`s. Propositions are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
 | Ownership and mutation | Logical code reads places under RFC 0001's observation rules. Every write makes a new version. A `&mut` reference has a current value and a final value, `final!`. How runtime code changes values in the logic is [#6](https://github.com/nikhilgarg28/locus/issues/6). |
 | Erasure and runtime behavior | Ghost values are removed, or become `Erased` inside runtime types, in both programs alike, and runtime parts such as tags and lengths are kept. Proof parameters are removed, and every call of their functions is checked. Calls of runtime functions are kept even when their results are ghost. |
-| Rust interoperability | Rust code never sees a proof. In build mode, every crate that uses a Locus crate is checked. In export mode, what other crates can reach has no contracts and no logical values, and lets them neither build a value without its invariant nor reach a field that one reads. What a value holds is forgotten when it passes through unchecked generic code. Models are declared by a type's own crate. |
+| Rust interoperability | Rust code never sees a proof. In build mode, every crate that uses a Locus crate is checked. In export mode, what other crates can reach has no contracts and no logical values, and lets them neither build a value without its invariant nor reach a field that one reads. `pub(locus)` keeps the rest for Locus crates. What a value holds is forgotten when it passes through unchecked generic code. Models are declared by a type's own crate. |
 | Diagnostics | New errors: logical values where runtime ones are needed, runtime calls in logical code, non-terminating logic functions, proofs about other versions, values that carry no proof after passing through unchecked code, invariants not established, and contracts or logical values in an exported interface. They are written as reasons until error codes exist. |
 | Trust model | New entries: the models and specifications that Locus's library declares for standard types and generic code; the consistency of Lean's axioms; and `unsafe` code preserving invariants. The logical pass's ghost checks replace RFC 0001's checks on proofs in runtime code, and where borrows end joins rustc's borrow-checker entry. See [design/TRUST.md](../TRUST.md). |
 
@@ -714,15 +741,29 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 **`old(x)` for the entry value and bare `x` for the value at return,** as in Prusti.
 - Rejected for one rule: a signature means entry values, and `final!` names the final value.
-- That rule also covers borrows that are returned, kept in locals, or stored, which `old!` cannot express.
+- That rule also covers borrows that are returned, kept in locals, or stored, which `old` cannot express.
 
-**Several models per type, chosen with `x as M`.** Rejected: one canonical model makes `v.len()` in logical code unambiguous. Other views are logic functions.
+**Several models per type, chosen with `x as M`.** Rejected: one canonical model makes `v.len()` in logical code unambiguous. Other interpretations are logic functions.
 
 **Models before field access,** where logical code would take the receiver to its model before selecting a field.
 - Rejected: keeping Rust's meaning for places makes logical code read like Rust, and works for types without models.
 - Models apply where a value is used.
 
-**Boolean comparisons, with `prop!` lifting them to propositions.** Rejected in favor of Lean's propositional comparisons, with a classical `if`. This means there is one kind of comparison.
+**One equality, `==`, meaning Lean's `Eq`,** with every comparison a proposition.
+- Rejected at the owner's direction. In Rust, `==` is a programmable comparison that gives a `bool`, and a reader expects the same in logical code.
+- Lean also separates `==` (`BEq`, a `Bool`) from `=` (`Eq`, a `Prop`), and ties them together with `LawfulBEq`. Here `===` is Lean's `=`.
+
+**`mint`, an unspecified `Int` for each value of a type without a model,** in place of `Opaque<T>`.
+- Rejected: it tells logic nothing more than an uninterpreted type does, and loses the type, so logic could do meaningless arithmetic on the integers.
+- Lean gives every type equality, so no logical type can lack it. What matters is which facts exist, and logic has none about an opaque value except where it came from.
+
+**Types with interior mutability holding no logical values.** Rejected at the owner's direction: proofs are irrelevant, so a cell's contents need only have the right type, and keeping unchecked code from writing them is enough.
+
+**Euclidean division for `/`,** as Lean's `/` on integers is. Rejected: a machine integer's `/` truncates, and its model's should agree. The Euclidean operations are `div_euclid` and `rem_euclid`, as in Rust.
+
+**CamelCase for logic functions that give a `Prop`,** as Lean names propositions. Rejected at the owner's direction: they are functions, and Rust names functions in snake_case. CamelCase marks `prop` declarations, which are matched like enums.
+
+**An anonymous constructor for one-arm propositions,** such as `(hp, hq)` for `And::Intro(hp, hq)`, as Lean's `⟨hp, hq⟩` is. Deferred by the owner to the RFC on proof construction ([#15](https://github.com/nikhilgarg28/locus/issues/15)).
 
 **`=>` for implication.** Rejected: inside a logical `match`, `=>` already separates an arm from its body, so `==>` is clearer.
 
@@ -734,7 +775,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 ## Prior art
 
-- **Lean 4** is the model for the logic, the kernel, inductive propositions, and proof irrelevance.
+- **Lean 4** is the model for the logic, the kernel, inductive propositions, and proof irrelevance, and for separating a `Bool` comparison (`BEq`) from equality (`Eq`).
 - **Creusot** has logic functions, a mutable reference's current value `*x` and final value `^x`, and models through its `View` trait. Its handling of `&mut` is the model for `final!`.
 - **RustHorn and RustHornBelt** (Matsushita et al., ESOP 2020 and PLDI 2022) gave prophecies for Rust's mutable borrows and proved them sound.
 - **Verus** separates spec, proof, and exec code, erases ghost code completely, and models types with `view()`.
@@ -744,40 +785,43 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 ## Unresolved questions
 
-**Decisions for the owner,** in order of what they block:
-1. **Ghost proofs and forgetting:**
-   - proofs and logical values become nothing, or the marker `Erased` inside runtime types, and proof parameters are removed;
-   - ghost contents are tracked only through checked code and specified standard library code;
-   - contracts are visible only to code that Locus checks, through the two modes of RFC 0001.
+**Decided by the owner while this RFC was drafted.** Recorded here; accepting the RFC confirms them. Where the owner set the direction, the mechanism is this RFC's proposal.
+1. **Ghost proofs and forgetting.** Proofs and logical values become nothing, or the marker `Erased` inside runtime types, and proof parameters are removed. Ghost contents are tracked only through checked code and specified standard library code, and contracts are visible only to code that Locus checks, through the two modes of RFC 0001.
+2. **Logical values in runtime types,** such as `Vec<Nat>` and `Option<@P>`.
+3. **The `&mut` convention:** entry values in signatures, and `final!(r)` for the value when the borrow ends, with no separate notation for entry values.
+4. **`Int` built in, and `Nat` from the library,** with `Nat - Nat` an `Int`. Integer division truncates toward zero, as Rust's does, division by zero gives zero, and Euclidean division is `div_euclid`.
+5. **Inductive propositions with named arms,** and `&&`, `||`, and `!` on propositions.
+6. **Equality.** `===` is Lean's equality, a proposition. `==` and the orderings give a `Bool`, and are built in only on `Int`, `Nat`, and `Bool` until [#12](https://github.com/nikhilgarg28/locus/issues/12).
+7. **Naming.** Logic functions in snake_case, and `prop` declarations in CamelCase.
+8. **Views.** A runtime value enters logical code as its view, `Opaque<T>`, which is taken to its model where it is used as a value. A model is a logic function of the view, and every logical computation produces a logical value.
+9. **Interior mutability.** Types with interior mutability may hold logical values, and a shared reference to one counts as a way to write them under rule 4.
+10. **The traits logical types implement:** `Clone`, `Copy`, and `Debug`, plus comparison and hashing for proofs.
+11. **Export mode's rules.** What other crates can reach states no contracts, postconditions included, has no logical values in its types or fields, and has no `Model` bounds. Other crates can neither construct a struct with proof fields nor reach a field that its proofs read.
+12. **Proof construction** beyond this RFC's forms is a third foundational RFC ([#15](https://github.com/nikhilgarg28/locus/issues/15)), and an anonymous constructor for one-arm propositions waits for it.
 
-   These follow the owner's direction; the mechanisms are this RFC's proposal.
-2. **The `&mut` convention:** entry values in signatures, and `final!(r)` for the value when the borrow ends, with no `old!`. This is the owner's.
-3. **Versions:** every write makes a new version, even of the same value, and a proof never carries over to another version without a new proof.
-4. **`Int` built in, and `Nat` from the library,** with `Nat - Nat` an `Int`. This is the owner's. Integer division truncates toward zero, as Rust's does, and division by zero gives zero.
-5. **One model per type,** declared by the type's own crate or by Locus's library.
-6. **Places keep their Rust meaning in logical code,** and models apply to values.
-7. **Lean's propositional comparisons,** with a classical `if`.
-8. **The traits logical types implement:** `Clone`, `Copy`, and `Debug`, plus comparison and hashing for proofs.
-9. **The program's own generic code is checked at each instantiation with logical types,** until [#12](https://github.com/nikhilgarg28/locus/issues/12) allows checking it once.
-10. **Syntax:** `==>`, `forall |x: T|`, `Arm(witnesses) @ proof`, `#[decreases(e)]`, and `final!`.
-11. **Ghost positions hold logical code:** a runtime call that returns a proof is written in its own statement or `let`, rather than as an argument, a tuple component, a field initializer, or a payload.
-12. **Unchecked code never gets a mutable path to a place holding logical values,** and a function whose parameters hold logical values is only called directly, never used as a value, and never callable from outside Rust.
-13. **No logical values in trait implementations,** apart from `impl Model`, until [#12](https://github.com/nikhilgarg28/locus/issues/12); and `Model` bounds only on functions.
-14. **Locus does not infer logical types:** a local whose type holds logical values has it written.
-15. **Tuples keep their shape,** with `Erased` for logical components, rather than losing them.
-16. **No `unsafe impl` other than `Send` and `Sync`** on a type with proof fields, in either mode.
-17. **Changing a value with an invariant means replacing it whole,** until [#6](https://github.com/nikhilgarg28/locus/issues/6) allows updates in place where nothing can panic.
-18. **`Opaque<T>`** is the logical type of values of a type without a model, and measures are `Int`s.
-19. **No `#[derive(Model)]` for now.** A struct without a model is still readable field by field.
-20. **Export mode's rules.** What other crates can reach has no contracts, postconditions included, which is the owner's; no logical values in its types or fields, so a reachable enum has no logical or proof fields; and no `Model` bounds. Other crates can neither construct a struct with proof fields, which erasure marks `#[non_exhaustive]`, nor reach a field that its proofs read.
+**Still for the owner,** in order of what they block:
+1. **Versions,** following the owner's direction toward SSA: every write makes a new version, even of the same value, and a proof never carries over to another version without a new proof.
+2. **One model per type,** declared by the type's own crate or by Locus's library.
+3. **Places keep their Rust meaning in logical code,** and models apply to values.
+4. **The program's own generic code is checked at each instantiation with logical types,** until [#12](https://github.com/nikhilgarg28/locus/issues/12) allows checking it once.
+5. **Syntax:** `===`, `==>`, `forall |x: T|`, `Arm(witnesses) @ proof`, `#[decreases(e)]`, and `final!`.
+6. **Ghost positions hold logical code:** a runtime call that returns a proof is written in its own statement or `let`, rather than as an argument, a tuple component, a field initializer, or a payload.
+7. **Unchecked code never gets a path that writes a place holding logical values,** and a function whose parameters hold logical values is only called directly, never used as a value, and never callable from outside Rust.
+8. **No logical values in trait implementations,** apart from `impl Model`, until [#12](https://github.com/nikhilgarg28/locus/issues/12); and `Model` bounds only on functions.
+9. **Locus does not infer logical types:** a local whose type holds logical values has it written.
+10. **Tuples keep their shape,** with `Erased` for logical components, rather than losing them.
+11. **No `unsafe impl` other than `Send` and `Sync`** on a type with proof fields, in either mode.
+12. **Changing a value with an invariant means replacing it whole,** until [#6](https://github.com/nikhilgarg28/locus/issues/6) allows updates in place where nothing can panic.
+13. **Measures are `Int`s,** and there is no `#[derive(Model)]` for now. A struct without a model is still readable field by field.
 
 **Left to later work,** each with its issue:
 - The runtime semantics: how runtime operations change versions and models, loops and invariants, tracked evidence, where borrows end, and overflow: [#6](https://github.com/nikhilgarg28/locus/issues/6).
 - Remaining syntax questions: [#5](https://github.com/nikhilgarg28/locus/issues/5).
 - Distribution, including how an exported package is laid out: [#7](https://github.com/nikhilgarg28/locus/issues/7).
-- Closures and async code, including closures that take or return proofs: [#8](https://github.com/nikhilgarg28/locus/issues/8).
-- Locus's standard library: logical types, and models and specifications of standard types and generic code: [#11](https://github.com/nikhilgarg28/locus/issues/11).
-- Traits and operators on logical types, generic predicates such as a `Sorted` that applies to any ordered type, traits with logical values or contracts, and checking generic code once for logical instantiations: [#12](https://github.com/nikhilgarg28/locus/issues/12).
+- Closures and async code, including closures that take or return proofs, and closures that capture a reference through which a place holding logical values can be written: [#8](https://github.com/nikhilgarg28/locus/issues/8).
+- Locus's standard library: logical types, indexing of sequences, `div_euclid` and `rem_euclid`, and models and specifications of standard types and generic code, including `Cell`, `RefCell`, and `Mutex`: [#11](https://github.com/nikhilgarg28/locus/issues/11).
+- Traits and operators on logical types, generic predicates such as a `sorted` that applies to any ordered type, traits with logical values or contracts, programmable comparisons with their laws and decidable equality, and checking generic code once for logical instantiations: [#12](https://github.com/nikhilgarg28/locus/issues/12).
+- How proofs are constructed: using definitions, rewriting, tactics, the interface to search, and shorter forms: RFC 0003, [#15](https://github.com/nikhilgarg28/locus/issues/15).
 - Storing proofs that were found, and what proof search may do: [#13](https://github.com/nikhilgarg28/locus/issues/13).
 - Claims that runtime functions terminate: [#14](https://github.com/nikhilgarg28/locus/issues/14).
 - How the kernel provides `Int`: the kernel RFC.

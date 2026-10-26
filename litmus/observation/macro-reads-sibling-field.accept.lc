@@ -1,0 +1,15 @@
+//~ question: May `prove!`, written directly, read one field while another field is mutably borrowed?
+//~ spec: observe.place.readable, observe.macro-expansions
+//~ rfc: 0001
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn bump_a(p: &mut Pair, positive: @(p.b > 0)) -> u32 {
+    let a = &mut p.a;
+    let still: @(p.b > 0) = prove!(p.b > 0);
+    *a += 1;
+    p.b
+}

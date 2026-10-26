@@ -2,7 +2,7 @@
 
 Locus adds logical types, whose values exist only for checking, and logical code, which computes with them. This chapter says what is logical, where logical values may appear, and what logical code may do. [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the design.
 
-Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
+Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the views `Opaque<T>` of runtime types, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
 
 ## Logical types
 
@@ -25,8 +25,8 @@ Values of logical types have no runtime representation. Parameters, locals, and 
 r[logic.ghost.types-written]
 Every local and expression whose type holds logical values has that type written, or is Locus syntax. Locus does not infer logical types.
 
-r[logic.ghost.no-interior-mutability]
-A type with interior mutability holds no logical values.
+r[logic.ghost.interior-mutability]
+A type with interior mutability may hold logical values. Its contents are part of no version and no model, so Locus knows only their types.
 
 r[logic.ghost.runtime-parts-kept]
 A runtime type that holds logical values keeps its runtime parts: an `Option` keeps its tag, and a `Vec` its length. Building one with a proof in it needs that proof, and taking the proof out gives back a proof of the same proposition.
@@ -47,7 +47,7 @@ r[logic.ghost.positions-logical]
 An expression in a ghost position is logical code. The ghost positions are an argument for a parameter of logical type, for a proof parameter, or for a generic parameter instantiated with a logical type; the logical component of a tuple; the initializer of a logical field; and the logical payload of a variant. A call to a runtime function cannot be one.
 
 r[logic.ghost.mutable-lending]
-No value whose type contains a `&mut` or `*mut` to a place that holds logical values reaches code that Locus neither checks nor has a specification for, whether as an argument or inside another value. No raw borrow of such a place is taken.
+No value whose type contains a reference or pointer through which a place that holds logical values can be written reaches code that Locus neither checks nor has a specification for, whether as an argument or inside another value. Such references are `&mut` and `*mut`, and `&` and `*const` to a type with interior mutability. No raw borrow of such a place is taken.
 
 r[logic.ghost.direct-calls]
 A function whose parameter types hold logical values is only called by name, outside any macro's input or output. It is never used as a value, and it is not callable from outside Rust: it is not `extern`, `#[no_mangle]`, or given an `#[export_name]`.
@@ -57,7 +57,16 @@ Apart from `impl Model`, no logical type appears in an `impl`'s self type, its t
 
 ## Logical code
 
-Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; and ghost arguments. In it, a runtime place keeps its Rust meaning, and a runtime value used as a logical value is its type's [model](models.md).
+Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; and ghost arguments. In it, a runtime place keeps its Rust meaning, and a runtime value used as a value is its type's [model](models.md).
+
+r[logic.code.logical-values]
+Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code where logical code reads it, as its view, of type `Opaque<T>`.
+
+r[logic.eq.same]
+`a === b` is the proposition that the logical values `a` and `b` are equal, and `a !== b` its negation. Every logical type has it, and it cannot be overloaded.
+
+r[logic.eq.comparisons]
+`==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, where `a == b` is true exactly when `a === b`, and each ordering agrees with the order of the integers. A `Bool` used as a proposition stands for the proposition that it is true.
 
 r[logic.code.no-runtime-calls]
 Logical code does not call runtime functions or methods, and does not mutate runtime state.
