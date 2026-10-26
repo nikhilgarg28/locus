@@ -2,7 +2,7 @@
 
 Locus has two modes. In build mode, the default, Locus builds the program itself, and checks every crate that depends on a Locus crate, so a crate's whole interface, contracts included, is available to the crates that use it. In export mode, Locus writes the crate's runtime program as Rust source that Rust users build without Locus. This chapter says what an exported crate's interface may contain. [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) describes the two modes, and [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the rules.
 
-What other crates can reach is what is public at the crate's root, or, when the crate has an *export root*, what is reachable through it, together with the public fields and methods of the types they can reach. An export root is a module named in the crate's manifest, conventionally `src/export.lc`. Its public items are public at the crate's root in both modes, and in export mode nothing else is reachable from other crates. Its rules wait for litmus examples that span more than one file.
+Every exported crate has an *export root*, a module that is `src/export.lc` unless the crate's manifest names another file. Its public items are public at the crate's root in both modes. In export mode, what other crates can reach is what is reachable through the export root, together with the public fields and methods of the types they can reach. Rules about the export root wait for litmus examples that span more than one file.
 
 A `pub` item that no other crate can reach is not restricted, and inside the crate every other chapter applies unchanged.
 

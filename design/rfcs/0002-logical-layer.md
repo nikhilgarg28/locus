@@ -41,7 +41,7 @@ The design in brief:
 
 That core is what a proof is, how logical code sees runtime data, and how a function promises something about what it returns or changes.
 
-A second reason is soundness. RFC 0001's previous draft gave every proof the same zero-sized Rust type, and believed a value's proposition from its type. A review found that safe, ordinary Rust could then turn a proof of one proposition into a "proof" of another:
+A second reason is soundness. Suppose every proof had the same zero-sized Rust type, and Locus believed a value's proposition from its type. Then safe, ordinary Rust could turn a proof of one proposition into a "proof" of another:
 
 ```rust
 fn convert<T: 'static, U: 'static>(value: T) -> Option<U> {
@@ -56,18 +56,7 @@ match convert::<@(1 == 1), @(0 != 0)>(trivial) {
 }
 ```
 
-At run time both proof types were the same Rust type, so the downcast succeeded, and Locus believed the result because of its type. This RFC removes the belief rather than the type. Locus tracks proofs itself, and keeps track of what a value holds only through code whose meaning it knows. Code like `downcast`, whose meaning it does not know, gives back the marker `Erased`, and `Erased` proves nothing.
-
-The design follows [v0](https://github.com/nikhilgarg28/locus_v0) where v0 settled a question:
-- logical types classified by type;
-- versions and snapshots;
-- propositions with named arms;
-- logical values held in runtime containers;
-- canonical models;
-- invariants in proof fields;
-- checking generic code at each logical instantiation.
-
-It departs from v0 where being a superset of Rust, or the ghost representation, requires it. Each departure is listed under [Alternatives](#alternatives).
+At run time both proof types would be the same Rust type, so the downcast would succeed, and Locus would believe the result because of its type. This RFC removes the belief rather than the type. Locus tracks proofs itself, and keeps track of what a value holds only through code whose meaning it knows. Code like `downcast`, whose meaning it does not know, gives back the marker `Erased`, and `Erased` proves nothing.
 
 ## Design
 
@@ -156,7 +145,7 @@ Every type is either a runtime type or a logical type.
 - tuples whose components are all logical;
 - structs and enums declared with `#[derive(Logical)]`, which may be recursive without `Box` and describe finite values;
 - `Opaque<T>`, for each runtime type `T` without a model: the values of `T`, which logical code can compare for equality and pass on, and whose visible fields it can read;
-- the logical types of Locus's library, which it builds from these: `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and others ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
+- the logical types of Locus's library, which it builds from these: `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and others. This RFC uses them in examples, and assumes only what it says about them; their definitions and operations are for the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)).
 
 `Nat` is an `Int` with a proof that it is not negative:
 
@@ -219,7 +208,7 @@ Everywhere else, ghost contents are forgotten:
   - Locus's library specifies at least `Option`, `Result`, `Box`, `Vec`, arrays, slices, and their iterators as code that keeps what its values hold, so `for (i, ok) in checked` keeps each element's proof.
   - Their exact specifications are [#11](https://github.com/nikhilgarg28/locus/issues/11).
   - The `?` operator on a value that holds a proof goes through the `Try` trait, and is for [#12](https://github.com/nikhilgarg28/locus/issues/12).
-- **The program's own generic code** is checked again for each instantiation whose type arguments contain logical types, as v0 did.
+- **The program's own generic code** is checked again for each instantiation whose type arguments contain logical types.
   - If checking those instantiations would not end, as with polymorphic recursion, the program is rejected.
   - Checking such code once for every instantiation is [#12](https://github.com/nikhilgarg28/locus/issues/12).
 - **Traits.**
@@ -275,9 +264,7 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 - **Place expressions keep their Rust meaning.** A place is a local or parameter, a field or tuple field visible at that point, or the target of a reference or `Box`. Indexing and overloaded `Deref` do not form places in logical code.
 - **A runtime value used as a logical value is its type's model.** That covers an operand, an argument of logical type, a method receiver, and either side of `==`. If the type has no model, the value is *opaque*: logical code can compare it for equality and pass it on, and nothing else.
 - **Methods and indexing work on models.** A method call or index on a runtime value works on its model, never on a runtime method, as RFC 0001 requires. For `v: &Vec<u32>`, `v.len()` is `Seq::len` of `v`'s model, and `v[i]` indexes that model. A logic function declared on the runtime type itself is found first, then those of its model's type.
-- **Indexing a sequence** takes an `Int`, so `xs[j - 1]` needs no conversion.
-  - For an element type that has values, an index outside the sequence gives some unspecified value of that type.
-  - For a proof type, or any element type that might have no values, it needs a proof that the index is in bounds. Otherwise indexing an empty `Seq<@False>` would prove `False`.
+- **Indexing a sequence,** as in `xs[i]`, is a placeholder until the RFC for Locus's standard library ([#11](https://github.com/nikhilgarg28/locus/issues/11)) decides the index type and what an index outside the sequence means. Whatever it decides, indexing a sequence whose elements might have no values, such as a `Seq<@False>`, needs a proof that the index is in bounds, or indexing an empty one would prove `False`.
 - **Constants and const generic parameters** may appear in logical code, through their models. A constant of logical type is logical code ([Ghost values](#ghost-values)).
 - **References are transparent.** A `&T`, `&mut T`, or `Box<T>` used as a value is the current value of its target. For a `&mut` parameter in a signature, "current" means at entry; see [Contracts](#contracts).
 
@@ -443,7 +430,7 @@ fn check(x: u8, p: Prop, hp: @p, low: @(x > 1)) -> @(p && x > 1) {
 
 ### Inductive propositions
 
-A `prop` declaration defines a proposition by the ways it can be proven, as an `enum` defines a type by its variants. This is how v0 wrote predicates with named arms:
+A `prop` declaration defines a proposition by the ways it can be proven, as an `enum` defines a type by its variants. Each arm is one way to prove it:
 
 ```rust
 prop Reachable(from: State, to: State) {
@@ -554,7 +541,7 @@ A runtime function states its contract in its signature.
   - **Inside a body,** logical code reads current versions: `*x` at a point in the body is its value there. A local borrow has a final value too. When the borrow ends, the place it borrowed from gets a new version, which holds `final!(r)`.
   - **`final!(r)` reads no place.** It is not an observation in RFC 0001's sense, so it never extends a borrow.
   - **`final!` appears in postconditions and in bodies,** not in preconditions.
-  - **There is no `old!`.** A signature already means entry values. A body that needs one later names a snapshot: `let start = logic! { *x };`.
+  - **Entry values need no notation of their own.** A signature already means entry values. A body that needs one later names a snapshot: `let start = logic! { *x };`.
   - **Soundness.** RustHornBelt proved prophecies sound for safe Rust, and Creusot is built on them. Using them needs to know where each borrow ends, which rustc's borrow checker computes on MIR. How Locus obtains that is [#6](https://github.com/nikhilgarg28/locus/issues/6).
 - **Partial correctness.** A postcondition holds when the function returns. A function that panics or loops forever proves nothing, so `fn never() -> @False { loop {} }` is accepted. A logic function cannot be written that way, because logic functions are total. That a runtime function terminates is a separate claim ([#14](https://github.com/nikhilgarg28/locus/issues/14)).
 - **Calls.** After a call returns, the caller has the proofs in its result, about the arguments it passed: `let (out, bounded) = clamp(n);`.
@@ -575,7 +562,7 @@ struct Interval {
 
 - **Every value of the type satisfies its proof fields, at every point:**
   - each construction must prove them, including constructions in code that macros and derives generate;
-  - no place based on a field that a proof field reads is assigned or mutably borrowed, so neither `iv.lo = 0` nor `*s.b = 0` through a `Box` field is allowed; the whole value is replaced instead, as v0 required;
+  - no place based on a field that a proof field reads is assigned or mutably borrowed, so neither `iv.lo = 0` nor `*s.b = 0` through a `Box` field is allowed; the whole value is replaced instead;
   - a proof field itself, including one of type `Option<@P>`, is never mutably borrowed;
   - a struct update `..base` never supplies a proof field;
   - code that Locus cannot translate, such as inline assembly, never constructs the type.
@@ -602,7 +589,7 @@ struct Interval {
 
 In build mode, every crate that depends on a Locus crate is checked, so a crate's whole interface, contracts included, is available to the crates that use it. In export mode, Rust users build the crate, and Locus never sees their code ([RFC 0001](0001-compiler-pipeline.md#sources-and-modes)). So what other crates can reach must be plain Rust, and must not let them break what was proven. This restricts only the exported interface: inside the crate, everything above applies unchanged.
 
-What other crates can reach is what is public at the crate's root, or, when the crate has an export root, what is reachable through it, together with the public fields and methods of the types they can reach. A `pub` item that nothing outside the crate can reach is not restricted.
+What other crates can reach is what is reachable through the crate's export root, `src/export.lc` unless its manifest names another, together with the public fields and methods of the types they can reach. A `pub` item that nothing outside the crate can reach is not restricted.
 
 - **No contracts.** A function or method that other crates can reach has no proof parameters and no proofs in its result. A Rust caller cannot supply a proof for a precondition, and could not use one from a postcondition.
 - **No logical values.** No parameter, result, constant, static, or type alias that other crates can reach has a type that holds logical values, such as `Nat`, `Option<@P>`, or `Vec<(usize, @P)>`. Nor does such a function have a `Model` bound: the exported program removes it, so a Rust caller could use a type at which the function was never checked.
@@ -641,14 +628,6 @@ RFC 0001 defines erasure. For this RFC's constructs:
 | Logic functions, proposition declarations, `#[derive(Logical)]` types, `impl Model` | Stubs in the checking program; nothing in the runtime program |
 | `logic!`, `prop!`, `prove!`, `_`, `final!` | Removed with the ghost value they produce, or `Erased` where one is needed |
 | In export mode, a struct that other crates can reach, when erasure removes a private field from it | Marked `#[non_exhaustive]` |
-
-### What changes in RFC 0001
-
-These changes are made in RFC 0001 in this PR, so that the two RFCs are decided together:
-- **No stand-ins for proofs or logical types.** Logical items become stubs in the checking program only, for resolving names. Inside runtime types, logical types become `Erased`, which Locus never believes.
-- **Two modes.** Contracts are visible only to code that Locus checks: build mode checks every crate that depends on a Locus crate, and export mode keeps contracts and logical values out of what other crates can reach. This replaces proof tokens and `unsafe` exports, so proof parameters are simply removed.
-- **The fourth way facts enter the logic** is the invariants of the program's own types, as described above. This replaces the earlier `'static` rule. Ghost contents that pass through unchecked code are forgotten.
-- **Tuples keep their shape,** so named results become `(T, Erased)` rather than `T`.
 
 ## Rules
 
@@ -710,47 +689,48 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 ## Alternatives
 
-**Proofs as zero-sized values that Locus believes by their type:** RFC 0001's previous draft, and v0's `Erased` marker. This RFC keeps the name, but Locus never believes the marker.
+**Proofs as zero-sized values that Locus believes by their type.** This RFC keeps such a marker, `Erased`, but Locus never believes it.
 - Proofs would flow through every generic function for free.
 - Rejected. With one Rust type for every proposition, Rust code that can tell types apart, through `Any` or specialization, could turn one proof into another.
 - Making that sound needs every Rust generic to be parametric, which neither specialization nor `unsafe` code guarantees.
 
-**No logical types inside runtime types:** an earlier draft of this RFC, which allowed only `Option` and `Result` to hold proofs.
-- Rejected at the owner's direction. Containers of ghost values are useful, as v0 found, and forgetting ghost contents at unchecked code makes them sound.
+**No logical types inside runtime types,** apart from proofs inside `Option` and `Result`.
+- Rejected at the owner's direction. Containers of ghost values are useful, and forgetting ghost contents at unchecked code makes them sound.
 
-**Proof tokens:** the previous draft. Each proof parameter became a parameter of a private zero-sized token type, which erasure supplied only at calls Locus had checked. Other crates obtained tokens through an `unsafe` constructor, and a function whose precondition sat in its parameters' data was `unsafe` to call.
+**Proof tokens.** Each proof parameter would become a parameter of a private zero-sized token type, which erasure supplies only at calls Locus has checked. Other crates would obtain tokens through an `unsafe` constructor, and a function whose precondition sits in its parameters' data would be `unsafe` to call.
 - Rejected at the owner's direction for the two modes. Contracts are visible only to code that Locus checks, so nothing needs a token.
-- An earlier draft removed proof parameters as this one does, but made the exported functions `unsafe`. Export mode instead keeps contracts out of the exported interface, and a wrapper checks or drops them.
 
-**`Nat` built in, with `Int` from the library,** as an earlier draft of this RFC, and the vision, had it.
+**`unsafe` exports:** proof parameters removed, as here, with each exported function that has a precondition made `unsafe`. Rejected: export mode keeps contracts out of the exported interface instead, and a wrapper checks or drops them.
+
+**`Nat` built in, with `Int` from the library.**
 - Rejected at the owner's direction. With `Int` built in, `Nat` is a subtype, and subtracting two naturals gives an integer rather than truncating at zero, as Lean does. So `v.len() - 1` cannot silently become `0`.
 
-**`()` instead of a named marker** for logical values inside runtime types: the previous draft, with `Vec<()>` for `Vec<Nat>`.
+**`()` instead of a named marker** for logical values inside runtime types, with `Vec<()>` for `Vec<Nat>`.
 - Rejected at the owner's direction. `Erased` reads more clearly in generated code and in rustc's messages, and rustc itself refuses the traits it does not implement, such as `Default`.
 - Neither adds safety inside the program: Locus never believes what a runtime value holds unless it tracked it, so a forged marker carries no more weight than a forged `()`.
 - At the Rust boundary, the marker is never seen: build mode checks every crate that could see it, and export mode keeps it out of what other crates can reach.
 
 **Distinct Rust types per proposition.** Not possible: propositions mention runtime values.
 
-**v0's `old!(x)` for the entry value and bare `x` for the value at return.**
+**`old(x)` for the entry value and bare `x` for the value at return,** as in Prusti.
 - Rejected for one rule: a signature means entry values, and `final!` names the final value.
 - That rule also covers borrows that are returned, kept in locals, or stored, which `old!` cannot express.
 
-**Several models per type, chosen with `x as M`** (an earlier v0 decision). Rejected, as v0 later did: one canonical model makes `v.len()` in logical code unambiguous. Other views are logic functions.
+**Several models per type, chosen with `x as M`.** Rejected: one canonical model makes `v.len()` in logical code unambiguous. Other views are logic functions.
 
-**Models before field access,** as in v0, where logical code observed the receiver through its model before selecting a field.
+**Models before field access,** where logical code would take the receiver to its model before selecting a field.
 - Rejected: keeping Rust's meaning for places makes logical code read like Rust, and works for types without models.
 - Models apply where a value is used.
 
-**Boolean comparisons with `prop!` lifting them to propositions** (v0). Rejected in favor of Lean's propositional comparisons, with a classical `if`. This means there is one kind of comparison.
+**Boolean comparisons, with `prop!` lifting them to propositions.** Rejected in favor of Lean's propositional comparisons, with a classical `if`. This means there is one kind of comparison.
 
-**`=>` for implication** (v0). Rejected: inside a logical `match`, `=>` already separates an arm from its body, so `==>` is clearer.
+**`=>` for implication.** Rejected: inside a logical `match`, `=>` already separates an arm from its body, so `==>` is clearer.
 
-**`forall (x: T) { F }` keywords** (v0). Rejected for `forall |x: T| F`, which reads like Rust's closures and needs no new delimiters.
+**`forall (x: T) { F }` keywords.** Rejected for `forall |x: T| F`, which reads like Rust's closures and needs no new delimiters.
 
 **A `ghost` keyword or a `Ghost<T>` wrapper,** as in Verus. Rejected: the type already says whether a value is ghost.
 
-**Tracked evidence, a `let mut h: @P` that follows the current version of what it reads** (v0). Deferred to the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)), together with loops, where it serves as a loop invariant.
+**Tracked evidence,** a `let mut h: @P` that follows the current version of what it reads. Deferred to the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)), together with loops, where it serves as a loop invariant.
 
 ## Prior art
 
@@ -761,7 +741,6 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 - **Prusti** writes entry values with `old(...)`, the convention this RFC replaces with entry-by-default and `final!`.
 - **Dafny** has ghost variables and fields, `decreases` clauses, and erasure of ghost code.
 - **F\* with Low\* and KaRaMeL** erases proofs to produce C, as Locus erases them to produce Rust.
-- **v0** decided much of this design, including its versions, as described above.
 
 ## Unresolved questions
 
@@ -787,8 +766,8 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 14. **Locus does not infer logical types:** a local whose type holds logical values has it written.
 15. **Tuples keep their shape,** with `Erased` for logical components, rather than losing them.
 16. **No `unsafe impl` other than `Send` and `Sync`** on a type with proof fields, in either mode.
-17. **Changing a value with an invariant means replacing it whole,** as v0 required, until [#6](https://github.com/nikhilgarg28/locus/issues/6) allows updates in place where nothing can panic.
-18. **`Opaque<T>`** is the logical type of values of a type without a model. Indexing a sequence takes an `Int`, and measures are `Int`s.
+17. **Changing a value with an invariant means replacing it whole,** until [#6](https://github.com/nikhilgarg28/locus/issues/6) allows updates in place where nothing can panic.
+18. **`Opaque<T>`** is the logical type of values of a type without a model, and measures are `Int`s.
 19. **No `#[derive(Model)]` for now.** A struct without a model is still readable field by field.
 20. **Export mode's rules.** What other crates can reach has no contracts, postconditions included, which is the owner's; no logical values in its types or fields, so a reachable enum has no logical or proof fields; and no `Model` bounds. Other crates can neither construct a struct with proof fields, which erasure marks `#[non_exhaustive]`, nor reach a field that its proofs read.
 

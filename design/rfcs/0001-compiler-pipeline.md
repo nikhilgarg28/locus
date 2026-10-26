@@ -21,7 +21,7 @@ Locus writes its own parser, the lowering, the logical layer, the kernel, erasur
 
 ## Motivation
 
-The [vision](../../VISION.md) commits Locus to being a superset of Rust in which "rustc does Rust's work". v0 did the opposite. It had its own front end for a growing subset of Rust, reimplementing moves, borrows, traits, and generics, and most of its 71,000 lines went there. This RFC decides how the work is split instead, which representations exist, how information flows between Locus and rustc, how rustc's errors reach the user, and what Locus produces.
+The [vision](../../VISION.md) commits Locus to being a superset of Rust in which "rustc does Rust's work". A front end of Locus's own would have to reimplement moves, borrows, traits, and generics, and every difference from rustc would be a difference between the program checked and the program run. This RFC decides how the work is split instead, which representations exist, how information flows between Locus and rustc, how rustc's errors reach the user, and what Locus produces.
 
 It settles two of the vision's foundational questions:
 - **Type information:** where Locus gets Rust's types and resolutions.
@@ -36,14 +36,7 @@ A [spike](../../spikes/rustc-facts/README.md) tested the central mechanism. A ha
 
 rustc's borrow checker rejected the one proof that read a moved value, with E0382 on the matching line. The driver built against stable rustc 1.97 (with `RUSTC_BOOTSTRAP=1`) and against a nightly four releases later, needing a one-line change between them.
 
-Two adversarial reviews of earlier drafts found problems in several areas:
-- configurations;
-- divergence between the checking and runtime programs;
-- where observations happen;
-- how errors are attributed and how Locus's names are found;
-- one way to forge proofs, through `Any`, when every proof had the same zero-sized Rust type.
-
-This revision addresses them. Each is answered below, recorded as an open question, or tracked in an issue. The last one led to removing proofs and logical values from the programs rustc compiles altogether, as [RFC 0002](0002-logical-layer.md) describes, and to the two modes: a crate's contracts are visible only to code that Locus checks. The two RFCs are proposed together.
+[RFC 0002](0002-logical-layer.md) defines the logical layer that this pipeline checks and erases, and the two RFCs are proposed together. Its treatment of proofs as ghost values, which no Rust code can forge, is why the checking and runtime programs contain no proofs, and why a crate's contracts are visible only to code that Locus checks.
 
 ## Design
 
@@ -121,18 +114,17 @@ Locus compiles one Cargo crate at a time, in the crate's real Cargo context: its
   - rustfmt formats every module file, so `cargo fmt` can make an exported file stale. rustfmt leaves a module alone when its `mod` declaration is marked `#[rustfmt::skip]` (tested), and erasure adds that mark where the declaration is in a `.lc` file. Protecting the rest, an exported crate root or a declaration in plain Rust, is [#7](https://github.com/nikhilgarg28/locus/issues/7).
   - How an exported package's manifest names its exported crate root, and what else the package contains, is [#7](https://github.com/nikhilgarg28/locus/issues/7).
 - **The exported interface is plain Rust.** What other crates can reach has no logical values in its types and states no contracts, and no other crate can construct a value without its invariant ([RFC 0002](0002-logical-layer.md#export-mode)).
-- **The export root.** A crate may name an *export root* in its manifest, conventionally `src/export.lc`:
+- **The export root.** Every exported crate has an *export root*: `src/export.lc`, unless its manifest names another file, and `cargo locus export` fails when there is none. A manifest names another file like this:
 
   ```toml
   [package.metadata.locus]
-  export-root = "src/export.lc"
+  export-root = "src/api/rust.lc"
   ```
 
   - It is a module of the crate, checked in both modes, whose public items are public at the crate's root, as if the crate root re-exported them.
   - In export mode, only what is reachable through the export root is reachable from other crates. Erasure lowers every other item's visibility to at most `pub(crate)`. In build mode, every public item stays public.
   - So the export root is where a crate decides what Rust users see, and wraps what cannot be exported as it is: a function with a precondition, behind a wrapper that checks the proposition at run time, or a function with a postcondition, behind one that drops it.
   - Its public names differ from the crate root's. So the exported interface is part of the crate's interface in build mode, at the same paths, and a Rust crate that builds against the exported crate builds against it in build mode too.
-  - Without an export root, the crate's whole public interface is exported, under the same rules.
 - **An exported crate uses its Locus dependencies as Rust does,** through their exported interfaces, because those are what its Rust users build it against.
 - **The crate is checked in the configurations it declares,** and a guard refuses the others (see [Configurations](#configurations)).
 - **Declarations.** When the crate root is a `.lc` file, erasure adds the declarations of the generated module and the export root. When it is plain Rust, the crate root declares them itself, with lines that `cargo locus export` gives.
@@ -321,7 +313,6 @@ rustc removes code whose `cfg` is false before it type-checks anything, so check
   - A `cfg` test can only examine the names it mentions. So the guard tests what can change checked code: every `cfg` name that appears in checked code, which is the `.lc` files and any plain Rust whose typed body a proof relies on. It also always tests `target_pointer_width`, which fixes the range of `usize`, and `debug_assertions`, which std's own macros test.
   - It takes these names from the sources, not from the output, which no longer mentions code that erasure removed.
   - A `cfg` that only plain, unproven Rust tests does not constrain the guard. So the rest of a mostly-Rust crate keeps all its configurations.
-  - v0 guarded its output against a different pointer width the same way.
 - **The cost is Cargo's feature unification.** A downstream crate can enable any combination of an exported library's features. If that combination changes what checked code sees and was not checked, the downstream build fails with the guard's message. Library authors therefore declare the combinations they support. The alternatives are worse:
   - checking one configuration and trusting the rest is unsound;
   - checking every combination is infeasible;
@@ -546,7 +537,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **A `locus! { ... }` macro inside ordinary `.rs` files,** erasing at build time. It needs no generated files. But a procedural macro sees no types and can only erase, never check, so a crate could be built and published with proofs that were never checked. Exported `.rs` files exist only when the check passed.
 
-**One mode, whose output always serves Rust callers,** as earlier drafts had it. Generated files sat beside their sources in every build, with `OUT_DIR` as an opt-in. To protect contracts from unchecked callers, proof parameters took tokens that only checked code supplied, other crates obtained tokens through an `unsafe` constructor, and a function whose precondition sat in its parameters' data was `unsafe`.
+**One mode, whose output always serves Rust callers.** Generated files would sit beside their sources in every build, with `OUT_DIR` as an opt-in. To protect contracts from unchecked callers, proof parameters would take tokens that only checked code supplies, other crates would obtain tokens through an `unsafe` constructor, and a function whose precondition sits in its parameters' data would be `unsafe`.
 - Rejected. Every Locus crate paid for the Rust boundary, even when all its users were checked, and contracts between Locus crates went through `unsafe`.
 - With two modes, contracts are visible only where Locus checks every use: everywhere in build mode, and nowhere outside the crate in export mode.
 
@@ -558,17 +549,17 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **A `@{ ... }` logical block.** Replaced by `logic! { ... }`, so that `@` stays reserved for proofs.
 
-**No built-in names,** with v0's `prove!` and `model!` dropped. Rejected: the names are worth having once rustc resolves them with Rust's own shadowing rules.
+**No built-in names,** with every Locus form written as syntax. Rejected: the names are worth having once rustc resolves them with Rust's own shadowing rules.
 
-**Locus's own front end for Rust**, as in v0. Rejected: it reimplements rustc, which is where v0's size and inconsistency came from.
+**Locus's own front end for Rust.** Rejected: it reimplements rustc, and wherever the two differ, proofs would be about a program other than the one that runs.
 
 **rust-analyzer's libraries instead of a rustc driver.** These work on stable Rust without `RUSTC_BOOTSTRAP`. But rust-analyzer's type inference is not rustc's, and where they differ, proofs would be about a program other than the one that runs. Its borrow checking is also not rustc's. It remains a candidate for editor support, where speed matters more than authority.
 
 **Charon** exports rustc's MIR in a stable format, and is a candidate source of typed bodies for [#6](https://github.com/nikhilgarg28/locus/issues/6). Run on the checking program, it could also report what the probes ask. It pins its own nightly, and adopting it would make its format part of the trusted path.
 
-**Distinct stand-ins for logical types in the checking program, and one `Erased` type in the runtime program,** as the first draft did and v0 does. Rejected: macros would see different types in the two programs, and types that are distinct in one would collide in the other. Both programs now use the same `Erased`, logical fields are removed, and no `impl` mentions a logical type ([RFC 0002](0002-logical-layer.md)).
+**Distinct stand-ins for logical types in the checking program, and one `Erased` type in the runtime program.** Rejected: macros would see different types in the two programs, and types that are distinct in one would collide in the other. Both programs now use the same `Erased`, logical fields are removed, and no `impl` mentions a logical type ([RFC 0002](0002-logical-layer.md)).
 
-**Zero-sized stand-ins for proofs that Locus believes by their type,** in both programs. This was an earlier draft. Rejected: Rust code that can tell types apart, through `Any` or specialization, could turn one proof into another. [RFC 0002](0002-logical-layer.md) makes proofs ghost instead: `Erased` is still one type for every proof, but Locus never believes it.
+**Zero-sized stand-ins for proofs that Locus believes by their type,** in both programs. Rejected: Rust code that can tell types apart, through `Any` or specialization, could turn one proof into another. [RFC 0002](0002-logical-layer.md) makes proofs ghost instead: `Erased` is still one type for every proof, but Locus never believes it.
 
 **One Rust type per proposition,** so that rustc could tell proofs apart. Not possible: propositions mention runtime values, so `@(y != 0)` is a different proposition for each `y`.
 
@@ -589,7 +580,6 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 - **rust-analyzer** provides the lossless, error-tolerant parser and the rowan trees this design starts from.
 - **Code generators that commit their output,** such as LALRPOP's and some users of prost, show that generated Rust beside its source is workable when a check catches stale output.
 - **TypeScript-based tools for Svelte and Vue** check generated code and map diagnostics back through source maps, as the origin maps do here.
-- **v0** wrapped Cargo's rustc invocations to capture them, used `RUSTC_BOOTSTRAP` for rustdoc's unstable JSON on stable, guarded its output against a different pointer width, and mapped spans across files with a source bundle.
 
 ## Unresolved questions
 
@@ -598,10 +588,10 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 2. `#[derive(Logical)]`, never implemented by hand, and a `Model` trait, in place of `logic struct` and `logic enum`.
 3. The four ways facts enter the logic. `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
 4. The current stable release with `RUSTC_BOOTSTRAP=1` preferred; a pinned nightly acceptable.
-5. Two modes. Build mode, the default, compiles the runtime program under `target/` and checks every crate that depends on a Locus crate. Export mode writes `.rs` files beside the sources for Rust users, with an optional export root named in `Cargo.toml`, conventionally `src/export.lc`.
+5. Two modes. Build mode, the default, compiles the runtime program under `target/` and checks every crate that depends on a Locus crate. Export mode writes `.rs` files beside the sources for Rust users. Its export root is `src/export.lc` unless `Cargo.toml` names another, and exporting a crate without one fails.
 6. In build mode, the configuration being built is checked. In export mode, declared configurations with a guard; the default is dev, release, and test builds with default features and 64-bit pointers, independent of the host. Erasure removes code no checked configuration enables.
 7. An exported interface has no logical values and states no contracts, postconditions included. There are no proof tokens and no `unsafe` exports.
-8. Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): removed, or the marker `Erased` inside runtime types. This replaces an earlier rule about `'static` bounds.
+8. Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): removed, or the marker `Erased` inside runtime types.
 9. Logical and proof fields are removed from types in both programs.
 10. Traits among Locus's names have no methods.
 11. The parser starts from a fork of rust-analyzer's. The owner left the choice to this RFC.
