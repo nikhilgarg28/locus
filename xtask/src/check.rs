@@ -2,7 +2,7 @@
 //! cross-references between them (rule coverage, citations, error codes, and
 //! links).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::diagnostics::{self, Diagnostic};
@@ -12,12 +12,30 @@ use crate::repo::{self, Repo};
 use crate::report::Report;
 use crate::rfc::{self, Rfc};
 use crate::spec::{self, Spec};
+use crate::trust::{self, Entry};
 
 pub struct Checked {
     pub spec: Spec,
     pub examples: Vec<Example>,
     pub rfcs: Vec<Rfc>,
     pub diagnostics: Vec<Diagnostic>,
+    pub trust: Vec<Entry>,
+}
+
+impl Checked {
+    /// The RFC a rule comes from: an accepted RFC that lists it, or else the
+    /// first other RFC that does.
+    pub fn introduced_by(&self, rule: &str) -> Option<&Rfc> {
+        let listing = || {
+            self.rfcs.iter().filter(move |r| {
+                r.path != rfc::TEMPLATE && r.rules.iter().any(|row| row.id == rule)
+            })
+        };
+        listing()
+            .find(|r| r.status.binds())
+            .or_else(|| listing().find(|r| r.status.is_open()))
+            .or_else(|| listing().next())
+    }
 }
 
 pub fn run(root: &Path) -> Result<(), String> {
@@ -58,7 +76,9 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
     let examples = litmus::check(repo, report);
     let rfcs = rfc::check(repo, report);
     let diagnostics = diagnostics::check(repo, report);
+    let trust = trust::check(repo, report);
     check_coverage(&spec, &examples, report);
+    check_provenance(&spec, &examples, &rfcs, report);
     check_error_codes(&examples, &diagnostics, report);
     check_links(repo, report);
     Checked {
@@ -66,6 +86,74 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
         examples,
         rfcs,
         diagnostics,
+        trust,
+    }
+}
+
+/// Every rule is listed in the `## Rules` table of the RFC that introduced it.
+/// The table of an RFC still being decided must match the spec and the
+/// examples, and an example's `//~ rfc:` must name an RFC.
+fn check_provenance(spec: &Spec, examples: &[Example], rfcs: &[Rfc], report: &mut Report) {
+    let rfcs: Vec<&Rfc> = rfcs.iter().filter(|r| r.path != rfc::TEMPLATE).collect();
+    let listed: BTreeSet<&str> = rfcs
+        .iter()
+        .flat_map(|r| r.rules.iter().map(|row| row.id.as_str()))
+        .collect();
+    for rule in &spec.rules {
+        if !listed.contains(rule.id.as_str()) {
+            report.error(
+                &rule.path,
+                Some(rule.line),
+                format!(
+                    "rule `{}` is listed in no RFC's `## Rules` table; the RFC that introduces a rule lists it there",
+                    rule.id
+                ),
+            );
+        }
+    }
+    let ids: BTreeSet<&str> = spec.rules.iter().map(|r| r.id.as_str()).collect();
+    let by_path: BTreeMap<&str, &Example> = examples.iter().map(|e| (e.path.as_str(), e)).collect();
+    for rfc in rfcs.iter().filter(|r| r.status.is_open()) {
+        for row in &rfc.rules {
+            if !ids.contains(row.id.as_str()) {
+                report.error(
+                    &rfc.path,
+                    Some(row.line),
+                    format!("`{}` is not a rule in the spec", row.id),
+                );
+            }
+            for listed in &row.examples {
+                let path = match listed.strip_prefix("litmus/") {
+                    Some(_) => listed.clone(),
+                    None => format!("litmus/{listed}"),
+                };
+                match by_path.get(path.as_str()) {
+                    None => report.error(
+                        &rfc.path,
+                        Some(row.line),
+                        format!("there is no litmus example `{listed}`"),
+                    ),
+                    Some(e) if !e.specs.iter().any(|(_, id)| *id == row.id) => report.error(
+                        &rfc.path,
+                        Some(row.line),
+                        format!("`{listed}` does not cite `{}`", row.id),
+                    ),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    let numbers: BTreeSet<&str> = rfcs.iter().map(|r| r.number.as_str()).collect();
+    for example in examples {
+        if let Some(number) = &example.rfc
+            && !numbers.contains(number.as_str())
+        {
+            report.error(
+                &example.path,
+                None,
+                format!("`//~ rfc: {number}` names no RFC"),
+            );
+        }
     }
 }
 
@@ -207,6 +295,15 @@ r[erasure.lonely]
 Nothing cites this.
 ";
 
+    const TRUST: (&str, &str) = ("design/TRUST.md", "# Trust model\n");
+    /// An accepted RFC listing every rule of CHAPTER, so that coverage tests
+    /// see no provenance errors.
+    const RFC: (&str, &str) = (
+        "design/rfcs/0001-erasure.md",
+        "# RFC 0001: Erasure\n\n- **Status:** accepted\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n\
+         | `erasure.tag.kept` | |\n| `erasure.order.left-to-right` | |\n| `erasure.payload.gone` | |\n| `erasure.lonely` | |\n",
+    );
+
     fn example(outcome: &str, spec: &str, body: &str) -> String {
         let issue = if outcome == "open" {
             "//~ issue: #1\n"
@@ -239,6 +336,8 @@ Nothing cites this.
             ("litmus/order/calls.accept.lc", &run_order),
             ("litmus/payload/used.reject.lc", &reject_payload),
             ("litmus/lonely/q.open.lc", &open_lonely),
+            TRUST,
+            RFC,
         ]);
         let mut report = Report::default();
         check_repo(&repo, &mut report);
@@ -261,6 +360,8 @@ Nothing cites this.
             ("spec/README.md", SPEC_README),
             ("spec/erasure.md", chapter),
             ("litmus/tag/kept.accept.lc", &accept),
+            TRUST,
+            RFC,
         ]);
         let mut report = Report::default();
         check_repo(&repo, &mut report);
@@ -273,12 +374,68 @@ Nothing cites this.
     }
 
     #[test]
+    fn rules_come_from_rfcs() {
+        let chapter =
+            "# Erasure\n\nr[erasure.tag.kept]\nThe tag is kept.\n\nr[erasure.lonely]\nUnlisted.\n";
+        let proposed = "\
+# RFC 0002: More
+
+- **Status:** proposed
+
+## Rules
+
+| Rule | Examples |
+|---|---|
+| `erasure.tag.kept` | `tag/kept.accept.lc`, `litmus/tag/other.accept.lc`, `tag/missing.accept.lc` |
+| `erasure.gone` | |
+";
+        // Accepted RFCs are not edited, so their tables are not re-checked.
+        let accepted = "# RFC 0001: Old\n\n- **Status:** accepted\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n| `erasure.removed` | `x.accept.lc` |\n";
+        let kept = "//~ question: q\n//~ spec: erasure.tag.kept\n//~ rfc: 0002\n";
+        let other = "//~ question: q\n//~ spec: erasure.lonely\n//~ rfc: 9999\n";
+        let repo = Repo::from_files(&[
+            ("spec/README.md", SPEC_README),
+            ("spec/erasure.md", chapter),
+            ("design/rfcs/0001-old.md", accepted),
+            ("design/rfcs/0002-more.md", proposed),
+            ("litmus/tag/kept.accept.lc", kept),
+            ("litmus/tag/other.accept.lc", other),
+            TRUST,
+        ]);
+        let mut report = Report::default();
+        let checked = check_repo(&repo, &mut report);
+        let errors: Vec<String> = report
+            .messages()
+            .into_iter()
+            .filter(|m| m.starts_with("error"))
+            .collect();
+        assert_eq!(
+            errors,
+            [
+                "error: spec/erasure.md:6: rule `erasure.lonely` is listed in no RFC's `## Rules` table; the RFC that introduces a rule lists it there",
+                "error: design/rfcs/0002-more.md:9: `litmus/tag/other.accept.lc` does not cite `erasure.tag.kept`",
+                "error: design/rfcs/0002-more.md:9: there is no litmus example `tag/missing.accept.lc`",
+                "error: design/rfcs/0002-more.md:10: `erasure.gone` is not a rule in the spec",
+                "error: litmus/tag/other.accept.lc: `//~ rfc: 9999` names no RFC",
+            ]
+        );
+        assert_eq!(
+            checked
+                .introduced_by("erasure.tag.kept")
+                .map(|r| r.number.as_str()),
+            Some("0002")
+        );
+        assert!(checked.introduced_by("erasure.lonely").is_none());
+    }
+
+    #[test]
     fn links_must_resolve() {
         let text = "[ok](spec/README.md) [dir](spec) [anchor](#x) [web](https://x.dev) \
                     [broken](nope.md) [abs](/spec/README.md) [out](../x.md) [frag](spec/README.md#chapters)";
         let repo = Repo::from_files(&[
             ("spec/README.md", "# Specification\n\n## Chapters\n"),
             ("README.md", text),
+            TRUST,
         ]);
         let mut report = Report::default();
         check_repo(&repo, &mut report);

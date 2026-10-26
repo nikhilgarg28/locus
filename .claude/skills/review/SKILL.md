@@ -10,7 +10,7 @@ You are the check that the author is not. Review from the diff, the spec, and th
 ## For every PR
 
 1. **Authorization.** Does an accepted RFC, a spec rule, or an issue authorize the change? Is it one kind of PR (design or build), not both?
-2. **Expectations.** Does it change or remove any decided litmus outcome, error code, run result, or spec rule? If so, is it labeled `expectation-change`, and is each change justified?
+2. **Expectations.** Does it change or remove any decided litmus outcome, mode, program, expected error, run result, or spec rule? If so, is it labeled `expectation-change`, and is each change justified? `cargo xtask pr-check` lists what it finds, but read the diff too.
 3. **Trust.** Does it add an axiom, a trusted declaration, an unchecked path, or a dependency the trust model does not list?
 4. **Evidence.** Do the cited examples actually exercise the rules they cite? A citation on an example that would pass anyway is not coverage.
 

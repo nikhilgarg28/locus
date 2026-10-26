@@ -1,7 +1,12 @@
 # The owner reviews changes to what Locus means and to how work on it is done.
 /VISION.md @nikhilgarg28
 /AGENTS.md @nikhilgarg28
+/CLAUDE.md @nikhilgarg28
 /spec/ @nikhilgarg28
 /design/ @nikhilgarg28
 /litmus/ @nikhilgarg28
 /.github/ @nikhilgarg28
+# The tooling and instructions that enforce the process.
+/xtask/ @nikhilgarg28
+/.cargo/ @nikhilgarg28
+/.claude/ @nikhilgarg28

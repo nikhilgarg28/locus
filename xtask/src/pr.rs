@@ -7,7 +7,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
-use crate::litmus::{self, Outcome};
+use crate::lexer;
+use crate::litmus::{self, ErrorExpectation, Outcome};
 use crate::report::Report;
 use crate::spec;
 
@@ -143,8 +144,9 @@ fn decided(path: &str) -> Option<Outcome> {
         .filter(|o| o.is_decided())
 }
 
-/// Removed or changed outcomes, error codes and run results of decided
-/// litmus examples. Adding expectations is not a change that needs declaring.
+/// Removed or changed outcomes, modes, programs, errors and run results of
+/// decided litmus examples. Adding expectations, or a code to an error that
+/// gave only a reason, is not a change that needs declaring.
 pub fn expectation_changes(
     changes: &[Change],
     base: &dyn Fn(&str) -> Option<String>,
@@ -201,24 +203,55 @@ fn compare(
     let (Some(old), Some(new)) = (parse(from, base(from)), parse(to, head(to))) else {
         return;
     };
-    if new.errors.len() < old.errors.len() {
+    if old.mode != new.mode {
         found.push(format!(
-            "{to}: expects fewer errors ({} → {})",
-            old.errors.len(),
-            new.errors.len()
+            "{to}: changes the mode from {} to {}",
+            old.mode.as_str(),
+            new.mode.as_str()
         ));
     }
-    let mut new_codes: Vec<&str> = new
+    let (old_lexed, new_lexed) = (lexer::lex(&old.source), lexer::lex(&new.source));
+    let same_program = old_lexed
+        .tokens
+        .iter()
+        .map(|t| t.text)
+        .eq(new_lexed.tokens.iter().map(|t| t.text));
+    if !same_program {
+        found.push(format!(
+            "{to}: changes the program, which can change what the example tests"
+        ));
+    }
+    // With the program unchanged, an error is identified by the first token on
+    // its line, so that moving lines by editing comments changes nothing.
+    let anchor = |lexed: &lexer::Lexed, line: usize| match lexed
+        .tokens
+        .iter()
+        .position(|t| t.line == line)
+    {
+        Some(index) if same_program => Anchor::Token(index),
+        _ => Anchor::Line(line),
+    };
+    let mut unmatched: Vec<(Anchor, &ErrorExpectation)> = new
         .errors
         .iter()
-        .filter_map(|e| e.code.as_deref())
+        .map(|e| (anchor(&new_lexed, e.target), e))
         .collect();
-    for code in old.errors.iter().filter_map(|e| e.code.as_deref()) {
-        match new_codes.iter().position(|c| *c == code) {
+    for error in &old.errors {
+        let at = anchor(&old_lexed, error.target);
+        let kept = unmatched
+            .iter()
+            .position(|(a, e)| *a == at && preserves(error, e));
+        match kept {
             Some(i) => {
-                new_codes.remove(i);
+                unmatched.remove(i);
             }
-            None => found.push(format!("{to}: no longer expects {code}")),
+            None => found.push(match &error.code {
+                Some(code) => format!("{to}: no longer expects {code} at line {}", error.target),
+                None => format!(
+                    "{to}: no longer expects the error at line {}: {}",
+                    error.target, error.text
+                ),
+            }),
         }
     }
     let new_runs: BTreeSet<(&str, &str)> = new
@@ -233,6 +266,25 @@ fn compare(
                 run.call, run.expected
             ));
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Anchor {
+    Token(usize),
+    Line(usize),
+}
+
+/// Whether `new` still expects what `old` did. A coded error keeps its code;
+/// its text may be reworded. An error with only a reason may gain a code, or
+/// keep its reason.
+fn preserves(old: &ErrorExpectation, new: &ErrorExpectation) -> bool {
+    let words = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    match (&old.code, &new.code) {
+        (Some(old), Some(new)) => old == new,
+        (Some(_), None) => false,
+        (None, Some(_)) => true,
+        (None, None) => words(&old.text) == words(&new.text),
     }
 }
 
@@ -294,66 +346,96 @@ mod tests {
     #[test]
     fn finds_weakened_expectations() {
         let header = "//~ question: q\n//~ spec: a.b\n";
-        let base: BTreeMap<&str, String> = [
+        let pairs: &[(&str, &str, Option<&str>, Option<&str>)] = &[
+            // Deleted, and moved to another outcome.
+            ("gone.reject", "gone.reject", Some("x //~ error: e\n"), None),
             (
-                "litmus/t/gone.reject.lc",
-                format!("{header}x //~ error: e\n"),
+                "flip.accept",
+                "flip.reject",
+                Some("x\n"),
+                Some("x //~ error: e\n"),
             ),
-            ("litmus/t/flip.accept.lc", format!("{header}x\n")),
+            // A code changed; a coded error's text may be reworded.
             (
-                "litmus/t/codes.reject.lc",
-                format!("{header}x //~ error[L0001]: e\ny //~ error[L0002]: e\n"),
-            ),
-            (
-                "litmus/t/runs.accept.lc",
-                format!("{header}x\n//~ run: f(1) => 2\n//~ run: f(2) => 3\n"),
-            ),
-            (
-                "litmus/t/refined.reject.lc",
-                format!("{header}x //~ error: e\n"),
+                "codes.reject",
+                "codes.reject",
+                Some("x //~ error[L0001]: e\ny //~ error[L0002]: e\n"),
+                Some("x //~ error[L0001]: reworded\ny //~ error[L0003]: e\n"),
             ),
             (
-                "litmus/t/q.open.lc",
-                "//~ question: q\n//~ issue: #1\n".to_string(),
+                "runs.accept",
+                "runs.accept",
+                Some("x\n//~ run: f(1) => 2\n//~ run: f(2) => 3\n"),
+                Some("x\n//~ run: f(1) => 2\n//~ run: f(2) => 4\n//~ run: f(3) => 4\n"),
             ),
-        ]
-        .into_iter()
-        .collect();
-        let head: BTreeMap<&str, String> = [
+            // Gaining a code is a refinement.
             (
-                "litmus/t/flip.reject.lc",
-                format!("{header}x //~ error: e\n"),
+                "refined.reject",
+                "refined.reject",
+                Some("x //~ error: e\n"),
+                Some("x //~ error[L0001]: e\n"),
+            ),
+            // Without a code, the reason is the expectation.
+            (
+                "reason.reject",
+                "reason.reject",
+                Some("x //~ error: the sum may overflow\n"),
+                Some("x //~ error: something else\n"),
+            ),
+            // Comments may move lines; the error stays on the same code.
+            (
+                "moved.reject",
+                "moved.reject",
+                Some("x //~ error: e\n"),
+                Some("// note\n\nx //~ error: e\n"),
             ),
             (
-                "litmus/t/codes.reject.lc",
-                format!("{header}x //~ error[L0001]: e\ny //~ error[L0003]: e\n"),
+                "retarget.reject",
+                "retarget.reject",
+                Some("x\ny //~ error: e\n"),
+                Some("x //~ error: e\ny\n"),
             ),
             (
-                "litmus/t/runs.accept.lc",
-                format!("{header}x\n//~ run: f(1) => 2\n//~ run: f(2) => 4\n//~ run: f(3) => 4\n"),
+                "code.accept",
+                "code.accept",
+                Some("fn f() {}\n"),
+                Some("fn f() { 1 }\n"),
             ),
             (
-                "litmus/t/refined.reject.lc",
-                format!("{header}x //~ error[L0001]: e\n"),
+                "comment.accept",
+                "comment.accept",
+                Some("fn f() {} // old\n"),
+                Some("fn f() {} // new\n"),
             ),
-            ("litmus/t/q.reject.lc", format!("{header}x //~ error: e\n")),
-        ]
-        .into_iter()
-        .collect();
-        let changes = [
-            Change::Deleted("litmus/t/gone.reject.lc".into()),
-            Change::Renamed {
-                from: "litmus/t/flip.accept.lc".into(),
-                to: "litmus/t/flip.reject.lc".into(),
-            },
-            Change::Modified("litmus/t/codes.reject.lc".into()),
-            Change::Modified("litmus/t/runs.accept.lc".into()),
-            Change::Modified("litmus/t/refined.reject.lc".into()),
-            Change::Renamed {
-                from: "litmus/t/q.open.lc".into(),
-                to: "litmus/t/q.reject.lc".into(),
-            },
+            (
+                "mode.accept",
+                "mode.accept",
+                Some("//~ mode: export\nx\n"),
+                Some("x\n"),
+            ),
+            ("q.open", "q.reject", Some("x\n"), Some("x //~ error: e\n")),
         ];
+        let path = |name: &str| format!("litmus/t/{name}.lc");
+        let text = |body: &str| format!("{header}{body}");
+        let base: BTreeMap<String, String> = pairs
+            .iter()
+            .filter_map(|(from, _, old, _)| Some((path(from), text(old.as_ref()?))))
+            .collect();
+        let head: BTreeMap<String, String> = pairs
+            .iter()
+            .filter_map(|(_, to, _, new)| Some((path(to), text(new.as_ref()?))))
+            .collect();
+        let changes: Vec<Change> = pairs
+            .iter()
+            .map(|(from, to, _, new)| match (from == to, new) {
+                (_, None) => Change::Deleted(path(from)),
+                (true, _) => Change::Modified(path(from)),
+                (false, _) => Change::Renamed {
+                    from: path(from),
+                    to: path(to),
+                },
+            })
+            .collect();
         let base = |p: &str| base.get(p).cloned();
         let head = |p: &str| head.get(p).cloned();
         assert_eq!(
@@ -361,8 +443,12 @@ mod tests {
             [
                 "deletes the decided example litmus/t/gone.reject.lc",
                 "moves litmus/t/flip.accept.lc from accept to reject: litmus/t/flip.reject.lc",
-                "litmus/t/codes.reject.lc: no longer expects L0002",
+                "litmus/t/codes.reject.lc: no longer expects L0002 at line 4",
                 "litmus/t/runs.accept.lc: removes or changes `run: f(2) => 3`",
+                "litmus/t/reason.reject.lc: no longer expects the error at line 3: the sum may overflow",
+                "litmus/t/retarget.reject.lc: no longer expects the error at line 4: e",
+                "litmus/t/code.accept.lc: changes the program, which can change what the example tests",
+                "litmus/t/mode.accept.lc: changes the mode from export to build",
             ]
         );
     }

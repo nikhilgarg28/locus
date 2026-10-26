@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use crate::diagnostics;
+use crate::lexer;
 use crate::repo::Repo;
 use crate::report::Report;
 use crate::spec;
@@ -39,6 +40,30 @@ impl Outcome {
     }
 }
 
+/// The mode an example is checked in: built by Locus, or exported to Rust.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mode {
+    Build,
+    Export,
+}
+
+impl Mode {
+    pub fn parse(s: &str) -> Option<Mode> {
+        match s {
+            "build" => Some(Mode::Build),
+            "export" => Some(Mode::Export),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Mode::Build => "build",
+            Mode::Export => "export",
+        }
+    }
+}
+
 pub struct Example {
     pub path: String,
     pub topic: String,
@@ -49,6 +74,7 @@ pub struct Example {
     pub specs: Vec<(usize, String)>,
     pub issue: Option<u32>,
     pub rfc: Option<String>,
+    pub mode: Mode,
     pub errors: Vec<ErrorExpectation>,
     pub runs: Vec<RunExpectation>,
     pub source: String,
@@ -146,25 +172,20 @@ pub fn parse(
         specs: Vec::new(),
         issue: None,
         rfc: None,
+        mode: Mode::Build,
         errors: Vec::new(),
         runs: Vec::new(),
         source: text.to_string(),
     };
-    let mut in_header = true;
-    for (index, line) in text.lines().enumerate() {
-        let number = index + 1;
-        let trimmed = line.trim_start();
-        let Some(at) = line.find("//~") else {
-            if !trimmed.is_empty() && !trimmed.starts_with("//") {
-                in_header = false;
-            }
+    let mut mode_given = false;
+    let lexed = lexer::lex(text);
+    for comment in &lexed.comments {
+        let Some(after) = comment.text.strip_prefix("//~") else {
             continue;
         };
-        let trailing = !line[..at].trim().is_empty();
-        if trailing {
-            in_header = false;
-        }
-        let after = &line[at + 3..];
+        let number = comment.line;
+        let trailing = comment.after_code;
+        let in_header = comment.in_header;
         let carets = after.chars().take_while(|c| *c == '^').count();
         let directive = after[carets..].trim();
         let (key, value) = match directive.split_once(':') {
@@ -231,7 +252,7 @@ pub fn parse(
                 }
                 _ => fail("expected `//~ run: <call> => <value>` or `=> panic`"),
             },
-            "question" | "spec" | "issue" | "rfc" if !in_header => {
+            "question" | "spec" | "issue" | "rfc" | "mode" if !in_header => {
                 fail("file-level annotations belong in the header comment, before any code");
             }
             "question" => {
@@ -264,8 +285,16 @@ pub fn parse(
                     fail("expected `//~ rfc: NNNN`");
                 }
             }
+            "mode" => match Mode::parse(value) {
+                Some(_) if mode_given => fail("an example has one mode"),
+                Some(mode) => {
+                    example.mode = mode;
+                    mode_given = true;
+                }
+                None => fail("expected `//~ mode: build` or `//~ mode: export`"),
+            },
             _ => fail(&format!(
-                "unknown annotation `{key}`; expected question, spec, issue, rfc, error or run"
+                "unknown annotation `{key}`; expected question, spec, issue, rfc, mode, error or run"
             )),
         }
     }
@@ -365,6 +394,49 @@ fn f(x: u8) -> u8 {
     }
 
     #[test]
+    fn parses_the_mode() {
+        let header = "//~ question: q\n//~ spec: a.b\n";
+        let (example, messages) = parse_one("litmus/t/a.accept.lc", header);
+        assert!(messages.is_empty(), "{messages:?}");
+        assert_eq!(example.mode, Mode::Build);
+        let text = format!("{header}//~ mode: export\n");
+        let (example, messages) = parse_one("litmus/t/a.accept.lc", &text);
+        assert!(messages.is_empty(), "{messages:?}");
+        assert_eq!(example.mode, Mode::Export);
+        let text = format!("{header}//~ mode: export\n//~ mode: build\n//~ mode: ship\n");
+        let (_, messages) = parse_one("litmus/t/a.accept.lc", &text);
+        let path = "litmus/t/a.accept.lc";
+        assert_eq!(
+            messages,
+            [
+                format!("error: {path}:4: an example has one mode"),
+                format!("error: {path}:5: expected `//~ mode: build` or `//~ mode: export`"),
+            ]
+        );
+    }
+
+    #[test]
+    fn reads_annotations_only_from_comments() {
+        let text = "\
+//~ question: Are annotations read from strings?
+//~ spec: a.b
+fn f() -> &'static str {
+    let _ = \"//~ error: inside a string\";
+    /* //~ error: inside a block comment */
+    \"x\" //~ run: not here
+}
+";
+        let (example, messages) = parse_one("litmus/t/a.accept.lc", text);
+        assert_eq!(
+            messages,
+            [
+                "error: litmus/t/a.accept.lc:6: only error annotations can follow code on the same line"
+            ]
+        );
+        assert!(example.errors.is_empty());
+    }
+
+    #[test]
     fn run_expectations_belong_to_accepted_examples() {
         let header = "//~ question: q\n//~ spec: a.b\n";
         let accept = format!("{header}fn f() {{}}\n//~ run: f(1) => 2\n//~ run: f(255) => panic\n");
@@ -447,7 +519,7 @@ fn g() {} //~ run: g() => 1
                 ),
                 format!("error: {path}:8: expected `//~ run: <call> => <value>` or `=> panic`"),
                 format!(
-                    "error: {path}:9: unknown annotation `frobnicate`; expected question, spec, issue, rfc, error or run"
+                    "error: {path}:9: unknown annotation `frobnicate`; expected question, spec, issue, rfc, mode, error or run"
                 ),
                 format!(
                     "error: {path}:10: only error annotations can follow code on the same line"

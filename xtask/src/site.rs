@@ -17,7 +17,7 @@ use mdbook_driver::MDBook;
 use mdbook_driver::config::Config;
 
 use crate::check::{self, Checked};
-use crate::litmus::{Example, Outcome};
+use crate::litmus::{Example, Mode, Outcome};
 use crate::markdown;
 use crate::repo::{self, Repo};
 use crate::report::Report;
@@ -182,7 +182,7 @@ fn stage(repo: &Repo, checked: &Checked, stamp: &Stamp) -> Result<Vec<(String, S
             text = plain_rust_fences(&text);
         }
         if checked.spec.chapters.iter().any(|c| &c.path == from) {
-            text = render_rules(&text, to, &checked.examples);
+            text = render_rules(&text, to, checked);
         }
         text = match from.as_str() {
             "site/intro.md" => stamp.fill(&text),
@@ -273,8 +273,9 @@ fn plain_rust_fences(text: &str) -> String {
     out
 }
 
-/// Replaces each `r[id]` marker with an anchor and the examples citing it.
-fn render_rules(text: &str, page: &str, examples: &[Example]) -> String {
+/// Replaces each `r[id]` marker with an anchor, the RFC that introduced the
+/// rule and its status unless accepted, and the examples citing it.
+fn render_rules(text: &str, page: &str, checked: &Checked) -> String {
     let mut out = String::with_capacity(text.len());
     for line in markdown::lines(text) {
         let id = match line.in_fence {
@@ -286,7 +287,8 @@ fn render_rules(text: &str, page: &str, examples: &[Example]) -> String {
             out.push('\n');
             continue;
         };
-        let citing: Vec<String> = examples
+        let citing: Vec<String> = checked
+            .examples
             .iter()
             .filter(|e| e.outcome.is_decided() && e.specs.iter().any(|(_, s)| s == id))
             .map(|e| {
@@ -300,9 +302,26 @@ fn render_rules(text: &str, page: &str, examples: &[Example]) -> String {
                 )
             })
             .collect();
+        let origin = match checked.introduced_by(id) {
+            Some(rfc) => {
+                let href = repo::relative(page, &rfc.path.replace(".md", ".html"));
+                let status = match rfc.status.binds() {
+                    true => String::new(),
+                    false => format!(
+                        " <span class=\"rule-status\">{}</span>",
+                        rfc.status.as_str()
+                    ),
+                };
+                format!(
+                    "<a class=\"rule-rfc\" href=\"{href}\">RFC {}</a>{status}",
+                    rfc.number
+                )
+            }
+            None => String::new(),
+        };
         out.push_str(&format!(
             "<div class=\"rule\" id=\"r-{id}\"><a class=\"rule-id\" href=\"#r-{id}\">{id}</a>\
-             <span class=\"rule-examples\">{}</span></div>\n\n",
+             {origin}<span class=\"rule-examples\">{}</span></div>\n\n",
             citing.join(" ")
         ));
     }
@@ -348,11 +367,19 @@ fn topic_page_text(topic: &str, examples: &[&Example], checked: &Checked) -> Str
         if let Some(issue) = e.issue {
             facts.push(format!("issue [#{issue}]({REPOSITORY}/issues/{issue})"));
         }
+        if e.mode == Mode::Export {
+            facts.push("export mode".to_string());
+        }
         if let Some(number) = &e.rfc {
             match checked.rfcs.iter().find(|r| &r.number == number) {
-                Some(rfc) => facts.push(format!(
+                Some(rfc) if rfc.status.binds() => facts.push(format!(
                     "[RFC {number}]({})",
                     repo::relative(&page, &rfc.path)
+                )),
+                Some(rfc) => facts.push(format!(
+                    "[RFC {number}]({}), {}",
+                    repo::relative(&page, &rfc.path),
+                    rfc.status.as_str()
                 )),
                 None => facts.push(format!("RFC {number}")),
             }
@@ -552,20 +579,30 @@ mod tests {
 
     #[test]
     fn renders_rule_markers_with_their_examples() {
+        let chapter = "# E\n\nr[erasure.tag]\nThe tag is kept.\n```\nr[erasure.tag]\n```\n";
+        let repo = Repo::from_files(&[
+            (
+                "spec/README.md",
+                "# Specification\n\n## Chapters\n\n- [E](erasure.md)\n",
+            ),
+            ("spec/erasure.md", chapter),
+            ("design/TRUST.md", "# Trust model\n"),
+            (
+                "design/rfcs/0002-tags.md",
+                "# RFC 0002: Tags\n\n- **Status:** proposed\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n| `erasure.tag` | |\n",
+            ),
+            (
+                "litmus/tag/kept.accept.lc",
+                "//~ question: q\n//~ spec: erasure.tag\n",
+            ),
+        ]);
         let mut report = Report::default();
-        let example = crate::litmus::parse(
-            "litmus/tag/kept.accept.lc",
-            "tag",
-            "kept",
-            Outcome::Accept,
-            "//~ question: q\n//~ spec: erasure.tag\n",
-            &mut report,
-        );
-        let text = "# E\n\nr[erasure.tag]\nThe tag is kept.\n```\nr[erasure.tag]\n```\n";
-        let out = render_rules(text, "spec/erasure.md", &[example]);
+        let checked = check::check_repo(&repo, &mut report);
+        let out = render_rules(chapter, "spec/erasure.md", &checked);
         assert_eq!(
             out,
             "# E\n\n<div class=\"rule\" id=\"r-erasure.tag\"><a class=\"rule-id\" href=\"#r-erasure.tag\">erasure.tag</a>\
+             <a class=\"rule-rfc\" href=\"../design/rfcs/0002-tags.html\">RFC 0002</a> <span class=\"rule-status\">proposed</span>\
              <span class=\"rule-examples\"><a class=\"accept\" href=\"../litmus/tag/index.html#kept\">tag/kept</a></span></div>\n\n\
              The tag is kept.\n```\nr[erasure.tag]\n```\n"
         );

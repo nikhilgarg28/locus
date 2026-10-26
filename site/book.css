@@ -30,3 +30,16 @@
 .rule-examples a.reject::before {
     content: "✗ ";
 }
+
+.rule-rfc {
+    font-family: var(--mono-font, monospace);
+}
+
+.rule-status {
+    padding: 0.1em 0.45em;
+    border-radius: 4px;
+    border: 1px solid var(--searchbar-border-color, currentColor);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.85em;
+}

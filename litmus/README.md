@@ -20,7 +20,16 @@ A directory holds one topic: variants of one idea that sit on either side of a l
 | `reject` | The program must be rejected, with each error its annotations give |
 | `open` | Not decided. The file links the `decision-needed` issue that will decide it. |
 
-`accept` and `reject` examples are *decided*. Deciding an open question renames its file, for example from `interior-mutability.open.lc` to `interior-mutability.reject.lc`. Changing a decided outcome, or deleting a decided example, is an [expectation change](../AGENTS.md#rules).
+`accept` and `reject` examples are *decided*. Deciding an open question renames its file, for example from `interior-mutability.open.lc` to `interior-mutability.reject.lc`.
+
+These changes to a decided example are [expectation changes](../AGENTS.md#rules):
+- changing its outcome, or deleting it;
+- changing its mode;
+- changing its program: anything but comments and whitespace;
+- removing or changing an expected error: its line, its code, or, for an error without a code, its reason;
+- removing or changing a `run` expectation.
+
+Adding an expectation, giving a code to an error that had only a reason, rewording a coded error's text, and editing plain comments or the question are ordinary changes. `cargo xtask pr-check` finds expectation changes, and CI runs it twice: as the branch defines it, and as its base does, so that a PR cannot weaken the guard that checks it.
 
 ## Annotations
 
@@ -55,6 +64,7 @@ fn inc(x: u8) -> u8 {
 | `//~ spec: <id>, <id>` | Header; required when decided | The spec rules the example tests |
 | `//~ issue: #<n>` | Header; required when open | The issue that will decide it |
 | `//~ rfc: <nnnn>` | Header, optional | The RFC that introduced it |
+| `//~ mode: build` or `//~ mode: export` | Header, optional | The mode the example is checked in: built by Locus, the default, or exported to Rust |
 | `//~ error[Lnnnn]: <text>` | After code on a line | An error with this code must be reported on this line |
 | `//~^ error[Lnnnn]: <text>` | Its own line | The same, for the line above; each `^` moves up one line |
 | `//~ error: <reason>` | As above | An error without a code yet; the reason says why |
@@ -62,9 +72,12 @@ fn inc(x: u8) -> u8 {
 
 - Error codes must match exactly. The text after the code needs only to appear in the compiler's message, so rewording a message does not change the language.
 - Until error codes exist, a rejected example gives the reason in words. Adding a code later is an ordinary change; changing or removing one is an expectation change.
+- Annotations are read only from line comments: `//~` inside a string or a block comment is not one.
 - Results are checked through calls rather than at a line, because a line can run many times. Each `run` is checked in the interpreter and in the generated Rust. A rejected program never runs, so only accepted examples have `run` lines.
 - Open examples may carry proposed annotations. They are not enforced until the example is decided.
 
 ## Checks
 
-`cargo xtask check` validates names, annotations, citations, and error codes. Each decided example must cite a rule that exists, each error code must have a [page](../diagnostics/README.md), and two examples in a topic cannot ask the same question. Running the examples starts when the compiler does.
+`cargo xtask check` validates names, annotations, citations, and error codes. Each decided example must cite a rule that exists, an `rfc` annotation must name an RFC that exists, each error code must have a [page](../diagnostics/README.md), and two examples in a topic cannot ask the same question. Running the examples starts when the compiler does.
+
+**What passing means, once the compiler runs them.** A rejected example passes only when the compiler reports each expected error: its code, or, until codes exist, an error on that line for that reason. A diagnostic saying that a feature is not supported yet never satisfies a rejected example, so that a missing feature cannot pass as a soundness test. An example that uses something the compiler does not support yet is reported as unsupported, neither passing nor failing.

@@ -6,6 +6,7 @@ use crate::litmus::is_kebab;
 use crate::markdown;
 use crate::repo::Repo;
 use crate::report::Report;
+use crate::spec;
 
 pub const TEMPLATE: &str = "design/rfcs/0000-template.md";
 
@@ -46,6 +47,29 @@ pub struct Rfc {
     pub number: String,
     pub title: String,
     pub status: Status,
+    /// The rows of its `## Rules` table: the rules it adds or changes.
+    pub rules: Vec<RuleRow>,
+}
+
+/// A row of an RFC's `## Rules` table: a rule ID and the examples that test it.
+pub struct RuleRow {
+    pub line: usize,
+    pub id: String,
+    /// Paths under `litmus/`, as the row gives them.
+    pub examples: Vec<String>,
+}
+
+impl Status {
+    /// Whether the RFC's rules bind.
+    pub fn binds(self) -> bool {
+        self == Status::Accepted
+    }
+
+    /// Whether the RFC can still change, so that its rules table must match
+    /// the spec and the examples.
+    pub fn is_open(self) -> bool {
+        matches!(self, Status::Draft | Status::Proposed)
+    }
 }
 
 pub fn check(repo: &Repo, report: &mut Report) -> Vec<Rfc> {
@@ -111,11 +135,17 @@ pub fn check(repo: &Repo, report: &mut Report) -> Vec<Rfc> {
                 ),
             }
         }
+        let rules = if path == TEMPLATE {
+            Vec::new()
+        } else {
+            rules_table(path, text, report)
+        };
         rfcs.push(Rfc {
             path: path.clone(),
             number: number.to_string(),
             title: title.to_string(),
             status,
+            rules,
         });
     }
     for (path, line, by) in superseded_by {
@@ -127,6 +157,58 @@ pub fn check(repo: &Repo, report: &mut Report) -> Vec<Rfc> {
         }
     }
     rfcs
+}
+
+/// The rows of the table in the `## Rules` section. The first cell of each
+/// row is a rule ID in backticks; the second lists example paths in backticks.
+fn rules_table(path: &str, text: &str, report: &mut Report) -> Vec<RuleRow> {
+    let mut rows = Vec::new();
+    let mut in_section = false;
+    for line in markdown::lines(text) {
+        if line.in_fence {
+            continue;
+        }
+        if line.text.starts_with("## ") {
+            in_section = line.text.trim() == "## Rules";
+            continue;
+        }
+        let row = line.text.trim();
+        if !in_section || !row.starts_with('|') {
+            continue;
+        }
+        let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();
+        let first = cells.first().copied().unwrap_or_default();
+        if first == "Rule" || first.starts_with("---") {
+            continue;
+        }
+        let Some(id) = first
+            .strip_prefix('`')
+            .and_then(|c| c.strip_suffix('`'))
+            .filter(|id| spec::is_valid_id(id))
+        else {
+            report.error(
+                path,
+                Some(line.number),
+                "a row of the rules table starts with a rule ID in backticks",
+            );
+            continue;
+        };
+        let examples = cells
+            .get(1)
+            .map(|cell| backticked(cell).map(|p| p.to_string()).collect())
+            .unwrap_or_default();
+        rows.push(RuleRow {
+            line: line.number,
+            id: id.to_string(),
+            examples,
+        });
+    }
+    rows
+}
+
+/// The spans of text between pairs of backticks.
+fn backticked(text: &str) -> impl Iterator<Item = &str> {
+    text.split('`').skip(1).step_by(2)
 }
 
 fn parse_path(path: &str) -> Option<&str> {
@@ -172,6 +254,7 @@ mod tests {
         let mut report = Report::default();
         let rfcs = check(&repo, &mut report);
         let numbers: Vec<&str> = rfcs.iter().map(|r| r.number.as_str()).collect();
+        assert!(rfcs.iter().all(|r| r.rules.is_empty()));
         assert_eq!(numbers, ["0000", "0001", "0001", "0003"]);
         assert_eq!(
             report.messages(),
@@ -181,6 +264,62 @@ mod tests {
                 "error: design/rfcs/0004-y.md:1: the RFC starts with `# RFC 0004: <title>`",
                 "error: design/rfcs/12-z.md: expected design/rfcs/NNNN-slug.md, with a four-digit number and a kebab-case slug",
                 "error: design/rfcs/0003-old.md:4: `RFC 0009` is not an existing RFC",
+            ]
+        );
+    }
+
+    #[test]
+    fn reads_the_rules_table() {
+        let text = "\
+# RFC 0001: T
+
+- **Status:** proposed
+
+## Design
+
+| Rule | Examples |
+|---|---|
+| `not.this-table` | `t/a.accept.lc` |
+
+## Rules
+
+| Rule | Examples |
+|---|---|
+| `erasure.tag.kept` | `tag/kept.accept.lc`, `litmus/tag/dropped.reject.lc` |
+| `erasure.lonely` | |
+| Erasure | `tag/kept.accept.lc` |
+
+## Interactions
+";
+        let repo = Repo::from_files(&[("design/rfcs/0001-t.md", text)]);
+        let mut report = Report::default();
+        let rfcs = check(&repo, &mut report);
+        assert_eq!(
+            report.messages(),
+            [
+                "error: design/rfcs/0001-t.md:17: a row of the rules table starts with a rule ID in backticks"
+            ]
+        );
+        let rows: Vec<(usize, &str, Vec<&str>)> = rfcs[0]
+            .rules
+            .iter()
+            .map(|r| {
+                (
+                    r.line,
+                    r.id.as_str(),
+                    r.examples.iter().map(String::as_str).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (
+                    15,
+                    "erasure.tag.kept",
+                    vec!["tag/kept.accept.lc", "litmus/tag/dropped.reject.lc"]
+                ),
+                (16, "erasure.lonely", vec![]),
             ]
         );
     }

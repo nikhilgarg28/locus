@@ -23,6 +23,8 @@ Each directory's README explains its format. Before editing files in a directory
 
 Read this file, the task (its issue or the request), and then only what the task touches: the spec chapters and rules it cites, the RFCs those rules came from, the litmus examples for them, and the README of each directory you edit. Do not read the whole repository to get started.
 
+Start from `cargo xtask context <rule-id>` for each rule the task cites. It prints the rule, the RFC that introduced it and whether that RFC is accepted, the examples on either side of it, the open examples that cite it, and the trust entries its RFC added.
+
 ## Every PR is one of three kinds
 
 - **Design**: RFCs, spec rules, litmus examples, the vision, and the trust model. No compiler code.
@@ -33,7 +35,7 @@ Tooling, documentation, and process changes that change no semantics are ordinar
 
 ## Rules
 
-1. **Only the owner decides what Locus means.** When you meet a question the spec and accepted RFCs do not answer, do not choose the convenient answer. Open a `decision-needed` issue that states the question, what it blocks, and the options, add an `.open` litmus example if one helps, and stop that part of the work.
+1. **Only the owner decides what Locus means.** When you meet a question the spec and accepted RFCs do not answer, do not choose the convenient answer. Open a `decision-needed` issue that states the question, what it blocks, and the options, add an `.open` litmus example if one helps, and stop that part of the work. Do the same when a spec rule, its RFC, and a decided example disagree: none of them wins ([spec/README.md](spec/README.md#when-sources-disagree)).
 2. **An RFC binds only once accepted.** Write new RFCs as `proposed`. Set an RFC to `accepted` or `rejected` only when the owner has decided and asked you to record it. The owner's merge is the acceptance.
 3. **Do not weaken decided expectations.** Do not change a decided litmus outcome, remove or change an expected error code or run result, delete a decided example, or remove a spec rule unless the owner asked for that change. Such a PR must carry the `expectation-change` label and justify each change in its description; CI rejects it otherwise.
 4. **Every spec rule has examples.** A rule (`r[id]`) needs at least one decided litmus example citing it, and a rule about what is allowed should have an accepted and a rejected example on either side of its line. CI enforces the first and warns about the second.
@@ -46,6 +48,7 @@ Tooling, documentation, and process changes that change no semantics are ordinar
 
 ```sh
 cargo xtask check                          # every repository check; run before each PR
+cargo xtask context <rule-id>              # one rule, with its RFC, status, examples, and trust entries
 cargo xtask pr-check --base origin/main    # the PR guards that CI runs
 cargo xtask site                           # build the website into target/site
 cargo fmt --all

@@ -1,6 +1,8 @@
 # Specification
 
-The specification defines Locus. It contains only accepted semantics: each rule arrives through an accepted [RFC](../design/rfcs/README.md), and the rule, not the RFC, is the authority on what it says. Rationale and rejected alternatives stay in the RFCs.
+The specification defines Locus. Each rule arrives through an [RFC](../design/rfcs/README.md), and the rule, not the RFC, is the authority on what it says. Rationale and rejected alternatives stay in the RFCs.
+
+On `main`, the specification contains only accepted semantics. A design PR adds the rules its RFC proposes here, so that they are checked and reviewed with their examples; they bind only once the RFC is accepted, which the owner's merge does.
 
 ## Rules
 
@@ -16,6 +18,16 @@ so a match on it behaves the same at run time.
 - A rule ID is a dotted name of lowercase, hyphenated words, with at least two parts. Name rules by what they are about, not by where they sit; an ID stays the same when its paragraph moves.
 - IDs are permanent. A rule that is removed leaves its ID unused forever, and removing one is an [expectation change](../AGENTS.md#rules).
 - Unmarked text is explanation, and needs no tests.
+
+## Provenance and status
+
+Every rule is listed in the `## Rules` table of the RFC that introduced it, and of each later RFC that changes it. `cargo xtask check` fails on a rule that no RFC lists, and, for an RFC still being decided, on a row naming a rule that does not exist or an example that does not cite it. A rule's status is its RFC's: accepted if an accepted RFC lists it, otherwise proposed or draft. The website shows each rule's RFC, and its status unless it is accepted.
+
+`cargo xtask context <id>` prints what the repository says about a rule: its text, its RFC and status, its examples, the open examples that cite it, and the trust entries its RFC added. Given a prefix such as `contracts`, it prints every rule under it.
+
+## When sources disagree
+
+A rule is the authority on what it says; an RFC records why; a decided litmus example is evidence of what a rule means. When a rule and a decided example disagree, or a rule and its accepted RFC do, neither wins: the disagreement is a defect. Open a `decision-needed` issue that names both, and stop the work that depends on it until the owner decides.
 
 ## Examples and tests
 

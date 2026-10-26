@@ -20,6 +20,9 @@ pub struct Rule {
     pub id: String,
     pub path: String,
     pub line: usize,
+    /// The paragraph the marker governs, up to the next blank line, heading or
+    /// marker outside a code block.
+    pub text: String,
 }
 
 pub struct Spec {
@@ -185,10 +188,20 @@ pub fn rules(path: &str, text: &str, report: &mut Report) -> Vec<Rule> {
                 format!("rule `{id}` must be followed by the text it marks"),
             );
         }
+        let body: Vec<&str> = lines[index + 1..]
+            .iter()
+            .skip_while(|l| l.text.trim().is_empty())
+            .take_while(|l| {
+                let text = l.text.trim();
+                l.in_fence || !(text.is_empty() || text.starts_with('#') || marker(text).is_some())
+            })
+            .map(|l| l.text)
+            .collect();
         out.push(Rule {
             id: id.to_string(),
             path: path.to_string(),
             line: line.number,
+            text: body.join("\n"),
         });
     }
     out
@@ -250,6 +263,7 @@ mod tests {
         assert_eq!(spec.rules.len(), 1);
         assert_eq!(spec.rules[0].id, "erasure.option.tag");
         assert_eq!(spec.rules[0].line, 3);
+        assert_eq!(spec.rules[0].text, "The tag is kept.");
     }
 
     #[test]
