@@ -707,13 +707,15 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 16. **Validation.** In both modes, Locus compares the runtime program's items and typed bodies with the checking program's, for everything the facts describe, and fails on any difference. Export mode keeps erasure textual, so its output stays readable.
 17. **Interfaces and manifests.** Each checked crate gets an interface that its dependents are checked against, and each result a manifest of what it relies on.
 18. **Acceptance waits for the spikes** of build mode's lowering and of the Cargo graph. A semantic slice, verifying one mutable function with a reborrow and a destructor end to end, goes with the RFC for the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)).
+19. **One library, with its macros' expansions selected by a `cfg`** that only the checking compile sets, rather than two versions of the library swapped per program. The Cargo spike found it the simplest way that works across crates; two libraries need every dependency's checking metadata kept and passed separately.
+20. **Ghost bindings recorded both ways** for expansions that rustc performs: a table of lexical scopes, consulted by position, and a local `macro_rules!` dispatch, resolved by hygiene. Each alone failed a case in the spike, and both together passed every one.
+21. **A proof hole inside another macro's input is rustc's error,** with Locus's suggestion to write `prove!(...)`, rather than a hole spelled as a macro.
 
 **Still for the owner:**
 1. `.rs` files may not name logical items, as proposed.
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
 3. Traits among Locus's names also have no associated functions or constants (an extension of 10 above).
 4. Until [#9](https://github.com/nikhilgarg28/locus/issues/9) decides more, an exported crate whose checked code tests target properties other than pointer width must declare its configurations.
-5. **One library, with its macros' expansions selected by a `cfg`,** rather than two versions of the library swapped per program. The Cargo spike found it the simplest way that works across crates; two libraries need every dependency's checking metadata kept and passed separately.
 
 **Left to other RFCs**, each with its issue:
 - Logical types, propositions, proofs, models, and contracts: [RFC 0002](0002-logical-layer.md), proposed with this one.
