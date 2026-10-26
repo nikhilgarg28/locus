@@ -1,10 +1,10 @@
-//~ question: May a type derive its model when one of its fields has no model but its identity?
+//~ question: May a type derive its model when one of its fields has no model?
 //~ spec: models.derived
 //~ rfc: 0002
 
 use std::cell::Cell;
 
-#[derive(Model)] //~ error: cannot derive `Model` for `Counter`: the field `hits` is a `Cell<u32>`, which has no model but its identity
+#[derive(Model)] //~ error: cannot derive `Model` for `Counter`: the field `hits` is a `Cell<u32>`, which has no model
 struct Counter {
     id: u32,
     hits: Cell<u32>,

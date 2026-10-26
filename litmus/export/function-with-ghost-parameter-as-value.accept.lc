@@ -1,0 +1,17 @@
+//~ question: In an exported crate, may a function with a ghost parameter be passed as a value, as it may when the crate is built?
+//~ spec: export.function-values
+//~ rfc: 0001
+//~ mode: export
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n + 1
+}
+
+pub fn count() -> u32 {
+    let mut nats: Vec<Nat> = Vec::new();
+    nats.push(logic! { 1 });
+    nats.push(logic! { 2 });
+    nats.into_iter().fold(0, grow)
+}
+
+//~ run: count() => 2

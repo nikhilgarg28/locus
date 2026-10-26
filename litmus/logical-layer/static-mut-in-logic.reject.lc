@@ -1,0 +1,9 @@
+//~ question: May logical code read a `static mut`?
+//~ spec: logic.code.statics
+//~ rfc: 0002
+
+static mut COUNT: u32 = 0;
+
+fn check() {
+    let zero: @(COUNT == 0) = _; //~ error: logical code reads `COUNT`, a `static mut`, which code that Locus does not see can change
+}

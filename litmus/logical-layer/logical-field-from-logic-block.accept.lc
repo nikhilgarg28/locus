@@ -1,0 +1,14 @@
+//~ question: May a logical field be initialized by logical code that reads a runtime value?
+//~ spec: logic.ghost.positions-logical
+//~ rfc: 0002
+
+struct Tally {
+    hits: u32,
+    count: Nat,
+}
+
+fn starting_at(n: u32) -> Tally {
+    Tally { hits: n, count: logic! { n } }
+}
+
+//~ run: starting_at(3).hits => 3

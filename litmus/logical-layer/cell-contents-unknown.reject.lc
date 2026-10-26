@@ -1,9 +1,12 @@
-//~ question: Are the snapshots of two `Cell`s equal when nothing is known about where they came from?
+//~ question: Are the snapshots of two `Cell`s built with the same contents equal?
 //~ spec: models.frozen-data, logic.eq.snapshots
 //~ rfc: 0002
 
 use std::cell::Cell;
 
-fn same(a: &Cell<u32>, b: &Cell<u32>) -> @(snap(a) === snap(b)) {
-    _ //~ error: cannot prove `snap(a) === snap(b)`: a `Cell`'s snapshot holds nothing of its contents, and nothing shows that the two come from one version
+fn built_alike() -> u32 {
+    let a = Cell::new(1u32);
+    let b = Cell::new(1u32);
+    let same: @(snap(a) === snap(b)) = _; //~ error: cannot prove `snap(a) === snap(b)`: a `Cell`'s snapshot holds nothing of its contents, so what `Cell::new` was given says nothing about it
+    a.get() + b.get()
 }

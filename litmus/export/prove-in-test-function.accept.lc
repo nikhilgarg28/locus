@@ -1,0 +1,20 @@
+//~ question: In an exported crate, may Locus's macros appear in a function that an attribute macro, such as `#[test]`, takes?
+//~ spec: export.macros-direct
+//~ rfc: 0001
+//~ mode: export
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+pub fn half_of_ten() -> u32 {
+    halve(10, _)
+}
+
+#[test]
+fn halves_four() {
+    let even = prove!(4 % 2 == 0);
+    assert_eq!(halve(4, even), 2);
+}
+
+//~ run: half_of_ten() => 5

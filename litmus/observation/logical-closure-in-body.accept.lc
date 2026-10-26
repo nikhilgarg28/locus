@@ -1,0 +1,10 @@
+//~ question: May a runtime body contain a logical closure that reads a runtime value?
+//~ spec: observe.captures.rejected, observe.place.readable
+//~ rfc: 0001
+
+fn commutes(x: u32) -> u32 {
+    let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };
+    x
+}
+
+//~ run: commutes(3) => 3

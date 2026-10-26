@@ -1,5 +1,5 @@
-//~ question: May a derive construct a value without proving its invariant?
-//~ spec: contracts.invariants
+//~ question: May `Default` be derived for a type with a proof field?
+//~ spec: logic.ghost.marker-traits
 //~ rfc: 0002
 
 #[derive(Default)] //~ error: the derived `Default` builds a `Positive` without a proof of `value > 0`

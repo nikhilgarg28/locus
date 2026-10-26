@@ -1,0 +1,15 @@
+//~ question: May a Locus crate use a union whose fields hold no logical values?
+//~ spec: logic.ghost.no-unions
+//~ rfc: 0002
+
+union Bits {
+    int: u32,
+    float: f32,
+}
+
+fn bits(x: f32) -> u32 {
+    let b = Bits { float: x };
+    unsafe { b.int }
+}
+
+//~ run: bits(1.0) => 1065353216

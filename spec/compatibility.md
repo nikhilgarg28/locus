@@ -7,7 +7,7 @@ In this chapter, *rustc* means the release of rustc that Locus is pinned to. A p
 ## Rust programs
 
 r[compat.superset.same-meaning]
-A program that rustc accepts is a Locus program with the same meaning, in every configuration Locus checks: Locus accepts it, and it behaves as rustc's compilation of it does. A `.rs` file renamed to `.lc` is the same program.
+A program that rustc accepts is a Locus program with the same meaning, in every configuration Locus checks: Locus accepts it, and it behaves as rustc's compilation of it does. A `.rs` file renamed to `.lc` is the same program. The one exception is a program that tests `__locus_check`, the `cfg` that Locus reserves for its checking compile, which Locus rejects.
 
 r[compat.errors.rustc]
 An error that rustc reports in runtime code is reported by Locus as rustc reports it: with rustc's code and message, at the corresponding place in the source.

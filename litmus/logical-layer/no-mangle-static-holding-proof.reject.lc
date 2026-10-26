@@ -1,0 +1,6 @@
+//~ question: May a static that code outside the program can reach by name hold a proof?
+//~ spec: logic.code.statics
+//~ rfc: 0002
+
+#[no_mangle]
+static READY: Option<@(1 == 2)> = None; //~ error: `READY` is `#[no_mangle]`, so code outside the program can write it, and it holds a proof

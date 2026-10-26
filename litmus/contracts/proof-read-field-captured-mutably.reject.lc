@@ -1,0 +1,14 @@
+//~ question: May a closure capture a field that a proof field reads by mutable reference?
+//~ spec: contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    let mut grow = || iv.hi += 1; //~ error: the closure captures `iv.hi` by mutable reference, and the proof field `ordered` reads it
+    grow();
+}

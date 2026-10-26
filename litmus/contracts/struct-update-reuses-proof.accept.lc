@@ -1,0 +1,14 @@
+//~ question: May a struct update reuse a proof from its base when every field the proof reads comes from the base too?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Tagged {
+    lo: u32,
+    hi: u32,
+    tag: u8,
+    ordered: @(lo <= hi),
+}
+
+fn retag(t: Tagged, tag: u8) -> Tagged {
+    Tagged { tag, ..t }
+}

@@ -1,0 +1,10 @@
+//~ question: May checked code call a closure whose parameter holds a proof?
+//~ spec: logic.boundary.calls
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn clear(slot: &Cell<Option<@(1 == 2)>>) {
+    let set = |v: Option<@(1 == 2)>| slot.set(v);
+    set(None);
+}

@@ -1,0 +1,13 @@
+//~ question: May a type that contains itself through `Box` derive its model?
+//~ spec: models.derived, logic.types.positive
+//~ rfc: 0002
+
+#[derive(Model)]
+enum List {
+    Nil,
+    Cons(u32, Box<List>),
+}
+
+fn symmetric(a: &List, b: &List, same: @(a === b)) -> @(b === a) {
+    _
+}

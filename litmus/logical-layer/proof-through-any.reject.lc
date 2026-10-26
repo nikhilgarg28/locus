@@ -12,7 +12,10 @@ fn forged(x: u32) -> u32 {
     let trivial: @(1 == 1) = _;
     let boxed: Box<dyn Any> = Box::new(trivial);
     match boxed.downcast::<@(0 != 0)>() {
-        Ok(p) => divide(x, 0, *p), //~ error: `*p` is not a proof of `0 != 0`: `downcast` forgets proofs and gives back `Erased`
+        Ok(p) => {
+            let q = *p;
+            divide(x, 0, q) //~ error: `q` is not a proof of `0 != 0`: `downcast` forgets proofs and gives back `Erased`
+        }
         Err(_) => 0,
     }
 }

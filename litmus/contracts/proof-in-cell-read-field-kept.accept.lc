@@ -1,0 +1,14 @@
+//~ question: When a proof field's proofs are inside a `Cell`, may a field they read be assigned a value that keeps their proposition?
+//~ spec: contracts.invariants.assignment
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>,
+}
+
+fn bump(c: &mut Cache) {
+    c.x = 2;
+}

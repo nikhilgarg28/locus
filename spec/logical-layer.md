@@ -50,13 +50,16 @@ r[logic.ghost.no-runtime-control]
 Runtime control flow never depends on a logical value.
 
 r[logic.ghost.positions-logical]
-An argument for a proof parameter, or for a parameter of logical type, is a ghost binding or logical code, never a call of a runtime function. A runtime value is passed there as logical code, such as `logic! { x }`, which takes it to its model. Elsewhere, a runtime call that produces a ghost value stays where it is.
+An argument for a proof parameter, or for a parameter of logical type, is a binding that holds a ghost value, or logical code, never a call of a runtime function. Elsewhere, a runtime call that produces a ghost value stays where it is. Outside logical code, a runtime value is never taken to its model implicitly: where a ghost value is expected, as such an argument or as the initializer of a logical field or a ghost local, a runtime value is written as logical code, such as `logic! { x }`.
 
 r[logic.ghost.shown-by-source]
-Outside delimited logical code, a binding counts as ghost only when the source shows it: it is a parameter of logical type, its type annotation holds a logical type, it is initialized by logical code, or it is bound by a proof pattern. An operator, method call, or field access there is logical code only when each operand is logical code or such a binding. Any other ghost value can be passed on and stored, but computing with it needs `logic!`.
+Outside delimited logical code, a binding is *shown to be ghost* only when it is a parameter of logical type, its type annotation holds a logical type, it is initialized by logical code, or it is bound by a proof pattern. An operator, method call, or field access there is logical code only when each operand is logical code or a binding shown to be ghost. Any other ghost value can be passed on and stored, but computing with it needs `logic!`.
 
 r[logic.ghost.no-trait-impls]
 Apart from `impl Model`, no logical type appears in an `impl`'s self type, its trait's arguments, or its associated types, and no trait method's signature holds logical values.
+
+r[logic.ghost.no-unions]
+No field of a union has a type that holds logical values.
 
 ## The boundary with unchecked code
 
@@ -67,7 +70,7 @@ r[logic.boundary.completable]
 A type holding logical values is *completable* when every value of its erased form is the erasure of one of its values. Locus judges this from types alone, and treats every case its judgment does not cover as not completable. `Int`, and the logical types that Locus's library declares completable, such as `Nat`, `Bool`, and `Seq<T>` for a completable `T`, are completable. A `#[derive(Logical)]` type is completable when one of its constructors has no proof fields and only completable fields, without recurring. A runtime type or a tuple is completable when every logical type it holds is. Proof types and logical function types are not.
 
 r[logic.boundary.calls]
-A function whose parameters hold logical values that are not completable is never coerced to a function pointer, never turned into a trait object, and is passed to a generic parameter only of the program's own code. It is not an `extern`, `#[no_mangle]`, or `#[export_name]` function. So it never reaches unchecked code, or specified standard library code, which could call it without its proof.
+A function or closure whose parameters hold logical values that are not completable, like any other value that can be called with such arguments, is never coerced to a function pointer, never turned into a trait object, and is passed to a generic parameter only of the program's own code. It is not an `extern`, `#[no_mangle]`, or `#[export_name]` function. So it never reaches unchecked code, or specified standard library code, which could call it without its proof.
 
 r[logic.boundary.writable]
 A place holding logical values can be written through a value when it is behind a `&mut` or `*mut` in the value's type or its type arguments, at any depth, or inside a type that Locus's library specifies as writable through a shared handle: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, and the sending halves of channels. What a closure, or a value of the program's own type, holds in fields whose types its own definition fixes does not count; its type arguments always do.
@@ -77,7 +80,7 @@ No value through which a place holding logical values that are not completable c
 
 ## Logical code
 
-Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on ghost bindings that the source shows. In it, reading a runtime place gives its [snapshot](models.md), and a runtime value used as a value is its type's model.
+Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on bindings shown to be ghost. In it, reading a runtime place gives its [snapshot](models.md), and a runtime value used as a value is its type's model.
 
 r[logic.code.logical-values]
 Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its snapshot, which is taken to its type's model wherever it is used as a value.
@@ -89,7 +92,7 @@ r[logic.eq.runtime-values]
 On runtime values, `a === b` is the equality of their models. It implies nothing about the values beyond their models: not that their snapshots or their fields are equal.
 
 r[logic.eq.snapshots]
-Two snapshots are equal exactly when they are the same variant and their fields' snapshots are equal. The opaque parts of two snapshots, such as a `Cell`'s, are equal only when the snapshots come from one version.
+Two snapshots are equal exactly when they are the same variant and their fields' snapshots are equal. The opaque parts of a snapshot, such as a `Cell`'s, are values that Locus knows nothing about, except that a move or a copy keeps them.
 
 r[logic.eq.comparisons]
 `==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, where `a == b` is true exactly when `a === b`, and each ordering agrees with the order of the integers. A `Bool` used as a proposition stands for the proposition that it is true.
@@ -98,7 +101,10 @@ r[logic.code.no-runtime-calls]
 Logical code does not call runtime functions or methods, and does not mutate runtime state.
 
 r[logic.fn.total]
-Every recursive call of a logic function is on a structurally smaller part of one of its arguments, or decreases the function's declared measure.
+Every recursive call of a logic function is on a structurally smaller part of one of its arguments, or decreases the function's declared measure. For now, no logic function calls itself through another. A body that proof search completes is held to the same rule.
 
 r[logic.const.well-founded]
 A constant of logical type is not defined in terms of itself, directly or through other constants or logic functions.
+
+r[logic.code.statics]
+Logical code reads a static only when it is immutable. No `static mut`, and no static that is `extern`, `#[no_mangle]`, or `#[export_name]`, holds logical values that are not completable.

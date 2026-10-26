@@ -1,0 +1,10 @@
+//~ question: May a program test `__locus_check`, the `cfg` that Locus reserves for its checking compile?
+//~ spec: compat.superset.same-meaning
+//~ rfc: 0001
+
+#[cfg(__locus_check)] //~ error: `__locus_check` is reserved for Locus's checking compile, so a program may not test it
+fn only_when_checked() {}
+
+fn value() -> u32 {
+    7
+}
