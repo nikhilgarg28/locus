@@ -8,5 +8,5 @@ struct Positive {
 }
 
 fn clear(p: &mut Positive) {
-    *p.value = 0; //~ error: `value` is read by the proof field `nonzero`; replace the whole `Positive` instead
+    *p.value = 0; //~ error: cannot prove the proof field `nonzero` for the new value of `value`: `0 > 0` is false
 }

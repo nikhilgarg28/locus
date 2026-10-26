@@ -1,5 +1,5 @@
 //~ question: May a `Cell` holding a proof be lent, through a shared reference, to code Locus has no specification for?
-//~ spec: logic.ghost.mutable-lending, logic.ghost.interior-mutability
+//~ spec: logic.boundary.writes, logic.ghost.interior-mutability
 //~ rfc: 0002
 
 use std::cell::Cell;

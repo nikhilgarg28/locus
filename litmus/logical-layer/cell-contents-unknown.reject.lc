@@ -1,0 +1,9 @@
+//~ question: Are two `Cell`s equal when nothing is known about where they came from?
+//~ spec: logic.eq.opaque
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn same(a: &Cell<u32>, b: &Cell<u32>) -> @(a === b) {
+    _ //~ error: cannot prove `a === b`: a `Cell`'s fields are hidden, so only where the values came from could show it
+}

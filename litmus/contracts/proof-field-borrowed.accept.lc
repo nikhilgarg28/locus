@@ -1,5 +1,5 @@
 //~ question: May a function give out a mutable borrow of a field that holds a proof?
-//~ spec: logic.ghost.mutable-lending, contracts.invariants
+//~ spec: contracts.invariants
 //~ rfc: 0002
 
 pub struct Cache {
@@ -9,6 +9,6 @@ pub struct Cache {
 
 impl Cache {
     pub fn hint(&mut self) -> &mut Option<@(self.x != 0)> {
-        &mut self.hint //~ error: `hint` is a proof field, so it cannot be mutably borrowed
+        &mut self.hint
     }
 }

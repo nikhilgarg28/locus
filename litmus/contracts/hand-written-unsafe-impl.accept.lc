@@ -1,0 +1,13 @@
+//~ question: May a hand-written `unsafe impl` be given to a type with proof fields?
+//~ spec: contracts.unsafe-impls
+//~ rfc: 0002
+
+unsafe trait Zeroable {}
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// The programmer promises, with `unsafe`, that the impl keeps the invariant.
+unsafe impl Zeroable for Positive {}

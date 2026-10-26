@@ -1,5 +1,5 @@
 //~ question: May a proposition declaration refer to itself under a negation?
-//~ spec: proofs.props.positive
+//~ spec: logic.types.positive
 //~ rfc: 0002
 
 prop Liar() {

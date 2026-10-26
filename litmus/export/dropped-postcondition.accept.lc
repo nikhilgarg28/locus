@@ -1,5 +1,5 @@
 //~ question: May an exported crate export a wrapper that drops a private function's postcondition?
-//~ spec: export.no-contracts
+//~ spec: export.plain-interface
 //~ rfc: 0002
 //~ mode: export
 

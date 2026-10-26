@@ -1,0 +1,13 @@
+//~ question: May a field that an invariant reads be assigned when the invariant may not hold for the new value?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn shift(iv: &mut Interval) {
+    iv.lo = 10; //~ error: cannot prove the proof field `ordered` for the new value of `lo`: `10 <= hi` is not known
+}

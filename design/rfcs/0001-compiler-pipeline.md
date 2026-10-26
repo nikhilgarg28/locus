@@ -114,9 +114,9 @@ Locus compiles one Cargo crate at a time, in the crate's real Cargo context: its
   - rustfmt formats every module file, so `cargo fmt` can make an exported file stale. rustfmt leaves a module alone when its `mod` declaration is marked `#[rustfmt::skip]` (tested), and erasure adds that mark where the declaration is in a `.lc` file. Protecting the rest, an exported crate root or a declaration in plain Rust, is [#7](https://github.com/nikhilgarg28/locus/issues/7).
   - How an exported package's manifest names its exported crate root, and what else the package contains, is [#7](https://github.com/nikhilgarg28/locus/issues/7).
 - **The exported interface is plain Rust.** What other crates can reach has no logical values in its types and states no contracts, and no other crate can construct a value without its invariant ([RFC 0002](0002-logical-layer.md#export-mode)).
-- **`pub(locus)` marks what only Locus crates see.** An item or field declared `pub(locus)` is public when the crate is built, and visible only within the crate when it is exported. Erasure writes it as `pub` in build mode and as `pub(crate)` in an exported program. Plain `pub` means the same in both modes.
+- **`pub(locus)` marks what only Locus crates see.** An item or field declared `pub(locus)` is public when the crate is built, and visible only within the crate when it is exported. Lowering and erasure write it as `pub` in build mode, and as `pub(crate)` in both programs of export mode. Plain `pub` means the same in both modes.
   - So a crate decides, item by item, what Rust users see. A function with a precondition is `pub(locus)`, and a plain `pub` wrapper checks the proposition at run time; a function with a postcondition gets a wrapper that drops it.
-  - Nothing changes visibility silently. In export mode, a plain `pub` item that breaks the export rules is an error that suggests `pub(locus)`, and so is a plain `pub use` of a `pub(locus)` item.
+  - Nothing changes visibility silently. In export mode, a plain `pub` item that breaks the export rules is an error that suggests `pub(locus)`. So is a plain `pub use` of a `pub(locus)` item, which rustc itself rejects there (E0364, tested), because the checking program already writes the item as `pub(crate)`.
   - So the interface of an exported crate is its interface in build mode without the `pub(locus)` items, at the same paths, and a Rust crate that builds against the exported crate builds against it in build mode too.
 - **An exported crate uses its Locus dependencies as Rust does,** through their exported interfaces, because those are what its Rust users build it against.
 - **The crate is checked in the configurations it declares,** and a guard refuses the others (see [Configurations](#configurations)).
@@ -135,7 +135,7 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 | Logic function | Item | `logic fn total(xs: &[u32]) -> Nat { ... }` | Rust has no item beginning `logic fn` |
 | Proposition declaration | Item | `prop Sorted(xs: Seq<Nat>) { ... }` | Rust has no item beginning `prop Name(` |
 | Proof type | Type | `h: @(x > 0)`, `@Sorted(xs)` | `@` cannot begin a type |
-| Named result | Return type | `-> (out: u8, @(out > n))` | Tuple types have no field names |
+| Named tuple component | Type, including a function's result | `-> (out: u8, @(out > n))`, `Vec<(i: usize, @(i < n))>` | Tuple types have no field names |
 | Proof hole | Expression | `(out, _)` | rustc rejects `_` as an expression except as an assignment target, an array length, or a generic argument, and the hole is recognized nowhere else |
 | Locus-only visibility | Visibility | `pub(locus) fn halve_even(...)` | rustc accepts only `crate`, `self`, `super`, and `in` paths inside `pub(...)`, and rejects anything else with E0704 (tested) |
 
@@ -171,9 +171,8 @@ How the names are found:
   The driver then reports which definition each one actually resolved to, by the definition's identity rather than its path. If one turns out to be the program's own, Locus discards everything from that run, errors included, and lowers again, treating it as plain Rust. A crate normally needs one rustc run, and needs a second only when names collide.
 - **Locus's macros are real macros.** Lowering lowers every invocation of a Locus macro that it recognizes, knowing what is logical, as it does all logical code. The rest reach rustc, which expands them like any other macro: inside another macro's input, such as `vec![prove!(...)]`, and in a macro's output.
   - Locus's library defines them as procedural macros that contain Locus's parser for logical code.
-  - In the checking program, such an expansion observes each local variable that its logical code reads, with the invocation's own hygiene, and probes each name it uses. It also carries its logical code, which the driver reports with its spans, so Locus checks that code like any other.
-  - It observes whole local variables because a macro does not know which fields are logical: lowering removes those fields, so a borrow of one would not resolve. So inside another macro's input or output, logical code that reads one field of a value conflicts with a mutable borrow of another.
-  - Lowering keeps each ghost local and parameter bound, as `Erased`, in the checking program, so that names in such expansions resolve.
+  - In the checking program, such an expansion observes each place that its logical code reads, with the invocation's own hygiene, and probes each name it uses. It also carries its logical code, which the driver reports with its spans, so Locus checks that code like any other.
+  - Every field it can name exists in the checking program, logical fields included, because they stay as fields of type `Erased` (see [The checking program](#the-checking-program)). Lowering keeps each ghost local and parameter bound, as `Erased`, in the checking program, so that names in such expansions resolve too.
   - In build mode's runtime program, Locus's library expands each of them to `Erased`. Code that erasure cannot remove as text, such as a program's own macro whose output invokes `prove!`, is kept as written, with `Erased` for its written types.
   - In export mode, the exported program cannot depend on Locus's library, so erasure removes every invocation as text. It can do that only for one written directly in the crate's own code, so export mode rejects invocations inside another macro's input or output ([RFC 0002](0002-logical-layer.md#export-mode)).
   - A Locus macro name that is never expanded, such as inside `stringify!`, is only tokens.
@@ -195,11 +194,11 @@ Each is sound no matter who wrote the code.
   - `Cell`, `RefCell`, `Mutex`, and the atomics have no model of their contents.
 
   So **a call Locus knows nothing about, taking `&x`, never changes `x`'s model**: Rust freezes what the model reads, and the model never reads what Rust does not freeze.
-- **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns on its own to a field that a proof field reads is rejected; it must replace the whole value, with a new proof.
+- **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns a field that a proof field reads must keep that proof field true. Locus proves it for the new value as if a hole were written there, and rejects the assignment when it cannot.
 - **Code Locus cannot translate is opaque:** dependencies, trait objects, inline assembly, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
 - **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): neither program has them, except as the marker `Erased` inside runtime types, which carries no proposition. Locus tracks what a value holds itself, only through code it checks and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
 - **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only checked code constructs the type or writes the fields its proofs read. In build mode, every crate that can name the type is checked. In export mode, other crates can neither construct it nor reach those fields. So a value that comes back from opaque code still satisfies its invariant: opaque code can only move it, copy it, drop it, or call the type's own checked functions.
-- **Statics.** Logical code may read only immutable statics whose types have models.
+- **Statics.** Logical code may read only immutable statics.
 
 The details of models are [RFC 0002](0002-logical-layer.md).
 
@@ -218,16 +217,17 @@ Logical code is never given to rustc: its operators mean different things from R
 | In the source | In the checking program |
 |---|---|
 | Runtime code | Copied unchanged |
-| A parameter, local, or field whose type is logical, proof parameters included, and every argument for one | Removed; see below |
+| A parameter or local whose type is logical, proof parameters included, and every argument for one | Removed; see below |
+| A field whose type is logical, proof fields included | A field of type `Erased`; see below |
 | A result whose type is logical | `()` |
 | A logical type argument of a runtime type, such as `Vec<Nat>` or `Option<@P>`, a logical tuple component, and a ghost value where Rust needs one | `Erased`: `Vec<Erased>`, `Option<Erased>`, `(u32, Erased)` |
 | A named result `(out: T, @P)` | `(T, Erased)`: tuples keep their shape |
-| A call of a runtime function whose result is entirely ghost | The call, as a statement |
+| A call of a runtime function whose result is entirely ghost | The call where it was: as a statement, or `match call { () => Erased }` where a ghost value is needed |
 | A logic function, `prop` declaration, or `#[derive(Logical)]` type | A stub: an empty type, or a function with the same name, generics, and signature, whose body panics if it is ever run |
 | An `impl Model` | A real implementation of the library's `Model` trait, with its logic function as a stub beside it, so that rustc checks `T: Model` bounds and coherence |
 | A proof hole, `_` | Removed with the proof it stands for |
 | A `logic!`, `prop!`, or `prove!` invocation that lowering recognizes, a proposition in a type annotation inside a body, or an argument of logical type | A block that observes every place the logical code reads, where the logical code reads it, and resolves every name it uses |
-| Any other expansion of a Locus macro | Expanded by rustc: an observation of each local variable it reads, and a probe for each name it uses |
+| Any other expansion of a Locus macro | Expanded by rustc: an observation of each place it reads, and a probe for each name it uses |
 | A proposition in a signature or a struct field's type | Nothing; see below |
 
 **Stubs exist only to resolve names.**
@@ -238,13 +238,12 @@ Logical code is never given to rustc: its operators mean different things from R
 
 **Proofs and logical values never reach rustc as values.** Ghost values are removed from the checking program, or become `Erased`, as they do in the runtime program ([RFC 0002](0002-logical-layer.md)). So rustc never computes a type that involves a proposition, and Locus alone checks every proof against the proposition its position requires, including the proof for every proof parameter at every call.
 
-**Logical and proof fields are removed** from structs and enum variants, in both programs. A type's derives and its Rust API then see only its runtime fields, and no lint fires for them.
-- Where a generic parameter would otherwise be unused, a `PhantomData` field under a fresh name takes its place.
-- Fields of a tuple struct or tuple variant after a removed one are renumbered.
-- Constructing the type omits the field. A pattern that binds the field binds nothing.
-- Reading the field is logical code. The checking program observes the whole value there as a shared borrow, so rustc still rejects the read after the value has moved or while it is mutably borrowed.
-- An assignment to a logical data field is erased, and its right-hand side is logical code. The checking program observes the value there as a mutable borrow.
-- Whether these observations can be narrowed to the fields a proposition is about is [#6](https://github.com/nikhilgarg28/locus/issues/6).
+**Logical and proof fields stay, as fields of type `Erased`,** in structs and enum variants, in both programs, just as a logical type argument becomes `Erased`. So fields keep their positions, generic parameters stay used, and logical code that reads or writes such a field is checked as a borrow of that field alone.
+- Constructing the type supplies `Erased` for the field, and a pattern that binds it binds an `Erased`.
+- Reading the field is logical code, and is observed as a shared borrow of the field.
+- An assignment to a logical data field is a ghost statement. Its right-hand side is logical code, and the checking program writes `Erased` there, so rustc checks the write as a write.
+- A derive sees the field as an `Erased`. `Erased` implements `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, and `Hash`, so those derives work. Others, such as `Default` or serde's, fail on the field unless told to skip it.
+- rustc's warning that such a field is never read is not shown: logical code reads it.
 
 **Logical code contains no runtime evaluation.** It reads places, and it never calls runtime functions, mutates, or has effects; the arguments of a logical call are logical code too. A runtime function that returns a proof is runtime code: it is called, and kept, in both programs. So erasing a logical construct never needs to preserve anything it did.
 
@@ -413,13 +412,14 @@ Erasure edits each `.lc` file into a `.rs` file of the runtime program: under `t
 **What the edits do:**
 - **Removed:**
   - logic functions, `prop` declarations, `#[derive(Logical)]` types, `Model` implementations and `T: Model` bounds, and `impl` blocks holding only those;
-  - parameters, locals, and fields of logical type, proof parameters included, with every argument for them and every `logic!`, `prop!`, `prove!`, and proof hole;
+  - parameters and locals of logical type, proof parameters included, with every argument for them and every `logic!`, `prop!`, `prove!`, and proof hole;
   - `use` declarations and private items that only logical code uses;
   - code that no checked configuration enables.
 
   Which of these apply comes from the facts.
-- **Kept:** a call of a runtime function whose result is entirely ghost, as a statement.
+- **Kept:** a call of a runtime function whose result is entirely ghost, where it was. As a statement it stays as it is. Where a ghost value is needed, as a logical field's initializer, a logical tuple component, or a payload, it becomes `match call { () => Erased }`, which keeps its order and keeps its temporaries alive to the end of the enclosing statement, as in the source.
 - **Simplified:**
+  - A logical field becomes a field of type `Erased`.
   - A tuple, including a named result, keeps its shape, with `Erased` for its logical components.
   - A logical type argument becomes `Erased`, and so does a ghost value that Rust needs: `Vec<Nat>` becomes `Vec<Erased>`, `Option<@P>` becomes `Option<Erased>`, and `Some(h)` becomes `Some(Erased)` or `Some(_)`.
   - `pub(locus)` becomes `pub` in build mode and `pub(crate)` in export mode.
@@ -444,7 +444,7 @@ Building the runtime program is how Locus reports lints and confirms its own out
 So the runtime program borrow-checks whenever the checking program does. Building it confirms this.
 
 **Contracts are visible only to code that Locus checks.** No proof exists at run time. What unchecked Rust code could do instead is call a function without meeting its precondition, rely on a postcondition, or build a value without its invariant. Neither mode lets it:
-- **Within a crate,** every file is checked. A function whose parameters hold logical values is only called directly, never through a function pointer, a trait, generic code, or an exported symbol ([RFC 0002](0002-logical-layer.md)).
+- **Within a crate,** every file is checked. A function whose parameters hold proofs never reaches code that Locus does not check, as a function value, a function pointer, a trait method, through generic code, or as an exported symbol ([RFC 0002](0002-logical-layer.md#the-boundary-with-unchecked-code)).
 - **In build mode,** every crate that depends on a Locus crate is checked, so every call of its functions and every use of its types is.
 - **In export mode,** what other crates can reach is plain Rust ([RFC 0002](0002-logical-layer.md#export-mode)): no contracts, no logical values in types, no public field that an invariant reads, and no way to construct a type with proof fields.
 
@@ -509,11 +509,10 @@ The rules below go into the specification with this RFC, in [Compatibility with 
 | `compat.syntax.contextual-keywords` | `compatibility/keywords-as-names.accept.lc`, `compatibility/raw-identifier-logic.accept.lc`, `compatibility/logic-block-is-a-struct-literal.reject.lc` |
 | `compat.names.shadowable` | `compatibility/glob-imported-macro-named-prove.accept.lc`, `compatibility/own-prove-inside-vec.accept.lc`, `compatibility/user-macro-named-prove.accept.lc`, `compatibility/user-type-named-nat.accept.lc` |
 | `compat.names.no-methods` | `compatibility/user-method-named-model.accept.lc` |
-| `compat.names.macros-expand` | `compatibility/locus-macro-inside-rust-macro.accept.lc`, `compatibility/prove-in-macro-output.accept.lc`, `compatibility/prove-in-stringify.accept.lc`, `compatibility/prove-through-alias.accept.lc` |
-| `observe.place.readable` | `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `observation/macro-reads-sibling-field.accept.lc`, `observation/proof-before-move.accept.lc`, `observation/after-move.reject.lc`, `observation/during-mutable-borrow.reject.lc`, `observation/let-annotation-after-initializer.reject.lc`, `observation/proof-after-move.reject.lc` |
+| `compat.names.macros-expand` | `compatibility/locus-macro-inside-rust-macro.accept.lc`, `compatibility/prove-in-macro-output.accept.lc`, `compatibility/prove-in-stringify.accept.lc`, `compatibility/prove-through-alias.accept.lc`, `observation/macro-in-vec-reads-sibling-field.accept.lc` |
+| `observe.place.readable` | `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `observation/macro-in-vec-reads-sibling-field.accept.lc`, `observation/macro-reads-sibling-field.accept.lc`, `observation/proof-before-move.accept.lc`, `observation/after-move.reject.lc`, `observation/during-mutable-borrow.reject.lc`, `observation/let-annotation-after-initializer.reject.lc`, `observation/proof-after-move.reject.lc` |
 | `observe.let.after-initializer` | `observation/let-annotation-after-initializer.reject.lc` |
 | `observe.captures.rejected` | `observation/logic-in-async-block.reject.lc`, `observation/logic-in-closure.reject.lc` |
-| `observe.macro-expansions` | `observation/macro-reads-sibling-field.accept.lc`, `observation/macro-in-vec-reads-whole-variable.reject.lc` |
 | `export.locus-visibility` | `export/locus-logical-field.accept.lc`, `export/wrapped-precondition.accept.lc`, `export/reexport-locus-item.reject.lc` |
 | `export.macros-direct` | `export/prove-through-alias.accept.lc`, `export/prove-in-macro-output.reject.lc`, `export/prove-inside-rust-macro.reject.lc` |
 
@@ -574,7 +573,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **One Rust type per proposition,** so that rustc could tell proofs apart. Not possible: propositions mention runtime values, so `@(y != 0)` is a different proposition for each `y`.
 
-**Keep logical and proof fields as zero-sized fields.** Rejected: every such field draws a "never read" lint, derives such as `Debug` fail on it, and it clutters the type's Rust API.
+**Remove logical and proof fields from types.** Rejected at the owner's direction. It needs renumbered tuple fields, extra `PhantomData` fields, and observations of the whole value where logical code reads one field, and Locus's macros expanded inside other macros could not name the field at all. Kept as `Erased`, a field costs derives that `Erased` does not implement, such as serde's, and shows up in `Debug` output.
 
 **Default to the host's configuration.** Rejected: the same crate would check differently on different machines.
 
@@ -603,7 +602,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 6. In build mode, the configuration being built is checked. In export mode, declared configurations with a guard; the default is dev, release, and test builds with default features and 64-bit pointers, independent of the host. Erasure removes code no checked configuration enables.
 7. An exported interface has no logical values and states no contracts, postconditions included. There are no proof tokens and no `unsafe` exports.
 8. Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): removed, or the marker `Erased` inside runtime types.
-9. Logical and proof fields are removed from types in both programs.
+9. Logical and proof fields stay in both programs, as fields of type `Erased`.
 10. Traits among Locus's names have no methods.
 11. The parser starts from a fork of rust-analyzer's. The owner left the choice to this RFC.
 12. Locus's macros are real macros, which rustc expands wherever it expands macros. Export mode accepts only invocations written directly in the crate's own code.
@@ -615,7 +614,6 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
 3. Traits among Locus's names also have no associated functions or constants (an extension of 10 above).
 4. Until [#9](https://github.com/nikhilgarg28/locus/issues/9) decides more, an exported crate whose checked code tests target properties other than pointer width must declare its configurations.
-5. Expansions of Locus's macros that lowering does not see, inside other macros' input or output, observe whole local variables, because a macro cannot tell which fields are logical.
 
 **Left to other RFCs**, each with its issue:
 - Logical types, propositions, proofs, models, and contracts: [RFC 0002](0002-logical-layer.md), proposed with this one.

@@ -1,5 +1,5 @@
 //~ question: May a private enum of an exported crate have a proof field that reads one of its payload fields?
-//~ spec: export.no-logical-values
+//~ spec: export.plain-interface
 //~ rfc: 0002
 //~ mode: export
 

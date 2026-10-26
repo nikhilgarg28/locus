@@ -1,5 +1,5 @@
 //~ question: May an exported crate's public function take a parameter whose type holds a proof?
-//~ spec: export.no-logical-values
+//~ spec: export.plain-interface
 //~ rfc: 0002
 //~ mode: export
 

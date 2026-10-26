@@ -10,8 +10,5 @@ Logical code inside a function body may read a place only where a shared borrow 
 r[observe.let.after-initializer]
 A proposition in the type annotation of a `let` reads places after the `let`'s initializer has been evaluated, where the `let`'s bindings come into scope.
 
-r[observe.macro-expansions]
-Logical code in an expansion of one of Locus's macros that lies inside another macro's input or output reads whole local variables: it is checked as a shared borrow of each local variable it reads, rather than of the places within them.
-
 r[observe.captures.rejected]
 Logical code inside the body of a runtime closure or an async block is rejected. Logical closures, which are themselves logical code, are not affected.

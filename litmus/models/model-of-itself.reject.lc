@@ -1,5 +1,5 @@
-//~ question: Inside its own model, is a value its model rather than its view?
-//~ spec: models.from-view
+//~ question: Inside its own model function, may a value be taken to the model being defined?
+//~ spec: models.own-definition
 //~ rfc: 0002
 
 struct Stack {
@@ -9,6 +9,6 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: &Stack) -> Seq<Nat> {
-        stack //~ error: inside `model`, `stack` is the view of a `Stack`, an `Opaque<Stack>`, not the `Seq<Nat>` being defined
+        stack //~ error: inside `model`, `stack` cannot be taken to the `Seq<Nat>` being defined; read its fields instead
     }
 }

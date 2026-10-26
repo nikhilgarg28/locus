@@ -1,5 +1,5 @@
 //~ question: May a proposition declaration refer to itself in a conjunction?
-//~ spec: proofs.props.positive, proofs.props.constructors
+//~ spec: logic.types.positive, proofs.props.constructors
 //~ rfc: 0002
 
 prop Even(n: Nat) {

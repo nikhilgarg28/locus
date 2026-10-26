@@ -1,5 +1,5 @@
 //~ question: May a call to a runtime function initialize a proof field?
-//~ spec: logic.ghost.positions-logical
+//~ spec: logic.ghost.runtime-code-kept, logic.ghost.positions-logical
 //~ rfc: 0002
 
 struct Interval {
@@ -16,5 +16,13 @@ fn checked_order(lo: u32, hi: u32) -> @(lo <= hi) {
 }
 
 fn interval(lo: u32, hi: u32) -> Interval {
-    Interval { lo, hi, ordered: checked_order(lo, hi) } //~ error: the initializer of a proof field must be logical code; call `checked_order` in a `let` of its own first
+    Interval { lo, hi, ordered: checked_order(lo, hi) }
 }
+
+fn width(lo: u32, hi: u32) -> u32 {
+    let iv = interval(lo, hi);
+    iv.hi - iv.lo
+}
+
+//~ run: width(2, 5) => 3
+//~ run: width(5, 2) => panic

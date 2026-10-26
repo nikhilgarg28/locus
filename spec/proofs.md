@@ -18,9 +18,6 @@ A proof of a proposition declared with `prop` is built only by one of its arms, 
 r[proofs.props.matching]
 A match on a proof of a declared proposition covers every one of its arms, and each arm of the match receives that arm's witnesses and a proof of its condition.
 
-r[proofs.props.positive]
-A proposition declaration refers to itself only in strictly positive positions: not under a negation, and not in the premise of an implication.
-
 ## Proofs
 
 r[proofs.elimination]

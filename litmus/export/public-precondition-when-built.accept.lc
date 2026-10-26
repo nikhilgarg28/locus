@@ -1,5 +1,5 @@
 //~ question: May a public function have a precondition when its crate is built rather than exported?
-//~ spec: export.no-contracts
+//~ spec: export.plain-interface
 //~ rfc: 0002
 //~ mode: build
 

@@ -1,5 +1,5 @@
 //~ question: May the type of a local that holds logical values be left to inference?
-//~ spec: logic.ghost.types-written
+//~ spec: logic.ghost.types-forward
 //~ rfc: 0002
 
 fn logical_payloads() -> Vec<Nat> {

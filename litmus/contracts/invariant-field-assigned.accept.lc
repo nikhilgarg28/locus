@@ -1,0 +1,13 @@
+//~ question: May a field that an invariant reads be assigned when the invariant holds for the new value?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    iv.lo = 0;
+}

@@ -1,0 +1,13 @@
+//~ question: May a field that an invariant reads be mutably borrowed?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn low(iv: &mut Interval) -> &mut u32 {
+    &mut iv.lo //~ error: `lo` is read by the proof field `ordered`, so it cannot be mutably borrowed; assign it instead
+}

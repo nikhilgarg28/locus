@@ -1,5 +1,5 @@
 //~ question: May an exported crate's public struct have a `pub(locus)` field of logical type?
-//~ spec: export.locus-visibility, export.no-logical-values
+//~ spec: export.locus-visibility, export.plain-interface
 //~ rfc: 0002
 //~ mode: export
 

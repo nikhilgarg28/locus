@@ -3,5 +3,5 @@
 //~ rfc: 0002
 
 fn bump_first(v: &mut Vec<(i: usize, @(i < 10))>) {
-    v[0].0 += 1; //~ error: `.0` is read by the proposition of the next component; replace the whole tuple instead
+    v[0].0 += 1; //~ error: cannot prove `i < 10` for the new value of `.0`, which the next component's proposition reads
 }

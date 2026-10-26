@@ -1,5 +1,5 @@
 //~ question: May a type declare one model of its own, reading frozen data?
-//~ spec: models.one-per-type, models.declared-by-owner, models.frozen-data, models.from-view
+//~ spec: models.one-per-type, models.declared-by-owner, models.frozen-data, models.own-definition
 //~ rfc: 0002
 
 struct Stack {

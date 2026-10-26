@@ -1,5 +1,5 @@
 //~ question: May `prove!`, written directly, read one field while another field is mutably borrowed?
-//~ spec: observe.place.readable, observe.macro-expansions
+//~ spec: observe.place.readable
 //~ rfc: 0001
 
 struct Pair {

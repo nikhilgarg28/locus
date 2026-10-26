@@ -1,5 +1,5 @@
 //~ question: May an exported crate keep a function with a precondition `pub(locus)` and export a wrapper that checks it?
-//~ spec: export.no-contracts, export.locus-visibility
+//~ spec: export.plain-interface, export.locus-visibility
 //~ rfc: 0002
 //~ mode: export
 

@@ -1,0 +1,12 @@
+//~ question: May a function with a proof parameter be given to code Locus has no specification for?
+//~ spec: logic.boundary.calls
+//~ rfc: 0002
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn lend() -> u32 {
+    let f = std::hint::black_box(halve); //~ error: `halve` needs a proof that `black_box`, which Locus has no specification for, could not supply
+    0
+}

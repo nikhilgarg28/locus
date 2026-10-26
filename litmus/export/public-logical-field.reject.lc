@@ -1,5 +1,5 @@
 //~ question: May an exported crate's public struct have a public field of logical type?
-//~ spec: export.no-logical-values
+//~ spec: export.plain-interface
 //~ rfc: 0002
 //~ mode: export
 
