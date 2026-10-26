@@ -18,7 +18,7 @@ Examples first, then the precise meaning. Say what is accepted, what is rejected
 
 ## Rules
 
-The spec rules this RFC adds or changes, each with its ID and the litmus examples that test it. Rules about what is allowed need an accepted and a rejected example on either side of the line.
+The spec rules this RFC adds or changes, each with its ID and the litmus examples that test it. Rules about what is allowed need an accepted and a rejected example on either side of the line. Every rule the RFC adds must appear here: `cargo xtask check` fails on a spec rule that no RFC lists, and on a row whose rule or examples do not exist.
 
 | Rule | Examples |
 |---|---|

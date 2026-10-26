@@ -10,7 +10,7 @@ You build what the spec says; you do not decide what it says. Follow [AGENTS.md]
 ## Before starting
 
 1. Read the task issue. It names what authorizes the work (spec rules, an accepted RFC), the allowed scope, the required behavior, and when to stop. If it does not, ask for those before writing code.
-2. Read the cited rules, the RFCs they came from, their litmus examples, and the README of each directory you will edit.
+2. Run `cargo xtask context <rule-id>` for each cited rule, then read what it points to: the rules, the RFCs they came from, their litmus examples, and the README of each directory you will edit. Implement only rules whose RFC is accepted.
 3. Check for open `decision-needed` issues that touch the same rules.
 
 ## Working

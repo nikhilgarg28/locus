@@ -12,6 +12,7 @@ Facts taken without proof: axioms, specifications of external code, and properti
 
 ## Rules
 
+- Every entry has a permanent ID in the first column of its table: `trusted.<name>` for a component, `assumed.<name>` for an assumption, in dotted kebab-case. Like a rule ID, it never changes, and it is never reused once an entry is removed.
 - Every entry names the accepted RFC that added it.
 - Every entry says what it covers, why it is needed, and what would detect a violation.
 - A change that adds to this page, or depends on something not listed here, is a design change and needs an RFC.

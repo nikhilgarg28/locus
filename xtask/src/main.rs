@@ -1,11 +1,14 @@
 //! Repository tasks for Locus, run as `cargo xtask <command>`.
 //!
 //! The checks here enforce the structure that the design process depends on:
-//! litmus examples, spec rules and their coverage, RFC metadata, error-code
-//! pages, and links. The site builder renders the same sources as HTML.
+//! litmus examples, spec rules and their coverage and provenance, RFC
+//! metadata, trust entries, error-code pages, and links. The site builder
+//! renders the same sources as HTML, and `context` gathers them for one rule.
 
 mod check;
+mod context;
 mod diagnostics;
+mod lexer;
 mod litmus;
 mod markdown;
 mod pr;
@@ -14,6 +17,7 @@ mod report;
 mod rfc;
 mod site;
 mod spec;
+mod trust;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -23,6 +27,7 @@ usage: cargo xtask <command>
 
 commands:
   check                       check litmus examples, spec rules, RFCs, diagnostics and links
+  context RULE...             what the repository says about a rule, or every rule under a prefix
   site [--out DIR]            build the website (default: target/site)
   pr-check --base REV [--allow-expectation-changes]
                               check a branch against REV: design and build changes kept
@@ -33,6 +38,7 @@ fn main() -> ExitCode {
     let root = repo_root();
     let result = match args.first().map(String::as_str) {
         Some("check") if args.len() == 1 => check::run(&root),
+        Some("context") if args.len() > 1 => context::run(&root, &args[1..]),
         Some("site") => parse_site_args(&args[1..]).and_then(|out| site::run(&root, &out)),
         Some("pr-check") => parse_pr_args(&args[1..]).and_then(|a| pr::run(&root, &a)),
         Some("help" | "-h" | "--help") => {

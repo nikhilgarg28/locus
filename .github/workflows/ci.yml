@@ -39,3 +39,21 @@ jobs:
           else
             cargo xtask pr-check --base "$BASE"
           fi
+      - name: PR guards, as the base branch defines them
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+          ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'expectation-change') }}
+        # The guard is built from the base's tooling, so that a PR cannot
+        # weaken the guard that checks it. It compares commits, not the working
+        # tree, so swapping the tooling's files does not change what it reads.
+        run: |
+          git checkout "$BASE" -- xtask Cargo.toml Cargo.lock .cargo
+          flags=(--base "$BASE")
+          if [ "$ALLOW" = "true" ]; then
+            flags+=(--allow-expectation-changes)
+          fi
+          status=0
+          cargo xtask pr-check "${flags[@]}" || status=$?
+          git checkout HEAD -- xtask Cargo.toml Cargo.lock .cargo
+          exit "$status"
