@@ -1,0 +1,12 @@
+//~ question: Is a declared proposition proved only by an arm whose condition holds?
+//~ spec: proofs.props.constructors
+//~ rfc: 0002
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn two_is_even() -> @Even(2) {
+    Even::Zero @ _ //~ error: cannot prove `2 == 0`
+}

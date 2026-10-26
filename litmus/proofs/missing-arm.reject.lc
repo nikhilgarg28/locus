@@ -1,0 +1,14 @@
+//~ question: May a match on a proof of a declared proposition leave out an arm?
+//~ spec: proofs.props.matching
+//~ rfc: 0002
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn one_is_not_even(h: @Even(1)) -> @False {
+    match h { //~ error: the match does not cover the arm `Even::Step`
+        Even::Zero @ one_is_zero => _,
+    }
+}

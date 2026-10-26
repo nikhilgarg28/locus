@@ -233,7 +233,8 @@ Logical code is:
 - the bodies of logic functions and of proposition declarations;
 - the contents of `logic! { ... }`, `prop!(...)`, and `prove!(...)`;
 - propositions in types, written `@(...)`, and proof holes `_`;
-- ghost arguments.
+- ghost arguments;
+- an operator, or a call of a logic function, whose operands are all logical.
 
 Logical code is pure, total, and deterministic. It never calls runtime functions or methods, never mutates runtime state, and has no effects. It may read runtime places, which RFC 0001 checks as [observations](../../spec/observation.md), and it may call logic functions.
 
@@ -253,8 +254,7 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
   - An integer literal is an `Int`, or a `Nat` where a `Nat` is expected.
   - The model of a machine integer lies in its type's range, which proofs may use: for `x: u8`, `x <= 255`. For `usize` and `isize`, the range is that of the configuration being checked.
 - **Comparisons and `==` are propositions.** `==` is equality of logical values, Lean's `Eq`.
-- **Connectives:** `&&`, `||`, and `!` combine propositions, and `==>` is implication.
-- **Quantifiers:** `forall |x: T| P` and `exists |x: T| P`, over logical types `T`.
+- **Connectives and quantifiers:** `&&`, `||`, `!`, `==>`, `forall |x: T| P`, and `exists |x: T| P`, over logical types `T`. See [Propositions](#propositions).
 - **`if` and `match` choose between logical values.** `if` accepts any proposition, because classical logic decides every proposition (Lean's `Classical.propDecidable`). A `Bool` used as a proposition means that it is true.
 - **`let`** binds a logical value.
 - **Closures**, such as `|x: Int| x + 1`, are values of logical function types.
@@ -359,21 +359,94 @@ let before = logic! { n };      // names the value of n₁, which later writes l
   - `prop!(e)` in a runtime body forms a proposition value.
   - `@(e)` is the type of proofs of `prop!(e)`.
   - `@P` is the type of proofs of `P`, for any expression `P` of type `Prop`, such as `@Sorted(xs)`.
-- **Defined predicates** are logic functions returning `Prop`, such as `Sorted` above. A proof uses the definition explicitly, through `unfold!` and `fold!`.
-- **Inductive propositions** list the ways they can be proven, as named arms:
-
-  ```rust
-  prop Even(n: Nat) {
-      Zero => { n == 0 }
-      Step(m: Nat) => { n == m + 2 && Even(m) }
-  }
-  ```
-
-  - Each arm is a constructor: `Even::Step(2) @ h` takes the witness `2` and a proof `h` of the arm's body, `4 == 2 + 2 && Even(2)`, and proves `Even(4)`.
-  - Arms may have no witnesses, tuple witnesses, or named witnesses, as enum variants do.
-  - A recursive reference must be strictly positive. It may appear in conjunctions, disjunctions, quantifiers, and the conclusion of an implication, but never under a negation or in an implication's premise.
-  - This is Lean's inductive propositions, written in Rust's shape.
+- **Three ways to define one:**
+  - a formula, built with connectives and quantifiers;
+  - a *defined predicate*, which is a logic function returning `Prop`, such as `Sorted` above;
+  - an *inductive proposition*, declared with `prop` ([below](#inductive-propositions)).
 - **Snapshots.** A proposition in a body is formed where RFC 0001 places its observation, and is about the versions it read there. A proposition in a signature is about entry values. `let before = logic! { n };` names a snapshot explicitly.
+
+**Connectives.** `&&`, `||`, `!`, and `==>` combine propositions into propositions, and `forall` and `exists` quantify them. The operands may be formulas or values of type `Prop`:
+
+```rust
+logic fn Between(low: Int, x: Int, high: Int) -> Prop {
+    low <= x && x < high
+}
+
+fn check(x: u8, p: Prop, hp: @p, low: @(x > 1)) -> @(p && x > 1) {
+    And::Intro(hp, low)
+}
+```
+
+- **On runtime `bool`s, the same operators keep their Rust meaning.** Which meaning applies follows from the operands' types, as it does for `+` on `u8` and on `Int`.
+- **An operator whose operands are all logical is logical code,** wherever it appears. So `let both = p && q;` in a runtime body binds a ghost `Prop`, and `if p && q { ... }` is rejected, because runtime control flow never depends on a logical value.
+- **Each connective has its proofs:**
+
+  | Proposition | Proved by | Used by |
+  |---|---|---|
+  | `P && Q` | `And::Intro(hp, hq)` | `match h { And::Intro(hp, hq) => ... }` |
+  | `P \|\| Q` | `Or::Left @ hp` or `Or::Right @ hq` | a `match` with an arm for each |
+  | `P ==> Q` | a logical function `\|hp: @P\| proof` | applying it, `h(hp)` |
+  | `!P` | the same, since `!P` is `P ==> False` | applying it to a proof of `P`, giving `False` |
+  | `forall \|x: T\| P` | a logical function `\|x: T\| proof` | applying it, `h(v)` |
+  | `exists \|x: T\| P` | `Exists::Witness(v) @ hp` | a `match`, whose witness stays inside the proof |
+
+- **Where they come from.** `And`, `True`, and `False` are built in, because the arms of a `prop` are written with them. `Or` and `Exists` are inductive propositions of Locus's library. Implication and `forall` are logical function types, as in Lean, and equality is built in.
+
+### Inductive propositions
+
+A `prop` declaration defines a proposition by the ways it can be proven, as an `enum` defines a type by its variants. This is how v0 wrote predicates with named arms:
+
+```rust
+prop Reachable(from: State, to: State) {
+    Same => { from == to }
+    Via(middle: State) => { Transition(from, middle) && Reachable(middle, to) }
+}
+```
+
+- **Declaration.**
+  - `prop Name(parameters) { arms }`. Each arm has a name, then optional *witnesses*, then `=>` and a logical block ending in a `Prop`: the arm's *condition*.
+  - Witnesses take the shapes of enum variants' fields: none, as in `Same`; positional, as in `Via(middle: State)`; or named, as in `At { index: Nat }`.
+  - A witness's type may mention the parameters and earlier witnesses. The condition may mention all of them.
+- **Meaning.**
+  - `Reachable(a, b)` is a `Prop`. A proof of it shows that some arm's condition holds, for some witnesses.
+  - Arms are alternatives. They may overlap, or leave cases uncovered, and none takes priority. A declaration with no arms can never be proven.
+  - A recursive declaration means the least proposition closed under its arms: Lean's inductive propositions, in Rust's shape. Its references to itself must be strictly positive. They may appear in conjunctions, disjunctions, quantifiers, and the conclusion of an implication, but never under a negation or in an implication's premise. Its proofs are always finite.
+- **Construction.**
+  - `Name::Arm(witnesses) @ proof` proves `Name(arguments)`. It takes the witnesses, and after `@` a proof of the arm's condition, with the parameters and witnesses substituted: `Reachable::Via(m) @ And::Intro(step, rest)`.
+  - The `@` slot is always written, even when the condition is trivial: `Reachable::Same @ _`.
+  - The path is always qualified. A bare `Same @ h` would be Rust's binding pattern, which keeps its Rust meaning.
+  - A nested construction is parenthesized: `Outer::Case(x) @ (Inner::Case(y) @ h)`.
+  - The parameters are inferred from the proposition expected.
+- **Matching.**
+  - `match h { Reachable::Same @ eq => ..., Reachable::Via(m) @ both => ... }` must cover every arm. Each arm binds its witnesses, and a proof of its condition.
+  - A match on a proof produces a proof (`proofs.elimination`), so witnesses never leave the reasoning.
+  - A declaration with one arm can be destructured with `let`: `let Contains::At { index } @ found = membership;`.
+- **Indices.**
+  - Every parameter is shared by all arms. An arm that holds only at particular values says so with an equality in its condition, as `Same` does with `from == to`. This is how Lean's indexed families are written here.
+  - Matching gives the equality as a proof, which `rewrite!` uses.
+- **No definition to unfold.** A declared proposition has no defining equation, so `fold!` and `unfold!` do not apply. It is proved by an arm, and used by matching. Even a declaration with one arm is not the same proposition as that arm's condition.
+- **Induction.**
+  - A logic function that matches a proof of a recursive declaration, and calls itself on a proof found inside an arm, is a proof by induction.
+  - The call is on a structurally smaller value, so it satisfies `logic.fn.total`:
+
+    ```rust
+    prop Even(n: Nat) {
+        Zero => { n == 0 }
+        Step(m: Nat) => { n == m + 2 && Even(m) }
+    }
+
+    logic fn even_mod_two(n: Nat, h: @Even(n)) -> @(n % 2 == 0) {
+        match h {
+            Even::Zero @ zero => _,
+            Even::Step(m) @ And::Intro(step, previous) => {
+                let hypothesis = even_mod_two(m, previous);
+                _
+            }
+        }
+    }
+    ```
+
+- **Generic declarations.** A `prop` may have type parameters, which range over logical types, as a logic function's do.
 
 ### Proofs
 
@@ -388,16 +461,12 @@ A proof is a value of a proof type. Proofs are irrelevant: any two proofs of a p
 | `match h { Even::Zero @ z => ..., Even::Step(m) @ k => ... }` | Reasoning by cases on a proof |
 | `fold!(f, h)`, `unfold!(f, h)` | Using the definition of a logic function |
 | `rewrite!(e, h)` | Transporting a proof along a proof `e` of an equality |
-| `And::Intro(h, k)`, `Or::Left(h)`, `Or::Right(k)`, `True::Intro` | The connectives' constructors |
+| `And::Intro(h, k)`, `Or::Left @ h`, `Or::Right @ k`, `True::Intro` | The connectives' constructors ([Connectives](#propositions)) |
 | `Exists::Witness(v) @ h` | A proof of `exists \|x: T\| P`, from a witness `v` and a proof `h` of `P` at `v` |
 | `\|x: T\| proof`, `\|h: @P\| proof` | A proof of `forall \|x: T\| Q`, or of `P ==> Q`: a logical function from each `x`, or each proof of `P`, to a proof of `Q` |
 | `all(v)`, `imp(h)` | Using a proof `all` of a `forall` at `v`, or a proof `imp` of an implication on a proof `h` of its premise |
 
-As in Lean:
-- `True`, `False`, `And`, `Or`, and `Exists` are inductive propositions of Locus's library;
-- `Not` is implication of `False`;
-- `forall` and `==>` are logical function types, whose proofs are logical functions;
-- equality is built in, with `rewrite!` to use it.
+The connectives' constructors and eliminators are listed under [Propositions](#propositions).
 
 - **A match on a proof produces a proof.** A witness inside a proof, such as an existential's, can be used to build other proofs, but never becomes a logical or runtime value. This is Lean's rule for eliminating propositions; Lean's exceptions for propositions with at most one proof can come later.
 - **Search proposes, and the kernel decides.**
@@ -529,6 +598,9 @@ The rules below go into four new chapters of the specification: [The logical lay
 | `models.declared-by-owner` | `models/hand-written-model.accept.lc`, `models/model-for-foreign-type.reject.lc` |
 | `models.frozen-data` | `models/hand-written-model.accept.lc`, `models/model-reads-cell.reject.lc` |
 | `proofs.versions` | `observation/proof-before-move.accept.lc`, `proofs/reproved-after-assignment.accept.lc`, `proofs/snapshot-survives-assignment.accept.lc`, `proofs/stale-proof-after-assignment.reject.lc`, `proofs/stale-proof-after-same-value.reject.lc` |
+| `proofs.connectives` | `proofs/connectives.accept.lc`, `proofs/conjunction-needs-both.reject.lc` |
+| `proofs.props.constructors` | `proofs/positive-proposition.accept.lc`, `proofs/wrong-arm.reject.lc` |
+| `proofs.props.matching` | `proofs/match-every-arm.accept.lc`, `proofs/missing-arm.reject.lc` |
 | `proofs.props.positive` | `proofs/positive-proposition.accept.lc`, `proofs/negative-proposition.reject.lc` |
 | `proofs.elimination` | `proofs/witness-stays-in-proof.accept.lc`, `proofs/witness-to-data.reject.lc` |
 | `proofs.partial` | `proofs/diverging-runtime-proof.accept.lc`, `proofs/returns-on-some-path.reject.lc` |
@@ -566,6 +638,13 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 **`Nat` built in, with `Int` from the library,** as an earlier draft of this RFC, and the vision, had it.
 - Rejected at the owner's direction. With `Int` built in, `Nat` is a subtype, and subtracting two naturals gives an integer rather than truncating at zero, as Lean does. So `v.len() - 1` cannot silently become `0`.
+
+**A named zero-sized type instead of `()`** for logical values inside runtime types, such as `Vec<Ghost>` for `Vec<Nat>`.
+- Inside the program, it would add no safety: Locus never believes what a runtime value holds unless it tracked it, so a forged marker would carry no more weight than a forged `()`.
+- It would read more clearly, and rustc itself would refuse traits the marker does not implement, such as `Default`.
+- At the Rust boundary, a private marker in a *parameter* would stop Rust callers from passing a proof they do not have. `find(xs, t, None)` could then stay safe, rather than `find` being `unsafe`.
+- But one marker type stands for every proposition. So it must never reach Rust callers in a *result*, or they could pass a marker from one function's result as another function's precondition. That needs a conversion at each boundary: cheap for `Option`, but a copy of the whole vector for `Vec<(usize, @P)>`.
+- This RFC keeps `()`, and leaves a private marker for `Option` and `Result` parameters to [#7](https://github.com/nikhilgarg28/locus/issues/7).
 
 **Distinct Rust types per proposition.** Not possible: propositions mention runtime values.
 

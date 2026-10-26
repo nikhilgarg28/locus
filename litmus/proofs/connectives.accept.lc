@@ -1,0 +1,19 @@
+//~ question: Do `&&` and `||` combine propositions, including values of type `Prop`?
+//~ spec: proofs.connectives
+//~ rfc: 0002
+
+fn between(x: u8, low: @(x > 1), high: @(x < 9)) -> @(x > 1 && x < 9) {
+    And::Intro(low, high)
+}
+
+fn either(x: u8, low: @(x > 1)) -> @(x > 1 || x > 100) {
+    Or::Left @ low
+}
+
+fn named(x: u8, low: @(x > 1), high: @(x < 9)) -> u8 {
+    let p = prop!(x > 1);
+    let q = prop!(x < 9);
+    let both = p && q;
+    let proof: @both = And::Intro(low, high);
+    x
+}
