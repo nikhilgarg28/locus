@@ -1,5 +1,5 @@
 //~ question: May a field that an invariant reads be mutably borrowed?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.no-mutable-borrow
 //~ rfc: 0002
 
 struct Interval {

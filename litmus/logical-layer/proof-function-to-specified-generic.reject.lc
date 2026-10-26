@@ -1,0 +1,11 @@
+//~ question: May a function with a proof parameter be passed to a generic parameter of the standard library?
+//~ spec: logic.boundary.calls
+//~ rfc: 0002
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn halve_all(start: u32, proofs: Vec<@(start % 2 == 0)>) -> u32 {
+    proofs.into_iter().fold(start, halve) //~ error: `halve` needs a proof, so it cannot be passed to `Iterator::fold`, which would call it with proofs about other values
+}

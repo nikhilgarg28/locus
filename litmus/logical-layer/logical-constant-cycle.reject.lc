@@ -1,0 +1,6 @@
+//~ question: May a logical constant be defined in terms of itself through another constant?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+const A: Nat = B + 1; //~ error: the logical constant `A` is defined in terms of itself, through `B`
+const B: Nat = A;

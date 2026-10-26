@@ -14,4 +14,4 @@ r[export.invariants-closed]
 When a crate is exported, no field that a proof field reads is reachable from other crates, and other crates cannot construct a struct that has proof fields.
 
 r[export.macros-direct]
-When a crate is exported, every invocation of one of Locus's macros is written directly in the crate's own code, by its name or an imported alias, and not inside another macro's input or output.
+When a crate is exported, every invocation of one of Locus's macros, and every call that passes an argument for a parameter of logical type, is written directly in the crate's own code, and not inside another macro's input or output. A Locus macro may be invoked by its name or an imported alias.

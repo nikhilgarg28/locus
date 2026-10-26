@@ -1,0 +1,16 @@
+//~ question: Does Locus count a logical type whose only constructor needs a proof as completable?
+//~ spec: logic.boundary.completable, logic.boundary.writes
+//~ rfc: 0002
+
+#[derive(Logical)]
+struct Positive {
+    n: Nat,
+    positive: @(n > 0),
+}
+
+fn lend(p: Positive) -> usize {
+    let mut held: Vec<Positive> = Vec::new();
+    held.push(p);
+    std::hint::black_box(&mut held); //~ error: `Positive` is not completable, because its only constructor needs a proof, so `held` cannot be lent mutably to `black_box`
+    held.len()
+}

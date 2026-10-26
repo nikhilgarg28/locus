@@ -1,5 +1,5 @@
 //~ question: May a value with an invariant be changed by replacing it whole?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants, contracts.invariants.assignment
 //~ rfc: 0002
 
 struct Interval {

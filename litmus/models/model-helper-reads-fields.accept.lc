@@ -1,0 +1,18 @@
+//~ question: May a model call a logic function that reads the value's fields?
+//~ spec: models.own-definition
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+logic fn size(stack: &Stack) -> Nat {
+    stack.items.len()
+}
+
+impl Model for Stack {
+    type Logic = Nat;
+    logic fn model(stack: &Stack) -> Nat {
+        size(stack)
+    }
+}

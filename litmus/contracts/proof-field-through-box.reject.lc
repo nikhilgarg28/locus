@@ -1,5 +1,5 @@
 //~ question: May a value that a proof field reads be written through a `Box` field?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.assignment
 //~ rfc: 0002
 
 struct Positive {

@@ -1,0 +1,10 @@
+//~ question: May a logical constant be defined in terms of another one?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+const B: Nat = 1;
+const A: Nat = B + 1;
+
+fn above(x: u32, big: @(x > A)) -> u32 {
+    x - 1
+}

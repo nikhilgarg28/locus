@@ -514,7 +514,7 @@ The rules below go into the specification with this RFC, in [Compatibility with 
 | `observe.let.after-initializer` | `observation/let-annotation-after-initializer.reject.lc` |
 | `observe.captures.rejected` | `observation/logic-in-async-block.reject.lc`, `observation/logic-in-closure.reject.lc` |
 | `export.locus-visibility` | `export/locus-logical-field.accept.lc`, `export/wrapped-precondition.accept.lc`, `export/reexport-locus-item.reject.lc` |
-| `export.macros-direct` | `export/prove-through-alias.accept.lc`, `export/prove-in-macro-output.reject.lc`, `export/prove-inside-rust-macro.reject.lc` |
+| `export.macros-direct` | `export/ghost-call-outside-macro.accept.lc`, `export/prove-through-alias.accept.lc`, `export/ghost-call-inside-macro.reject.lc`, `export/prove-in-macro-output.reject.lc`, `export/prove-inside-rust-macro.reject.lc` |
 
 The accepted near-misses `before-move`, `after-mutable-borrow-ends`, and `proof-before-move` read `v.len()` in logical code, which [RFC 0002](0002-logical-layer.md) defines through `Vec`'s model, and rely on its versions: restating a proof before the move needs `v` to be the same version as at entry. So they are decided together with it.
 

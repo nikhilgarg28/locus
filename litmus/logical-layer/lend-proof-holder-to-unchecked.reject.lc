@@ -1,5 +1,5 @@
 //~ question: May a place holding a proof be lent mutably to code Locus has no specification for?
-//~ spec: logic.boundary.writes
+//~ spec: logic.boundary.unchecked, logic.boundary.writes
 //~ rfc: 0002
 
 fn check(n: u32) -> Option<@(n > 0)> {

@@ -1,0 +1,9 @@
+//~ question: May a generic type derive its model?
+//~ spec: models.derived
+//~ rfc: 0002
+
+#[derive(Model)] //~ error: `Model` can be derived only for a type without type parameters, for now
+struct Pair<T> {
+    first: T,
+    second: T,
+}

@@ -1,0 +1,9 @@
+//~ question: May a struct with a logical data field derive `PartialEq`?
+//~ spec: logic.ghost.marker-traits
+//~ rfc: 0002
+
+#[derive(PartialEq)] //~ error: the derived `PartialEq` would compare `count`, a `Nat`, which has no runtime value; implement `PartialEq` without it
+struct Counted {
+    id: u32,
+    count: Nat,
+}

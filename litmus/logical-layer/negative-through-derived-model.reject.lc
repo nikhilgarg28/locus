@@ -1,0 +1,13 @@
+//~ question: May a logical type refer to itself negatively through a derived model?
+//~ spec: logic.types.positive
+//~ rfc: 0002
+
+#[derive(Model)]
+struct Holder {
+    b: Bad,
+}
+
+#[derive(Logical)]
+struct Bad {
+    f: logic fn(<Holder as Model>::Logic) -> @False, //~ error: `Bad` refers to itself, through the model of `Holder`, in a parameter of a logical function type
+}

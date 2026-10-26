@@ -1,0 +1,24 @@
+//~ question: May a struct with a proof field derive `PartialEq`, `Eq`, and `Hash`?
+//~ spec: logic.ghost.marker-traits
+//~ rfc: 0002
+
+#[derive(PartialEq, Eq, Hash)]
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn interval(a: u32, b: u32) -> Interval {
+    if a <= b {
+        Interval { lo: a, hi: b, ordered: _ }
+    } else {
+        Interval { lo: b, hi: a, ordered: _ }
+    }
+}
+
+fn same(a: u32, b: u32) -> bool {
+    interval(a, b) == interval(b, a)
+}
+
+//~ run: same(2, 7) => true

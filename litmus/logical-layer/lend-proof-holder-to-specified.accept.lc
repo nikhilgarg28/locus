@@ -1,0 +1,20 @@
+//~ question: May a place holding a proof be lent mutably to standard library code whose specification Locus's library declares?
+//~ spec: logic.boundary.unchecked, logic.boundary.writes
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn take(x: u32) -> bool {
+    let mut found: Option<@(x > 0)> = check(x);
+    let taken = found.take();
+    taken.is_some()
+}
+
+//~ run: take(3) => true
+//~ run: take(0) => false

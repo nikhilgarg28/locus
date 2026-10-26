@@ -1,0 +1,16 @@
+//~ question: Does Locus count a logical type with a constructor that needs no proof as completable?
+//~ spec: logic.boundary.completable, logic.boundary.writes
+//~ rfc: 0002
+
+#[derive(Logical)]
+enum Count {
+    Zero,
+    More(Nat),
+}
+
+fn lend(c: Count) -> usize {
+    let mut held: Vec<Count> = Vec::new();
+    held.push(c);
+    std::hint::black_box(&mut held);
+    held.len()
+}

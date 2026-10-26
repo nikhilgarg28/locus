@@ -1,5 +1,5 @@
 //~ question: May a field that an invariant reads be assigned when the invariant may not hold for the new value?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.assignment
 //~ rfc: 0002
 
 struct Interval {

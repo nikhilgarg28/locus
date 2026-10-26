@@ -1,5 +1,5 @@
 //~ question: May a tuple component be written when a later component's proposition reads it?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.proof-holders, contracts.invariants.assignment
 //~ rfc: 0002
 
 fn bump_first(v: &mut Vec<(i: usize, @(i < 10))>) {

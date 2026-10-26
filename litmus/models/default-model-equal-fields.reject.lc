@@ -1,0 +1,12 @@
+//~ question: Are two values equal when all their fields are, if their type has no model of its own?
+//~ spec: models.default-identity, logic.eq.runtime-values
+//~ rfc: 0002
+
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(p === q) {
+    _ //~ error: cannot prove `p === q`: `Point` has no model but its identity, which equal fields do not determine; derive its model to compare by fields
+}

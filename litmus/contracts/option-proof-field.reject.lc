@@ -1,5 +1,5 @@
 //~ question: Does a field holding an `Option` of a proof count as a proof field?
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.proof-holders, contracts.invariants.assignment
 //~ rfc: 0002
 
 struct Cache {

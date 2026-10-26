@@ -1,0 +1,9 @@
+//~ question: Does a tuple whose components are all logical keep its shape inside a runtime type?
+//~ spec: logic.ghost.erased, logic.types.tuples
+//~ rfc: 0002
+
+fn sizes() -> usize {
+    std::mem::size_of::<(u32, (Nat, @(true)))>()
+}
+
+//~ run: sizes() => 4

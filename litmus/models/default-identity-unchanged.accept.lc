@@ -1,0 +1,14 @@
+//~ question: Do two readings of a value that no write separates have the same identity?
+//~ spec: models.default-identity
+//~ rfc: 0002
+
+struct Token {
+    id: u32,
+}
+
+fn unchanged(t: &Token) -> u32 {
+    let first = logic! { *t };
+    let second = logic! { *t };
+    let same: @(first === second) = _;
+    t.id
+}

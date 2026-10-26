@@ -1,0 +1,7 @@
+//~ question: May a logic function give the unit type `()`?
+//~ spec: logic.types.tuples, logic.code.logical-values
+//~ rfc: 0002
+
+logic fn nothing(n: Nat) -> () { //~ error: a logic function's result must be logical, and `()` is a runtime type
+    ()
+}

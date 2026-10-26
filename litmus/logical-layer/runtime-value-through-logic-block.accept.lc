@@ -1,0 +1,13 @@
+//~ question: May a runtime value be passed to a logical parameter through a `logic!` block?
+//~ spec: logic.ghost.positions-logical
+//~ rfc: 0002
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n + 1
+}
+
+fn caller(x: u32) -> u32 {
+    grow(x, logic! { x })
+}
+
+//~ run: caller(4) => 5

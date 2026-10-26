@@ -13,7 +13,16 @@ r[contracts.final]
 ## Proofs in data
 
 r[contracts.invariants]
-Every value of a type with proof fields satisfies them. Each construction of the type, including in code that macros and derives generate and in a struct update, proves them. No place based on a field that a proof field reads is mutably borrowed. Such a place may be assigned when each proof field that reads it is proved for the new value. A proof field itself may be borrowed and written, with a proof of its proposition. A field whose type holds a proof counts as a proof field, and the same rules hold for a tuple component that a later component's proposition reads.
+Every value of a type with proof fields satisfies them. Each construction of the type proves them, including constructions in code that macros and derives generate, and a struct update.
+
+r[contracts.invariants.no-mutable-borrow]
+No place based on a proof field, or on a field that a proof field reads, is mutably borrowed.
+
+r[contracts.invariants.assignment]
+A field that a proof field reads may be assigned when each proof field that reads it is proved for the new value. A proof field may be assigned a value whose proofs prove its proposition, and that assignment, too, proves each proof field that reads it.
+
+r[contracts.invariants.proof-holders]
+A field whose type holds a proof, such as an `Option<@P>`, counts as a proof field. A tuple component that a later component's proposition reads follows the rules for a field that a proof field reads.
 
 r[contracts.unsafe-impls]
 No `unsafe impl` that a derive or another macro generates is allowed on a type with proof fields.

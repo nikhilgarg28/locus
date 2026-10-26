@@ -1,0 +1,12 @@
+//~ question: May a field holding proofs be mutably borrowed when another proof field reads it?
+//~ spec: contracts.invariants.no-mutable-borrow, contracts.invariants.proof-holders
+//~ rfc: 0002
+
+struct Hints {
+    hints: Vec<@True>,
+    nonempty: @(hints.len() > 0),
+}
+
+fn clear(s: &mut Hints) {
+    s.hints.clear(); //~ error: `hints` holds proofs and is read by the proof field `nonempty`, so it cannot be mutably borrowed; assign it instead
+}

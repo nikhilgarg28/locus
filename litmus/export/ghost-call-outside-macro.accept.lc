@@ -1,0 +1,16 @@
+//~ question: When a crate is exported, may the result of a call that passes a proof be given to another macro?
+//~ spec: export.macros-direct
+//~ rfc: 0002
+//~ mode: export
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+pub fn halves() -> Vec<u32> {
+    let even: @(10 % 2 == 0) = _;
+    let half = halve(10, even);
+    vec![half]
+}
+
+//~ run: halves().len() => 1

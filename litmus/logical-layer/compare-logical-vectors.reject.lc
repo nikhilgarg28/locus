@@ -1,0 +1,7 @@
+//~ question: May runtime code compare two vectors of logical values with `==`?
+//~ spec: logic.ghost.marker-traits
+//~ rfc: 0002
+
+fn same(a: &Vec<Nat>, b: &Vec<Nat>) -> bool {
+    a == b //~ error: `Vec<Nat>` cannot be compared at run time: logical values have no runtime value to compare
+}

@@ -1,0 +1,9 @@
+//~ question: May an operator outside `logic!` compute with a ghost value that the source does not show to be ghost?
+//~ spec: logic.ghost.shown-by-source
+//~ rfc: 0002
+
+fn next(v: &Vec<Nat>) -> usize {
+    let k = v[0];
+    let m = k + 1; //~ error: `k` holds a logical value, which the source does not show; write `logic! { k + 1 }`
+    v.len()
+}

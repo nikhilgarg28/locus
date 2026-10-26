@@ -1,0 +1,16 @@
+//~ question: May a proof field be assigned a value whose proofs prove its proposition?
+//~ spec: contracts.invariants.assignment, contracts.invariants.proof-holders
+//~ rfc: 0002
+
+struct Cache {
+    x: u32,
+    hint: Option<@(x != 0)>,
+}
+
+fn forget(c: &mut Cache) {
+    c.hint = None;
+}
+
+fn remember(c: &mut Cache, nonzero: @(c.x != 0)) {
+    c.hint = Some(nonzero);
+}

@@ -1,0 +1,18 @@
+//~ question: May a model reach itself through a logic function it calls?
+//~ spec: models.own-definition
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+logic fn size(stack: &Stack) -> Nat {
+    model(stack) //~ error: `size` takes a `Stack` to its model, and the model of `Stack` calls `size`, so the model would depend on itself
+}
+
+impl Model for Stack {
+    type Logic = Nat;
+    logic fn model(stack: &Stack) -> Nat {
+        size(stack)
+    }
+}
