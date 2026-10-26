@@ -1,0 +1,10 @@
+//~ question: Does a runtime function need a proof of its result on the paths that do return?
+//~ spec: proofs.partial
+//~ rfc: 0002
+
+fn sometimes(b: bool) -> @(1 == 2) {
+    if b {
+        loop {}
+    }
+    _ //~ error: cannot prove `1 == 2`
+}

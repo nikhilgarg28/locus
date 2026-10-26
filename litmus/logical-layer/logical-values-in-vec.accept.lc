@@ -6,7 +6,6 @@ fn logical_payloads() -> usize {
     let mut values: Vec<Nat> = Vec::new();
     values.push(logic! { 3 });
     values.push(logic! { 4 });
-    let second: @(values[1] == 4) = _;
     values.len()
 }
 

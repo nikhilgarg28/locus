@@ -11,4 +11,4 @@ r[observe.let.after-initializer]
 A proposition in the type annotation of a `let` reads places after the `let`'s initializer has been evaluated, where the `let`'s bindings come into scope.
 
 r[observe.captures.rejected]
-Logical code inside a closure body or an async block is rejected.
+Logical code inside the body of a runtime closure or an async block is rejected. Logical closures, which are themselves logical code, are not affected.

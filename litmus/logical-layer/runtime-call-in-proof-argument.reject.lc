@@ -1,5 +1,5 @@
 //~ question: May a call to a runtime function be the argument for a proof parameter?
-//~ spec: logic.ghost.arguments-logical
+//~ spec: logic.ghost.positions-logical
 //~ rfc: 0002
 
 fn checked_even(n: u32) -> @(n % 2 == 0) {

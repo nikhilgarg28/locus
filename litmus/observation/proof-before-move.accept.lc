@@ -1,6 +1,5 @@
 //~ question: May a proof about a vector be restated before the vector is moved?
-//~ spec: observe.place.readable
-//~ issue: #6
+//~ spec: observe.place.readable, proofs.versions
 //~ rfc: 0001
 
 fn consume(v: Vec<u32>) -> usize {

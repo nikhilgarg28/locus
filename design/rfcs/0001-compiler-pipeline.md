@@ -137,9 +137,10 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 - **What "valid Rust" means here: code that rustc accepts when it is compiled.** Code that `cfg` removes is only parsed by rustc, and a Locus form there has no meaning in either language.
 - **Locus syntax is not recognized inside macro invocations or attribute arguments.** Those are token trees, and their meaning is the macro's.
 - **Rust's own contextual keywords can precede `fn`** (`safe`, `default`, `const`, `async`, `unsafe`, `extern`). `logic` is not one of them. If Rust ever gives `logic fn` or `prop Name(` a meaning, Locus follows Rust and respells its forms.
+- **[RFC 0002](0002-logical-layer.md) adds further forms** under the same rule: proof constructors and patterns (`Even::Step(m) @ h`), `final!(r)`, logical function types, and measures.
 
 **Locus names** are ordinary Rust items:
-- the macros `logic! { ... }` for logical blocks, `prop!(...)` for propositions, and `prove!(...)` for proofs, from Locus's library;
+- the macros `logic! { ... }` for logical blocks, `prop!(...)` for propositions, and `prove!(...)` for proofs, and the proof forms `fold!`, `unfold!`, and `rewrite!` ([RFC 0002](0002-logical-layer.md)), from Locus's library;
 - the derive `Logical`;
 - the trait `Model`;
 - the logical types and functions of Locus's standard library, such as `Nat`.
@@ -157,7 +158,8 @@ How the names are found:
 - **Recognizing Locus's names.** Lowering assumes that each of these is Locus's:
   - an invocation of a Locus macro name;
   - a `derive(Logical)`;
-  - an `impl Model`.
+  - an `impl Model`;
+  - a type path that resolves, by Locus's own reading of the crate's items, imports, and aliases, to a logical type, which decides what lowering removes.
 
   The driver then reports which definition each one actually resolved to, by the definition's identity rather than its path. If one turns out to be the program's own, Locus discards everything from that run, errors included, and lowers again, treating it as plain Rust. A crate normally needs one rustc run, and needs a second only when names collide.
 - **Locus's macros work only where Locus can see them.** Lowering replaces every invocation of a Locus macro that it recognizes. Locus's library defines each macro to expand to a marker, which the driver reports. So an invocation that rustc expands anyway is reported as a Locus error. Examples are an invocation inside another macro's input, such as `vec![prove!(...)]`, inside a macro's output, or under another name, through `use prove as check` (tested to resolve).
@@ -169,7 +171,7 @@ How the names are found:
 There is no wall between Rust and Locus inside a crate. Plain Rust and Locus code mix freely, and every file goes through the pipeline. Soundness comes instead from the only four ways facts about runtime values can enter the logic:
 
 1. **Models:** observing a runtime value through its type's model.
-2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic.
+2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic, together with what Rust's ownership rules guarantee: a call changes only what it is given mutable access to, and a mutable borrow's final value is what its place holds when the borrow ends.
 3. **Assumed specifications:** each declared with a reason, and listed by the audit.
 4. **Invariants of the program's own types,** stated by their proof fields, as described below.
 
@@ -209,7 +211,8 @@ Logical code is never given to rustc: its operators mean different things from R
 | A logical type argument of a runtime type, such as `Vec<Nat>` or `Option<@P>`, and a ghost value where Rust needs one | `()`, and a tuple without its logical components: `Vec<()>`, `Option<()>` |
 | A named result `(out: T, @P)` | `T` |
 | A call of a runtime function whose result is entirely ghost | The call, as a statement |
-| A logic function, `prop` declaration, `#[derive(Logical)]` type, or `Model` implementation | A stub: an empty type, or a function with the same name, generics, and signature, whose body panics if it is ever run |
+| A logic function, `prop` declaration, or `#[derive(Logical)]` type | A stub: an empty type, or a function with the same name, generics, and signature, whose body panics if it is ever run |
+| An `impl Model` | A real implementation of the library's `Model` trait, with its logic function as a stub beside it, so that rustc checks `T: Model` bounds and coherence |
 | A proof hole, `_` | Removed with the proof it stands for |
 | A `logic!`, `prop!`, or `prove!` invocation, a proposition in a type annotation inside a body, or an argument of logical type | A block that observes every place the logical code reads, where the logical code reads it, and resolves every name it uses |
 | A proposition in a signature or a struct field's type | Nothing; see below |
@@ -389,7 +392,7 @@ Erasure edits each `.lc` file into its `.rs` file. Locus syntax is removed or re
 
 **What the edits do:**
 - **Removed:**
-  - logic functions, `prop` declarations, `#[derive(Logical)]` types, `Model` implementations, and `impl` blocks holding only those;
+  - logic functions, `prop` declarations, `#[derive(Logical)]` types, `Model` implementations and `T: Model` bounds, and `impl` blocks holding only those;
   - parameters, result components, locals, and fields of logical type, except proof parameters, with every argument for them and every `logic!`, `prop!`, `prove!`, and proof hole;
   - `use` declarations and private items that only logical code uses;
   - code that no checked configuration enables.
@@ -406,6 +409,7 @@ Erasure edits each `.lc` file into its `.rs` file. Locus syntax is removed or re
 - A binding that only logical code uses is renamed, never removed, so its value is dropped at the same point. The new name begins with an underscore and is fresh in its scope, so it cannot capture another binding.
 - Imports and private items that only logical code uses are removed.
 - A runtime field that only logical code reads stays, because removing it would change the type. rustc's dead-code warning for it is reported to the user as "field `x` is read only by logical code", at the user's lint level.
+- Likewise, a value that only logical code reads, such as an assignment overwritten before runtime code reads it, keeps its assignment. rustc's warning for it is reported as "the value assigned to `n` is read only by logical code".
 
 Building the runtime program is how Locus reports lints and confirms its own output. Any other warning there is either about the user's code or a Locus bug.
 
@@ -488,18 +492,18 @@ The rules below go into the specification with this RFC, in [Compatibility with 
 
 | Rule | Examples |
 |---|---|
-| `compat.superset.same-meaning` | `compatibility/plain-rust.accept.lc`, `compatibility/clone-before-move.accept.lc`, `compatibility/user-method-named-model.accept.lc` |
-| `compat.errors.rustc` | `compatibility/use-after-move.reject.lc`, `compatibility/logic-block-is-a-struct-literal.reject.lc` |
-| `compat.syntax.not-rust` | `compatibility/underscore-in-rust-positions.accept.lc`, `compatibility/at-in-patterns.accept.lc`, `compatibility/tokens-in-macro-input.accept.lc`, `compatibility/keywords-as-names.accept.lc`, `compatibility/logic-block-is-a-struct-literal.reject.lc` |
+| `compat.superset.same-meaning` | `compatibility/clone-before-move.accept.lc`, `compatibility/plain-rust.accept.lc`, `compatibility/user-method-named-model.accept.lc` |
+| `compat.errors.rustc` | `compatibility/logic-block-is-a-struct-literal.reject.lc`, `compatibility/use-after-move.reject.lc` |
+| `compat.syntax.not-rust` | `compatibility/at-in-patterns.accept.lc`, `compatibility/keywords-as-names.accept.lc`, `compatibility/tokens-in-macro-input.accept.lc`, `compatibility/underscore-in-rust-positions.accept.lc`, `compatibility/logic-block-is-a-struct-literal.reject.lc` |
 | `compat.syntax.contextual-keywords` | `compatibility/keywords-as-names.accept.lc`, `compatibility/raw-identifier-logic.accept.lc`, `compatibility/logic-block-is-a-struct-literal.reject.lc` |
-| `compat.names.shadowable` | `compatibility/user-macro-named-prove.accept.lc`, `compatibility/glob-imported-macro-named-prove.accept.lc`, `compatibility/user-type-named-nat.accept.lc`, `compatibility/own-prove-inside-vec.accept.lc` |
+| `compat.names.shadowable` | `compatibility/glob-imported-macro-named-prove.accept.lc`, `compatibility/own-prove-inside-vec.accept.lc`, `compatibility/user-macro-named-prove.accept.lc`, `compatibility/user-type-named-nat.accept.lc` |
 | `compat.names.no-methods` | `compatibility/user-method-named-model.accept.lc` |
-| `compat.names.direct-only` | `compatibility/locus-macro-inside-rust-macro.reject.lc`, `compatibility/prove-in-macro-output.reject.lc`, `compatibility/prove-through-alias.reject.lc`, `compatibility/prove-in-stringify.accept.lc`, `compatibility/own-prove-inside-vec.accept.lc` |
-| `observe.place.readable` | `observation/before-move.accept.lc`, `observation/after-mutable-borrow-ends.accept.lc`, `observation/after-move.reject.lc`, `observation/during-mutable-borrow.reject.lc`, `observation/proof-after-move.reject.lc`, `observation/let-annotation-after-initializer.reject.lc` |
+| `compat.names.direct-only` | `compatibility/own-prove-inside-vec.accept.lc`, `compatibility/prove-in-stringify.accept.lc`, `compatibility/locus-macro-inside-rust-macro.reject.lc`, `compatibility/prove-in-macro-output.reject.lc`, `compatibility/prove-through-alias.reject.lc` |
+| `observe.place.readable` | `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `observation/proof-before-move.accept.lc`, `observation/after-move.reject.lc`, `observation/during-mutable-borrow.reject.lc`, `observation/let-annotation-after-initializer.reject.lc`, `observation/proof-after-move.reject.lc` |
 | `observe.let.after-initializer` | `observation/let-annotation-after-initializer.reject.lc` |
-| `observe.captures.rejected` | `observation/logic-in-closure.reject.lc`, `observation/logic-in-async-block.reject.lc` |
+| `observe.captures.rejected` | `observation/logic-in-async-block.reject.lc`, `observation/logic-in-closure.reject.lc` |
 
-The accepted near-misses `before-move` and `after-mutable-borrow-ends` read `v.len()` in logical code, which [RFC 0002](0002-logical-layer.md) defines through `Vec`'s model, so they are decided together with it. `proof-before-move` stays open: restating a proof needs `v` to be unchanged since entry, which is the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)).
+The accepted near-misses `before-move`, `after-mutable-borrow-ends`, and `proof-before-move` read `v.len()` in logical code, which [RFC 0002](0002-logical-layer.md) defines through `Vec`'s model, and rely on its versions: restating a proof before the move needs `v` to be the same version as at entry. So they are decided together with it.
 
 The observation examples use provisional syntax for propositions ([#5](https://github.com/nikhilgarg28/locus/issues/5)); respelling them does not change their outcomes.
 

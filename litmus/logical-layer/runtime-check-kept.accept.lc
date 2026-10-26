@@ -1,0 +1,38 @@
+//~ question: Do runtime checks still run when the value they produce is ghost?
+//~ spec: logic.ghost.runtime-code-kept
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn hundred_over(n: u32) -> u32 {
+    let Some(positive) = check(n) else { return 0 };
+    divide(100, n, positive)
+}
+
+fn checked_even(n: u32) -> @(n % 2 == 0) {
+    if n % 2 == 0 {
+        _
+    } else {
+        panic!("odd")
+    }
+}
+
+fn halve(n: u32) -> u32 {
+    let even = checked_even(n);
+    n / 2
+}
+
+//~ run: hundred_over(4) => 25
+//~ run: hundred_over(0) => 0
+//~ run: halve(10) => 5
+//~ run: halve(7) => panic

@@ -24,7 +24,7 @@ r[compat.syntax.contextual-keywords]
 
 ## Locus names
 
-Locus's macros (`logic!`, `prop!`, `prove!`), its `Logical` derive, its `Model` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are.
+Locus's macros (`logic!`, `prop!`, `prove!`, `fold!`, `unfold!`, `rewrite!`), its `Logical` derive, its `Model` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are.
 
 r[compat.names.shadowable]
 A program's own definitions and imports take precedence over Locus's names, as they would over the standard prelude's, including a glob-imported macro with the same name as one of Locus's.

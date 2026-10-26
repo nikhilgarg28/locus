@@ -12,8 +12,3 @@ impl Model for Stack {
         stack.items
     }
 }
-
-fn push(stack: &mut Stack, value: u32) -> @(final!(stack).len() == stack.len() + 1) {
-    stack.items.push(value);
-    _
-}

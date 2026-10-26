@@ -1,5 +1,5 @@
 //~ question: Does a runtime function that returns only a proof still run when its proof is bound first?
-//~ spec: logic.ghost.arguments-logical, logic.ghost.erased
+//~ spec: logic.ghost.positions-logical, logic.ghost.erased
 //~ rfc: 0002
 
 fn checked_even(n: u32) -> @(n % 2 == 0) {

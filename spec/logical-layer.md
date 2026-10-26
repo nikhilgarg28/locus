@@ -9,6 +9,9 @@ Every type is a runtime type or a logical type. Runtime types are Rust's types, 
 r[logic.types.contents-logical]
 The fields, payloads, and type arguments of a logical type are logical types.
 
+r[logic.types.positive]
+A logical type refers to itself, directly or through other logical types, only in strictly positive positions: never in a parameter of a logical function type.
+
 r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
 
@@ -22,14 +25,23 @@ Values of logical types have no runtime representation. Parameters, result compo
 r[logic.ghost.runtime-parts-kept]
 A runtime type that holds logical values keeps its runtime parts: an `Option` keeps its tag, and a `Vec` its length. Building one with a proof in it needs that proof, and taking the proof out gives back a proof of the same proposition.
 
+r[logic.ghost.runtime-code-kept]
+Erasure removes only logical code. A runtime call, condition, or statement runs as written, even when the expression it belongs to has a ghost value.
+
 r[logic.ghost.forgotten]
 Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code holds `()` in place of its logical values when it comes back, and no proof.
 
 r[logic.ghost.no-runtime-control]
 Runtime control flow never depends on a logical value.
 
-r[logic.ghost.arguments-logical]
-An argument for a parameter of logical type, for a proof parameter, or for a generic parameter instantiated with a logical type is logical code. A call to a runtime function cannot be such an argument.
+r[logic.ghost.positions-logical]
+An expression in a ghost position is logical code. The ghost positions are an argument for a parameter of logical type, for a proof parameter, or for a generic parameter instantiated with a logical type; the logical component of a tuple; the initializer of a logical field; and the logical payload of a variant. A call to a runtime function cannot be one.
+
+r[logic.ghost.mutable-lending]
+A mutable borrow of a place whose type holds logical values is passed only to code that Locus checks or has a specification for.
+
+r[logic.ghost.direct-calls]
+A function with proof or logical parameters is only called by name, outside any macro's input or output. It is never used as a value.
 
 ## Logical code
 

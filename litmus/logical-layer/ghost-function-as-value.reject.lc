@@ -1,0 +1,12 @@
+//~ question: May a function with a proof parameter be used as a value?
+//~ spec: logic.ghost.direct-calls
+//~ rfc: 0002
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn pick() -> u32 {
+    let f = halve; //~ error: `halve` has a proof parameter, so it can only be called directly, not used as a value
+    0
+}

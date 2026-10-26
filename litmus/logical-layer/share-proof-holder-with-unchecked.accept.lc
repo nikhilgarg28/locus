@@ -1,0 +1,21 @@
+//~ question: May a place holding a proof be reassigned whole, and lent to unchecked code by shared reference?
+//~ spec: logic.ghost.mutable-lending
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn rechecked(x: u32) -> bool {
+    let mut found: Option<@(x > 0)> = None;
+    found = check(x);
+    std::hint::black_box(&found);
+    found.is_some()
+}
+
+//~ run: rechecked(3) => true
+//~ run: rechecked(0) => false

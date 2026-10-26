@@ -1,0 +1,8 @@
+//~ question: May a logical type refer to itself in a parameter of a logical function type?
+//~ spec: logic.types.positive
+//~ rfc: 0002
+
+#[derive(Logical)]
+struct Bad {
+    f: logic fn(Bad) -> @False, //~ error: `Bad` refers to itself in a parameter of a logical function type
+}

@@ -1,0 +1,20 @@
+//~ question: May a call to a runtime function initialize a proof field?
+//~ spec: logic.ghost.positions-logical
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn checked_order(lo: u32, hi: u32) -> @(lo <= hi) {
+    if lo > hi {
+        panic!("unordered");
+    }
+    _
+}
+
+fn interval(lo: u32, hi: u32) -> Interval {
+    Interval { lo, hi, ordered: checked_order(lo, hi) } //~ error: the initializer of a proof field must be logical code; call `checked_order` in a `let` of its own first
+}

@@ -1,5 +1,5 @@
 //~ question: May a logical type have only logical fields, payloads, and type arguments?
-//~ spec: logic.types.contents-logical
+//~ spec: logic.types.contents-logical, logic.types.positive
 //~ rfc: 0002
 
 #[derive(Logical)]
