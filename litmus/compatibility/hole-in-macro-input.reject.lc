@@ -1,0 +1,8 @@
+//~ question: Is `_` inside another macro's input a proof hole?
+//~ spec: compat.syntax.not-rust
+//~ rfc: 0001
+
+fn holes(x: u32) -> usize {
+    let proofs: Vec<@(x == x)> = vec![_]; //~ error: in expressions, `_` can only be used on the left-hand side of an assignment; inside another macro's input, write `prove!(x == x)`
+    proofs.len()
+}

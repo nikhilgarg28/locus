@@ -246,7 +246,7 @@ Further rules:
    - Otherwise unchecked generic code could call such a method. With `impl From<Option<@P>> for Absurd`, generic code bounded by `From` could build an `Absurd` from any `Some(Erased)`.
    - Traits with logical values are [#12](https://github.com/nikhilgarg28/locus/issues/12).
 
-**Deciding what is logical.** Before rustc runs, Locus decides only what the source shows ([RFC 0001](0001-compiler-pipeline.md#the-checking-program)): Locus syntax, the names of Locus's macros and their aliases, `derive(Logical)`, `derive(Model)`, and `impl Model`, and which bindings the source shows to be ghost ([Logical code](#logical-code)). It never needs an expression's type or a callee's signature.
+**Deciding what is logical.** Before rustc runs, Locus decides only what the source shows ([RFC 0001](0001-compiler-pipeline.md#the-lowered-program)): Locus syntax, the names of Locus's macros and their aliases, `derive(Logical)`, `derive(Model)`, and `impl Model`, and which bindings the source shows to be ghost ([Logical code](#logical-code)). It never needs an expression's type or a callee's signature.
 - Ghost values reach rustc as markers, so rustc infers and resolves the program as written: which method a call selects, which generic arguments it instantiates, and where markers flow.
 - After rustc, Locus learns from its facts where each marker went, and works out which logical type it stands for, forward from signatures and annotations.
 - Every assumption made before rustc is confirmed against the facts, by the identity of the item each name resolved to. A wrong one is an error or a second run, never a program with another meaning.
