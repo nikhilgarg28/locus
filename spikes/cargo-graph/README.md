@@ -1,5 +1,7 @@
 # Spike: build mode's Cargo graph
 
+> The marker for logical data is called `ErasedData` here, as it was when this spike ran. The RFCs now call it `LogicalData`.
+
 A throwaway experiment for [RFC 0001](../../design/rfcs/0001-compiler-pipeline.md), the compiler pipeline, whose acceptance waits for it. Nothing outside `spikes/` may depend on it.
 
 ## Question

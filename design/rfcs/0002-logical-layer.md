@@ -22,7 +22,7 @@ The design in brief:
 
   Locus's library builds `Nat`, `Bool`, `Seq`, and the rest from these.
 - **Proofs and logical values are ghost.** They have no runtime representation, and Locus tracks them itself.
-  - At run time each is a zero-sized marker: `Erased` for a proof, and `ErasedData` for any other logical value. So `Vec<Nat>` is a `Vec<ErasedData>` at run time, and keeps its length. An exported program removes ghost parameters and locals altogether ([RFC 0001](0001-compiler-pipeline.md)).
+  - At run time each is a zero-sized marker: `Erased` for a proof, and `LogicalData` for any other logical value. So `Vec<Nat>` is a `Vec<LogicalData>` at run time, and keeps its length. An exported program removes ghost parameters and locals altogether ([RFC 0001](0001-compiler-pipeline.md)).
   - The two markers implement different traits, so rustc itself rejects `==` on two `Vec<Nat>`s, and still accepts it on values that hold proofs, which are all equal.
   - Locus believes what a value holds only through code it checked, or through standard library code whose specification it has. Everywhere else ghost contents are forgotten, so no Rust code can forge or convert a proof.
   - Contracts are visible only to code that Locus checks. In build mode, every crate that uses a Locus crate is checked. In export mode, what other crates can reach is plain Rust, with no logical values and no contracts.
@@ -186,12 +186,12 @@ Values of logical types, proofs included, exist only for checking. They are *gho
 - inside runtime types, as type arguments: `Option<@P>`, `Vec<Nat>`, `Result<u32, @P>`, or `Vec<(i: usize, @(i < n))>`.
 
 **Representation.** No ghost value has a runtime representation. At run time, each is a zero-sized **marker**:
-- **`Erased` for a proof type, and `ErasedData` for every other logical type.** Which crate defines them depends on the mode (RFC 0001), but each is one type, for every proposition or for every logical data type, and neither carries a proposition or a value.
+- **`Erased` for a proof type, and `LogicalData` for every other logical type.** Which crate defines them depends on the mode (RFC 0001), but each is one type, for every proposition or for every logical data type, and neither carries a proposition or a value. Their names are what rustc's errors and `Debug` output show, so `` `LogicalData: PartialEq` is not satisfied `` tells the reader that the value is logical.
 - **In build mode, every ghost position keeps its marker** in both programs of RFC 0001: parameters, arguments, locals, results, and fields. So `fn halve(n: u32, even: @(n % 2 == 0)) -> u32` runs as `fn halve(n: u32, even: Erased) -> u32`, and a call keeps its proof argument as the marker. rustc then infers and resolves the program exactly as it is written, ghost values included.
 - **An exported program removes ghost parameters and locals,** with every argument for them, and a result whose type is entirely logical becomes `()`, so that its Rust reads as a programmer would write it (RFC 0001).
 - **Inside runtime types, and as the type of a field, logical types are markers** in both modes.
-  - A tuple keeps its shape, with markers for its logical components, even when every component is logical, so its layout, and code that handles it generically or in macro input, are unchanged. A named result `(out: u8, @P)` is `(u8, Erased)`, and `(Nat, @P)` is `(ErasedData, Erased)`.
-  - So `Option<@P>` is `Option<Erased>`, `Vec<Nat>` is `Vec<ErasedData>`, and `Vec<(usize, @P)>` is `Vec<(usize, Erased)>`.
+  - A tuple keeps its shape, with markers for its logical components, even when every component is logical, so its layout, and code that handles it generically or in macro input, are unchanged. A named result `(out: u8, @P)` is `(u8, Erased)`, and `(Nat, @P)` is `(LogicalData, Erased)`.
+  - So `Option<@P>` is `Option<Erased>`, `Vec<Nat>` is `Vec<LogicalData>`, and `Vec<(usize, @P)>` is `Vec<(usize, Erased)>`.
   - Where Rust needs a value of such a type, the ghost value is its marker: `v.push(n)` pushes `n`'s marker.
   - The markers implement exactly the traits that their logical types implement (below). So rustc itself refuses a `Default` for `(u32, @P)`, and `==` on two `Vec<Nat>`s.
 - **The runtime parts of a type are all kept.** An `Option` keeps its tag, and a `Vec` its length.
@@ -228,7 +228,7 @@ Everywhere else, ghost contents are forgotten:
   - If checking those instantiations would not end, as with polymorphic recursion, the program is rejected.
   - Checking such code once for every instantiation is [#12](https://github.com/nikhilgarg28/locus/issues/12).
 - **Traits.**
-  - Logical types implement `Clone`, `Copy`, and `Debug`, and nothing else, so `ErasedData` implements only these. rustc itself then rejects runtime code that would compare, order, or hash logical data: `==` on two `Vec<Nat>`s, which would compare only their lengths, or a derived `PartialEq` on a struct with a `Nat` field, which would ignore it.
+  - Logical types implement `Clone`, `Copy`, and `Debug`, and nothing else, so `LogicalData` implements only these. rustc itself then rejects runtime code that would compare, order, or hash logical data: `==` on two `Vec<Nat>`s, which would compare only their lengths, or a derived `PartialEq` on a struct with a `Nat` field, which would ignore it.
   - Proof types also implement `PartialEq`, `Eq`, `PartialOrd`, `Ord`, and `Hash`, and so does `Erased`. These are right for proofs, because any two proofs of a proposition are equal. So a derived `PartialEq` on a struct with proof fields works, and ignoring them is correct. That is why proofs and logical data have different markers.
   - No logical type implements a trait that makes a value from nothing, such as `Default`.
   - Locus understands the standard derives: a derived `Clone` of a type with logical data fields copies them too.
@@ -686,7 +686,7 @@ struct Interval {
   - So unchecked code can only move, copy, or drop a value, or call the type's own checked functions.
   - This is how invariants become the fourth way facts enter the logic, in RFC 0001's sense.
   - Such a type is a distinct Rust type, so it can instantiate any generic parameter. Unlike a marker, it cannot be confused with another type.
-- **Logical data fields,** such as `count: Nat`, are ghost too, and stay as fields of type `ErasedData`. Assigning one is a ghost statement.
+- **Logical data fields,** such as `count: Nat`, are ghost too, and stay as fields of type `LogicalData`. Assigning one is a ghost statement.
 
 **Runtime types holding logical values.** Any runtime type may hold logical values as type arguments, as described under [Ghost values](#ghost-values):
 - `Option<@P>` keeps its tag at run time. `Some(h)` needs `h: @P` to build it, and matching `Some(h)` gives back `h: @P`.
@@ -736,7 +736,7 @@ What other crates can reach is every item and field that the source declares pla
 
 RFC 0001 defines erasure. For this RFC's constructs:
 
-In the table, the marker is `Erased` for a proof and `ErasedData` for other logical data.
+In the table, the marker is `Erased` for a proof and `LogicalData` for other logical data.
 
 | In the source | In build mode, both programs | In an exported program |
 |---|---|---|
@@ -818,7 +818,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 
 | Area | Effect |
 |---|---|
-| Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which are markers at run time: `Erased` for proofs and `ErasedData` for other logical data. `Int` is built in, and `Nat` is a library type whose difference is an `Int`. Every runtime type has a snapshot type `Snap<T>`, and a model only when one is declared, derived, or given by the library. |
+| Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which are markers at run time: `Erased` for proofs and `LogicalData` for other logical data. `Int` is built in, and `Nat` is a library type whose difference is an `Int`. Every runtime type has a snapshot type `Snap<T>`, and a model only when one is declared, derived, or given by the library. |
 | Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. `===` is Lean's equality, and comparisons give `Bool`s, as Rust's give `bool`s. Propositions are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
 | Ownership and mutation | Logical code reads places under RFC 0001's observation rules. Every write makes a new version. A `&mut` reference has a current value and a final value, `final!`. How runtime code changes values in the logic is [#6](https://github.com/nikhilgarg28/locus/issues/6). |
 | Erasure and runtime behavior | In build mode, every ghost value is a zero-sized marker in both programs, and nothing is erased. An exported program removes ghost parameters and locals, and keeps markers inside runtime types and fields. Runtime parts such as tags and lengths are kept, every call of a function with a precondition is checked, and calls of runtime functions are kept even when their results are ghost. |
@@ -929,7 +929,7 @@ The examples use this RFC's syntax. Where [#5](https://github.com/nikhilgarg28/l
 7. **Naming.** Logic functions in snake_case, and `prop` declarations in CamelCase.
 8. **Snapshots and models.** Every runtime type has a snapshot type `Snap<T>`, derived from its definition, which holds every field and nothing behind an `UnsafeCell` or a raw pointer. A type has a model only when it is declared, derived with `#[derive(Model)]` from its fields' models, or declared by Locus's library; there is no default, for now. Logical code reads places as snapshots and uses values through their models, and `snap(x)` gives a snapshot explicitly. On runtime values, `===` compares models; on snapshots, values. Every logical computation produces a logical value.
 9. **Interior mutability.** Types with interior mutability may hold logical values.
-10. **The traits logical types implement:** `Clone`, `Copy`, and `Debug`, plus comparison and hashing for proofs. So proofs and logical data have separate markers, `Erased` and `ErasedData`, and rustc itself rejects comparing, ordering, or hashing logical data.
+10. **The traits logical types implement:** `Clone`, `Copy`, and `Debug`, plus comparison and hashing for proofs. So proofs and logical data have separate markers, `Erased` and `LogicalData`, and rustc itself rejects comparing, ordering, or hashing logical data. The owner named the second `LogicalData`, so that rustc's errors say the value is logical.
 11. **Export mode's rules.** What other crates can reach states no contracts, postconditions included, has no logical values in its types or fields, and has no `Model` bounds. Other crates can neither construct a struct with proof fields nor reach a field that its proofs read.
 12. **Proof construction** beyond this RFC's forms is a third foundational RFC ([#15](https://github.com/nikhilgarg28/locus/issues/15)). An anonymous constructor for one-arm propositions waits for it, and arms do not become constructors with proof fields.
 13. **The boundary with unchecked code,** defined once for both modes. Completable values are exempt, judged conservatively from types. A function needing a proof is never coerced to a pointer, made a trait object, or passed to generic code other than the program's own. No way to write a place holding logical values reaches unchecked code, which Locus decides from types, type arguments included, and from its library's list of types writable through a shared handle, channels included.

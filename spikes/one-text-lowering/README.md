@@ -1,5 +1,7 @@
 # Spike: one lowered text for build mode
 
+> The marker for logical data is called `ErasedData` here, as it was when this spike ran. The RFCs now call it `LogicalData`.
+
 A throwaway experiment for [RFC 0001](../../design/rfcs/0001-compiler-pipeline.md), decision 15. Nothing outside `spikes/` may depend on it.
 
 ## Question
