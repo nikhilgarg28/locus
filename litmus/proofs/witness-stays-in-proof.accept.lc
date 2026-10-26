@@ -1,0 +1,9 @@
+//~ question: May a witness taken from a proof be used to build another proof?
+//~ spec: proofs.elimination
+//~ rfc: 0002
+
+logic fn weaker(big: @(exists |m: Nat| m > 5)) -> @(exists |m: Nat| m > 4) {
+    match big {
+        Exists::Witness(m) @ above => Exists::Witness(m) @ _,
+    }
+}

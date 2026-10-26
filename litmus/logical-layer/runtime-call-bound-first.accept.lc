@@ -1,0 +1,22 @@
+//~ question: Does a runtime function that returns only a proof still run when its proof is bound first?
+//~ spec: logic.ghost.arguments-logical, logic.ghost.erased
+//~ rfc: 0002
+
+fn checked_even(n: u32) -> @(n % 2 == 0) {
+    if n % 2 != 0 {
+        panic!("odd");
+    }
+    _
+}
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn half(n: u32) -> u32 {
+    let even = checked_even(n);
+    halve(n, even)
+}
+
+//~ run: half(10) => 5
+//~ run: half(7) => panic

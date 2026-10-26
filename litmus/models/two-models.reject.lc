@@ -1,0 +1,21 @@
+//~ question: May a type have two models?
+//~ spec: models.one-per-type
+//~ rfc: 0002
+
+struct Celsius {
+    degrees: i32,
+}
+
+impl Model for Celsius {
+    type Logic = Int;
+    logic fn model(c: &Celsius) -> Int {
+        c.degrees
+    }
+}
+
+impl Model for Celsius { //~ error: `Celsius` already has a model
+    type Logic = Int;
+    logic fn model(c: &Celsius) -> Int {
+        c.degrees + 273
+    }
+}

@@ -1,0 +1,16 @@
+//~ question: Is a logic function that recurses on a structurally smaller value total?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+#[derive(Logical)]
+enum Peano {
+    Zero,
+    Succ(Peano),
+}
+
+logic fn value(n: Peano) -> Nat {
+    match n {
+        Peano::Zero => 0,
+        Peano::Succ(previous) => value(previous) + 1,
+    }
+}

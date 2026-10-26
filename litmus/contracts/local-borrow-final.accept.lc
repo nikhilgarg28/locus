@@ -1,0 +1,14 @@
+//~ question: Once a local mutable borrow ends, does the borrowed place hold the borrow's final value?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn through_borrow() -> u32 {
+    let mut n: u32 = 1;
+    let r = &mut n;
+    *r = 7;
+    *r += 1;
+    let eight: @(n == 8) = _;
+    n
+}
+
+//~ run: through_borrow() => 8

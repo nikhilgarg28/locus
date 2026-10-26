@@ -1,6 +1,5 @@
 //~ question: May logical code read a vector once a mutable borrow of it has ended?
-//~ spec: observe.place.readable
-//~ issue: #4
+//~ spec: observe.place.readable, models.observation
 //~ rfc: 0001
 
 fn f() -> usize {

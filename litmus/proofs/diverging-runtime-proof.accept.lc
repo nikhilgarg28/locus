@@ -1,0 +1,7 @@
+//~ question: May a runtime function that never returns promise a false proposition?
+//~ spec: proofs.partial
+//~ rfc: 0002
+
+fn never() -> @(1 == 2) {
+    loop {}
+}

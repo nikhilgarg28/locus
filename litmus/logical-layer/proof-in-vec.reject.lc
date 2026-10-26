@@ -1,0 +1,8 @@
+//~ question: May a vector hold proofs?
+//~ spec: logic.ghost.not-type-argument
+//~ rfc: 0002
+
+fn collect(x: u32, positive: @(x > 0)) -> usize {
+    let proofs: Vec<@(x > 0)> = Vec::new(); //~ error: a proof type cannot be a type argument of `Vec`
+    proofs.len()
+}

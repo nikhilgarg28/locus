@@ -1,0 +1,13 @@
+//~ question: May a field that an invariant reads be assigned on its own, even when the invariant stays true?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    iv.lo = 0; //~ error: `lo` is read by the proof field `ordered`; replace the whole `Interval` instead
+}

@@ -1,0 +1,7 @@
+//~ question: May a logic function call itself on the same value?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+logic fn forever(n: Nat) -> Nat {
+    forever(n) + 1 //~ error: this recursive call is not on a smaller value, and `forever` declares no measure
+}

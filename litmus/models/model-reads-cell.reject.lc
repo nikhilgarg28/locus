@@ -1,0 +1,16 @@
+//~ question: May a model read the contents of a `Cell`?
+//~ spec: models.frozen-data
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Counter {
+    hits: Cell<u32>,
+}
+
+impl Model for Counter {
+    type Logic = Nat;
+    logic fn model(c: &Counter) -> Nat {
+        c.hits //~ error: `Cell<u32>` has no model: its contents can change while it is shared
+    }
+}

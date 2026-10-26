@@ -1,0 +1,25 @@
+//~ question: Does an `Option` holding a proof keep its tag at run time, and give back the proof when matched?
+//~ spec: contracts.option-proof, logic.ghost.not-type-argument, logic.ghost.no-runtime-control
+//~ rfc: 0002
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn hundred_over(n: u32) -> u32 {
+    match check(n) {
+        Some(positive) => divide(100, n, positive),
+        None => 0,
+    }
+}
+
+//~ run: hundred_over(4) => 25
+//~ run: hundred_over(0) => 0

@@ -1,0 +1,26 @@
+//~ question: May a logical type have only logical fields, payloads, and type arguments?
+//~ spec: logic.types.contents-logical
+//~ rfc: 0002
+
+#[derive(Logical)]
+enum Tree {
+    Leaf,
+    Node(Tree, Nat, Tree),
+}
+
+#[derive(Logical)]
+struct Span {
+    start: Nat,
+    length: Nat,
+}
+
+logic fn size(t: Tree) -> Nat {
+    match t {
+        Tree::Leaf => 0,
+        Tree::Node(left, _, right) => size(left) + 1 + size(right),
+    }
+}
+
+logic fn count(xs: Seq<Nat>) -> Nat {
+    xs.len()
+}

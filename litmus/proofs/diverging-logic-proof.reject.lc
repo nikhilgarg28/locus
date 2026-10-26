@@ -1,0 +1,7 @@
+//~ question: May a logic function that never returns promise a false proposition?
+//~ spec: proofs.partial, logic.fn.total
+//~ rfc: 0002
+
+logic fn never() -> @(1 == 2) {
+    never() //~ error: this recursive call is not on a smaller value, and `never` declares no measure
+}

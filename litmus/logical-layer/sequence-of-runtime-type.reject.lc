@@ -1,0 +1,7 @@
+//~ question: May a logical sequence hold values of a runtime type?
+//~ spec: logic.types.contents-logical
+//~ rfc: 0002
+
+logic fn count(xs: Seq<u32>) -> Nat { //~ error: a type argument of a logical type must be logical, and `u32` is a runtime type
+    xs.len()
+}

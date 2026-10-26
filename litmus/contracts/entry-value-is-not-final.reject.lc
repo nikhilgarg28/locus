@@ -1,0 +1,8 @@
+//~ question: Does a `&mut` parameter in a result type mean its value at return?
+//~ spec: contracts.entry-values
+//~ rfc: 0002
+
+fn reset(counter: &mut u32) -> @(counter == 0) {
+    *counter = 0;
+    _ //~ error: cannot prove `counter == 0`: in a signature, `counter` is the value at entry, and the value at return is `final!(counter)`
+}

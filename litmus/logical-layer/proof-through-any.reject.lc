@@ -1,0 +1,22 @@
+//~ question: May a proof be converted through `Any` into a proof of another proposition?
+//~ spec: logic.ghost.not-type-argument
+//~ rfc: 0002
+
+use std::any::Any;
+
+fn convert<T: 'static, U: 'static>(value: T) -> Option<U> {
+    let boxed: Box<dyn Any> = Box::new(value);
+    boxed.downcast::<U>().ok().map(|b| *b)
+}
+
+fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
+    x / y
+}
+
+fn forged(x: u32) -> u32 {
+    let trivial: @(1 == 1) = _;
+    match convert::<@(1 == 1), @(0 != 0)>(trivial) { //~ error: a proof cannot instantiate the generic parameter `T` of `convert`
+        Some(p) => divide(x, 0, p),
+        None => 0,
+    }
+}

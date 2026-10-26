@@ -1,0 +1,12 @@
+//~ question: May a crate declare the model of a type that another crate defines?
+//~ spec: models.declared-by-owner
+//~ rfc: 0002
+
+use std::time::Instant;
+
+impl Model for Instant { //~ error: only the crate that defines `Instant`, or Locus's library, can declare its model
+    type Logic = Nat;
+    logic fn model(i: &Instant) -> Nat {
+        0
+    }
+}

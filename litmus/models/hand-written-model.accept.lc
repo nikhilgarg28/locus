@@ -1,0 +1,19 @@
+//~ question: May a type declare one model of its own, reading frozen data?
+//~ spec: models.one-per-type, models.declared-by-owner, models.frozen-data
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: &Stack) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+fn push(stack: &mut Stack, value: u32) -> @(final!(stack).len() == stack.len() + 1) {
+    stack.items.push(value);
+    _
+}

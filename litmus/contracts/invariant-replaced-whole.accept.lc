@@ -1,0 +1,13 @@
+//~ question: May a value with an invariant be changed by replacing it whole?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    *iv = Interval { lo: 0, hi: iv.hi, ordered: _ };
+}

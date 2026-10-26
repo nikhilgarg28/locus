@@ -1,0 +1,18 @@
+//~ question: May a call to a runtime function be the argument for a proof parameter?
+//~ spec: logic.ghost.arguments-logical
+//~ rfc: 0002
+
+fn checked_even(n: u32) -> @(n % 2 == 0) {
+    if n % 2 != 0 {
+        panic!("odd");
+    }
+    _
+}
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn half(n: u32) -> u32 {
+    halve(n, checked_even(n)) //~ error: an argument for a proof parameter must be logical code; call `checked_even` in a `let` of its own first
+}

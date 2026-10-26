@@ -1,0 +1,13 @@
+//~ question: Does the borrowed place hold a value the borrow had before its last write?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn through_borrow() -> u32 {
+    let mut n: u32 = 1;
+    let r = &mut n;
+    *r = 7;
+    let was_seven: @(*r == 7) = _;
+    *r = 8;
+    let seven: @(n == 7) = _; //~ error: cannot prove `n == 7`: `n` holds the borrow's final value, 8
+    n
+}

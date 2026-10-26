@@ -1,0 +1,7 @@
+//~ question: May a `Some` holding a proof be built without proving its proposition?
+//~ spec: contracts.option-proof
+//~ rfc: 0002
+
+fn claim(n: u32) -> Option<@(n > 0)> {
+    Some(_) //~ error: cannot prove `n > 0`
+}

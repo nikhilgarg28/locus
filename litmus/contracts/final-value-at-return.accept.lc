@@ -1,0 +1,17 @@
+//~ question: Does a `&mut` parameter mean its entry value in a signature, and `final!` its value at return?
+//~ spec: contracts.entry-values, contracts.final
+//~ rfc: 0002
+
+fn bump(counter: &mut u32, room: @(counter < 100)) -> @(final!(counter) == counter + 1) {
+    *counter += 1;
+    _
+}
+
+fn six() -> u32 {
+    let mut n: u32 = 5;
+    let grew = bump(&mut n, _);
+    let is_six: @(n == 6) = _;
+    n
+}
+
+//~ run: six() => 6

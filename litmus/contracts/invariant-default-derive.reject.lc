@@ -1,0 +1,9 @@
+//~ question: May a derive construct a value without proving its invariant?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+#[derive(Default)] //~ error: the derived `Default` builds a `Positive` without a proof of `value > 0`
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}

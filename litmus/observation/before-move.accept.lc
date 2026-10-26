@@ -1,6 +1,5 @@
 //~ question: May logical code read a vector before the vector is moved?
-//~ spec: observe.place.readable
-//~ issue: #4
+//~ spec: observe.place.readable, models.observation
 //~ rfc: 0001
 
 fn consume(v: Vec<u32>) -> usize {
