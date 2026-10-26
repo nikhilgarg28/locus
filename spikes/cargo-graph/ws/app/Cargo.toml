@@ -1,0 +1,10 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+b = { path = "../b" }
+# A Locus library outside the workspace, standing in for a registry crate.
+outside = { path = "../../outside", optional = true }

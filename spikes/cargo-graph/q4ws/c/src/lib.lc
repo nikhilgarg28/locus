@@ -1,0 +1,4 @@
+//@ contract f: v2
+pub fn f() -> u32 {
+    1
+}

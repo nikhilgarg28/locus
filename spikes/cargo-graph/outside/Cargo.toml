@@ -1,0 +1,9 @@
+# A Locus library outside the spike's workspace, standing in for a registry crate.
+[package]
+name = "outside"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/lib.lc"

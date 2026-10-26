@@ -1,0 +1,6 @@
+# Two Locus crates that plain rustc can also build: their Locus lines are
+# written as `//@` comments. `d`'s check fails: it relies on `c::f: v1`, and
+# `c` states `f: v2`. A workspace of its own, outside the repository's.
+[workspace]
+resolver = "3"
+members = ["c", "d"]

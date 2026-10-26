@@ -1,0 +1,4 @@
+# The spike's workspace: a workspace of its own, outside the repository's.
+[workspace]
+resolver = "3"
+members = ["a", "b", "pm", "app"]
