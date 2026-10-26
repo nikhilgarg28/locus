@@ -1,0 +1,16 @@
+//~ question: May a `Cell` hold a proof?
+//~ spec: logic.ghost.no-interior-mutability
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn cached(n: u32) -> bool {
+    let slot: std::cell::Cell<Option<@(n > 0)>> = std::cell::Cell::new(check(n)); //~ error: `Cell` has interior mutability, so it cannot hold logical values
+    true
+}

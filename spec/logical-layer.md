@@ -7,7 +7,7 @@ Every type is a runtime type or a logical type. Runtime types are Rust's types, 
 ## Logical types
 
 r[logic.types.contents-logical]
-The fields, payloads, and type arguments of a logical type are logical types.
+The fields, payloads, and type arguments of a logical type are logical types. The one exception is `Opaque<T>`, whose argument names a runtime type.
 
 r[logic.types.positive]
 A logical type refers to itself, directly or through other logical types, only in strictly positive positions: never in a parameter of a logical function type.
@@ -22,6 +22,12 @@ Values of logical types, proofs included, are *ghost*: they exist only for check
 r[logic.ghost.erased]
 Values of logical types have no runtime representation. Parameters, result components, locals, and fields of logical type are absent from the program that runs, except that a proof parameter becomes a token that only code Locus checked can supply. Inside a runtime type, a logical type is `()`. Arguments for ghost positions are not evaluated at run time.
 
+r[logic.ghost.types-written]
+Every local and expression whose type holds logical values has that type written, or is Locus syntax. Locus does not infer logical types.
+
+r[logic.ghost.no-interior-mutability]
+A type with interior mutability holds no logical values.
+
 r[logic.ghost.runtime-parts-kept]
 A runtime type that holds logical values keeps its runtime parts: an `Option` keeps its tag, and a `Vec` its length. Building one with a proof in it needs that proof, and taking the proof out gives back a proof of the same proposition.
 
@@ -29,7 +35,10 @@ r[logic.ghost.runtime-code-kept]
 Erasure removes only logical code. A runtime call, condition, or statement runs as written, even when the expression it belongs to has a ghost value.
 
 r[logic.ghost.forgotten]
-Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code holds `()` in place of its logical values when it comes back, and no proof.
+Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code, or turned into a trait object of a trait without a specification, holds `()` in place of its logical values when it comes back, and no proof.
+
+r[logic.ghost.generic-instantiations]
+The program's own generic code is checked again at each instantiation whose type arguments contain logical types.
 
 r[logic.ghost.no-runtime-control]
 Runtime control flow never depends on a logical value.
@@ -38,10 +47,13 @@ r[logic.ghost.positions-logical]
 An expression in a ghost position is logical code. The ghost positions are an argument for a parameter of logical type, for a proof parameter, or for a generic parameter instantiated with a logical type; the logical component of a tuple; the initializer of a logical field; and the logical payload of a variant. A call to a runtime function cannot be one.
 
 r[logic.ghost.mutable-lending]
-A mutable borrow of a place whose type holds logical values is passed only to code that Locus checks or has a specification for.
+No value whose type contains a `&mut` or `*mut` to a place that holds logical values reaches code that Locus neither checks nor has a specification for, whether as an argument, inside another value, or as the result of an exported function. No raw borrow of such a place is taken.
 
 r[logic.ghost.direct-calls]
-A function with proof or logical parameters is only called by name, outside any macro's input or output. It is never used as a value.
+A function whose parameter types hold logical values is only called by name, outside any macro's input or output. It is never used as a value.
+
+r[logic.ghost.no-trait-impls]
+Apart from `impl Model`, no logical type appears in an `impl`'s self type, its trait's arguments, or its associated types, and no trait method's signature holds logical values.
 
 ## Logical code
 

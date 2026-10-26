@@ -13,6 +13,9 @@ The model of a machine integer lies within the range of its type.
 r[models.one-per-type]
 A type has at most one model.
 
+r[models.bounds-on-functions]
+A `Model` bound appears only on a function's type parameters, never on an `impl` or a trait.
+
 r[models.declared-by-owner]
 A type's model is declared by the crate that defines the type, or, for the standard library's types, by Locus's library.
 

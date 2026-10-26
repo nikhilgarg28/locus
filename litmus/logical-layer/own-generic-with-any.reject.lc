@@ -1,0 +1,25 @@
+//~ question: Is the program's own generic function checked again when it is instantiated with proofs?
+//~ spec: logic.ghost.generic-instantiations, logic.ghost.forgotten
+//~ rfc: 0002
+
+use std::any::Any;
+
+fn launder<T: 'static, U: 'static>(value: T) -> Option<U> {
+    let boxed: Box<dyn Any> = Box::new(value);
+    match boxed.downcast::<U>() {
+        Ok(b) => Some(*b),
+        Err(_) => None,
+    }
+}
+
+fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
+    x / y
+}
+
+fn forged(x: u32) -> u32 {
+    let trivial: @(1 == 1) = _;
+    match launder::<@(1 == 1), @(0 != 0)>(trivial) { //~ error: in `launder::<@(1 == 1), @(0 != 0)>`, `*b` is not a proof of `0 != 0`: `downcast` forgets proofs
+        Some(p) => divide(x, 0, p),
+        None => 0,
+    }
+}

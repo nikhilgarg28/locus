@@ -198,7 +198,8 @@ The checking program is what rustc sees.
 - **It is written as ordinary `.rs` files** under `target/locus/check/`, and rustc parses them like any crate. Files on disk can be opened, compared, and compiled by hand when something goes wrong. If disk access ever matters, the driver can serve the same text from memory through rustc's file-loader hook, without changing anything else.
 - **Lowering keeps each source line on the same line of the checking program where it can,** and appends synthesized items at the end. Raw rustc output is then readable when debugging Locus itself. The origin maps, not the alignment, are the authority.
 - **Locus's library crate holds its macros, its probes, and the stubs of its logical items,** such as `Nat` and `Model`. rustc receives it under a crate name the program does not use.
-- **New names are fresh.** Every name Locus introduces, such as the library's crate name and the generated module, is chosen so that it appears nowhere in the crate's sources. User code therefore cannot name generated items, and generated items cannot collide with the user's, even under `#![no_implicit_prelude]`.
+- **New names are fresh.** Every name Locus introduces, such as the library's crate name and the generated module, is chosen so that it appears nowhere in the crate's sources, so generated items cannot collide with the user's, even under `#![no_implicit_prelude]`.
+- **User code never names a generated item.** The crate root declares the generated module, so its name is visible, and macros such as `paste!` can build any name. So the driver reports what every path resolves to, and Locus rejects any path that the user wrote, in any file or in macro output, that resolves to the proof token or to anything else Locus generated.
 - **The checking program is compiled with `--cap-lints allow`.** Lints there would be artifacts of the lowering, and a user's `#![deny(warnings)]` or `forbid` must not turn synthesized code into errors. This was tested. Real lints come from building the runtime program.
 
 Logical code is never given to rustc: its operators mean different things from Rust's (`+` on `Nat` cannot overflow), and its types do not fit Rust's (a logical `List` can contain itself without a `Box`). What rustc sees instead:
@@ -206,10 +207,11 @@ Logical code is never given to rustc: its operators mean different things from R
 | In the source | In the checking program |
 |---|---|
 | Runtime code | Copied unchanged |
-| A parameter, result component, local, or field whose type is logical, and every argument for one | Removed; see below |
+| A parameter, local, or field whose type is logical, and every argument for one | Removed; see below |
+| A result whose type is logical | `()` |
 | A proof parameter, and the argument for it | A parameter of the crate's proof token type, and the token |
-| A logical type argument of a runtime type, such as `Vec<Nat>` or `Option<@P>`, and a ghost value where Rust needs one | `()`, and a tuple without its logical components: `Vec<()>`, `Option<()>` |
-| A named result `(out: T, @P)` | `T` |
+| A logical type argument of a runtime type, such as `Vec<Nat>` or `Option<@P>`, a logical tuple component, and a ghost value where Rust needs one | `()`: `Vec<()>`, `Option<()>`, `(u32, ())` |
+| A named result `(out: T, @P)` | `(T, ())`: tuples keep their shape |
 | A call of a runtime function whose result is entirely ghost | The call, as a statement |
 | A logic function, `prop` declaration, or `#[derive(Logical)]` type | A stub: an empty type, or a function with the same name, generics, and signature, whose body panics if it is ever run |
 | An `impl Model` | A real implementation of the library's `Model` trait, with its logic function as a stub beside it, so that rustc checks `T: Model` bounds and coherence |
@@ -400,7 +402,7 @@ Erasure edits each `.lc` file into its `.rs` file. Locus syntax is removed or re
   Which of these apply comes from the facts.
 - **Kept:** a call of a runtime function whose result is entirely ghost, as a statement.
 - **Simplified:**
-  - A named result becomes its runtime components.
+  - A tuple, including a named result, keeps its shape, with `()` for its logical components.
   - A logical type argument becomes `()`, and so does a ghost value that Rust needs: `Vec<Nat>` becomes `Vec<()>`, `Option<@P>` becomes `Option<()>`, and `Some(h)` becomes `Some(())` or `Some(_)`.
   - A proof parameter becomes a parameter of the token type, and each checked call passes the token.
   - `cfg` attributes that every checked configuration satisfies are dropped.

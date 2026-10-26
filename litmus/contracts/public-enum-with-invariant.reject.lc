@@ -1,0 +1,8 @@
+//~ question: May a public enum have a proof field that reads one of its payload fields?
+//~ spec: contracts.closed-to-rust
+//~ rfc: 0002
+
+pub enum Reading {
+    Valid { x: u32, ok: @(x > 0) }, //~ error: Rust makes the fields of a public enum's variants public, so `ok` cannot read `x`
+    Missing,
+}

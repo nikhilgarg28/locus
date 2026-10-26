@@ -1,6 +1,6 @@
 # Observing runtime values
 
-Logical code never runs, but it can read runtime values: it *observes* them. Inside a function body, logical code is a `logic!`, `prop!`, or `prove!` invocation, a proposition in a type annotation, or an argument for a parameter of logical type. `final!(r)` reads no place, so it observes nothing ([Contracts](contracts.md)). An observation is checked with Rust's own ownership rules, so logical code can read only what the runtime program could read at the same point.
+Logical code never runs, but it can read runtime values: it *observes* them. Inside a function body, logical code is a `logic!`, `prop!`, or `prove!` invocation, a proposition in a type annotation, or an expression in a ghost position ([The logical layer](logical-layer.md)). `final!(r)` reads no place, so it observes nothing ([Contracts](contracts.md)). An observation is checked with Rust's own ownership rules, so logical code can read only what the runtime program could read at the same point.
 
 Propositions in signatures and in struct field types read parameters, results, and the struct's own fields. These are readable by construction, so they observe nothing at a point in the body.
 

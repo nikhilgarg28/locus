@@ -7,7 +7,7 @@ A proposition is a claim, of type `Prop`; forming one proves nothing. A proof is
 Each local and parameter is a binding, and every write to a binding or to any part of it gives the binding a new version, as in SSA form.
 
 r[proofs.versions]
-A proposition is about the versions of the places it reads where it is formed. A write gives a binding a new version even when it writes the value the binding already had. A proof of a proposition about one version is not a proof of the same formula about another version.
+A proposition is about the versions of the places it reads where it is formed. A write gives a binding a new version even when it writes the value the binding already had, and a write through a reference gives what it refers to a new version. Two points share a version only if no write separates them on any path, including a later iteration of a loop. A proof of a proposition about one version is not a proof of the same formula about another version.
 
 r[proofs.connectives]
 In logical code, `&&`, `||`, `!`, and `==>` combine propositions, including values of type `Prop`, into propositions. A proof of `P && Q` needs proofs of both `P` and `Q`, and a proof of `P || Q` a proof of either.

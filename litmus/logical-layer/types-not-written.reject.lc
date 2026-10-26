@@ -1,0 +1,9 @@
+//~ question: May the type of a local that holds logical values be left to inference?
+//~ spec: logic.ghost.types-written
+//~ rfc: 0002
+
+fn logical_payloads() -> Vec<Nat> {
+    let mut values = Vec::new(); //~ error: the type of `values` holds logical values, so it must be written
+    values.push(logic! { 3 });
+    values
+}

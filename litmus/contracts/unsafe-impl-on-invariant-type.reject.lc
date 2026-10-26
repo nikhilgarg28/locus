@@ -1,0 +1,12 @@
+//~ question: May an `unsafe impl` other than `Send` or `Sync` be written for a type with proof fields?
+//~ spec: contracts.closed-to-rust
+//~ rfc: 0002
+
+unsafe trait Zeroable {}
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+unsafe impl Zeroable for Positive {} //~ error: `Positive` has proof fields, so it cannot implement the `unsafe` trait `Zeroable`

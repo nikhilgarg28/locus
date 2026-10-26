@@ -1,4 +1,4 @@
-//~ question: May a place holding a proof be reassigned whole, and lent to unchecked code by shared reference?
+//~ question: Does a place holding a proof keep its proof when lent by shared reference to code Locus has no specification for?
 //~ spec: logic.ghost.mutable-lending
 //~ rfc: 0002
 
@@ -10,12 +10,18 @@ fn check(n: u32) -> Option<@(n > 0)> {
     }
 }
 
-fn rechecked(x: u32) -> bool {
-    let mut found: Option<@(x > 0)> = None;
-    found = check(x);
-    std::hint::black_box(&found);
-    found.is_some()
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
 }
 
-//~ run: rechecked(3) => true
-//~ run: rechecked(0) => false
+fn hundred_over(n: u32) -> u32 {
+    let found: Option<@(n > 0)> = check(n);
+    std::hint::black_box(&found);
+    match found {
+        Some(p) => divide(100, n, p),
+        None => 0,
+    }
+}
+
+//~ run: hundred_over(4) => 25
+//~ run: hundred_over(0) => 0

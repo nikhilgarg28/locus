@@ -1,5 +1,5 @@
 //~ question: May a vector hold logical values, keeping its length at run time?
-//~ spec: logic.ghost.erased, logic.ghost.runtime-parts-kept
+//~ spec: logic.ghost.erased, logic.ghost.runtime-parts-kept, logic.ghost.types-written
 //~ rfc: 0002
 
 fn logical_payloads() -> usize {

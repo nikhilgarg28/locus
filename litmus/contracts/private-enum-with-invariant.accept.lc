@@ -1,0 +1,16 @@
+//~ question: May a private enum have a proof field that reads one of its payload fields?
+//~ spec: contracts.closed-to-rust
+//~ rfc: 0002
+
+enum Reading {
+    Valid { x: u32, ok: @(x > 0) },
+    Missing,
+}
+
+fn read(x: u32) -> Reading {
+    if x > 0 {
+        Reading::Valid { x, ok: _ }
+    } else {
+        Reading::Missing
+    }
+}

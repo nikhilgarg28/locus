@@ -3,7 +3,7 @@
 //~ rfc: 0002
 
 fn in_bounds(items: &[u32], wanted: &[usize]) -> Vec<(i: usize, @(i < items.len()))> {
-    let mut checked = Vec::new();
+    let mut checked: Vec<(i: usize, @(i < items.len()))> = Vec::new();
     for &i in wanted {
         if i < items.len() {
             checked.push((i, _));
