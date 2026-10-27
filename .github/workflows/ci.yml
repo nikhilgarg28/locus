@@ -39,21 +39,41 @@ jobs:
           else
             cargo xtask pr-check --base "$BASE"
           fi
+
+  base-guard:
+    # The PR guards, as the base branch defines them, so that a PR cannot
+    # weaken the guard that checks it. This job never builds or runs the PR's
+    # code: code from the PR that ran earlier in a job could change what a
+    # later step builds, so the guard gets a job of its own, with no shared
+    # cache. It restores the base's tooling, which also deletes tooling files
+    # that the PR added, such as a build script, and then compares commits
+    # through git, so the rest of the PR's working tree does not matter.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Restore the base's tooling
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          paths=()
+          for path in xtask Cargo.toml Cargo.lock .cargo rust-toolchain rust-toolchain.toml; do
+            if git cat-file -e "$BASE:$path" 2>/dev/null || git cat-file -e "HEAD:$path" 2>/dev/null; then
+              paths+=("$path")
+            fi
+          done
+          git restore --source="$BASE" --worktree --staged -- "${paths[@]}"
+          git status --short
       - name: PR guards, as the base branch defines them
-        if: github.event_name == 'pull_request'
         env:
           BASE: origin/${{ github.base_ref }}
           ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'expectation-change') }}
-        # The guard is built from the base's tooling, so that a PR cannot
-        # weaken the guard that checks it. It compares commits, not the working
-        # tree, so swapping the tooling's files does not change what it reads.
         run: |
-          git checkout "$BASE" -- xtask Cargo.toml Cargo.lock .cargo
           flags=(--base "$BASE")
           if [ "$ALLOW" = "true" ]; then
             flags+=(--allow-expectation-changes)
           fi
-          status=0
-          cargo xtask pr-check "${flags[@]}" || status=$?
-          git checkout HEAD -- xtask Cargo.toml Cargo.lock .cargo
-          exit "$status"
+          cargo xtask pr-check "${flags[@]}"

@@ -36,6 +36,27 @@ impl Checked {
             .or_else(|| listing().find(|r| r.status.is_open()))
             .or_else(|| listing().next())
     }
+
+    /// An RFC still being decided that lists a rule an accepted RFC
+    /// introduced. The rule's text here is then that RFC's proposed revision,
+    /// not the accepted text.
+    pub fn revised_by(&self, rule: &str) -> Option<&Rfc> {
+        if !self.introduced_by(rule)?.status.binds() {
+            return None;
+        }
+        self.rfcs.iter().find(|r| {
+            r.path != rfc::TEMPLATE
+                && r.status.is_open()
+                && r.rules.iter().any(|row| row.id == rule)
+        })
+    }
+
+    /// Whether a rule's text, as written here, binds: an accepted RFC
+    /// introduced it, and no RFC still being decided revises it.
+    pub fn binds(&self, rule: &str) -> bool {
+        self.introduced_by(rule).is_some_and(|r| r.status.binds())
+            && self.revised_by(rule).is_none()
+    }
 }
 
 pub fn run(root: &Path) -> Result<(), String> {
@@ -79,6 +100,7 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
     let trust = trust::check(repo, report);
     check_coverage(&spec, &examples, report);
     check_provenance(&spec, &examples, &rfcs, report);
+    check_trust_origins(&trust, &rfcs, report);
     check_error_codes(&examples, &diagnostics, report);
     check_links(repo, report);
     Checked {
@@ -87,6 +109,31 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
         rfcs,
         diagnostics,
         trust,
+    }
+}
+
+/// Every trust entry names, in its last column, at least one RFC that exists.
+fn check_trust_origins(trust: &[Entry], rfcs: &[Rfc], report: &mut Report) {
+    for entry in trust {
+        if entry.rfcs.is_empty() {
+            report.error(
+                trust::PATH,
+                Some(entry.line),
+                format!("`{}` names no RFC that added it", entry.id),
+            );
+        }
+        for number in &entry.rfcs {
+            if !rfcs
+                .iter()
+                .any(|r| r.path != rfc::TEMPLATE && &r.number == number)
+            {
+                report.error(
+                    trust::PATH,
+                    Some(entry.line),
+                    format!("`{}` names RFC {number}, which does not exist", entry.id),
+                );
+            }
+        }
     }
 }
 
@@ -426,6 +473,62 @@ Nothing cites this.
             Some("0002")
         );
         assert!(checked.introduced_by("erasure.lonely").is_none());
+    }
+
+    #[test]
+    fn proposed_revisions_do_not_bind() {
+        let chapter = "# Erasure\n\nr[erasure.tag.kept]\nRevised text.\n\nr[erasure.order.left-to-right]\nUnchanged.\n";
+        let accepted = "# RFC 0001: Old\n\n- **Status:** accepted\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n\
+                        | `erasure.tag.kept` | |\n| `erasure.order.left-to-right` | |\n";
+        let revising = "# RFC 0002: Revision\n\n- **Status:** proposed\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n\
+                        | `erasure.tag.kept` | |\n";
+        let repo = Repo::from_files(&[
+            ("spec/README.md", SPEC_README),
+            ("spec/erasure.md", chapter),
+            ("design/rfcs/0001-old.md", accepted),
+            ("design/rfcs/0002-revision.md", revising),
+            TRUST,
+        ]);
+        let mut report = Report::default();
+        let checked = check_repo(&repo, &mut report);
+        let number = |r: Option<&Rfc>| r.map(|r| r.number.clone());
+        assert_eq!(
+            number(checked.introduced_by("erasure.tag.kept")),
+            Some("0001".into())
+        );
+        assert_eq!(
+            number(checked.revised_by("erasure.tag.kept")),
+            Some("0002".into())
+        );
+        assert!(!checked.binds("erasure.tag.kept"));
+        assert_eq!(
+            number(checked.revised_by("erasure.order.left-to-right")),
+            None
+        );
+        assert!(checked.binds("erasure.order.left-to-right"));
+    }
+
+    #[test]
+    fn trust_entries_name_existing_rfcs() {
+        let trust = "# Trust model\n\n## Trusted components\n\n| ID | Component | Added by |\n|---|---|---|\n\
+                     | `trusted.ok` | Fine | [RFC 0001](rfcs/0001-erasure.md) |\n\
+                     | `trusted.none` | No origin | someone |\n\
+                     | `trusted.ghost` | Missing origin | RFC 0009 |\n";
+        let repo = Repo::from_files(&[("design/TRUST.md", trust), RFC]);
+        let mut report = Report::default();
+        check_repo(&repo, &mut report);
+        let errors: Vec<String> = report
+            .messages()
+            .into_iter()
+            .filter(|m| m.contains("design/TRUST.md"))
+            .collect();
+        assert_eq!(
+            errors,
+            [
+                "error: design/TRUST.md:8: `trusted.none` names no RFC that added it",
+                "error: design/TRUST.md:9: `trusted.ghost` names RFC 0009, which does not exist",
+            ]
+        );
     }
 
     #[test]
