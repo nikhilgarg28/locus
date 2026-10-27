@@ -1,5 +1,5 @@
-//~ question: Does exposing one local leave what Locus knows about another?
-//~ spec: logic.unsafe.exposed
+//~ question: Does a raw pointer to one local leave what Locus knows about another?
+//~ spec: logic.unsafe.escape
 //~ rfc: 0002
 
 fn raw() -> u32 {

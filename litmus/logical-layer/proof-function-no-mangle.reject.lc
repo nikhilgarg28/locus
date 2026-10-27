@@ -2,7 +2,7 @@
 //~ spec: logic.boundary.calls
 //~ rfc: 0002
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn halve(n: u32, even: @(n % 2 == 0)) -> u32 { //~ error: `halve` needs a proof, so it cannot be `#[no_mangle]`: code outside the program could call it without one
     n / 2
 }

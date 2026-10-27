@@ -1,0 +1,17 @@
+//~ question: Does a call of a checked function that writes only its argument keep facts about other places?
+//~ spec: logic.boundary.escape
+//~ rfc: 0002
+
+fn reset(x: &mut u32) {
+    *x = 0;
+}
+
+fn calls() -> u32 {
+    let mut x: u32 = 7;
+    let y: u32 = 9;
+    reset(&mut x);
+    let nine: @(y == 9) = _;
+    y
+}
+
+//~ run: calls() => 9

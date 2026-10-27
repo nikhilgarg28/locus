@@ -1,0 +1,11 @@
+//~ question: May a shared iterator over values holding proofs be passed to unchecked code?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+fn count(n: u32) -> usize {
+    let found: Vec<Option<@(n > 0)>> = Vec::new();
+    std::hint::black_box(found.iter());
+    found.len()
+}
+
+//~ run: count(1) => 0

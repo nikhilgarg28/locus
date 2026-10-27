@@ -1,0 +1,11 @@
+//~ question: May a guard that gives mutable access to a proof be passed to unchecked code?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+use std::sync::Mutex;
+
+fn keep(n: u32) -> u32 {
+    let slot: Mutex<Option<@(n > 0)>> = Mutex::new(None);
+    std::hint::black_box(slot.lock().unwrap()); //~ error: the `MutexGuard` gives mutable access to `slot`'s contents, which hold a proof, so it cannot be passed to `black_box`
+    n
+}

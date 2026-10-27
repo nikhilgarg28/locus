@@ -1,5 +1,5 @@
 //~ question: May a vector be used after a clone of it has been moved away?
-//~ spec: compat.superset.same-meaning
+//~ spec: compat.superset.same-meaning, compat.errors.rustc
 //~ rfc: 0001
 
 fn lengths() -> (usize, usize) {

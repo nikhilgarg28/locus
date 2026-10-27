@@ -41,7 +41,7 @@ r[logic.ghost.runtime-code-kept]
 Erasure removes only logical code. A runtime call, condition, or statement runs as written, even when the expression it belongs to has a ghost value.
 
 r[logic.ghost.forgotten]
-Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code, or turned into a trait object of a trait without a specification, holds markers in place of its logical values when it comes back, and no proof. So does a value read through a raw pointer, given another type by a pointer cast or by `transmute`, made by `mem::zeroed` or `MaybeUninit::assume_init`, or returned by foreign code or inline assembly.
+Locus knows what logical values a runtime value holds only through code it checks and standard library code whose specification Locus's library declares. A value passed to a generic parameter of any other code, or turned into a trait object of a trait without a specification, holds markers in place of its logical values when it comes back, and no proof of them; a value of an invariant type still satisfies its invariant ([`logic.unsafe.invariant`](#unsafe-code)). So does a value read through a raw pointer, given another type by a pointer cast or by `transmute`, made by `mem::zeroed` or `MaybeUninit::assume_init`, or returned by foreign code or inline assembly.
 
 r[logic.ghost.generic-instantiations]
 The program's own generic code is checked again at each instantiation whose type arguments contain logical types.
@@ -59,7 +59,7 @@ r[logic.ghost.no-trait-impls]
 Apart from `impl Model`, no logical type appears in an `impl`'s self type, its trait's arguments, or its associated types, and no trait method's signature holds logical values.
 
 r[logic.ghost.no-unions]
-No field of a union has a type that holds logical values.
+No field of a union has a type that carries a forgeable proof or is an invariant type, since reading another field would make its value from memory of a different type.
 
 ## The boundary with unchecked code
 
@@ -69,22 +69,31 @@ r[logic.boundary.unchecked]
 r[logic.boundary.completable]
 A type holding logical values is *completable* when every value of its erased form is the erasure of one of its values. Locus judges this from types alone, and treats every case its judgment does not cover as not completable. `Int`, and the logical types that Locus's library declares completable, such as `Nat`, `Bool`, and `Seq<T>` for a completable `T`, are completable. A `#[derive(Logical)]` type is completable when one of its constructors has no proof fields and only completable fields, without recurring. A runtime type or a tuple is completable when every logical type it holds is. Proof types and logical function types are not.
 
-r[logic.boundary.calls]
-A function or closure whose parameters hold logical values that are not completable, like any other value that can be called with such arguments, is never coerced to a function pointer, never turned into a trait object, and is passed to a generic parameter only of the program's own code. It is not an `extern`, `#[no_mangle]`, or `#[export_name]` function. So it never reaches unchecked code, or specified standard library code, which could call it without its proof.
+r[logic.boundary.payload]
+A value *carries a forgeable proof* when a logical type that is not completable appears in its type as a type argument, at any depth, as in `@P`, `Option<@P>`, or `Vec<(i: usize, @(i < n))>`. Writing such a place could store a marker taken from a proof of another proposition. A type of the program's own is an *invariant type* when it, or a type it holds, has a proof field; unchecked code can neither construct one nor write the fields its proofs read, because a proof field is reachable from no other code, so a value of an invariant type may pass through unchecked code and is still believed. These are distinct: `Option<@P>` carries a forgeable proof and is not an invariant type; `Interval` is an invariant type and carries no forgeable proof; `Vec<Interval>` carries neither.
 
-r[logic.boundary.writable]
-A place holding logical values can be written through a value when it is behind a `&mut` or `*mut` in the value's type or its type arguments, at any depth, or inside a type that Locus's library specifies as writable through a shared handle: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, and the sending halves of channels. What a closure, or a value of the program's own type, holds in fields whose types its own definition fixes does not count; its type arguments always do.
+r[logic.boundary.calls]
+A function or closure with a parameter that carries a forgeable proof, like any other value that can be called with such an argument, is never coerced to a function pointer, never turned into a trait object, and is passed to a generic parameter only of the program's own code. It is not an `extern`, `#[no_mangle]`, or `#[export_name]` function. So it never reaches unchecked code, or specified standard library code, which could call it without its proof. What calling a value gives access to is [`logic.boundary.access`](#the-boundary-with-unchecked-code)'s concern.
+
+r[logic.boundary.access]
+A value *grants write access* to a place that carries a forgeable proof when code holding the value can store into that place. Locus decides this from the value's type: a `&mut` or `*mut` to such a place grants it; a type of the program's own grants whatever its fields' types grant, following its own definition; a standard library type grants what Locus's library describes for it, which covers the mutable handles `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, the sending halves of channels, and the guards, mutable iterators, and entries that give mutable access to their contents; a callable grants what calling it yields, through its result or the places it captures. Any other type whose value could hold such access, including one whose type arguments carry a forgeable proof and one Locus has no description for, is taken to grant it. What a closure or a value of the program's own type holds in fields whose types its definition fixes, with no forgeable proof among them, does not grant access.
 
 r[logic.boundary.writes]
-No value through which a place holding logical values that are not completable can be written reaches unchecked code, as an argument or inside another value, and no raw pointer to such a place is made: no raw borrow, no cast or coercion of a reference to it into a raw pointer, and no call that returns a raw pointer into it, such as `as_mut_ptr`. A completable value that unchecked code may have written comes back as any value of its type: Locus forgets what it knew about it.
+No value that grants write access to a place carrying a forgeable proof reaches unchecked code, as an argument, inside another value, or as the result of a callable that does; no raw pointer to such a place is made, by a raw borrow, by a cast or coercion of a reference to it, or by a call that returns a raw pointer into it, such as `as_mut_ptr`; and no value granting such access is coerced to a trait object or otherwise given a type that hides the access from Locus. A completable value that unchecked code may have written comes back as any value of its type: Locus forgets what it knew about it.
+
+r[logic.boundary.escape]
+Locus keeps a fact about a place only while no code that could write the place runs without a write Locus sees. A call to a function whose effect Locus does not know may write every place reachable through a `&mut` or a shared mutable handle it is passed, and every place that earlier escaped to unchecked code, and retains that access; so after it, Locus knows those places only by their types, until a write it sees, such as an assignment or a call whose postcondition gives the place a value, makes a fact about them hold again. A checked function's effect — the places it may write and the access it may retain — is summarized from its body and the functions it calls, and a specification may describe the effect of code Locus does not check more narrowly. How the summary is computed is the runtime semantics ([#6](https://github.com/nikhilgarg28/locus/issues/6)); until it is, every call to a function without a known effect is treated this way.
 
 ## Unsafe code
 
-r[logic.unsafe.exposed]
-A place is *exposed* from the point where its address reaches a raw pointer, by a raw borrow, by a cast or coercion of a reference to it, or by a call that returns a raw pointer into it, such as `as_mut_ptr`, and from the point where an address into it is exposed as an integer. A `static mut`, and a static declared in an `extern` block, is always exposed. From then on, Locus knows an exposed place, the whole local, static, or referent it is part of, and everything they own, only by their types and the invariants of their types.
+r[logic.unsafe.escape]
+A place *escapes* from the point where its address reaches a raw pointer, by a raw borrow, by a cast or coercion of a reference to it, or by a call that returns a raw pointer into it, such as `as_mut_ptr`; from the point where an address into it is exposed as an integer; and from the point where a `&mut` to it, or a value granting write access to it, is passed to code whose effect Locus does not know. A `static mut`, and a static declared in an `extern` block, always counts as escaped. From then on Locus holds no fact about the place, the whole local, static, or referent it is part of, or anything they own, beyond their types and invariants, except where a write it sees gives the place a value again; and every later call to code whose effect it does not know may write it ([escape](#the-boundary-with-unchecked-code)).
 
 r[logic.unsafe.no-conjuring]
-Code that Locus checks never makes a value of a type that holds logical values that are not completable from memory of another type: where the source names such a type, it is not the target of a `transmute` or of a cast from a pointer to another type, and no value of it is taken from `mem::zeroed` or `MaybeUninit::assume_init`.
+Code that Locus checks never makes a value that carries a forgeable proof, or a value of an invariant type, from memory of another type. Where the source names such a type, no value of it is the target of a `transmute`, `transmute_copy`, or a cast from a pointer to another type, is read from a field of a union, or is taken from `mem::zeroed` or `MaybeUninit::assume_init`; and no `extern` function's signature names such a type in a parameter or result. The value is built from its runtime parts instead, with its proofs proved.
+
+r[logic.unsafe.invariant]
+An invariant type's proof fields are an obligation Locus places on `unsafe` code beyond Rust's own: every value of the type that code Locus checks can observe satisfies them, including one observed in a callback or while unwinding. Generic `unsafe` code meets this for free, since it cannot name the type's invariant; other `unsafe` code, in the crate's dependencies or, for an exported crate, in its users, meets it as a trusted assumption, which a hand-written `unsafe impl` records for its type. Opening an invariant under exclusive access and restoring it is not yet supported.
 
 ## Logical code
 

@@ -25,4 +25,7 @@ r[contracts.invariants.proof-holders]
 A field whose type holds a proof, such as an `Option<@P>`, counts as a proof field. A tuple component that a later component's proposition reads follows the rules for a field that a proof field reads.
 
 r[contracts.unsafe-impls]
-No `unsafe impl` that a derive or another macro generates is allowed on a type with proof fields.
+No `unsafe impl` that a derive or another macro generates is allowed on a type with proof fields. A hand-written `unsafe impl` is the programmer's promise, under [`logic.unsafe.invariant`](logical-layer.md#unsafe-code), that the type's invariant is upheld.
+
+r[contracts.invariants.observed]
+A value of a type with proof fields satisfies them wherever code that Locus checks can observe it, which is everywhere a Locus value is observed. Code that Locus does not check may hold, move, copy, or drop such a value, or call the type's own checked functions, but cannot construct one or write the fields its proofs read.

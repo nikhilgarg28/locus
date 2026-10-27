@@ -1,0 +1,12 @@
+//~ question: Does a derived model keep the runtime structure of a field that holds proofs?
+//~ spec: models.derived
+//~ rfc: 0002
+
+#[derive(Model)]
+struct Checked {
+    indices: Vec<(i: usize, @(i < 10))>,
+}
+
+fn same_length(a: &Checked, b: &Checked, same: @(a === b)) -> @(a.indices.len() == b.indices.len()) {
+    _
+}

@@ -1,5 +1,5 @@
 //~ question: May the sending half of a channel of proofs be given to code Locus has no specification for?
-//~ spec: logic.boundary.writable, logic.boundary.writes
+//~ spec: logic.boundary.access, logic.boundary.writes
 //~ rfc: 0002
 
 use std::sync::mpsc;

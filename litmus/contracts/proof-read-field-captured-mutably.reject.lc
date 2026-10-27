@@ -8,7 +8,9 @@ struct Interval {
     ordered: @(lo <= hi),
 }
 
-fn widen(iv: &mut Interval) {
-    let mut grow = || iv.hi += 1; //~ error: the closure captures `iv.hi` by mutable reference, and the proof field `ordered` reads it
-    grow();
+fn touch(iv: &mut Interval) {
+    let mut borrow_hi = || {
+        let _hi: &mut u32 = &mut iv.hi;
+    }; //~^^ error: the closure captures `iv.hi` by mutable reference, and the proof field `ordered` reads it
+    borrow_hi();
 }

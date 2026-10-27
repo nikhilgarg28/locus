@@ -1,5 +1,5 @@
 //~ question: May an exported crate's public struct have a public field that its invariant reads?
-//~ spec: export.invariants-closed
+//~ spec: export.invariants-closed, contracts.invariants.observed
 //~ rfc: 0002
 //~ mode: export
 

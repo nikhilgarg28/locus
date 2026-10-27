@@ -1,0 +1,8 @@
+//~ question: May a proposition in a `let` annotation read a place that the initializer leaves in place?
+//~ spec: observe.let.after-initializer, observe.place.readable
+//~ rfc: 0001
+
+fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
+    let (count, again): (usize, @(v.len() > 0)) = (v.len(), nonempty);
+    count
+}

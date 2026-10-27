@@ -1,0 +1,15 @@
+//~ question: Is an invariant type's invariant believed for a value that passed through unchecked generic code?
+//~ spec: logic.unsafe.invariant, contracts.invariants.observed
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn width(iv: Interval) -> u32 {
+    let back = std::hint::black_box(iv);
+    let ok: @(back.lo <= back.hi) = back.ordered;
+    back.hi - back.lo
+}

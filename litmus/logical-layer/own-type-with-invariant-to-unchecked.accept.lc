@@ -1,5 +1,5 @@
 //~ question: May a value of the program's own type with a proof field be lent mutably to code Locus has no specification for?
-//~ spec: logic.boundary.writable, logic.boundary.writes
+//~ spec: logic.boundary.access, logic.boundary.payload, logic.boundary.writes
 //~ rfc: 0002
 
 struct Interval {

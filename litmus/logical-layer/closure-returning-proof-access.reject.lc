@@ -1,0 +1,11 @@
+//~ question: May a closure whose result gives mutable access to a place holding a proof be passed to unchecked code?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+fn keep(n: u32) -> u32 {
+    let mut found: Option<@(n > 0)> = None;
+    let access = &mut found;
+    let give = move || access;
+    std::hint::black_box(give); //~ error: calling `give` gives mutable access to `found`, which holds a proof, so `give` cannot be passed to `black_box`
+    n
+}

@@ -1,0 +1,20 @@
+//~ question: May a vector of values of an invariant type be lent mutably to unchecked code?
+//~ spec: logic.boundary.payload, logic.boundary.access
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widths(v: &mut Vec<Interval>) -> u32 {
+    std::hint::black_box(&mut *v);
+    match v.first() {
+        Some(iv) => {
+            let ok: @(iv.lo <= iv.hi) = iv.ordered;
+            iv.hi - iv.lo
+        }
+        None => 0,
+    }
+}

@@ -1,5 +1,5 @@
 //~ question: May checked code make a value of a type with proof fields by `transmute`?
-//~ spec: logic.unsafe.no-conjuring
+//~ spec: logic.unsafe.no-conjuring, logic.unsafe.invariant
 //~ rfc: 0002
 
 struct Interval {

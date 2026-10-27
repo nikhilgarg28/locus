@@ -12,6 +12,8 @@ litmus/
     interior-mutability.open.lc
 ```
 
+Examples are written for Rust's edition 2024, so an example whose meaning depends on the edition, such as one about the lifetimes that `impl Trait` captures, means what it means in 2024.
+
 A directory holds one topic: variants of one idea that sit on either side of a line. A file is `<name>.<outcome>.lc`, where names are lowercase, hyphenated words and the outcome is one of:
 
 | Outcome | Meaning |

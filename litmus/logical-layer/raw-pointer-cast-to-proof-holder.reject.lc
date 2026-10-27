@@ -1,5 +1,5 @@
 //~ question: May a reference to a place that holds a proof be cast to a raw pointer?
-//~ spec: logic.boundary.writes, logic.unsafe.exposed
+//~ spec: logic.boundary.writes
 //~ rfc: 0002
 
 fn check(x: u32) -> Option<@(x > 0)> {

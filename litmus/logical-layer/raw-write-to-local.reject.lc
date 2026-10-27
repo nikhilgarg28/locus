@@ -1,5 +1,5 @@
 //~ question: After a local's address reaches a raw pointer, does Locus still know its value?
-//~ spec: logic.unsafe.exposed
+//~ spec: logic.unsafe.escape
 //~ rfc: 0002
 
 fn raw() -> u32 {

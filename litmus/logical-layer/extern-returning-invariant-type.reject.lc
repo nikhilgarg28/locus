@@ -1,0 +1,12 @@
+//~ question: May an `extern` function's signature name an invariant type?
+//~ spec: logic.unsafe.no-conjuring
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+unsafe extern "C" {
+    fn make_positive() -> Positive; //~ error: `make_positive` is `extern`, and its result has the invariant type `Positive`, which foreign code could make without its proof
+}

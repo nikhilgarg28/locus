@@ -1,5 +1,5 @@
 //~ question: Does a function with a proof parameter run as if the parameter were absent?
-//~ spec: logic.ghost.erased, logic.boundary.calls
+//~ spec: logic.ghost.erased
 //~ rfc: 0002
 
 fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
