@@ -98,6 +98,16 @@ pub fn title(text: &str) -> Option<&str> {
         .map(str::trim)
 }
 
+/// The value of the first `- **Name:** value` line outside code, with its
+/// line number.
+pub fn field<'a>(text: &'a str, name: &str) -> Option<(usize, &'a str)> {
+    let prefix = format!("- **{name}:**");
+    lines(text)
+        .into_iter()
+        .filter(|l| !l.in_fence)
+        .find_map(|l| Some((l.number, l.text.strip_prefix(&prefix)?.trim())))
+}
+
 /// Inline link targets `[text](target)` outside code, with their line numbers.
 pub fn links(text: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();

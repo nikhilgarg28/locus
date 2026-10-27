@@ -43,3 +43,52 @@
     letter-spacing: 0.04em;
     font-size: 0.85em;
 }
+
+/* Issues: a badge for each kind, also used next to the rules they cite. */
+
+.issue-kind,
+.issue-status,
+.rule-issue {
+    display: inline-block;
+    padding: 0.05em 0.5em;
+    border-radius: 4px;
+    font-size: 0.8em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.issue-status {
+    border: 1px solid var(--searchbar-border-color, currentColor);
+}
+
+.issue-kind.soundness,
+.rule-issue.soundness {
+    background: rgba(214, 69, 65, 0.22);
+}
+
+.issue-kind.decision,
+.rule-issue.decision {
+    background: rgba(230, 160, 30, 0.25);
+}
+
+.issue-kind.design,
+.rule-issue.design {
+    background: rgba(70, 130, 220, 0.22);
+}
+
+.issue-kind.task,
+.rule-issue.task {
+    background: rgba(120, 120, 120, 0.22);
+}
+
+.rule-issue::before {
+    content: "⚑ ";
+}
+
+.rule-issue {
+    color: var(--fg) !important;
+    text-decoration: none !important;
+    text-transform: none;
+    font-family: var(--mono-font, monospace);
+}

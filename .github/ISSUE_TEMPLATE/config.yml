@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: The project's own issues
+    url: https://github.com/nikhilgarg28/locus/tree/main/issues
+    about: Open questions, design work, and tasks are files in the repository, changed through pull requests.

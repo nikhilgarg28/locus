@@ -18,7 +18,7 @@ A directory holds one topic: variants of one idea that sit on either side of a l
 |---|---|
 | `accept` | The program must be accepted, and must produce each value its `run` lines give |
 | `reject` | The program must be rejected, with each error its annotations give |
-| `open` | Not decided. The file links the `decision-needed` issue that will decide it. |
+| `open` | Not decided. The file links the [decision issue](../issues/README.md) that will decide it. |
 
 `accept` and `reject` examples are *decided*. Deciding an open question renames its file, for example from `interior-mutability.open.lc` to `interior-mutability.reject.lc`.
 
@@ -62,7 +62,7 @@ fn inc(x: u8) -> u8 {
 |---|---|---|
 | `//~ question: <text>` | Header, required | The one question the example asks |
 | `//~ spec: <id>, <id>` | Header; required when decided | The spec rules the example tests |
-| `//~ issue: #<n>` | Header; required when open | The issue that will decide it |
+| `//~ issue: <name>` | Header; required when open | The issue it belongs to, `issues/<name>.md`. An open example links the decision that will decide it. |
 | `//~ rfc: <nnnn>` | Header, optional | The RFC that introduced it |
 | `//~ mode: build` or `//~ mode: export` | Header, optional | The mode the example is checked in: built by Locus, the default, or exported to Rust |
 | `//~ error[Lnnnn]: <text>` | After code on a line | An error with this code must be reported on this line |

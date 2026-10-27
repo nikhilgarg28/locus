@@ -1,11 +1,12 @@
 //! `cargo xtask check`: every structural check over the repository, plus the
-//! cross-references between them (rule coverage, citations, error codes, and
-//! links).
+//! cross-references between them (rule coverage, citations, error codes,
+//! issues, and links).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::diagnostics::{self, Diagnostic};
+use crate::issues::{self, Issue, Kind, Status};
 use crate::litmus::{self, Example, Outcome};
 use crate::markdown;
 use crate::repo::{self, Repo};
@@ -20,6 +21,8 @@ pub struct Checked {
     pub rfcs: Vec<Rfc>,
     pub diagnostics: Vec<Diagnostic>,
     pub trust: Vec<Entry>,
+    /// In the order the index lists them: by status, then kind, then title.
+    pub issues: Vec<Issue>,
 }
 
 impl Checked {
@@ -86,6 +89,13 @@ pub fn run(root: &Path) -> Result<(), String> {
             .count(),
         checked.diagnostics.len(),
     );
+    let issues = |status| checked.issues.iter().filter(|i| i.status == status).count();
+    println!(
+        "issues: {} open, {} later, {} closed",
+        issues(Status::Open),
+        issues(Status::Later),
+        issues(Status::Closed)
+    );
     if !report.warnings.is_empty() {
         println!("{} warning(s)", report.warnings.len());
     }
@@ -98,9 +108,11 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
     let rfcs = rfc::check(repo, report);
     let diagnostics = diagnostics::check(repo, report);
     let trust = trust::check(repo, report);
+    let issues = issues::check(repo, report);
     check_coverage(&spec, &examples, report);
     check_provenance(&spec, &examples, &rfcs, report);
     check_trust_origins(&trust, &rfcs, report);
+    check_issues(&issues, &spec, &examples, &rfcs, report);
     check_error_codes(&examples, &diagnostics, report);
     check_links(repo, report);
     Checked {
@@ -109,6 +121,97 @@ pub fn check_repo(repo: &Repo, report: &mut Report) -> Checked {
         rfcs,
         diagnostics,
         trust,
+        issues,
+    }
+}
+
+/// An issue cites rules that exist, and is closed by something that exists. A
+/// decision closes only when the owner decides it: by an accepted RFC, or by
+/// the owner's words, quoted in the last entry of its log. An example links an
+/// issue that exists, and an open example links a decision that is not closed.
+fn check_issues(
+    issues: &[Issue],
+    spec: &Spec,
+    examples: &[Example],
+    rfcs: &[Rfc],
+    report: &mut Report,
+) {
+    let ids: BTreeSet<&str> = spec.rules.iter().map(|r| r.id.as_str()).collect();
+    for issue in issues {
+        for (line, id) in &issue.rules {
+            if !ids.contains(id.as_str()) {
+                report.error(
+                    &issue.path,
+                    Some(*line),
+                    format!("`{id}` is not a rule in the spec"),
+                );
+            }
+        }
+        let Some((line, _)) = &issue.closed_by else {
+            continue;
+        };
+        let line = Some(*line);
+        match issue.closed_by_rfc() {
+            Some(number) => match rfcs
+                .iter()
+                .find(|r| r.path != rfc::TEMPLATE && r.number == number)
+            {
+                None => report.error(
+                    &issue.path,
+                    line,
+                    format!("RFC {number} does not exist"),
+                ),
+                Some(rfc) if issue.kind == Kind::Decision && !rfc.status.binds() => report.error(
+                    &issue.path,
+                    line,
+                    format!(
+                        "a decision closes when the owner decides it, and RFC {number} is {}, not accepted",
+                        rfc.status.as_str()
+                    ),
+                ),
+                Some(_) => {}
+            },
+            None if issue.kind == Kind::Decision
+                && !(issue.closed_by_owner() && issue.last_entry_quotes) =>
+            {
+                report.error(
+                    &issue.path,
+                    line,
+                    "a decision is closed by an accepted RFC (`RFC NNNN`), or by `the owner` with their words quoted in the last log entry",
+                )
+            }
+            None => {}
+        }
+    }
+    let by_name: BTreeMap<&str, &Issue> = issues.iter().map(|i| (i.name.as_str(), i)).collect();
+    for example in examples {
+        let Some(name) = &example.issue else {
+            continue;
+        };
+        let open = example.outcome == Outcome::Open;
+        match by_name.get(name.as_str()) {
+            None => report.error(
+                &example.path,
+                None,
+                format!("`//~ issue: {name}` names no issue: there is no issues/{name}.md"),
+            ),
+            Some(issue) if open && issue.kind != Kind::Decision => report.error(
+                &example.path,
+                None,
+                format!(
+                    "an open example links the decision that will decide it, and issues/{name}.md is a {} issue",
+                    issue.kind.as_str()
+                ),
+            ),
+            Some(issue) if open && issue.status == Status::Closed => report.error(
+                &example.path,
+                None,
+                format!(
+                    "issues/{name}.md is closed: decide this example, or link the decision that still will"
+                ),
+            ),
+            Some(_) => {}
+        }
     }
 }
 
@@ -343,6 +446,11 @@ Nothing cites this.
 ";
 
     const TRUST: (&str, &str) = ("design/TRUST.md", "# Trust model\n");
+    /// The decision that the open examples of these tests link.
+    const ISSUE: (&str, &str) = (
+        "issues/lonely.md",
+        "# Lonely\n\n- **Kind:** decision\n- **Status:** open\n\n## Log\n",
+    );
     /// An accepted RFC listing every rule of CHAPTER, so that coverage tests
     /// see no provenance errors.
     const RFC: (&str, &str) = (
@@ -353,7 +461,7 @@ Nothing cites this.
 
     fn example(outcome: &str, spec: &str, body: &str) -> String {
         let issue = if outcome == "open" {
-            "//~ issue: #1\n"
+            "//~ issue: lonely\n"
         } else {
             ""
         };
@@ -385,6 +493,7 @@ Nothing cites this.
             ("litmus/lonely/q.open.lc", &open_lonely),
             TRUST,
             RFC,
+            ISSUE,
         ]);
         let mut report = Report::default();
         check_repo(&repo, &mut report);
@@ -506,6 +615,84 @@ Nothing cites this.
             None
         );
         assert!(checked.binds("erasure.order.left-to-right"));
+    }
+
+    #[test]
+    fn issues_cite_rules_and_close_as_allowed() {
+        let issue = |kind: &str, status: &str, line: &str, log: &str| {
+            format!("# T\n\n- **Kind:** {kind}\n- **Status:** {status}\n{line}\n\n## Log\n{log}")
+        };
+        let closed =
+            |kind, by: &str, log| issue(kind, "closed", &format!("- **Closed by:** {by}"), log);
+        let quoted = "\n### 2026-10-27, PR #12\n\n> Keep it.\n";
+        let files = [
+            (
+                "issues/bad-rule.md",
+                issue("task", "open", "- **Rules:** `erasure.nope`", ""),
+            ),
+            ("issues/by-accepted.md", closed("decision", "RFC 0001", "")),
+            (
+                "issues/by-owner.md",
+                closed("decision", "the owner, in review", quoted),
+            ),
+            (
+                "issues/by-owner-unquoted.md",
+                closed("decision", "the owner", ""),
+            ),
+            ("issues/by-pr.md", closed("decision", "PR #3", quoted)),
+            ("issues/by-proposed.md", closed("decision", "RFC 0002", "")),
+            ("issues/by-missing.md", closed("task", "RFC 0009", "")),
+            ("issues/task-done.md", closed("task", "PR #3", "")),
+            (
+                "litmus/q/a-missing.accept.lc",
+                "//~ question: q\n//~ spec: erasure.tag.kept\n//~ issue: missing-issue\n".into(),
+            ),
+            (
+                "litmus/q/b-closed.open.lc",
+                "//~ question: q\n//~ issue: by-accepted\n".into(),
+            ),
+            (
+                "litmus/q/c-task.open.lc",
+                "//~ question: q\n//~ issue: task-done\n".into(),
+            ),
+            (
+                "litmus/q/d-fine.open.lc",
+                "//~ question: q\n//~ issue: lonely\n".into(),
+            ),
+            (
+                "design/rfcs/0002-next.md",
+                "# RFC 0002: Next\n\n- **Status:** proposed\n".into(),
+            ),
+        ];
+        let mut files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        files.extend([
+            ("spec/README.md", SPEC_README),
+            ("spec/erasure.md", CHAPTER),
+            TRUST,
+            RFC,
+            ISSUE,
+        ]);
+        let repo = Repo::from_files(&files);
+        let mut report = Report::default();
+        check_repo(&repo, &mut report);
+        let messages: Vec<String> = report
+            .messages()
+            .into_iter()
+            .filter(|m| m.contains("issue"))
+            .collect();
+        assert_eq!(
+            messages,
+            [
+                "error: issues/bad-rule.md:5: `erasure.nope` is not a rule in the spec",
+                "error: issues/by-owner-unquoted.md:5: a decision is closed by an accepted RFC (`RFC NNNN`), or by `the owner` with their words quoted in the last log entry",
+                "error: issues/by-pr.md:5: a decision is closed by an accepted RFC (`RFC NNNN`), or by `the owner` with their words quoted in the last log entry",
+                "error: issues/by-proposed.md:5: a decision closes when the owner decides it, and RFC 0002 is proposed, not accepted",
+                "error: issues/by-missing.md:5: RFC 0009 does not exist",
+                "error: litmus/q/a-missing.accept.lc: `//~ issue: missing-issue` names no issue: there is no issues/missing-issue.md",
+                "error: litmus/q/b-closed.open.lc: issues/by-accepted.md is closed: decide this example, or link the decision that still will",
+                "error: litmus/q/c-task.open.lc: an open example links the decision that will decide it, and issues/task-done.md is a task issue",
+            ]
+        );
     }
 
     #[test]

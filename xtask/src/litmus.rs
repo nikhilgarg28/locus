@@ -72,7 +72,8 @@ pub struct Example {
     pub question: Option<String>,
     /// Cited spec rules, with the line of each citation.
     pub specs: Vec<(usize, String)>,
-    pub issue: Option<u32>,
+    /// The name of the issue it links, a file under `issues/`.
+    pub issue: Option<String>,
     pub rfc: Option<String>,
     pub mode: Mode,
     pub errors: Vec<ErrorExpectation>,
@@ -273,10 +274,10 @@ pub fn parse(
                     }
                 }
             }
-            "issue" => match value.strip_prefix('#').and_then(|n| n.parse::<u32>().ok()) {
-                Some(_) if example.issue.is_some() => fail("an example links one issue"),
-                Some(n) => example.issue = Some(n),
-                None => fail("expected `//~ issue: #<number>`"),
+            "issue" => match is_kebab(value) {
+                true if example.issue.is_some() => fail("an example links one issue"),
+                true => example.issue = Some(value.to_string()),
+                false => fail("expected `//~ issue: <name>`, naming the file issues/<name>.md"),
             },
             "rfc" => {
                 if value.len() == 4 && value.chars().all(|c| c.is_ascii_digit()) {
@@ -311,7 +312,7 @@ pub fn parse(
         Outcome::Open if example.issue.is_none() => report.error(
             path,
             None,
-            "an open example must link its decision-needed issue with `//~ issue: #N`",
+            "an open example must link the decision that will decide it with `//~ issue: <name>`",
         ),
         _ => {}
     }
@@ -483,7 +484,7 @@ fn f() -> &'static str {
             messages,
             [
                 "error: litmus/t/a.open.lc: missing `//~ question:` in the header",
-                "error: litmus/t/a.open.lc: an open example must link its decision-needed issue with `//~ issue: #N`",
+                "error: litmus/t/a.open.lc: an open example must link the decision that will decide it with `//~ issue: <name>`",
             ]
         );
     }
@@ -492,7 +493,7 @@ fn f() -> &'static str {
     fn rejects_malformed_annotations() {
         let text = "\
 //~ question: q
-//~ issue: #3
+//~ issue: runtime-semantics
 fn f() {}
 //~ spec: a.b
 //~ error: alone
@@ -525,6 +526,14 @@ fn g() {} //~ run: g() => 1
                     "error: {path}:10: only error annotations can follow code on the same line"
                 ),
             ]
+        );
+        let (example, messages) = parse_one(path, "//~ question: q\n//~ issue: #3\n");
+        assert_eq!(example.issue, None);
+        assert_eq!(
+            messages[0],
+            format!(
+                "error: {path}:2: expected `//~ issue: <name>`, naming the file issues/<name>.md"
+            )
         );
     }
 

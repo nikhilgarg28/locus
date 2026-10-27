@@ -9,7 +9,7 @@ The owner's time is the scarcest resource in the project. A brief turns open que
 
 ## Gathering
 
-1. Collect open issues labeled `decision-needed`, `proposed` RFCs, and `.open` litmus examples.
+1. Collect the `decision` issues in `issues/` that are open or for later, `proposed` RFCs, and `.open` litmus examples.
 2. Merge duplicates, and note which questions depend on others.
 3. Order them by what they block: work waiting on the answer, and other decisions that depend on it.
 

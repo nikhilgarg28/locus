@@ -10,7 +10,7 @@ An RFC proposes what Locus should mean and why. The owner decides; your job is t
 ## Before writing
 
 1. Read [VISION.md](../../../VISION.md) and [the RFC process](../../../design/rfcs/README.md).
-2. Find what the proposal touches: the spec chapters and rules, the accepted RFCs they came from, and their litmus examples (`cargo xtask context <rule-id or prefix>` gathers them). Search open issues for the same question.
+2. Find what the proposal touches: the spec chapters and rules, the accepted RFCs they came from, and their litmus examples (`cargo xtask context <rule-id or prefix>` gathers them). Search `issues/` for the same question.
 3. If the proposal contradicts the vision or an accepted RFC, say so at the top of the RFC rather than working around it.
 
 ## Writing
@@ -20,7 +20,7 @@ An RFC proposes what Locus should mean and why. The owner decides; your job is t
 3. Fill in every row of the interactions table. "None" means you checked.
 4. Give real alternatives, each with the reason it loses. If you favor one, say which and why, but present the others fairly.
 5. Write the rules the RFC adds into the spec (`r[id]` markers; see [spec/README.md](../../../spec/README.md)), list each in the RFC's `## Rules` table, and add a litmus example for each one: for a rule about what is allowed, an accepted example and a nearly identical rejected one. Use the [litmus playbook](../litmus/SKILL.md) to probe each rule's boundary.
-6. Turn each unresolved question into an `.open` litmus example or a `decision-needed` issue, and list it under "Unresolved questions".
+6. Turn each unresolved question into a `decision` issue, with an `.open` litmus example where one helps, and list it under "Unresolved questions".
 
 ## Finishing
 

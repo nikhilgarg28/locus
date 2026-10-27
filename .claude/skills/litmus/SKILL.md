@@ -13,7 +13,7 @@ A litmus example asks one question with a small program, and its file name gives
 2. Write the smallest program that asks the question. Remove everything that does not bear on it.
 3. Header: one `//~ question:`, the `//~ spec:` rules it tests, `//~ rfc:` if an RFC introduced it, and `//~ mode: export` if it is about export mode. `cargo xtask context <rule-id>` shows the examples a rule already has.
 4. For `reject`, mark each expected error on its line. For `accept`, add `//~ run:` lines when the run-time behavior is part of the question.
-5. Classify it from the spec and accepted RFCs only. If they do not decide it, it is `open`: open a `decision-needed` issue and link it with `//~ issue:`. Never pick an outcome because it is convenient or because a draft implementation does it.
+5. Classify it from the spec and accepted RFCs only. If they do not decide it, it is `open`: add a `decision` issue to `issues/` and link it with `//~ issue: <name>`. Never pick an outcome because it is convenient or because a draft implementation does it.
 
 ## Probing a boundary
 

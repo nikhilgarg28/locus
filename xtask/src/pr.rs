@@ -1,12 +1,15 @@
 //! `cargo xtask pr-check`: guards on what a branch changes relative to its
 //! base. Design changes (vision, spec, RFCs) and build changes (compiler
 //! crates) go in separate PRs, and a decided expectation can change only when
-//! the PR declares it.
+//! the PR declares it. So can the record of an issue: a PR may edit an issue's
+//! text and add to its log, but deleting or renaming an issue, or changing what
+//! its log already says, needs declaring too.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
+use crate::issues;
 use crate::lexer;
 use crate::litmus::{self, ErrorExpectation, Outcome};
 use crate::report::Report;
@@ -56,8 +59,9 @@ pub fn run(root: &Path, args: &Args) -> Result<(), String> {
     }
     let mut found = expectation_changes(&changes, &base, &head);
     found.extend(removed_rules(&base_spec, &head_spec));
+    found.extend(issue_changes(&changes, &base, &head));
     if found.is_empty() {
-        println!("ok: no decided expectation changed");
+        println!("ok: no decided expectation or issue record changed");
         return Ok(());
     }
     let list: String = found.iter().map(|f| format!("\n  - {f}")).collect();
@@ -66,7 +70,7 @@ pub fn run(root: &Path, args: &Args) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "error: this branch changes decided expectations:{list}\n\
+            "error: this branch changes decided expectations or the record of an issue:{list}\n\
              If the owner asked for this, label the PR `expectation-change` and justify each change in its description."
         ))
     }
@@ -267,6 +271,42 @@ fn compare(
             ));
         }
     }
+}
+
+fn is_issue(path: &str) -> bool {
+    path.starts_with("issues/") && path.ends_with(".md") && path != issues::README
+}
+
+/// Deleted and renamed issues, and logs that changed other than by growing.
+/// Editing the rest of an issue, or closing it, is not a change that needs
+/// declaring; `cargo xtask check` decides what may close it.
+pub fn issue_changes(
+    changes: &[Change],
+    base: &dyn Fn(&str) -> Option<String>,
+    head: &dyn Fn(&str) -> Option<String>,
+) -> Vec<String> {
+    let mut found = Vec::new();
+    for change in changes {
+        match change {
+            Change::Deleted(path) if is_issue(path) => {
+                found.push(format!("deletes the issue {path}; close it instead"));
+            }
+            Change::Renamed { from, to } if is_issue(from) => found.push(format!(
+                "renames the issue {from} to {to}; an issue's name is permanent"
+            )),
+            Change::Modified(path) if is_issue(path) => {
+                if let (Some(old), Some(new)) = (base(path), head(path))
+                    && !issues::log_only_grows(&old, &new)
+                {
+                    found.push(format!(
+                        "{path}: changes what its log says, which may only grow at the end"
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    found
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -478,6 +518,57 @@ mod tests {
                 "litmus/t/spaced.accept.lc: changes the program, which can change what the example tests",
                 "litmus/t/doc.accept.lc: changes the program, which can change what the example tests",
                 "litmus/t/mode.accept.lc: changes the mode from export to build",
+            ]
+        );
+    }
+
+    #[test]
+    fn finds_issue_record_changes() {
+        let issue = |log: &str| {
+            format!(
+                "# T\n\n- **Kind:** task\n- **Status:** open\n\n## Log\n\n### 2026-10-27, a\n\n{log}\n"
+            )
+        };
+        let base: BTreeMap<&str, String> = [
+            ("issues/grown.md", issue("Started.")),
+            ("issues/edited.md", issue("Started.")),
+            ("issues/rewritten.md", issue("Started.")),
+        ]
+        .into_iter()
+        .collect();
+        let head: BTreeMap<&str, String> = [
+            (
+                "issues/grown.md",
+                issue("Started.\n\n### 2026-10-28, b\n\nDone."),
+            ),
+            (
+                "issues/edited.md",
+                issue("Started.").replace("Status:** open", "Status:** later"),
+            ),
+            ("issues/rewritten.md", issue("Never started.")),
+        ]
+        .into_iter()
+        .collect();
+        let changes = [
+            Change::Modified("issues/grown.md".into()),
+            Change::Modified("issues/edited.md".into()),
+            Change::Modified("issues/rewritten.md".into()),
+            Change::Modified(issues::README.into()),
+            Change::Deleted("issues/gone.md".into()),
+            Change::Renamed {
+                from: "issues/old.md".into(),
+                to: "issues/new.md".into(),
+            },
+            Change::Added("issues/fresh.md".into()),
+        ];
+        let base = |p: &str| base.get(p).cloned();
+        let head = |p: &str| head.get(p).cloned();
+        assert_eq!(
+            issue_changes(&changes, &base, &head),
+            [
+                "issues/rewritten.md: changes what its log says, which may only grow at the end",
+                "deletes the issue issues/gone.md; close it instead",
+                "renames the issue issues/old.md to issues/new.md; an issue's name is permanent",
             ]
         );
     }

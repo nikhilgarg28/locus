@@ -11,6 +11,7 @@ Locus is a superset of Rust with explicit, kernel-checked proofs that are erased
 | [design/rfcs/](design/rfcs/README.md) | Proposals and the reasons for each decision | Binding once accepted |
 | [design/TRUST.md](design/TRUST.md) | What must be trusted for a checked program to mean what it claims | Normative |
 | [litmus/](litmus/README.md) | Example programs that must be accepted, must be rejected, or are open questions | Decided outcomes are normative |
+| [issues/](issues/README.md) | Questions for the owner, design work, tasks, and soundness problems, one file each | A record. A decision closes only when the owner decides it. |
 | [diagnostics/](diagnostics/README.md) | One page per error code | Describes the compiler |
 | `crates/` | The compiler. Created by the first implementation RFC. | Implements the spec |
 | `spikes/` | Throwaway experiments. Nothing may depend on them. | None |
@@ -21,7 +22,7 @@ Each directory's README explains its format. Before editing files in a directory
 
 ## Read only what the task needs
 
-Read this file, the task (its issue or the request), and then only what the task touches: the spec chapters and rules it cites, the RFCs those rules came from, the litmus examples for them, and the README of each directory you edit. Do not read the whole repository to get started.
+Read this file, the task (its issue in `issues/`, or the request), and then only what the task touches: the spec chapters and rules it cites, the RFCs those rules came from, the litmus examples for them, and the README of each directory you edit. Do not read the whole repository to get started.
 
 Start from `cargo xtask context <rule-id>` for each rule the task cites. It prints the rule, the RFC that introduced it and whether that RFC is accepted, the examples on either side of it, the open examples that cite it, and the trust entries its RFC added.
 
@@ -29,15 +30,15 @@ Start from `cargo xtask context <rule-id>` for each rule the task cites. It prin
 
 - **Design**: RFCs, spec rules, litmus examples, the vision, and the trust model. No compiler code.
 - **Build**: compiler code and tests that implement accepted spec rules. Never changes the spec, the RFCs, the vision, or the trust model.
-- **Review**: no commits. Comments on a PR, or new issues.
+- **Review**: no commits. Comments on the PR; anything outside its scope is reported as issues for a PR of its own to add.
 
-Tooling, documentation, and process changes that change no semantics are ordinary PRs. `cargo xtask pr-check` rejects a branch that changes both the design (`VISION.md`, `spec/`, `design/`) and `crates/`.
+Tooling, documentation, and process changes that change no semantics are ordinary PRs. A PR of any kind may add, edit, and close issues. `cargo xtask pr-check` rejects a branch that changes both the design (`VISION.md`, `spec/`, `design/`) and `crates/`.
 
 ## Rules
 
-1. **Only the owner decides what Locus means.** When you meet a question the spec and accepted RFCs do not answer, do not choose the convenient answer. Open a `decision-needed` issue that states the question, what it blocks, and the options, add an `.open` litmus example if one helps, and stop that part of the work. Do the same when a spec rule, its RFC, and a decided example disagree: none of them wins ([spec/README.md](spec/README.md#when-sources-disagree)).
+1. **Only the owner decides what Locus means.** When you meet a question the spec and accepted RFCs do not answer, do not choose the convenient answer. Add a `decision` issue to [issues/](issues/README.md) in your PR that states the question, what it blocks, and the options, add an `.open` litmus example if one helps, and stop that part of the work. Do the same when a spec rule, its RFC, and a decided example disagree: none of them wins ([spec/README.md](spec/README.md#when-sources-disagree)).
 2. **An RFC binds only once accepted.** Write new RFCs as `proposed`. Set an RFC to `accepted` or `rejected` only when the owner has decided and asked you to record it. The owner's merge is the acceptance.
-3. **Do not weaken decided expectations.** Do not change a decided litmus outcome, remove or change an expected error code or run result, delete a decided example, or remove a spec rule unless the owner asked for that change. Such a PR must carry the `expectation-change` label and justify each change in its description; CI rejects it otherwise.
+3. **Do not weaken decided expectations.** Do not change a decided litmus outcome, remove or change an expected error code or run result, delete a decided example, or remove a spec rule unless the owner asked for that change. The same holds for the record of an issue: do not delete or rename one, or change what its log already says. Such a PR must carry the `expectation-change` label and justify each change in its description; CI rejects it otherwise.
 4. **Every spec rule has examples.** A rule (`r[id]`) needs at least one decided litmus example citing it, and a rule about what is allowed should have an accepted and a rejected example on either side of its line. CI enforces the first and warns about the second.
 5. **No new trust without an RFC.** Do not add axioms, trusted declarations, unchecked shortcuts, or anything else that extends [the trust model](design/TRUST.md) unless an accepted RFC names it there.
 6. **Do not merge, and do not push to `main`.** Open a PR from a branch; the owner merges.
@@ -48,7 +49,7 @@ Tooling, documentation, and process changes that change no semantics are ordinar
 
 ```sh
 cargo xtask check                          # every repository check; run before each PR
-cargo xtask context <rule-id>              # one rule, with its RFC, status, examples, and trust entries
+cargo xtask context <rule-id>              # one rule, with its RFC, status, examples, issues, and trust entries
 cargo xtask pr-check --base origin/main    # the PR guards that CI runs
 cargo xtask site                           # build the website into target/site
 cargo fmt --all
@@ -60,18 +61,18 @@ cargo test --workspace
 
 ## Issues and pull requests
 
-Work is tracked in GitHub issues. Labels:
+Work is tracked in [issues/](issues/README.md), one file per issue, and changes only through PRs. A PR may add issues, edit their text, add to the end of their logs, and close them as that README allows. GitHub's issue tracker is for reports from outside the project: do not create, edit, comment on, or close a GitHub issue unless the owner asks. Record the issue as a file in your PR instead, linking the report if there is one.
 
-| Label | Meaning |
+| Kind | Meaning |
 |---|---|
-| `decision-needed` | A question only the owner can answer; say what it blocks |
+| `decision` | A question only the owner can answer; say what it blocks |
 | `design` | Design work: an RFC, spec rules, or litmus examples |
-| `task` | Implementation work, written as a contract ([template](.github/ISSUE_TEMPLATE/task.md)) |
+| `task` | Implementation work, written as a contract |
 | `soundness` | Something accepted that should not be, or a hole in the trust model |
-| `expectation-change` | A PR that changes or removes decided expectations, with the owner's agreement |
-| `later` | Recorded so that it is not forgotten; not scheduled |
 
-PRs follow the [template](.github/pull_request_template.md): their kind, what authorizes them, expectation and trust changes, and the verification that ran.
+An issue's status is `open`, `later` (recorded so that it is not forgotten; not scheduled), or `closed`.
+
+PRs follow the [template](.github/pull_request_template.md): their kind, what authorizes them, expectation and trust changes, and the verification that ran. A PR that changes or removes decided expectations, or deletes, renames, or rewrites the log of an issue, carries the `expectation-change` label, with the owner's agreement.
 
 ## Playbooks
 

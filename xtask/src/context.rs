@@ -1,7 +1,8 @@
 //! `cargo xtask context <rule>...`: what the repository says about a rule, in
 //! one place: its text, the RFC that introduced it and that RFC's status, its
-//! examples, the questions still open about it, and the trust entries its RFC
-//! added. A task can start from this instead of from whole directories.
+//! examples, the questions still open about it, the issues that cite it, and
+//! the trust entries its RFC added. A task can start from this instead of from
+//! whole directories.
 
 use std::path::Path;
 
@@ -116,10 +117,31 @@ pub fn describe(checked: &Checked, has_compiler: bool, rule: &Rule) -> String {
     out.push_str("\n## Open questions\n\n");
     let open: Vec<&&Example> = citing.iter().filter(|e| !e.outcome.is_decided()).collect();
     if open.is_empty() {
-        out.push_str("No open example cites it. Check its RFC's unresolved questions and the open `decision-needed` issues.\n");
+        out.push_str("No open example cites it.\n");
     }
     for e in open {
         out.push_str(&example_line(e));
+    }
+    out.push_str("\n## Issues\n\n");
+    let issues: Vec<_> = checked
+        .issues
+        .iter()
+        .filter(|i| i.rules.iter().any(|(_, id)| *id == rule.id))
+        .collect();
+    if issues.is_empty() {
+        out.push_str("None cites it.\n");
+    }
+    for issue in issues {
+        out.push_str(&format!(
+            "- {} ({}, {}): {}\n",
+            issue.path,
+            issue.kind.as_str(),
+            issue.status.as_str(),
+            issue.title
+        ));
+        if let Some(blocks) = &issue.blocks {
+            out.push_str(&format!("  - blocks: {blocks}\n"));
+        }
     }
 
     if let Some(rfc) = rfc {
@@ -153,8 +175,8 @@ fn example_line(e: &Example) -> String {
     if e.mode == Mode::Export {
         facts.push("export mode".to_string());
     }
-    if let Some(issue) = e.issue {
-        facts.push(format!("issue #{issue}"));
+    if let Some(issue) = &e.issue {
+        facts.push(format!("issue {issue}"));
     }
     let mut line = format!(
         "- {} ({}): {}\n",
@@ -223,7 +245,12 @@ mod tests {
             ),
             (
                 "litmus/tag/maybe.open.lc",
-                "//~ question: Maybe?\n//~ spec: erasure.tag.kept\n//~ issue: #4\n",
+                "//~ question: Maybe?\n//~ spec: erasure.tag.kept\n//~ issue: tag-everywhere\n",
+            ),
+            (
+                "issues/tag-everywhere.md",
+                "# Is the tag kept everywhere?\n\n- **Kind:** decision\n- **Status:** open\n\
+                 - **Blocks:** the erasure pass\n- **Rules:** `erasure.tag.kept`\n\n## Log\n",
             ),
         ]);
         let mut report = Report::default();
@@ -254,7 +281,12 @@ mod tests {
 
 ## Open questions
 
-- litmus/tag/maybe.open.lc (open, issue #4): Maybe?
+- litmus/tag/maybe.open.lc (open, issue tag-everywhere): Maybe?
+
+## Issues
+
+- issues/tag-everywhere.md (decision, open): Is the tag kept everywhere?
+  - blocks: the erasure pass
 
 ## Trust entries added by RFC 0001
 

@@ -27,7 +27,7 @@ Every rule is listed in the `## Rules` table of the RFC that introduced it, and 
 
 ## When sources disagree
 
-A rule is the authority on what it says; an RFC records why; a decided litmus example is evidence of what a rule means. When a rule and a decided example disagree, or a rule and its accepted RFC do, neither wins: the disagreement is a defect. Open a `decision-needed` issue that names both, and stop the work that depends on it until the owner decides.
+A rule is the authority on what it says; an RFC records why; a decided litmus example is evidence of what a rule means. When a rule and a decided example disagree, or a rule and its accepted RFC do, neither wins: the disagreement is a defect. Add a [decision issue](../issues/README.md) that names both, and stop the work that depends on it until the owner decides.
 
 ## Examples and tests
 

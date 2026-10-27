@@ -21,7 +21,7 @@ Diagnostic wording, refactoring, performance, and tooling that change no semanti
 ## How an RFC lands
 
 1. A design PR adds `design/rfcs/NNNN-slug.md`, copied from [the template](0000-template.md), with status `proposed`. Use the next unused number; if two PRs collide, the later one renumbers.
-2. The same PR adds the spec rules the RFC introduces and the litmus examples that test them, written as the proposal would decide them, and lists every rule it adds or changes in its `## Rules` table. A rule takes its status from that table: it is proposed while the RFC is, and binds once the RFC is accepted. Questions the RFC leaves open become `.open` examples with `decision-needed` issues.
+2. The same PR adds the spec rules the RFC introduces and the litmus examples that test them, written as the proposal would decide them, and lists every rule it adds or changes in its `## Rules` table. A rule takes its status from that table: it is proposed while the RFC is, and binds once the RFC is accepted. Questions the RFC leaves open become [decision issues](../../issues/README.md), with `.open` examples where one helps.
 3. A fresh session reviews the PR adversarially ([playbook](../../.claude/skills/review/SKILL.md)), looking for contradictions, unsoundness, and interactions the RFC missed.
 4. The owner decides. To accept, the status becomes `accepted` and the owner merges. To reject, the status becomes `rejected` and the PR is merged for the record (with its spec rules and examples removed) or closed.
 

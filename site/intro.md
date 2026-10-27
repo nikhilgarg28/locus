@@ -8,9 +8,10 @@ This site is built from [the repository](https://github.com/nikhilgarg28/locus) 
 - [Specification](../spec/README.md): the accepted rules. Each rule links to the examples that test it.
 - [Litmus examples](../litmus/README.md): small programs that must be accepted, must be rejected, or are still open questions.
 - [RFCs](../design/rfcs/README.md): proposals, and the reasons behind each decision.
+- [Issues](../issues/README.md): questions for the owner, design work, tasks, and soundness problems, with what each one blocks.
 - [Trust model](../design/TRUST.md): what has to be trusted for a checked program to mean what it claims.
 - [Error index](../diagnostics/README.md): what each error code means.
 
 ## How decisions are made
 
-A change to what Locus means starts as an RFC. Accepting it adds rules to the specification, and each rule must be tested by litmus examples before it can be accepted. Questions that are not yet decided are published as open examples, so what is unknown is as visible as what is settled.
+A change to what Locus means starts as an RFC. Accepting it adds rules to the specification, and each rule must be tested by litmus examples before it can be accepted. Questions that are not yet decided are published as open examples and as decision issues, so what is unknown is as visible as what is settled.

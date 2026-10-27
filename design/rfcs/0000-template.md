@@ -48,4 +48,4 @@ How other languages and systems handle this, with references.
 
 ## Unresolved questions
 
-Each one an `.open` litmus example or a `decision-needed` issue.
+Each one a [decision issue](../../issues/README.md), with an `.open` litmus example where one helps.
