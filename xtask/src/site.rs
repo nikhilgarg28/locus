@@ -5,8 +5,8 @@
 //! Staging mirrors the repository's layout, so relative links between
 //! published pages keep working. A `README.md` becomes `index.md`. Links to
 //! files that are not published point at GitHub instead. Spec rule markers
-//! become anchors listing the litmus examples that cite them, and each litmus
-//! topic gets a generated page.
+//! become anchors listing the litmus examples and open issues that cite them,
+//! each litmus topic gets a generated page, and the issues get an index.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -17,6 +17,7 @@ use mdbook_driver::MDBook;
 use mdbook_driver::config::Config;
 
 use crate::check::{self, Checked};
+use crate::issues::{Issue, Status};
 use crate::litmus::{Example, Mode, Outcome};
 use crate::markdown;
 use crate::repo::{self, Repo};
@@ -36,6 +37,7 @@ const PAGES: &[(&str, &str)] = &[
     ("design/rfcs/README.md", "design/rfcs/index.md"),
     ("design/TRUST.md", "design/TRUST.md"),
     ("diagnostics/README.md", "diagnostics/index.md"),
+    ("issues/README.md", "issues/index.md"),
 ];
 
 pub fn run(root: &Path, out: &Path) -> Result<(), String> {
@@ -152,6 +154,9 @@ fn stage(repo: &Repo, checked: &Checked, stamp: &Stamp) -> Result<Vec<(String, S
     for diagnostic in &checked.diagnostics {
         targets.insert(diagnostic.path.clone(), diagnostic.path.clone());
     }
+    for issue in &checked.issues {
+        targets.insert(issue.path.clone(), issue.path.clone());
+    }
     let mut topics: BTreeMap<&str, Vec<&Example>> = BTreeMap::new();
     for example in &checked.examples {
         topics.entry(&example.topic).or_default().push(example);
@@ -168,6 +173,7 @@ fn stage(repo: &Repo, checked: &Checked, stamp: &Stamp) -> Result<Vec<(String, S
         ("litmus", "litmus/README.md"),
         ("design/rfcs", "design/rfcs/README.md"),
         ("diagnostics", "diagnostics/README.md"),
+        ("issues", "issues/README.md"),
     ] {
         targets.insert(dir.to_string(), targets[readme].clone());
     }
@@ -184,11 +190,18 @@ fn stage(repo: &Repo, checked: &Checked, stamp: &Stamp) -> Result<Vec<(String, S
         if checked.spec.chapters.iter().any(|c| &c.path == from) {
             text = render_rules(&text, to, checked);
         }
+        if let Some(issue) = checked.issues.iter().find(|i| &i.path == from) {
+            text = render_issue(&text, to, issue, checked);
+        }
         text = match from.as_str() {
             "site/intro.md" => stamp.fill(&text),
             "litmus/README.md" => text + &litmus_index(&topics, to),
             "design/rfcs/README.md" => text + &rfc_index(checked),
             "diagnostics/README.md" => text + &diagnostic_index(checked),
+            "issues/README.md" => {
+                let index = relink(repo, &targets, from, to, &issue_index(checked));
+                before_first_section(&text, &index)
+            }
             _ => text,
         };
         pages.push((to.clone(), text));
@@ -327,9 +340,24 @@ fn render_rules(text: &str, page: &str, checked: &Checked) -> String {
             }
             None => String::new(),
         };
+        let issues: String = checked
+            .issues
+            .iter()
+            .filter(|i| i.status != Status::Closed && i.rules.iter().any(|(_, r)| r == id))
+            .map(|i| {
+                format!(
+                    "<a class=\"rule-issue {}\" href=\"{}\" title=\"{}: {}\">{}</a>",
+                    i.kind.as_str(),
+                    repo::relative(page, &i.path.replace(".md", ".html")),
+                    i.kind.as_str(),
+                    escape(&i.title, false).replace('"', "&quot;"),
+                    i.name
+                )
+            })
+            .collect();
         out.push_str(&format!(
             "<div class=\"rule\" id=\"r-{id}\"><a class=\"rule-id\" href=\"#r-{id}\">{id}</a>\
-             {origin}<span class=\"rule-examples\">{}</span></div>\n\n",
+             {origin}{issues}<span class=\"rule-examples\">{}</span></div>\n\n",
             citing.join(" ")
         ));
     }
@@ -372,8 +400,9 @@ fn topic_page_text(topic: &str, examples: &[&Example], checked: &Checked) -> Str
         if !rules.is_empty() {
             facts.push(format!("rules: {}", rules.join(", ")));
         }
-        if let Some(issue) = e.issue {
-            facts.push(format!("issue [#{issue}]({REPOSITORY}/issues/{issue})"));
+        if let Some(issue) = &e.issue {
+            let href = repo::relative(&page, &format!("issues/{issue}.md"));
+            facts.push(format!("issue [{issue}]({href})"));
         }
         if e.mode == Mode::Export {
             facts.push("export mode".to_string());
@@ -489,6 +518,156 @@ fn diagnostic_index(checked: &Checked) -> String {
     out
 }
 
+/// An issue's page: its kind and status as badges under the title, its rules
+/// as links to the spec, and the examples that link it.
+fn render_issue(text: &str, page: &str, issue: &Issue, checked: &Checked) -> String {
+    let header_line = |name| markdown::field(text, name).map(|(line, _)| line);
+    let (kind_line, status_line) = (header_line("Kind"), header_line("Status"));
+    let rules_line = issue.rules.first().map(|(line, _)| *line);
+    let rule_pages: BTreeMap<&str, &str> = checked
+        .spec
+        .rules
+        .iter()
+        .map(|r| (r.id.as_str(), r.path.as_str()))
+        .collect();
+    let mut facts = format!(
+        "{} · [source]({REPOSITORY}/blob/main/{})",
+        badges(issue),
+        issue.path
+    );
+    let examples: Vec<String> = checked
+        .examples
+        .iter()
+        .filter(|e| e.issue.as_deref() == Some(issue.name.as_str()))
+        .map(|e| {
+            let href = repo::relative(page, &topic_page(&e.topic));
+            format!(
+                "[{}/{}]({href}#{}) ({})",
+                e.topic,
+                e.name,
+                e.name,
+                e.outcome.as_str()
+            )
+        })
+        .collect();
+    if !examples.is_empty() {
+        facts.push_str(&format!("\n\nExamples: {}", examples.join(", ")));
+    }
+    let mut out = String::with_capacity(text.len() + facts.len());
+    let mut titled = false;
+    for line in markdown::lines(text) {
+        if Some(line.number) == kind_line || Some(line.number) == status_line {
+            continue;
+        }
+        if Some(line.number) == rules_line {
+            let links: Vec<String> = issue
+                .rules
+                .iter()
+                .map(|(_, id)| match rule_pages.get(id.as_str()) {
+                    Some(chapter) => format!("[{id}]({}#r-{id})", repo::relative(page, chapter)),
+                    None => format!("`{id}`"),
+                })
+                .collect();
+            out.push_str(&format!("- **Rules:** {}\n", links.join(", ")));
+            continue;
+        }
+        out.push_str(line.text);
+        out.push('\n');
+        if !titled && !line.in_fence && line.text.starts_with("# ") {
+            titled = true;
+            out.push_str(&format!("\n{facts}\n"));
+        }
+    }
+    out
+}
+
+fn badges(issue: &Issue) -> String {
+    format!(
+        "{} <span class=\"issue-status {status}\">{status}</span>",
+        kind_badge(issue),
+        status = issue.status.as_str()
+    )
+}
+
+/// `insert` placed before the first `## ` heading of `text`, so that it follows
+/// the title and the opening paragraphs.
+fn before_first_section(text: &str, insert: &str) -> String {
+    let at = markdown::lines(text)
+        .into_iter()
+        .find(|l| !l.in_fence && l.text.starts_with("## "))
+        .map_or(text.len(), |l| {
+            text.lines().take(l.number - 1).map(|l| l.len() + 1).sum()
+        });
+    let at = at.min(text.len());
+    format!("{}{insert}\n{}", &text[..at], &text[at..])
+}
+
+/// The index of issues, at the top of the issues page: the open ones, those
+/// left for later, and the closed ones, each most urgent first.
+fn issue_index(checked: &Checked) -> String {
+    let mut out = String::new();
+    if checked.issues.is_empty() {
+        out.push_str("There are no issues yet.\n");
+        return out;
+    }
+    let with = |status| -> Vec<&Issue> {
+        checked
+            .issues
+            .iter()
+            .filter(|i| i.status == status)
+            .collect()
+    };
+    let (open, later, closed) = (
+        with(Status::Open),
+        with(Status::Later),
+        with(Status::Closed),
+    );
+    out.push_str(&format!(
+        "{} open, {} for later, {} closed.\n",
+        open.len(),
+        later.len(),
+        closed.len()
+    ));
+    for (heading, issues) in [("Open", &open), ("For later", &later)] {
+        if issues.is_empty() {
+            continue;
+        }
+        out.push_str(&format!(
+            "\n## {heading}\n\n| Issue | Kind | Blocks |\n|---|---|---|\n"
+        ));
+        for issue in issues.iter() {
+            out.push_str(&format!(
+                "| [{}]({}.md) | {} | {} |\n",
+                escape(&issue.title, true),
+                issue.name,
+                kind_badge(issue),
+                escape(issue.blocks.as_deref().unwrap_or(""), true)
+            ));
+        }
+    }
+    if !closed.is_empty() {
+        out.push_str("\n## Closed\n\n| Issue | Kind | Closed by |\n|---|---|---|\n");
+        for issue in &closed {
+            let by = issue.closed_by.as_ref().map_or("", |(_, by)| by.as_str());
+            out.push_str(&format!(
+                "| [{}]({}.md) | {} | {} |\n",
+                escape(&issue.title, true),
+                issue.name,
+                kind_badge(issue),
+                escape(by, true)
+            ));
+        }
+    }
+    out
+}
+
+fn kind_badge(issue: &Issue) -> String {
+    format!(
+        "<span class=\"issue-kind {kind}\">{kind}</span>",
+        kind = issue.kind.as_str()
+    )
+}
+
 fn summary(checked: &Checked, topics: &BTreeMap<&str, Vec<&Example>>) -> String {
     let mut out = String::from(
         "# Summary\n\n[Locus](index.md)\n\n- [Vision](VISION.md)\n- [Specification](spec/index.md)\n",
@@ -508,6 +687,14 @@ fn summary(checked: &Checked, topics: &BTreeMap<&str, Vec<&Example>>) -> String 
     for rfc in checked.rfcs.iter().filter(|r| r.path != rfc::TEMPLATE) {
         let title = summary_title(&format!("RFC {}: {}", rfc.number, rfc.title));
         out.push_str(&format!("    - [{title}]({})\n", rfc.path));
+    }
+    out.push_str("- [Issues](issues/index.md)\n");
+    for issue in &checked.issues {
+        out.push_str(&format!(
+            "    - [{}]({})\n",
+            summary_title(&issue.title),
+            issue.path
+        ));
     }
     out.push_str("- [Trust model](design/TRUST.md)\n- [Error index](diagnostics/index.md)\n");
     for d in &checked.diagnostics {
@@ -613,6 +800,67 @@ mod tests {
              <a class=\"rule-rfc\" href=\"../design/rfcs/0002-tags.html\">RFC 0002</a> <span class=\"rule-status\">proposed</span>\
              <span class=\"rule-examples\"><a class=\"accept\" href=\"../litmus/tag/index.html#kept\">tag/kept</a></span></div>\n\n\
              The tag is kept.\n```\nr[erasure.tag]\n```\n"
+        );
+    }
+
+    #[test]
+    fn renders_issues() {
+        let open = "# Is the tag kept?\n\n- **Kind:** decision\n- **Status:** open\n\
+                    - **Blocks:** erasure\n- **Rules:** `erasure.tag`\n\n## Question\n\nKept?\n\n## Log\n";
+        let closed = "# Old | task\n\n- **Kind:** task\n- **Status:** closed\n- **Closed by:** PR #3\n\n## Log\n";
+        let repo = Repo::from_files(&[
+            (
+                "spec/README.md",
+                "# Specification\n\n## Chapters\n\n- [E](erasure.md)\n",
+            ),
+            (
+                "spec/erasure.md",
+                "# E\n\nr[erasure.tag]\nThe tag is kept.\n",
+            ),
+            ("design/TRUST.md", "# Trust model\n"),
+            ("issues/tag-kept.md", open),
+            ("issues/old.md", closed),
+            (
+                "litmus/tag/kept.open.lc",
+                "//~ question: q\n//~ spec: erasure.tag\n//~ issue: tag-kept\n",
+            ),
+        ]);
+        let mut report = Report::default();
+        let checked = check::check_repo(&repo, &mut report);
+        let page = render_issue(open, "issues/tag-kept.md", &checked.issues[0], &checked);
+        assert_eq!(
+            page,
+            "# Is the tag kept?\n\n\
+             <span class=\"issue-kind decision\">decision</span> <span class=\"issue-status open\">open</span> \
+             · [source](https://github.com/nikhilgarg28/locus/blob/main/issues/tag-kept.md)\n\n\
+             Examples: [tag/kept](../litmus/tag/index.md#kept) (open)\n\n\
+             - **Blocks:** erasure\n- **Rules:** [erasure.tag](../spec/erasure.md#r-erasure.tag)\n\n\
+             ## Question\n\nKept?\n\n## Log\n"
+        );
+        assert_eq!(
+            issue_index(&checked),
+            "1 open, 0 for later, 1 closed.\n\n\
+             ## Open\n\n| Issue | Kind | Blocks |\n|---|---|---|\n\
+             | [Is the tag kept?](tag-kept.md) | <span class=\"issue-kind decision\">decision</span> | erasure |\n\n\
+             ## Closed\n\n| Issue | Kind | Closed by |\n|---|---|---|\n\
+             | [Old \\| task](old.md) | <span class=\"issue-kind task\">task</span> | PR #3 |\n"
+        );
+        let rules = render_rules("r[erasure.tag]\n", "spec/erasure.md", &checked);
+        assert!(
+            rules.contains(
+                "<a class=\"rule-issue decision\" href=\"../issues/tag-kept.html\" \
+                 title=\"decision: Is the tag kept?\">tag-kept</a>"
+            ),
+            "{rules}"
+        );
+        assert_eq!(
+            before_first_section("# I\n\nIntro.\n\n## Format\n", "INDEX\n"),
+            "# I\n\nIntro.\n\nINDEX\n\n## Format\n"
+        );
+        let summary = summary(&checked, &BTreeMap::new());
+        assert!(
+            summary.contains("- [Issues](issues/index.md)\n    - [Is the tag kept?](issues/tag-kept.md)\n    - [Old | task](issues/old.md)\n"),
+            "{summary}"
         );
     }
 

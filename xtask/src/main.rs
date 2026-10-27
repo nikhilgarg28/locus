@@ -2,12 +2,13 @@
 //!
 //! The checks here enforce the structure that the design process depends on:
 //! litmus examples, spec rules and their coverage and provenance, RFC
-//! metadata, trust entries, error-code pages, and links. The site builder
+//! metadata, trust entries, issues, error-code pages, and links. The site builder
 //! renders the same sources as HTML, and `context` gathers them for one rule.
 
 mod check;
 mod context;
 mod diagnostics;
+mod issues;
 mod lexer;
 mod litmus;
 mod markdown;
@@ -26,12 +27,13 @@ const USAGE: &str = "\
 usage: cargo xtask <command>
 
 commands:
-  check                       check litmus examples, spec rules, RFCs, diagnostics and links
+  check                       check litmus examples, spec rules, RFCs, issues, diagnostics and links
   context RULE...             what the repository says about a rule, or every rule under a prefix
   site [--out DIR]            build the website (default: target/site)
   pr-check --base REV [--allow-expectation-changes]
                               check a branch against REV: design and build changes kept
-                              apart, and no decided expectation changed or removed";
+                              apart, no decided expectation changed or removed, and no
+                              issue deleted, renamed, or its log rewritten";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

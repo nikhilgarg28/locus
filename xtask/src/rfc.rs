@@ -105,7 +105,7 @@ pub fn check(repo: &Repo, report: &mut Report) -> Vec<Rfc> {
             );
             continue;
         };
-        let Some((line, status)) = field(text, "Status") else {
+        let Some((line, status)) = markdown::field(text, "Status") else {
             report.error(path, None, "missing the `- **Status:** <status>` line");
             continue;
         };
@@ -126,7 +126,7 @@ pub fn check(repo: &Repo, report: &mut Report) -> Vec<Rfc> {
             report.error(path, None, "RFC 0000 is reserved for the template");
         }
         if status == Status::Superseded {
-            match field(text, "Superseded by") {
+            match markdown::field(text, "Superseded by") {
                 Some((line, by)) => superseded_by.push((path.clone(), line, by.to_string())),
                 None => report.error(
                     path,
@@ -216,15 +216,6 @@ fn parse_path(path: &str) -> Option<&str> {
     let (number, slug) = file.split_once('-')?;
     let numeric = number.len() == 4 && number.chars().all(|c| c.is_ascii_digit());
     (numeric && is_kebab(slug)).then_some(number)
-}
-
-/// The value of a `- **Name:** value` line, with its line number.
-fn field<'a>(text: &'a str, name: &str) -> Option<(usize, &'a str)> {
-    let prefix = format!("- **{name}:**");
-    markdown::lines(text)
-        .into_iter()
-        .filter(|l| !l.in_fence)
-        .find_map(|l| Some((l.number, l.text.strip_prefix(&prefix)?.trim())))
 }
 
 #[cfg(test)]

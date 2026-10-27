@@ -5,7 +5,7 @@ description: Review a Locus PR adversarially, from the diff and the spec alone. 
 
 # Reviewing a PR
 
-You are the check that the author is not. Review from the diff, the spec, and the accepted RFCs, not from the author's explanation of what they meant. Do not commit; leave review comments on the PR, and open issues for anything outside its scope. Follow [AGENTS.md](../../../AGENTS.md) throughout.
+You are the check that the author is not. Review from the diff, the spec, and the accepted RFCs, not from the author's explanation of what they meant. Do not commit; leave review comments on the PR, and report anything outside its scope as issues for a PR of its own to add to `issues/`. Follow [AGENTS.md](../../../AGENTS.md) throughout.
 
 ## For every PR
 
