@@ -681,7 +681,7 @@ The last step added `#[cfg(__locus_check)] pub fn only_in_checking() {}` to `a`.
    - A build script is crate `build_script_build`, type `bin`, root `build.rs`. It is checked when it depends on a Locus crate, and Cargo compiled it only after that crate's whole compile. Cargo runs the script itself, without the wrapper; its `cargo::rustc-cfg` reaches the crate's invocation as `--cfg`, and the driver copies it to the checking program.
    - A procedural macro is `--crate-type proc-macro`, compiled here as plain rustc, and loaded by both programs of `b`.
    - An integration test, and every harness of `cargo test`, is `--test` with no `--crate-type` and a `-C metadata` of its own, so it is another crate to check, with no interface. A library's harness is checked separately from the library.
-   - Doctests are compiled by rustdoc from the `.lc` source, outside any wrapper, and failed ([#9](https://github.com/nikhilgarg28/locus/issues/9)).
+   - Doctests are compiled by rustdoc from the `.lc` source, outside any wrapper, and failed ([cfg-corner-cases](../../issues/cfg-corner-cases.md)).
    - `RUSTC_WORKSPACE_WRAPPER` does not wrap a path dependency outside the workspace, so `outside` reached plain rustc and failed. `RUSTC_WRAPPER` wraps it, and it was checked from its `.lc` sources. Build mode therefore needs `RUSTC_WRAPPER`, and with it the `-vV` identity of finding 4.
    - Nightly Cargo's directory per unit did not disturb interface files kept beside each artifact.
 6. **Identities: a DefPathHash names an item within one build configuration; interfaces need an identity that survives edits.**
@@ -699,4 +699,4 @@ The last step added `#[cfg(__locus_check)] pub fn only_in_checking() {}` to `a`.
 - **Keys of the side directories.** The spike keys lowered text, checking metadata, and facts by crate name and `-C extra-filename`. Nightly Cargo passes no `-C extra-filename` for binaries and build scripts, so a binary and its test harness would share a key. No case here collided.
 - **Untested:** cross-compilation with `--target` (host and target units of one crate; procedural macros and build scripts on the host), a procedural macro that depends on a Locus crate, `.rs` modules in a Locus crate (lowering writes only `.lc` files), registry and git dependencies (`--cap-lints allow`), workspaces with many crates, release builds, `cargo check` and `cargo clippy`, and the cost of `RUSTC_WRAPPER` for crates that are not checked.
 - **Measurements** come from one 4-core container, debug builds, small crates, and a logical pass that does nothing.
-- **Doctests** stay [#9](https://github.com/nikhilgarg28/locus/issues/9).
+- **Doctests** stay [cfg-corner-cases](../../issues/cfg-corner-cases.md).

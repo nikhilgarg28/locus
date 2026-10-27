@@ -3,6 +3,7 @@
 - **Kind:** decision
 - **Status:** open
 - **Blocks:** Any proof about what runtime code computes; freezing the facts format and the choice of THIR or MIR in RFC 0001; the planned semantic slice: verifying one small mutable function with a reborrow and a destructor end to end through the pipeline, with its certificate and a replay of the stored proof. It is meant to run alongside this RFC, to expose the pipeline's constraints early
+- **Rules:** `proofs.versions`, `contracts.final`, `logic.boundary.escape`, `logic.unsafe.escape`
 
 ## Question
 
@@ -50,3 +51,7 @@ None yet. The stale-proof examples in `litmus/proofs/` and `litmus/contracts/`, 
 ### 2026-10-25, opened on GitHub as #6
 
 Moved into the repository from [GitHub issue #6](https://github.com/nikhilgarg28/locus/issues/6) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

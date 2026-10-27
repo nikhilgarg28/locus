@@ -9,6 +9,7 @@
 What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)). This covers:
 
 - **Logical types:** `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and characters and strings.
+- **Rules:** `logic.boundary.unchecked`, `logic.boundary.access`
   - Each is defined from `Int` and inductive types, the core RFC 0002 builds on. Any native acceleration has a stated correspondence (vision, commitment 5).
   - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unchecked code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
   - Their positivity in each type argument: `Seq` and `Maybe` are positive, and a set, as a predicate, is not.
@@ -51,3 +52,7 @@ Moved into the repository from [GitHub issue #11](https://github.com/nikhilgarg2
 > The same RFC also owns:
 > - the descriptions of what access each standard type grants: `Cell`, `RefCell`, `Mutex`, guards, mutable iterators, entries, and channel senders all grant write access, while `&`, `Rc`, `Arc`, and shared iterators do not. A type without a description is taken to grant everything.
 > - the effects of standard functions, such as `Vec::push`, which writes only its vector and retains nothing.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

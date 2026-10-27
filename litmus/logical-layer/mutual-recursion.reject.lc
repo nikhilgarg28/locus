@@ -1,11 +1,12 @@
 //~ question: May two logic functions call each other?
 //~ spec: logic.fn.total
 //~ rfc: 0002
+//~ issue: mutual-recursion
 
 logic fn ping(n: Nat) -> Nat {
     pong(n)
 }
 
 logic fn pong(n: Nat) -> Nat {
-    ping(n) //~ error: `pong` calls `ping`, which calls `pong`: logic functions cannot yet recur through one another (#16)
+    ping(n) //~ error: `pong` calls `ping`, which calls `pong`: logic functions cannot yet recur through one another (issue mutual-recursion)
 }

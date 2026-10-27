@@ -9,6 +9,7 @@
 How Locus crates are published and used, under the two modes of RFC 0001 (`design/rfcs/0001-compiler-pipeline.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)):
 - **Build mode,** the default, checks every crate that depends on a Locus crate, from its sources. Its checking and runtime programs are one lowered text compiled against two versions of Locus's library.
 - **Export mode** erases each `.lc` file to readable `.rs` written beside it, for Rust users. `pub(locus)` marks what only Locus crates see.
+- **Rules:** `export.plain-interface`, `export.locus-visibility`
 
 This covers:
 - **Package contents.**
@@ -51,3 +52,7 @@ To be laid out in the RFC.
 ### 2026-10-25, opened on GitHub as #7
 
 Moved into the repository from [GitHub issue #7](https://github.com/nikhilgarg28/locus/issues/7) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

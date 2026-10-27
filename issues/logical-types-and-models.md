@@ -2,6 +2,7 @@
 
 - **Kind:** decision
 - **Status:** open
+- **Rules:** `logic.types.contents-logical`, `models.one-per-type`, `models.derived`, `logic.eq.runtime-values`
 
 ## Question
 
@@ -49,3 +50,7 @@ Moved into the repository from [GitHub issue #4](https://github.com/nikhilgarg28
 > - logical code keeping Rust's meaning for places, with models applying to values.
 >
 > It decides the observation examples `before-move` and `after-mutable-borrow-ends` as accepted. `proof-before-move` now waits on [#6](runtime-semantics.md). The library's own types and models are tracked in [#11](standard-library.md).
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

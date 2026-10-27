@@ -9,6 +9,7 @@
 Whether and how logical code can appear in places that RFC 0001 (`design/rfcs/0001-compiler-pipeline.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)) rejects for now, and one mechanism it still has to settle:
 
 - **Closure bodies and async blocks.**
+- **Rules:** `observe.captures.rejected`, `compat.names.macros-expand`, `logic.boundary.calls`
   - An observation inside one would become a capture, and change what the closure or future captures.
   - Under build mode's single lowered text, a ghost local named inside a closure is also a real capture of a zero-sized marker: by reference, unless the closure is `move`. That changes the closure's borrows, though not its layout.
   - RFC 0001 rejects logical code there for now (`observe.captures.rejected`).
@@ -41,3 +42,7 @@ Moved into the repository from [GitHub issue #8](https://github.com/nikhilgarg28
 > Recorded from the review of [#10](https://github.com/nikhilgarg28/locus/pull/10). `logic.boundary.calls` keeps a closure whose parameter carries a forgeable proof from reaching even *specified* standard library code. So `found.map(|p| divide(100, n, p))`, `filter_map`, and `fold` with such closures are rejected today, and users will write these often.
 >
 > A sound relaxation, for when this issue settles closures: allow passing such a closure to specified generic code whose specification names the values it calls the closure with. `Option::map` calls it with the contained value. Locus would then check each indirect call like a direct one, against that specification. Unspecified code would stay rejected.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

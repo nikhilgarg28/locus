@@ -10,6 +10,7 @@ How logical code is generic over operations, and how operators on logical types 
 
 - **Logical traits:** whether there are any, like Lean's type classes, for arithmetic, order, and equality.
 - **Operators on user-defined logical types:** how `+`, `<`, `==`, and `[]` are resolved, together with the laws that tie a comparison to `===` (Lean's `LawfulBEq`) and decidable equality. For now `==` and the orderings are built in only on `Int`, `Nat`, and `Bool`.
+- **Rules:** `logic.ghost.no-trait-impls`, `models.bounds-on-functions`
 - **Runtime traits and models:** how they relate. For example, does a type's `Ord` implementation agree with an order on its model, or `PartialEq` with equality of models?
 - **Traits with logical values or contracts.** For now no trait method's signature holds logical values, and no logical type appears in an `impl` apart from `impl Model`. When such traits arrive, an implementation written in plain Rust cannot be checked, so in export mode they will not be reachable from other crates ([#7](distribution-and-export.md)).
 - **Checking generic code once** for every instantiation with logical types, instead of again at each one.
@@ -29,3 +30,7 @@ To be laid out in an RFC.
 ### 2026-10-25, opened on GitHub as #12
 
 Moved into the repository from [GitHub issue #12](https://github.com/nikhilgarg28/locus/issues/12) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
