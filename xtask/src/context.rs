@@ -71,9 +71,23 @@ pub fn describe(checked: &Checked, has_compiler: bool, rule: &Rule) -> String {
         )),
         None => out.push_str("- Introduced by: no RFC lists it in its `## Rules` table\n"),
     }
-    out.push_str(match rfc.is_some_and(|r| r.status.binds()) {
-        true => "- Binding: yes\n",
-        false => "- Binding: not until its RFC is accepted\n",
+    let revision = checked.revised_by(&rule.id);
+    if let Some(revision) = revision {
+        out.push_str(&format!(
+            "- Revised by: RFC {}, {} ({}), {}\n",
+            revision.number,
+            revision.title,
+            revision.status.as_str(),
+            revision.path
+        ));
+    }
+    out.push_str(&match (checked.binds(&rule.id), revision) {
+        (true, _) => "- Binding: yes\n".to_string(),
+        (false, Some(revision)) => format!(
+            "- Binding: the accepted text does; this revision does not, until RFC {} is accepted\n",
+            revision.number
+        ),
+        (false, None) => "- Binding: not until its RFC is accepted\n".to_string(),
     });
     out.push_str(match has_compiler {
         true => "- Implementation: not tracked yet\n",
@@ -247,5 +261,44 @@ mod tests {
 - `trusted.erasure` (design/TRUST.md:7): Erasure
 "
         );
+    }
+
+    #[test]
+    fn shows_a_pending_revision() {
+        let rfc = |n: &str, status: &str| {
+            format!(
+                "# RFC {n}: R{n}\n\n- **Status:** {status}\n\n## Rules\n\n| Rule | Examples |\n|---|---|\n| `erasure.tag.kept` | `tag/kept.accept.lc` |\n"
+            )
+        };
+        let (old, new) = (rfc("0001", "accepted"), rfc("0002", "proposed"));
+        let repo = Repo::from_files(&[
+            (
+                "spec/README.md",
+                "# Specification\n\n## Chapters\n\n- [Erasure](erasure.md)\n",
+            ),
+            (
+                "spec/erasure.md",
+                "# Erasure\n\nr[erasure.tag.kept]\nThe tag is kept.\n",
+            ),
+            ("design/rfcs/0001-old.md", &old),
+            ("design/rfcs/0002-new.md", &new),
+            ("design/TRUST.md", "# Trust model\n"),
+            (
+                "litmus/tag/kept.accept.lc",
+                "//~ question: Is the tag kept?\n//~ spec: erasure.tag.kept\nfn f() {}\n",
+            ),
+        ]);
+        let mut report = Report::default();
+        let checked = check::check_repo(&repo, &mut report);
+        let text = describe(&checked, false, &checked.spec.rules[0]);
+        assert!(
+            text.contains("- Introduced by: RFC 0001, R0001 (accepted), design/rfcs/0001-old.md\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("- Revised by: RFC 0002, R0002 (proposed), design/rfcs/0002-new.md\n"),
+            "{text}"
+        );
+        assert!(text.contains("- Binding: the accepted text does; this revision does not, until RFC 0002 is accepted\n"), "{text}");
     }
 }

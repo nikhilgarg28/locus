@@ -214,8 +214,8 @@ fn compare(
     let same_program = old_lexed
         .tokens
         .iter()
-        .map(|t| t.text)
-        .eq(new_lexed.tokens.iter().map(|t| t.text));
+        .map(|t| (t.text, t.joint))
+        .eq(new_lexed.tokens.iter().map(|t| (t.text, t.joint)));
     if !same_program {
         found.push(format!(
             "{to}: changes the program, which can change what the example tests"
@@ -407,6 +407,32 @@ mod tests {
                 Some("fn f() {} // old\n"),
                 Some("fn f() {} // new\n"),
             ),
+            // A macro sees whether tokens touch, and doc comments.
+            (
+                "joined.accept",
+                "joined.accept",
+                Some("pick!(>=);\n"),
+                Some("pick!(> =);\n"),
+            ),
+            (
+                "spaced.accept",
+                "spaced.accept",
+                Some("s!(a+b);\n"),
+                Some("s!(a + b);\n"),
+            ),
+            (
+                "doc.accept",
+                "doc.accept",
+                Some("///one\nfn f() {}\n"),
+                Some("///two\nfn f() {}\n"),
+            ),
+            // Which whitespace separates tokens is not a change.
+            (
+                "reflowed.accept",
+                "reflowed.accept",
+                Some("fn f() { a + b }\n"),
+                Some("fn f() {\n    a /* sum */ + b\n}\n"),
+            ),
             (
                 "mode.accept",
                 "mode.accept",
@@ -448,6 +474,9 @@ mod tests {
                 "litmus/t/reason.reject.lc: no longer expects the error at line 3: the sum may overflow",
                 "litmus/t/retarget.reject.lc: no longer expects the error at line 4: e",
                 "litmus/t/code.accept.lc: changes the program, which can change what the example tests",
+                "litmus/t/joined.accept.lc: changes the program, which can change what the example tests",
+                "litmus/t/spaced.accept.lc: changes the program, which can change what the example tests",
+                "litmus/t/doc.accept.lc: changes the program, which can change what the example tests",
                 "litmus/t/mode.accept.lc: changes the mode from export to build",
             ]
         );

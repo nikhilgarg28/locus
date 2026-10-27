@@ -312,8 +312,16 @@ fn render_rules(text: &str, page: &str, checked: &Checked) -> String {
                         rfc.status.as_str()
                     ),
                 };
+                let revision = match checked.revised_by(id) {
+                    Some(revision) => format!(
+                        " <span class=\"rule-status\">revised by RFC {}, {}</span>",
+                        revision.number,
+                        revision.status.as_str()
+                    ),
+                    None => String::new(),
+                };
                 format!(
-                    "<a class=\"rule-rfc\" href=\"{href}\">RFC {}</a>{status}",
+                    "<a class=\"rule-rfc\" href=\"{href}\">RFC {}</a>{status}{revision}",
                     rfc.number
                 )
             }
