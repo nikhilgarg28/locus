@@ -1,0 +1,17 @@
+//~ question: After unchecked code has had mutable access to a value of an invariant type, does Locus still know its fields' values?
+//~ spec: contracts.invariants.observed, logic.boundary.escape
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn reset(iv: &mut Interval) -> u32 {
+    iv.lo = 0;
+    std::hint::black_box(&mut *iv);
+    let ordered: @(iv.lo <= iv.hi) = iv.ordered;
+    let zero: @(iv.lo == 0) = _; //~ error: cannot prove `iv.lo == 0`: `iv` was lent mutably to `black_box`, whose effect is unknown, so Locus knows only its invariant
+    iv.hi - iv.lo
+}

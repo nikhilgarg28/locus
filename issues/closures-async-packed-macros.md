@@ -9,7 +9,7 @@
 Whether and how logical code can appear in places that RFC 0001 (`design/rfcs/0001-compiler-pipeline.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)) rejects for now, and one mechanism it still has to settle:
 
 - **Closure bodies and async blocks.**
-- **Rules:** `observe.captures.rejected`, `compat.names.macros-expand`, `logic.boundary.calls`
+- **Rules:** `observe.captures.rejected`, `compat.names.macros-expand`, `logic.boundary.calls`, `contracts.invariants.assignment`
   - An observation inside one would become a capture, and change what the closure or future captures.
   - Under build mode's single lowered text, a ghost local named inside a closure is also a real capture of a zero-sized marker: by reference, unless the closure is `move`. That changes the closure's borrows, though not its layout.
   - RFC 0001 rejects logical code there for now (`observe.captures.rejected`).
@@ -46,3 +46,7 @@ Moved into the repository from [GitHub issue #8](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-10-28, PR #10
+
+After the third review, the owner decided that an assignment that needs a proof, such as one to a field that a proof field reads, is rejected inside a runtime closure or an async block until this issue decides how closures are checked: RFC 0002, decision 42, `contracts.invariants.assignment`, and `contracts/assignment-needing-proof-in-closure.reject.lc`. A `move` closure that captures a whole `&mut Interval` and assigns `r.hi = r.lo` has no logical code in its body, but still has the obligation. When closures are supported, the obligation must be proved for each call's state at entry, not from facts known when the closure was made.

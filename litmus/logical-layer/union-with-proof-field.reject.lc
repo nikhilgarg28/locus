@@ -4,5 +4,5 @@
 
 union Pun {
     raw: u64,
-    hint: Option<@(0 != 0)>, //~ error: the field `hint` of the union `Pun` holds logical values: reading it would reinterpret what `raw` wrote
+    hint: Option<@(0 != 0)>, //~ error: the field `hint` of the union `Pun` carries a forgeable proof: reading it would reinterpret what `raw` wrote as a proof
 }

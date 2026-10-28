@@ -1,17 +1,9 @@
-//~ question: Does a value read through a raw pointer keep its proofs?
+//~ question: Does a value read through a raw pointer keep what Locus knew about its logical values?
 //~ spec: logic.ghost.forgotten
 //~ rfc: 0002
 
-fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
-    x / y
-}
-
-fn forged(x: u32) -> u32 {
-    let trivial: Option<@(1 == 1)> = Some(_);
-    let ptr = &trivial as *const Option<@(1 == 1)> as *const Option<@(0 != 0)>;
-    let read: Option<@(0 != 0)> = unsafe { *ptr }; //~ error: a value read through a raw pointer holds no proofs: `read` holds markers, which prove nothing
-    match read {
-        Some(p) => divide(x, 0, p),
-        None => 0,
-    }
+fn read(counts: &[Nat; 1], five: @(counts[0] === 5)) {
+    let p = counts as *const [Nat; 1];
+    let copy: [Nat; 1] = unsafe { *p };
+    let still: @(copy[0] === 5) = _; //~ error: cannot prove `copy[0] === 5`: `copy` was read through a raw pointer, so its logical values are markers that Locus knows nothing about
 }

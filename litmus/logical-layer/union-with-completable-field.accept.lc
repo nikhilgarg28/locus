@@ -1,0 +1,14 @@
+//~ question: May a union have a field that holds only completable logical values?
+//~ spec: logic.ghost.no-unions, logic.boundary.completable
+//~ rfc: 0002
+
+union Tagged {
+    bits: u64,
+    count: Nat,
+}
+
+fn bits(t: Tagged) -> u64 {
+    unsafe { t.bits }
+}
+
+//~ run: bits(Tagged { bits: 7 }) => 7

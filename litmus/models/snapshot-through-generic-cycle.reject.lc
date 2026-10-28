@@ -1,0 +1,18 @@
+//~ question: Does a snapshot look through a generic wrapper's reference when the wrapper's type argument leads back to the type that holds it?
+//~ spec: models.snapshots
+//~ rfc: 0002
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+struct Node<'a> {
+    w: Wrap<'a, Node<'a>>,
+}
+
+// rustc accepts this: `N.w.inner` is `N`.
+static N: Node<'static> = Node { w: Wrap { inner: &N } };
+
+logic fn absurd(s: Snap<Node>) -> @False {
+    absurd(s.w.inner) //~ error: `s.w.inner` is the address of a `Node`, not its snapshot: `Node` reaches itself again through its field `w`, so that field's snapshot follows no reference
+}

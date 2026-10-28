@@ -1,5 +1,5 @@
-//~ question: Does a value given another type by `transmute` keep its proofs?
-//~ spec: logic.ghost.forgotten
+//~ question: May `transmute` give a proof holder the type of a holder of another proposition's proof?
+//~ spec: logic.unsafe.no-conjuring
 //~ rfc: 0002
 
 fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
@@ -8,7 +8,7 @@ fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
 
 fn forged(x: u32) -> u32 {
     let trivial: Option<@(1 == 1)> = Some(_);
-    let cast: Option<@(0 != 0)> = unsafe { std::mem::transmute(trivial) }; //~ error: `transmute` gives back no proofs: `cast` holds markers, which prove nothing
+    let cast: Option<@(0 != 0)> = unsafe { std::mem::transmute(trivial) }; //~ error: `transmute` cannot make an `Option<@(0 != 0)>`: a value that carries a forgeable proof is built from its parts, with its proofs proved, never from memory of another type
     match cast {
         Some(p) => divide(x, 0, p),
         None => 0,

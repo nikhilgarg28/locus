@@ -1,0 +1,17 @@
+//~ question: May a runtime closure assign a field that a proof field reads?
+//~ spec: contracts.invariants.assignment
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn collapse(iv: &mut Interval) {
+    let r = &mut *iv;
+    let mut update = move || {
+        r.hi = r.lo; //~ error: assigning `r.hi`, which the proof field `ordered` reads, needs a proof, and an assignment that needs a proof is not supported inside a closure
+    };
+    update();
+}

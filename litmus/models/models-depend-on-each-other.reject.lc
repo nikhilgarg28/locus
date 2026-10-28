@@ -1,0 +1,25 @@
+//~ question: May two hand-written models depend on each other?
+//~ spec: models.own-definition
+//~ rfc: 0002
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+struct Node<'a> {
+    w: Wrap<'a, Node<'a>>,
+}
+
+impl<'a> Model for Node<'a> {
+    type Logic = Nat;
+    logic fn model(n: &Node<'a>) -> Nat {
+        model(n.w) //~ error: the model of `Node` depends on itself, through the model of `Wrap<Node>`
+    }
+}
+
+impl<'a> Model for Wrap<'a, Node<'a>> {
+    type Logic = Nat;
+    logic fn model(w: &Wrap<'a, Node<'a>>) -> Nat {
+        model(w.inner)
+    }
+}

@@ -1,0 +1,17 @@
+//~ question: May a mutable reference to a shared reference to a proof holder be lent to code Locus has no specification for?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn lend(n: u32) {
+    let found: Option<@(n > 0)> = check(n);
+    let mut view: &Option<@(n > 0)> = &found;
+    std::hint::black_box(&mut view); //~ error: `&mut view` grants write access to `view`, a reference to an `Option<@(n > 0)>`: unchecked code could replace it with a reference to an `Option` holding a proof of another proposition
+}

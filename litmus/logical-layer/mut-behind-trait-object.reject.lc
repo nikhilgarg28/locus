@@ -1,0 +1,12 @@
+//~ question: After a closure that mutably borrows a local is given to unchecked code as a trait object, does a fact about the local survive?
+//~ spec: logic.boundary.escape, logic.unsafe.escape
+//~ rfc: 0002
+
+fn hidden() -> u32 {
+    let mut n: u32 = 0;
+    n = 1;
+    let bump: Box<dyn FnMut() + '_> = Box::new(|| n = 7);
+    std::hint::black_box(bump);
+    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: the boxed closure given to `black_box` holds a mutable borrow of `n`, so code whose effect is unknown may have written it
+    n
+}

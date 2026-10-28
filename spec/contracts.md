@@ -16,10 +16,10 @@ r[contracts.invariants]
 Every value of a type with proof fields satisfies them. Each construction of the type proves them, including constructions in code that macros and derives generate, and a struct update.
 
 r[contracts.invariants.no-mutable-borrow]
-No place based on a proof field, or on a field that a proof field reads, is mutably borrowed.
+No place based on a proof field, or on a field that a proof field reads, is mutably borrowed, whether by `&mut`, by `ref mut`, or by a binding that a pattern makes by reference when it matches through a `&mut`.
 
 r[contracts.invariants.assignment]
-A field that a proof field reads may be assigned when each proof field that reads it is proved for the new value. When Locus cannot see what a proof field holds, as for one inside a `Cell`, proving it for the new value is proving its proposition. A proof field may be assigned a value whose proofs prove its proposition, and that assignment, too, proves each proof field that reads it.
+A field that a proof field reads may be assigned when each proof field that reads it is proved for the new value. When Locus cannot see what a proof field holds, as for one inside a `Cell`, proving it for the new value is proving its proposition. A proof field may be assigned a value whose proofs prove its proposition, and that assignment, too, proves each proof field that reads it. Inside the body of a runtime closure or an async block, an assignment that needs such a proof is rejected, as logical code there is.
 
 r[contracts.invariants.proof-holders]
 A field whose type holds a proof, such as an `Option<@P>`, counts as a proof field. A tuple component that a later component's proposition reads follows the rules for a field that a proof field reads.

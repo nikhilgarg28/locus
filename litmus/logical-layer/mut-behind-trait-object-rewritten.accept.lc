@@ -1,0 +1,14 @@
+//~ question: May a fact about a local that escaped through a trait object be established again by a write that Locus sees?
+//~ spec: logic.boundary.escape
+//~ rfc: 0002
+
+fn rewritten() -> u32 {
+    let mut n: u32 = 0;
+    let bump: Box<dyn FnMut() + '_> = Box::new(|| n = 7);
+    std::hint::black_box(bump);
+    n = 1;
+    let one: @(n == 1) = _;
+    n
+}
+
+//~ run: rewritten() => 1

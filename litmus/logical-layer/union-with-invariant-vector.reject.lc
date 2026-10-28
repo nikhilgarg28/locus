@@ -1,0 +1,16 @@
+//~ question: May a union have a field that holds values of an invariant type inside another type?
+//~ spec: logic.ghost.no-unions
+//~ rfc: 0002
+
+use std::mem::ManuallyDrop;
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+union Pun {
+    raw: [usize; 3],
+    ivs: ManuallyDrop<Vec<Interval>>, //~ error: the field `ivs` of the union `Pun` holds values of the invariant type `Interval`: reading it would make them from memory written as `[usize; 3]`
+}
