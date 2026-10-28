@@ -1,0 +1,2 @@
+/** A block doc comment. */
+fn documented() {}

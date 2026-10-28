@@ -1,0 +1,2 @@
+/// A doc comment with "quotes", a \ backslash and a `tick`.
+fn documented() {}

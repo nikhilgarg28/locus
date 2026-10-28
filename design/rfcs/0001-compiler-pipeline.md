@@ -15,6 +15,8 @@ Locus compiles a Cargo crate in four steps:
    - **Build mode,** the default: rustc compiles the same lowered program again, with the *runtime* expansions, in which Locus's macros give the markers and nothing else. `cargo locus build` builds it under `target/`, in the configuration being built. Every crate in the build that depends on a Locus crate is checked too, so contracts hold across crates.
    - **Export mode:** `cargo locus export` erases the logical layer by editing each `.lc` file into readable Rust, written beside the sources as `.rs` files that Rust users build with plain Cargo. The crate's public interface must then be plain Rust: it has no logical values and states no contracts.
 
+**Locus is built in stages** ([Stages](#stages)). The first needs neither `.lc` files nor a compiler wrapper: Locus code is written in `.rs` files inside `locus! { ... }` blocks, a macro that does what lowering does, and `cargo locus check` checks the crate. The language is built out on that first stage. Build mode follows, and export mode if it is still wanted.
+
 Locus writes its own parser, the lowering, the logical layer, the kernel, erasure, and diagnostics. Everything else that Rust already does is rustc's: name resolution, macro expansion, type inference, trait resolution, ownership and borrow checking, lints, and code generation.
 
 ## Motivation
@@ -90,6 +92,27 @@ rustc's borrow checker rejected the one proof that read a moved value, with E038
 | Validating that the program built or exported is the one checked | Locus, from rustc's typed bodies of both |
 | Monomorphization, code generation, linking | rustc |
 | Diagnostics: rendering, and mapping rustc's back to the source | Locus |
+
+### Stages
+
+Locus is built in stages, and the first needs neither `.lc` files nor a compiler wrapper. Locus code is written in ordinary `.rs` files, inside `locus! { ... }` blocks, and the first stage is used to build out the language itself: its logical layer, its proofs, and its library. The rest of this RFC describes the full toolchain, which follows.
+
+1. **The `locus!` macro.** A function-like macro from Locus's library takes Locus syntax as its input and expands to the lowered program of [The lowered program](#the-lowered-program). It is the lowering, done by rustc's macro expansion over the tokens of each block instead of by Locus over whole files ([spike](../../spikes/locus-macro/README.md)).
+   - **Function-like, because an attribute macro cannot carry Locus syntax.** rustc parses an item before any attribute on it runs, so `fn f(p: @(y != 0))` is a syntax error even under `#[cfg(any())]` (tested). Inside `locus! { }`, all 264 litmus examples reach the macro as tokens through rustc's own lexer, comments included.
+   - **One text, two expansions.** The macro writes one text, and the library's macros put `#[cfg(__locus_check)]` in their own output, so the `cfg` is evaluated in the user's crate: the checking expansion under `--cfg __locus_check`, the runtime expansion otherwise. In the spike, 20 accepted examples compiled both ways and printed their `run` values in both, and two rejected ones failed only in the checking expansion, at their annotated lines (E0382, E0502). Every crate that uses Locus declares `cfg(__locus_check)` in its `check-cfg`, or rustc warns at every block.
+   - **`cargo locus check` checks.** It compiles the crate through the driver with the checking `cfg`, runs the logical pass and the kernel, and validates the runtime program against the checked one by compiling the crate a second time without the `cfg`, as build mode does.
+   - **`cargo build` builds, unchanged.** To Cargo, rustc, rust-analyzer, and the crate's users, a crate with `locus!` blocks is an ordinary Rust crate that depends on Locus's library. rustc's errors point at the user's lines in both expansions; rustfmt leaves a block exactly as written, plain Rust inside it included; and rust-analyzer expands the blocks and resolves what is in them, one expansion at a time (tested). Building does not check: a result holds for the program built from the sources and the configuration that `cargo locus check` checked, so a project runs the check in CI, as it runs its tests.
+   - **Code outside `locus!` blocks is plain Rust,** as `.rs` files are in the full toolchain. The driver reports what every path resolves to, and a path outside a block that names a logical item, or calls a function with ghost parameters, is an error.
+   - **Ghost parameters stay, as markers, in both expansions,** as in build mode. Removing them from the runtime expansion, as export mode does, would give a function two signatures, which breaks a plain-Rust caller in whichever expansion it was not written for, and would need, at each Locus call site, the callee's signature to know which arguments to drop, which a macro over one block does not have (tested).
+   - **Within the crate, the semantics are build mode's.** Every rule of this RFC and of RFC 0002 that holds in build mode holds, and the litmus examples are checked with each file's text inside `locus! { }`. The two examples about `.lc` files, `include-from-source` and `reserved-check-cfg`, apply once there are `.lc` files.
+   - **Other crates are not checked.** Interfaces, contracts across crates, and checking the crates that depend on a Locus crate wait for build mode. A plain-Rust crate can call a function that needs a proof, and pass a marker that proves nothing: it compiles, and reaches the division by zero the precondition rules out (tested). So a crate that uses a Locus crate is trusted to call it as checked code would, with genuine proofs and without building values of its invariant types, and the trust model lists this as `assumed.stage1.dependents`. The alternative, export mode's interface rules for everything other crates can reach, is for the owner (below).
+   - **What a block sees.** A block sees only its own tokens, and three things follow:
+     - a logical type's declaration and its `impl`s are written in one block, because another block cannot know that a name is logical (tested: E0118);
+     - the library is named `locus` in the user's namespace, rather than under a fresh name, and items inside a block are macro-expanded, so a user's own item named `locus` can make the name ambiguous (tested: E0659);
+     - which marker a `logic!` block gives, when its code is a proof, as a lemma's call or a logical closure that proves a `forall` is, is not decided by its tokens. That is open for lowering too (below).
+   - **Not needed in the first stage:** `.lc` files and their parser, the file loader, rewriting dep-info and `#[path]`, the compiler wrapper and its identity, checking every crate that depends on a Locus crate, and export mode.
+2. **Build mode, with `.lc` files.** Locus syntax anywhere in a `.lc` file, lowering of whole files, the compiler wrapper, interfaces and contracts across crates, and every dependent crate checked. A `.lc` file lowers to what its text would expand to inside `locus! { }`, so the library, the driver, the facts, the logical pass, and validation carry over, and lowering whole files lifts the first stage's limits on what a block sees.
+3. **Export mode, if it is still wanted.** Readable `.rs` files for Rust users of a crate written in `.lc` files. A crate written with `locus!` blocks is already plain Rust to its users, so export mode is needed only to publish crates written in `.lc` files to Rust users.
 
 ### Sources and modes
 
@@ -579,8 +602,15 @@ Three spikes tested this design. Nothing depends on them, and each states what i
   - what the check costs;
   - that definition hashes pair the two programs within a build, but interfaces need names that survive edits.
 
+- **[The `locus!` macro](../../spikes/locus-macro/README.md).** A toy `locus!` over 22 litmus examples in an ordinary Cargo crate, every litmus file through rustc's lexer as macro input, rustfmt and rust-analyzer on the result, and a plain-Rust crate calling a Locus one. It showed:
+  - that the surface syntax survives as macro input, and one text gives both expansions;
+  - that diagnostics point at the user's code, rustfmt leaves blocks alone, and rust-analyzer resolves inside them;
+  - that ghost parameters must stay as markers, and that a plain-Rust caller can then pass a marker that proves nothing;
+  - what a block cannot see: logical types declared in another block, and which marker a `logic!` gives when its code is a proof.
+
 **Not yet tested:**
 - real lowering from `.lc` files, and the real prelude;
+- a real `locus!`, with Locus's parser, its own diagnostics, and the driver reading its checking expansion;
 - serving the lowered text through rustc's file loader at the sources' paths, with `#[path]` for `.lc` modules;
 - checking procedural macro crates that depend on Locus crates, and comparing every item's description and every body in validation;
 - inferring effect summaries, and keeping them in interfaces;
@@ -745,6 +775,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **Decided by the owner after the third review,** following the recommendations.
 
+34. **Locus is built in stages, starting with the `locus!` macro.** Locus code is first written in `.rs` files inside `locus!` blocks and checked with `cargo locus check`, and the language is built out on that. Build mode, with `.lc` files, follows, and export mode if it is still wanted.
 35. **A dependency is named by Cargo's package identity,** its name, version, and source, with its crate target, and a Locus dependency also by its interface hash. Whether an earlier check still applies, given features, configuration, sources, specifications, and Locus's version, is the manifest's question, not part of every name.
 36. **Lowering rewrites the `#[path]`s the source writes** beneath a module it points, as well as adding the missing ones.
 37. **Validation compares foreign linkage:** `#[link_name]` on a foreign item and `#[link(...)]` on its `extern` block, with their options.
@@ -754,6 +785,8 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
 3. Traits among Locus's names also have no associated functions or constants (an extension of 10 above).
 4. Until [cfg-corner-cases](../../issues/cfg-corner-cases.md) decides more, an exported crate whose checked code tests target properties other than pointer width must declare its configurations.
+5. **In the first stage, other crates are trusted,** as `assumed.stage1.dependents`, so that the crate is checked with build mode's semantics and every litmus example applies. The alternative is export mode's interface rules for everything other crates can reach: sound against plain-Rust callers from the start, but a crate could then make no public item with logical values in its signature until build mode exists. Both keep ghost parameters as markers.
+6. **Which marker a `logic!` gives** when its code is a proof, such as `logic! { add_zero(n) }` for a lemma `add_zero`. Lowering decides only what the source shows, and the source does not show it. The options: the source shows it, by writing logical code that gives a proof as `prove!` and keeping `logic!` for data; or the marker is left to rustc's inference, as a value of a type that either marker can fill, and Locus confirms it against the logical type of the code. The first keeps lowering's rule; the second writes nothing new, and is untested.
 
 **Left to other RFCs**, each with its issue:
 - Logical types, propositions, proofs, models, and contracts: [RFC 0002](0002-logical-layer.md), proposed with this one.

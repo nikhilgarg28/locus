@@ -1,0 +1,1 @@
+logic fn next(x: Nat) -> Nat { x' }

@@ -1,0 +1,11 @@
+[package]
+name = "diag"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus = { path = "../locus" }
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "locus"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus-macros = { path = "../locus-macros" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

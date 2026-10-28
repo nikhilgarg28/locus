@@ -1,0 +1,10 @@
+[package]
+name = "user_c"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus = { path = "../../locus" }
+lib_a_marker = { path = "../lib_a_marker" }
+lib_a_removed = { path = "../lib_a_removed" }
