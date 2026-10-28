@@ -1,0 +1,16 @@
+//~ question: May logical code read through a reference that a snapshot cuts, as a place?
+//~ spec: models.snapshots, observe.place.readable
+//~ rfc: 0002
+
+struct A<'a> {
+    next: &'a B<'a>,
+}
+
+struct B<'a> {
+    value: u32,
+    prev: Option<&'a A<'a>>,
+}
+
+fn value(a: &A, positive: @(a.next.value > 0)) -> u32 {
+    a.next.value
+}

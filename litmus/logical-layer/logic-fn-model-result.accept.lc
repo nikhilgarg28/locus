@@ -1,0 +1,11 @@
+//~ question: May a logic function with a runtime parameter give a logical result?
+//~ spec: logic.code.logical-values
+//~ rfc: 0002
+
+logic fn count(xs: &[u32]) -> Nat {
+    xs.len()
+}
+
+fn nonempty(xs: &[u32], some: @(count(xs) > 0)) -> u32 {
+    xs[0]
+}

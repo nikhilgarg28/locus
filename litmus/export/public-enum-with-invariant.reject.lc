@@ -1,0 +1,9 @@
+//~ question: May an exported enum have a proof field that reads one of its payload fields?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+pub enum Reading {
+    Valid { x: u32, ok: @(x > 0) }, //~ error: `Reading` is reachable from other crates, and Rust makes the fields of its variants public, so it cannot have the proof field `ok`
+    Missing,
+}

@@ -1,0 +1,13 @@
+// Hard case 4: a function with a proof parameter as a value.
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn pick() -> u32 {
+    let f = halve;
+    f(10, _)
+}
+
+fn main() {
+    println!("pick() = {}", pick());
+}

@@ -1,0 +1,13 @@
+//~ question: May a `Model` bound appear on an `impl`?
+//~ spec: models.bounds-on-functions
+//~ rfc: 0002
+
+trait Describe {
+    fn describe(&self) -> u32;
+}
+
+impl<T: Model> Describe for T { //~ error: a `Model` bound cannot appear on an `impl`, because removing it could change which implementation a call selects
+    fn describe(&self) -> u32 {
+        1
+    }
+}

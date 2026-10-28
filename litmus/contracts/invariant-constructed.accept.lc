@@ -1,0 +1,25 @@
+//~ question: May a type's invariant be established when each value is constructed?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn interval(a: u32, b: u32) -> Interval {
+    if a <= b {
+        Interval { lo: a, hi: b, ordered: _ }
+    } else {
+        Interval { lo: b, hi: a, ordered: _ }
+    }
+}
+
+fn width(a: u32, b: u32) -> u32 {
+    let iv = interval(a, b);
+    iv.hi - iv.lo
+}
+
+//~ run: width(7, 3) => 4
+//~ run: width(2, 9) => 7

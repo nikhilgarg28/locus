@@ -1,0 +1,12 @@
+//~ question: May a runtime value initialize a logical field without being written as logical code?
+//~ spec: logic.ghost.positions-logical
+//~ rfc: 0002
+
+struct Tally {
+    hits: u32,
+    count: Nat,
+}
+
+fn new() -> Tally {
+    Tally { hits: 0, count: 0 } //~ error: the field `count` is logical, and `0` here is runtime code; write `logic! { 0 }`
+}

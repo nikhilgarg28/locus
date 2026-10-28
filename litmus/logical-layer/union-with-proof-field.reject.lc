@@ -1,0 +1,8 @@
+//~ question: May a union have a field that holds a proof?
+//~ spec: logic.ghost.no-unions
+//~ rfc: 0002
+
+union Pun {
+    raw: u64,
+    hint: Option<@(0 != 0)>, //~ error: the field `hint` of the union `Pun` carries a forgeable proof: reading it would reinterpret what `raw` wrote as a proof
+}

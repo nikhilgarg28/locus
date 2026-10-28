@@ -1,0 +1,18 @@
+//~ question: Must code that a macro generates prove the invariant of a type it constructs?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+macro_rules! positive {
+    ($v:expr) => {
+        Positive { value: $v, nonzero: prove!($v > 0) }
+    };
+}
+
+fn zero() -> Positive {
+    positive!(0) //~ error: cannot prove `0 > 0` for the field `nonzero` of `Positive`, in code that `positive!` generates
+}

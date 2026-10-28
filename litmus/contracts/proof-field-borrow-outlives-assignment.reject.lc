@@ -1,0 +1,15 @@
+//~ question: May a mutable borrow of a proof field write a proof about a sibling field's old value?
+//~ spec: contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+struct Cache {
+    x: u32,
+    hint: Option<@(x != 0)>,
+}
+
+fn forge(c: &mut Cache, nonzero: @(c.x != 0)) {
+    c.hint = None;
+    let h = &mut c.hint; //~ error: `hint` is a proof field, so it cannot be mutably borrowed; assign it instead
+    c.x = 0;
+    *h = Some(nonzero);
+}

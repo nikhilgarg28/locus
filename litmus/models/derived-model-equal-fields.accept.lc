@@ -1,0 +1,13 @@
+//~ question: Are two values equal when their type derives its model and all their fields are equal?
+//~ spec: models.derived, logic.eq.runtime-values
+//~ rfc: 0002
+
+#[derive(Model)]
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(p === q) {
+    _
+}

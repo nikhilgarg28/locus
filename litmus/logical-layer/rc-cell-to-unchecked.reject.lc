@@ -1,0 +1,12 @@
+//~ question: May an `Rc` sharing a `Cell` that holds a proof be given to code Locus has no specification for?
+//~ spec: logic.boundary.writes, logic.ghost.interior-mutability
+//~ rfc: 0002
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+fn lend(n: u32) -> bool {
+    let slot: Rc<Cell<Option<@(n > 0)>>> = Rc::new(Cell::new(None));
+    std::hint::black_box(slot.clone()); //~ error: `slot` shares a `Cell` holding a proof, so it cannot be given to `black_box`, which Locus has no specification for: that code could write a forged proof that `slot` would then read
+    slot.get().is_some()
+}

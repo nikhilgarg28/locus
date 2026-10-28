@@ -1,0 +1,32 @@
+// Hard case 5: a proof field initialized from a runtime call.
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+struct Checker;
+
+impl Checker {
+    fn order(&self, lo: u32, hi: u32) -> @(lo <= hi) {
+        if lo > hi {
+            panic!("unordered");
+        }
+        _
+    }
+
+    fn interval(&self, lo: u32, hi: u32) -> Interval {
+        Interval { lo, hi, ordered: self.order(lo, hi) }
+    }
+}
+
+fn width(lo: u32, hi: u32) -> u32 {
+    let iv = Checker.interval(lo, hi);
+    iv.hi - iv.lo
+}
+
+fn main() {
+    println!("width(2, 5) = {}", width(2, 5));
+    let late = std::panic::catch_unwind(|| width(5, 2));
+    println!("width(5, 2) panicked = {}", late.is_err());
+}

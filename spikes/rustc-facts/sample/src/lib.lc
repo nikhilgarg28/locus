@@ -1,0 +1,19 @@
+//! Spike input: a Locus source file, in provisional syntax.
+use sample_dep::Meters;
+
+logic fn total(xs: &[u32]) -> Nat;
+
+pub fn first(v: &Vec<u32>, nonempty: @(v.len() > 0)) -> u32 {
+    v[0]
+}
+
+pub fn demo() -> u32 {
+    let v = vec![1, 2, 3];
+    let m = Meters(5);
+    let known: @(total(&v) > 0) = _;
+    let x = first(&v, known);
+    let kept: Option<@(m.0 == 5)> = Some(_);
+    let moved = v;
+    let late: @(v.len() == 3) = _;
+    x + m.get() + moved[0]
+}

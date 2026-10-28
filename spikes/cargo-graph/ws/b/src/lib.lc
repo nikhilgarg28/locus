@@ -1,0 +1,26 @@
+//! A Locus library that depends on `a`. Spike syntax: a line
+//! `uses CRATE::NAME: VERSION` states the contract this crate relies on.
+uses a::div: v1
+uses a::double: v1
+pub use a::{Meters, nonzero};
+
+contract half: v1
+pub fn half(n: u32) -> u32 {
+    let h = ::__locus::prove!(n);
+    a::div(n, 2, h)
+}
+
+pub fn quadruple(m: &a::Meters) -> u32 {
+    let _seen = ::__locus::prove!(m.0);
+    a::double(a::double(m.get()))
+}
+
+pub fn witnesses() -> (Option<::__locus::Erased>, Option<::__locus::Erased>) {
+    (a::witness(), a::witness())
+}
+
+/// Set by the build script.
+#[cfg(b_fast)]
+pub fn answer() -> u32 {
+    pm::answer!()
+}

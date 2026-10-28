@@ -1,0 +1,21 @@
+//~ question: May a proof be converted through `Any` into a proof of another proposition?
+//~ spec: logic.ghost.forgotten
+//~ rfc: 0002
+
+use std::any::Any;
+
+fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
+    x / y
+}
+
+fn forged(x: u32) -> u32 {
+    let trivial: @(1 == 1) = _;
+    let boxed: Box<dyn Any> = Box::new(trivial);
+    match boxed.downcast::<@(0 != 0)>() {
+        Ok(p) => {
+            let q = *p;
+            divide(x, 0, q) //~ error: `q` is not a proof of `0 != 0`: `downcast` forgets proofs and gives back `Erased`
+        }
+        Err(_) => 0,
+    }
+}

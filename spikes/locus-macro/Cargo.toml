@@ -1,0 +1,34 @@
+# The spike's own workspace, so that the repository's root workspace
+# (members = ["xtask"]) is untouched. Nothing outside spikes/ may depend on it.
+[workspace]
+resolver = "3"
+members = [
+    "locus",
+    "locus-macros",
+    "tokenize",
+    "cases",
+    "diag",
+    "cross/lib_a_marker",
+    "cross/lib_a_removed",
+    "cross/user_b",
+    "cross/user_c",
+]
+# `cases` holds examples that the checking expansion must reject, `diag` holds
+# deliberate type errors, and run.sh builds their bins one at a time, so a plain
+# `cargo build` builds only these.
+default-members = ["locus", "locus-macros", "tokenize"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.dependencies]
+proc-macro2 = "1"
+quote = "1"
+
+# A crate whose code expands Locus's macros must declare the checking `cfg`,
+# or `unexpected_cfgs` warns at every invocation. `cross/user_c` leaves this
+# out on purpose, to show the warning.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

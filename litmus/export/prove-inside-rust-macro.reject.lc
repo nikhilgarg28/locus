@@ -1,0 +1,9 @@
+//~ question: May an exported crate invoke a Locus macro inside another macro's input?
+//~ spec: export.macros-direct
+//~ rfc: 0001
+//~ mode: export
+
+pub fn check(x: u32) -> usize {
+    let proofs: Vec<@(x == x)> = vec![prove!(x == x)]; //~ error: in an exported crate, Locus's `prove!` cannot be invoked inside another macro's input, because erasure could not remove it
+    proofs.len()
+}

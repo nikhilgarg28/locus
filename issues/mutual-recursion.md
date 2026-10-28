@@ -3,6 +3,7 @@
 - **Kind:** design
 - **Status:** later
 - **Blocks:** Nothing in RFC 0002. It limits which logic functions can be written until it is decided
+- **Rules:** `logic.fn.total`
 
 ## Question
 
@@ -32,3 +33,7 @@ Nothing in RFC 0002. It limits which logic functions can be written until it is 
 ### 2026-10-26, opened on GitHub as #16
 
 Moved into the repository from [GitHub issue #16](https://github.com/nikhilgarg28/locus/issues/16) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

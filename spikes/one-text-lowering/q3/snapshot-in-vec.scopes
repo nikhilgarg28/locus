@@ -1,0 +1,4 @@
+# Option (b)'s side table, written by lowering: for each binding of a name
+# that is ever ghost, its lexical scope in the lowered file.
+# file name ghost|runtime start end
+snapshot-in-vec.rs before ghost 9:5 15:1

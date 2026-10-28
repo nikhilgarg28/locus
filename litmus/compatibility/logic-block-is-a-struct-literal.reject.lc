@@ -1,0 +1,8 @@
+//~ question: Is `logic { ... }` read as a Rust struct literal rather than as a logical block?
+//~ spec: compat.syntax.not-rust, compat.syntax.contextual-keywords, compat.errors.rustc
+//~ rfc: 0001
+
+fn count(xs: &[u32]) -> usize {
+    let n = logic { xs }; //~ error: cannot find struct, variant or union type `logic` in this scope
+    xs.len()
+}

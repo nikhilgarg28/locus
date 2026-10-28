@@ -1,0 +1,43 @@
+// Hard case 11: Locus syntax that rustc cannot parse, rewritten by lowering.
+logic fn double(n: Nat) -> Nat {
+    n + n
+}
+
+prop Small(n: Nat) {
+    n < 10
+}
+
+#[derive(Logical)]
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+impl Point {
+    logic fn origin() -> Point {
+        Point { x: 0, y: 0 }
+    }
+}
+
+#[derive(Logical)]
+enum List<T> {
+    Nil,
+    Cons(T, List<T>),
+}
+
+pub(locus) fn halve_even(n: u32, even: @(n % 2 == 0)) -> (out: u32, @(out * 2 == n)) {
+    (n / 2, _)
+}
+
+fn use_them() -> u32 {
+    let d = logic! { double(3) };
+    let s = prop!(Small(d));
+    let o: Point = logic! { Point::origin() };
+    let l: List<Nat> = logic! { List::Nil };
+    let (half, exact) = halve_even(8, _);
+    half
+}
+
+fn main() {
+    println!("use_them() = {}", use_them());
+}

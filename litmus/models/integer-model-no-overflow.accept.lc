@@ -1,0 +1,7 @@
+//~ question: Is a machine integer in logical code a number that cannot overflow?
+//~ spec: models.observation
+//~ rfc: 0002
+
+fn successor_is_larger(x: u8) -> @(x + 1 > x) {
+    _
+}

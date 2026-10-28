@@ -1,0 +1,37 @@
+//! A Locus library. Spike syntax: a line `contract NAME: VERSION` states a
+//! contract, and lowering blanks it; `::__locus::prove!(places)` is a proof.
+mod util;
+pub use util::double;
+
+contract div: v1
+pub fn div(n: u32, d: u32, _nonzero: ::__locus::Erased) -> u32 {
+    let _step = ::__locus::prove!(d);
+    n / d
+}
+
+pub fn witness() -> Option<::__locus::Erased> {
+    Some(::__locus::prove!())
+}
+
+pub struct Meters(pub u32);
+
+impl Meters {
+    pub fn get(&self) -> u32 {
+        self.0
+    }
+}
+
+impl Clone for Meters {
+    fn clone(&self) -> Self {
+        Meters(self.0)
+    }
+}
+
+#[doc(hidden)]
+pub use ::__locus as __l;
+
+/// A proof, from a macro of `a`'s: expands through `a`'s own `__locus`.
+#[macro_export]
+macro_rules! nonzero {
+    ($e:expr) => { $crate::__l::prove!($e) };
+}

@@ -1,0 +1,19 @@
+//~ question: May an exported crate keep a function with a precondition `pub(locus)` and export a wrapper that checks it?
+//~ spec: export.plain-interface, export.locus-visibility
+//~ rfc: 0002
+//~ mode: export
+
+pub(locus) fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+pub fn halve(n: u32) -> Option<u32> {
+    if n % 2 == 0 {
+        Some(halve_even(n, _))
+    } else {
+        None
+    }
+}
+
+//~ run: halve(10) => Some(5)
+//~ run: halve(7) => None

@@ -1,0 +1,11 @@
+//~ question: After lending a vector of naturals mutably to code Locus has no specification for, does Locus still know its length?
+//~ spec: logic.boundary.writes, logic.ghost.forgotten
+//~ rfc: 0002
+
+fn lend(n: Nat) -> usize {
+    let mut counts: Vec<Nat> = Vec::new();
+    counts.push(n);
+    std::hint::black_box(&mut counts);
+    let one: @(counts.len() == 1) = _; //~ error: cannot prove `counts.len() == 1`: `black_box` may have written `counts`, so only its type is known
+    counts.len()
+}

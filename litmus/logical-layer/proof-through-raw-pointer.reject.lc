@@ -1,0 +1,9 @@
+//~ question: Does a value read through a raw pointer keep what Locus knew about its logical values?
+//~ spec: logic.ghost.forgotten
+//~ rfc: 0002
+
+fn read(counts: &[Nat; 1], five: @(counts[0] === 5)) {
+    let p = counts as *const [Nat; 1];
+    let copy: [Nat; 1] = unsafe { *p };
+    let still: @(copy[0] === 5) = _; //~ error: cannot prove `copy[0] === 5`: `copy` was read through a raw pointer, so its logical values are markers that Locus knows nothing about
+}

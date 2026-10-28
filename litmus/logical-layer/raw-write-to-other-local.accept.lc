@@ -1,0 +1,17 @@
+//~ question: Does a raw pointer to one local leave what Locus knows about another?
+//~ spec: logic.unsafe.escape
+//~ rfc: 0002
+
+fn raw() -> u32 {
+    let mut n: u32 = 1;
+    let mut m: u32 = 2;
+    let before: @(m == 2) = _;
+    let p = &mut m as *mut u32;
+    unsafe {
+        *p = 0;
+    }
+    let one: @(n == 1) = _;
+    n + m
+}
+
+//~ run: raw() => 1

@@ -1,0 +1,26 @@
+// Hard case 3: a for loop over Vec<(usize, @(i < n))>.
+fn at(xs: &[u32], i: usize, ok: @(i < xs.len())) -> u32 {
+    xs[i]
+}
+
+fn indices(xs: &[u32]) -> Vec<(i: usize, @(i < xs.len()))> {
+    let mut out: Vec<(i: usize, @(i < xs.len()))> = Vec::new();
+    for i in 0..xs.len() {
+        out.push((i, _));
+    }
+    out
+}
+
+fn sum(xs: &[u32]) -> u32 {
+    let checked = indices(xs);
+    let mut total = 0;
+    for (i, ok) in checked {
+        total += at(xs, i, ok);
+    }
+    total
+}
+
+fn main() {
+    let r = sum(&[1, 2, 3]);
+    println!("sum(&[1, 2, 3]) = {r}");
+}

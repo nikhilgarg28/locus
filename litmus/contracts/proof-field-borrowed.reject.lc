@@ -1,0 +1,14 @@
+//~ question: May a function give out a mutable borrow of a field that holds a proof?
+//~ spec: contracts.invariants.no-mutable-borrow, contracts.invariants.proof-holders
+//~ rfc: 0002
+
+pub struct Cache {
+    x: u32,
+    hint: Option<@(x != 0)>,
+}
+
+impl Cache {
+    pub fn hint(&mut self) -> &mut Option<@(self.x != 0)> {
+        &mut self.hint //~ error: `hint` is a proof field, so it cannot be mutably borrowed; assign it instead
+    }
+}

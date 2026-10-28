@@ -1,0 +1,9 @@
+//~ question: Is a Rust ownership error reported as rustc reports it?
+//~ spec: compat.errors.rustc
+//~ rfc: 0001
+
+fn lengths() -> (usize, usize) {
+    let v = vec![1, 2, 3];
+    let moved = v;
+    (v.len(), moved.len()) //~ error: borrow of moved value: `v`
+}

@@ -1,0 +1,12 @@
+//~ question: Does a field holding an `Option` of a proof count as a proof field?
+//~ spec: contracts.invariants.proof-holders, contracts.invariants.assignment
+//~ rfc: 0002
+
+struct Cache {
+    x: u32,
+    nonzero: Option<@(x != 0)>,
+}
+
+fn clear(c: &mut Cache) {
+    c.x = 0; //~ error: cannot prove the proof field `nonzero` for the new value of `x`: it may hold a proof that `x != 0`
+}

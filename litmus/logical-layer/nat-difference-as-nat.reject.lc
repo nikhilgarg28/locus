@@ -1,0 +1,7 @@
+//~ question: Is the difference of two naturals a natural?
+//~ spec: logic.arith.nat-subtraction
+//~ rfc: 0002
+
+logic fn gap(a: Nat, b: Nat) -> Nat {
+    a - b //~ error: expected `Nat`, found `Int`: subtracting `Nat`s gives an `Int`
+}

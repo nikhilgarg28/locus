@@ -1,0 +1,14 @@
+//~ question: When a proof field's proofs are inside a `Cell`, must assigning a field they read prove their proposition?
+//~ spec: contracts.invariants.assignment
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>,
+}
+
+fn reset(c: &mut Cache) {
+    c.x = 0; //~ error: cannot prove `0 != 0` for `c.hint`: Locus cannot see whether the `Cell` holds a proof, so assigning `c.x` must prove its proposition
+}

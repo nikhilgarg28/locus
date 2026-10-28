@@ -1,0 +1,8 @@
+//~ question: Does addition in logical code wrap at the machine integer's bound?
+//~ spec: models.observation
+//~ rfc: 0002
+
+// In logical code `x` is a `Nat`, so `x + 1` is 256 here, not 0.
+fn wraps(x: u8, at_max: @(x == 255)) -> @(x + 1 == 0) {
+    _ //~ error: cannot prove `x + 1 == 0`
+}

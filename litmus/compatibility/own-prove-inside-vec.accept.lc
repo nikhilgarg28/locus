@@ -1,0 +1,17 @@
+//~ question: May a program's own macro named `prove` be used inside another macro's input?
+//~ spec: compat.names.shadowable
+//~ rfc: 0001
+
+macro_rules! prove {
+    ($e:expr) => {
+        $e
+    };
+}
+
+fn holds(x: u32) -> usize {
+    let checks = vec![prove!(x == x), prove!(x > 9)];
+    checks.into_iter().filter(|c| *c).count()
+}
+
+//~ run: holds(7) => 1
+//~ run: holds(12) => 2

@@ -1,0 +1,27 @@
+//~ question: Does a place holding a proof keep its proof when lent by shared reference to code Locus has no specification for?
+//~ spec: logic.boundary.writes
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn hundred_over(n: u32) -> u32 {
+    let found: Option<@(n > 0)> = check(n);
+    std::hint::black_box(&found);
+    match found {
+        Some(p) => divide(100, n, p),
+        None => 0,
+    }
+}
+
+//~ run: hundred_over(4) => 25
+//~ run: hundred_over(0) => 0

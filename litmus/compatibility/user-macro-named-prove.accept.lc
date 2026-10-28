@@ -1,0 +1,17 @@
+//~ question: Does a program's own macro named `prove` keep its Rust meaning?
+//~ spec: compat.names.shadowable
+//~ rfc: 0001
+
+macro_rules! prove {
+    ($condition:expr) => {
+        assert!($condition)
+    };
+}
+
+fn half(x: u32) -> u32 {
+    prove!(x % 2 == 0);
+    x / 2
+}
+
+//~ run: half(8) => 4
+//~ run: half(7) => panic

@@ -1,0 +1,13 @@
+//~ question: May a reference to a place that holds a proof be cast to a raw pointer?
+//~ spec: logic.boundary.writes
+//~ rfc: 0002
+
+fn check(x: u32) -> Option<@(x > 0)> {
+    if x > 0 { Some(_) } else { None }
+}
+
+fn hold(x: u32) -> u32 {
+    let mut found = check(x);
+    let p = &mut found as *mut Option<@(x > 0)>; //~ error: `found` holds a proof, so no raw pointer to it may be made: a raw write could put a proof of another proposition there
+    x
+}

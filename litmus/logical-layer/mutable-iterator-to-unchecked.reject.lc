@@ -1,0 +1,9 @@
+//~ question: May a mutable iterator over values holding proofs be passed to unchecked code?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+fn keep(n: u32) -> usize {
+    let mut found: Vec<Option<@(n > 0)>> = Vec::new();
+    std::hint::black_box(found.iter_mut()); //~ error: `IterMut` gives mutable access to the elements of `found`, which hold proofs, so it cannot be passed to `black_box`
+    found.len()
+}

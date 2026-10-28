@@ -1,0 +1,10 @@
+//~ question: May an exported crate's public struct have a public field that its invariant reads?
+//~ spec: export.invariants-closed
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Interval {
+    pub lo: u32, //~ error: `lo` is read by the proof field `ordered`, so it cannot be reachable from other crates
+    hi: u32,
+    ordered: @(lo <= hi),
+}

@@ -1,0 +1,16 @@
+//~ question: May a fact about an escaped local be established again by a write that Locus sees?
+//~ spec: logic.boundary.escape
+//~ rfc: 0002
+
+fn again() -> u32 {
+    let mut n: u32 = 1;
+    let untouched: u32 = 9;
+    std::hint::black_box(&mut n);
+    n = 3;
+    let three: @(n == 3) = _;
+    std::hint::black_box(());
+    let nine: @(untouched == 9) = _;
+    untouched
+}
+
+//~ run: again() => 9

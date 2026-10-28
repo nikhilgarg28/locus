@@ -1,0 +1,11 @@
+//~ question: Is the unit type `()` a runtime type?
+//~ spec: logic.types.tuples
+//~ rfc: 0002
+
+fn units() -> usize {
+    let all: Vec<()> = vec![(), (), ()];
+    let many: @(all.len() == 3) = _;
+    all.len()
+}
+
+//~ run: units() => 3

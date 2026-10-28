@@ -1,0 +1,13 @@
+//~ question: May checked code make a value of a type with proof fields by `transmute`?
+//~ spec: logic.unsafe.no-conjuring, logic.unsafe.invariant
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn backwards() -> Interval {
+    unsafe { std::mem::transmute::<[u32; 2], Interval>([5, 1]) } //~ error: `Interval` holds a proof, so checked code cannot make one from memory of another type: build it from its fields instead
+}

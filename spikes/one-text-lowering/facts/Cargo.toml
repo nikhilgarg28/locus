@@ -1,0 +1,11 @@
+[package]
+name = "locus-lowering-facts"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+# A workspace of its own, outside the repository's.
+[workspace]

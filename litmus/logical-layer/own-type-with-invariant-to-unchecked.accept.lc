@@ -1,0 +1,14 @@
+//~ question: May a value of the program's own type with a proof field be lent mutably to code Locus has no specification for?
+//~ spec: logic.boundary.access, logic.boundary.payload, logic.boundary.writes
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn lend(iv: &mut Interval) -> u32 {
+    std::hint::black_box(&mut *iv);
+    iv.hi - iv.lo
+}

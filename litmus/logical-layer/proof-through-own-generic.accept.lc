@@ -1,0 +1,11 @@
+//~ question: May a proof pass through the program's own generic function?
+//~ spec: logic.ghost.forgotten, logic.ghost.generic-instantiations
+//~ rfc: 0002
+
+fn identity<T>(value: T) -> T {
+    value
+}
+
+fn relay(x: u32, positive: @(x > 0)) -> @(x > 0) {
+    identity(positive)
+}

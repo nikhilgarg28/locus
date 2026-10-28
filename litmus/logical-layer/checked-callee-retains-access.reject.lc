@@ -1,0 +1,17 @@
+//~ question: When a checked function gives unchecked code access to its argument, does the caller still know the argument's place after later calls of unchecked code?
+//~ spec: logic.boundary.escape, logic.unsafe.escape
+//~ rfc: 0002
+
+fn share(n: &mut u32) {
+    let p = n as *mut u32;
+    std::hint::black_box(p);
+}
+
+fn caller() -> u32 {
+    let mut n: u32 = 1;
+    share(&mut n);
+    n = 1;
+    std::hint::black_box(());
+    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `share` lets unchecked code keep access to `n`, and a later call of unknown code may have written it
+    n
+}

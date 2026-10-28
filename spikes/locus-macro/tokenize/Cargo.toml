@@ -1,0 +1,8 @@
+[package]
+name = "tokenize"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+proc-macro2 = { workspace = true, features = ["span-locations"] }

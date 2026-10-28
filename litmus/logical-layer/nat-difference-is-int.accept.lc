@@ -1,0 +1,8 @@
+//~ question: Is the difference of two naturals an integer that can be negative?
+//~ spec: logic.arith.nat-subtraction
+//~ rfc: 0002
+
+// `a` and `b` are `Nat`s in logical code, and `a - b` is an `Int`.
+fn below(a: u8, b: u8, smaller: @(a < b)) -> @(a - b < 0) {
+    _
+}

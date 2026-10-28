@@ -1,0 +1,14 @@
+// Hard case 2: a proof through the program's own generic function.
+fn identity<T>(x: T) -> T {
+    x
+}
+
+fn relay(x: u32, positive: @(x > 0)) -> @(x > 0) {
+    identity(positive)
+}
+
+fn main() {
+    let p = relay(3, _);
+    let kept: Option<@(3 > 0)> = Some(identity(p));
+    println!("kept.is_some() = {}", kept.is_some());
+}

@@ -1,0 +1,7 @@
+//~ question: May a `Model` bound appear on a function's type parameter?
+//~ spec: models.bounds-on-functions
+//~ rfc: 0002
+
+fn same<T: Model>(a: &T, b: &T, equal: @(model(a) === model(b))) -> u32 {
+    1
+}

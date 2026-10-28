@@ -1,0 +1,7 @@
+//~ question: May `===` state that two sequences are equal?
+//~ spec: logic.eq.same
+//~ rfc: 0002
+
+logic fn same_items(a: Seq<Nat>, b: Seq<Nat>) -> Prop {
+    a === b
+}

@@ -3,6 +3,7 @@
 - **Kind:** decision
 - **Status:** open
 - **Blocks:** Every litmus example beyond RFC 0001's. Those examples use provisional spellings
+- **Rules:** `proofs.connectives`, `compat.syntax.not-rust`
 
 ## Question
 
@@ -43,3 +44,7 @@ Moved into the repository from [GitHub issue #5](https://github.com/nikhilgarg28
 > - `final!(r)`.
 >
 > This issue stays open for what RFC 0002 leaves to it, and for any respelling the owner wants.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

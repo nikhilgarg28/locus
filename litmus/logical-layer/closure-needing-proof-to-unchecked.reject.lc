@@ -1,0 +1,10 @@
+//~ question: May a closure whose parameter holds a proof be passed to code that Locus does not check?
+//~ spec: logic.boundary.calls
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn keep(slot: &Cell<Option<@(1 == 2)>>) {
+    let set = |v: Option<@(1 == 2)>| slot.set(v);
+    std::hint::black_box(set); //~ error: the closure `set` takes a proof, and is passed to `black_box`, which Locus does not check and could call it with anything
+}

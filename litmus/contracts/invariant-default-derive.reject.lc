@@ -1,0 +1,9 @@
+//~ question: May `Default` be derived for a type with a proof field?
+//~ spec: logic.ghost.marker-traits
+//~ rfc: 0002
+
+#[derive(Default)] //~ error: the derived `Default` builds a `Positive` without a proof of `value > 0`
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}

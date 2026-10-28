@@ -1,0 +1,9 @@
+//~ question: May a witness taken from a proof become a logical value?
+//~ spec: proofs.elimination
+//~ rfc: 0002
+
+logic fn witness(big: @(exists |m: Nat| m > 5)) -> Nat {
+    match big { //~ error: a match on a proof can only produce a proof, and this one produces a `Nat`
+        Exists::Witness(m) @ _ => m,
+    }
+}

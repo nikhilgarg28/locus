@@ -1,0 +1,14 @@
+//~ question: May a proposition declaration refer to itself in a conjunction?
+//~ spec: logic.types.positive, proofs.props.constructors
+//~ rfc: 0002
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn four_is_even() -> @Even(4) {
+    let zero: @Even(0) = Even::Zero @ _;
+    let two: @Even(2) = Even::Step(0) @ And::Intro(_, zero);
+    Even::Step(2) @ And::Intro(_, two)
+}

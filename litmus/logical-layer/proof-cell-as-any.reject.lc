@@ -1,0 +1,13 @@
+//~ question: May a shared cell holding a proof be converted to a trait object that hides it?
+//~ spec: logic.boundary.writes
+//~ rfc: 0002
+
+use std::any::Any;
+use std::cell::Cell;
+use std::rc::Rc;
+
+fn hide(n: u32) -> u32 {
+    let slot: Rc<Cell<Option<@(n > 0)>>> = Rc::new(Cell::new(None));
+    let hidden: Rc<dyn Any> = slot.clone(); //~ error: `slot` gives mutable access to a proof, and converting it to `Rc<dyn Any>` would hide that access from Locus
+    n
+}

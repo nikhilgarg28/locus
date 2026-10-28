@@ -1,0 +1,14 @@
+//~ question: Do paths that the source resolves from its own file, and `file!`, refer to the `.lc` file?
+//~ spec: compat.superset.same-meaning
+//~ rfc: 0001
+
+fn reads_itself() -> bool {
+    include_str!("include-from-source.accept.lc").starts_with("//~ question")
+}
+
+fn named_by_source() -> bool {
+    file!().ends_with("include-from-source.accept.lc")
+}
+
+//~ run: reads_itself() => true
+//~ run: named_by_source() => true

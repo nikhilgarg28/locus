@@ -1,0 +1,12 @@
+//~ question: May a logic function's recursive call increase its declared measure?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+#[decreases(n)]
+logic fn climb(n: Nat) -> Nat {
+    if n > 100 {
+        0
+    } else {
+        climb(n + 1) //~ error: cannot prove that the measure decreases: `n + 1 < n`
+    }
+}

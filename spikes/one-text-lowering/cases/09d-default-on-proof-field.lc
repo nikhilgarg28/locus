@@ -1,0 +1,8 @@
+// Hard case 9d: litmus contracts/invariant-default-derive.reject.lc.
+#[derive(Default)] //~ error: must be rejected
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+fn main() {}

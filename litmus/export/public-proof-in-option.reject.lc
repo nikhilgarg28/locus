@@ -1,0 +1,12 @@
+//~ question: May an exported crate's public function take a parameter whose type holds a proof?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+logic fn sorted(xs: Seq<Nat>) -> Prop {
+    forall |i: Nat, j: Nat| i <= j && j < xs.len() ==> xs[i] <= xs[j]
+}
+
+pub fn find(xs: &[u32], target: u32, ordered: Option<@sorted(xs)>) -> Option<usize> { //~ error: `find` is reachable from other crates, so the type of `ordered` cannot hold logical values
+    xs.iter().position(|x| *x == target)
+}

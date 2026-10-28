@@ -1,0 +1,14 @@
+//~ question: May a pattern that matches through a mutable reference bind a field that a proof field reads?
+//~ spec: contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    let Interval { hi, .. } = iv; //~ error: `hi` is bound by mutable reference to `iv.hi`, which the proof field `ordered` reads: a pattern that matches through `&mut` binds by reference
+    *hi += 1;
+}

@@ -1,0 +1,5 @@
+//! A Locus library outside the workspace.
+contract triple: v1
+pub fn triple(x: u32, _h: ::__locus::Erased) -> u32 {
+    x * 3
+}

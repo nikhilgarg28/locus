@@ -1,0 +1,15 @@
+//~ question: Does a match on a proof of a declared proposition give each arm's witnesses and condition?
+//~ spec: proofs.props.matching
+//~ rfc: 0002
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn one_is_not_even(h: @Even(1)) -> @False {
+    match h {
+        Even::Zero @ one_is_zero => _,
+        Even::Step(m) @ And::Intro(one_is_step, _) => _,
+    }
+}

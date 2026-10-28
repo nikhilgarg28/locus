@@ -1,0 +1,12 @@
+//~ question: Is a logic function whose recursive call decreases its declared measure total?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+#[decreases(n)]
+logic fn halvings(n: Nat) -> Nat {
+    if n < 2 {
+        0
+    } else {
+        halvings(n / 2) + 1
+    }
+}

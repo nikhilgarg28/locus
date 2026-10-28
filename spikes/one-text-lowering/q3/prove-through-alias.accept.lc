@@ -1,0 +1,12 @@
+//~ question: May Locus's `prove!` be invoked under another name?
+//~ spec: compat.names.macros-expand
+//~ rfc: 0001
+
+use prove as check;
+
+fn same(x: u32) -> u32 {
+    let proof: @(x == x) = check!(x == x);
+    x
+}
+
+//~ run: same(4) => 4

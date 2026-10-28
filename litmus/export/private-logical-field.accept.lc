@@ -1,0 +1,15 @@
+//~ question: May an exported crate's public struct have a private field of logical type?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Tally {
+    pub hits: u32,
+    count: Nat,
+}
+
+impl Tally {
+    pub fn new() -> Tally {
+        Tally { hits: 0, count: logic! { 0 } }
+    }
+}

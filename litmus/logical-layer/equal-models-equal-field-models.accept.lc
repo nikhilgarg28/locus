@@ -1,0 +1,23 @@
+//~ question: Does equality of two values' derived models give equality of their fields' models?
+//~ spec: logic.eq.runtime-values, models.derived
+//~ rfc: 0002
+
+struct Inner {
+    x: u32,
+}
+
+impl Model for Inner {
+    type Logic = Nat;
+    logic fn model(inner: &Inner) -> Nat {
+        0
+    }
+}
+
+#[derive(Model)]
+struct Outer {
+    inner: Inner,
+}
+
+fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(a.inner === b.inner) {
+    _
+}

@@ -1,0 +1,20 @@
+//~ question: Does a fact proven about a generic wrapper's snapshot hold at a type argument that closes a cycle through the wrapper?
+//~ spec: models.snapshots, logic.ghost.generic-instantiations
+//~ rfc: 0002
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+struct Node<'a> {
+    w: Wrap<'a, Node<'a>>,
+}
+
+fn same<T>(a: &Wrap<T>, b: &Wrap<T>, inner: @(snap(a.inner) === snap(b.inner))) -> @(snap(a) === snap(b)) {
+    _
+}
+
+fn same_nodes(a: &Wrap<Node>, b: &Wrap<Node>, inner: @(snap(a.inner) === snap(b.inner))) -> u32 {
+    let wraps = same(a, b, inner);
+    0
+}

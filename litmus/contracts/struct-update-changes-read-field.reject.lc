@@ -1,0 +1,14 @@
+//~ question: May a struct update reuse a proof from its base when it replaces a field the proof reads?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Tagged {
+    lo: u32,
+    hi: u32,
+    tag: u8,
+    ordered: @(lo <= hi),
+}
+
+fn raise(t: Tagged) -> Tagged {
+    Tagged { lo: 10, ..t } //~ error: cannot prove `10 <= t.hi` for the field `ordered`: the update replaces `lo`, which it reads
+}

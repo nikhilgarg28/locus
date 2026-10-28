@@ -1,0 +1,20 @@
+// Hard case 4e: a function with a proof parameter where the types match for
+// rustc: a pointer type that keeps the proof parameter, and Iterator::fold
+// (both from RFC 0002's boundary rule 2).
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn pointer() -> u32 {
+    let f: fn(u32, @(10 % 2 == 0)) -> u32 = halve; //~ error: Locus must reject; rustc cannot
+    f(10, _)
+}
+
+fn folded(proofs: Vec<@(10 % 2 == 0)>) -> u32 {
+    proofs.into_iter().fold(10, halve) //~ error: Locus must reject; rustc cannot
+}
+
+fn main() {
+    let p: @(10 % 2 == 0) = _;
+    println!("pointer() = {}, folded = {}", pointer(), folded(vec![p, p]));
+}

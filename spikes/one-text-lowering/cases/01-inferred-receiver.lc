@@ -1,0 +1,25 @@
+// Hard case 1: a method call on an inferred receiver.
+struct Gate {
+    min: u32,
+}
+
+impl Gate {
+    fn admit(&self, n: u32, pos: @(n > 0)) -> @(n >= self.min) {
+        if n < self.min {
+            panic!("below the minimum");
+        }
+        _
+    }
+}
+
+fn check(gates: &Vec<Gate>, n: u32, pos: @(n > 0)) -> u32 {
+    let ok = gates.first().unwrap().admit(n, pos);
+    let held = Some(ok);
+    if held.is_some() { n } else { 0 }
+}
+
+fn main() {
+    let gates = vec![Gate { min: 2 }];
+    let r = check(&gates, 5, _);
+    println!("check(&gates, 5, _) = {r}");
+}

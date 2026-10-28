@@ -1,0 +1,8 @@
+//~ question: May a public function have a precondition when its crate is built rather than exported?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: build
+
+pub fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}

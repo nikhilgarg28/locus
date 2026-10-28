@@ -1,0 +1,28 @@
+//~ question: May a `Cell` hold a proof?
+//~ spec: logic.ghost.interior-mutability
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn cached(n: u32) -> u32 {
+    let slot: Cell<Option<@(n > 0)>> = Cell::new(check(n));
+    match slot.get() {
+        Some(positive) => divide(100, n, positive),
+        None => 0,
+    }
+}
+
+//~ run: cached(0) => 0
+//~ run: cached(5) => 20

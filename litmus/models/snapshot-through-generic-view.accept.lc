@@ -1,0 +1,11 @@
+//~ question: Does a generic wrapper's snapshot look through its reference when its type argument does not lead back?
+//~ spec: models.snapshots, logic.eq.snapshots
+//~ rfc: 0002
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+fn same(a: &Wrap<u32>, b: &Wrap<u32>, values: @(*a.inner === *b.inner)) -> @(snap(a) === snap(b)) {
+    _
+}

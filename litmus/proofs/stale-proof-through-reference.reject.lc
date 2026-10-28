@@ -1,0 +1,11 @@
+//~ question: Does a write through a mutable reference give its target a new version?
+//~ spec: proofs.versions
+//~ rfc: 0002
+
+fn through(x: &mut u32) -> u32 {
+    *x = 1;
+    let one: @(*x == 1) = _;
+    *x = 2;
+    let still: @(*x == 1) = one; //~ error: `one` proves `*x == 1` about an earlier version of `*x`
+    *x
+}

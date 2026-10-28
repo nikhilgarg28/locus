@@ -1,0 +1,12 @@
+//~ question: May an exported crate re-export a `pub(locus)` item with plain `pub`?
+//~ spec: export.locus-visibility
+//~ rfc: 0001
+//~ mode: export
+
+mod parity {
+    pub(locus) fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+        n / 2
+    }
+}
+
+pub use parity::halve_even; //~ error: `halve_even` is `pub(locus)`, so an exported crate cannot re-export it with `pub`

@@ -3,6 +3,7 @@
 - **Kind:** decision
 - **Status:** later
 - **Blocks:** Total-correctness specifications. Nothing in RFC 0001 or RFC 0002
+- **Rules:** `proofs.partial`
 
 ## Question
 
@@ -24,3 +25,7 @@ To be laid out in an RFC.
 ### 2026-10-25, opened on GitHub as #14
 
 Moved into the repository from [GitHub issue #14](https://github.com/nikhilgarg28/locus/issues/14) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-10-27, PR #10
+
+Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.

@@ -1,0 +1,15 @@
+//~ question: May a vector hold indices, each with a proof that it is in bounds?
+//~ spec: logic.ghost.runtime-parts-kept
+//~ rfc: 0002
+
+fn in_bounds(items: &[u32], wanted: &[usize]) -> Vec<(i: usize, @(i < items.len()))> {
+    let mut checked: Vec<(i: usize, @(i < items.len()))> = Vec::new();
+    for &i in wanted {
+        if i < items.len() {
+            checked.push((i, _));
+        }
+    }
+    checked
+}
+
+//~ run: in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2

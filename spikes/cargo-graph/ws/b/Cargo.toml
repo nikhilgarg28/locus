@@ -1,0 +1,16 @@
+[package]
+name = "b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "src/lib.lc"
+
+[dependencies]
+a = { path = "../a" }
+pm = { path = "../pm" }
+
+[build-dependencies]
+a = { path = "../a" }

@@ -1,0 +1,14 @@
+//~ question: May `final!` name a borrow after the borrow has ended, without extending it?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn after_borrow() -> u32 {
+    let mut n: u32 = 1;
+    let r = &mut n;
+    *r = 5;
+    n = n + 1;
+    let was_five: @(final!(r) == 5) = _;
+    n
+}
+
+//~ run: after_borrow() => 6

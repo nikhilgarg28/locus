@@ -1,0 +1,11 @@
+//~ question: May a value of the program's own generic type, whose type argument holds proofs, be lent mutably to code Locus has no specification for?
+//~ spec: logic.boundary.access, logic.boundary.writes
+//~ rfc: 0002
+
+struct Bag<T> {
+    items: Vec<T>,
+}
+
+fn lend(n: usize, bag: &mut Bag<(i: usize, @(i < n))>) {
+    std::hint::black_box(bag); //~ error: `bag`'s type argument holds proofs, so it cannot be lent mutably to `black_box`, which Locus has no specification for
+}

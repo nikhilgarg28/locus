@@ -1,0 +1,23 @@
+// Question 3: a runtime binding shadows a ghost one inside a block.
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn shadowed(pair: &mut Pair) -> usize {
+    let before = logic! { pair };
+    let n = {
+        let mut before = Pair { a: 1, b: 2 };
+        let bb = &mut before.b;
+        let inner: Vec<@(before.a == 1)> = vec![prove!(before.a == 1)];
+        *bb += 1;
+        inner.len()
+    };
+    let outer: Vec<@(before.a == before.a)> = vec![prove!(before.a == before.a)];
+    n + outer.len()
+}
+
+fn main() {
+    let mut pair = Pair { a: 1, b: 2 };
+    println!("shadowed = {}", shadowed(&mut pair));
+}

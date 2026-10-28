@@ -1,0 +1,16 @@
+//~ question: May a type whose proof field is inside a `Cell` be constructed without proving the proposition?
+//~ spec: contracts.invariants, contracts.invariants.assignment
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>,
+}
+
+fn empty() -> Cache {
+    Cache { x: 0, hint: Cell::new(None) }
+}
+
+//~ run: empty().x => 0

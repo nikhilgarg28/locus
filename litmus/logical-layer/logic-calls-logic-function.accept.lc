@@ -1,0 +1,12 @@
+//~ question: May logical code call a logic function on a runtime value's model?
+//~ spec: logic.code.no-runtime-calls
+//~ rfc: 0002
+
+logic fn double(n: Nat) -> Nat {
+    n + n
+}
+
+fn f(v: Vec<u32>) -> usize {
+    let twice = logic! { double(v.len()) };
+    v.len()
+}

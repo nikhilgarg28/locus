@@ -1,0 +1,17 @@
+// Borrow case 13: logical code reads one field while another is mutably borrowed.
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn bump(p: &mut Pair) -> u32 {
+    let a = &mut p.a;
+    let h = prove!(p.b > 0);
+    *a += 1;
+    p.b
+}
+
+fn main() {
+    let mut p = Pair { a: 1, b: 2 };
+    println!("bump = {}, a = {}", bump(&mut p), p.a);
+}

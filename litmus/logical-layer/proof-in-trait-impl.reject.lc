@@ -1,0 +1,16 @@
+//~ question: May a trait implementation take a proof inside its parameter types?
+//~ spec: logic.ghost.no-trait-impls
+//~ rfc: 0002
+
+struct Absurd {
+    proof: @(1 == 2),
+}
+
+impl From<Option<@(1 == 2)>> for Absurd { //~ error: a trait implementation cannot hold logical values in its signature yet
+    fn from(h: Option<@(1 == 2)>) -> Absurd {
+        match h {
+            Some(p) => Absurd { proof: p },
+            None => panic!("no proof"),
+        }
+    }
+}

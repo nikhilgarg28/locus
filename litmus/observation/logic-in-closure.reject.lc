@@ -1,0 +1,12 @@
+//~ question: May logical code appear inside a closure body?
+//~ spec: observe.captures.rejected
+//~ rfc: 0001
+
+fn f() -> usize {
+    let v = vec![1, 2, 3];
+    let count = || {
+        let n = logic! { v.len() }; //~ error: logical code inside a closure is not supported
+        v.len()
+    };
+    count()
+}

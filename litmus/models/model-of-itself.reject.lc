@@ -1,0 +1,14 @@
+//~ question: Inside its own model function, may a value be taken to the model being defined?
+//~ spec: models.own-definition
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: &Stack) -> Seq<Nat> {
+        stack //~ error: inside `model`, `stack` cannot be taken to the `Seq<Nat>` being defined; read its fields instead
+    }
+}

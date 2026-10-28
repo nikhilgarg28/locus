@@ -1,0 +1,12 @@
+//~ question: May a vector hold logical values, keeping its length at run time?
+//~ spec: logic.ghost.erased, logic.ghost.runtime-parts-kept, logic.ghost.types-forward
+//~ rfc: 0002
+
+fn logical_payloads() -> usize {
+    let mut values: Vec<Nat> = Vec::new();
+    values.push(logic! { 3 });
+    values.push(logic! { 4 });
+    values.len()
+}
+
+//~ run: logical_payloads() => 2

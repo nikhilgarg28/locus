@@ -1,0 +1,7 @@
+//~ question: Does the model of a machine integer lie within its type's range?
+//~ spec: models.integer-range
+//~ rfc: 0002
+
+fn fits(x: u8) -> @(x <= 255) {
+    _
+}

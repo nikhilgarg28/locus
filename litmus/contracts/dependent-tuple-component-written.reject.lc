@@ -1,0 +1,7 @@
+//~ question: May a tuple component be written when a later component's proposition reads it?
+//~ spec: contracts.invariants.proof-holders, contracts.invariants.assignment
+//~ rfc: 0002
+
+fn bump_first(v: &mut Vec<(i: usize, @(i < 10))>) {
+    v[0].0 += 1; //~ error: cannot prove `i < 10` for the new value of `.0`, which the next component's proposition reads
+}

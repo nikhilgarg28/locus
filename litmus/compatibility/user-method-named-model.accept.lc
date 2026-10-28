@@ -1,0 +1,20 @@
+//~ question: Does a program's own method named `model` keep its meaning beside Locus's `Model` trait?
+//~ spec: compat.names.no-methods, compat.superset.same-meaning
+//~ rfc: 0001
+
+trait Summary {
+    fn model(self) -> u32;
+}
+
+impl Summary for &Vec<u32> {
+    fn model(self) -> u32 {
+        self.len() as u32
+    }
+}
+
+fn summarize() -> u32 {
+    let v: Vec<u32> = vec![1, 2, 3, 4, 5, 6, 7];
+    v.model()
+}
+
+//~ run: summarize() => 7

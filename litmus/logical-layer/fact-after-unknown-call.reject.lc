@@ -1,0 +1,12 @@
+//~ question: After unchecked code is given mutable access to a local, does a fact about the local survive a later call of unchecked code?
+//~ spec: logic.boundary.escape, logic.unsafe.escape
+//~ rfc: 0002
+
+fn later() -> u32 {
+    let mut n: u32 = 1;
+    std::hint::black_box(&mut n);
+    n = 1;
+    std::hint::black_box(());
+    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `n` escaped to `black_box`, whose effect is unknown, and a later call of unknown code may have written it
+    n
+}

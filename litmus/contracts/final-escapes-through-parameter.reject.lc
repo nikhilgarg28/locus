@@ -1,0 +1,8 @@
+//~ question: Is `final!(x)` the value at return when a reborrow of `x` can outlive the call?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn stash<'a>(x: &'a mut u32, slot: &mut Option<&'a mut u32>) -> @(final!(x) == x) {
+    *slot = Some(x);
+    _ //~ error: cannot prove `final!(x) == x`: the lifetime of `x` appears in `slot`, so its borrow can outlive the call
+}

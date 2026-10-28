@@ -1,0 +1,7 @@
+// Question 5: inside vec![..], prove! reads a value after it has moved.
+fn late() -> usize {
+    let v = vec![1, 2, 3];
+    let moved = v;
+    let proofs: Vec<@(true)> = vec![prove!(v.len() == 3)]; //~ error: v has moved
+    moved.len() + proofs.len()
+}

@@ -1,0 +1,11 @@
+//~ question: Does a proof carry over to a new version of a variable that holds the same value?
+//~ spec: proofs.versions
+//~ rfc: 0002
+
+fn same_value() -> u8 {
+    let mut n: u8 = 3;
+    let positive: @(n > 0) = _;
+    n = 3;
+    let again: @(n > 0) = positive; //~ error: `positive` proves `n > 0` about an earlier version of `n`
+    n
+}

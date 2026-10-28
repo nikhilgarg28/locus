@@ -1,0 +1,12 @@
+//~ question: May a value that a proof field reads be written through a `Box` field?
+//~ spec: contracts.invariants.assignment
+//~ rfc: 0002
+
+struct Positive {
+    value: Box<u32>,
+    nonzero: @(value > 0),
+}
+
+fn clear(p: &mut Positive) {
+    *p.value = 0; //~ error: cannot prove the proof field `nonzero` for the new value of `value`: `0 > 0` is false
+}

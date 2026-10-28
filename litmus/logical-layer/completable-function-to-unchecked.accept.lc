@@ -1,0 +1,12 @@
+//~ question: May a function whose only ghost parameter is completable be given to code Locus has no specification for?
+//~ spec: logic.boundary.calls
+//~ rfc: 0002
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n + 1
+}
+
+fn lend() -> u32 {
+    let f = std::hint::black_box(grow);
+    0
+}

@@ -1,0 +1,11 @@
+//~ question: May a runtime value be passed directly as the argument of a logical parameter?
+//~ spec: logic.ghost.positions-logical
+//~ rfc: 0002
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n + 1
+}
+
+fn caller(x: u32) -> u32 {
+    grow(x, x) //~ error: the argument for the logical parameter `by` is runtime code; write `logic! { x }` to pass `x`'s model
+}

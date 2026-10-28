@@ -1,0 +1,21 @@
+//~ question: May a trait be implemented for a type with proof fields, when the signature holds no logical values?
+//~ spec: logic.ghost.no-trait-impls
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+impl std::fmt::Display for Interval {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {}]", self.lo, self.hi)
+    }
+}
+
+fn shown() -> String {
+    Interval { lo: 1, hi: 4, ordered: _ }.to_string()
+}
+
+//~ run: shown() => "[1, 4]"

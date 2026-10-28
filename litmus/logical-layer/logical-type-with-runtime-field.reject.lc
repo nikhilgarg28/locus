@@ -1,0 +1,9 @@
+//~ question: May a logical type have a field of a runtime type?
+//~ spec: logic.types.contents-logical
+//~ rfc: 0002
+
+#[derive(Logical)]
+struct Reading {
+    raw: u32, //~ error: a field of a logical type must be logical, and `u32` is a runtime type
+    scaled: Nat,
+}

@@ -1,0 +1,14 @@
+//~ question: May a field that no proof field reads be mutably borrowed in a type with an invariant?
+//~ spec: contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    label: u32,
+    ordered: @(lo <= hi),
+}
+
+fn label(iv: &mut Interval) -> &mut u32 {
+    &mut iv.label
+}

@@ -1,0 +1,18 @@
+//~ question: May a macro generate an `unsafe impl` for a type with proof fields?
+//~ spec: contracts.unsafe-impls
+//~ rfc: 0002
+
+unsafe trait Zeroable {}
+
+macro_rules! zeroable {
+    ($t:ty) => {
+        unsafe impl Zeroable for $t {}
+    };
+}
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+zeroable!(Positive); //~ error: `Positive` has proof fields, so a macro cannot generate an `unsafe impl` of `Zeroable` for it

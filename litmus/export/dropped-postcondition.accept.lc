@@ -1,0 +1,16 @@
+//~ question: May an exported crate export a wrapper that drops a private function's postcondition?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+pub(locus) fn clamp_proven(n: u32) -> (out: u32, @(out <= 100)) {
+    if n > 100 { (100, _) } else { (n, _) }
+}
+
+pub fn clamp(n: u32) -> u32 {
+    let (out, _bounded) = clamp_proven(n);
+    out
+}
+
+//~ run: clamp(7) => 7
+//~ run: clamp(250) => 100

@@ -1,0 +1,9 @@
+//~ question: May a `logic!` block compute with a ghost value that the source does not show to be ghost?
+//~ spec: logic.ghost.shown-by-source
+//~ rfc: 0002
+
+fn next(v: &Vec<Nat>) -> usize {
+    let k = v[0];
+    let m = logic! { k + 1 };
+    v.len()
+}

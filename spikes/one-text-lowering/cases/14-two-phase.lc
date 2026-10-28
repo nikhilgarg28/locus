@@ -1,0 +1,10 @@
+// Borrow case 14: logical code in an argument reads the receiver (two-phase borrow).
+fn grow() -> usize {
+    let mut values: Vec<Nat> = Vec::new();
+    values.push(logic! { values.len() });
+    values.len()
+}
+
+fn main() {
+    println!("grow() = {}", grow());
+}

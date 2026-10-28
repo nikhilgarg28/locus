@@ -1,0 +1,14 @@
+//~ question: Does a snapshot look through a reference by which a type reaches itself again?
+//~ spec: models.snapshots
+//~ rfc: 0002
+
+struct Node {
+    next: &'static Node,
+}
+
+// rustc accepts this: `A.next` is `A`.
+static A: Node = Node { next: &A };
+
+logic fn absurd(s: Snap<Node>) -> @False {
+    absurd(s.next) //~ error: `s.next` is the address of a `Node`, not its snapshot: at a reference through which `Node` reaches itself again, a snapshot holds only the address
+}

@@ -1,0 +1,15 @@
+//~ question: Does a proof survive a generic function that Locus has no specification for?
+//~ spec: logic.ghost.forgotten
+//~ rfc: 0002
+
+use std::hint::black_box;
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+// Locus's library gives `black_box` no specification, by design.
+fn opaque(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    let passed = black_box(positive);
+    divide(x, y, passed) //~ error: `passed` is not a proof of `y > 0`: `black_box` forgets what it was given and returns `Erased`
+}

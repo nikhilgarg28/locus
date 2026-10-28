@@ -1,0 +1,7 @@
+//~ question: Does a proof of a conjunction need proofs of both sides?
+//~ spec: proofs.connectives
+//~ rfc: 0002
+
+fn between(x: u8, low: @(x > 1)) -> @(x > 1 && x < 9) {
+    And::Intro(low, _) //~ error: cannot prove `x < 9`
+}

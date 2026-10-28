@@ -1,0 +1,13 @@
+//~ question: May a proposition be proved again about a variable's new version?
+//~ spec: proofs.versions
+//~ rfc: 0002
+
+fn reproved() -> u8 {
+    let mut n: u8 = 3;
+    let positive: @(n > 0) = _;
+    n = n + 1;
+    let again: @(n > 0) = _;
+    n
+}
+
+//~ run: reproved() => 4

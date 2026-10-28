@@ -1,0 +1,22 @@
+// Question 3: a nested function binds a runtime parameter with a ghost's name.
+// A local macro_rules is visible in nested items; a local binding is not.
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn outer(pair: &mut Pair) -> usize {
+    let before = logic! { pair };
+    fn inner(mut before: Pair) -> usize {
+        let bb = &mut before.b;
+        let v: Vec<@(before.a == before.a)> = vec![prove!(before.a == before.a)];
+        *bb += 1;
+        v.len()
+    }
+    inner(Pair { a: 1, b: 2 })
+}
+
+fn main() {
+    let mut pair = Pair { a: 1, b: 2 };
+    println!("outer = {}", outer(&mut pair));
+}

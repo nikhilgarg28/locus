@@ -1,0 +1,24 @@
+//~ question: May an exported crate's public struct have an invariant over private fields?
+//~ spec: export.invariants-closed
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+impl Interval {
+    pub fn new(lo: u32, hi: u32) -> Option<Interval> {
+        if lo <= hi {
+            Some(Interval { lo, hi, ordered: _ })
+        } else {
+            None
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.hi - self.lo
+    }
+}

@@ -1,0 +1,16 @@
+//~ question: May a union have a field of an invariant type?
+//~ spec: logic.ghost.no-unions, logic.unsafe.no-conjuring
+//~ rfc: 0002
+
+use std::mem::ManuallyDrop;
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+union Pun {
+    raw: [u32; 2],
+    iv: ManuallyDrop<Interval>, //~ error: the field `iv` of the union `Pun` has the invariant type `Interval`: reading it would make an `Interval` from memory written as `[u32; 2]`
+}

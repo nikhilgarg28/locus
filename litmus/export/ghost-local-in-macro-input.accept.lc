@@ -1,0 +1,12 @@
+//~ question: In an exported crate, may a ghost local be named inside a function-like macro's input?
+//~ spec: export.macros-direct
+//~ rfc: 0001
+//~ mode: export
+
+pub fn holders() -> usize {
+    let h = prove!(1 == 1);
+    let v: Vec<@(1 == 1)> = vec![h];
+    v.len()
+}
+
+//~ run: holders() => 1

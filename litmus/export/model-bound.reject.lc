@@ -1,0 +1,8 @@
+//~ question: May an exported crate's public function have a `Model` bound?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+pub fn count<T: Model>(xs: &[T]) -> usize { //~ error: `count` is reachable from other crates, so it cannot have the bound `T: Model`
+    xs.len()
+}

@@ -1,0 +1,9 @@
+//~ question: In edition 2024, when an `impl Trait` result captures a `&mut` parameter's lifetime without naming it, is the parameter's final value known when the function returns?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+// For edition 2024, in which `-> impl FnMut()` captures every lifetime in scope.
+// In edition 2021, rustc rejects this signature (E0700) unless it names the lifetime.
+fn stash(x: &mut u32) -> (impl FnMut(), @(final!(x) === x)) {
+    (move || *x = 7, _) //~ error: cannot prove `final!(x) === x`: the `impl FnMut()` result captures the borrow of `x`, so its final value is not known when `stash` returns
+}

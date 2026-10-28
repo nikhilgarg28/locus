@@ -1,0 +1,13 @@
+//~ question: Does a proof from before a loop fit a variable that the loop assigns?
+//~ spec: proofs.versions
+//~ rfc: 0002
+
+fn looped(k: u8) -> u8 {
+    let mut n: u8 = 1;
+    let one: @(n == 1) = _;
+    for _ in 0..k {
+        let still: @(n == 1) = one; //~ error: `one` proves `n == 1` about an earlier version of `n`, which the loop assigns
+        n = 2;
+    }
+    n
+}

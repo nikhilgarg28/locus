@@ -1,0 +1,27 @@
+// Hard case 7: the method-order trap. Rust's lookup finds the trait method
+// (by value) before the inherent one (by reference).
+trait Go {
+    fn go(self, a: u32) -> u32;
+}
+
+struct Thing;
+
+impl Go for Thing {
+    fn go(self, a: u32) -> u32 {
+        a + 100
+    }
+}
+
+impl Thing {
+    fn go(&self, a: u32, h: @(a > 0)) -> u32 {
+        a
+    }
+}
+
+fn call(x: Thing, h: @(1 > 0)) -> u32 {
+    x.go(1, h) //~ error: must fail loudly, not call Go::go
+}
+
+fn main() {
+    println!("call(Thing, _) = {}", call(Thing, _));
+}

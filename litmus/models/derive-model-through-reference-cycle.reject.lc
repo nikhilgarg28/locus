@@ -1,0 +1,8 @@
+//~ question: May a type that reaches itself through a reference derive its model?
+//~ spec: models.derived
+//~ rfc: 0002
+
+#[derive(Model)] //~ error: cannot derive `Model` for `Node`: it reaches itself through the reference in `next`, so its model type would have no values
+struct Node {
+    next: &'static Node,
+}

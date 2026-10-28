@@ -1,0 +1,14 @@
+//~ question: May logical code read an immutable static?
+//~ spec: logic.code.statics
+//~ rfc: 0002
+
+static LIMIT: u32 = 100;
+
+fn limit() -> u32 {
+    let a = logic! { LIMIT };
+    let b = logic! { LIMIT };
+    let same: @(a === b) = _;
+    LIMIT
+}
+
+//~ run: limit() => 100

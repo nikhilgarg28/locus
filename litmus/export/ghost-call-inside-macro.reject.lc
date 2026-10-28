@@ -1,0 +1,13 @@
+//~ question: When a crate is exported, may a call that passes a proof be written inside another macro's input?
+//~ spec: export.macros-direct
+//~ rfc: 0002
+//~ mode: export
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+pub fn halves() -> Vec<u32> {
+    let even: @(10 % 2 == 0) = _;
+    vec![halve(10, even)] //~ error: in an exported crate, a call that passes a proof is written outside other macros' input, so that erasure can remove the proof
+}

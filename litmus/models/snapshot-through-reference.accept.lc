@@ -1,0 +1,11 @@
+//~ question: Does a snapshot look through a reference that does not lead back to its own type?
+//~ spec: models.snapshots, logic.eq.snapshots
+//~ rfc: 0002
+
+struct View<'a> {
+    value: &'a u32,
+}
+
+fn same(a: &View, b: &View, values: @(*a.value === *b.value)) -> @(snap(a) === snap(b)) {
+    _
+}

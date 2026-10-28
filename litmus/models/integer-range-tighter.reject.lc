@@ -1,0 +1,7 @@
+//~ question: Does the model of a machine integer lie within a range narrower than its type's?
+//~ spec: models.integer-range
+//~ rfc: 0002
+
+fn tighter(x: u8) -> @(x < 255) {
+    _ //~ error: cannot prove `x < 255`
+}

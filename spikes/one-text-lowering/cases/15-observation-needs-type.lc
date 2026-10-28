@@ -1,0 +1,18 @@
+// Borrow case 15: logical code reads a field of a local whose type rustc
+// learns only later. Runtime code reading `p.a` there would be E0282 too.
+#[derive(Default)]
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn late_type() -> u32 {
+    let p = Default::default();
+    let h = prove!(p.a == 0); //~ error: rustc's E0282, in the checking program only
+    let q: Pair = p;
+    q.a + q.b
+}
+
+fn main() {
+    println!("late_type() = {}", late_type());
+}
