@@ -1,0 +1,21 @@
+//~ question: May a value be used as a whole inside the block that opens its invariant?
+//~ spec: contracts.invariants.open
+//~ rfc: 0002
+
+struct NonEmpty {
+    items: Vec<u32>,
+    ok: @(items.len() > 0),
+}
+
+fn first(n: &NonEmpty) -> u32 {
+    n.items[0]
+}
+
+fn replace_all(n: &mut NonEmpty, x: u32) -> u32 {
+    open!(n => {
+        n.items.clear();
+        let old = first(n); //~ error: `n` is open here, so it cannot be used as a whole: `first` takes a `&NonEmpty`, and would believe an invariant that does not hold
+        n.items.push(x);
+        old
+    })
+}

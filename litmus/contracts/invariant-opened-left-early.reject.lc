@@ -1,0 +1,19 @@
+//~ question: May a block that opens an invariant be left before its end?
+//~ spec: contracts.invariants.open
+//~ rfc: 0002
+
+struct NonEmpty {
+    items: Vec<u32>,
+    ok: @(items.len() > 0),
+}
+
+fn refill(n: &mut NonEmpty, xs: &[u32]) -> bool {
+    open!(n => {
+        n.items.clear();
+        if xs.is_empty() {
+            return false; //~ error: an `open!` block is left only at its end: this `return` would leave `n` with its invariant open
+        }
+        n.items.extend_from_slice(xs);
+    });
+    true
+}

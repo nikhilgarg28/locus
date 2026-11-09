@@ -90,14 +90,22 @@ Option 1 can be followed by option 2 for single specified calls, as a way to lea
 
 ## Example
 
-- [`contracts/invariant-opened-for-push.open.lc`](../litmus/contracts/invariant-opened-for-push.open.lc): the `push` above.
-- [`contracts/invariant-opened-two-fields.open.lc`](../litmus/contracts/invariant-opened-two-fields.open.lc): a count and a vector that an invariant relates.
-- [`contracts/invariant-opened-not-restored.open.lc`](../litmus/contracts/invariant-opened-not-restored.open.lc): a block that ends with the invariant broken.
-
-Each carries the outcome option 1 would give it.
+Decided as option 1 gives them, citing `contracts.invariants.open`:
+- [`contracts/invariant-opened-for-push.accept.lc`](../litmus/contracts/invariant-opened-for-push.accept.lc): the `push` above.
+- [`contracts/invariant-opened-two-fields.accept.lc`](../litmus/contracts/invariant-opened-two-fields.accept.lc): a count and a vector that an invariant relates.
+- [`contracts/invariant-opened-not-restored.reject.lc`](../litmus/contracts/invariant-opened-not-restored.reject.lc): a block that ends with the invariant broken.
+- [`contracts/invariant-opened-used-whole.reject.lc`](../litmus/contracts/invariant-opened-used-whole.reject.lc), [`invariant-opened-proof-read.reject.lc`](../litmus/contracts/invariant-opened-proof-read.reject.lc), and [`invariant-opened-left-early.reject.lc`](../litmus/contracts/invariant-opened-left-early.reject.lc): what a block may not do.
 
 ## Log
 
 ### 2026-11-09, fourth review of PR #10
 
 Raised by the fourth review of [#10](https://github.com/nikhilgarg28/locus/pull/10) as the largest gap in what can be proved about ordinary code, and written up at the owner's request as a proposal. Option 1 is the review's recommendation. The choice is the owner's, because it changes what a program does when it panics and so needs a change to the vision.
+
+### 2026-11-09, the owner's decision
+
+Asked whether a panic inside the block may abort, the owner answered:
+
+> Open block is fine
+
+RFC 0002 proposes option 1 as its decision 51, with the rule `contracts.invariants.open`, and the vision's commitment 2 names the abort. The three open examples are decided, and three rejected ones are added. The litmus format cannot yet expect an abort, so no example shows that a panic in a block aborts. This issue stays open until RFC 0002 is accepted. Left for later, and recorded in the RFC: leaving the guard out where a block cannot unwind, and option 2 for single specified calls.

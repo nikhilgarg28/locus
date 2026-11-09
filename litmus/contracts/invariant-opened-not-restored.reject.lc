@@ -1,6 +1,5 @@
 //~ question: Must a block that opens an invariant prove it again at its end?
-//~ issue: opening-invariants
-//~ spec: contracts.invariants
+//~ spec: contracts.invariants.open
 //~ rfc: 0002
 
 struct NonEmpty {
@@ -8,7 +7,6 @@ struct NonEmpty {
     ok: @(items.len() > 0),
 }
 
-// Proposed: rejected, with this error.
 fn empty(n: &mut NonEmpty) {
     open!(n => {
         n.items.clear();

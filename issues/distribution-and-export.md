@@ -56,3 +56,7 @@ Moved into the repository from [GitHub issue #7](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-09, fourth review of PR #10
+
+RFC 0002's decision 52 adds a question for this issue: how a project names the unchecked crates it trusts to be sound. The RFC says only that the list is in the manifest, that the standard library and crates with no `unsafe` code need no entry, and that each result's manifest names the listed crates it relied on. Still to decide here: the list's form, whether a workspace shares one, and whether a crate published for Locus users carries its own.
