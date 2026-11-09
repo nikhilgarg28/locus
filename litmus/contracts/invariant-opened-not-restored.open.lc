@@ -1,0 +1,16 @@
+//~ question: Must a block that opens an invariant prove it again at its end?
+//~ issue: opening-invariants
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct NonEmpty {
+    items: Vec<u32>,
+    ok: @(items.len() > 0),
+}
+
+// Proposed: rejected, with this error.
+fn empty(n: &mut NonEmpty) {
+    open!(n => {
+        n.items.clear();
+    }); //~ error: cannot prove the proof field `ok` at the end of the block: `n.items` is empty there
+}

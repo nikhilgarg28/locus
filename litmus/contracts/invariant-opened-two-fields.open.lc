@@ -1,0 +1,27 @@
+//~ question: May two fields that an invariant relates be changed one after the other, inside a block that proves the invariant again at its end?
+//~ issue: opening-invariants
+//~ spec: contracts.invariants.assignment
+//~ rfc: 0002
+
+struct Counted {
+    items: Vec<u32>,
+    count: usize,
+    ok: @(count == items.len()),
+}
+
+// Proposed: accepted. Between the two statements `ok` does not hold, and nothing can observe `c`:
+// it is not used whole in the block, and a panic in the block aborts.
+fn add(c: &mut Counted, x: u32) {
+    open!(c => {
+        c.items.push(x);
+        c.count = c.items.len();
+    });
+}
+
+fn one() -> usize {
+    let mut c = Counted { items: Vec::new(), count: 0, ok: _ };
+    add(&mut c, 7);
+    c.count
+}
+
+//~ run: one() => 1
