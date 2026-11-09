@@ -1,0 +1,25 @@
+//~ question: May a proof field inside a `Cell` read a constant, and may the other fields then be assigned without proving it again?
+//~ spec: logic.ghost.interior-mutability, contracts.invariants.assignment
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+const LIMIT: u32 = 8;
+
+struct Cache {
+    x: u32,
+    ready: Cell<Option<@(LIMIT > 0)>>,
+}
+
+fn bump(c: &mut Cache) {
+    c.x = 2;
+}
+
+fn two() -> u32 {
+    let mut c = Cache { x: 0, ready: Cell::new(None) };
+    c.ready.set(Some(_));
+    bump(&mut c);
+    c.x
+}
+
+//~ run: two() => 2

@@ -24,12 +24,12 @@ The model covers a core, on paper or in Lean:
 
 ## Questions it must answer
 
-1. **What a type that reads values means, and where it may appear.** One rule from which these follow, instead of four rules found one at a time: assigning a field that an invariant reads (`contracts.invariants.assignment`), when two types are the same (`logic.ghost.type-identity`), dependent tuples in generic code (`logic.ghost.dependent-tuples`), and no forgeable proof under interior mutability (`logic.ghost.interior-mutability`).
+1. **What a type that reads values means, and where it may appear.** One rule from which these follow, instead of four rules found one at a time: assigning a field that an invariant reads (`contracts.invariants.assignment`), when two types are the same (`logic.ghost.type-identity`), dependent tuples in generic code (`logic.ghost.dependent-tuples`), and what a proposition under interior mutability may read (`logic.ghost.interior-mutability`).
 2. **What exactly is assumed of code that Locus does not check.** `assumed.unsafe.sound` says it is sound Rust, read at the level of types. The model states that precisely enough for `logic.boundary.escape` to be a consequence, and says whether it is RustBelt's semantic typing or something weaker.
 3. **Whether the logic needs prophecies at all.** `contracts.final` confines `final!` to a signature's result. The model says what a proof that mentions a final value means in a caller before the borrow ends, and whether backward functions, as in Aeneas, are enough.
 4. **Which types have structural snapshots.** An argument that every structural snapshot type has only finite values, and that `models.snapshots.opaque` covers every other case.
 5. **Where an invariant can be observed.** RFC 0002 forbids borrowing a field that an invariant reads, so `self.items.push(x)` is rejected, which most data structures with invariants need. Allowing it means saying what a drop or a caught panic may observe while the field is borrowed ([runtime-semantics](runtime-semantics.md), and idea 2 of [external-review-ideas](external-review-ideas.md)).
-6. **Which features wait for the model.** Two that the owner chose earlier carry most of the remaining risk, because each puts a logical value where the program can change it: ghost data in mutable runtime places, such as logical fields and `Vec<Nat>`, and dependent tuples inside containers. The model either covers them or says to hold them back.
+6. **Which features wait for the model.** Three that the owner chose carry most of the remaining risk, because each puts a logical value where the program can change it: proofs under interior mutability, which decision 47 keeps with a condition; ghost data in mutable runtime places, such as logical fields and `Vec<Nat>`; and dependent tuples inside containers. The model either covers them or says to hold them back.
 
 ## Log
 

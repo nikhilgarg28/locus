@@ -2,7 +2,9 @@
 //~ spec: logic.boundary.calls
 //~ rfc: 0002
 
-fn clear(slot: &mut Option<@(1 == 2)>) {
-    let mut set = |v: Option<@(1 == 2)>| *slot = v;
+use std::cell::Cell;
+
+fn clear(slot: &Cell<Option<@(1 == 2)>>) {
+    let set = |v: Option<@(1 == 2)>| slot.set(v);
     set(None);
 }
