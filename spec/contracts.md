@@ -8,7 +8,7 @@ r[contracts.entry-values]
 In a function's signature, each parameter denotes its value when the function is called. For a `&mut` parameter, that is the value of its referent at entry.
 
 r[contracts.final]
-`final!(r)` denotes the value that the referent of the mutable reference `r`, a parameter, local, or result, has when the borrow ends: when neither `r` nor any reborrow of it is used again. When the borrow ends, the place that was borrowed holds that value. For a `&mut` parameter whose lifetime nothing else in the signature can hold, as rustc decides from the signature, counting the lifetimes that an `impl Trait` result or an `async fn` captures without naming them, the borrow ends when the function returns, after its locals are dropped. `final!(r)` reads no place, and does not appear in preconditions.
+`final!(r)` denotes the value that the referent of the mutable reference `r` has when the borrow ends: when neither `r` nor any reborrow of it is used again. When the borrow ends, the place that was borrowed holds that value. `final!` appears only in the propositions of a signature's result, where `r` is a `&mut` parameter or a `&mut` in the result. It never appears in a parameter's type, and never in a body, so no ghost value and no proposition formed in a body is computed from a value that the program has yet to produce. For a `&mut` parameter whose lifetime nothing else in the signature can hold, as rustc decides from the signature, counting the lifetimes that an `impl Trait` result or an `async fn` captures without naming them, the borrow ends when the function returns, after its locals are dropped. `final!(r)` reads no place.
 
 ## Proofs in data
 
@@ -19,7 +19,7 @@ r[contracts.invariants.no-mutable-borrow]
 No place based on a proof field, or on a field that a proof field reads, is mutably borrowed, whether by `&mut`, by `ref mut`, or by a binding that a pattern makes by reference when it matches through a `&mut`.
 
 r[contracts.invariants.assignment]
-A field that a proof field reads may be assigned when each proof field that reads it is proved for the new value. When Locus cannot see what a proof field holds, as for one inside a `Cell`, proving it for the new value is proving its proposition. A proof field may be assigned a value whose proofs prove its proposition, and that assignment, too, proves each proof field that reads it. Inside the body of a runtime closure or an async block, an assignment that needs such a proof is rejected, as logical code there is.
+A field that a proof field reads may be assigned when each proof field that reads it is proved for the new value. A proof field may be assigned a value whose proofs prove its proposition, and that assignment, too, proves each proof field that reads it. Either assignment means building the value again with that field changed, so the proofs it needs are those that building it would need. Inside the body of a runtime closure or an async block, an assignment that needs such a proof is rejected, as logical code there is.
 
 r[contracts.invariants.proof-holders]
 A field whose type holds a proof, such as an `Option<@P>`, counts as a proof field. A tuple component that a later component's proposition reads follows the rules for a field that a proof field reads.

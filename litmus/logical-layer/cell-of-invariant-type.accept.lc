@@ -1,0 +1,32 @@
+//~ question: May a `Cell` hold a value of a type with an invariant, and is the invariant believed for what comes out?
+//~ spec: logic.ghost.interior-mutability, logic.boundary.payload
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+#[derive(Clone, Copy)]
+struct Positive {
+    n: u32,
+    ok: @(n > 0),
+}
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn cached(p: Positive) -> u32 {
+    let slot: Cell<Option<Positive>> = Cell::new(Some(p));
+    match slot.get() {
+        Some(q) => {
+            let positive: @(q.n > 0) = q.ok;
+            divide(100, q.n, positive)
+        }
+        None => 0,
+    }
+}
+
+fn five() -> u32 {
+    cached(Positive { n: 5, ok: _ })
+}
+
+//~ run: five() => 20

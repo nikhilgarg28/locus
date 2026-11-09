@@ -1,0 +1,11 @@
+//~ question: May a tuple whose second component's proposition reads its first be given to generic code that sees two independent components?
+//~ spec: logic.ghost.dependent-tuples
+//~ rfc: 0002
+
+fn set_first<A, B>(pair: &mut (A, B), first: A) {
+    pair.0 = first;
+}
+
+fn widen(checked: &mut Vec<(i: usize, @(i < 10))>) {
+    set_first(&mut checked[0], 50); //~ error: `(i: usize, @(i < 10))` is one type, whose second component reads its first, so it does not match `(A, B)`: `set_first` could replace the first component and keep the proof
+}

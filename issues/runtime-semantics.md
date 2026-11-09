@@ -55,3 +55,7 @@ Moved into the repository from [GitHub issue #6](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-09, fourth review of PR #10
+
+RFC 0002 now states the reading that this RFC must define precisely ([What a checked program means](../design/rfcs/0002-logical-layer.md#what-a-checked-program-means)), and its decision 45 says what a checked function's summary records. The review also named the largest gap in what can be proved about ordinary code: a field that an invariant reads cannot be borrowed mutably, so `self.items.push(x)` is rejected. Deciding what a drop or a caught panic may observe while such a field is borrowed belongs here, with [soundness-model](soundness-model.md).

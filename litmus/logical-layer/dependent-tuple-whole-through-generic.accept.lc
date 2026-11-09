@@ -1,0 +1,19 @@
+//~ question: May a tuple whose second component's proposition reads its first pass whole through the program's own generic code?
+//~ spec: logic.ghost.dependent-tuples, logic.ghost.generic-instantiations
+//~ rfc: 0002
+
+fn identity<T>(value: T) -> T {
+    value
+}
+
+fn get(xs: &[u32; 10], i: usize, in_bounds: @(i < 10)) -> u32 {
+    xs[i]
+}
+
+fn fourth(xs: &[u32; 10]) -> u32 {
+    let entry: (i: usize, @(i < 10)) = (3, _);
+    let (i, ok) = identity(entry);
+    get(xs, i, ok)
+}
+
+//~ run: fourth(&[7; 10]) => 7

@@ -1,0 +1,15 @@
+//~ question: May a ghost value written through a mutable reference be computed from that reference's final value?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+struct Tally {
+    hits: u32,
+    count: Nat,
+}
+
+// If this were accepted, `t.count` at return would be `final!(t).count`,
+// and also `final!(t).count + 1`.
+fn absurd(t: &mut Tally) -> @False {
+    t.count = logic! { final!(t).count + 1 }; //~ error: `final!` appears only in the propositions of a signature's result: this ghost value would be computed from the value it decides
+    _
+}

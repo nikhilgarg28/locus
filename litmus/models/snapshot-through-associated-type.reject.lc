@@ -1,0 +1,25 @@
+//~ question: Does a snapshot look into a field whose type is an associated type of the declaring type's parameter?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+trait Family {
+    type Out: 'static;
+}
+
+struct Node<F: Family> {
+    next: F::Out,
+}
+
+struct K;
+
+impl Family for K {
+    type Out = &'static Node<K>;
+}
+
+// rustc accepts this: `A.next` is `A`. No field's declared type shows the cycle,
+// which closes through the `impl`.
+static A: Node<K> = Node { next: &A };
+
+logic fn absurd(s: Snap<Node<K>>) -> @False {
+    absurd(s.next) //~ error: `s.next` is opaque: `Node` declares `next` with the associated type `F::Out`, so its snapshot holds nothing that logical code can look into
+}

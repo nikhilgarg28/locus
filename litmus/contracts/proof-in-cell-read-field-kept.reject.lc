@@ -1,0 +1,28 @@
+//~ question: When a proof field's proofs are inside a `Cell`, may a field they read be assigned while a shared reference to the `Cell` is live?
+//~ spec: logic.ghost.interior-mutability
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>, //~ error: a `Cell` cannot hold a proof: a type with interior mutability holds only completable logical values
+}
+
+fn divide(a: u32, b: u32, nonzero: @(b != 0)) -> u32 {
+    a / b
+}
+
+// Why the rule exists. rustc accepts every line: the borrow covers only `c.hint`,
+// so `c.x` may be assigned while `stale` is live. `stale` was typed when `c.x` was 0,
+// and reads the proof that was stored for 2 as a proof that `0 != 0`.
+fn stale_reader() -> u32 {
+    let mut c = Cache { x: 0, hint: Cell::new(None) };
+    let stale: &Cell<Option<@(c.x != 0)>> = &c.hint;
+    c.x = 2;
+    c.hint.set(Some(_));
+    match stale.get() {
+        Some(zero_is_nonzero) => divide(1, 0, zero_is_nonzero),
+        None => 0,
+    }
+}

@@ -60,3 +60,7 @@ Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `car
 ### 2026-10-28, PR #10
 
 After the third review, the owner decided that closures that take proofs stay off the standard library's adapters until this issue specifies them, and that doing so is a priority for adoption: RFC 0002, decision 43. Such a specification says that the callee calls the closure only with values it was given, keeping their logical contents, not only their erased form. `Option::map` calls it exactly when it holds `Some(v)`, with that `v`, and `None` never calls it. Adapters that keep the closure, call it many times, or unwind while it runs need more than that.
+
+### 2026-11-09, fourth review of PR #10
+
+RFC 0002's decision 47 changes what this issue owes. No forgeable proof sits under interior mutability, or in a type the library has not described, so the library no longer lists the types writable through a shared handle, and no longer specifies that the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents. It lists instead the plain containers that may hold a forgeable proof: references, `Box`, `Option`, `Result`, tuples, arrays, slices, `Vec`, and their iterators to begin with, and types such as `Rc`, `Arc`, and the maps as it specifies them. Decision 48 adds a constraint: the snapshot it declares for a collection is strictly positive in its element types, so a set's or a map's snapshot is the sequence of its entries.

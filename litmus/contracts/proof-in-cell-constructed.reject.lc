@@ -1,0 +1,14 @@
+//~ question: May a proof field sit inside a `Cell`?
+//~ spec: logic.ghost.interior-mutability, logic.boundary.payload
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>, //~ error: a `Cell` cannot hold a proof: a type with interior mutability holds only completable logical values
+}
+
+fn empty() -> Cache {
+    Cache { x: 0, hint: Cell::new(None) }
+}

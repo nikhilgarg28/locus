@@ -7,6 +7,8 @@ fn later() -> u32 {
     std::hint::black_box(&mut n);
     n = 1;
     std::hint::black_box(());
-    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `n` escaped to `black_box`, whose effect is unknown, and a later call of unknown code may have written it
+    let one: @(n == 1) = _;
     n
 }
+
+//~ run: later() => 1

@@ -1,0 +1,12 @@
+//~ question: May `final!` appear in a body, naming a borrow after it has ended?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn after_borrow() -> u32 {
+    let mut n: u32 = 1;
+    let r = &mut n;
+    *r = 5;
+    n = n + 1;
+    let was_five: @(final!(r) == 5) = _; //~ error: `final!` appears only in the propositions of a signature's result; to keep the value a borrow ended with, name it with `logic!` when the borrow ends
+    n
+}

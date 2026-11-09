@@ -1,0 +1,11 @@
+//~ question: May a mutable reference to a place holding a proof be converted to a trait object that hides it?
+//~ spec: logic.boundary.writes
+//~ rfc: 0002
+
+use std::fmt::Debug;
+
+fn hide(n: u32) -> u32 {
+    let mut found: Option<@(n > 0)> = None;
+    let hidden: &mut dyn Debug = &mut found; //~ error: `&mut found` gives mutable access to a proof, and converting it to `&mut dyn Debug` would hide that access from Locus
+    n
+}

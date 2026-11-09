@@ -1,0 +1,18 @@
+//~ question: May a `Cell` hold a proof?
+//~ spec: logic.ghost.interior-mutability, logic.boundary.payload
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn cached(n: u32) -> bool {
+    let slot: Cell<Option<@(n > 0)>> = Cell::new(check(n)); //~ error: a `Cell` cannot hold a proof: a type with interior mutability holds only completable logical values; keep the proof in a type of the program's own
+    slot.get().is_some()
+}

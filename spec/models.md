@@ -9,6 +9,9 @@ Logical code reaches runtime data only through places: locals, fields, and the t
 r[models.snapshots]
 Every runtime type `T` has a snapshot type `Snap<T>`, whose values are exactly the values that `T` can have. For a struct or enum it has the same fields and variants, each of its field type's snapshot type, proof fields included. A machine integer's snapshot is an integer within its type's range, and a `bool`'s a `Bool`. `Box` and references are transparent: `Snap<&T>` is `Snap<T>`. The snapshots of arrays, slices, and `Vec<T>` are `Seq<Snap<T>>`. So that every snapshot is finite, a field is *cut* when its type reaches the type that declares the field again through a reference, following type arguments, and a cut field's snapshot follows no reference: each reference in it holds only its address. The cut belongs to the type that closes the cycle, so a type's snapshot is the same wherever it appears, and a generic type's has the same shape for every type argument. Logical code that reads through a cut field's references as places still observes their targets.
 
+r[models.snapshots.opaque]
+A snapshot is structural only where this chapter or Locus's library says how, and where the type's declaration shows the result to be finite and strictly positive. Everywhere else it is opaque: for a union; for a field whose declared type names an associated type of one of its type's parameters, or an opaque type, whatever the type arguments are, since the declaration does not show what the field will hold; and for any type that neither this chapter nor Locus's library gives a snapshot. Logical code can hold, pass on, and compare an opaque snapshot, which a move or a copy keeps, and cannot look into it. No runtime type is rejected because its snapshot would be ill-formed.
+
 r[models.snapshot-privacy]
 A snapshot holds every field of its value, private ones included, but logical code reads a field of a snapshot only where Rust code could read that field.
 
