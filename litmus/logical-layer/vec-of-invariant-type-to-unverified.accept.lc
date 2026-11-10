@@ -1,4 +1,4 @@
-//~ question: May a vector of values of an invariant type be lent mutably to unchecked code?
+//~ question: May a vector of values of an invariant type be lent mutably to unverified code?
 //~ spec: logic.boundary.payload, logic.boundary.access
 //~ rfc: 0002
 

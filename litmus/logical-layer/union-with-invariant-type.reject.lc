@@ -1,5 +1,5 @@
 //~ question: May a union have a field of an invariant type?
-//~ spec: logic.ghost.no-unions, logic.unsafe.no-conjuring
+//~ spec: logic.ghost.no-unions
 //~ rfc: 0002
 
 use std::mem::ManuallyDrop;

@@ -1,0 +1,12 @@
+//~ question: May an unverified function call a function that needs a proof?
+//~ spec: logic.unverified.plain-rust
+//~ rfc: 0002
+
+fn halve(x: u32, even: @(x % 2 == 0)) -> u32 {
+    x / 2
+}
+
+#[unverified]
+fn half_of_ten() -> u32 {
+    halve(10, _) //~ error: `half_of_ten` is marked `#[unverified]`, so it holds no logical code and cannot give `halve` the proof it needs
+}

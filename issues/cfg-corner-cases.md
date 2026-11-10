@@ -11,7 +11,7 @@ RFC 0001 (`design/rfcs/0001-compiler-pipeline.md`, section *Configurations*, pro
 - **In build mode,** Locus checks exactly the configuration being built, and builds what it checked. So most of the cases below arise only in export mode.
 - **In export mode,** a crate declares the configurations it is checked in. By default these are dev, release and test builds, with default features and 64-bit pointers. The default does not depend on the machine that runs the check.
 - **Erasure removes code that no checked configuration enables.** In export mode, it drops a `cfg` attribute that every checked configuration satisfies, and keeps the others as written.
-- **A guard in an exported crate's generated module** turns every unchecked configuration into a `compile_error!`. It tests every `cfg` name that appears in checked code, plus `target_pointer_width` and `debug_assertions`.
+- **A guard in an exported crate's generated module** turns every unchecked configuration into a `compile_error!`. It tests every `cfg` name that appears in verified code, plus `target_pointer_width` and `debug_assertions`.
 - **The runtime program is validated against the checking program** in both modes, by comparing their items and typed bodies.
 - **What neither the guard nor validation can cover becomes an assumption in the trust model.** For exported crates, that is the compiler, dependency versions and features, and the inputs of macros that read the environment or files when Rust users build them.
 
@@ -23,8 +23,8 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 
 **Flags that ordinary tools add**
 1. **`cfg(test)` and `--test`.** `cargo test --release` builds `test` without `debug_assertions`, which the export default does not check. Doc tests compile against the library without `cfg(test)`, and `cfg(doctest)` exists too.
-2. **docs.rs and rustdoc.** These set `cfg(doc)` and `--cfg docsrs`, and many crates gate attributes on them, such as `#[cfg_attr(docsrs, feature(doc_cfg))]`. rustdoc expands `compile_error!`, so a guard that tests `docsrs` breaks documentation builds. Option: the guard ignores `cfg`s that gate only attributes unable to change checked code, such as docs, lint levels and feature gates.
-3. **Tool `cfg`s:** `clippy`, `miri`, `rust_analyzer`. Running Clippy or Miri on a Locus crate must not hit the guard unless checked code tests these names.
+2. **docs.rs and rustdoc.** These set `cfg(doc)` and `--cfg docsrs`, and many crates gate attributes on them, such as `#[cfg_attr(docsrs, feature(doc_cfg))]`. rustdoc expands `compile_error!`, so a guard that tests `docsrs` breaks documentation builds. Option: the guard ignores `cfg`s that gate only attributes unable to change verified code, such as docs, lint levels and feature gates.
+3. **Tool `cfg`s:** `clippy`, `miri`, `rust_analyzer`. Running Clippy or Miri on a Locus crate must not hit the guard unless verified code tests these names.
 4. **`-C panic=abort`** and `cfg(panic = "...")`. Proofs already say nothing after a panic, but `catch_unwind` and `Drop` behave differently under the two strategies.
 5. **`-C target-cpu` and `-C target-feature`** (including `native`), which change `cfg(target_feature = ...)`. Is the default "the target's baseline features", and how is that stated without depending on the host?
 
@@ -35,12 +35,12 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 **Where `cfg` values come from**
 8. **`RUSTFLAGS --cfg` and build scripts' `cargo:rustc-cfg`.** Build scripts that probe the compiler or the environment (for example with `autocfg`) can set different `cfg`s on the machine that checks than on the machine that builds.
 9. **Compiler-version detection** (`rustversion`, build-script probes). This selects code by the compiler that builds an exported program, which ties into the trust assumption about that compiler.
-10. **`check-cfg`.** The guard must not trigger `unexpected_cfgs` warnings that the user's own code would not. Using only names that appear in checked code should ensure this, but it needs a test, including for the names the guard always tests.
+10. **`check-cfg`.** The guard must not trigger `unexpected_cfgs` warnings that the user's own code would not. Using only names that appear in verified code should ensure this, but it needs a test, including for the names the guard always tests.
 
 **Target properties**
-11. **Other target `cfg`s in checked code** (`target_os`, `unix`, `windows`, `target_arch`, `target_endian`, `target_has_atomic`). The machine-independent default cannot pick their values. Options:
+11. **Other target `cfg`s in verified code** (`target_os`, `unix`, `windows`, `target_arch`, `target_endian`, `target_has_atomic`). The machine-independent default cannot pick their values. Options:
     - (a) a fixed reference target;
-    - (b) require declared configurations whenever checked code tests these names (RFC 0001 does this for now);
+    - (b) require declared configurations whenever verified code tests these names (RFC 0001 does this for now);
     - (c) the host's values, which makes the default depend on the host.
 12. **Checking a target other than the host** needs that target's standard library installed, even without code generation. A 32-bit host checking the default 64-bit configuration hits this. Early fixtures for cross-compilation and for host-versus-target builds are pinned in [#18](external-review-ideas.md), item 6, with `no_std`, `alloc`, and `#[no_implicit_prelude]`.
 13. **32-bit and 16-bit targets:** what declaring them looks like, and how proofs about `usize` arithmetic carry across pointer widths.

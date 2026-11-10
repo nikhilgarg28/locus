@@ -1,0 +1,8 @@
+//~ question: May a function marked `#[unverified]` return a proof?
+//~ spec: logic.unverified.plain-rust
+//~ rfc: 0002
+
+#[unverified]
+fn parse(s: &str) -> (n: u32, @(n < 100)) { //~ error: `parse` is marked `#[unverified]`, and an unverified function returns no proof
+    ((s.len() % 100) as u32, _)
+}

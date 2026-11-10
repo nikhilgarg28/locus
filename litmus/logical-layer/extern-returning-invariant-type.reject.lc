@@ -1,5 +1,5 @@
 //~ question: May an `extern` function's signature name an invariant type?
-//~ spec: logic.unsafe.no-conjuring
+//~ spec: logic.unverified.plain-rust
 //~ rfc: 0002
 
 struct Positive {

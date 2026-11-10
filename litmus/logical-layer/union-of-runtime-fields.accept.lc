@@ -1,5 +1,5 @@
 //~ question: May a Locus crate use a union whose fields hold no logical values?
-//~ spec: logic.ghost.no-unions
+//~ spec: logic.ghost.no-unions, logic.unverified.functions
 //~ rfc: 0002
 
 union Bits {

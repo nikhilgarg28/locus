@@ -1,0 +1,25 @@
+//~ question: May verified code pass the fields of an invariant type to a function that contains an `unsafe` block?
+//~ spec: logic.unverified.plain-rust
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+// Unverified, and safe for every argument: no proof reaches it, so it checks.
+fn sub(hi: u32, lo: u32) -> u32 {
+    if lo <= hi { unsafe { hi.unchecked_sub(lo) } } else { 0 }
+}
+
+fn width(iv: &Interval) -> u32 {
+    sub(iv.hi, iv.lo)
+}
+
+fn three() -> u32 {
+    let iv = Interval { lo: 2, hi: 5, ordered: _ };
+    width(&iv)
+}
+
+//~ run: three() => 3

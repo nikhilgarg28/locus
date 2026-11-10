@@ -1,4 +1,4 @@
-//~ question: Is an invariant type's invariant believed for a value that passed through unchecked generic code?
+//~ question: Is an invariant type's invariant believed for a value that passed through unverified generic code?
 //~ spec: logic.unsafe.invariant, contracts.invariants.observed
 //~ rfc: 0002
 

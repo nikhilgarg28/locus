@@ -1,4 +1,4 @@
-//~ question: May checked code call a closure whose parameter holds a proof?
+//~ question: May verified code call a closure whose parameter holds a proof?
 //~ spec: logic.boundary.calls
 //~ rfc: 0002
 

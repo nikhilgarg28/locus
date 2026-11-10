@@ -9,9 +9,9 @@
 What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)). This covers:
 
 - **Logical types:** `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and characters and strings.
-- **Rules:** `logic.boundary.unchecked`, `logic.boundary.access`
+- **Rules:** `logic.boundary.unverified`, `logic.boundary.access`
   - Each is defined from `Int` and inductive types, the core RFC 0002 builds on. Any native acceleration has a stated correspondence (vision, commitment 5).
-  - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unchecked code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
+  - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unverified code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
   - Their positivity in each type argument: `Seq` and `Maybe` are positive, and a set, as a predicate, is not.
   - Indexing of sequences: the index type, what an out-of-range index means, and the bounds proof needed when elements might not exist.
   - `div_euclid` and `rem_euclid` on `Int`.
@@ -64,3 +64,7 @@ After the third review, the owner decided that closures that take proofs stay of
 ### 2026-11-09, fourth review of PR #10
 
 RFC 0002's decisions 47 and 48 add two conditions that this issue's specifications must keep. A proposition under interior mutability reads only what is fixed where its type is written, which is what lets the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents. And the snapshot that the library declares for a collection is strictly positive in its element types, so a set's or a map's snapshot is the sequence of its entries.
+
+### 2026-11-09, conversation with the owner about PR #24
+
+RFC 0002's decision 56 leaves Locus's library as the only place that states specifications of code Locus does not verify: a program has no form for them yet. This issue still owns the library's own specifications. The form in which a program could state a contract for another crate's function, which the library's specifications might share, is [boundary-contracts](boundary-contracts.md), recorded for later.

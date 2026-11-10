@@ -1,0 +1,7 @@
+//~ question: May a function that contains an `unsafe` block take a proof, so that the proof justifies the `unsafe` code?
+//~ spec: logic.unverified.functions, logic.unverified.plain-rust
+//~ rfc: 0002
+
+fn get(v: &[u32], i: usize, ok: @(i < v.len())) -> u32 { //~ error: `get` contains an `unsafe` block, so it is unverified, and an unverified function takes no proof
+    unsafe { *v.get_unchecked(i) }
+}

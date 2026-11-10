@@ -1,0 +1,15 @@
+//~ question: May a function with an `unsafe` block and a plain Rust signature be called from verified code?
+//~ spec: logic.unverified.functions, logic.unverified.plain-rust
+//~ rfc: 0002
+
+// `get` contains `unsafe`, so it is unverified without being marked. It is
+// safe for every argument, as any safe Rust function must be.
+fn get(v: &[u32], i: usize) -> u32 {
+    if i < v.len() { unsafe { *v.get_unchecked(i) } } else { 0 }
+}
+
+fn first(v: &[u32]) -> u32 {
+    get(v, 0)
+}
+
+//~ run: first(&[7, 8]) => 7

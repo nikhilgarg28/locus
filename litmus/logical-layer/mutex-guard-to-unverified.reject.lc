@@ -1,4 +1,4 @@
-//~ question: May a guard that gives mutable access to a proof be passed to unchecked code?
+//~ question: May a guard that gives mutable access to a proof be passed to unverified code?
 //~ spec: logic.boundary.access, logic.boundary.writes
 //~ rfc: 0002
 

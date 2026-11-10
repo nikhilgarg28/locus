@@ -1,5 +1,5 @@
-//~ question: May checked code `transmute` between types that hold no logical values?
-//~ spec: logic.unsafe.no-conjuring
+//~ question: May a function of a Locus crate `transmute` between types that hold no logical values?
+//~ spec: logic.unverified.functions
 //~ rfc: 0002
 
 fn bits(x: f32) -> u32 {

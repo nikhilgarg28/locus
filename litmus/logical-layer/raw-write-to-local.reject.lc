@@ -1,5 +1,5 @@
-//~ question: After a local's address reaches a raw pointer, does Locus still know its value?
-//~ spec: logic.unsafe.escape
+//~ question: May a function that contains an `unsafe` block state a proof?
+//~ spec: logic.unverified.functions, logic.unverified.plain-rust
 //~ rfc: 0002
 
 fn raw() -> u32 {
@@ -8,6 +8,6 @@ fn raw() -> u32 {
     unsafe {
         *p = 0;
     }
-    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `n`'s address reached a raw pointer, so Locus knows only that it is a `u32`
+    let one: @(n == 1) = _; //~ error: `raw` contains an `unsafe` block, so it is unverified, and an unverified function holds no logical code
     100 / n
 }

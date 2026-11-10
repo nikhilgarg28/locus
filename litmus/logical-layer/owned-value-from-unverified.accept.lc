@@ -1,4 +1,4 @@
-//~ question: Does a fact about a value that unchecked code returned survive a later call of unchecked code?
+//~ question: Does a fact about a value that unverified code returned survive a later call of unverified code?
 //~ spec: logic.boundary.escape
 //~ rfc: 0002
 

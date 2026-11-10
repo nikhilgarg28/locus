@@ -1,0 +1,14 @@
+//~ question: Does verified code know anything about an unverified function's result beyond its type?
+//~ spec: logic.boundary.escape
+//~ rfc: 0002
+
+#[unverified]
+fn three() -> u32 {
+    3
+}
+
+fn caller() -> u32 {
+    let n = three();
+    let ok: @(n == 3) = _; //~ error: cannot prove `n == 3`: `three` is unverified, so Locus knows only that `n` is a `u32`
+    n
+}

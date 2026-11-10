@@ -1,4 +1,4 @@
-//~ question: Does a call of a checked function that writes only its argument keep facts about other places?
+//~ question: Does a call of a verified function that writes only its argument keep facts about other places?
 //~ spec: logic.boundary.escape
 //~ rfc: 0002
 

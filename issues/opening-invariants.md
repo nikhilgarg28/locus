@@ -22,9 +22,9 @@ impl NonEmpty {
 }
 ```
 
-What works today is assigning the field a whole new value, which for a vector means building it again. Most data structures with invariants change their fields in place, so most of them cannot be written. How should a checked function change such a field through a borrow?
+What works today is assigning the field a whole new value, which for a vector means building it again. Most data structures with invariants change their fields in place, so most of them cannot be written. How should a verified function change such a field through a borrow?
 
-The rule is there for a reason. While the field is borrowed, the value may not satisfy its invariant, and RFC 0002 promises that every value of an invariant type satisfies it wherever checked code can observe it (`contracts.invariants.observed`). Three things could observe it in between:
+The rule is there for a reason. While the field is borrowed, the value may not satisfy its invariant, and RFC 0002 promises that every value of an invariant type satisfies it wherever verified code can observe it (`contracts.invariants.observed`). Three things could observe it in between:
 - the code doing the update, if it used the value whole or read its proof fields;
 - a caller, if the borrow outlived the function, as in `fn items_mut(&mut self) -> &mut Vec<u32>`;
 - a destructor, a `catch_unwind`, or another thread, if a panic unwound out of the update. Unwinding cannot be made harmless by a rule about what is believed afterwards: a `RefCell<NonEmpty>` gives no sign that a panic interrupted an update, and neither does a lock without poisoning.
@@ -49,7 +49,7 @@ impl NonEmpty {
 
 `open!(v => { ... })` opens the invariant of `v`, a local or the target of a `&mut` whose type has proof fields, for the length of the block.
 
-- **Inside the block,** the fields that `v`'s proof fields read may be mutably borrowed, and they and the proof fields may be assigned without proof. Any code may run there, including code that Locus does not check.
+- **Inside the block,** the fields that `v`'s proof fields read may be mutably borrowed, and they and the proof fields may be assigned without proof. Any code may run there, including code that Locus does not verify.
 - **Nothing observes `v` while it is open.** In the block, `v` is not used as a whole, by value or by reference, and its proof fields are not read; only its fields are used. No borrow of a field outlives the block. The block is left only at its end: not by `return`, `break`, `continue`, `?`, or `.await`.
 - **At the end of the block,** every proof field of `v` is proved for the values its fields then have, as if each were assigned a hole. A proof field that search cannot prove is assigned in the block's last statements.
 - **A panic that would unwind out of the block aborts the process.** The block holds a guard, in both programs of build mode and in an exported program, that aborts if it is dropped by unwinding. So no destructor, `catch_unwind`, or other thread sees `v` open. This is what the `take_mut` and `replace_with` crates do for the same reason.
@@ -66,10 +66,10 @@ Later, without changing any accepted program: Locus can leave the guard out wher
 
 ### 2. No syntax: the invariant is open while the borrow lasts, and Locus reasons about unwinding.
 
-`self.items.push(x)` is accepted as written. The invariant is open from the borrow of `items` until rustc's borrow facts say the borrow ends, where the proof fields are proved again. For unwinding, every operation in between that may panic must leave a state for which the invariant can be proved. That needs, for each call that is given the borrow, what the borrowed place holds if the call unwinds: "unchanged" for `Vec::push`, "some permutation" for `sort_by`, and "unknown" for code Locus does not check.
+`self.items.push(x)` is accepted as written. The invariant is open from the borrow of `items` until rustc's borrow facts say the borrow ends, where the proof fields are proved again. For unwinding, every operation in between that may panic must leave a state for which the invariant can be proved. That needs, for each call that is given the borrow, what the borrowed place holds if the call unwinds: "unchanged" for `Vec::push`, "some permutation" for `sort_by`, and "unknown" for code Locus does not verify.
 
 - For: no new syntax, no change at run time, and the common single call just works.
-- Against: every specification gains an outcome for unwinding, which is new trusted text in the library and a second postcondition on every checked function that takes `&mut`. Partial correctness, where a panic proves nothing, stops being true inside these regions. An update of two fields has no borrow that spans both, so it still needs a block or a trick to keep the borrow alive. And where the region ends is decided by rustc's borrow analysis, not by anything the reader sees.
+- Against: every specification gains an outcome for unwinding, which is new trusted text in the library and a second postcondition on every verified function that takes `&mut`. Partial correctness, where a panic proves nothing, stops being true inside these regions. An update of two fields has no borrow that spans both, so it still needs a block or a trick to keep the borrow alive. And where the region ends is decided by rustc's borrow analysis, not by anything the reader sees.
 
 ### 3. Stay as it is.
 
@@ -81,7 +81,7 @@ Keep the ban, and rebuild fields. Sound and simple, and it rules out most data s
 |---|---|---|---|
 | `self.items.push(x)` | In a block | As written | Rejected |
 | Two fields updated together | Yes | Awkward | Only by replacing the value |
-| Unchecked code on the field | Yes; the invariant is proved after | Only if the invariant holds for any value | Rejected |
+| Unverified code on the field | Yes; the invariant is proved after | Only if the invariant holds for any value | Rejected |
 | Run-time change | A panic in the block aborts | None | None |
 | New trusted text | The guard | An unwind outcome in every specification | None |
 | Where the invariant is open | Where the source says | Where rustc's borrows say | Nowhere |

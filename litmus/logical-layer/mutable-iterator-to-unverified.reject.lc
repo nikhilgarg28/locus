@@ -1,4 +1,4 @@
-//~ question: May a mutable iterator over values holding proofs be passed to unchecked code?
+//~ question: May a mutable iterator over values holding proofs be passed to unverified code?
 //~ spec: logic.boundary.access, logic.boundary.writes
 //~ rfc: 0002
 

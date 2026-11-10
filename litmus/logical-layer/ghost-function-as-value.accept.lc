@@ -1,4 +1,4 @@
-//~ question: May a function with a proof parameter be used as a value in checked code?
+//~ question: May a function with a proof parameter be used as a value in verified code?
 //~ spec: logic.boundary.calls
 //~ rfc: 0002
 

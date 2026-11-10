@@ -36,7 +36,7 @@ A first [spike](../../spikes/rustc-facts/README.md) tested the central mechanism
 
 rustc's borrow checker rejected the one proof that read a moved value, with E0382 on the matching line. The driver built against stable rustc 1.97 (with `RUSTC_BOOTSTRAP=1`) and against a nightly four releases later, needing a one-line change between them.
 
-[RFC 0002](0002-logical-layer.md) defines the logical layer that this pipeline checks and erases, and the two RFCs are proposed together. Its treatment of proofs as ghost values, which no Rust code can forge, is why the checking and runtime programs contain markers rather than proofs, and why a crate's contracts are visible only to code that Locus checks.
+[RFC 0002](0002-logical-layer.md) defines the logical layer that this pipeline checks and erases, and the two RFCs are proposed together. Its treatment of proofs as ghost values, which no Rust code can forge, is why the checking and runtime programs contain markers rather than proofs, and why a crate's contracts are visible only to code that Locus verifies.
 
 ## Design
 
@@ -173,6 +173,7 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 
 **Locus names** are ordinary Rust items:
 - the macros `logic! { ... }` for logical blocks, `prop!(...)` for propositions, and `prove!(...)` for proofs, from Locus's library, and `open!(v => { ... })` for a block that opens a type's invariant, whose contents are runtime code ([RFC 0002](0002-logical-layer.md#proofs-in-data));
+- the attribute `#[unverified]`, which marks a function that Locus does not verify ([RFC 0002](0002-logical-layer.md#unverified-functions-and-unsafe-code));
 - the derives `Logical` and `Model`;
 - the trait `Model`;
 - the logical types and functions of Locus's standard library, such as `Nat`.
@@ -216,8 +217,8 @@ How the names are found:
 There is no wall between Rust and Locus inside a crate. Plain Rust and Locus code mix freely, and every file goes through the pipeline. Soundness comes instead from the only four ways facts about runtime values can enter the logic:
 
 1. **Snapshots and models:** observing a runtime value as what it is, its snapshot, or through its type's model, what it means.
-2. **Typed bodies Locus understands:** rustc's typed bodies, translated into the logic, together with what Rust's ownership and aliasing rules guarantee: a call changes only what its effect allows, which is what it is given mutable access to, while it holds it, and what escaped through a raw pointer earlier, and a mutable borrow's final value is what its place holds when the borrow ends.
-3. **Assumed specifications:** each declared with a reason, and listed by the audit.
+2. **Typed bodies Locus understands:** rustc's typed bodies of verified functions, translated into the logic, together with what Rust's ownership rules guarantee: a call changes only what its effect allows, which is what it is given mutable access to, while it holds it, and a mutable borrow's final value is what its place holds when the borrow ends. A function that contains `unsafe` code, handles a raw pointer, or is marked `#[unverified]` is not translated: Locus knows it by its Rust type ([RFC 0002](0002-logical-layer.md#unverified-functions-and-unsafe-code)).
+3. **Assumed specifications:** each declared with a reason, and listed by the audit. For now only Locus's library declares any (RFC 0002, decision 56).
 4. **Invariants of the program's own types,** stated by their proof fields, as described below.
 
 Each is sound no matter who wrote the code.
@@ -227,12 +228,12 @@ Each is sound no matter who wrote the code.
   - Types from the standard library with `unsafe` internals (`Vec`, `Rc`, `String`) get snapshots and models declared by Locus's library, each as a trusted entry with its reason.
   - `Cell`, `RefCell`, `Mutex`, and the atomics have no model, and their snapshots hold nothing of their contents.
 
-  So **a call Locus knows nothing about, taking `&x`, never changes `x`'s snapshot or model**: Rust freezes what they hold, and they never hold what Rust does not freeze. For what `x` owns on the heap, such as a `Vec`'s elements, the freezing is the callee keeping Rust's safety contract, which the trust model lists as `assumed.unsafe.sound`: Rust's aliasing rules alone protect only what the reference itself points to ([RFC 0002](0002-logical-layer.md#the-boundary-with-unchecked-code)).
-- **A call keeps only the facts it cannot change.** Each checked function's summary, what it may write and whether it lets an address escape, is inferred and kept in its crate's interface; code whose effect is unknown is assumed to write everything it is given mutably, while it holds it, and nothing afterwards, because it is taken to be sound Rust (`assumed.unsafe.sound`). `unsafe` code can write a place through a raw pointer with no write that Locus sees, so a place whose address reaches a raw pointer, foreign code, or inline assembly *escapes*, and a fact about it holds only until the next call or `unsafe` operation that may write it. Rust's provenance rules make that enough: code reaches memory only through a pointer derived from one it was given ([RFC 0002](0002-logical-layer.md#the-boundary-with-unchecked-code)).
+  So **a call Locus knows nothing about, taking `&x`, never changes `x`'s snapshot or model**: Rust freezes what they hold, and they never hold what Rust does not freeze. For what `x` owns on the heap, such as a `Vec`'s elements, the freezing is the callee keeping Rust's safety contract, which the trust model lists as `assumed.unsafe.sound`: Rust's aliasing rules alone protect only what the reference itself points to ([RFC 0002](0002-logical-layer.md#the-boundary-with-unverified-code)).
+- **A call keeps only the facts it cannot change.** Each verified function's summary of what it may write is inferred and kept in its crate's interface; code whose effect is unknown, a Rust crate's or an unverified function's, is assumed to write everything it is given mutably, while it holds it, and nothing afterwards, because it is taken to be sound Rust (`assumed.unsafe.sound`). A raw pointer exists only inside an unverified function, so no place of verified code changes without a write or a call that Locus sees ([RFC 0002](0002-logical-layer.md#unverified-functions-and-unsafe-code)).
 - **Plain Rust in a Locus crate is still checked by Locus.** For example, plain Rust that assigns a field that a proof field reads must keep that proof field true. Locus proves it for the new value as if a hole were written there, and rejects the assignment when it cannot.
-- **Code Locus cannot translate is opaque:** dependencies, trait objects, inline assembly, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
-- **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): both programs hold them only as zero-sized markers, `Erased` and `LogicalData`, which carry no proposition and no value. Locus tracks what a value holds itself, only through code it checks and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
-- **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only checked code constructs the type or writes the fields its proofs read. In build mode, every crate that can name the type is checked. In export mode, other crates can neither construct it nor reach those fields. So a value that comes back from opaque code still satisfies its invariant: opaque code can only move it, copy it, drop it, or call the type's own checked functions. `unsafe` code could do more, and keeping the invariant is an obligation Locus adds for it, beyond Rust's ([RFC 0002](0002-logical-layer.md#unsafe-code)).
+- **Code Locus does not translate is unverified:** dependencies, the crate's own unverified functions, trait objects, and anything else outside what Locus models. It runs, but its results are known only by their types, and anything it receives through `&mut` may come back as any value of its type.
+- **Locus never believes what it did not check.** Proofs and logical values are ghost ([RFC 0002](0002-logical-layer.md)): both programs hold them only as zero-sized markers, `Erased` and `LogicalData`, which carry no proposition and no value. Locus tracks what a value holds itself, only through code it verifies and standard library code whose specification it has. Passed to any other code, ghost contents are forgotten. So no Rust code, through `Any`, specialization, or anything else, can convert or forge a proof, and Locus never relies on Rust's generics being parametric.
+- **Invariants hold for every value.** Every value of a type with proof fields satisfies them. Only verified code constructs the type or writes the fields its proofs read. In build mode, every crate that can name the type is checked. In export mode, other crates can neither construct it nor reach those fields. So a value that comes back from unverified code still satisfies its invariant: unverified code can only move it, copy it, drop it, or call the type's own verified functions. `unsafe` code could do more, and keeping the invariant is an obligation Locus adds for it, beyond Rust's ([RFC 0002](0002-logical-layer.md#unverified-functions-and-unsafe-code)).
 - **Statics.** Logical code may read only immutable statics, and no static that code outside the program can write, a `static mut` or one that is `extern`, `#[no_mangle]`, or `#[export_name]`, holds logical values that are not completable ([RFC 0002](0002-logical-layer.md#logical-code)).
 
 The details of models are [RFC 0002](0002-logical-layer.md).
@@ -265,6 +266,7 @@ Logical code is never given to rustc as code: its operators mean different thing
 | A `logic!`, `prop!`, or `prove!` invocation that lowering recognizes, a proposition in a type annotation inside a body, or an operator on bindings shown to be ghost | An invocation of a library macro that lowering writes, listing the places the logical code reads and the names it uses: `::__locus::proof!([&p.b] [total] total(p) > 0)`. In the checking program it observes each place and probes each name, then gives the marker; in the runtime program it gives the marker alone |
 | Any other invocation of a Locus macro | Expanded by rustc, as [Locus syntax and Locus names](#locus-syntax-and-locus-names) describes |
 | An `open!` block | An invocation of a library macro around the block's contents, which are lowered as runtime code. In both programs it expands to those contents under a guard that aborts if a panic unwinds out of them |
+| `#[unverified]` | An attribute of Locus's library that expands to its item unchanged, in both programs. An exported program has no such attribute |
 | A proposition in a signature or a struct field's type | Inside `Proof![...]`; nothing to observe |
 | `pub(locus)` | `pub` |
 
@@ -353,7 +355,7 @@ rustc removes code whose `cfg` is false before it type-checks anything, so check
 - **In build mode, Locus checks exactly the configuration being built,** which it reads from Cargo's invocation of the compiler, and builds what it checked. Nothing needs guarding.
 - **In export mode, Locus checks the configurations the crate declares,** because Rust users build the exported files in configurations Locus never sees. How a crate declares them is [distribution-and-export](../../issues/distribution-and-export.md). `cargo locus export` checks each one, and passes only if all of them pass.
   - **The default** is the dev, release, and test builds, with default features, for a target with 64-bit pointers. These are what `cargo build`, `cargo build --release`, and `cargo test` build.
-  - **The default does not depend on the machine that runs the check.** For now, an exported crate whose checked code tests other properties of the target, such as `target_os`, must declare its configurations.
+  - **The default does not depend on the machine that runs the check.** For now, an exported crate whose verified code tests other properties of the target, such as `target_os`, must declare its configurations.
 - **Code that no checked configuration enables is removed** from `.lc` files, in either mode, since it was never checked. In `.rs` files, which export does not edit, the guard refuses every configuration that would enable it.
 - **One exported program for all of them.** In export mode, erasure writes one runtime program, which must be right in every checked configuration.
   - A `cfg` attribute that every checked configuration satisfies is dropped. Every other `cfg` attribute is kept as written.
@@ -372,10 +374,10 @@ rustc removes code whose `cfg` is false before it type-checks anything, so check
   - A `cfg` test can only examine the names it mentions. So the guard tests every `cfg` name that appears anywhere in the crate's sources, `.lc` and `.rs` files alike. It also always tests `target_pointer_width`, which fixes the range of `usize`, and `debug_assertions`, which std's own macros test.
   - It takes these names from the sources, not from the output, which no longer mentions code that erasure removed.
   - Plain Rust counts too. Export leaves `.rs` files as they are, so code in one that no checked configuration compiles was never checked, and in another configuration could call a function whose proof parameters export removed, as `#[cfg(feature = "fast")] fn quick() -> u32 { crate::needs_proof(0) }` would. So a mostly-Rust crate declares the configurations it supports, rather than keeping all of them.
-- **The cost is Cargo's feature unification.** A downstream crate can enable any combination of an exported library's features. If that combination changes what checked code sees and was not checked, the downstream build fails with the guard's message. Library authors therefore declare the combinations they support. The alternatives are worse:
+- **The cost is Cargo's feature unification.** A downstream crate can enable any combination of an exported library's features. If that combination changes what verified code sees and was not checked, the downstream build fails with the guard's message. Library authors therefore declare the combinations they support. The alternatives are worse:
   - checking one configuration and trusting the rest is unsound;
   - checking every combination is infeasible;
-  - banning `cfg` in checked code rules out ordinary platform-specific code.
+  - banning `cfg` in verified code rules out ordinary platform-specific code.
 - **Behavior that differs between builds without a `cfg`** is the runtime semantics' to handle. Integer overflow, for example, depends on the `overflow-checks` setting, which no stable `cfg` can test, so a proof must hold either way ([runtime-semantics](../../issues/runtime-semantics.md)).
 - **What the guard cannot test** becomes an assumption about exported crates in [the trust model](../TRUST.md):
   - the compiler that builds the exported program;
@@ -415,7 +417,7 @@ rustc removes code whose `cfg` is false before it type-checks anything, so check
   - an integration test, and every harness `cargo test` builds, is a crate of its own, checked with no interface;
   - a procedural macro crate that depends on a Locus crate is checked like any crate, and one that does not is compiled as plain Rust;
   - doctests are compiled by rustdoc outside any wrapper, so build mode refuses the doctests of a crate that depends on a Locus crate until [cfg-corner-cases](../../issues/cfg-corner-cases.md) decides how to check them.
-- **For every other crate,** it compiles exactly as rustc does, and records whether the crate contains `unsafe` code after macro expansion. RFC 0002 uses that to decide which unchecked crates need to be named as trusted.
+- **For every other crate,** it compiles exactly as rustc does, and records whether the crate contains `unsafe` code after macro expansion. RFC 0002 uses that to decide which unverified crates need to be named as trusted.
 - **It fails closed.** If it was asked to check a crate and cannot produce facts for it, the check fails. The first spike's silent fallback to plain compilation is not acceptable.
 - **Facts are tied to their program.** The driver records an identity of the checking program it compiled, and Locus rejects facts that do not match the program it generated.
 
@@ -482,13 +484,13 @@ Each stage has one representation, and each representation has one owner.
    - Facts are serialized, as JSON at first, so that the driver and the rest of Locus can run as separate processes.
 5. **Logical IR.** Locus's typed representation of logical items, propositions, and proofs. It refers to runtime types and items only through `Ty` and `ItemRef` from the facts.
 6. **Kernel terms and obligations.** Defined by the kernel RFC.
-7. **Interfaces.** When Locus checks a crate, it writes the crate's **interface**: its logical items, the contracts and ghost signatures of its functions, the summary of each function (what it may write, whether it lets an address escape, and whether it may run unchecked code or an `unsafe` operation whose effect is unknown), its invariants, and its models, in Locus's own terms. A crate that depends on it is checked against that interface, since rustc's metadata holds only markers. The interface's hash is part of what a dependent's check relied on.
+7. **Interfaces.** When Locus checks a crate, it writes the crate's **interface**: its logical items, the contracts and ghost signatures of its functions, the summary of what each verified function may write, which of its functions are unverified, its invariants, and its models, in Locus's own terms. A crate that depends on it is checked against that interface, since rustc's metadata holds only markers. The interface's hash is part of what a dependent's check relied on.
 8. **Manifests.** Every successful check writes a **manifest** of what its result relies on, so that a reviewer can see what was claimed and on what grounds:
    - the hashes of the sources, and the configuration checked;
    - the interfaces of the dependencies, by hash;
    - the version of the semantic translation, and of the facts format;
    - the models and specifications from Locus's library that the proofs used;
-   - the assumed specifications, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.sound` with the named crates it relies on and each `unsafe` block, `unsafe fn`, and `unsafe impl` of a checked crate that the result passes through, by location, `assumed.unsafe.invariants` with the types whose invariants it relies on, and `assumed.rust.aliasing`;
+   - the assumed specifications, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.sound` with the named crates it relies on and each unverified function with `unsafe` code, and each `unsafe impl`, of a verified crate that the result passes through, by location, and `assumed.unsafe.invariants` with the types whose invariants it relies on;
    - the certificate: the proofs, stored or found, that the kernel checked.
 
    The audit command prints it, and the vision's promise that a result can report its assumptions (commitment 4) is this list. Its format, and how stored proofs are found again, are [proof-search-and-storage](../../issues/proof-search-and-storage.md).
@@ -532,9 +534,9 @@ Building the runtime program is how Locus reports lints and confirms its own out
 
 **Source locations.** In build mode, `file!`, `line!`, `column!`, `Location::caller`, and panic messages name the `.lc` file, because rustc reads the lowered text at its path, and lowering keeps runtime code on its own line where it can, though a column moves where Locus syntax earlier on the line was lowered. In export mode, they name the exported file, whose lines move where erasure removed an item. That is the one stated exception to "erasure never changes what the program does".
 
-**Contracts are visible only to code that Locus checks.** No proof exists at run time. What unchecked Rust code could do instead is call a function without meeting its precondition, rely on a postcondition, or build a value without its invariant. Neither mode lets it:
-- **Within a crate,** every file is checked. A function whose parameters hold proofs never reaches code that Locus does not check, as a function value, a function pointer, a trait method, through generic code, or as an exported symbol ([RFC 0002](0002-logical-layer.md#the-boundary-with-unchecked-code)).
-- **In build mode,** every crate that depends on a Locus crate is checked, so every call of its functions and every use of its types is.
+**Contracts are visible only to code that Locus verifies.** No proof exists at run time. What unverified Rust code could do instead is call a function without meeting its precondition, rely on a postcondition, or build a value without its invariant. Neither mode lets it:
+- **Within a crate,** every file is checked. A function whose parameters hold proofs never reaches code that Locus does not verify, as a function value, a function pointer, a trait method, through generic code, or as an exported symbol ([RFC 0002](0002-logical-layer.md#the-boundary-with-unverified-code)).
+- **In build mode,** every crate that depends on a Locus crate is verified, so every call of its functions and every use of its types is.
 - **In export mode,** what other crates can reach is plain Rust ([RFC 0002](0002-logical-layer.md#export-mode)): no contracts, no logical values in types, no public field that an invariant reads, and no way to construct a type with proof fields.
 
 So Locus needs no proof tokens and no `unsafe` exports to protect contracts.
@@ -656,7 +658,7 @@ The observation examples use provisional syntax for propositions ([proposition-s
 | Ownership and mutation | rustc checks all ownership, including what logical code reads. How mutation is modeled in the logic is built from rustc's typed bodies ([runtime-semantics](../../issues/runtime-semantics.md)). |
 | Erasure and runtime behavior | In build mode nothing is erased: both programs compile one lowered text, whose ghost values are markers. In export mode erasure edits the source into readable Rust. Either way, runtime code is untouched, logical code does no runtime evaluation, the runtime program is validated against the checking program, and only source locations change. |
 | Configurations | Each configuration is a separate program. Build mode checks the configuration being built. An exported crate is checked in the configurations it declares, and its exported code refuses to compile in any other ([cfg-corner-cases](../../issues/cfg-corner-cases.md)). |
-| Rust interoperability | In build mode, every crate that depends on a Locus crate is checked, so contracts work across crates. In export mode, `.rs` files sit beside their `.lc` sources, so the crate builds with plain Cargo, and its interface is plain Rust, with no proofs, logical values, or contracts; `pub(locus)` marks what only Locus crates see ([distribution-and-export](../../issues/distribution-and-export.md)). |
+| Rust interoperability | In build mode, every crate that depends on a Locus crate is verified, so contracts work across crates. In export mode, `.rs` files sit beside their `.lc` sources, so the crate builds with plain Cargo, and its interface is plain Rust, with no proofs, logical values, or contracts; `pub(locus)` marks what only Locus crates see ([distribution-and-export](../../issues/distribution-and-export.md)). |
 | Diagnostics | Rust's errors keep their codes and messages, with spans mapped to the source. Errors that involve logical code are explained in Locus's terms. Lints come from the runtime program. |
 | Trust model | New trusted components: rustc's type checker and borrow checker, `locus-driver`, the facts format, Locus's library, the parser, the lowering, obligation generation, translation validation, export's guard and visibilities, and the orchestration. New assumptions, for exported crates: toolchains, dependencies, macro inputs, and published files. [RFC 0002](0002-logical-layer.md) adds the rest. See [design/TRUST.md](../TRUST.md). |
 
@@ -669,7 +671,7 @@ The observation examples use provisional syntax for propositions ([proposition-s
 
 **Keep the markers in the checking program only,** and remove them from build mode's runtime program afterwards, using the facts. Rejected: it keeps the runtime program of build mode readable, but no one reads it, and the two programs would again differ under every attribute macro.
 
-**A discovery run:** compile a provisional program first to learn types and resolutions, then lower precisely and compile again. Rejected for now. It costs a second compile of every checked crate, and it must be shown to converge. One lowered text needs neither. It stays the fallback if a case arises that only types can decide.
+**A discovery run:** compile a provisional program first to learn types and resolutions, then lower precisely and compile again. Rejected for now. It costs a second compile of every verified crate, and it must be shown to converge. One lowered text needs neither. It stays the fallback if a case arises that only types can decide.
 
 **Lowered files on disk, mirroring the crate under `target/`,** compiled from there. Rejected: a path that the source resolves from its own file, as in `#![doc = include_str!("../README.md")]`, would resolve from the copy instead, and `file!` would name it.
 
@@ -683,7 +685,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **A `locus! { ... }` macro inside ordinary `.rs` files,** erasing at build time. It needs no generated files. But a procedural macro sees no types and can only erase, never check, so a crate could be built and published with proofs that were never checked. Exported `.rs` files exist only when the check passed.
 
-**One mode, whose output always serves Rust callers.** Generated files would sit beside their sources in every build, with `OUT_DIR` as an opt-in. To protect contracts from unchecked callers, proof parameters would take tokens that only checked code supplies, other crates would obtain tokens through an `unsafe` constructor, and a function whose precondition sits in its parameters' data would be `unsafe`.
+**One mode, whose output always serves Rust callers.** Generated files would sit beside their sources in every build, with `OUT_DIR` as an opt-in. To protect contracts from unverified callers, proof parameters would take tokens that only verified code supplies, other crates would obtain tokens through an `unsafe` constructor, and a function whose precondition sits in its parameters' data would be `unsafe`.
 - Rejected. Every Locus crate paid for the Rust boundary, even when all its users were checked, and contracts between Locus crates went through `unsafe`.
 - With two modes, contracts are visible only where Locus checks every use: everywhere in build mode, and nowhere outside the crate in export mode.
 
@@ -750,7 +752,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 14. Build mode checks Locus dependencies from their sources, so a Locus crate published for Locus users includes its `.lc` files.
 15. **One lowered text for build mode.** The checking and runtime programs of build mode are one lowered text, compiled twice with different expansions of Locus's macros, with every ghost position kept as a marker. Lowering decides only what the source shows, and confirms every assumption against the facts. This revisits decision 8 of the previous draft, that proof parameters are removed, for build mode only, whose runtime program no one reads; an exported program still removes them. The [spikes](#spikes) support it.
 16. **Validation.** In both modes, Locus compares the runtime program's items and typed bodies with the checking program's, for every item and body, and fails on any difference. Export mode keeps erasure textual, so its output stays readable.
-17. **Interfaces and manifests.** Each checked crate gets an interface that its dependents are checked against, and each result a manifest of what it relies on.
+17. **Interfaces and manifests.** Each verified crate gets an interface that its dependents are checked against, and each result a manifest of what it relies on.
 18. **Acceptance waits for the spikes** of build mode's lowering and of the Cargo graph. A semantic slice, verifying one mutable function with a reborrow and a destructor end to end, goes with the RFC for the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)).
 19. **One library, with its macros' expansions selected by a `cfg`** that only the checking compile sets, rather than two versions of the library swapped per program. The Cargo spike found it the simplest way that works across crates; two libraries need every dependency's checking metadata kept and passed separately.
 20. **Ghost bindings recorded both ways** for expansions that rustc performs: a table of lexical scopes, consulted by position, and a local `macro_rules!` dispatch, resolved by hygiene. Each alone failed a case in the spike, and both together passed every one.
@@ -783,15 +785,17 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **Decided by the owner after the fourth review,** with [RFC 0002's](0002-logical-layer.md#unresolved-questions) decisions 44 to 50.
 
-38. **Summaries and manifests follow the trust model's new entry.** Code that Locus does not check is taken to be sound Rust (`assumed.unsafe.sound`), so a function's summary records what it may write, whether it lets an address escape, and whether it may run unchecked code or an unknown `unsafe` operation, and no longer what access it may retain. A manifest lists the unchecked crates whose calls a result relies on.
+38. **Summaries and manifests follow the trust model's new entry.** Code that Locus does not verify is taken to be sound Rust (`assumed.unsafe.sound`), so a function's summary records what it may write, whether it lets an address escape, and whether it may run unverified code or an unknown `unsafe` operation, and no longer what access it may retain. A manifest lists the unverified crates whose calls a result relies on. RFC 0002's decision 54 narrows a summary to what a function may write.
 39. **In the first stage, what other crates can reach is plain Rust,** by export mode's interface rules, and `pub(locus)` means `pub(crate)`. This settles item 5 of the list below as it stood, and removes `assumed.stage1.dependents` from the trust model: a plain-Rust caller could forge a marker with no `unsafe` code.
-40. **The driver records which crates contain `unsafe` code,** and a manifest lists the named crates and the `unsafe` code of checked crates that a result relies on (RFC 0002, decisions 52 and 53).
+40. **The driver records which crates contain `unsafe` code,** and a manifest lists the named crates and the `unsafe` code of verified crates that a result relies on (RFC 0002, decisions 52 and 53). With RFC 0002's decision 54, what is listed for a verified crate is each unverified function that contains `unsafe` code, and each `unsafe impl`.
 41. **`open!` is among Locus's macros** (RFC 0002, decision 51). Its contents are runtime code, lowered like the code around it, and it expands the same way in both programs, to those contents under a guard.
+42. **Functions are verified or unverified** (RFC 0002, decisions 54 to 57). The logical pass translates only verified functions, and reads the others' types. `#[unverified]` is among Locus's names: an attribute that expands to its item unchanged. An interface records which of a crate's functions are unverified, and this RFC now says verified and unverified where it said checked and unchecked code.
+
 **Still for the owner.** Each is written into the spec and the examples as proposed where an example can show it, so accepting this RFC accepts it. Item 1 has no rule yet, because an example would need a `.rs` file beside a `.lc` one, which the litmus format cannot yet express:
 1. `.rs` files may not name logical items, as proposed.
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
 3. Traits among Locus's names also have no associated functions or constants (an extension of 10 above).
-4. Until [cfg-corner-cases](../../issues/cfg-corner-cases.md) decides more, an exported crate whose checked code tests target properties other than pointer width must declare its configurations.
+4. Until [cfg-corner-cases](../../issues/cfg-corner-cases.md) decides more, an exported crate whose verified code tests target properties other than pointer width must declare its configurations.
 5. **Which marker a `logic!` gives** when its code is a proof, such as `logic! { add_zero(n) }` for a lemma `add_zero`. Lowering decides only what the source shows, and the source does not show it. The options: the source shows it, by writing logical code that gives a proof as `prove!` and keeping `logic!` for data; or the marker is left to rustc's inference, as a value of a type that either marker can fill, and Locus confirms it against the logical type of the code. The first keeps lowering's rule; the second writes nothing new, and is untested.
 
 **Left to other RFCs**, each with its issue:

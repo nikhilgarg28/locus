@@ -1,4 +1,4 @@
-//~ question: After a closure that mutably borrows a local is given to unchecked code as a trait object, does a fact about the local survive?
+//~ question: After a closure that mutably borrows a local is given to unverified code as a trait object, does a fact about the local survive?
 //~ spec: logic.boundary.escape
 //~ rfc: 0002
 
