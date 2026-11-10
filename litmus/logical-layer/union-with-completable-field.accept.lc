@@ -7,8 +7,9 @@ union Tagged {
     count: Nat,
 }
 
-fn bits(t: Tagged) -> u64 {
-    unsafe { t.bits }
+// Verified code can make one. Reading a union's field needs `unsafe`, and an
+// unverified function takes no type that holds logical data, so no code of
+// the crate reads it back.
+fn make() -> Tagged {
+    Tagged { bits: 7 }
 }
-
-//~ run: bits(Tagged { bits: 7 }) => 7

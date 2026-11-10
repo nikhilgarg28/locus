@@ -40,3 +40,7 @@ Raised by the fourth review of #10. It found three ways to prove `False` under t
 ### 2026-11-09, conversation with the owner about PR #24
 
 The owner asked whether the approach to `unsafe` code itself needed to change, and chose a smaller one: RFC 0002's decisions 54 to 57. A function is verified whole or not at all, an unverified function is plain Rust that takes and returns no proof, and no program assumes a fact. This removes the second picture of unverified code that the fourth review found: there is no escape, no list of operations that make values from raw memory, and no assumption about Rust's aliasing rules. What the model must now cover on this side is one assumption, `assumed.unsafe.sound`, stated for a function. Two points of the new text are the reviewer's proposals and still for the owner: that an unverified function handles no invariant type at all, and that a function that calls into an unnamed crate with `unsafe` code is unverified.
+
+### 2026-11-09, conversation with the owner about PR #24, continued
+
+Of the two proposals in the entry above, the owner confirmed the first and widened it: an unverified function takes no type that holds logical data at any depth, completable or not (RFC 0002, decision 58). The second, about crates that are not named, is still for the owner. Decision 59 adds a later part to this model: permissions, which are ghost values that are not `Copy`, and the argument that a layer of pointer primitives is sound ([permissioned-pointers](permissioned-pointers.md)).

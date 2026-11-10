@@ -54,7 +54,7 @@ None is chosen. They are recorded so that the work does not start from nothing.
 3. Whether a postcondition is a proof value in the result or a fact about it, for the crate's own functions and for other crates'.
 4. Models for types built on raw pointers, which a contract needs something to speak about, and how Locus rules out a type whose value changes through `&self`.
 5. How a result's manifest lists the contracts it assumed.
-6. Whether verifying `unsafe` code with permissions can later discharge a contract instead of assuming it, and what that needs from the logic, such as linear ghost values.
+6. Whether verifying `unsafe` code with permissions can later discharge a contract instead of assuming it. RFC 0002's decision 59 takes that road for Locus's own library ([permissioned-pointers](permissioned-pointers.md)), whose pointer primitives need exactly the contracts this issue is about.
 
 ## Log
 
@@ -69,3 +69,7 @@ The owner then asked whether any of it was needed for a first version, since Rus
 > Yes, this is good and I likely won't have requires/ensures for a while.
 
 So RFC 0002's decision 56 gives unverified functions no contract, and this issue keeps what was learned.
+
+### 2026-11-09, conversation with the owner about PR #24, continued
+
+The owner confirmed that an unverified function takes no type that holds logical data, at any depth (RFC 0002, decision 58), and set the direction for Locus's own library: verified collections on permissioned pointers (decision 59). The primitives under those collections are unverified code with preconditions and postconditions, so Locus's library will need a contract form before a program does.

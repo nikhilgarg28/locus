@@ -24,6 +24,10 @@ What Locus's library provides on top of the language core in RFC 0002 (`design/r
   - the library's list of **types writable through a shared handle**, which must be complete: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, the sending halves of channels, and anything else through which one holder writes what another reads.
 - **Lemmas** about the logical types.
 
+## Direction
+
+RFC 0002's decision 59 sets where this library is headed: its collections are verified Locus on permissioned pointers, with no `unsafe` code of their own, and Rust's standard library stays available without proofs. So the trusted specifications of Rust's `Box`, `Vec`, and the other collections that this issue lists are a stage, not the end: [permissioned-pointers](permissioned-pointers.md) is the design that replaces them, and it also asks which small part of Rust's library Locus must still understand.
+
 ## What it blocks
 
 Any proof about standard library data, and the accepted examples in RFC 0002 that use `Seq`, `Vec`, or `vec!`.
@@ -68,3 +72,7 @@ RFC 0002's decisions 47 and 48 add two conditions that this issue's specificatio
 ### 2026-11-09, conversation with the owner about PR #24
 
 RFC 0002's decision 56 leaves Locus's library as the only place that states specifications of code Locus does not verify: a program has no form for them yet. This issue still owns the library's own specifications. The form in which a program could state a contract for another crate's function, which the library's specifications might share, is [boundary-contracts](boundary-contracts.md), recorded for later.
+
+### 2026-11-09, conversation with the owner about PR #24, continued
+
+The owner set the direction that decision 59 records, quoted in [permissioned-pointers](permissioned-pointers.md). It adds questions for this issue's RFC: which standard types Locus's library replaces with its own, what `Vec` names in a `.lc` file, how a Locus collection meets a Rust crate that expects the standard one, and what happens to RFC 0002's examples, which use Rust's `Vec` and `Option` under trusted specifications until then.
