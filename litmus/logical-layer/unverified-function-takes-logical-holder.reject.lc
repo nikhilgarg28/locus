@@ -2,11 +2,11 @@
 //~ spec: logic.unverified.plain-rust
 //~ rfc: 0002
 
-union Tagged {
-    bits: u64,
-    count: Nat,
+struct Tally {
+    total: u32,
+    seen: Nat,
 }
 
-fn bits(t: Tagged) -> u64 { //~ error: `bits` contains an `unsafe` block, so it is unverified, and its signature holds `Tagged`, whose field `count` holds the logical type `Nat`
-    unsafe { t.bits }
+fn total(t: &Tally) -> u32 { //~ error: `total` contains an `unsafe` block, so it is unverified, and its signature holds `Tally`, whose field `seen` holds the logical type `Nat`
+    unsafe { std::ptr::read(&t.total) }
 }

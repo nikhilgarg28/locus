@@ -69,7 +69,7 @@ r[logic.ghost.no-trait-impls]
 Apart from `impl Model`, no logical type appears in an `impl`'s self type, its trait's arguments, or its associated types, and no trait method's signature holds logical values.
 
 r[logic.ghost.no-unions]
-No field of a union has a type that carries a forgeable proof or holds a value of an invariant type, at any depth, as `ManuallyDrop<Interval>` and `ManuallyDrop<Vec<Interval>>` do, since reading another field would make its value from memory of a different type. A field may hold completable logical values.
+No field of a union has a type that holds a logical type ([`logic.unverified.plain-rust`](#unverified-functions-and-unsafe-code)), at any depth, as `Option<@P>`, `ManuallyDrop<Interval>`, `ManuallyDrop<Vec<Interval>>`, and `Nat` do. Reading another field would make its value from memory of a different type; and reading a union needs `unsafe`, so only an unverified function could read it, and none takes such a type.
 
 ## The boundary with unverified code
 
