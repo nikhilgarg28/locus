@@ -23,3 +23,11 @@ Each litmus example is one `.lc` file, so nothing in `litmus/` can show a claim 
 ### 2026-10-27, opened on GitHub as #19
 
 Moved into the repository from [GitHub issue #19](https://github.com/nikhilgarg28/locus/issues/19) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-11-09, fourth review of PR #10
+
+Two more rules wait for examples that span crates. RFC 0002's decision 52 takes unchecked code to be sound crate by crate: a crate with `unsafe` code that the project has not named is treated as foreign code, which an example can show only with a second crate. And RFC 0001's decision 39 holds what other crates can reach, in the first stage, to export mode's interface rules. Neither has a spec rule yet.
+
+### 2026-11-09, conversation with the owner about PR #24
+
+The rule that waits for a second crate has changed with RFC 0002's decision 54: a function that calls into a crate with `unsafe` code that the project has not named is unverified, so it can state no proof. It still has no spec rule, for the same reason.

@@ -1,0 +1,29 @@
+//~ question: May a field that an invariant reads be changed through a borrow, inside a block that proves the invariant again at its end?
+//~ spec: contracts.invariants.open, contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+struct NonEmpty {
+    items: Vec<u32>,
+    ok: @(items.len() > 0),
+}
+
+impl NonEmpty {
+    fn one(x: u32) -> NonEmpty {
+        NonEmpty { items: vec![x], ok: _ }
+    }
+
+    // At the end of the block, `ok` is proved for the longer vector.
+    fn push(&mut self, x: u32) {
+        open!(self => {
+            self.items.push(x);
+        });
+    }
+}
+
+fn two() -> usize {
+    let mut n = NonEmpty::one(1);
+    n.push(2);
+    n.items.len()
+}
+
+//~ run: two() => 2

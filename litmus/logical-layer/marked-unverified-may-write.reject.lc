@@ -1,0 +1,14 @@
+//~ question: After a function marked `#[unverified]` was lent a place, does Locus still know the place's value?
+//~ spec: logic.unverified.functions, logic.boundary.escape
+//~ rfc: 0002
+
+// The mark alone makes `look` unverified: Locus does not verify its body.
+#[unverified]
+fn look(n: &mut u32) {}
+
+fn caller() -> u32 {
+    let mut n: u32 = 1;
+    look(&mut n);
+    let one: @(n == 1) = _; //~ error: cannot prove `n == 1`: `look` is unverified, so it may have written `n`
+    n
+}

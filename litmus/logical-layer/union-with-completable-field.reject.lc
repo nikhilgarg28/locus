@@ -1,0 +1,8 @@
+//~ question: May a union have a field that holds only completable logical values?
+//~ spec: logic.ghost.no-unions
+//~ rfc: 0002
+
+union Tagged {
+    bits: u64,
+    count: Nat, //~ error: the field `count` of the union `Tagged` holds the logical type `Nat`: reading a union needs `unsafe`, and an unverified function takes no type that holds logical data, so no code could read `Tagged`
+}

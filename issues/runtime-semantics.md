@@ -1,13 +1,13 @@
-# Runtime semantics of checked code
+# Runtime semantics of verified code
 
 - **Kind:** decision
 - **Status:** open
 - **Blocks:** Any proof about what runtime code computes; freezing the facts format and the choice of THIR or MIR in RFC 0001; the planned semantic slice: verifying one small mutable function with a reborrow and a destructor end to end through the pipeline, with its certificate and a replay of the stored proof. It is meant to run alongside this RFC, to expose the pipeline's constraints early
-- **Rules:** `proofs.versions`, `contracts.final`, `logic.boundary.escape`, `logic.unsafe.escape`
+- **Rules:** `proofs.versions`, `contracts.final`, `logic.boundary.escape`, `logic.unverified.functions`
 
 ## Question
 
-How rustc's typed bodies become statements in the logic: the **runtime semantics** of checked code. RFCs 0001 and 0002 ([#10](https://github.com/nikhilgarg28/locus/pull/10)) fix the interface, and leave this to its own RFC.
+How rustc's typed bodies become statements in the logic: the **runtime semantics** of verified code. RFCs 0001 and 0002 ([#10](https://github.com/nikhilgarg28/locus/pull/10)) fix the interface, and leave this to its own RFC.
 
 An external review asked for this RFC early, before the pipeline's representations are frozen, because it decides whether several of their commitments can be implemented as stated. It needs to answer:
 
@@ -20,7 +20,7 @@ An external review asked for this RFC early, before the pipeline's representatio
   - This RFC decides how bodies are translated, including where each borrow ends, which is where prophecies are resolved.
   - rustc computes where borrows end on MIR. Drops, unwinding, and borrows pull toward MIR; source-shaped typed expressions pull toward THIR.
 - **What remains true after an opaque call,** and what is forgotten:
-  - a completable value lent mutably to unchecked code comes back as any value of its type;
+  - a completable value lent mutably to unverified code comes back as any value of its type;
   - values read through raw pointers, or cast or transmuted, are forgotten.
 - **Drops and unwinding.**
   - Which obligations hold on unwind.
@@ -55,3 +55,11 @@ Moved into the repository from [GitHub issue #6](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-09, fourth review of PR #10
+
+RFC 0002 now states the reading that this RFC must define precisely ([What a checked program means](../design/rfcs/0002-logical-layer.md#what-a-checked-program-means)), and its decision 45 says what a checked function's summary records. The review also named the largest gap in what can be proved about ordinary code: a field that an invariant reads cannot be borrowed mutably, so `self.items.push(x)` is rejected. [opening-invariants](opening-invariants.md) lays out the options for the owner; what a drop or a caught panic may observe while such a field is borrowed is part of the reading that this RFC defines ([soundness-model](soundness-model.md)).
+
+### 2026-11-09, conversation with the owner about PR #24
+
+RFC 0002's decision 54 makes a function verified whole or not at all: one that contains `unsafe` code or handles a raw pointer is unverified. So this RFC translates only functions with no `unsafe` code and no raw pointers, and treats every unverified function as an unknown function of its Rust type. A verified function's summary records only what it may write; escape, and the assumption about Rust's aliasing rules, are gone. The words are now verified and unverified, where earlier entries of this log say checked and unchecked.

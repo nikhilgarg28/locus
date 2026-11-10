@@ -1,0 +1,20 @@
+//~ question: Can verified code learn a fact about an unverified function's result by checking it at run time?
+//~ spec: logic.unverified.functions
+//~ rfc: 0002
+
+#[unverified]
+fn parse(s: &str) -> u32 {
+    s.len() as u32
+}
+
+fn small(s: &str) -> u32 {
+    let n = parse(s);
+    if n < 100 {
+        let ok: @(n < 100) = _;
+        n
+    } else {
+        0
+    }
+}
+
+//~ run: small("abc") => 3

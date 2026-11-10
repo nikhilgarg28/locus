@@ -9,9 +9,9 @@
 What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)). This covers:
 
 - **Logical types:** `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and characters and strings.
-- **Rules:** `logic.boundary.unchecked`, `logic.boundary.access`
+- **Rules:** `logic.boundary.unverified`, `logic.boundary.access`
   - Each is defined from `Int` and inductive types, the core RFC 0002 builds on. Any native acceleration has a stated correspondence (vision, commitment 5).
-  - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unchecked code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
+  - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unverified code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
   - Their positivity in each type argument: `Seq` and `Maybe` are positive, and a set, as a predicate, is not.
   - Indexing of sequences: the index type, what an out-of-range index means, and the bounds proof needed when elements might not exist.
   - `div_euclid` and `rem_euclid` on `Int`.
@@ -23,6 +23,10 @@ What Locus's library provides on top of the language core in RFC 0002 (`design/r
   - that the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents;
   - the library's list of **types writable through a shared handle**, which must be complete: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, the sending halves of channels, and anything else through which one holder writes what another reads.
 - **Lemmas** about the logical types.
+
+## Direction
+
+RFC 0002's decision 59 sets where this library is headed: its collections are verified Locus on permissioned pointers, with no `unsafe` code of their own, and Rust's standard library stays available without proofs. So the trusted specifications of Rust's `Box`, `Vec`, and the other collections that this issue lists are a stage, not the end: [permissioned-pointers](permissioned-pointers.md) is the design that replaces them, and it also asks which small part of Rust's library Locus must still understand.
 
 ## What it blocks
 
@@ -60,3 +64,15 @@ Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `car
 ### 2026-10-28, PR #10
 
 After the third review, the owner decided that closures that take proofs stay off the standard library's adapters until this issue specifies them, and that doing so is a priority for adoption: RFC 0002, decision 43. Such a specification says that the callee calls the closure only with values it was given, keeping their logical contents, not only their erased form. `Option::map` calls it exactly when it holds `Some(v)`, with that `v`, and `None` never calls it. Adapters that keep the closure, call it many times, or unwind while it runs need more than that.
+
+### 2026-11-09, fourth review of PR #10
+
+RFC 0002's decisions 47 and 48 add two conditions that this issue's specifications must keep. A proposition under interior mutability reads only what is fixed where its type is written, which is what lets the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents. And the snapshot that the library declares for a collection is strictly positive in its element types, so a set's or a map's snapshot is the sequence of its entries.
+
+### 2026-11-09, conversation with the owner about PR #24
+
+RFC 0002's decision 56 leaves Locus's library as the only place that states specifications of code Locus does not verify: a program has no form for them yet. This issue still owns the library's own specifications. The form in which a program could state a contract for another crate's function, which the library's specifications might share, is [boundary-contracts](boundary-contracts.md), recorded for later.
+
+### 2026-11-09, conversation with the owner about PR #24, continued
+
+The owner set the direction that decision 59 records, quoted in [permissioned-pointers](permissioned-pointers.md). It adds questions for this issue's RFC: which standard types Locus's library replaces with its own, what `Vec` names in a `.lc` file, how a Locus collection meets a Rust crate that expects the standard one, and what happens to RFC 0002's examples, which use Rust's `Vec` and `Option` under trusted specifications until then.

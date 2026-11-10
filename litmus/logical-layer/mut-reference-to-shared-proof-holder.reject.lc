@@ -13,5 +13,5 @@ fn check(n: u32) -> Option<@(n > 0)> {
 fn lend(n: u32) {
     let found: Option<@(n > 0)> = check(n);
     let mut view: &Option<@(n > 0)> = &found;
-    std::hint::black_box(&mut view); //~ error: `&mut view` grants write access to `view`, a reference to an `Option<@(n > 0)>`: unchecked code could replace it with a reference to an `Option` holding a proof of another proposition
+    std::hint::black_box(&mut view); //~ error: `&mut view` grants write access to `view`, a reference to an `Option<@(n > 0)>`: unverified code could replace it with a reference to an `Option` holding a proof of another proposition
 }

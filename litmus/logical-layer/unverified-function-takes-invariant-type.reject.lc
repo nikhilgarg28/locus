@@ -1,0 +1,13 @@
+//~ question: May a function that contains an `unsafe` block take a value of an invariant type, only to read its fields?
+//~ spec: logic.unverified.plain-rust
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn width(iv: &Interval) -> u32 { //~ error: `width` contains an `unsafe` block, so it is unverified, and its signature holds the invariant type `Interval`: pass it the fields it needs
+    unsafe { iv.hi.unchecked_sub(iv.lo) }
+}

@@ -1,0 +1,12 @@
+//~ question: May a function that contains an `unsafe` block take a type of the program's own that holds logical data in a field, when that data is completable?
+//~ spec: logic.unverified.plain-rust
+//~ rfc: 0002
+
+struct Tally {
+    total: u32,
+    seen: Nat,
+}
+
+fn total(t: &Tally) -> u32 { //~ error: `total` contains an `unsafe` block, so it is unverified, and its signature holds `Tally`, whose field `seen` holds the logical type `Nat`
+    unsafe { std::ptr::read(&t.total) }
+}

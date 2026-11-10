@@ -1,0 +1,11 @@
+[package]
+name = "permissioned-pointers-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A workspace of its own, so the repository's root workspace is untouched.
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(checked)'] }

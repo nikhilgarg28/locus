@@ -1,5 +1,5 @@
-//~ question: May checked code make a value of a type with proof fields by `mem::zeroed`?
-//~ spec: logic.unsafe.no-conjuring
+//~ question: May a function make a value of a type with proof fields by `mem::zeroed`?
+//~ spec: logic.unverified.plain-rust
 //~ rfc: 0002
 
 struct Positive {
@@ -8,5 +8,5 @@ struct Positive {
 }
 
 fn nothing() -> Positive {
-    unsafe { std::mem::zeroed::<Positive>() } //~ error: `Positive` holds a proof, so checked code cannot take one from `mem::zeroed`
+    unsafe { std::mem::zeroed::<Positive>() } //~ error: `nothing` contains an `unsafe` block, so it is unverified, and an unverified function handles no invariant type
 }

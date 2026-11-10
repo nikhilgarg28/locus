@@ -1,0 +1,14 @@
+//~ question: May a proof field inside a `Cell` read another field of its value?
+//~ spec: logic.ghost.interior-mutability
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+struct Cache {
+    x: u32,
+    hint: Cell<Option<@(x != 0)>>, //~ error: `hint` is under interior mutability and its proposition reads the field `x`: a `Cell`'s type cannot follow a value that an assignment can change
+}
+
+fn empty() -> Cache {
+    Cache { x: 0, hint: Cell::new(None) }
+}

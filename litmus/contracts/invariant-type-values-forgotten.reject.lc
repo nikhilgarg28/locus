@@ -1,4 +1,4 @@
-//~ question: After unchecked code has had mutable access to a value of an invariant type, does Locus still know its fields' values?
+//~ question: After unverified code has had mutable access to a value of an invariant type, does Locus still know its fields' values?
 //~ spec: contracts.invariants.observed, logic.boundary.escape
 //~ rfc: 0002
 

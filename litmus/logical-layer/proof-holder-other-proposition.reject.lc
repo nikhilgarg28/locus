@@ -1,0 +1,13 @@
+//~ question: Is a proof holder accepted where its type states an equivalent proposition that is spelled differently?
+//~ spec: logic.ghost.type-identity
+//~ rfc: 0002
+
+fn store(m: u32, slot: &mut Option<@(m > 0)>, positive: @(m > 0)) {
+    *slot = Some(positive);
+}
+
+fn fill(n: u32, positive: @(n > 0)) -> bool {
+    let mut found: Option<@(0 < n)> = None;
+    store(n, &mut found, positive); //~ error: `found` is an `Option<@(0 < n)>`, and `store` needs an `Option<@(n > 0)>`: the propositions are equivalent but not the same, and a value that holds a proof is not converted
+    found.is_some()
+}

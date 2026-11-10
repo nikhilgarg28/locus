@@ -1,0 +1,22 @@
+//~ question: May a proof field be read inside the block that opens its value's invariant?
+//~ spec: contracts.invariants.open
+//~ rfc: 0002
+
+struct NonEmpty {
+    items: Vec<u32>,
+    ok: @(items.len() > 0),
+}
+
+fn first(items: &[u32], nonempty: @(items.len() > 0)) -> u32 {
+    items[0]
+}
+
+fn reset(n: &mut NonEmpty, x: u32) -> u32 {
+    open!(n => {
+        n.items.clear();
+        let stale: @(n.items.len() > 0) = n.ok; //~ error: `n` is open here, so its proof field `ok` cannot be read: it was proved for the fields `n` had before the block
+        let old = first(&n.items, stale);
+        n.items.push(x);
+        old
+    })
+}

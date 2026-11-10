@@ -1,5 +1,5 @@
-//~ question: May checked code make a value of a type with proof fields by `transmute`?
-//~ spec: logic.unsafe.no-conjuring, logic.unsafe.invariant
+//~ question: May a function make a value of a type with proof fields by `transmute`?
+//~ spec: logic.unverified.plain-rust, logic.unsafe.invariant
 //~ rfc: 0002
 
 struct Interval {
@@ -9,5 +9,5 @@ struct Interval {
 }
 
 fn backwards() -> Interval {
-    unsafe { std::mem::transmute::<[u32; 2], Interval>([5, 1]) } //~ error: `Interval` holds a proof, so checked code cannot make one from memory of another type: build it from its fields instead
+    unsafe { std::mem::transmute::<[u32; 2], Interval>([5, 1]) } //~ error: `backwards` contains an `unsafe` block, so it is unverified, and an unverified function handles no invariant type: build the `Interval` from its fields in verified code
 }

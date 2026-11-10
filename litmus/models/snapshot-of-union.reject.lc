@@ -1,0 +1,13 @@
+//~ question: Does a snapshot look into a union?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+union Bits {
+    word: u32,
+    bytes: [u8; 4],
+}
+
+fn low(b: &Bits) -> u32 {
+    let zero: @(snap(b).word == 0) = _; //~ error: a union's snapshot is opaque: logical code cannot read `word`, since which field the union holds is not part of its value
+    0
+}

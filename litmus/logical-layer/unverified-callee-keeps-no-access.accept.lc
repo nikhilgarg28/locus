@@ -1,0 +1,21 @@
+//~ question: After a function of the crate hands unverified code a raw pointer to its argument, does the caller still know the argument's place across later calls?
+//~ spec: logic.unverified.functions, logic.boundary.escape
+//~ rfc: 0002
+
+// `share` handles a raw pointer, so it is unverified. Like all unverified code
+// it is taken to be sound: it keeps no access to `n` once the borrow ends.
+fn share(n: &mut u32) {
+    let p = n as *mut u32;
+    std::hint::black_box(p);
+}
+
+fn caller() -> u32 {
+    let mut n: u32 = 1;
+    share(&mut n);
+    n = 1;
+    std::hint::black_box(());
+    let one: @(n == 1) = _;
+    n
+}
+
+//~ run: caller() => 1
