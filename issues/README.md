@@ -17,7 +17,7 @@ A file is `<name>.md`, where the name is lowercase, hyphenated words. The name i
 ## Format
 
 ```markdown
-# Runtime semantics of checked code
+# Runtime semantics of verified code
 
 - **Kind:** decision
 - **Status:** open

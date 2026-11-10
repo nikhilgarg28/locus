@@ -2,7 +2,7 @@
 //~ spec: logic.unverified.functions, logic.boundary.escape
 //~ rfc: 0002
 
-// The mark alone makes `look` unverified: Locus does not read its body.
+// The mark alone makes `look` unverified: Locus does not verify its body.
 #[unverified]
 fn look(n: &mut u32) {}
 
