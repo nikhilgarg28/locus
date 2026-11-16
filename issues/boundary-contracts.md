@@ -112,3 +112,23 @@ The owner then asked for the form to be designed, with its visibility:
 
 So this issue moves from `later` to `open`. The design has started in conversation, and nothing in it is decided.
 
+### 2026-11-16, conversation with the owner on specifications, continued
+
+The form proposed in reply was an attribute, `#[unsafe(assume(P))]`, written on a function's definition or in an `extern` block that repeats another crate's signatures. It left the function's Rust type unchanged, and put the fact in scope after the call, as an `if` puts its condition in scope. The owner asked what the return type was, and on hearing that it held no proof, decided against that:
+
+> I don't like just assuming facts in scope - prefer these to become native proofs in returns (like the way we use extern in rust - we just assume it behaves in a certain way).
+
+So an assumed postcondition is a proof in the function's result, as a verified function's is, and what is assumed is that the body honours the signature. That is form 2 above. Forms 1 and 3 as written are ruled out, since neither can put a proof in the result of a function whose Rust type is already fixed. Naming the fact that an `if` puts in scope is now [naming-facts-from-control-flow](naming-facts-from-control-flow.md).
+
+The owner then restated the goal, and proposed another way to reach it:
+
+> Let's take a step back though - the main goal we are trying to solve is to make it possible for us to use rust stdlib from within Locus in a way that we can supply chosen post conditions (and maybe pre-conditions too - we talked about it earlier but didn't pursue due to complexity). What if we just did that by having locus stdblib exporting types or even modules and somehow played with library visibility rules that ensure for instance Option or Vec by default come from the right library depending on the right context?
+
+The reply, on which nothing is decided:
+
+- **One primitive, the assumed function:** a function with a Locus signature, proof parameters and proofs in its result, whose body is plain Rust that Locus does not check, marked as `unsafe` is. Its visibility is the function's own. A precondition is a proof parameter, so preconditions need no feature of their own. A type from another crate is wrapped in a type of the program's own.
+- **Locus's library is then ordinary Locus code:** its own collection types, first as wrappers around the standard library's whose methods are assumed, later verified on permissioned pointers with the same signatures (RFC 0002, decision 75). It would replace the trusted specifications of standard functions that decision 56 kept, and the exception that lets a specified operation take exposed logical data.
+- **Rust forces the types to differ.** `v.len()` on the standard library's own `Vec` resolves to the standard library's `len`, which returns a `usize`. A method that returns a proof belongs to another type.
+- **Which `Vec` a name means is decided by Rust's own rule,** that an import shadows the prelude: `use locus::prelude::*;`. An implicit switch inside Locus code would change what valid Rust means there.
+- **What cannot be swapped:** `Option`, `Result`, slices, arrays, `Box`, integers, and ranges, which the language and every standard signature use. Those would be understood by the language itself, not by assumptions in a library.
+
