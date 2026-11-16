@@ -1,5 +1,5 @@
 //~ question: May a vector of values of an invariant type be lent mutably to unverified code?
-//~ spec: logic.boundary.payload, logic.boundary.access
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
 //~ rfc: 0002
 
 struct Interval {
@@ -9,7 +9,7 @@ struct Interval {
 }
 
 fn widths(v: &mut Vec<Interval>) -> u32 {
-    std::hint::black_box(&mut *v);
+    std::hint::black_box(&mut *v); //~ error: `Interval` has a proof field, so a `Vec<Interval>` cannot be lent to `black_box`, which Locus does not verify
     match v.first() {
         Some(iv) => {
             let ok: @(iv.lo <= iv.hi) = iv.ordered;

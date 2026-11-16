@@ -1,5 +1,5 @@
 //~ question: May a mutable reference to a shared reference to a proof holder be lent to code Locus has no specification for?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ spec: logic.boundary.plain-data
 //~ rfc: 0002
 
 fn check(n: u32) -> Option<@(n > 0)> {

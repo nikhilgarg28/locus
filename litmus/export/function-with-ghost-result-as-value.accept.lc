@@ -1,4 +1,4 @@
-//~ question: In an exported crate, may a function with a ghost result be passed as a value, as it may when the crate is built?
+//~ question: In an exported crate, may a function with a ghost result be used as a value, as it may when the crate is built?
 //~ spec: export.function-values
 //~ rfc: 0001
 //~ mode: export
@@ -7,8 +7,10 @@ fn witness(n: u32) -> @(1 + 1 === 2) {
     _
 }
 
-pub fn count(xs: &[u32]) -> usize {
-    xs.iter().copied().map(witness).count()
+pub fn count(n: u32) -> u32 {
+    let f = witness;
+    let held: @(1 + 1 === 2) = f(n);
+    n
 }
 
-//~ run: count(&[1, 2]) => 2
+//~ run: count(2) => 2

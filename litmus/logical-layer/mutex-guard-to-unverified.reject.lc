@@ -1,5 +1,5 @@
 //~ question: May a guard that gives mutable access to a proof be passed to unverified code?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ spec: logic.boundary.plain-data
 //~ rfc: 0002
 
 use std::sync::Mutex;

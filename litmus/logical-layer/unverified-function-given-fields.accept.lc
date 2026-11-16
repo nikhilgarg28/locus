@@ -1,5 +1,5 @@
 //~ question: May verified code pass the fields of an invariant type to a function that contains an `unsafe` block?
-//~ spec: logic.unverified.plain-rust
+//~ spec: logic.unverified.plain-rust, logic.boundary.plain-data, logic.unsafe.invariant
 //~ rfc: 0002
 
 struct Interval {

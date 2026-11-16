@@ -73,3 +73,7 @@ So RFC 0002's decision 56 gives unverified functions no contract, and this issue
 ### 2026-11-09, conversation with the owner about PR #24, continued
 
 The owner confirmed that an unverified function takes no type that holds logical data, at any depth (RFC 0002, decision 58), and set the direction for Locus's own library: verified collections on permissioned pointers (decision 59). The primitives under those collections are unverified code with preconditions and postconditions, so Locus's library will need a contract form before a program does.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+Two items of the plan now rest on this issue's subject: the pointer primitives of [permissioned-pointers](permissioned-pointers.md), which decision 71 of RFC 0002 makes planned work, and leaving out a check that a proof makes unnecessary ([no-panic-claims](no-panic-claims.md)). Both need a function whose signature states a contract and whose body Locus does not verify. Since decision 65 that is a third kind of function, beside verified and unverified: its signature holds logical data, which only a verified function's may, and its body contains `unsafe`, which a verified function's may not. Only Locus's library has any until this issue is decided, as its trusted specifications.

@@ -1,0 +1,21 @@
+//~ question: May a function with a plain signature, which uses a proof inside, be marked `#[verified]`?
+//~ spec: logic.unverified.functions, logic.verified.restrictions
+//~ rfc: 0002
+
+fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+// The mark changes nothing here: without it the function is verified too.
+// It says that adding `unsafe` later must be an error.
+#[verified]
+fn halve(n: u32) -> Option<u32> {
+    if n % 2 == 0 {
+        Some(halve_even(n, _))
+    } else {
+        None
+    }
+}
+
+//~ run: halve(10) => Some(5)
+//~ run: halve(7) => None

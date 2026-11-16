@@ -37,3 +37,15 @@ The owner set the direction and asked for a check of the claim behind it:
 > Also we should record in RFC that Locus's own stdlib will support permissioned pointers and build the rest of the collections (say box/vector etc) using them and hence avoiding unsafe code. We will also have access to Rust's stdlib within Locus but with no proofs. In fact, can you please verify that permission pointers is all it takes to build say box or vec without unsafe?
 
 The spike was written to check it. It ran `Box` and `Vec` with `unsafe` forbidden over a layer of eleven primitives, in a build that asserts every primitive's `requires` at run time: no assertion failed, every block was freed, and Valgrind found no error. rustc rejected a use after free, a copied permission, two mutable borrows of one slot, and a vector of `Rc` sent to another thread. It also rejected a `drop` that gives its permission away and an `into_inner` that takes the box apart, which is where questions 2 and 5 come from. Miri could not be installed, so Rust's aliasing rules were not tested. No proof was involved: the spike shows that the Rust can be written, not that Locus can verify it.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The owner moved this from a direction to planned work:
+
+> I agree that permissioned pointers are a good idea worth bringing forward.
+
+RFC 0002's decision 71 records it. Three points from the conversation bear on the questions above:
+
+- **Question 1 has a direction.** A permission is not a new kind of ghost value. In the owner's words it is "a private ZST with logical data inside": a runtime struct that is not `Copy`, so that rustc keeps it to one holder, that logical code can read, and that only the trusted primitives construct (RFC 0002, decision 69). Since decision 61 it stays within verified code like every value that holds logical data.
+- **Allocation that can fail.** The collections should offer forms that return an error when allocation fails, from the start, and the primitives should stay sound if an allocator unwinds: with values that are valid at every point (decision 66), an unwind leaks memory and nothing worse. Rust 1.100 requires allocators not to unwind because the assumption that they do not had become a pervasive source of unsoundness.
+- **Why it is worth the work.** "Memory Safety Bugs in Rust Standard Library" (Microsoft FORGE Lab, 2026) reports soundness bugs under the safe interfaces of `std`, reached from safe code. Locus's trusted specifications of `std` inherit such bugs; verified collections would not have the first two kinds it describes. The contracts on the primitives are also what a proof needs in order to leave out a bounds check ([no-panic-claims](no-panic-claims.md)).

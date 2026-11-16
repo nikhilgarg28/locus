@@ -1,5 +1,5 @@
 //~ question: May a mutable iterator over values holding proofs be passed to unverified code?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ spec: logic.boundary.plain-data
 //~ rfc: 0002
 
 fn keep(n: u32) -> usize {

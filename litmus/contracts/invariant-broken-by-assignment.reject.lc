@@ -9,5 +9,5 @@ struct Interval {
 }
 
 fn shift(iv: &mut Interval) {
-    iv.lo = 10; //~ error: cannot prove the proof field `ordered` for the new value of `lo`: `10 <= hi` is not known
+    iv.lo = 10; //~ error: `lo` is read by the proof field `ordered`, so it is not assigned in place; replace the whole `Interval`, which needs a proof that `10 <= hi`
 }

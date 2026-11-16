@@ -1,5 +1,5 @@
 //~ question: May a shared cell holding a proof be converted to a trait object that hides it?
-//~ spec: logic.boundary.writes
+//~ spec: logic.boundary.logical-data
 //~ rfc: 0002
 
 use std::any::Any;

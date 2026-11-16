@@ -9,5 +9,5 @@ struct Interval {
 }
 
 fn low(iv: &mut Interval) -> &mut u32 {
-    &mut iv.lo //~ error: `lo` is read by the proof field `ordered`, so it cannot be mutably borrowed; assign it instead
+    &mut iv.lo //~ error: `lo` is read by the proof field `ordered`, so it cannot be mutably borrowed; replace the whole `Interval`
 }

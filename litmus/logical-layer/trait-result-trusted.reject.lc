@@ -1,0 +1,18 @@
+//~ question: Does verified code know that a trait method's result has a property that only the trait's documentation promises?
+//~ spec: contracts.calls.unrelated, logic.boundary.escape
+//~ rfc: 0002
+
+trait OneByte {
+    /// Returns an ASCII byte.
+    fn byte(&self) -> u8;
+}
+
+fn ascii(b: u8, small: @(b < 128)) -> u8 {
+    b
+}
+
+// An implementation can return any `u8`, whatever the documentation says.
+fn first<P: OneByte>(p: &P) -> u8 {
+    let b = p.byte();
+    ascii(b, _) //~ error: cannot prove `b < 128`: `byte` states no contract, so `b` is known only to be a `u8`
+}

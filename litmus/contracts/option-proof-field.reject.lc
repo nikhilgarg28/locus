@@ -8,5 +8,5 @@ struct Cache {
 }
 
 fn clear(c: &mut Cache) {
-    c.x = 0; //~ error: cannot prove the proof field `nonzero` for the new value of `x`: it may hold a proof that `x != 0`
+    c.x = 0; //~ error: `x` is read by the proof field `nonzero`, which may hold a proof that `x != 0`, so it is not assigned in place; replace the whole `Cache`
 }

@@ -1,5 +1,5 @@
 //~ question: May a `Cell` hold a value of a type with an invariant, and is the invariant believed for what comes out?
-//~ spec: logic.ghost.interior-mutability, logic.boundary.payload
+//~ spec: logic.ghost.interior-mutability, logic.boundary.plain-data
 //~ rfc: 0002
 
 use std::cell::Cell;

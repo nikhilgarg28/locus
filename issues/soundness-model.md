@@ -3,7 +3,7 @@
 - **Kind:** design
 - **Status:** open
 - **Blocks:** Treating RFC 0002's rules as settled; the RFC for the runtime semantics, which defines the translation this model is about
-- **Rules:** `logic.boundary.escape`, `logic.unverified.plain-rust`, `logic.ghost.type-identity`, `logic.ghost.interior-mutability`, `contracts.final`, `models.snapshots.opaque`
+- **Rules:** `logic.boundary.plain-data`, `logic.boundary.escape`, `logic.unverified.plain-rust`, `logic.ghost.type-identity`, `logic.ghost.interior-mutability`, `contracts.final`, `contracts.invariants.assignment`, `models.snapshots.opaque`
 
 ## Scope
 
@@ -44,3 +44,15 @@ The owner asked whether the approach to `unsafe` code itself needed to change, a
 ### 2026-11-09, conversation with the owner about PR #24, continued
 
 Of the two proposals in the entry above, the owner confirmed the first and widened it: an unverified function takes no type that holds logical data at any depth, completable or not (RFC 0002, decision 58). The second, about crates that are not named, is still for the owner. Decision 59 adds a later part to this model: permissions, which are ghost values that are not `Copy`, and the argument that a layer of pointer primitives is sound ([permissioned-pointers](permissioned-pointers.md)).
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The owner asked for a boundary whose rule is short enough to hold in mind, and RFC 0002's decisions 61 to 67 give one. What the model has to cover on this side is now:
+
+- **One invariant at the boundary** (question 2): after instantiation, no unverified code has a value, a type argument, a capture, or a callee whose type holds logical data, except through a specified library operation. Completability, the three kinds of protected value, and the analysis of write access are gone, so the model no longer has to justify them. It has to show that the invariant is preserved, and that checking it for each instantiation is enough.
+- **Values that are valid at every point** (questions 1 and 5): a field that a proof reads never changes in place, and there is no `open!`. A struct with proof fields is a dependent record, and the model need say nothing about unwinding through a broken value.
+- **Two assumptions fewer.** `assumed.unsafe.invariants` is removed, since no `unsafe` code outside specified library operations holds a value with an invariant.
+
+The conversation also listed the ways a boundary can fail, as classes to attack it with before its representation is fixed: fabricating evidence, duplicating a resource, invalidating a fact through a hidden alias, re-entering during an update, and leaving by a panic or a forgotten guard. The cases from "Memory Safety Bugs in Rust Standard Library" (Microsoft FORGE Lab, 2026) are examples of the second and fifth kinds, and are now in `litmus/`.
+
+Two holes found in the same conversation, both closed by the rules as now written: a verified generic function that passes its own type parameter to unverified generic code (`logical-layer/generic-parameter-reaches-unverified.reject.lc`), and a crate that Locus does not verify calling a public function that takes a proof (decision 68).

@@ -1,0 +1,27 @@
+//~ question: May an unverified function call a verified function whose signature holds no logical data?
+//~ spec: logic.boundary.plain-data
+//~ rfc: 0002
+
+fn halve_even(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+// Verified, with a plain signature: it establishes the proof it needs by checking.
+fn halve(n: u32) -> Option<u32> {
+    if n % 2 == 0 {
+        Some(halve_even(n, _))
+    } else {
+        None
+    }
+}
+
+#[unverified]
+fn half_or_zero(n: u32) -> u32 {
+    match halve(n) {
+        Some(h) => h,
+        None => 0,
+    }
+}
+
+//~ run: half_or_zero(10) => 5
+//~ run: half_or_zero(7) => 0

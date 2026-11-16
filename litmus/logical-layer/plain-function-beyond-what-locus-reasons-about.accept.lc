@@ -1,0 +1,11 @@
+//~ question: Is a function with no logical data accepted when it uses Rust that Locus cannot reason about yet?
+//~ spec: logic.verified.restrictions, logic.boundary.logical-data
+//~ rfc: 0002
+
+// Verified by default, with nothing to prove: no proof, no logical data, no invariant.
+fn total(xs: &[u32]) -> u32 {
+    let add: Box<dyn Fn(u32, u32) -> u32> = Box::new(|a, b| a + b);
+    xs.iter().fold(0, |acc, x| add(acc, *x))
+}
+
+//~ run: total(&[1, 2, 3]) => 6

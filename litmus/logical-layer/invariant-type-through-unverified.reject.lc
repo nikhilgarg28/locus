@@ -1,0 +1,15 @@
+//~ question: May a value of a type with a proof field pass through unverified generic code?
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn width(iv: Interval) -> u32 {
+    let back = std::hint::black_box(iv); //~ error: `Interval` has a proof field, so a value of it cannot be given to `black_box`, which Locus does not verify
+    let ok: @(back.lo <= back.hi) = back.ordered;
+    back.hi - back.lo
+}

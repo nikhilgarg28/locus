@@ -3,7 +3,7 @@
 //~ rfc: 0002
 //~ mode: export
 
-pub struct Interval {
+pub struct Interval { //~ error: `Interval` is reachable from other crates and has the proof field `ordered`, so it cannot be exported; declare it `pub(locus)`, and export functions that take and return plain data
     lo: u32,
     hi: u32,
     ordered: @(lo <= hi),

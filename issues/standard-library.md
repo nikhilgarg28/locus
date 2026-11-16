@@ -9,9 +9,8 @@
 What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)). This covers:
 
 - **Logical types:** `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and characters and strings.
-- **Rules:** `logic.boundary.unverified`, `logic.boundary.access`
+- **Rules:** `logic.boundary.unverified`, `logic.boundary.plain-data`
   - Each is defined from `Int` and inductive types, the core RFC 0002 builds on. Any native acceleration has a stated correspondence (vision, commitment 5).
-  - Which of them the library declares **completable**, the conservative judgment RFC 0002 uses at the boundary with unverified code. `Nat`, `Bool`, and `Seq<T>` for a completable `T` are the minimum.
   - Their positivity in each type argument: `Seq` and `Maybe` are positive, and a set, as a predicate, is not.
   - Indexing of sequences: the index type, what an out-of-range index means, and the bounds proof needed when elements might not exist.
   - `div_euclid` and `rem_euclid` on `Int`.
@@ -21,7 +20,7 @@ What Locus's library provides on top of the language core in RFC 0002 (`design/r
   - A type with no model of its own has its opaque identity, `Opaque<T>`. `Cell`, `RefCell`, `Mutex`, and the atomics have nothing else, and `()` needs nothing else.
 - **Specifications of standard functions:** what `Vec::push`, `len`, indexing, `vec!`, and the others do to models and to the logical values a container holds. These are assumed specifications, listed by the audit. They include:
   - that the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents;
-  - the library's list of **types writable through a shared handle**, which must be complete: `Cell`, `RefCell`, `Mutex`, `RwLock`, `OnceCell`, `OnceLock`, the sending halves of channels, and anything else through which one holder writes what another reads.
+  - **which operations may be given logical data.** Since RFC 0002's decision 61, a standard library operation takes a value that holds logical data only when it has a specification that says what becomes of that data. RFC 0002's examples assume one for `Option`, `Result`, `Box`, `Rc`, `Arc`, `Vec`, arrays, slices, their iterators, channels, and the methods of `Cell`, `RefCell`, and `Mutex`. The list, and each specification, is this issue's. Operations that the language itself reaches for come first: `?`, `for`, `==` on values that hold proofs, `clone`, and dropping a container of proofs.
 - **Lemmas** about the logical types.
 
 ## Direction
@@ -76,3 +75,9 @@ RFC 0002's decision 56 leaves Locus's library as the only place that states spec
 ### 2026-11-09, conversation with the owner about PR #24, continued
 
 The owner set the direction that decision 59 records, quoted in [permissioned-pointers](permissioned-pointers.md). It adds questions for this issue's RFC: which standard types Locus's library replaces with its own, what `Vec` names in a `.lc` file, how a Locus collection meets a Rust crate that expects the standard one, and what happens to RFC 0002's examples, which use Rust's `Vec` and `Option` under trusted specifications until then.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+RFC 0002's decision 61 replaces the analysis of what access each standard type grants with one rule: unverified code handles only plain data, and a library operation is given logical data only when Locus's library specifies it. So this issue no longer owns a list of completable types, or a list of types writable through a shared handle. It owns the list of operations that have a specification, and each specification must say what becomes of the logical data the operation is given, which is more than what the operation does to Rust values.
+
+A specification of a generic operation must hold for every implementation a caller can supply. `sort` gives a sorted slice only when `Ord` is a total order, so the specification asks for that as a proof and does not assume it. The cases in "Memory Safety Bugs in Rust Standard Library" (Microsoft FORGE Lab, 2026) are of this kind, and three of them are now litmus examples: `contracts/same-call-twice`, `contracts/built-before-filled`, and `logical-layer/trait-result-trusted`.

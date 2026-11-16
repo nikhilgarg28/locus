@@ -90,11 +90,7 @@ Option 1 can be followed by option 2 for single specified calls, as a way to lea
 
 ## Example
 
-Decided as option 1 gives them, citing `contracts.invariants.open`:
-- [`contracts/invariant-opened-for-push.accept.lc`](../litmus/contracts/invariant-opened-for-push.accept.lc): the `push` above.
-- [`contracts/invariant-opened-two-fields.accept.lc`](../litmus/contracts/invariant-opened-two-fields.accept.lc): a count and a vector that an invariant relates.
-- [`contracts/invariant-opened-not-restored.reject.lc`](../litmus/contracts/invariant-opened-not-restored.reject.lc): a block that ends with the invariant broken.
-- [`contracts/invariant-opened-used-whole.reject.lc`](../litmus/contracts/invariant-opened-used-whole.reject.lc), [`invariant-opened-proof-read.reject.lc`](../litmus/contracts/invariant-opened-proof-read.reject.lc), and [`invariant-opened-left-early.reject.lc`](../litmus/contracts/invariant-opened-left-early.reject.lc): what a block may not do.
+RFC 0002's decision 67 withdrew the `open!` block, and with it the six examples that option 1 had decided. What stands today is option 3: [`contracts/invariant-field-borrowed.reject.lc`](../litmus/contracts/invariant-field-borrowed.reject.lc) and [`contracts/invariant-field-assigned.reject.lc`](../litmus/contracts/invariant-field-assigned.reject.lc) reject a change in place, and [`contracts/invariant-replaced-whole.accept.lc`](../litmus/contracts/invariant-replaced-whole.accept.lc) replaces the value.
 
 ## Log
 
@@ -109,3 +105,15 @@ Asked whether a panic inside the block may abort, the owner answered:
 > Open block is fine
 
 RFC 0002 proposes option 1 as its decision 51, with the rule `contracts.invariants.open`, and the vision's commitment 2 names the abort. The three open examples are decided, and three rejected ones are added. The litmus format cannot yet expect an abort, so no example shows that a panic in a block aborts. This issue stays open until RFC 0002 is accepted. Left for later, and recorded in the RFC: leaving the guard out where a block cannot unwind, and option 2 for single specified calls.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The owner withdrew option 1 for now, and went further than option 3 as it stood:
+
+> No `open!` initially. We will not support temporarily breaking an invariant while retaining the object's certified identity.
+
+RFC 0002's decisions 66 and 67 record it. A field that a proof reads is never assigned and never mutably borrowed; a value changes by being replaced whole, or by being taken apart and built again. So a value with an invariant is valid at every point of the program, no rule about unwinding is needed, and the vision's commitment 2 loses the exception that option 1 had added. The rule `contracts.invariants.open` and its six examples are removed.
+
+What this costs is the reason the issue stays open: a method that takes `&mut self` cannot change a field that a proof reads, when the field is not `Copy`, without cloning it or putting a placeholder in its place, because Rust does not let a field be moved out of `*self`. Such types offer methods that take the value and return it.
+
+One shape for bringing changes in place back, noted in the same conversation: a block that takes the value out of a `&mut`, builds it again, and puts it back, aborting if a panic would unwind in between. It is option 1's guard with a different reading: nothing is ever in a broken state, because inside the block the function owns the parts by value.

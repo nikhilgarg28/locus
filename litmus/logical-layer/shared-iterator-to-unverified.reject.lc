@@ -1,0 +1,9 @@
+//~ question: May a shared iterator over values holding proofs be passed to unverified code?
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
+//~ rfc: 0002
+
+fn count(n: u32) -> usize {
+    let found: Vec<Option<@(n > 0)>> = Vec::new();
+    std::hint::black_box(found.iter()); //~ error: the iterator yields references to values that hold proofs, so it cannot be passed to `black_box`, which Locus does not verify
+    found.len()
+}

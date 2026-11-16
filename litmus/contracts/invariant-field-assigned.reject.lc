@@ -9,5 +9,5 @@ struct Interval {
 }
 
 fn widen(iv: &mut Interval) {
-    iv.lo = 0;
+    iv.lo = 0; //~ error: `lo` is read by the proof field `ordered`, so it is not assigned in place; replace the whole `Interval`
 }

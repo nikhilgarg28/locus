@@ -1,4 +1,4 @@
-//~ question: May a field holding proofs be assigned when the proof field that reads it holds for the new value?
+//~ question: May a field holding proofs be assigned when another proof field reads it?
 //~ spec: contracts.invariants.assignment, contracts.invariants.proof-holders
 //~ rfc: 0002
 
@@ -9,5 +9,5 @@ struct Hints {
 
 fn reset(s: &mut Hints) {
     let trivial: @True = True::Intro;
-    s.hints = vec![trivial];
+    s.hints = vec![trivial]; //~ error: `hints` is read by the proof field `nonempty`, so it is not assigned in place; replace the whole `Hints`
 }

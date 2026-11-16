@@ -10,6 +10,6 @@ struct Cache {
 fn forge(c: &mut Cache, nonzero: @(c.x != 0)) {
     c.hint = None;
     let h = &mut c.hint; //~ error: `hint` is a proof field, so it cannot be mutably borrowed; assign it instead
-    c.x = 0;
+    c.x = 0; //~ error: `x` is read by the proof field `hint`, so it is not assigned in place
     *h = Some(nonzero);
 }

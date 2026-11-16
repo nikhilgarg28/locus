@@ -34,3 +34,13 @@ Moved into the repository from [GitHub issue #15](https://github.com/nikhilgarg2
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+Two things the owner said about this RFC's subject, for when it is drafted:
+
+> I do want proofs as local variables. To me a more interesting question is [...] what's the grammar for defining proofs and what are its atoms? Basically, what is the equivalent of lean tactics here? I'd really like it to feel regular Rust code too - definitely something to design later.
+
+And `===` is "the only thing which kernel could use for rewriting/checking" (RFC 0002, decision 70).
+
+A benchmark for the design, from a discussion of panic-freedom among Rust users, is [`contracts/loop-over-stepped-range.open.lc`](../litmus/contracts/loop-over-stepped-range.open.lc): a loop over `(0..buf.len()).step_by(2)` that indexes `buf`. It is plainly in bounds and was offered as tedious to prove so. It needs a specification of what `step_by` yields and a fact carried through the loop. The same discussion asked that proofs that tools find be kept apart from the code people read, which is what a hole and a stored proof already do. WUFFS, which proves bounds and overflow safety with a few named proof steps and no runtime checks, is prior art for a small proof language.

@@ -8,5 +8,5 @@ struct Hints {
 }
 
 fn clear(s: &mut Hints) {
-    s.hints.clear(); //~ error: `hints` holds proofs and is read by the proof field `nonempty`, so it cannot be mutably borrowed; assign it instead
+    s.hints.clear(); //~ error: `hints` holds proofs and is read by the proof field `nonempty`, so it cannot be mutably borrowed; replace the whole `Hints`
 }
