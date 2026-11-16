@@ -1,7 +1,7 @@
 # Contracts at the boundary with unverified code
 
 - **Kind:** design
-- **Status:** later
+- **Status:** open
 - **Blocks:** Using a proof to remove a runtime check; taking a fact from a Rust crate that no runtime check can test; specifications of crates other than the standard library
 - **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`
 
@@ -18,6 +18,8 @@ This issue is the design of contracts for unverified functions and for functions
 
 - **Assuming is unsafe.** Once a proof can justify an `unsafe` operation, a false assumption in safe code could cause undefined behavior, which safe Locus must never do (vision, commitment 9). So whatever states an assumption is marked as `unsafe` is, and every result lists the assumptions it relies on. An `assume!(P)` in verified code was rejected for this reason.
 - **An unverified body stays plain Rust.** Whatever form a contract takes, the body states and proves nothing.
+- **One form, for programs as for Locus's library, which says that it is assumed** (RFC 0002, decision 78).
+- **Postconditions only** (RFC 0002, decision 79). A specification obliges no caller, so question 2 below no longer arises, and the first gap under Scope stays until other work closes it.
 
 ## Forms considered
 
@@ -95,3 +97,18 @@ The proposal had left them out, on the ground that a safe function accepts every
 - **A safe function that Rust code already calls,** such as the standard library's. A precondition there can oblige nobody. Callers that Locus does not verify prove nothing, and Rust code such as `v[i]` sits in functions that are verified with nothing to prove (RFC 0002, decision 65), so it would stop compiling, against the vision's first commitment. What reads as the precondition of such a function is its panic condition: "panics only when `i >= len`". A specification can state that, and Locus would hold a caller to it exactly where the caller claims `#[no(panic)]` ([no-panic-claims](no-panic-claims.md)).
 - **An `unsafe fn`.** Its precondition is its safety contract, which every caller already promises by writing `unsafe`. A specification should state it, and a verified caller would prove it. This is what lets a proof remove a check, the first gap under Scope above. It needs a change to decision 65, under which verified code calls no `unsafe fn`, and a place at the call to write the proof.
 - **A program's own function that only verified code can reach.** Its precondition is a proof parameter, as for every verified function, and no clause is needed. If its body is unverified, the mark that says "assumed" is what lets it keep that signature: this is the third kind of function that the previous entry describes.
+
+### 2026-11-16, conversation with the owner on specifications
+
+On the proposal above, which allowed a precondition in two of its three cases, the owner decided against preconditions:
+
+> I'm okay with no preconditions - let's keep it simple like that.
+
+RFC 0002's decision 79 records it. A specification states what is assumed of a function's result, and obliges no caller. So verified code still calls no `unsafe fn`, and a proof cannot yet justify skipping a check. Stating when a safe function panics, which `#[no(panic)]` will need, was part of the same proposal, and is left to [no-panic-claims](no-panic-claims.md).
+
+The owner then asked for the form to be designed, with its visibility:
+
+> But I do want to iterate on the syntax for specifying these assumed post conditions + figure out visibility rules. Can I take a crate, add assumed post conditions and after that, who all sees those post conditions? Only in that crate or outside? Can I rename the type while doing so?
+
+So this issue moves from `later` to `open`. The design has started in conversation, and nothing in it is decided.
+
