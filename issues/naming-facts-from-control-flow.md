@@ -36,3 +36,15 @@ This fits a preference the owner stated in the same conversation, that a fact sh
 Raised by the owner while discussing how an assumed postcondition reaches its caller. The reply had compared a fact left in scope by a call with the fact that an `if` leaves in scope, and noted that neither can be named without restating its proposition. The owner asked for a note, to be taken up later:
 
 > Can you please take a note to do this, maybe bit later?
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+In the order of the questions above:
+1. **Spelling:** the owner's `if h: x < 0 { ... }`. In an expression, Rust accepts no `name:` before a condition, so it is not valid Rust today, and it reads as a `let` with a type does.
+2. **`else`** binds the same name to the negation: in `if h: c { A } else { B }`, `h` proves `c` in `A` and `!c` in `B`. One name, as in Lean. A chain of `else if` gives each branch its own name, and the earlier names stay in scope as negations.
+3. **Constructs,** in the order to add them: `if` and `else if`; `while h: c`, with `h` in the body; `match` guards, `Some(x) if h: x > 0 =>`; then `if let` and `let else`, where the fact is that the value has the pattern's shape, written `if let Some(x) = opt @ h`; and last `&&` and `||`. What holds after a loop is the loop's invariant and the negated condition, and belongs to the runtime semantics.
+4. **Which conditions:** those built from the operations that the language defines. A condition that calls a function binds the call first.
+5. **An unnamed condition still gives `_` its fact.** Otherwise every existing example would need a name. Naming is for when a person or a proof needs to refer to it.
+6. **Tracked evidence** stays with the runtime semantics.

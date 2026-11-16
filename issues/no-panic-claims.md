@@ -52,3 +52,17 @@ Raised after reading a discussion among Rust users of "Memory Safety Bugs in Rus
 > Should we have '#[no(panic)]' or some macro like that on methods which the compiler will complain about unless it can be proven? I initially thought about having full effect system but that feels like an overkill when all we need is panic guarantees.
 
 and then decided: "Yes to #no(panic) in plan". The questions above are what was said in reply, and none is decided. On how hard the claim is to prove: it is undecidable in general, which does not matter for a claim that a function opts into; it suits self-contained code such as parsers, drivers, and cryptography, and is not a sensible default.
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+In the order of the questions above:
+1. **A panic** is anything that unwinds or aborts through Rust's panic machinery: an explicit `panic!`, a failed index, overflow where it is checked, `unwrap` on `None`. A call of `process::exit`, a stack overflow, and running out of memory are not; a collection's methods that can fail to allocate offer a fallible form.
+2. **Each obligation is a proof like any other.** `_` finds it where it can, silently; where it cannot, the operation is an error, and the program writes the proof or a check. No new way to prove anything.
+3. **A call** is allowed when the callee carries the claim, or is one of the operations the language defines, whose panic condition the language knows. Since RFC 0002's decision 80 there are no specifications, so a standard function without the claim is wrapped, or checked before the call.
+4. **Generic code, closures, and trait methods** wait for contracts on trait methods ([traits-on-logical-types](traits-on-logical-types.md)). Until then a `#[no(panic)]` function calls none through a type parameter.
+5. **Leaving out the check** waits for [permissioned-pointers](permissioned-pointers.md).
+6. **The spelling** `#[no(panic)]`, and `#[no(diverge)]` for termination, so that the two claims read as one family.
+
+The open example [`contracts/loop-over-stepped-range.open.lc`](../litmus/contracts/loop-over-stepped-range.open.lc) is decided by questions 2 and 3.

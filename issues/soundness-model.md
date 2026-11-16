@@ -71,3 +71,10 @@ What the model has to show for a sealed type:
 RFC 0002's decision 76 adds loans, and with them two more things for the model to show:
 - that a value lent by shared reference is unchanged when the loan ends, when all of its logical data lies in the structural part of its snapshot. This is `models.frozen-data` again, for unverified code that holds the reference;
 - that nothing logical comes back. No operation open to verified code turns a type that exposes no logical data into one that does, other than building the value from proofs. A marker that unverified code copied out of a loan, and kept behind `dyn Any` or in a static, is then inert. The same fact keeps a `Box<dyn Any>` from any source harmless, so it is worth stating once, as the property the whole boundary rests on.
+
+### 2026-11-16, conversation with the owner on reaching the standard library
+
+RFC 0002's decisions 80 to 83 change what the model has to cover:
+- **Assumptions.** `unsafe assume!(P)` is an axiom at one place. The model should say that a result holds given the assumptions it lists, and that an assumption changes nothing else: the function stays verified, and no rule at the boundary is waived.
+- **No specifications.** Every call of the standard library is a call of unknown code. The operations that the language defines on Rust's built-in types take their place, and their meaning belongs to the runtime semantics.
+- **The library's wrapper types** are trusted to give back the values they were given, at the types they were given them (`trusted.library`). That is the property that the specifications of `Vec::push` and `Cell::set` used to state one function at a time.

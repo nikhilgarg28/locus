@@ -2,8 +2,8 @@
 
 - **Kind:** design
 - **Status:** open
-- **Blocks:** Using a proof to remove a runtime check; taking a fact from a Rust crate that no runtime check can test; specifications of crates other than the standard library
-- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`
+- **Blocks:** Using a proof to remove a runtime check
+- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `proofs.assume`
 
 ## Scope
 
@@ -19,7 +19,8 @@ This issue is the design of contracts for unverified functions and for functions
 - **Assuming is unsafe.** Once a proof can justify an `unsafe` operation, a false assumption in safe code could cause undefined behavior, which safe Locus must never do (vision, commitment 9). So whatever states an assumption is marked as `unsafe` is, and every result lists the assumptions it relies on. An `assume!(P)` in verified code was rejected for this reason.
 - **An unverified body stays plain Rust.** Whatever form a contract takes, the body states and proves nothing.
 - **One form, for programs as for Locus's library, which says that it is assumed** (RFC 0002, decision 78).
-- **Postconditions only** (RFC 0002, decision 79). A specification obliges no caller, so question 2 below no longer arises, and the first gap under Scope stays until other work closes it.
+- **A contract is a signature, and a program assumes with `unsafe assume!(_)`** (RFC 0002, decision 80, which replaces decisions 78 and 79). A function of the program's own wraps the code that Locus does not verify. Its proof parameters are its preconditions, the proofs in its result are its postconditions, and where its body cannot prove one it assumes it. So questions 1, 2, 3, and 5 below are answered: the form is a proof constructor marked `unsafe`; a precondition binds the callers of the wrapper, which are verified code; a postcondition is a proof value; and each result lists its assumptions. The second gap under Scope is closed.
+- **What is left** is the first gap: a proof cannot yet justify skipping a check, because a verified function contains no `unsafe` code. That, and questions 4 and 6, now rest on [permissioned-pointers](permissioned-pointers.md).
 
 ## Forms considered
 
@@ -132,3 +133,12 @@ The reply, on which nothing is decided:
 - **Which `Vec` a name means is decided by Rust's own rule,** that an import shadows the prelude: `use locus::prelude::*;`. An implicit switch inside Locus code would change what valid Rust means there.
 - **What cannot be swapped:** `Option`, `Result`, slices, arrays, `Box`, integers, and ranges, which the language and every standard signature use. Those would be understood by the language itself, not by assumptions in a library.
 
+### 2026-11-16, conversation with the owner on specifications, concluded
+
+The owner accepted the proposal of the previous entry, with one change of his own: the assumption is a constructor of proofs, not a mark on a function.
+
+> why put unsafe assume as function decorator vs using 'unsafe assume!(_)' as the constructor for constructing the proof which can then be used anywhere, even in internal body of functions?
+
+RFC 0002's decisions 80 to 83 record the result, and the text above the log is brought up to date. Two of the owner's questions are written into RFC 0002 as proposed and are still for the owner: whether a function that assumes a fact stays verified (proposed: yes), and whether the form is `unsafe assume!` or `assume!` alone (proposed: with `unsafe`).
+
+This issue stays open for what a constructor of proofs cannot do: let `unsafe` code sit behind a proof parameter. The other thing it cannot do, hand logical data to unverified generic code, is trusted in Locus's own library alone (decision 83).

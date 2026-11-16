@@ -63,3 +63,15 @@ RFC 0002 now states the reading that this RFC must define precisely ([What a che
 ### 2026-11-09, conversation with the owner about PR #24
 
 RFC 0002's decision 54 makes a function verified whole or not at all: one that contains `unsafe` code or handles a raw pointer is unverified. So this RFC translates only functions with no `unsafe` code and no raw pointers, and treats every unverified function as an unknown function of its Rust type. A verified function's summary records only what it may write; escape, and the assumption about Rust's aliasing rules, are gone. The words are now verified and unverified, where earlier entries of this log say checked and unchecked.
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+Stated as semantics only; which of rustc's representations Locus reads is an implementation choice that the owner has set aside for now.
+- **The reading:** a verified function is a pure function of values, as RFC 0002 says, with each place given a new version at each write, in the manner of Aeneas. A `&mut` parameter is a value in and a value out, which `final!` names.
+- **The first slice:** straight-line code, `if` and `match`, calls of verified functions, and `&mut` parameters. No loops. This is enough for every accepted example that has no loop.
+- **Loops** need an invariant: a proposition that holds on entry and that each iteration keeps. It is carried as tracked evidence, a `let mut h: @P` that the loop body re-establishes, so that a loop adds no new kind of annotation.
+- **Overflow:** an arithmetic operation means the same operation on the models when it does not overflow. A proof that uses its result needs a proof that it did not, in every build profile; where the result is not used in a proof, nothing is owed, so Rust code compiles unchanged.
+- **Panics and drops:** a panic proves nothing, and since a value with an invariant is valid at every point (RFC 0002, decision 67), unwinding needs no rule of its own. A drop is a call.
+- **What the language defines** on Rust's built-in types (RFC 0002, decision 82) is listed and given its meaning here.

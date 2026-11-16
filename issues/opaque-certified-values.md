@@ -2,7 +2,7 @@
 
 - **Kind:** design
 - **Status:** later
-- **Blocks:** Giving a proof holder to generic code without a specification; a derive of another crate on a type with a logical field
+- **Blocks:** Giving a proof holder to generic code that Locus does not verify; a derive of another crate on a type with a logical field
 - **Rules:** `logic.boundary.plain-data`, `logic.boundary.loans`, `logic.boundary.logical-data`, `export.invariants-closed`
 
 ## Scope
@@ -16,7 +16,7 @@ This issue records what stays awkward after both, so that it is not forgotten.
 
 What is still rejected, each with an example where there is one:
 - a derive of another crate that hands every field to a trait of its own, such as `serde::Serialize`, unless the logical fields are skipped, since a marker implements only the standard traits;
-- exposed logical data given by value or by `&mut` to code without a specification ([`logical-layer/option-through-black-box.reject.lc`](../litmus/logical-layer/option-through-black-box.reject.lc)), or lent to code that hands the reference back ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc));
+- exposed logical data given by value or by `&mut` to code that Locus does not verify, the standard library's included ([`logical-layer/option-through-black-box.reject.lc`](../litmus/logical-layer/option-through-black-box.reject.lc)), or lent to code that hands the reference back ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc));
 - a loan of logical data inside a cell ([`logical-layer/proof-cell-formatted.reject.lc`](../litmus/logical-layer/proof-cell-formatted.reject.lc)), or of a function that takes a proof ([`logical-layer/proof-function-lent-by-reference.reject.lc`](../litmus/logical-layer/proof-function-lent-by-reference.reject.lc));
 - a proof about a value that the type does not hold, which cannot be sealed: `(i: usize, @(i < xs.len()))` exposes its proof unless a struct holds `xs` too;
 - an enum with a proof field shown to unverified crates, since Rust makes its fields public;
@@ -58,3 +58,7 @@ and agreed to the further relaxation that this issue had recorded. RFC 0002's de
 A proof field prints as `Erased`, the marker's name, as RFC 0001 had already noted when it kept logical fields as marker fields.
 
 The owner also agreed to leave the boundary at signatures (decision 77): Locus does not follow a type parameter through the generic bodies of other crates, the standard library's included.
+
+### 2026-11-16, conversation with the owner on reaching the standard library
+
+RFC 0002's decisions 80 to 83 end the specifications of standard functions. So the one code that may be given exposed logical data, apart from a loan, is Locus's own library, and "without a specification" above now reads "that Locus does not verify". The standard library's `Option::take` on an `Option<@P>` joins the list of what is rejected ([`logical-layer/lend-proof-holder-to-specified.reject.lc`](../litmus/logical-layer/lend-proof-holder-to-specified.reject.lc)); `match` does the same work ([`logical-layer/proof-holder-taken-apart.accept.lc`](../litmus/logical-layer/proof-holder-taken-apart.accept.lc)).
