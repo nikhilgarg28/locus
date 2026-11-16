@@ -2,6 +2,8 @@
 //~ spec: contracts.invariants.assignment, contracts.invariants.proof-holders
 //~ rfc: 0002
 
+use locus::std::prelude::*;
+
 struct Hints {
     hints: Vec<@True>,
     nonempty: @(hints.len() > 0),

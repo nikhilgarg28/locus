@@ -2,7 +2,7 @@
 //~ spec: logic.boundary.calls
 //~ rfc: 0002
 
-use std::cell::Cell;
+use locus::std::cell::Cell;
 
 fn keep(slot: &Cell<Option<@(1 == 2)>>) {
     let set = |v: Option<@(1 == 2)>| slot.set(v);

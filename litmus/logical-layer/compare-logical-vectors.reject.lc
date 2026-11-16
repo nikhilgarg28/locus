@@ -2,6 +2,8 @@
 //~ spec: logic.ghost.marker-traits
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn same(a: &Vec<Nat>, b: &Vec<Nat>) -> bool {
     a == b //~ error: `Vec<Nat>` cannot be compared at run time: logical values have no runtime value to compare
 }

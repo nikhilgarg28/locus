@@ -2,6 +2,8 @@
 //~ spec: models.derived
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 #[derive(Model)]
 struct Checked {
     indices: Vec<(i: usize, @(i < 10))>,

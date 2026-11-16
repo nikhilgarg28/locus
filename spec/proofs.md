@@ -25,3 +25,6 @@ A match on a proof produces a proof. A witness inside a proof never becomes a lo
 
 r[proofs.partial]
 A proof that a runtime function returns needs to hold only when the function returns. A runtime function that never returns needs no proof of its result.
+
+r[proofs.assume]
+`unsafe assume!(P)` is a proof of `P` that is taken on trust, and `unsafe assume!(_)` is one of the proposition that its position requires. It is the only way a program takes a fact that it does not prove. It is written where a proof is expected, in verified code, and nowhere else: an unverified function holds no logical code ([`logic.unverified.plain-rust`](logical-layer.md#unverified-functions-and-unsafe-code)). It performs no operation and is not an `unsafe` block, so a function that contains it stays verified, and everything else in that function is checked as before. An assumption allows nothing that a proof would not: a verified function still contains no `unsafe` code ([`logic.verified.restrictions`](logical-layer.md#unverified-functions-and-unsafe-code)), and no exposed logical data reaches unverified code because of one. Every result lists the assumptions it relies on, in whichever crate they are written, each with its proposition and its place ([`assumed.stated`](../design/TRUST.md)).

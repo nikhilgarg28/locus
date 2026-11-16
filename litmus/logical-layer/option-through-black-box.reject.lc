@@ -1,4 +1,4 @@
-//~ question: May an `Option` holding a proof pass through code Locus has no specification for?
+//~ question: May an `Option` holding a proof pass through code Locus does not verify?
 //~ spec: logic.boundary.plain-data
 //~ rfc: 0002
 

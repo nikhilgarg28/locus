@@ -11,7 +11,7 @@ fn divide(x: u32, y: u32, nonzero: @(y != 0)) -> u32 {
 fn forged(x: u32) -> u32 {
     let trivial: @(1 == 1) = _;
     let boxed: Box<dyn Any> = Box::new(trivial); //~ error: `trivial` is a proof, and converting its box to `Box<dyn Any>` would hide that it holds one
-    match boxed.downcast::<@(0 != 0)>() { //~ error: `downcast` is library code without a specification, so it is not called at a type that holds a proof
+    match boxed.downcast::<@(0 != 0)>() { //~ error: `downcast` is the standard library's, which Locus does not verify, so it is not called at a type that holds a proof
         Ok(p) => {
             let q = *p;
             divide(x, 0, q)

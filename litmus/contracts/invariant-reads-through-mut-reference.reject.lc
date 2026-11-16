@@ -3,6 +3,6 @@
 //~ rfc: 0002
 
 struct View<'a> {
-    items: &'a mut Vec<u32>,
+    items: &'a mut [u32],
     nonempty: @(items.len() > 0), //~ error: `nonempty` reads through `items`, a `&mut`: its target can change while no field of the `View` is assigned
 }

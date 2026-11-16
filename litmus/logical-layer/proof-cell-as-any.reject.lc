@@ -2,9 +2,9 @@
 //~ spec: logic.boundary.logical-data
 //~ rfc: 0002
 
+use locus::std::cell::Cell;
+use locus::std::rc::Rc;
 use std::any::Any;
-use std::cell::Cell;
-use std::rc::Rc;
 
 fn hide(n: u32) -> u32 {
     let slot: Rc<Cell<Option<@(n > 0)>>> = Rc::new(Cell::new(None));

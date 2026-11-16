@@ -1,6 +1,8 @@
-//~ question: May a vector of a logical type whose constructors need no proof be lent to code Locus has no specification for?
+//~ question: May a vector of a logical type whose constructors need no proof be lent to code Locus does not verify?
 //~ spec: logic.boundary.plain-data
 //~ rfc: 0002
+
+use locus::std::vec::Vec;
 
 #[derive(Logical)]
 enum Count {

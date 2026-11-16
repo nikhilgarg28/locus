@@ -1,6 +1,8 @@
-//~ question: May a vector of naturals be lent mutably to code Locus has no specification for?
+//~ question: May a vector of naturals be lent mutably to code Locus does not verify?
 //~ spec: logic.boundary.plain-data
 //~ rfc: 0002
+
+use locus::std::vec::Vec;
 
 fn lend(n: Nat) -> usize {
     let mut counts: Vec<Nat> = Vec::new();

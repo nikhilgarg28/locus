@@ -2,6 +2,8 @@
 //~ spec: contracts.invariants.no-mutable-borrow, contracts.invariants.proof-holders
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Hints {
     hints: Vec<@True>,
     nonempty: @(hints.len() > 0),

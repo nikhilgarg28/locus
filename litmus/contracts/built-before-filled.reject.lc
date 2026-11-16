@@ -2,6 +2,8 @@
 //~ spec: contracts.invariants, contracts.invariants.observed
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Filled {
     items: Vec<u32>,
     len: usize,
@@ -12,5 +14,5 @@ struct Filled {
 // If filling panicked, a half-built `Filled` would be dropped as a whole one.
 // Here no such value exists, because it cannot be built until its proof field holds.
 fn filled(len: usize) -> Filled {
-    Filled { items: Vec::new(), len, full: _ } //~ error: cannot prove `items.len() == len`: `items` is empty, and `len` may not be zero
+    Filled { items: Vec::new(), len, full: _ } //~ error: cannot prove `items.len() == len`: nothing relates the new vector's length to `len`
 }

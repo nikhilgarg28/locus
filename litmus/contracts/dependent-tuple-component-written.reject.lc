@@ -2,6 +2,8 @@
 //~ spec: contracts.invariants.proof-holders, contracts.invariants.assignment
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn bump_first(v: &mut Vec<(i: usize, @(i < 10))>) {
     v[0].0 += 1; //~ error: `.0` is read by the next component's proposition, so it is not assigned in place; replace the whole tuple
 }

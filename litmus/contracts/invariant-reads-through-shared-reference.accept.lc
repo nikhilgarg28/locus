@@ -3,11 +3,11 @@
 //~ rfc: 0002
 
 struct View<'a> {
-    items: &'a Vec<u32>,
+    items: &'a [u32],
     nonempty: @(items.len() > 0),
 }
 
-fn view(items: &Vec<u32>) -> Option<View<'_>> {
+fn view(items: &[u32]) -> Option<View<'_>> {
     if items.len() > 0 {
         Some(View { items, nonempty: _ })
     } else {
@@ -16,7 +16,7 @@ fn view(items: &Vec<u32>) -> Option<View<'_>> {
 }
 
 fn seen() -> bool {
-    let items = vec![1];
+    let items = [1];
     match view(&items) {
         Some(_) => true,
         None => false,

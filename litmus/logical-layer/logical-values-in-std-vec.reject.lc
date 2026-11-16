@@ -1,0 +1,9 @@
+//~ question: May the standard library's own `Vec` hold logical values?
+//~ spec: logic.boundary.plain-data, logic.boundary.unverified
+//~ rfc: 0002
+
+// No `use locus::std::vec::Vec;`, so `Vec` is the standard library's.
+fn logical_payloads() -> usize {
+    let mut values: Vec<Nat> = Vec::new(); //~ error: `Vec::new` is the standard library's, which Locus does not verify, so it is not called at `Nat`, a logical type; `use locus::std::vec::Vec;` for a vector that may hold one
+    values.len()
+}

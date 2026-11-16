@@ -1,4 +1,4 @@
-//~ question: May a function whose ghost parameter is a logical value, not a proof, be given to code Locus has no specification for?
+//~ question: May a function whose ghost parameter is a logical value, not a proof, be given to code Locus does not verify?
 //~ spec: logic.boundary.calls, logic.boundary.logical-data
 //~ rfc: 0002
 

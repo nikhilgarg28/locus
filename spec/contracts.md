@@ -13,7 +13,7 @@ r[contracts.final]
 ## Calls
 
 r[contracts.calls.unrelated]
-What verified code knows about the result of a call is what the callee's contract says, a proof in its result or a specification in Locus's library, and nothing else. Two calls of one function with equal arguments are unrelated unless such a proof relates them: a fact about the result of the first is not a fact about the result of the second.
+What verified code knows about the result of a call is what the callee's contract says, a proof in its result, and nothing else: no fact is attached to a function from outside its signature. Two calls of one function with equal arguments are unrelated unless such a proof relates them: a fact about the result of the first is not a fact about the result of the second.
 
 ## Proofs in data
 

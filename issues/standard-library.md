@@ -3,37 +3,96 @@
 - **Kind:** decision
 - **Status:** open
 - **Blocks:** Any proof about standard library data, and the accepted examples in RFC 0002 that use `Seq`, `Vec`, or `vec!`
+- **Rules:** `logic.boundary.unverified`, `logic.boundary.plain-data`, `proofs.assume`
 
 ## Question
 
-What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)). This covers:
+What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. What the library holds is below. Everything in this list is proposed, for this issue's RFC, and nothing in it is decided beyond those four decisions.
 
-- **Logical types:** `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and characters and strings.
-- **Rules:** `logic.boundary.unverified`, `logic.boundary.plain-data`
-  - Each is defined from `Int` and inductive types, the core RFC 0002 builds on. Any native acceleration has a stated correspondence (vision, commitment 5).
-  - Their positivity in each type argument: `Seq` and `Maybe` are positive, and a set, as a predicate, is not.
-  - Indexing of sequences: the index type, what an out-of-range index means, and the bounds proof needed when elements might not exist.
-  - `div_euclid` and `rem_euclid` on `Int`.
-- **Models of standard types,** each a trusted entry with its reason.
-  - RFC 0002 lists integers, `bool`, references, `Box`, arrays, slices, `Vec`, `Option`, and tuples.
-  - Still open: `String`, `str`, `char`, `HashMap` and `BTreeMap`, `Rc`, `Arc`, and `Cow`.
-  - A type with no model of its own has its opaque identity, `Opaque<T>`. `Cell`, `RefCell`, `Mutex`, and the atomics have nothing else, and `()` needs nothing else.
-- **Specifications of standard functions:** what `Vec::push`, `len`, indexing, `vec!`, and the others do to models and to the logical values a container holds. These are assumed specifications, listed by the audit. They include:
-  - that the methods of `Cell`, `RefCell`, and `Mutex` keep the types of their contents;
-  - **which operations may be given exposed logical data.** Since RFC 0002's decisions 61 and 73, a standard library operation takes a value whose type exposes logical data, such as an `Option<@P>`, only when it has a specification that says what becomes of that data. A value of a sealed type needs none. RFC 0002's examples assume one for `Option`, `Result`, `Box`, `Rc`, `Arc`, `Vec`, arrays, slices, their iterators, channels, and the methods of `Cell`, `RefCell`, and `Mutex`. The list, and each specification, is this issue's. Operations that the language itself reaches for come first: `?`, `for`, `==` on values that hold proofs, `clone`, and dropping a container of proofs.
-- **Lemmas** about the logical types.
+### 1. Logical types
+
+These are erased, and exist only to state and prove facts. `Int` is the language's; the library builds the rest from it and from inductive types (vision, commitment 5).
+
+- **Numbers and truth:** `Nat`, `Bool`.
+- **Collections:** `Seq<T>`, `Set<T>`, `Map<K, V>`, and `Multiset<T>`, which is what "the same items in another order" is stated with.
+- **Sums:** `Maybe<T>`, and a two-sided one for `Result`, as the models of `Option` and `Result`.
+- **Text:** characters, and strings as sequences.
+- For each: its definition, its positivity in each type argument (`Seq` and `Maybe` are positive, and a set, as a predicate, is not), and a stated correspondence for any native acceleration.
+- **Fixed-width arithmetic:** what wrapping, saturating, and bitwise operations mean on `Int`, so that machine arithmetic has something to be equal to; and `div_euclid` and `rem_euclid`.
+- **Indexing of sequences:** the index type, what an index outside the sequence means, and the bounds proof needed when elements might not exist.
+
+### 2. Logic functions and predicates
+
+The vocabulary that contracts are written in.
+
+- **On sequences:** `len`, indexing, `push`, `concat`, `take`, `skip`, `update`, `subrange`, `rev`, `first`, `last`, `contains`, `count`, `sum`, `min`, `max`, and `map`, `filter`, `fold`, and `zip` over logical functions.
+- **On sets and maps:** membership, insertion, removal, union, intersection, a map's domain, and equality by contents.
+- **Predicates:** `Sorted`, `Permutation`, `Distinct`, and the like. One definition of each, so that two crates mean the same thing by "sorted".
+
+### 3. Lemmas
+
+Facts about the logical types, each a logic function with a proof that the kernel checks. None is assumed.
+
+- **Arithmetic:** linear facts, multiplication, division and remainder, powers, bit operations, the bounds of each machine integer type, and when an operation overflows.
+- **Order:** the laws of a total order, for the built-in orders.
+- **Collections:** what each function above does to length and contents, equality by contents, and facts about permutations.
+- **Induction:** on `Nat`, on `Seq`, strong induction, and recursion on a measure.
+- Whether lemmas are written in Locus or brought from Lean's libraries, whose logic Locus follows, is a question for [proof-construction](proof-construction.md).
+
+### 4. Proof helpers
+
+What makes a proof short to write and to read. The design is [proof-construction](proof-construction.md)'s; this is the part of it that is a library.
+
+- **Procedures that return proofs:** linear arithmetic, bit-vector facts, evaluation of a closed proposition, and simplification with a chosen set of lemmas. Each returns a proof that the kernel checks, so none is trusted.
+- **The search behind `_`,** and the lemma sets it may use.
+- **Helpers for reading a proof's state:** showing the proposition to be proved and the proofs in scope ([proof-debugging](proof-debugging.md)).
+
+### 5. Models of Rust's own types
+
+Each is a trusted entry with its reason (`trusted.library-specs`).
+
+- **In RFC 0002:** integers, `bool`, references, `Box`, arrays, slices, `Vec`, `Option`, and tuples. The standard library's `Vec` keeps its model, so that one received from Rust code has the same model once it is converted to Locus's.
+- **To add:** `char`, `str`, `Result`, ranges, and `Rc` and `Arc`, which are to be transparent as `Box` is, with `Weak` opaque.
+- **Opaque:** a type with no model has its opaque snapshot. `Cell`, `RefCell`, `Mutex`, and the atomics have nothing else.
+
+### 6. Runtime types of its own, under `locus::std`
+
+RFC 0002's decisions 81 to 83. `locus::std` mirrors the standard library's modules, so that a path is found by putting `locus::` in front.
+
+- **Types around the standard library's:** `Vec`, `String`, `VecDeque`, the maps and sets, `Rc`, `Arc`, the cells, the locks, and the atomics. Each holds the standard library's type, dereferences to it so that its other methods are there, converts to and from it in constant time, and gives contracts in the signatures of the methods it defines.
+- **Functions for the types that stay Rust's,** under names of their own, for when a program wants a fact from a standard method:
+  - `option` and `result`: `map`, `and_then`, `take`, `replace`, `unwrap_or`, written with `match` and so verified;
+  - `num`: checked, wrapping, and saturating arithmetic, `min`, `max`, `abs`, `pow`, verified against the arithmetic of section 1;
+  - `slice`: `split_at`, `swap`, `reverse`, `binary_search`, `sort`, verified where a safe body can be written;
+  - `mem`: `swap`, `replace`, and `take`, which cannot be written in safe Rust and so are assumed, or primitives.
+- **Carrying proofs through closures,** as `Option::map` and the iterator adapters do (RFC 0002, decision 43).
+- **A prelude,** `locus::std::prelude`, which is the standard library's with Locus's types in place of the ones it swaps.
+
+### 7. Permissions and pointer primitives
+
+Later: [permissioned-pointers](permissioned-pointers.md). They are what the types of section 6 are rebuilt on, after which their contracts are proved and not assumed.
+
+### 8. Tests of what is assumed and trusted
+
+- Each assumption in the library, and each model, compared with the standard library's behavior by tests generated from the proposition, wherever it can be evaluated at run time.
+- A build in which an assumption whose proposition can be evaluated is also checked at run time, as `debug_assert!` is.
+
+## Questions it must answer
+
+1. **Whether a method that keeps the standard library's name keeps its shape.** `len` could return a `usize`, as Rust's does, with the fact coming from a view of the vector as a slice, whose length the language defines; or it could return the number with its proof, so that `let (n, p) = v.len();` is how a length is read. RFC 0002's litmus examples take the first, with one method of Locus's own, `Vec::view`; its text shows the second for `push`.
+2. **Which built-in operations the language defines** on the types that stay Rust's, and so are not library at all (RFC 0002, item 18 of what is still for the owner).
+3. **Which standard traits each type forwards,** and what a program does for a trait of another crate, which only that crate or Locus's library can implement.
+4. **Indexing of sequences,** as in section 1.
+5. **Where lemmas come from,** as in section 3.
+6. **What an exported crate does with these types** ([distribution-and-export](distribution-and-export.md)).
 
 ## Direction
 
-RFC 0002's decision 59 sets where this library is headed: its collections are verified Locus on permissioned pointers, with no `unsafe` code of their own, and Rust's standard library stays available without proofs. So the trusted specifications of Rust's `Box`, `Vec`, and the other collections that this issue lists are a stage, not the end: [permissioned-pointers](permissioned-pointers.md) is the design that replaces them, and it also asks which small part of Rust's library Locus must still understand.
+RFC 0002's decision 59 sets where this library is headed: its collections are verified Locus on permissioned pointers, with no `unsafe` code of their own, and Rust's standard library stays available without proofs. The wrappers of section 6 are the first stage: the same types and signatures, with contracts assumed. [permissioned-pointers](permissioned-pointers.md) is the design that turns the assumptions into proofs.
 
 ## What it blocks
 
 Any proof about standard library data, and the accepted examples in RFC 0002 that use `Seq`, `Vec`, or `vec!`.
-
-## Options
-
-To be laid out in an RFC.
 
 ## Log
 
@@ -126,4 +185,14 @@ So no rule of Locus's own decides which `Vec` a name means: Rust's rule, that an
   - Locus library functions, under names of their own, for standard methods on the kept types that a program wants a fact from, such as `checked_add` or `Option::map`, since an inherent method of a type that is kept cannot be shadowed. Most can be verified, not assumed;
   - untouched and called as plain Rust: everything else.
 - *What this costs.* An operator or a trait method has the signature that the standard library's trait gives it, so it cannot return a proof. On Locus's own types `v[i]`, `*rc`, `for x in &v`, and `v.clone()` run and tell Locus nothing, and the named method is how a program gets a fact. Contracts on trait methods ([traits-on-logical-types](traits-on-logical-types.md)) are what would lift this.
+
+### 2026-11-16, conversation with the owner on what Locus's library holds
+
+The owner accepted the design of the previous entry ("This feels like a clean design... Rest everything looks good"), and RFC 0002's decisions 80 to 83 record it: `unsafe assume!(_)`, Locus's own types under `locus::std`, the split between what is swapped and what is kept, and the library trusted to keep what its wrapper types are given. The trusted specifications of standard functions, which this issue had listed, are gone, and the text above the log is rewritten for that.
+
+The owner then asked what else the library holds:
+
+> Also, while you're at it, also describe what logical machinery goes to locus std - logical types like Nat, Int, Seq, ... or general logical theorems etc? Maybe proof helper library? what else?
+
+Sections 1 to 8 above are the reply. They are a proposal for this issue's RFC, and the owner has not decided on them.
 
