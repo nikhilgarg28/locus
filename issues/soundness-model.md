@@ -65,3 +65,9 @@ What the model has to show for a sealed type:
 - that it means the same wherever it goes: its propositions read only its own fields, and none of its logical data comes in through a type argument, so one Rust type never stands for two meanings;
 - that a value handed back by unverified code is one that verified code built: other crates cannot reach its fields, the crate's own unverified functions cannot name it, trait implementations for it are verified, and generic code can only move, copy, and drop it;
 - what a hand-written `unsafe impl` on it promises, since generic `unsafe` code can now be instantiated with it.
+
+### 2026-11-16, conversation with the owner on the standard library
+
+RFC 0002's decision 76 adds loans, and with them two more things for the model to show:
+- that a value lent by shared reference is unchanged when the loan ends, when all of its logical data lies in the structural part of its snapshot. This is `models.frozen-data` again, for unverified code that holds the reference;
+- that nothing logical comes back. No operation open to verified code turns a type that exposes no logical data into one that does, other than building the value from proofs. A marker that unverified code copied out of a loan, and kept behind `dyn Any` or in a static, is then inert. The same fact keeps a `Box<dyn Any>` from any source harmless, so it is worth stating once, as the property the whole boundary rests on.

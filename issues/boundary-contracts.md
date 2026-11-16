@@ -77,3 +77,21 @@ The owner confirmed that an unverified function takes no type that holds logical
 ### 2026-11-16, conversation with the owner on how to build Locus
 
 Two items of the plan now rest on this issue's subject: the pointer primitives of [permissioned-pointers](permissioned-pointers.md), which decision 71 of RFC 0002 makes planned work, and leaving out a check that a proof makes unnecessary ([no-panic-claims](no-panic-claims.md)). Both need a function whose signature states a contract and whose body Locus does not verify. Since decision 65 that is a third kind of function, beside verified and unverified: its signature holds logical data, which only a verified function's may, and its body contains `unsafe`, which a verified function's may not. Only Locus's library has any until this issue is decided, as its trusted specifications.
+
+### 2026-11-16, conversation with the owner on the standard library
+
+Discussing how the standard library's functions would be specified, the owner set two requirements for the form:
+
+> The syntax for attaching post conditions should not be special cased to stdlib and should be available for user for their own code/crates too. And it should explicitly mention assume or unsafe or something like that.
+
+RFC 0002's decision 78 records them. So there is one form, used by Locus's library and by programs, for the standard library's functions, another crate's, and a program's own unverified functions; and it says in its text that what it states is assumed, as "Assuming is unsafe" above already asks. Decision 56's rule stands until the form is designed.
+
+The owner also asked:
+
+> And why not permit preconditions?
+
+The proposal had left them out, on the ground that a safe function accepts every input. The reply separates three cases by who can be made to prove a precondition. It is a proposal, and the owner has not decided on it:
+
+- **A safe function that Rust code already calls,** such as the standard library's. A precondition there can oblige nobody. Callers that Locus does not verify prove nothing, and Rust code such as `v[i]` sits in functions that are verified with nothing to prove (RFC 0002, decision 65), so it would stop compiling, against the vision's first commitment. What reads as the precondition of such a function is its panic condition: "panics only when `i >= len`". A specification can state that, and Locus would hold a caller to it exactly where the caller claims `#[no(panic)]` ([no-panic-claims](no-panic-claims.md)).
+- **An `unsafe fn`.** Its precondition is its safety contract, which every caller already promises by writing `unsafe`. A specification should state it, and a verified caller would prove it. This is what lets a proof remove a check, the first gap under Scope above. It needs a change to decision 65, under which verified code calls no `unsafe fn`, and a place at the call to write the proof.
+- **A program's own function that only verified code can reach.** Its precondition is a proof parameter, as for every verified function, and no clause is needed. If its body is unverified, the mark that says "assumed" is what lets it keep that signature: this is the third kind of function that the previous entry describes.

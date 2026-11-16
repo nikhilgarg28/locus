@@ -1,5 +1,5 @@
-//~ question: May a place holding a proof be lent by shared reference to code Locus has no specification for?
-//~ spec: logic.boundary.plain-data
+//~ question: May a place holding a proof be lent by shared reference to code that hands the reference back?
+//~ spec: logic.boundary.loans, logic.boundary.plain-data
 //~ rfc: 0002
 
 fn check(n: u32) -> Option<@(n > 0)> {
@@ -16,7 +16,7 @@ fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
 
 fn hundred_over(n: u32) -> u32 {
     let found: Option<@(n > 0)> = check(n);
-    std::hint::black_box(&found); //~ error: `found` holds a proof, so it cannot be lent to `black_box`, which Locus does not verify, even by shared reference
+    std::hint::black_box(&found); //~ error: `black_box` returns the reference it is given, and Locus takes no logical data back from code it does not verify, so `&found`, which holds a proof, cannot be passed to it
     match found {
         Some(p) => divide(100, n, p),
         None => 0,

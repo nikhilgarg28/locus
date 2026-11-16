@@ -1,4 +1,4 @@
-//~ question: May a value of a type with a proof field be printed with `{:?}`, through a `Debug` written over its plain fields?
+//~ question: May a type with a proof field leave the proof out of its `{:?}` output, through a `Debug` written over its plain fields?
 //~ spec: logic.boundary.plain-data, logic.boundary.logical-data
 //~ rfc: 0002
 
@@ -10,7 +10,8 @@ struct Interval {
     ordered: @(lo <= hi),
 }
 
-// Verified, since it takes `Self`. It hands the formatter plain fields only.
+// Verified, since it takes `Self`. It hands the formatter plain fields only,
+// where the derived `Debug` would also print `ordered: Erased`.
 impl fmt::Debug for Interval {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Interval").field("lo", &self.lo).field("hi", &self.hi).finish()

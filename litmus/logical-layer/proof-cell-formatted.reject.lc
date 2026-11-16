@@ -1,0 +1,18 @@
+//~ question: May a `Cell` holding a proof be printed with `{:?}`, which lends it to the formatting code by shared reference?
+//~ spec: logic.boundary.loans
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn shown(n: u32) -> String {
+    let slot: Cell<Option<@(n > 0)>> = Cell::new(check(n));
+    format!("{:?}", slot) //~ error: `slot` holds its proof inside a `Cell`, which can be written through a shared reference, so it cannot be lent to the formatting code, which Locus does not verify
+}

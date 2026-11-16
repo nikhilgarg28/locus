@@ -2,31 +2,33 @@
 
 - **Kind:** design
 - **Status:** later
-- **Blocks:** Using the standard library's derived `Debug` on a type with a logical field; giving a proof holder to generic code without a specification
-- **Rules:** `logic.boundary.plain-data`, `logic.boundary.logical-data`, `export.invariants-closed`
+- **Blocks:** Giving a proof holder to generic code without a specification; a derive of another crate on a type with a logical field
+- **Rules:** `logic.boundary.plain-data`, `logic.boundary.loans`, `logic.boundary.logical-data`, `export.invariants-closed`
 
 ## Scope
 
-RFC 0002's decision 61 keeps exposed logical data inside verified code. Its decision 73 lets unverified code hold a value of a *sealed type*: a struct or enum of a verified crate whose logical data sits in its own fields. Such a value can be printed, stored in any container, sorted, and shown to other crates, and unverified code can neither build one nor open it.
+RFC 0002's decision 61 keeps exposed logical data inside verified code. Two later decisions let unverified code touch what it cannot misuse:
 
-This issue records what stays awkward after that, so that it is not forgotten, and one further relaxation.
+- **Decision 73, sealed types.** Unverified code may hold a value of a struct or enum of a verified crate whose logical data sits in its own fields. Such a value can be printed, stored in any container, sorted, and shown to other crates, and unverified code can neither build one nor open it.
+- **Decision 76, loans.** Unverified code may be lent, by shared reference, exposed logical data that lies in the structural part of its value's snapshot. It can read it, and can neither change it nor give anything logical back. So the standard library's derived `Debug` works on a type with a logical field ([`logical-layer/derived-debug-on-type-with-proof-field.accept.lc`](../litmus/logical-layer/derived-debug-on-type-with-proof-field.accept.lc)), and an `Option<@P>` can be printed ([`logical-layer/proof-holder-formatted.accept.lc`](../litmus/logical-layer/proof-holder-formatted.accept.lc)).
+
+This issue records what stays awkward after both, so that it is not forgotten.
 
 What is still rejected, each with an example where there is one:
-- the standard library's derived `Debug` on a type with a logical field, because what it generates hands every field to the formatter ([`logical-layer/derived-debug-on-type-with-proof-field.reject.lc`](../litmus/logical-layer/derived-debug-on-type-with-proof-field.reject.lc)); a `Debug` written by hand is accepted ([`logical-layer/debug-written-by-hand.accept.lc`](../litmus/logical-layer/debug-written-by-hand.accept.lc)). Derives of other crates that hand every field to their own code, such as `serde::Serialize`, are in the same position unless the logical fields are skipped;
-- a proof holder lent by shared reference ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc)), and any other exposed logical data given to code without a specification;
+- a derive of another crate that hands every field to a trait of its own, such as `serde::Serialize`, unless the logical fields are skipped, since a marker implements only the standard traits;
+- exposed logical data given by value or by `&mut` to code without a specification ([`logical-layer/option-through-black-box.reject.lc`](../litmus/logical-layer/option-through-black-box.reject.lc)), or lent to code that hands the reference back ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc));
+- a loan of logical data inside a cell ([`logical-layer/proof-cell-formatted.reject.lc`](../litmus/logical-layer/proof-cell-formatted.reject.lc)), or of a function that takes a proof ([`logical-layer/proof-function-lent-by-reference.reject.lc`](../litmus/logical-layer/proof-function-lent-by-reference.reject.lc));
 - a proof about a value that the type does not hold, which cannot be sealed: `(i: usize, @(i < xs.len()))` exposes its proof unless a struct holds `xs` too;
 - an enum with a proof field shown to unverified crates, since Rust makes its fields public;
 - a generic type whose logical data comes in through a type argument ([`logical-layer/own-generic-type-to-unverified.reject.lc`](../litmus/logical-layer/own-generic-type-to-unverified.reject.lc)).
 
-The further relaxation: **a shared reference to exposed logical data that holds no pointer and no cell,** such as `&Option<@P>` or the reference to a proof field that a derived `Debug` makes, may be given to unverified code, also as a trait object. It is believed sound for two reasons: such a reference cannot be written through, and nothing that exposes logical data is accepted back from unverified code, so a marker it copies has nowhere to go. It has no argument written down.
-
 ## Questions it must answer
 
-1. Whether the further relaxation is worth a second notion beside the sealed type, when its main use is one derive. The alternative is a derive of Locus's own.
-2. Which types hold "no pointer and no cell", decided from their fields alone, so that no description of standard types is needed.
-3. What a derive from another crate may be given, since `Serialize` reads fields and `Deserialize` builds the type and so must go through a verified constructor.
-4. Whether a permission, which is a sealed type that is not `Copy` ([permissioned-pointers](permissioned-pointers.md)), should be allowed into unverified hands at all, where a duplicate would be more than a wrong fact.
-5. The arguments, in [soundness-model](soundness-model.md): that a sealed value handed back is one that verified code built, and that nothing exposed comes back.
+1. What a derive from another crate may be given, since `Serialize` reads fields and `Deserialize` builds the type and so must go through a verified constructor.
+2. Whether a permission, which is a sealed type that is not `Copy` ([permissioned-pointers](permissioned-pointers.md)), should be allowed into unverified hands at all, where a duplicate would be more than a wrong fact.
+3. The arguments, in [soundness-model](soundness-model.md): that a sealed value handed back is one that verified code built, that a loan cannot be written through, and that nothing exposed comes back.
+4. Whether a result that the caller discards, as in `std::hint::black_box(&found);`, need be held to the rule that an unverified function's result exposes no logical data.
+5. Whether following a type parameter through the generic bodies of other crates is worth its cost. RFC 0002's decision 77 says not for now.
 
 ## Log
 
@@ -41,3 +43,18 @@ After seeing what the strict rule cost, a type with a private proof field that c
 > This sounds reasonable - can we make it failproof while offering such a relaxation? If so, let's do it
 
 RFC 0002's decision 73 records it as sealed types, with three conditions: other crates reach no field that holds logical data or that a proof reads; the crate's own unverified functions still name no type that holds logical data; and `unsafe` code keeps such values intact (`assumed.unsafe.invariants`). The issue is renamed in its title to what remains. The second relaxation is narrowed above to references that cannot be written through.
+
+### 2026-11-16, conversation with the owner on the standard library
+
+Told that the standard library's derived `Debug` was still rejected on a type with a proof field, the owner said:
+
+> This feels like a bad limitation - we should find a way to fix it I guess?
+
+and agreed to the further relaxation that this issue had recorded. RFC 0002's decision 76 records it as loans, with the rule `logic.boundary.loans`. It is tighter in three ways than the sentence this issue carried until now, "a shared reference to exposed logical data that holds no pointer and no cell":
+- What may be lent is decided from the snapshot: every logical type must lie in its structural part. So a `Vec<@P>` is lent, and a value of a type that Locus's library gives no snapshot is not.
+- A function's signature and a closure's captures are left out. Whoever holds a reference to a function that takes a proof could call it, with a marker copied from another loan.
+- The unverified function's result exposes no logical data, even behind a shared reference, since a reference that comes back could be to another value. So `std::hint::black_box(&found)` stays rejected. The reply to the owner had listed that example as one that would be accepted; it is not, and question 4 above asks whether a discarded result should matter.
+
+A proof field prints as `Erased`, the marker's name, as RFC 0001 had already noted when it kept logical fields as marker fields.
+
+The owner also agreed to leave the boundary at signatures (decision 77): Locus does not follow a type parameter through the generic bodies of other crates, the standard library's included.

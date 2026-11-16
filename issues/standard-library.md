@@ -85,3 +85,23 @@ A specification of a generic operation must hold for every implementation a call
 ### 2026-11-16, conversation with the owner on how to build Locus, continued
 
 Decision 73 of RFC 0002 narrows what needs a specification. A value of a sealed type, a struct or enum with proof fields of the program's own, may be given to any library operation, specified or not: a container of another crate can hold it, and what comes back is some value of the type. A specification is needed only for exposed logical data, such as an `Option<@P>`, and for knowing which value comes back.
+
+### 2026-11-16, conversation with the owner on the standard library
+
+The owner asked how Locus knows that an `UnsafeCell` has no model, whether a call into the standard library tells Locus anything, and how a specification would work, and broadly agreed with the reply. This is the starting position it gives this issue's RFC:
+
+- **Opaque is the default.** A standard type's snapshot is structural, and it has a model, only where Locus's library says so. The language forbids two things to every declaration, the library's included: looking inside an `UnsafeCell`, and behind a raw pointer (`models.frozen-data`). So `Cell`, `RefCell`, `Mutex`, and the atomics need no entry.
+- **`Rc` and `Arc` are to be transparent, as `Box` is, and `Weak` opaque.** While a target is shared it is reached only by shared reference, and the counts are in cells. They move from "still open" above to what this issue's RFC proposes.
+- **A call without a specification gives its Rust type and nothing else.** A type without a model has none, which is not the same as a unit model: using a value of it as a value in logical code is an error.
+- **A specification,** as proposed:
+  - is a declaration that repeats the function's Rust signature, so that a change to the function fails to compile, and adds a proposition about its result over the models of its arguments;
+  - is assumed and listed, never proved;
+  - attaches to the function that rustc resolves the call to, so a call through a trait bound gets only what the trait states;
+  - says what becomes of any logical data the operation is given;
+  - is tested against the standard library, and for the collections that Locus rebuilds with the same layout (RFC 0002, decision 75) the same statement is proved of Locus's version.
+- **The owner added two requirements,** which RFC 0002's decision 78 records:
+
+  > The syntax for attaching post conditions should not be special cased to stdlib and should be available for user for their own code/crates too. And it should explicitly mention assume or unsafe or something like that.
+
+  The owner also asked why a specification should not state a precondition. That question is in [boundary-contracts](boundary-contracts.md).
+- **Fewer operations need a specification to be given exposed logical data.** Since RFC 0002's decision 76, an operation that only reads through a shared reference and returns plain data, such as `len`, `is_some`, or a `Debug` implementation, is lent it without one. It still needs one for Locus to know its result.
