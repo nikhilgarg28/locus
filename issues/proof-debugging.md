@@ -70,3 +70,22 @@ The strongest argument against the proposal is that every form is one more name 
 ### 2026-11-16, conversation with the owner on specifications
 
 Raised by the owner, in the words quoted above, while asking for an audit of the decisions that are still open. The proposal is the reply's, and the owner has not decided on it.
+
+### 2026-11-16, conversation with the owner on the proof library
+
+The owner asked for the least that would do:
+
+> I also want some diagnostic tools - tell me about minimal set of tools for proof diagnostics? Do we have basically only macros? What is the smallest set of macros? And how does one "print" logical data if printing is an inherently runtime activity and logical data is erased by then?
+
+The reply revises the proposal above. It is still a proposal.
+
+- **No macros are needed.** Each form in the table above can be a function with an ordinary signature that the checker recognizes by its definition, in keeping with the owner's wish that the proof library be regular functions ([proof-construction](proof-construction.md)).
+- **The smallest set is two functions and one report:**
+  1. `debug::goal()`, written where a proof is expected. It reports the proposition required there, and every proof in scope with its proposition and the versions it is about, and the check stops there. This covers `show!()`, `facts!()`, and `explain!(h)`.
+  2. `debug::value(e)`, which reports a logical expression. This covers `eval!(e)`.
+  3. A failed `_`, and a failed procedure, report what `debug::goal()` would.
+- **Conveniences that can wait:** a report at a statement that does not stop the check, a stand-in for a proof not yet written, and a runtime check that gives a proof.
+- **"Printing" logical data means one of three things:**
+  1. *A closed expression, when the program is checked.* It is evaluated by the checker, since logic functions are pure and total, and the value is put in a diagnostic: `debug::value(sum(seq![1, 2, 3]))` reports `6`.
+  2. *An expression that mentions runtime values, when the program is checked.* It has no one value, because the function is checked once for every input. What can be shown is the expression after simplification, and the facts in scope that mention it.
+  3. *When the program runs.* Nothing logical exists to print. A quantity that can be computed is computed again by runtime code, with a proof that what was computed is the logical value, and that is printed: `let (n, same) = v.len();` and then `println!("{n}")`.

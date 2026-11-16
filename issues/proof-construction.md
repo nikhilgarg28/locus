@@ -75,3 +75,19 @@ The owner's question: "what library/syntax etc to use for writing proofs - how t
 - **Options.** (1) Terms and procedures, as above. (2) A tactic block as well, `by { ... }`, whose statements transform a goal. (3) Proofs in Lean files beside the program. The proposal is option 1, with option 2 kept for later as sugar that expands to a term, if long proofs prove too verbose. Option 3 takes the proofs out of the program, against the vision.
 - **The strongest argument against option 1** is that a long proof is easier to write against a goal that the tool displays after each step. `show!()` gives that display for a term with a hole in it.
 - **Lemmas** are written in Locus first. Bringing a theorem in from Lean's libraries by name is possible in principle, since the logic is Lean's, and is left for the kernel RFC.
+
+### 2026-11-16, conversation with the owner on the proof library
+
+The owner set a requirement for the library that proofs are written with:
+
+> For proof writing, can you propose how the library functions may look like? I want it to feel like a library of regular functions, not an embedded DSL.
+
+The reply revises the proposal of the previous entry in that direction. It is still a proposal.
+
+- **Everything is a function, a method, an enum, or a closure.** The macros that the previous entry and RFC 0002 mention for proofs, `calc!`, `rewrite!`, `fold!`, and `unfold!`, become methods and functions: `ab.then(bc)` chains two equalities, `h.rewrite(e)` rewrites, and `eq::by_def()` proves an equality that holds by unfolding definitions.
+- **A lemma is a logic function** in a module named for what it is about: `int::add_comm(a, b)`, `seq::len_push(s, x)`.
+- **A procedure is a function whose result is generic in the proposition,** which is inferred from where the call stands, as the result of `collect()` or `Default::default()` is: `let h: @(lo <= m) = arith::linear();`. Its signature is ordinary. Its body is the checker's, as the body of `size_of::<T>()` is the compiler's.
+- **Three things need the language, and nothing else does:**
+  1. procedures, as above, which run when the program is checked;
+  2. inferring the predicate that `rewrite` and `congr` are generic in;
+  3. values that a lemma's caller does not write, such as the `a`, `b`, and `c` of a transitivity lemma. The proposal is to write them as generic parameters, `logic fn lt_trans<a: Int, b: Int, c: Int>(h1: @(a < b), h2: @(b < c)) -> @(a < c)`, inferred as type parameters are and given with a turbofish when they cannot be.
