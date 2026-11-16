@@ -53,3 +53,12 @@ RFC 0002's decision 71 records it. Three points from the conversation bear on th
 ### 2026-11-16, conversation with the owner on how to build Locus, continued
 
 A permission as the owner described it, a struct with logical data inside that is not `Copy`, is a sealed type in the sense of RFC 0002's decision 73, so by that rule unverified code could hold one. For an `Interval` the worst a broken assumption gives is a wrong fact. For a permission it is two holders of one piece of memory. Whether the library lets a permission into unverified hands is a question for its design, recorded as question 4 of [opaque-certified-values](opaque-certified-values.md).
+
+### 2026-11-16, conversation with the owner on the standard library
+
+On question 10, how a Locus collection meets Rust crates, the owner decided that the two must be able to exchange values without copying:
+
+> Yes, we should add this restriction regardless to keep zero copy possible.
+
+RFC 0002's decision 75 records it. Locus's `Box`, `Vec`, and `String` keep the layout and the allocator of the standard library's, and convert in constant time, through the standard library's own functions for taking such a value apart and putting it together. Each conversion is one more trusted primitive, whose contract says that the Locus value's model is the Rust value's. A hash map has no such functions, so it converts by iteration or stays Rust's, with a specification. In a Rust file `Vec` keeps meaning the standard library's; Locus's is named by its own path, and presents the same model and the same contracts, so that a proof written against one holds for the other.
+
