@@ -1,38 +1,43 @@
-# Letting unverified code hold a value with an invariant, and borrow a proof
+# What is still awkward at the boundary with unverified code
 
 - **Kind:** design
 - **Status:** later
-- **Blocks:** Printing a value with a proof field through `Debug` or `Display`; storing one in another crate's container; sorting or hashing one with generic code; a public type with an invariant in an exported crate or, in the first stage, in any crate
+- **Blocks:** Using the standard library's derived `Debug` on a type with a logical field; giving a proof holder to generic code without a specification
 - **Rules:** `logic.boundary.plain-data`, `logic.boundary.logical-data`, `export.invariants-closed`
 
 ## Scope
 
-RFC 0002's decisions 61 and 62 keep every value whose type holds logical data inside verified code, and count a type with proof fields among them. The owner chose that strict reading to start with, because it makes the boundary's rule one sentence. This issue records what it rules out, and the two relaxations that would bring most of it back.
+RFC 0002's decision 61 keeps exposed logical data inside verified code. Its decision 73 lets unverified code hold a value of a *sealed type*: a struct or enum of a verified crate whose logical data sits in its own fields. Such a value can be printed, stored in any container, sorted, and shown to other crates, and unverified code can neither build one nor open it.
 
-What the strict rule rejects, each with an example:
-- formatting such a value through the standard library ([`logical-layer/display-on-type-with-proof-field.reject.lc`](../litmus/logical-layer/display-on-type-with-proof-field.reject.lc));
-- passing one through generic code that has no specification ([`logical-layer/invariant-type-through-unverified.reject.lc`](../litmus/logical-layer/invariant-type-through-unverified.reject.lc), [`logical-layer/vec-of-invariant-type-to-unverified.reject.lc`](../litmus/logical-layer/vec-of-invariant-type-to-unverified.reject.lc));
-- exporting a public struct with a private proof field ([`export/private-invariant-fields.reject.lc`](../litmus/export/private-invariant-fields.reject.lc));
-- lending a proof holder by shared reference ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc)).
+This issue records what stays awkward after that, so that it is not forgotten, and one further relaxation.
 
-The two relaxations:
+What is still rejected, each with an example where there is one:
+- the standard library's derived `Debug` on a type with a logical field, because what it generates hands every field to the formatter ([`logical-layer/derived-debug-on-type-with-proof-field.reject.lc`](../litmus/logical-layer/derived-debug-on-type-with-proof-field.reject.lc)); a `Debug` written by hand is accepted ([`logical-layer/debug-written-by-hand.accept.lc`](../litmus/logical-layer/debug-written-by-hand.accept.lc)). Derives of other crates that hand every field to their own code, such as `serde::Serialize`, are in the same position unless the logical fields are skipped;
+- a proof holder lent by shared reference ([`logical-layer/share-proof-holder-with-unverified.reject.lc`](../litmus/logical-layer/share-proof-holder-with-unverified.reject.lc)), and any other exposed logical data given to code without a specification;
+- a proof about a value that the type does not hold, which cannot be sealed: `(i: usize, @(i < xs.len()))` exposes its proof unless a struct holds `xs` too;
+- an enum with a proof field shown to unverified crates, since Rust makes its fields public;
+- a generic type whose logical data comes in through a type argument ([`logical-layer/own-generic-type-to-unverified.reject.lc`](../litmus/logical-layer/own-generic-type-to-unverified.reject.lc)).
 
-1. **A sealed value.** Unverified code may hold a value of a type whose proofs read only its own fields. It can move the value, drop it, and call the type's own functions, and can neither build one nor see inside. The type itself is then the evidence, as a newtype with a private field is in Rust.
-2. **A proof lent by shared reference.** Unverified code may be given `&T` for a `T` that holds a proof, with no interior mutability on the way.
-
-Both are believed sound for one reason: nothing that holds logical data is accepted back from unverified code, so a marker it copies or makes has nowhere to go. Neither has an argument written down.
+The further relaxation: **a shared reference to exposed logical data that holds no pointer and no cell,** such as `&Option<@P>` or the reference to a proof field that a derived `Debug` makes, may be given to unverified code, also as a trait object. It is believed sound for two reasons: such a reference cannot be written through, and nothing that exposes logical data is accepted back from unverified code, so a marker it copies has nowhere to go. It has no argument written down.
 
 ## Questions it must answer
 
-1. Which types are sealed: every proposition reads only the type's own fields, no type argument holds logical data, and unverified code of the same crate does not name its fields.
-2. What `&mut` to a sealed value allows. Unverified code could swap two valid values, which keeps each valid and changes what verified code knows about the place.
-3. Whether a trait object may hide a sealed value, since the rule that a type is never hidden exists so that the boundary's check can see it.
-4. What a derive from another crate may be given, since `Serialize` reads fields and `Deserialize` builds the type.
-5. How an exported crate shows such a type, and what its Rust users may do with it.
-6. The argument, in [soundness-model](soundness-model.md), that nothing comes back.
+1. Whether the further relaxation is worth a second notion beside the sealed type, when its main use is one derive. The alternative is a derive of Locus's own.
+2. Which types hold "no pointer and no cell", decided from their fields alone, so that no description of standard types is needed.
+3. What a derive from another crate may be given, since `Serialize` reads fields and `Deserialize` builds the type and so must go through a verified constructor.
+4. Whether a permission, which is a sealed type that is not `Copy` ([permissioned-pointers](permissioned-pointers.md)), should be allowed into unverified hands at all, where a duplicate would be more than a wrong fact.
+5. The arguments, in [soundness-model](soundness-model.md): that a sealed value handed back is one that verified code built, and that nothing exposed comes back.
 
 ## Log
 
 ### 2026-11-16, conversation with the owner on how to build Locus
 
-Raised when the question of derives came up under the strict rule: a derived `Debug` hands each field to the formatter, and the formatting code is unverified. The reply offered both relaxations and recommended leaving them out of the first proposal; the owner did not take them up, and went on to the rules for function kinds. They are recorded here so that the cost of the strict rule is not forgotten.
+Raised when the question of derives came up under the rule as it first stood, in which a type with proof fields counted as exposed logical data: a derived `Debug` hands each field to the formatter, and the formatting code is unverified. The reply offered two relaxations, letting unverified code hold a value with an invariant without opening it, and lending a proof by shared reference, and recommended leaving both out of the first proposal.
+
+### 2026-11-16, conversation with the owner on how to build Locus, continued
+
+After seeing what the strict rule cost, a type with a private proof field that could be neither printed nor exported, the owner took the first relaxation:
+
+> This sounds reasonable - can we make it failproof while offering such a relaxation? If so, let's do it
+
+RFC 0002's decision 73 records it as sealed types, with three conditions: other crates reach no field that holds logical data or that a proof reads; the crate's own unverified functions still name no type that holds logical data; and `unsafe` code keeps such values intact (`assumed.unsafe.invariants`). The issue is renamed in its title to what remains. The second relaxation is narrowed above to references that cannot be written through.

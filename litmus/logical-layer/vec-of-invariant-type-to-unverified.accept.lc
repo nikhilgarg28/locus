@@ -9,7 +9,7 @@ struct Interval {
 }
 
 fn widths(v: &mut Vec<Interval>) -> u32 {
-    std::hint::black_box(&mut *v); //~ error: `Interval` has a proof field, so a `Vec<Interval>` cannot be lent to `black_box`, which Locus does not verify
+    std::hint::black_box(&mut *v);
     match v.first() {
         Some(iv) => {
             let ok: @(iv.lo <= iv.hi) = iv.ordered;

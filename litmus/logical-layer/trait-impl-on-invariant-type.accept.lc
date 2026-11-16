@@ -1,5 +1,5 @@
 //~ question: May a trait be implemented for a type with proof fields, when the signature holds no logical values?
-//~ spec: logic.ghost.no-trait-impls, logic.unverified.functions
+//~ spec: logic.ghost.no-trait-impls
 //~ rfc: 0002
 
 struct Interval {
@@ -8,19 +8,14 @@ struct Interval {
     ordered: @(lo <= hi),
 }
 
-trait Width {
-    fn width(&self) -> u32;
-}
-
-// `width` takes `Self`, which holds a proof, so it is verified, and verified code calls it.
-impl Width for Interval {
-    fn width(&self) -> u32 {
-        self.hi - self.lo
+impl std::fmt::Display for Interval {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {}]", self.lo, self.hi)
     }
 }
 
-fn three() -> u32 {
-    Interval { lo: 1, hi: 4, ordered: _ }.width()
+fn shown() -> String {
+    Interval { lo: 1, hi: 4, ordered: _ }.to_string()
 }
 
-//~ run: three() => 3
+//~ run: shown() => "[1, 4]"

@@ -56,3 +56,12 @@ The owner asked for a boundary whose rule is short enough to hold in mind, and R
 The conversation also listed the ways a boundary can fail, as classes to attack it with before its representation is fixed: fabricating evidence, duplicating a resource, invalidating a fact through a hidden alias, re-entering during an update, and leaving by a panic or a forgotten guard. The cases from "Memory Safety Bugs in Rust Standard Library" (Microsoft FORGE Lab, 2026) are examples of the second and fifth kinds, and are now in `litmus/`.
 
 Two holes found in the same conversation, both closed by the rules as now written: a verified generic function that passes its own type parameter to unverified generic code (`logical-layer/generic-parameter-reaches-unverified.reject.lc`), and a crate that Locus does not verify calling a public function that takes a proof (decision 68).
+
+### 2026-11-16, conversation with the owner on how to build Locus, continued
+
+Decision 73 of RFC 0002 lets unverified code hold a value of a sealed type, so two things in the entry above change. The boundary's invariant now speaks of what a type exposes: logical data that is not inside the fields of a sealed type. And `assumed.unsafe.invariants` stays in the trust model, because `unsafe` code, such as a container's, does hold sealed values.
+
+What the model has to show for a sealed type:
+- that it means the same wherever it goes: its propositions read only its own fields, and none of its logical data comes in through a type argument, so one Rust type never stands for two meanings;
+- that a value handed back by unverified code is one that verified code built: other crates cannot reach its fields, the crate's own unverified functions cannot name it, trait implementations for it are verified, and generic code can only move, copy, and drop it;
+- what a hand-written `unsafe impl` on it promises, since generic `unsafe` code can now be instantiated with it.

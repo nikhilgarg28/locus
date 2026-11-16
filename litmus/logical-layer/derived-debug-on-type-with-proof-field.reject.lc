@@ -1,0 +1,10 @@
+//~ question: May the standard library's derived `Debug` be used on a type with a proof field?
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
+//~ rfc: 0002
+
+#[derive(Debug)] //~ error: the derived `Debug` hands the proof field `ordered` to the formatter, which Locus does not verify; write `Debug` by hand over the plain fields
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}

@@ -9,6 +9,6 @@ struct Interval {
 }
 
 fn lend(iv: &mut Interval) -> u32 {
-    std::hint::black_box(&mut *iv); //~ error: `Interval` has a proof field, so a value of it cannot be lent to `black_box`, which Locus does not verify
+    std::hint::black_box(&mut *iv);
     iv.hi - iv.lo
 }
