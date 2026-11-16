@@ -105,3 +105,25 @@ The owner asked how Locus knows that an `UnsafeCell` has no model, whether a cal
 
   The owner also asked why a specification should not state a precondition. That question is in [boundary-contracts](boundary-contracts.md).
 - **Fewer operations need a specification to be given exposed logical data.** Since RFC 0002's decision 76, an operation that only reads through a shared reference and returns plain data, such as `len`, `is_some`, or a `Debug` implementation, is lent it without one. It still needs one for Locus to know its result.
+
+### 2026-11-16, conversation with the owner on reaching the standard library through Locus's own types
+
+The owner liked the direction recorded in [boundary-contracts](boundary-contracts.md), in which Locus's library exports its own types whose methods have Locus signatures, over specifications attached to the standard library's functions. One thing is decided, and four questions were raised.
+
+**Decided: the import is explicit, and its name says what it shadows.**
+
+> And I'd prefer to use explicit `use locus::prelude::...` infact, maybe something even more explicitly suggesting that we are shadowing rust stdlib? `use locus::rust::std::prelude` or something like that?
+
+So no rule of Locus's own decides which `Vec` a name means: Rust's rule, that an import shadows the prelude, does. The path is open; the reply suggested `locus::std`, mirroring the standard library's module tree.
+
+**Raised by the owner, with the reply. None is decided.**
+
+- *Must each method of the wrapped type be written again?* No. `Deref` and `DerefMut` to the inner `Vec` make every method that takes `&self` or `&mut self` callable on the wrapper, and a method the wrapper defines wins over the inner one of the same name. So the library writes only the methods it gives contracts. Constructors, methods that take `self` by value, and trait implementations are not forwarded.
+- *Why mark the function, and not construct the proof with `unsafe assume!(_)`?* The reply agreed that the constructor is the better way to assume a fact: one proposition is assumed, the rest of the function is still checked, and it answers the reason `assume!` was rejected before, which was that nothing marked it as `unsafe` is. A function whose whole body is trusted can do two things that a constructor of proofs cannot, neither of them a fact: use `unsafe` Rust behind a proof parameter, and hand logical data to unverified generic code, as a wrapper's `push` does when its element type holds a proof.
+- *Do `Result`, `Option`, and `Box` need to be swapped at all?* The reply: no. A type is swapped only when it has private state, so that its methods are the only way to learn about a value. The proposed split:
+  - kept, with operations whose meaning the language defines, and a model: integers, `bool`, `char`, references, tuples, arrays, slices, `Box`, `Option`, `Result`, and ranges;
+  - Locus's own type around the standard library's: `Vec`, `String`, the maps and sets, `VecDeque`, `Rc`, `Arc`, the cells, the locks, and the atomics;
+  - Locus library functions, under names of their own, for standard methods on the kept types that a program wants a fact from, such as `checked_add` or `Option::map`, since an inherent method of a type that is kept cannot be shadowed. Most can be verified, not assumed;
+  - untouched and called as plain Rust: everything else.
+- *What this costs.* An operator or a trait method has the signature that the standard library's trait gives it, so it cannot return a proof. On Locus's own types `v[i]`, `*rc`, `for x in &v`, and `v.clone()` run and tell Locus nothing, and the named method is how a program gets a fact. Contracts on trait methods ([traits-on-logical-types](traits-on-logical-types.md)) are what would lift this.
+
