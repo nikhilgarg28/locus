@@ -91,3 +91,64 @@ The reply revises the proposal of the previous entry in that direction. It is st
   1. procedures, as above, which run when the program is checked;
   2. inferring the predicate that `rewrite` and `congr` are generic in;
   3. values that a lemma's caller does not write, such as the `a`, `b`, and `c` of a transitivity lemma. The proposal is to write them as generic parameters, `logic fn lt_trans<a: Int, b: Int, c: Int>(h1: @(a < b), h2: @(b < c)) -> @(a < c)`, inferred as type parameters are and given with a turbofish when they cannot be.
+
+### 2026-11-17, conversation with the owner on terms and procedures
+
+The owner compared two ways of writing a proof: terms built by calling functions, and tactics that change a goal. After seeing a proof written at each level, down to a pure term with no search in it, the owner decided how the two meet:
+
+> I can do option 3 but I want to keep a relatively tightly scoped list of procedures and have clear rules on what each does + how to compose them with terms.
+
+Option 3 was: a procedure call may stand in the source, and a command replaces any call by the term it found, when the author wants it kept. So:
+
+- **Decided:** proofs are terms; a small, closed list of procedures may be called where a proof is expected; each has a stated rule; and every call can be expanded into a term that calls no procedure.
+- **Not decided:** the list, the rules, and the spellings. The owner asked for a proposal of the whole machinery, which follows.
+
+**Proposal.** Three layers, of which only the last searches.
+
+*1. Term forms, which are the language's.* RFC 0002 has all but the last two.
+
+| Form | Proves |
+|---|---|
+| a local or a parameter | what its type says |
+| a call, `lemma(x, h)` | a lemma's conclusion; a `forall` at a value; the conclusion of an implication |
+| a closure, `\|x: T, h: @P\| ...` | a `forall`, or an implication |
+| a constructor, `And::Intro(p, q)`, `Or::Left(p)`, `Exists::Witness(v) @ p`, `Name::Arm(w) @ p` | a conjunction, a disjunction, an `exists`, a declared proposition |
+| `match` on a proof, and `let` for a proposition with one arm | by cases; opens a witness |
+| `let h = ...;` | names a step |
+| recursion, with `#[decreases(e)]` | by induction |
+| `if h: c { ... } else { ... }` | by cases on a condition, with the fact named ([naming-facts-from-control-flow](naming-facts-from-control-flow.md)) |
+| `_` where a value is expected | a value that the checker infers from the proofs beside it, as in `lt_trans(_, _, _, ab, bc)` |
+
+*2. Library functions that search for nothing.* Each is a lemma or a rule, with a predictable name.
+
+- **`logic`:** `p.left()`, `p.right()`, `absurd(f)`, `contradiction(p, not_p)`, `by_contra(...)`, `excluded_middle()`, `if_true(h)`, `if_false(h)`.
+- **`eq`:** `refl(x)`, `e.symm()`, `e.then(f)`, `congr(f, e)`, `h.rewrite(e)`, which replaces every occurrence, `h.rewrite_at(e, pattern)` for one, and `unfold(f)`, the defining equation of a logic function.
+- **`int`, `nat`:** the laws of arithmetic and order, each one lemma, named as Lean names them: `add_comm`, `add_assoc`, `mul_add`, `le_trans`, `lt_of_lt_of_le`, `le_antisymm`, `lt_or_ge`, `add_lt_add_left`, `sub_pos`, `div_add_mod`, `mod_lt`.
+- **`seq`, `set`, `map`:** what each operation does to length and contents, and equality by contents.
+- **Induction principles** as functions that take closures: `nat::induction(base, step)`.
+
+*3. Procedures.* The list is closed: a program cannot add one, and writes a lemma instead.
+
+| Procedure | Proves | Uses | Fails when |
+|---|---|---|---|
+| `compute()` | A proposition whose two sides evaluate to the same thing, or a closed proposition that evaluates to true | Definitions only | The sides do not reduce to the same form |
+| `linear(facts)` | A goal built from `+`, `-`, multiplication, division and remainder by a literal, comparisons, `&&`, `\|\|`, `!`, and `==>`, over `Int` and `Nat` | The facts it is given, and nothing else. Any other subterm is an atom, and two atoms are the same when a given equality makes them so | The goal does not follow from those facts by linear arithmetic. It reports values for which it fails |
+| `ring()` | An equality between polynomials over `Int` | Nothing | The two sides are different polynomials |
+| `_` | Tries, in this order and nothing more: a proof in scope of this proposition; `compute()`; `linear` with every proof in scope | The scope | None of the three succeeds |
+
+Candidates for a second wave, each to be argued for: rewriting to a normal form with a given list of equations, and facts about bits and wrapping arithmetic.
+
+*Rules for composing them.*
+
+1. **A procedure call is an expression whose type is a proof.** It stands wherever a proof is expected.
+2. **Its goal is the type expected there:** an annotation, a parameter, a field, a result. With no expected type it is an error. A lemma needs none, since its result says what it proves.
+3. **A procedure uses its arguments, and never the scope.** `_` is the one form that reads the scope.
+4. **Facts are passed as a tuple of proofs,** `linear((step, ih))`, and any proof may be one, a lemma's result included.
+5. **Procedures do not instantiate a `forall` or open an `exists`.** The term does that first: `linear((sorted(i, j, bounds),))`.
+6. **Cases and induction belong to terms.** `linear` splits only on what is inside its own fragment.
+7. **Every call expands.** A command replaces a call by the term it found, which uses only the forms of layer 1 and the functions of layer 2. A check does not search again for a call whose stored proof still matches ([proof-search-and-storage](proof-search-and-storage.md)).
+8. **The same call gives the same answer on every machine,** within a fixed bound.
+9. **A failed call reports** what `debug::goal()` would ([proof-debugging](proof-debugging.md)), and the procedure's own reason.
+
+*What is left out on purpose:* tactic blocks, procedures written by programs, solvers, default sets of rewriting rules, and facts that a procedure takes without being given them. The macros `calc!`, `rewrite!`, `fold!`, and `unfold!` are replaced by the methods and functions of layer 2.
+
