@@ -1,0 +1,16 @@
+//~ question: Does a proof variable hold at the top of a loop when one way through the body leaves it behind?
+//~ spec: runtime.loops
+//~ rfc: 0004
+
+fn count_below(xs: &[u32], limit: u32) -> (n: usize, @(n <= xs.len())) {
+    let mut n = 0;
+    let mut i = 0;
+    let mut fits: @(n <= i && i <= xs.len()) = _;
+    while i < xs.len() {
+        if xs[i] < limit {
+            n += 1;
+        }
+        i += 1;
+    }
+    (n, _) //~ error: cannot prove `n <= xs.len()`: the loop writes `n` and `i`, and `fits` is not assigned again in its body, so after the loop it proves nothing about their current values
+}

@@ -66,3 +66,9 @@ In the order of the questions above:
 6. **The spelling** `#[no(panic)]`, and `#[no(diverge)]` for termination, so that the two claims read as one family.
 
 The open example [`contracts/loop-over-stepped-range.open.lc`](../litmus/contracts/loop-over-stepped-range.open.lc) is decided by questions 2 and 3.
+
+### 2026-11-17, conversation with the owner on what runtime code tells Locus
+
+[RFC 0004](../design/rfcs/0004-runtime-code.md) settles what arithmetic means outside a `#[no(panic)]` function: the wrapped result, whichever way the crate is built, with nothing owed where it is written. The owner placed the strict rule here: in a `#[no(panic)]` function, each `+`, `-`, and `*` is proved to be in range, since a build with overflow checks could panic there. `wrapping_add` and its kin are then how a function says that wrapping is meant, and would join the understood operations with this claim.
+
+The same RFC gives each understood operation the condition under which it returns. Under this claim, that condition is what the function must prove before the operation.

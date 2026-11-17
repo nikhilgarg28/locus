@@ -626,15 +626,15 @@ let before = logic! { n };      // names the value of n₁, which later writes l
   - A proposition never changes: later writes make new versions, and leave the old ones as they were.
 - **A proof proves exactly its proposition.**
   - Where a proposition about other versions is required, the proof does not fit, even if the formula is spelled the same; it needs a new proof.
-  - Proof search can find one from what the runtime semantics says relates the versions, such as `n₁ == n₀ + 1` after `n = n + 1`.
+  - Proof search can find one from what the runtime semantics says relates the versions, such as `n₁ == n₀ + 1` after `n = n + 1`, when the sum is in range.
 - **Versions are logical variables, not definitions.** The facts that relate them are hypotheses that proofs may use, so a proof about one version never fits another by computation alone.
 - **In a signature,** parameters are at their entry versions, and `final!(x)` is the version that `x`'s referent has when the borrow ends.
-- **What the runtime semantics must give at least.** How versions are formed from a function's typed body, at the joins of branches and in loops, is the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)). Whatever it decides, it gives at least these facts:
+- **What the runtime semantics must give at least.** How versions are formed from a function's typed body, at the joins of branches and in loops, is the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)). [RFC 0004](0004-runtime-code.md) is its first part: the operations that Locus understands, arithmetic, joins, and loops. Whatever the rest decides, it gives at least these facts:
   - a `let` or an assignment, directly or through a reference, gives the new version the value written;
   - a version that no write separates from another, on every path between them, is the same version; on a later iteration of a loop, a write anywhere in the loop separates;
   - inside a branch, its condition or matched pattern holds;
   - after a call returns, its postconditions hold;
-  - machine arithmetic that does not overflow gives the result of the same arithmetic on the models, and machine comparisons agree with the models';
+  - machine arithmetic gives the result of the same arithmetic on the models, wrapped to the type, which is the true result when that is in range, and machine comparisons agree with the models' ([RFC 0004](0004-runtime-code.md));
   - `len` and indexing of arrays and slices agree with their models, as the language defines them; a vector is read through the methods of Locus's `Vec` ([Assumptions and the standard library](#assumptions-and-the-standard-library));
   - a mutable borrow's final value is what its place holds when the borrow ends.
 
@@ -1227,7 +1227,7 @@ The examples use this RFC's syntax. Where [proposition-syntax](../../issues/prop
 
 **A `ghost` keyword or a `Ghost<T>` wrapper,** as in Verus. Rejected: the type already says whether a value is ghost.
 
-**Tracked evidence,** a `let mut h: @P` that follows the current version of what it reads. Deferred to the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)), together with loops, where it serves as a loop invariant.
+**Tracked evidence,** a `let mut h: @P` that follows the current version of what it reads. Taken up in a simpler form by [RFC 0004](0004-runtime-code.md): a `let mut` proof variable that the program assigns again, with nothing that follows a version. It serves as a loop's invariant there.
 
 **Judging writability by variance.** A type would grant write access to a type argument exactly when it is not covariant in it, as rustc computes, in place of a list of writable types. Rejected: variance follows a type's definition and not what its methods do, so a covariant `Handle<T>` that holds an `Rc<dyn Any>` and a `PhantomData<T>` can still write a `T` through `&self` (tested). Variance can help describe known types, never admit unknown ones.
 
@@ -1444,11 +1444,11 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 15. **The conditions of decision 76.** The owner asked for a derived `Debug` to work, and agreed to the loan. These are this RFC's: that what may be lent is decided from the snapshot; that a function's signature and a closure's captures are left out; that the function's result exposes nothing even when the caller discards it, so `black_box(&found)` stays rejected; and that a proof field prints as `Erased`.
 16. **A function that assumes a fact stays verified.** The owner asked: "would adding 'unsafe assume' make the function unverified or can we keep it verified?" This RFC keeps it verified. `unsafe assume!` is a proof, not an `unsafe` block, and only its one proposition is trusted.
 17. **The spelling `unsafe assume!(_)`.** The owner asked whether it should be "just 'assume' with assume implicitly being unsafe in this world". This RFC keeps `unsafe`: the owner's earlier ruling was that assuming is marked as `unsafe` is, and a reader who knows Rust and not Locus already searches for that word. The cost is one word at each assumption.
-18. **Which built-in operations the language defines** on the types that stay Rust's. The owner accepted the split; the list is this RFC's, and what each operation means is the runtime semantics RFC's.
+18. **Which built-in operations the language defines** on the types that stay Rust's. Decided since, in [RFC 0004](0004-runtime-code.md), whose table lists each with what it means.
 19. **What an exported crate does with Locus's own types:** whether it depends on Locus's library as a Rust crate, or has them rewritten to the standard library's ([distribution-and-export](../../issues/distribution-and-export.md)). This RFC's export examples use none.
 
 **Left to later work,** each with its issue:
-- The runtime semantics: how runtime operations change versions and models, loops and invariants, tracked evidence, where borrows end, and overflow: [runtime-semantics](../../issues/runtime-semantics.md).
+- The rest of the runtime semantics, after [RFC 0004](0004-runtime-code.md): `&mut` parameters and reborrows, where borrows end, partial moves, and drops: [runtime-semantics](../../issues/runtime-semantics.md).
 - Remaining syntax questions: [proposition-syntax](../../issues/proposition-syntax.md).
 - Distribution, including how an exported package is laid out: [distribution-and-export](../../issues/distribution-and-export.md).
 - Closures and async code, including closures that take or return proofs, closures that capture a reference through which a place holding logical values can be written, and assignments inside closures that need proofs: [closures-async-packed-macros](../../issues/closures-async-packed-macros.md).

@@ -1,0 +1,14 @@
+//~ question: Does a proof variable prove its proposition after an `if` when one branch leaves it behind?
+//~ spec: runtime.joins
+//~ rfc: 0004
+
+fn settle(mut n: u32, big: bool, room: @(n < 50)) -> (out: u32, @(out < 100)) {
+    let mut small: @(n < 100) = _;
+    if big {
+        n += 10;
+        small = _;
+    } else {
+        n += 1;
+    }
+    (n, small) //~ error: `small` does not prove `n < 100` for the current `n`: on the path through the `else` branch it was last assigned before `n += 1`
+}

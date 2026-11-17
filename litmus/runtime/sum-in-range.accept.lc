@@ -1,0 +1,13 @@
+//~ question: Is a sum the true sum when the facts show that it is in range?
+//~ spec: runtime.arith.wrapping
+//~ rfc: 0004
+
+fn next_below(i: u32, room: @(i < 100)) -> (j: u32, @(j == i + 1)) {
+    (i + 1, _)
+}
+
+fn eight() -> u32 {
+    next_below(7, _).0
+}
+
+//~ run: eight() => 8

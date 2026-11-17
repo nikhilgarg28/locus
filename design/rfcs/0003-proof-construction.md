@@ -93,7 +93,7 @@ A proof hole tries three things, in this order, and nothing else:
 2. `compute()`;
 3. `linear`, given everything known at that point.
 
-What is known at a point is the proofs in scope, and the facts that the runtime semantics gives there: the condition of an enclosing branch, the value that a place was given, the range of a machine integer (RFC 0002, [Logical code](0002-logical-layer.md#logical-code)). `prove!(P)` is the same hole with its proposition written out. A hole that none of the three fills is an error, and the program writes a term.
+What is known at a point is the proofs in scope, and the facts that the runtime semantics gives there: the condition of an enclosing branch, the value that a place was given, the range of a machine integer ([RFC 0004](0004-runtime-code.md), and RFC 0002's [Logical code](0002-logical-layer.md#logical-code)). `prove!(P)` is the same hole with its proposition written out. A hole that none of the three fills is an error, and the program writes a term.
 
 ### Composing procedures with terms
 

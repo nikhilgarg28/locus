@@ -1,0 +1,21 @@
+//~ question: Does a proof variable prove its proposition after an `if` when both branches assign it again?
+//~ spec: runtime.joins, runtime.proofs.assigned
+//~ rfc: 0004
+
+fn settle(mut n: u32, big: bool, room: @(n < 50)) -> (out: u32, @(out < 100)) {
+    let mut small: @(n < 100) = _;
+    if big {
+        n += 10;
+        small = _;
+    } else {
+        n += 1;
+        small = _;
+    }
+    (n, small)
+}
+
+fn seventeen() -> u32 {
+    settle(7, true, _).0
+}
+
+//~ run: seventeen() => 17

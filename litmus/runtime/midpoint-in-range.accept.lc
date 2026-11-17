@@ -1,0 +1,13 @@
+//~ question: Is the midpoint of two indices known to lie between them, with nothing written?
+//~ spec: runtime.arith.wrapping, runtime.operations.returned
+//~ rfc: 0004
+
+fn mid(lo: usize, hi: usize, order: @(lo < hi)) -> (m: usize, @(lo <= m && m < hi)) {
+    (lo + (hi - lo) / 2, _)
+}
+
+fn three() -> usize {
+    mid(2, 5, _).0
+}
+
+//~ run: three() => 3

@@ -196,3 +196,6 @@ The owner then asked what else the library holds:
 
 Sections 1 to 8 above are the reply. They are a proposal for this issue's RFC, and the owner has not decided on them.
 
+### 2026-11-17, conversation with the owner on what runtime code tells Locus
+
+Question 2 above, which built-in operations the language defines on the types that stay Rust's, is answered in [RFC 0004](../design/rfcs/0004-runtime-code.md): the operations that Rust gives syntax, and `len` on arrays and slices, `Box::new`, and `checked_add`, `checked_sub`, and `checked_mul`. No method of `Option` or `Result` is on the list, and the owner chose no way yet for a function to join it ([pure-functions](pure-functions.md)). So question 1 stands as it was: a method of Locus's own `Vec` gives a fact as a proof in its result, or through a view as a slice.

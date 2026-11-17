@@ -52,3 +52,7 @@ In the order of the questions above:
 ### 2026-11-17, conversation with the owner on terms and procedures
 
 [RFC 0003](../design/rfcs/0003-proof-construction.md) takes the first of the forms proposed above, `if h: c { A } else { B }`, as one of the term forms that the owner accepted, with the rule `proofs.facts.named`. In `A`, `h` proves `c`; in `B`, it proves `!c`, which is this issue's question 2 and is still the RFC's proposal, not the owner's words. Questions 3 to 6 stay here: `while`, `match` guards, `if let`, which conditions can be named, and tracked evidence. An unnamed condition still gives a hole its fact (`proofs.holes`).
+
+### 2026-11-17, conversation with the owner on what runtime code tells Locus
+
+Question 6 above, how this relates to tracked evidence, is answered by [RFC 0004](../design/rfcs/0004-runtime-code.md). There is no evidence that follows a version. A proof variable declared with `let mut` is assigned again by the program, and it proves its proposition for the current values where it does so on every path. So the name of a `while`'s condition, when this issue adds it, is one more proof in the body, and what holds after the loop is what such variables prove there.

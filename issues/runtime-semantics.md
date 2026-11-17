@@ -150,3 +150,10 @@ The third part, overflow, is decided: "Yes all three rules make sense. We can lo
 
 With this, the three parts of the question are decided: understood operations, loops, and overflow. None is in an RFC or the specification yet. The owner next wants to explore whether a program needs a way to give a function of its own a meaning, which is [pure-functions](pure-functions.md), and that may change how the first part is written.
 
+### 2026-11-17, conversation with the owner on what runtime code tells Locus, concluded
+
+The owner asked for the three decided parts to be written down: "I suppose we can lock in our decisions here. Please file them in an RFC".
+
+[RFC 0004](../design/rfcs/0004-runtime-code.md) is the result, as a draft: it has had no adversarial review. It adds a chapter to the specification, [Runtime code](../spec/runtime.md), with eight rules and their examples. It lists what the owner decided, and what it proposes beyond that: that `Box::new` is understood, that what is known where paths join is what is known on every path and no more, the rows of its table that were not discussed one by one, that a kept proof's proposition is written, and `a..=b`.
+
+What stays in this issue is the rest of the runtime semantics: `&mut` parameters and reborrows, where borrows end, partial moves, drops and unwinding, calls that Locus cannot translate, and how much of obligation generation is trusted.

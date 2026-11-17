@@ -54,3 +54,20 @@ What it would be used for:
 ### 2026-11-17, conversation with the owner on what runtime code tells Locus
 
 Raised as the way to grow the list of understood operations beyond what the language defines. The owner asked for an explanation, which is the text above, and deferred the design until loops and overflow are decided.
+
+### 2026-11-17, conversation with the owner on what runtime code tells Locus, continued
+
+With loops and overflow decided, the owner came back to this: "explore if we need a mechanism for user to opt-in arbitrary functions to mean something for the compiler".
+
+The reply: not to start, and eventually yes for one case with no way round it, an operator or a trait method on a type of the program's own, whose signature the trait fixes. An observer can return its proof, a check can return an `Option` of a proof, and a definition used at run time and in propositions can be written twice. Two forms were put:
+
+- **By body.** A mark under which a function's body is its meaning. Locus checks that the body uses only understood operations and other such functions, takes no `&mut`, and at first has no loop and no recursion. Nothing is declared beside the body, and nothing is assumed. It does not reach a body that calls unverified code, such as a wrapper around the standard library.
+- **By declaration.** The form under "What was put to the owner" above: a stated value that the body proves or assumes. It reaches a wrapper, at the price of a second place where a contract lives and of an assumed case.
+
+Either way the mark exposes the body as a contract, as `const fn` does, so it is written and never inferred; and generic code gains nothing until a trait can say that its method is such a function.
+
+The owner decided:
+
+> Let's stay with nothing for now.
+
+[RFC 0004](../design/rfcs/0004-runtime-code.md) records it. This issue stays, as `later`, with the reply's leaning recorded: the form by body, when the question is taken up again.
