@@ -1,0 +1,55 @@
+//~ question: May a method that takes `&mut self` change a field that a proof reads by leaving a valid value in its place while it builds the new one?
+//~ spec: contracts.invariants.assignment, contracts.invariants.observed
+//~ rfc: 0002
+
+use locus::std::mem;
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(items.len() <= cap),
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: &Stack) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+impl Stack {
+    fn new(cap: usize) -> Stack {
+        // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
+        let (items, empty) = Vec::empty();
+        Stack { items, cap, fits: _ }
+    }
+
+    // Whether `x` was pushed, with a proof that the stack then grew by one.
+    fn push(&mut self, x: u32) -> (pushed: bool, @(pushed ==> final!(self).len() == self.len() + 1)) {
+        // An empty stack stands in for `*self`. If the `push` below panicked, the caller
+        // would be left with that one: a valid stack, with the wrong contents.
+        // `replace` is Locus's library's, and `was` proves that `taken` is what was there.
+        let (taken, was) = mem::replace(self, Stack::new(0));
+        let Stack { mut items, cap, fits } = taken;
+        let (seen, same) = items.view();
+        if seen.len() < cap {
+            let grew = items.push(x);
+            *self = Stack { items, cap, fits: _ };
+            (true, _)
+        } else {
+            *self = Stack { items, cap, fits };
+            (false, _)
+        }
+    }
+}
+
+fn third_fits() -> bool {
+    let mut stack = Stack::new(2);
+    let (first, _) = stack.push(7);
+    let (second, _) = stack.push(8);
+    let (third, _) = stack.push(9);
+    third
+}
+
+//~ run: third_fits() => false

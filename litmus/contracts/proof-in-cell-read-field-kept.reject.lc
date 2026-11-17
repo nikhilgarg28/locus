@@ -2,7 +2,7 @@
 //~ spec: logic.ghost.interior-mutability
 //~ rfc: 0002
 
-use std::cell::Cell;
+use locus::std::cell::Cell;
 
 struct Cache {
     x: u32,

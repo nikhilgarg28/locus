@@ -1,0 +1,21 @@
+//~ question: May a closure that takes a value of a type with a proof field be given to an iterator adapter of the standard library?
+//~ spec: logic.boundary.calls, logic.boundary.logical-data
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+// Whatever `map` calls the closure with is an `Interval`, which only verified code builds.
+fn widest(ivs: &[Interval]) -> u32 {
+    ivs.iter().map(|iv| iv.hi - iv.lo).max().unwrap_or(0)
+}
+
+fn four() -> u32 {
+    let ivs = [Interval { lo: 1, hi: 3, ordered: _ }, Interval { lo: 2, hi: 6, ordered: _ }];
+    widest(&ivs)
+}
+
+//~ run: four() => 4

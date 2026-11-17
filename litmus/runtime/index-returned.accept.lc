@@ -1,0 +1,19 @@
+//~ question: Once an index has returned, does Locus know that it was in bounds, and which element it gave?
+//~ spec: runtime.operations.returned, runtime.operations.conditions
+//~ rfc: 0004
+
+fn at(xs: &[u32], i: usize) -> (x: u32, @(i < xs.len() && x == xs[i])) {
+    let x = xs[i];
+    (x, _)
+}
+
+fn second() -> u32 {
+    at(&[7, 8], 1).0
+}
+
+fn beyond() -> u32 {
+    at(&[7], 3).0
+}
+
+//~ run: second() => 8
+//~ run: beyond() => panic

@@ -1,5 +1,5 @@
 //~ question: May a vector of values of an invariant type be lent mutably to unverified code?
-//~ spec: logic.boundary.payload, logic.boundary.access
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
 //~ rfc: 0002
 
 struct Interval {

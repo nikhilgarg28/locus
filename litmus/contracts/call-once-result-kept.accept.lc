@@ -1,0 +1,20 @@
+//~ question: May a fact about a call's result be used with that same result?
+//~ spec: contracts.calls.unrelated
+//~ rfc: 0002
+
+fn get(xs: &[u8], i: usize, in_bounds: @(i < xs.len())) -> u8 {
+    xs[i]
+}
+
+// The implementation is called once, and its result is kept.
+fn byte<S: AsRef<[u8]>>(s: &S, i: usize) -> Option<u8> {
+    let bytes = s.as_ref();
+    if i < bytes.len() {
+        Some(get(bytes, i, _))
+    } else {
+        None
+    }
+}
+
+//~ run: byte(&[7u8, 9], 1) => Some(9)
+//~ run: byte(&[7u8, 9], 2) => None

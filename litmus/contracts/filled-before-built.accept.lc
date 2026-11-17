@@ -1,0 +1,34 @@
+//~ question: May a value with an invariant be built once the data that its invariant describes is in place?
+//~ spec: contracts.invariants, contracts.invariants.observed
+//~ rfc: 0002
+
+use locus::std::prelude::*;
+
+struct Filled {
+    items: Vec<u32>,
+    len: usize,
+    full: @(items.len() == len),
+}
+
+// `make` may panic. Until `Filled` is built there is only a plain vector,
+// which unwinding drops as one.
+fn filled(len: usize, make: fn() -> u32) -> Option<Filled> {
+    let items: Vec<u32> = vec![make(); len];
+    // `view` is a method of Locus's `Vec`: the vector as a slice, with a proof
+    // that the two hold the same items. Its body assumes that proof.
+    let (seen, same) = items.view();
+    if seen.len() == len {
+        Some(Filled { items, len, full: _ })
+    } else {
+        None
+    }
+}
+
+fn three() -> usize {
+    match filled(3, || 7) {
+        Some(f) => f.len,
+        None => 0,
+    }
+}
+
+//~ run: three() => 3

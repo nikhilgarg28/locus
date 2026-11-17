@@ -1,0 +1,25 @@
+//~ question: May a function state a fact about another crate's result that it cannot prove, by assuming it?
+//~ spec: proofs.assume, contracts.calls.unrelated
+//~ rfc: 0002
+
+mod dep {
+    // Stands for a function of another crate, which promises a result below 100
+    // in its documentation and in nothing that Locus can check.
+    #[unverified]
+    pub fn parse(s: &str) -> u32 {
+        s.len() as u32 % 100
+    }
+}
+
+fn small(s: &str) -> (n: u32, @(n < 100)) {
+    let n = dep::parse(s);
+    (n, unsafe assume!(_))
+}
+
+fn tenth(s: &str) -> u32 {
+    let (n, below) = small(s);
+    let fits: @(n / 10 < 10) = _;
+    n / 10
+}
+
+//~ run: tenth("abcdefghijkl") => 1

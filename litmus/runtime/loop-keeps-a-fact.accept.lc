@@ -1,0 +1,22 @@
+//~ question: Does a proof variable that every way through a loop's body assigns again hold at the top of the loop, and after it?
+//~ spec: runtime.loops, runtime.joins
+//~ rfc: 0004
+
+fn count_below(xs: &[u32], limit: u32) -> (n: usize, @(n <= xs.len())) {
+    let mut n = 0;
+    let mut i = 0;
+    let mut fits: @(n <= i && i <= xs.len()) = _;
+    while i < xs.len() {
+        if xs[i] < limit {
+            n += 1;
+            i += 1;
+            fits = _;
+        } else {
+            i += 1;
+            fits = _;
+        }
+    }
+    (n, _)
+}
+
+//~ run: count_below(&[1, 5, 2], 3).0 => 2

@@ -1,0 +1,7 @@
+//~ question: Does a procedure use a proof that is in scope and was not passed to it?
+//~ spec: proofs.procedures
+//~ rfc: 0003
+
+logic fn weaker(n: Int, big: @(n > 5)) -> @(n > 4) {
+    linear(()) //~ error: cannot prove `n > 4` from the facts given, of which there are none: it fails for `n = 0`; `big` is in scope and was not passed
+}

@@ -37,3 +37,33 @@ The owner set the direction and asked for a check of the claim behind it:
 > Also we should record in RFC that Locus's own stdlib will support permissioned pointers and build the rest of the collections (say box/vector etc) using them and hence avoiding unsafe code. We will also have access to Rust's stdlib within Locus but with no proofs. In fact, can you please verify that permission pointers is all it takes to build say box or vec without unsafe?
 
 The spike was written to check it. It ran `Box` and `Vec` with `unsafe` forbidden over a layer of eleven primitives, in a build that asserts every primitive's `requires` at run time: no assertion failed, every block was freed, and Valgrind found no error. rustc rejected a use after free, a copied permission, two mutable borrows of one slot, and a vector of `Rc` sent to another thread. It also rejected a `drop` that gives its permission away and an `into_inner` that takes the box apart, which is where questions 2 and 5 come from. Miri could not be installed, so Rust's aliasing rules were not tested. No proof was involved: the spike shows that the Rust can be written, not that Locus can verify it.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The owner moved this from a direction to planned work:
+
+> I agree that permissioned pointers are a good idea worth bringing forward.
+
+RFC 0002's decision 71 records it. Three points from the conversation bear on the questions above:
+
+- **Question 1 has a direction.** A permission is not a new kind of ghost value. In the owner's words it is "a private ZST with logical data inside": a runtime struct that is not `Copy`, so that rustc keeps it to one holder, that logical code can read, and that only the trusted primitives construct (RFC 0002, decision 69). Since decision 61 it stays within verified code like every value that holds logical data.
+- **Allocation that can fail.** The collections should offer forms that return an error when allocation fails, from the start, and the primitives should stay sound if an allocator unwinds: with values that are valid at every point (decision 66), an unwind leaks memory and nothing worse. Rust 1.100 requires allocators not to unwind because the assumption that they do not had become a pervasive source of unsoundness.
+- **Why it is worth the work.** "Memory Safety Bugs in Rust Standard Library" (Microsoft FORGE Lab, 2026) reports soundness bugs under the safe interfaces of `std`, reached from safe code. Locus's trusted specifications of `std` inherit such bugs; verified collections would not have the first two kinds it describes. The contracts on the primitives are also what a proof needs in order to leave out a bounds check ([no-panic-claims](no-panic-claims.md)).
+
+### 2026-11-16, conversation with the owner on how to build Locus, continued
+
+A permission as the owner described it, a struct with logical data inside that is not `Copy`, is a sealed type in the sense of RFC 0002's decision 73, so by that rule unverified code could hold one. For an `Interval` the worst a broken assumption gives is a wrong fact. For a permission it is two holders of one piece of memory. Whether the library lets a permission into unverified hands is a question for its design, recorded as question 4 of [opaque-certified-values](opaque-certified-values.md).
+
+### 2026-11-16, conversation with the owner on the standard library
+
+On question 10, how a Locus collection meets Rust crates, the owner decided that the two must be able to exchange values without copying:
+
+> Yes, we should add this restriction regardless to keep zero copy possible.
+
+RFC 0002's decision 75 records it. Locus's `Box`, `Vec`, and `String` keep the layout and the allocator of the standard library's, and convert in constant time, through the standard library's own functions for taking such a value apart and putting it together. Each conversion is one more trusted primitive, whose contract says that the Locus value's model is the Rust value's. A hash map has no such functions, so it converts by iteration or stays Rust's, with a specification. In a Rust file `Vec` keeps meaning the standard library's; Locus's is named by its own path, and presents the same model and the same contracts, so that a proof written against one holds for the other.
+
+### 2026-11-16, conversation with the owner on reaching the standard library
+
+RFC 0002's decisions 81 and 83 set the stage before this design: Locus's library first provides its collections as wrappers around the standard library's, with contracts that are assumed, and is trusted to keep the values they are given. This design then replaces a wrapper with a verified collection, without changing its signatures. Two things follow for the questions above:
+- question 10, how a Locus collection meets Rust crates, has its answer for the wrapper stage: the wrapper holds the standard library's type, so it converts in constant time by value and by reference. Whether a rebuilt collection can still lend itself as a `&std::vec::Vec<T>` depends on holding that type as its storage;
+- the two things that `unsafe assume!` cannot do are this design's to deliver: `unsafe` code behind a proof parameter, which is how a proof removes a bounds check, and a collection that holds proofs with no unverified code touching them.

@@ -1,0 +1,7 @@
+//~ question: Does `linear` prove that a product of two positive variables is positive?
+//~ spec: proofs.procedures.linear
+//~ rfc: 0003
+
+logic fn product(x: Int, y: Int, px: @(x > 0), py: @(y > 0)) -> @(x * y > 0) {
+    linear((px, py)) //~ error: cannot prove `x * y > 0` from the facts given: `x * y` is a product of two variables, which `linear` takes as an atom that the facts say nothing about
+}

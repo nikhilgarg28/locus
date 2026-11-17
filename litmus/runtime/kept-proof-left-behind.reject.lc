@@ -1,0 +1,9 @@
+//~ question: Does a `let mut` proof variable follow a write to what it is about, with no assignment?
+//~ spec: runtime.proofs.assigned
+//~ rfc: 0004
+
+fn step(mut n: u32, room: @(n < 100)) -> (out: u32, @(out <= 100)) {
+    let mut bounded: @(n <= 100) = _;
+    n += 1;
+    (n, bounded) //~ error: `bounded` proves `n <= 100` for the value `n` had before `n += 1`, not the current one; assign `bounded` again
+}

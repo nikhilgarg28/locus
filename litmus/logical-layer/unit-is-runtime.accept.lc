@@ -3,7 +3,7 @@
 //~ rfc: 0002
 
 fn units() -> usize {
-    let all: Vec<()> = vec![(), (), ()];
+    let all: [(); 3] = [(), (), ()];
     let many: @(all.len() == 3) = _;
     all.len()
 }

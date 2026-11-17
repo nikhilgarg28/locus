@@ -34,3 +34,22 @@ Moved into the repository from [GitHub issue #12](https://github.com/nikhilgarg2
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+**The question that decisions 80 to 82 of RFC 0002 make urgent:** a trait method has the signature its trait gives it, so it cannot return a proof. On Locus's own types, `v[i]`, `*rc`, `for x in &v`, `a == b`, and `v.clone()` run and tell Locus nothing.
+
+Options:
+1. **Leave it.** A named method gives the fact: `v.get(i, p)`, `v.view()`.
+2. **Views.** Each of Locus's types has one method that returns it as a type the language understands, with a proof that the two are the same: a `Vec` as a slice, a `String` as a `str`. After one binding, `len` and indexing are the language's.
+3. **Transparent functions.** A function may declare that its result is a stated logical expression of its arguments. Locus verifies the body against it once, and from then on a call is an expression it understands, as it understands `a + b`. The declaration is on the method's implementation and does not change its Rust signature, so it works for operators and trait methods, and `if h: i < v.len()` works with no binding at all.
+
+Proposal: option 2 now, and option 3 as the next design after proof construction. The strongest argument against option 3 is that it is a second way to learn a fact from a call, beside a proof in the result, and the owner has just turned one such way down. The difference is that nothing is assumed: the fact is the function's own declared meaning, checked against its body. It does not help a wrapper whose body cannot be verified, which is why it waits for the verified collections.
+
+For the rest of this issue: logical traits as type classes, following Lean, and generic code checked once against them, in place of checking at each instantiation.
+
+### 2026-11-17, found while writing examples of values with invariants
+
+A sorted vector over `T: Ord` cannot state its invariant. A call of `cmp` tells Locus nothing ([RFC 0004](../design/rfcs/0004-runtime-code.md)), and no trait method has a contract. RFC 0002's examples of values with invariants hold `u32`s for this reason.

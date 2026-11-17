@@ -2,6 +2,8 @@
 //~ spec: compat.names.macros-expand
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+
 fn check(x: u32) -> usize {
     let proofs: Vec<@(x == x)> = vec![prove!(x == x)];
     proofs.len()

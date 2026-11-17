@@ -1,9 +1,9 @@
 # Contracts at the boundary with unverified code
 
 - **Kind:** design
-- **Status:** later
-- **Blocks:** Using a proof to remove a runtime check; taking a fact from a Rust crate that no runtime check can test; specifications of crates other than the standard library
-- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`
+- **Status:** open
+- **Blocks:** Using a proof to remove a runtime check
+- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `proofs.assume`
 
 ## Scope
 
@@ -18,6 +18,9 @@ This issue is the design of contracts for unverified functions and for functions
 
 - **Assuming is unsafe.** Once a proof can justify an `unsafe` operation, a false assumption in safe code could cause undefined behavior, which safe Locus must never do (vision, commitment 9). So whatever states an assumption is marked as `unsafe` is, and every result lists the assumptions it relies on. An `assume!(P)` in verified code was rejected for this reason.
 - **An unverified body stays plain Rust.** Whatever form a contract takes, the body states and proves nothing.
+- **One form, for programs as for Locus's library, which says that it is assumed** (RFC 0002, decision 78).
+- **A contract is a signature, and a program assumes with `unsafe assume!(_)`** (RFC 0002, decision 80, which replaces decisions 78 and 79). A function of the program's own wraps the code that Locus does not verify. Its proof parameters are its preconditions, the proofs in its result are its postconditions, and where its body cannot prove one it assumes it. So questions 1, 2, 3, and 5 below are answered: the form is a proof constructor marked `unsafe`; a precondition binds the callers of the wrapper, which are verified code; a postcondition is a proof value; and each result lists its assumptions. The second gap under Scope is closed.
+- **What is left** is the first gap: a proof cannot yet justify skipping a check, because a verified function contains no `unsafe` code. That, and questions 4 and 6, now rest on [permissioned-pointers](permissioned-pointers.md).
 
 ## Forms considered
 
@@ -73,3 +76,69 @@ So RFC 0002's decision 56 gives unverified functions no contract, and this issue
 ### 2026-11-09, conversation with the owner about PR #24, continued
 
 The owner confirmed that an unverified function takes no type that holds logical data, at any depth (RFC 0002, decision 58), and set the direction for Locus's own library: verified collections on permissioned pointers (decision 59). The primitives under those collections are unverified code with preconditions and postconditions, so Locus's library will need a contract form before a program does.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+Two items of the plan now rest on this issue's subject: the pointer primitives of [permissioned-pointers](permissioned-pointers.md), which decision 71 of RFC 0002 makes planned work, and leaving out a check that a proof makes unnecessary ([no-panic-claims](no-panic-claims.md)). Both need a function whose signature states a contract and whose body Locus does not verify. Since decision 65 that is a third kind of function, beside verified and unverified: its signature holds logical data, which only a verified function's may, and its body contains `unsafe`, which a verified function's may not. Only Locus's library has any until this issue is decided, as its trusted specifications.
+
+### 2026-11-16, conversation with the owner on the standard library
+
+Discussing how the standard library's functions would be specified, the owner set two requirements for the form:
+
+> The syntax for attaching post conditions should not be special cased to stdlib and should be available for user for their own code/crates too. And it should explicitly mention assume or unsafe or something like that.
+
+RFC 0002's decision 78 records them. So there is one form, used by Locus's library and by programs, for the standard library's functions, another crate's, and a program's own unverified functions; and it says in its text that what it states is assumed, as "Assuming is unsafe" above already asks. Decision 56's rule stands until the form is designed.
+
+The owner also asked:
+
+> And why not permit preconditions?
+
+The proposal had left them out, on the ground that a safe function accepts every input. The reply separates three cases by who can be made to prove a precondition. It is a proposal, and the owner has not decided on it:
+
+- **A safe function that Rust code already calls,** such as the standard library's. A precondition there can oblige nobody. Callers that Locus does not verify prove nothing, and Rust code such as `v[i]` sits in functions that are verified with nothing to prove (RFC 0002, decision 65), so it would stop compiling, against the vision's first commitment. What reads as the precondition of such a function is its panic condition: "panics only when `i >= len`". A specification can state that, and Locus would hold a caller to it exactly where the caller claims `#[no(panic)]` ([no-panic-claims](no-panic-claims.md)).
+- **An `unsafe fn`.** Its precondition is its safety contract, which every caller already promises by writing `unsafe`. A specification should state it, and a verified caller would prove it. This is what lets a proof remove a check, the first gap under Scope above. It needs a change to decision 65, under which verified code calls no `unsafe fn`, and a place at the call to write the proof.
+- **A program's own function that only verified code can reach.** Its precondition is a proof parameter, as for every verified function, and no clause is needed. If its body is unverified, the mark that says "assumed" is what lets it keep that signature: this is the third kind of function that the previous entry describes.
+
+### 2026-11-16, conversation with the owner on specifications
+
+On the proposal above, which allowed a precondition in two of its three cases, the owner decided against preconditions:
+
+> I'm okay with no preconditions - let's keep it simple like that.
+
+RFC 0002's decision 79 records it. A specification states what is assumed of a function's result, and obliges no caller. So verified code still calls no `unsafe fn`, and a proof cannot yet justify skipping a check. Stating when a safe function panics, which `#[no(panic)]` will need, was part of the same proposal, and is left to [no-panic-claims](no-panic-claims.md).
+
+The owner then asked for the form to be designed, with its visibility:
+
+> But I do want to iterate on the syntax for specifying these assumed post conditions + figure out visibility rules. Can I take a crate, add assumed post conditions and after that, who all sees those post conditions? Only in that crate or outside? Can I rename the type while doing so?
+
+So this issue moves from `later` to `open`. The design has started in conversation, and nothing in it is decided.
+
+### 2026-11-16, conversation with the owner on specifications, continued
+
+The form proposed in reply was an attribute, `#[unsafe(assume(P))]`, written on a function's definition or in an `extern` block that repeats another crate's signatures. It left the function's Rust type unchanged, and put the fact in scope after the call, as an `if` puts its condition in scope. The owner asked what the return type was, and on hearing that it held no proof, decided against that:
+
+> I don't like just assuming facts in scope - prefer these to become native proofs in returns (like the way we use extern in rust - we just assume it behaves in a certain way).
+
+So an assumed postcondition is a proof in the function's result, as a verified function's is, and what is assumed is that the body honours the signature. That is form 2 above. Forms 1 and 3 as written are ruled out, since neither can put a proof in the result of a function whose Rust type is already fixed. Naming the fact that an `if` puts in scope is now [naming-facts-from-control-flow](naming-facts-from-control-flow.md).
+
+The owner then restated the goal, and proposed another way to reach it:
+
+> Let's take a step back though - the main goal we are trying to solve is to make it possible for us to use rust stdlib from within Locus in a way that we can supply chosen post conditions (and maybe pre-conditions too - we talked about it earlier but didn't pursue due to complexity). What if we just did that by having locus stdblib exporting types or even modules and somehow played with library visibility rules that ensure for instance Option or Vec by default come from the right library depending on the right context?
+
+The reply, on which nothing is decided:
+
+- **One primitive, the assumed function:** a function with a Locus signature, proof parameters and proofs in its result, whose body is plain Rust that Locus does not check, marked as `unsafe` is. Its visibility is the function's own. A precondition is a proof parameter, so preconditions need no feature of their own. A type from another crate is wrapped in a type of the program's own.
+- **Locus's library is then ordinary Locus code:** its own collection types, first as wrappers around the standard library's whose methods are assumed, later verified on permissioned pointers with the same signatures (RFC 0002, decision 75). It would replace the trusted specifications of standard functions that decision 56 kept, and the exception that lets a specified operation take exposed logical data.
+- **Rust forces the types to differ.** `v.len()` on the standard library's own `Vec` resolves to the standard library's `len`, which returns a `usize`. A method that returns a proof belongs to another type.
+- **Which `Vec` a name means is decided by Rust's own rule,** that an import shadows the prelude: `use locus::prelude::*;`. An implicit switch inside Locus code would change what valid Rust means there.
+- **What cannot be swapped:** `Option`, `Result`, slices, arrays, `Box`, integers, and ranges, which the language and every standard signature use. Those would be understood by the language itself, not by assumptions in a library.
+
+### 2026-11-16, conversation with the owner on specifications, concluded
+
+The owner accepted the proposal of the previous entry, with one change of his own: the assumption is a constructor of proofs, not a mark on a function.
+
+> why put unsafe assume as function decorator vs using 'unsafe assume!(_)' as the constructor for constructing the proof which can then be used anywhere, even in internal body of functions?
+
+RFC 0002's decisions 80 to 83 record the result, and the text above the log is brought up to date. Two of the owner's questions are written into RFC 0002 as proposed and are still for the owner: whether a function that assumes a fact stays verified (proposed: yes), and whether the form is `unsafe assume!` or `assume!` alone (proposed: with `unsafe`).
+
+This issue stays open for what a constructor of proofs cannot do: let `unsafe` code sit behind a proof parameter. The other thing it cannot do, hand logical data to unverified generic code, is trusted in Locus's own library alone (decision 83).

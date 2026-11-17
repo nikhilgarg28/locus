@@ -1,0 +1,15 @@
+//~ question: Does a hole use the condition of the branch it is in, with linear arithmetic?
+//~ spec: proofs.holes, proofs.procedures.linear
+//~ rfc: 0003
+
+fn tenth(n: u32) -> u32 {
+    if n < 100 {
+        let small: @(n / 10 < 10) = _;
+        n / 10
+    } else {
+        9
+    }
+}
+
+//~ run: tenth(57) => 5
+//~ run: tenth(400) => 9

@@ -2,6 +2,8 @@
 //~ spec: logic.ghost.erased, logic.ghost.runtime-parts-kept, logic.ghost.types-forward
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn logical_payloads() -> usize {
     let mut values: Vec<Nat> = Vec::new();
     values.push(logic! { 3 });

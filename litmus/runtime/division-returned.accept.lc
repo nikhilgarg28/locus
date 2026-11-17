@@ -1,0 +1,10 @@
+//~ question: Once a division has returned, does Locus know that the divisor was not zero?
+//~ spec: runtime.operations.returned, runtime.operations.conditions
+//~ rfc: 0004
+
+fn ratio(a: u32, b: u32) -> (q: u32, @(b != 0)) {
+    let q = a / b;
+    (q, _)
+}
+
+//~ run: ratio(9, 2).0 => 4

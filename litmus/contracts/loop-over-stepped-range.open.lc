@@ -1,0 +1,12 @@
+//~ question: Can this loop be proved never to panic, and how much must be written to prove it?
+//~ issue: no-panic-claims
+//~ rfc: 0002
+
+// Offered in a discussion of panic-freedom in Rust as a loop that is plainly safe and tedious to prove so.
+// Every index is in bounds, but the proof needs what `step_by` yields, and a fact carried through the loop.
+#[no(panic)]
+fn bump_evens(buf: &mut [u8]) {
+    for i in (0..buf.len()).step_by(2) {
+        buf[i] = buf[i].wrapping_add(1);
+    }
+}

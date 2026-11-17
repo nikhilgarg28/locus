@@ -1,0 +1,15 @@
+//~ question: Is a fact about another crate's result known without a check or an assumption?
+//~ spec: proofs.assume, contracts.calls.unrelated
+//~ rfc: 0002
+
+mod dep {
+    #[unverified]
+    pub fn parse(s: &str) -> u32 {
+        s.len() as u32 % 100
+    }
+}
+
+fn small(s: &str) -> (n: u32, @(n < 100)) {
+    let n = dep::parse(s);
+    (n, _) //~ error: cannot prove `n < 100`: `parse` is unverified, so `n` is known only to be a `u32`
+}

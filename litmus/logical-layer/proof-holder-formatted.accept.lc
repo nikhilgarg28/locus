@@ -1,0 +1,21 @@
+//~ question: May an `Option` holding a proof be printed with `{:?}`?
+//~ spec: logic.boundary.loans
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+// The formatting code is not verified. It is lent `found` by shared reference:
+// it reads the marker, and has nowhere to put a copy of it.
+fn shown(n: u32) -> String {
+    let found: Option<@(n > 0)> = check(n);
+    format!("{:?}", found)
+}
+
+//~ run: shown(4) => "Some(Erased)"
+//~ run: shown(0) => "None"

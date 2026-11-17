@@ -1,0 +1,13 @@
+//~ question: Does a declared proposition have a defining equation to unfold?
+//~ spec: proofs.unfold
+//~ rfc: 0003
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn zero_is_even() -> @Even(0) {
+    let def = eq::unfold(Even)(0); //~ error: `Even` is a declared proposition, which has no defining equation: prove it with an arm, as in `Even::Zero @ _`
+    Even::Zero @ _
+}

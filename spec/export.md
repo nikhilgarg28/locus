@@ -8,13 +8,13 @@ r[export.locus-visibility]
 An item or field declared `pub(locus)` is public when its crate is built, and visible only within the crate when the crate is exported, so the rules of this chapter do not apply to it. When a crate is exported, a plain `pub use` of a `pub(locus)` item is rejected.
 
 r[export.plain-interface]
-When a crate is exported, nothing that other crates can reach mentions a logical type: no function or method has a proof parameter or a proof in its result, no parameter, result, field, constant, static, or type alias has a type that holds logical values, and no function has a `Model` bound. Because Rust makes every field of an enum's variants public, an enum that other crates can reach has no logical or proof fields.
+When a crate is exported, nothing that other crates can reach exposes logical data ([`logic.boundary.logical-data`](logical-layer.md#the-boundary-with-unverified-code)): no function or method has a proof parameter or a proof in its result, no parameter, result, constant, static, or type alias has a type that exposes logical data, no field that other crates can reach holds logical data, and no function has a `Model` bound. Because Rust makes every field of an enum's variants public, an enum that other crates can reach has no field that holds logical data.
 
 r[export.invariants-closed]
-When a crate is exported, no field that a proof field reads is reachable from other crates, and other crates cannot construct a struct that has proof fields.
+When a crate is exported, no field that a proof field reads is reachable from other crates, and other crates cannot construct a struct that holds logical data. So a sealed type that other crates can reach stays sealed against them: they hold its values and call its functions, and can neither build one nor change what its proofs read.
 
 r[export.macros-direct]
 When a crate is exported, every invocation of one of Locus's macros, and every call that passes an argument for a parameter of logical type, is written directly in the crate's own code: not in any macro's output, and not in the input of a function-like macro. An attribute macro or a derive may take an item that contains them. A Locus macro may be invoked by its name or an imported alias.
 
 r[export.function-values]
-When a crate is exported, a function with ghost parameters may be used as a value wherever it may be when the crate is built.
+When a crate is exported, a function with ghost parameters or a ghost result may be used as a value wherever it may be when the crate is built, which is within verified code ([`logic.boundary.calls`](logical-layer.md#the-boundary-with-unverified-code)).

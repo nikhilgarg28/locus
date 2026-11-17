@@ -1,11 +1,11 @@
-//~ question: May the sending half of a channel of proofs be given to code Locus has no specification for?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ question: May a channel of the standard library carry values that hold proofs?
+//~ spec: logic.boundary.plain-data
 //~ rfc: 0002
 
 use std::sync::mpsc;
 
 fn lend(n: u32) -> bool {
-    let (tx, rx) = mpsc::channel::<Option<@(n > 0)>>();
-    std::hint::black_box(tx.clone()); //~ error: `tx` sends values holding proofs, so it cannot be given to `black_box`, which Locus has no specification for: that code could send a forged proof that `rx` would receive
+    let (tx, rx) = mpsc::channel::<Option<@(n > 0)>>(); //~ error: `mpsc::channel` is the standard library's, which Locus does not verify, so it is not made at a type that holds a proof: its other half could be given a forged one
+    drop(tx);
     rx.try_recv().is_ok()
 }

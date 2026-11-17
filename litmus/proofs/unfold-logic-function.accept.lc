@@ -1,0 +1,11 @@
+//~ question: Does `eq::unfold` give the defining equation of a logic function?
+//~ spec: proofs.unfold
+//~ rfc: 0003
+
+logic fn twice(n: Int) -> Int {
+    n + n
+}
+
+logic fn twice_is_sum(n: Int) -> @(twice(n) === n + n) {
+    eq::unfold(twice)(n)
+}

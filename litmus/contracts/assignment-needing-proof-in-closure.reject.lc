@@ -11,7 +11,7 @@ struct Interval {
 fn collapse(iv: &mut Interval) {
     let r = &mut *iv;
     let mut update = move || {
-        r.hi = r.lo; //~ error: assigning `r.hi`, which the proof field `ordered` reads, needs a proof, and an assignment that needs a proof is not supported inside a closure
+        r.hi = r.lo; //~ error: `hi` is read by the proof field `ordered`, so it is not assigned in place, inside a closure or anywhere else
     };
     update();
 }

@@ -1,5 +1,5 @@
 //~ question: May a closure whose result gives mutable access to a place holding a proof be passed to unverified code?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ spec: logic.boundary.plain-data, logic.boundary.logical-data
 //~ rfc: 0002
 
 fn keep(n: u32) -> u32 {

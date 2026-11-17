@@ -64,3 +64,20 @@ RFC 0002's decision 52 adds a question for this issue: how a project names the u
 ### 2026-11-09, conversation with the owner about PR #24
 
 RFC 0002's decision 54 changes what the list of trusted crates does. A crate with `unsafe` code that is not on it is no longer handled by tracking what it was given: a function that calls into it is unverified, and is itself what a result lists. That reading of decision 52 is the reviewer's proposal and still for the owner. A manifest also lists each unverified function with `unsafe` code, and each `unsafe impl`, of a Locus crate that a result passes through.
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+**New with RFC 0002's decision 81:** what an exported crate does with the types of `locus::std`, and what a program does that already has a crate named `locus`.
+
+Options for exported crates:
+1. **Depend on Locus's library as an ordinary Rust crate.** Its runtime part is small, has no proofs after erasure, and is itself exported Rust. The exported crate names `locus::std::vec::Vec` as it names any dependency's type.
+2. **Rewrite Locus's types to the standard library's when exporting,** with each wrapper method written out as the standard calls it makes.
+3. **Forbid them in exported crates.**
+
+Proposal: option 1, with one rule: what an exported crate shows to other crates uses the standard library's types, converting at the edge, which costs nothing. So a Rust user sees `Vec<u32>` in every signature, and the vision's "no runtime support" still holds in the sense that matters: the dependency is plain Rust with no Locus toolchain. The strongest argument against is that the exported source reads less like what a Rust programmer would write inside function bodies; option 2 fixes that at the price of a rewriting pass that would have to be validated.
+
+For the name: `locus` is reserved in a Locus crate's dependencies, as `std` and `core` are.
+
+For the rest of this issue, the proposal is to decide only what the first build needs, and leave publishing until build mode works: configurations under `[package.metadata.locus]`, the list of trusted crates per workspace, and each published crate carrying the list of assumptions its results rest on.

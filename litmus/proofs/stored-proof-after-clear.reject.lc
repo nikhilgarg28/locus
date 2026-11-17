@@ -2,6 +2,8 @@
 //~ spec: proofs.versions
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn first(items: &mut Vec<u32>, nonempty: @(items.len() > 0)) -> u32 {
     let mut checked: Vec<(i: usize, @(i < items.len()))> = Vec::new();
     checked.push((0, _));

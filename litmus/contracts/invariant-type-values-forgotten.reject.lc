@@ -9,7 +9,7 @@ struct Interval {
 }
 
 fn reset(iv: &mut Interval) -> u32 {
-    iv.lo = 0;
+    *iv = Interval { lo: 0, hi: iv.hi, ordered: _ };
     std::hint::black_box(&mut *iv);
     let ordered: @(iv.lo <= iv.hi) = iv.ordered;
     let zero: @(iv.lo == 0) = _; //~ error: cannot prove `iv.lo == 0`: `iv` was lent mutably to `black_box`, whose effect is unknown, so Locus knows only its invariant

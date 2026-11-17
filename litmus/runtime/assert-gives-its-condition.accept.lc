@@ -1,0 +1,11 @@
+//~ question: Is the condition of an `assert!` known after it?
+//~ spec: runtime.operations.returned, runtime.joins
+//~ rfc: 0004
+
+// `assert!` is an `if` whose other branch does not return, so only one path reaches the next line.
+fn checked(n: u32) -> (out: u32, @(out < 100)) {
+    assert!(n < 100);
+    (n, _)
+}
+
+//~ run: checked(7).0 => 7

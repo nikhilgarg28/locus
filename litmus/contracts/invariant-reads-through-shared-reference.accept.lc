@@ -1,0 +1,26 @@
+//~ question: May a proof field read through a shared reference that another field holds?
+//~ spec: contracts.invariants.reads
+//~ rfc: 0002
+
+struct View<'a> {
+    items: &'a [u32],
+    nonempty: @(items.len() > 0),
+}
+
+fn view(items: &[u32]) -> Option<View<'_>> {
+    if items.len() > 0 {
+        Some(View { items, nonempty: _ })
+    } else {
+        None
+    }
+}
+
+fn seen() -> bool {
+    let items = [1];
+    match view(&items) {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+//~ run: seen() => true

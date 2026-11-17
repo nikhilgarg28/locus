@@ -1,6 +1,8 @@
 //~ question: May a mutable iterator over values holding proofs be passed to unverified code?
-//~ spec: logic.boundary.access, logic.boundary.writes
+//~ spec: logic.boundary.plain-data
 //~ rfc: 0002
+
+use locus::std::vec::Vec;
 
 fn keep(n: u32) -> usize {
     let mut found: Vec<Option<@(n > 0)>> = Vec::new();

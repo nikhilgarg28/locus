@@ -1,0 +1,7 @@
+//~ question: Is a sum the true sum when nothing shows that it is in range?
+//~ spec: runtime.arith.wrapping
+//~ rfc: 0004
+
+fn next(i: u32) -> (j: u32, @(j == i + 1)) {
+    (i + 1, _) //~ error: cannot prove `j == i + 1`: the sum may overflow, so `j` is the sum wrapped to a `u32`, in a debug build and in a release build alike
+}
