@@ -75,3 +75,20 @@ Stated as semantics only; which of rustc's representations Locus reads is an imp
 - **Overflow:** an arithmetic operation means the same operation on the models when it does not overflow. A proof that uses its result needs a proof that it did not, in every build profile; where the result is not used in a proof, nothing is owed, so Rust code compiles unchanged.
 - **Panics and drops:** a panic proves nothing, and since a value with an invariant is valid at every point (RFC 0002, decision 67), unwinding needs no rule of its own. A drop is a call.
 - **What the language defines** on Rust's built-in types (RFC 0002, decision 82) is listed and given its meaning here.
+
+### 2026-11-17, conversation with the owner on what runtime code tells Locus
+
+The owner took up this issue as one question, what Locus knows about the value of a runtime expression, in three parts: which operations it understands, loops, and overflow. The first part is decided. On the proposal: "I like your recommendation." On keeping the list of methods to one: "Yes, let's do it and go to B."
+
+**Decided:**
+
+- **An operation is understood when Rust gives it syntax and it is applied to a type that stays Rust's** (RFC 0002, decision 82): arithmetic, division and remainder, comparisons and the boolean operators, casts between integer types, indexing and range indexing of arrays and slices, building and matching tuples, structs, and enums, `?`, taking and following a reference, following a `Box`, and `for` over a range of integers.
+- **One method is understood: `len`, on arrays and slices.** No method of `Option` or `Result` is, for now; the owner: "it's always possible to add more later". The methods of the integer types, such as `checked_add`, are decided with overflow.
+- **Each understood operation has a value and a condition under which it returns, and once it has returned Locus knows both.** After `let x = xs[i];`, Locus knows `i < xs.len()`, and that `x` is the element at `i`. A panic proves nothing, and a return proves that the check passed. So `assert!` needs no rule of its own: it is an `if` whose other branch does not return. `debug_assert!` gives nothing, since a release build leaves it out.
+- **Everything else is a call,** known through its signature: `opt.unwrap()`, `xs.get(i)`, `xs.iter()`, an operator on a type of the program's own, and `==` on a type with a derived `PartialEq`.
+
+**In the proposal the owner accepted, and still this issue's to write down as rules:** each operation's value and condition; that floats are left out; that shifts and bit operations are named functions which `compute` evaluates and `linear` takes as atoms; and `Box::new`, which RFC 0002 already lists as defined by the language, and without which a `Box` could neither keep its value nor hold a proof.
+
+**Deferred by the owner:** a way for a function of the program's own to declare what its result is, so that a call of it is understood as these operations are ([pure-functions](pure-functions.md)). "We will come back and examine pure functions later after B and C".
+
+Nothing here is in an RFC or the specification yet. It will be written with the other two parts.
