@@ -1,0 +1,7 @@
+//~ question: May `then` chain two equalities that do not meet in the middle?
+//~ spec: proofs.equality
+//~ rfc: 0003
+
+logic fn chain(a: Int, b: Int, c: Int, ab: @(a === b), cb: @(c === b)) -> @(a === c) {
+    ab.then(cb) //~ error: `then` needs a proof of `b === ...`, and `cb` proves `c === b`; write `cb.symm()`
+}

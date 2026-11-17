@@ -1,0 +1,7 @@
+//~ question: Does `linear` decide a bound that involves division by a literal?
+//~ spec: proofs.procedures.linear
+//~ rfc: 0003
+
+logic fn mid_below(lo: Int, hi: Int, order: @(lo < hi)) -> @(lo + (hi - lo) / 2 < hi) {
+    linear((order,))
+}

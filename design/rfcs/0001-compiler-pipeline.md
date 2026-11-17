@@ -164,6 +164,7 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 | Named tuple component | Type, including a function's result | `-> (out: u8, @(out > n))`, `Vec<(i: usize, @(i < n))>` | Tuple types have no field names |
 | Proof hole | Expression | `(out, _)` | rustc rejects `_` as an expression except as an assignment target, an array length, or a generic argument, and the hole is recognized nowhere else |
 | Assumption | Expression | `(out, unsafe assume!(_))` | In an expression, rustc accepts `unsafe` only before a block |
+| Named condition | Expression | `if small: n < 100 { ... }` | rustc accepts no `name:` between `if` and its condition ([RFC 0003](0003-proof-construction.md)) |
 | Locus-only visibility | Visibility | `pub(locus) fn halve_even(...)` | rustc accepts only `crate`, `self`, `super`, and `in` paths inside `pub(...)`, and rejects anything else with E0704 (tested) |
 
 `@` is reserved for proofs. In a tuple struct's field, `pub (locus)` with nothing after it is Rust's: a public field whose type is a path `locus` in parentheses, which rustc accepts (tested). It keeps that meaning.
@@ -179,6 +180,7 @@ Locus extends Rust in two ways. Neither can change what a Rust program means.
 - the derives `Logical` and `Model`;
 - the trait `Model`;
 - the logical types and functions of Locus's standard library, such as `Nat`;
+- the procedures `compute` and `linear`, and the functions of `eq`, with which proofs are built ([RFC 0003](0003-proof-construction.md));
 - the runtime types that Locus's library provides in place of some of the standard library's, under `locus::std` ([RFC 0002](0002-logical-layer.md#assumptions-and-the-standard-library)). Unlike the names above, these are never in the prelude: a program imports them by path, as in `use locus::std::vec::Vec;`, and until it does, `Vec` is the standard library's.
 
 `Logical` can only be derived, never implemented by hand. Deriving it fails unless every field and payload is logical. `Model` is implemented by hand or derived. What they mean is [RFC 0002](0002-logical-layer.md).

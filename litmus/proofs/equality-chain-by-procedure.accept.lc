@@ -1,0 +1,7 @@
+//~ question: Does `linear` chain two equalities?
+//~ spec: proofs.procedures.linear, proofs.procedures.expand
+//~ rfc: 0003
+
+logic fn chain(a: Int, b: Int, c: Int, ab: @(a === b), cb: @(c === b)) -> @(a === c) {
+    linear((ab, cb))
+}

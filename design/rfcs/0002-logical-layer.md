@@ -742,7 +742,7 @@ A proof is a value of a proof type. Proofs are irrelevant: any two proofs of a p
 
 | Form | Meaning |
 |---|---|
-| `_` | A hole: proof search finds a proof of the expected proposition |
+| `_` | A hole: a proof of the expected proposition, found by the three steps that [RFC 0003](0003-proof-construction.md) names |
 | `prove!(P)` | A hole whose proposition is written out |
 | `lemma(arguments)` | A call of a logic function that returns a proof |
 | `Even::Step(m) @ h` | A constructor of an inductive proposition: its witnesses, then after `@` a proof of the arm's body |
@@ -752,11 +752,11 @@ A proof is a value of a proof type. Proofs are irrelevant: any two proofs of a p
 | `\|x: T\| proof`, `\|h: @P\| proof` | A proof of `forall \|x: T\| Q`, or of `P ==> Q`: a logical function from each `x`, or each proof of `P`, to a proof of `Q` |
 | `all(v)`, `imp(h)` | Using a proof `all` of a `forall` at `v`, or a proof `imp` of an implication on a proof `h` of its premise |
 
-The connectives' constructors and eliminators are listed under [Propositions](#propositions). Forms for using a logic function's definition and for rewriting along an equality are for RFC 0003 ([proof-construction](../../issues/proof-construction.md)).
+The connectives' constructors and eliminators are listed under [Propositions](#propositions). Forms for using a logic function's definition and for rewriting along an equality, the procedures `compute` and `linear`, and what a hole tries, are [RFC 0003](0003-proof-construction.md)'s.
 
 - **A match on a proof produces a proof.** A witness inside a proof, such as an existential's, can be used to build other proofs, but never becomes a logical or runtime value. This is Lean's rule for eliminating propositions; Lean's exceptions for propositions with at most one proof can come later.
 - **Search proposes, and the kernel decides.**
-  - Holes and `prove!` are filled by untrusted search: automation, decision procedures, solvers, or AI.
+  - Holes, `prove!`, and the procedures of [RFC 0003](0003-proof-construction.md) are untrusted search. That RFC says exactly what each may try.
   - A candidate counts only once the kernel checks it.
   - Proofs that were found are stored with the crate, so that checking never depends on finding them again ([vision](../../VISION.md), commitment 3). The format is [proof-search-and-storage](../../issues/proof-search-and-storage.md).
 - **The logic is Lean's.** The kernel checks proofs in Lean 4's type theory, which has:
@@ -1454,7 +1454,7 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 - Closures and async code, including closures that take or return proofs, closures that capture a reference through which a place holding logical values can be written, and assignments inside closures that need proofs: [closures-async-packed-macros](../../issues/closures-async-packed-macros.md).
 - Locus's standard library: logical types, indexing of sequences, `div_euclid` and `rem_euclid`, models of standard types, its own collection, cell, and lock types and their contracts, and functions that carry proofs through closures as `Option::map` and the iterator adapters do: [standard-library](../../issues/standard-library.md).
 - Traits and operators on logical types, generic predicates such as a `sorted` that applies to any ordered type, traits with logical values or contracts, programmable comparisons with their laws and decidable equality, and checking generic code once for logical instantiations: [traits-on-logical-types](../../issues/traits-on-logical-types.md).
-- How proofs are constructed: using definitions, rewriting, tactics, the interface to search, and shorter forms: RFC 0003, [proof-construction](../../issues/proof-construction.md).
+- How proofs are constructed: using definitions, rewriting, procedures, and what a hole tries: [RFC 0003](0003-proof-construction.md), [proof-construction](../../issues/proof-construction.md).
 - Storing proofs that were found, and what proof search may do: [proof-search-and-storage](../../issues/proof-search-and-storage.md).
 - Claims that runtime functions terminate: [termination-claims](../../issues/termination-claims.md).
 - How the kernel provides `Int`: the kernel RFC.

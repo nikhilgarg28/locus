@@ -152,3 +152,12 @@ Candidates for a second wave, each to be argued for: rewriting to a normal form 
 
 *What is left out on purpose:* tactic blocks, procedures written by programs, solvers, default sets of rewriting rules, and facts that a procedure takes without being given them. The macros `calc!`, `rewrite!`, `fold!`, and `unfold!` are replaced by the methods and functions of layer 2.
 
+### 2026-11-17, conversation with the owner on terms and procedures, concluded
+
+The owner accepted the proposal of the previous entry with one change, and asked for it to be written into the open PR:
+
+> We can drop ring for now - rest is all good. Let's please add it to the PR.
+
+[RFC 0003](../design/rfcs/0003-proof-construction.md) is the result, as a draft: it has had no adversarial review. It adds nine rules to the specification, under "Constructing proofs", each with examples. What the owner decided is listed in that RFC, and so is what the RFC proposes beyond it: what `else` binds in `if h: c`, that `linear` includes equality and reduces by evaluation first, that contradictory facts prove anything, the names, and that facts are passed as a tuple.
+
+This issue stays open until the owner decides on RFC 0003.

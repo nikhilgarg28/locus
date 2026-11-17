@@ -37,3 +37,7 @@ The owner asked for an audit of the decisions that are still open, with a propos
 - **How a stored proof finds its hole after an edit:** by the goal after normalization together with the hypotheses in scope, and a fingerprint of the definitions it uses, as the external review suggested. A proof whose key no longer matches is searched for again, never reused.
 - **When search fails,** the report is the one [proof-debugging](proof-debugging.md) proposes.
 - **The strongest argument against a committed file** is noise in reviews. The answer is that it is generated, like a lock file, and that without it a check depends on search succeeding again.
+
+### 2026-11-17, conversation with the owner on terms and procedures
+
+[RFC 0003](../design/rfcs/0003-proof-construction.md) settles the first of this issue's questions, as the owner accepted it: a hole tries a known proof, then `compute()`, then `linear` over what is known at that point, and nothing else (`proofs.holes`); a procedure uses only what it is given (`proofs.procedures`); and whatever either finds is a term with no hole and no procedure call in it (`proofs.procedures.expand`). What stays here is where found terms are stored, how a stored term finds its hole or call after an edit, the bound within which a procedure must answer, and the command that writes a term into the source.

@@ -1,0 +1,11 @@
+//~ question: May a lemma's values be left to the proofs passed beside them?
+//~ spec: proofs.values.inferred
+//~ rfc: 0003
+
+logic fn lt_trans(a: Int, b: Int, c: Int, ab: @(a < b), bc: @(b < c)) -> @(a < c) {
+    linear((ab, bc))
+}
+
+logic fn chain(x: Int, y: Int, z: Int, xy: @(x < y), yz: @(y < z)) -> @(x < z) {
+    lt_trans(_, _, _, xy, yz)
+}

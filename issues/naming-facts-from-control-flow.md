@@ -48,3 +48,7 @@ In the order of the questions above:
 4. **Which conditions:** those built from the operations that the language defines. A condition that calls a function binds the call first.
 5. **An unnamed condition still gives `_` its fact.** Otherwise every existing example would need a name. Naming is for when a person or a proof needs to refer to it.
 6. **Tracked evidence** stays with the runtime semantics.
+
+### 2026-11-17, conversation with the owner on terms and procedures
+
+[RFC 0003](../design/rfcs/0003-proof-construction.md) takes the first of the forms proposed above, `if h: c { A } else { B }`, as one of the term forms that the owner accepted, with the rule `proofs.facts.named`. In `A`, `h` proves `c`; in `B`, it proves `!c`, which is this issue's question 2 and is still the RFC's proposal, not the owner's words. Questions 3 to 6 stay here: `while`, `match` guards, `if let`, which conditions can be named, and tracked evidence. An unnamed condition still gives a hole its fact (`proofs.holes`).

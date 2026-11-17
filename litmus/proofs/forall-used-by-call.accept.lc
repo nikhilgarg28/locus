@@ -1,0 +1,12 @@
+//~ question: Is a proof of a `forall` used by calling it with a value?
+//~ spec: proofs.holes, proofs.procedures
+//~ rfc: 0003
+
+prop Even(n: Nat) {
+    Zero => { n == 0 }
+    Step(m: Nat) => { n == m + 2 && Even(m) }
+}
+
+logic fn at_three(doubles: @(forall |n: Nat| Even(2 * n))) -> @Even(2 * 3) {
+    doubles(3)
+}

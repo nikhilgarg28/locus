@@ -1,0 +1,7 @@
+//~ question: Does `rewrite` carry a proof about one value over to an equal one?
+//~ spec: proofs.equality
+//~ rfc: 0003
+
+logic fn moved(a: Int, b: Int, small: @(a < 10), same: @(a === b)) -> @(b < 10) {
+    small.rewrite(same)
+}

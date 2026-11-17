@@ -1,0 +1,11 @@
+//~ question: Does `compute` prove an equality that holds for every value, and not by evaluation?
+//~ spec: proofs.procedures.compute
+//~ rfc: 0003
+
+logic fn double(n: Int) -> Int {
+    if n <= 0 { 0 } else { double(n - 1) + 2 }
+}
+
+logic fn sum(n: Int, nonneg: @(n >= 0)) -> @(double(n) === n + n) {
+    compute() //~ error: `double(n)` and `n + n` do not evaluate to the same value: evaluation stops at `n <= 0`, which depends on `n`
+}

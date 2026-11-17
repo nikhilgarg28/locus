@@ -1,0 +1,7 @@
+//~ question: Does a hole prove a fact about a product of two variables?
+//~ spec: proofs.holes, proofs.procedures.linear
+//~ rfc: 0003
+
+logic fn square_nonneg(x: Int) -> @(x * x >= 0) {
+    _ //~ error: cannot prove `x * x >= 0`: no proof in scope states it, it does not hold by evaluation, and `x * x` is not linear; call a lemma
+}
