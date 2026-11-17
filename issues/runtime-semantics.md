@@ -134,3 +134,19 @@ This is the tracked evidence that RFC 0002 had deferred to this issue, in a simp
 
 The third part, overflow, is next.
 
+### 2026-11-17, conversation with the owner on overflow
+
+The third part, overflow, is decided: "Yes all three rules make sense. We can lock this in".
+
+**Decided:**
+
+- **`a + b`, `a - b`, and `a * b` on machine integers mean the wrapped result, in every build, and nothing is owed at the operation.** Rust defines overflow in both kinds of build: with overflow checks it panics, and without them the result wraps. One statement is true in both: if the operation returned, its result is the wrapped value. So a proof holds whichever way the crate is built, as the vision's first commitment asks, and plain Rust compiles unchanged.
+- **The true result follows when it is in range.** Locus knows the range of every machine integer, and that wrapping does nothing to a value in range. `linear` does this itself, since wrapping is a remainder by a literal. So overflow shows only where a proof needs the true value and the facts do not give the range.
+- **Division and remainder return only if the divisor is not zero,** in every build, so that fact is given. A cast between integer types is always defined, as wrapping.
+- **The strict rule, that each operation is proved to be in range, belongs to `#[no(panic)]`** ([no-panic-claims](no-panic-claims.md)), since a build with overflow checks could panic there. It is asked for one function at a time, so it does not reject plain Rust.
+- **`checked_add`, `checked_sub`, and `checked_mul` join the understood methods,** beside `len`: each gives `Some` of the true result when it is in range, and `None` otherwise. No other method of the integer types does, for now. `wrapping_add` means what `+` means under the first rule, and matters only once `#[no(panic)]` exists.
+
+**In the proposal, and still this issue's to write down:** that shifts mean the shift by the amount reduced to the type's width, which is also true in both kinds of build; and negation, which wraps as the other operations do.
+
+With this, the three parts of the question are decided: understood operations, loops, and overflow. None is in an RFC or the specification yet. The owner next wants to explore whether a program needs a way to give a function of its own a meaning, which is [pure-functions](pure-functions.md), and that may change how the first part is written.
+
