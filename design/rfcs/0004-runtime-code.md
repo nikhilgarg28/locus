@@ -135,7 +135,7 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 | `runtime.operations` | `runtime/checked-sum.accept.lc`, `runtime/length-of-slice.accept.lc`, `runtime/for-over-an-iterator.reject.lc`, `runtime/method-that-is-a-call.reject.lc` |
 | `runtime.operations.returned` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/index-returned.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/index-not-yet-returned.reject.lc` |
 | `runtime.operations.conditions` | `runtime/checked-sum.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/index-returned.accept.lc` |
-| `runtime.arith.wrapping` | `runtime/binary-search-found.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `runtime/sum-may-overflow.reject.lc` |
+| `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `runtime/sum-may-overflow.reject.lc` |
 | `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/kept-proof-left-behind.reject.lc` |
 | `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
 | `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-loses-a-fact.reject.lc` |
@@ -203,3 +203,9 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 - A function that declares what its result is ([pure-functions](../../issues/pure-functions.md)), and contracts on a trait's methods ([traits-on-logical-types](../../issues/traits-on-logical-types.md)).
 - A claim that a loop ends ([termination-claims](../../issues/termination-claims.md)), and that a function cannot panic ([no-panic-claims](../../issues/no-panic-claims.md)).
 - Naming the fact of a `while` condition and of a `match` arm ([naming-facts-from-control-flow](../../issues/naming-facts-from-control-flow.md)).
+
+**Not yet said.** Found while writing [RFC 0002](0002-logical-layer.md)'s examples of values with invariants, which are written so as not to need them:
+
+- **What a write to an item of an array or a slice tells Locus:** that the sequence is the old one with that item replaced, and that the write returns only if the index is in bounds. The table has no row for a write.
+- **That a slice's length is at most `isize::MAX`.** Without it, the sum of two indices into one buffer may wrap as far as Locus knows.
+- **What is known after a `while` ends:** that its condition is false. The rule for joins gives it after an `if` whose other branch returns, and nothing says it for a loop.

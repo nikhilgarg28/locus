@@ -49,3 +49,7 @@ Options:
 Proposal: option 2 now, and option 3 as the next design after proof construction. The strongest argument against option 3 is that it is a second way to learn a fact from a call, beside a proof in the result, and the owner has just turned one such way down. The difference is that nothing is assumed: the fact is the function's own declared meaning, checked against its body. It does not help a wrapper whose body cannot be verified, which is why it waits for the verified collections.
 
 For the rest of this issue: logical traits as type classes, following Lean, and generic code checked once against them, in place of checking at each instantiation.
+
+### 2026-11-17, found while writing examples of values with invariants
+
+A sorted vector over `T: Ord` cannot state its invariant. A call of `cmp` tells Locus nothing ([RFC 0004](../design/rfcs/0004-runtime-code.md)), and no trait method has a contract. RFC 0002's examples of values with invariants hold `u32`s for this reason.

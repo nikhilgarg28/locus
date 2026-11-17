@@ -1,0 +1,12 @@
+//~ question: May an unverified function take a value out of its place through a slot?
+//~ spec: contracts.slots.local, logic.boundary.plain-data
+//~ rfc: 0002
+
+use locus::std::mem;
+
+// The `unsafe` block makes `reset` unverified, and its signature holds no logical data.
+fn reset(counts: &mut [u32; 4]) -> u32 {
+    let (slot, taken, _) = mem::take_out(counts); //~ error: `take_out` returns a proof, so an unverified function cannot call it
+    slot.put([0; 4]);
+    unsafe { *taken.as_ptr() }
+}

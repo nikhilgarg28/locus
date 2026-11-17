@@ -1,0 +1,18 @@
+//~ question: May a slot be moved out of the variable that `take_out` bound it to?
+//~ spec: contracts.slots.local
+//~ rfc: 0002
+
+use locus::std::mem;
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn widen(iv: &mut Interval) {
+    let (slot, taken, was) = mem::take_out(iv);
+    // Wherever `kept` went from here, nothing would oblige it to reach `put`.
+    let kept = slot; //~ error: a slot is used only as the receiver of `put`, so it cannot be moved to `kept`
+    kept.put(Interval { lo: 0, hi: taken.hi, ordered: _ });
+}

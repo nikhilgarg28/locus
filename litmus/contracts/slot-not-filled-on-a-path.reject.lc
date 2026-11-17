@@ -1,0 +1,26 @@
+//~ question: May a path return while a slot has not been passed to `put`?
+//~ spec: contracts.slots.local
+//~ rfc: 0002
+
+use locus::std::mem;
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(items.len() <= cap),
+}
+
+impl Stack {
+    fn push(&mut self, x: u32) -> bool {
+        let (slot, taken, was) = mem::take_out(self);
+        let Stack { mut items, cap, fits } = taken;
+        let (seen, same) = items.view();
+        if seen.len() >= cap {
+            return false; //~ error: this path leaves `slot` without passing it to `put`, so `*self` would hold nothing
+        }
+        let grew = items.push(x);
+        slot.put(Stack { items, cap, fits: _ });
+        true
+    }
+}

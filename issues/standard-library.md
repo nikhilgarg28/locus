@@ -199,3 +199,11 @@ Sections 1 to 8 above are the reply. They are a proposal for this issue's RFC, a
 ### 2026-11-17, conversation with the owner on what runtime code tells Locus
 
 Question 2 above, which built-in operations the language defines on the types that stay Rust's, is answered in [RFC 0004](../design/rfcs/0004-runtime-code.md): the operations that Rust gives syntax, and `len` on arrays and slices, `Box::new`, and `checked_add`, `checked_sub`, and `checked_mul`. No method of `Option` or `Result` is on the list, and the owner chose no way yet for a function to join it ([pure-functions](pure-functions.md)). So question 1 stands as it was: a method of Locus's own `Vec` gives a fact as a proof in its result, or through a view as a slice.
+
+### 2026-11-17, conversation with the owner on changing a value with an invariant
+
+The owner agreed that Locus's library has a `replace` whose result says that it returns what was there, and that RFC 0002 proposes the signatures of `Vec` that its examples need ("yes to all"). RFC 0002's decision 87 records it.
+
+- `locus::std::mem` gains `replace`, `take_out`, and `Slot` ([opening-invariants](opening-invariants.md)).
+- Three signatures of `Vec` are proposed, not the six that were put to the owner. `push` and a new `set` return a proof in place of `()`, and `empty` is a constructor of its own name that returns its proof. `new`, `len`, and `pop` keep the standard library's shape, because decided examples call them for their values. This is a proposed answer to question 1 above: a method that returns `()` returns its proof instead, and a method that returns a value keeps its shape.
+- Two things this needs from the library's RFC: what each of these methods says about the items themselves, and how a `Nat` is made from an `Int` that is known not to be negative.

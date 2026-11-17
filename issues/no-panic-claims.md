@@ -72,3 +72,7 @@ The open example [`contracts/loop-over-stepped-range.open.lc`](../litmus/contrac
 [RFC 0004](../design/rfcs/0004-runtime-code.md) settles what arithmetic means outside a `#[no(panic)]` function: the wrapped result, whichever way the crate is built, with nothing owed where it is written. The owner placed the strict rule here: in a `#[no(panic)]` function, each `+`, `-`, and `*` is proved to be in range, since a build with overflow checks could panic there. `wrapping_add` and its kin are then how a function says that wrapping is meant, and would join the understood operations with this claim.
 
 The same RFC gives each understood operation the condition under which it returns. Under this claim, that condition is what the function must prove before the operation.
+
+### 2026-11-17, conversation with the owner on changing a value with an invariant
+
+Assigning a field that a proof reads, and then the proof field again, waits for this claim. The value is broken between the two statements, so nothing between them may panic. The owner: "Maybe someday we will do option 4 too with no panic but not needed now" (RFC 0002, decision 85).

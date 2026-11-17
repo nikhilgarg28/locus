@@ -37,3 +37,9 @@ No `unsafe impl` that a derive or another macro generates is allowed on a type w
 
 r[contracts.invariants.observed]
 A value of a type with proof fields satisfies them at every point of the program. It is built with its proofs proved, and a field that a proof field reads never changes in place. Code that Locus does not verify may hold, move, copy, or drop such a value, or call the type's own verified functions, but cannot build one or reach the fields that hold logical data or that its proofs read ([`logic.boundary.plain-data`](logical-layer.md#the-boundary-with-unverified-code)). So nothing observes such a value in a broken state: not a destructor, not code that catches a panic, and not another thread. Dropping a value takes it apart for the last time: its own destructor is given a value that satisfies its proof fields, and the destructors of its fields run afterwards.
+
+r[contracts.slots]
+`take_out` of Locus's library moves the value out of the target of a mutable reference and gives a slot for that place, and `put` on the slot writes a value there. From the one call to the other the place holds no value. After `put` it holds the value that `put` was given, as after an assignment. A panic that would unwind past a slot aborts the process, so nothing observes the place without a value.
+
+r[contracts.slots.local]
+A slot is bound to a local variable by the `let` whose initializer is the call of `take_out`. That variable is used only as the receiver of `put`: it is not moved, borrowed, assigned, captured, stored, or returned. Every path that leaves the variable's scope, other than by a panic, has passed it to `put`, and no `.await` lies between the two calls. Only a verified function calls `take_out`, whose result holds a proof.

@@ -838,8 +838,60 @@ struct Interval {
   - an unverified function never constructs the type, since it handles no type that holds logical data.
 - **Why nothing changes in place, and why there is no `open!` yet.** The previous revision accepted an assignment to a field that a proof reads when the proof could be proved again, and had an `open!` block in which such fields could be borrowed and the invariant was proved again at the end, with a panic inside the block aborting the process (decision 51). The owner chose to support neither for now (decision 67): "We will not support temporarily breaking an invariant while retaining the object's certified identity."
   - A value that is valid at every point needs no rule about unwinding, about calls that come back in, or about what a destructor may see, and it changes nothing about what a program does when it panics, so the [vision](../../VISION.md)'s commitment 2 has no exception.
-  - The cost is that a method taking `&mut self` cannot change a field that a proof reads, when the field's type is not `Copy`, without cloning the field or putting a placeholder in its place: rustc rejects moving `items` out of `*self` (E0507). Such a type offers methods that take the value and return it, as `push` above does.
-  - [opening-invariants](../../issues/opening-invariants.md) keeps the question open. One shape that would fit this reading without any broken state is a block that takes the value out of a `&mut`, builds it again, and puts it back, aborting if a panic would unwind in between.
+  - The cost falls on a method that takes `&mut self`: rustc rejects moving `items` out of `*self` (E0507), so such a method cannot take the value apart where it stands. The three ways below are what it does instead.
+- **A value with an invariant is changed in one of three ways, and each replaces it whole** (decisions 84 to 87). The owner, shown these beside a fourth that assigns the proof field again in place: "I like options 1-3." For `struct Stack { items: Vec<u32>, cap: usize, fits: @(items.len() <= cap) }`, each is the middle of a `push`, after the check that there is room:
+
+  ```rust
+  // 1. By value. The method takes the stack and returns it.
+  let Stack { mut items, cap, .. } = self;
+  let grew = items.push(x);
+  Stack { items, cap, fits: _ }
+
+  // 2. A stand-in. A valid value takes the place of `*self` while the new one is built.
+  let (taken, was) = mem::replace(self, Stack::new(0));
+  let Stack { mut items, cap, .. } = taken;
+  let grew = items.push(x);
+  *self = Stack { items, cap, fits: _ };
+
+  // 3. A slot. The value is moved out of `*self`, and a new one is put back.
+  let (slot, taken, was) = mem::take_out(self);
+  let Stack { mut items, cap, .. } = taken;
+  let grew = items.push(x);
+  slot.put(Stack { items, cap, fits: _ });
+  ```
+
+  - **By value** needs nothing more than decision 66 gives.
+  - **A stand-in** needs no rule either. `Stack` is sealed, so the standard library's `mem::replace` may be given one. Locus's library has a `replace` of its own, whose result says that it returns what was there:
+
+    ```rust
+    // In Locus's library, as `locus::std::mem::replace`.
+    pub fn replace<T>(place: &mut T, new: T)
+        -> (old: T, @(snap(old) === snap(place) && snap(final!(place)) === snap(new)))
+    ```
+
+    If `push` panics, the caller is left with the stand-in: a valid stack with the wrong contents, which is what `mem::take` leaves a Rust program with. The type needs a valid value that is cheap to build.
+  - **A slot** is for a type that has none, such as a buffer that is never empty.
+
+    ```rust
+    // In Locus's library, under `locus::std::mem`.
+    pub fn take_out<'a, T>(place: &'a mut T) -> (slot: Slot<'a, T>, old: T, @(snap(old) === snap(place)))
+
+    impl<'a, T> Slot<'a, T> {
+        pub fn put(self, new: T)
+    }
+    ```
+
+    - `take_out` moves the value out of the place, and `put` writes a value there. Between the two the place holds nothing, and nothing can reach it: the slot holds the borrow, so rustc rejects every use of `*self` until `put` has ended it.
+    - **A slot stays a local.** The `let` that calls `take_out` binds it to a variable, and that variable is used in one way only, as the receiver of `put`. It is not moved, borrowed, assigned, captured, stored, or returned, and no `.await` lies between the two calls. Every path that leaves the variable's scope without a panic has passed it to `put`.
+    - **A panic that would unwind past a slot aborts the process.** The slot's destructor does it, so no destructor of the caller's, no code that catches the panic, and no other thread sees the empty place. The abort is the library function's own behavior, in a call that the program wrote. Erasing proofs changes nothing about it, so the [vision](../../VISION.md)'s commitment 2 has no exception.
+    - **`put` is read as a write.** After `slot.put(v)` the place holds `v`, as after `*self = v`. A contract could not say so: it would have to speak of the value the place ends with, which nothing in a body may compute from ([`contracts.final`](../../spec/contracts.md)).
+    - **The rule is what makes the guard sound.** A slot that leaked, in a cycle of reference-counted pointers or in a future that is forgotten, would never run its destructor, and the place would be used after its value was moved out. Rust's scoped threads take a closure for this reason. A slot that is only ever a local, passed once to `put`, cannot leak. Unverified code cannot call `take_out`, because its result holds a proof.
+    - **Nothing is in a broken state at any point.** Inside the region the function owns the parts by value, as in the first way. So no value keeps "the object's certified identity" while its invariant does not hold, which is what the owner ruled out with `open!`.
+  - **What the three do not cover:**
+    - **A method that returns a `&mut` into a field that a proof reads,** such as a `top_mut` that lends out the last item of `items`. It stays rejected, even when the proof reads only the field's length. Such a type offers a method that takes the new item.
+    - **A type with both an invariant and a destructor.** rustc does not let a type that implements `Drop` be taken apart (E0509), so such a value changes only by being replaced with one built anew. The destructor belongs on the type of a field.
+  - **An invariant that the shape of a type can hold needs no proof field.** `struct NonEmpty { first: u32, rest: Vec<u32> }` is never empty, no proof reads `rest`, and `self.rest.push(x)` is allowed as it stands.
+  - **Assigning the proof field again in place is left for later.** `self.items.push(x); self.fits = _;` reads best, and is how a loop keeps a fact ([RFC 0004](0004-runtime-code.md)). It leaves the value broken between the two statements, so it needs every operation between them to be unable to panic. The owner: "Maybe someday we will do option 4 too with no panic but not needed now" ([no-panic-claims](../../issues/no-panic-claims.md)).
 - **Proof fields are not borrowed mutably either.** A proof field's type reads its sibling fields, and a `&mut` to it would carry that type away from the value it is about.
 - **A field whose type holds a proof,** such as `Option<@P>`, counts as a proof field.
 - **A proof field's runtime structure can carry an invariant too.** With `hints: Vec<@True>` and `nonempty: @(hints.len() > 0)`, `nonempty` reads `hints`, so `hints` is both a proof field and a field that a proof reads, and both rules hold. `s.hints.clear()` borrows it mutably and is rejected, and so is `s.hints = vec![h]`: the value is replaced whole.
@@ -987,6 +1039,23 @@ fn small(s: &str) -> (n: u32, @(n < 100)) {
   - It dereferences to the standard library's type, so every method that takes `&self` or `&mut self` is there without being written again, with the standard library's signature and no contract. A method that the wrapper defines takes the place of the one it is named after.
   - It holds the standard library's own type, so it has that type's layout and allocator, and converts to and from it in constant time, by value and by reference (decision 75).
   - Its contracts are assumed for now. When the type is rebuilt on permissioned pointers, the signatures stay and the assumptions go, and no program that uses it changes.
+  - **Three signatures of Locus's `Vec` are proposed here,** because the examples of values with invariants need them (decision 87). A method that returns `()` in the standard library returns its proof in its place, so no call of it changes. A method that returns a value keeps the standard library's shape and gives no fact, since a program ported from Rust calls it for that value: `new`, `len`, and `pop` are such, and the length as a fact comes from `view`. A fact that such a method cannot give comes from a method under a name of its own.
+
+    ```rust
+    impl<T> Vec<T> {
+        /// An empty vector, with a proof that it is empty. `Vec::new()` gives the vector alone.
+        pub fn empty() -> (v: Vec<T>, @(v.len() == 0))
+
+        /// The standard library's `push`, with a proof that the vector grew by one.
+        pub fn push(&mut self, x: T) -> @(final!(self).len() == self.len() + 1)
+
+        /// Writes one item. The standard library has only `v[i] = x`, a trait's method, which can return no proof.
+        pub fn set(&mut self, i: usize, x: T) -> @(i < self.len() && final!(self).len() == self.len())
+    }
+    ```
+
+    What each says about the items themselves, that the last one is `x` and the others are as they were, needs the operations on sequences that the standard library's RFC decides.
+  - **`locus::std::mem` holds `replace`, `take_out`, and `Slot`** ([Proofs in data](#proofs-in-data)). The first is the standard library's function with a contract. The other two are Locus's own.
 - **A program names Locus's types with an explicit import** (decision 81): `use locus::std::prelude::*;`, or one type at a time, as in `use locus::std::cell::Cell;`. `locus::std` mirrors the standard library's modules. Without the import, `Vec` is the standard library's, as in any Rust program. No rule of Locus's decides which is meant: an import shadows the prelude, by Rust's own rule. The owner: "I'd prefer to use explicit `use locus::prelude::...` infact, maybe something even more explicitly suggesting that we are shadowing rust stdlib".
 - **The standard library's own collections are unverified code like any other.** `Vec::<Nat>::new()` is rejected. A `Vec<u32>` that another crate returns is some vector, and a call of its `len` tells Locus nothing about it. Converting it to Locus's `Vec` costs nothing, and from then on the contracts of that type's methods apply.
 - **Until its collections are verified, Locus's library is trusted to keep what they are given** (decision 83). A wrapper's `push` hands its argument to the standard library's `push`. When the element type holds a proof, that is exposed logical data in unverified code, which no verified function may do. `trusted.library` covers it for the library's own types, and for nothing else, so `Vec<(i: usize, @(i < n))>` works from the start.
@@ -1085,7 +1154,7 @@ The rules below go into five new chapters of the specification: [The logical lay
 | `logic.ghost.no-unions` | `logical-layer/union-of-runtime-fields.accept.lc`, `logical-layer/union-with-completable-field.reject.lc`, `logical-layer/union-with-invariant-type.reject.lc`, `logical-layer/union-with-invariant-vector.reject.lc`, `logical-layer/union-with-proof-field.reject.lc` |
 | `logic.boundary.unverified` | `logical-layer/proof-holder-taken-apart.accept.lc`, `logical-layer/lend-proof-holder-to-specified.reject.lc`, `logical-layer/lend-proof-holder-to-unverified.reject.lc`, `logical-layer/logical-values-in-std-vec.reject.lc` |
 | `logic.boundary.logical-data` | `logical-layer/closure-over-sealed-value-to-unverified.accept.lc`, `logical-layer/debug-written-by-hand.accept.lc`, `logical-layer/derived-debug-on-type-with-proof-field.accept.lc`, `logical-layer/own-type-with-invariant-to-unverified.accept.lc`, `logical-layer/plain-function-beyond-what-locus-reasons-about.accept.lc`, `logical-layer/proof-holder-as-shared-trait-object.accept.lc`, `logical-layer/vec-of-invariant-type-to-unverified.accept.lc`, `logical-layer/closure-returning-proof-access.reject.lc`, `logical-layer/completable-function-to-unverified.reject.lc`, `logical-layer/own-generic-type-to-unverified.reject.lc`, `logical-layer/proof-access-as-trait-object.reject.lc`, `logical-layer/proof-cell-as-any.reject.lc`, `logical-layer/proof-through-any.reject.lc`, `logical-layer/shared-iterator-to-unverified.reject.lc` |
-| `logic.boundary.plain-data` | `logical-layer/cell-of-invariant-type.accept.lc`, `logical-layer/debug-written-by-hand.accept.lc`, `logical-layer/own-type-with-invariant-to-unverified.accept.lc`, `logical-layer/proof-holder-taken-apart.accept.lc`, `logical-layer/proof-through-own-generic.accept.lc`, `logical-layer/unverified-function-given-fields.accept.lc`, `logical-layer/vec-of-invariant-type-to-unverified.accept.lc`, `logical-layer/verified-entered-through-plain-signature.accept.lc`, `logical-layer/closure-returning-proof-access.reject.lc`, `logical-layer/completable-holder-to-unverified.reject.lc`, `logical-layer/generic-parameter-reaches-unverified.reject.lc`, `logical-layer/lend-proof-cell-to-unverified.reject.lc`, `logical-layer/lend-proof-holder-to-specified.reject.lc`, `logical-layer/lend-proof-holder-to-unverified.reject.lc`, `logical-layer/logical-values-in-std-vec.reject.lc`, `logical-layer/mut-reference-to-shared-proof-holder.reject.lc`, `logical-layer/mutable-iterator-to-unverified.reject.lc`, `logical-layer/mutex-guard-to-unverified.reject.lc`, `logical-layer/option-through-black-box.reject.lc`, `logical-layer/own-generic-type-to-unverified.reject.lc`, `logical-layer/own-generic-with-any.reject.lc`, `logical-layer/proof-free-logical-to-unverified.reject.lc`, `logical-layer/proof-only-logical-to-unverified.reject.lc`, `logical-layer/proof-sender-to-unverified.reject.lc`, `logical-layer/proof-through-any.reject.lc`, `logical-layer/proof-through-black-box.reject.lc`, `logical-layer/rc-cell-to-unverified.reject.lc`, `logical-layer/share-proof-holder-with-unverified.reject.lc`, `logical-layer/shared-iterator-to-unverified.reject.lc` |
+| `logic.boundary.plain-data` | `logical-layer/cell-of-invariant-type.accept.lc`, `logical-layer/debug-written-by-hand.accept.lc`, `logical-layer/own-type-with-invariant-to-unverified.accept.lc`, `logical-layer/proof-holder-taken-apart.accept.lc`, `logical-layer/proof-through-own-generic.accept.lc`, `logical-layer/unverified-function-given-fields.accept.lc`, `logical-layer/vec-of-invariant-type-to-unverified.accept.lc`, `logical-layer/verified-entered-through-plain-signature.accept.lc`, `contracts/slot-taken-by-unverified.reject.lc`, `logical-layer/closure-returning-proof-access.reject.lc`, `logical-layer/completable-holder-to-unverified.reject.lc`, `logical-layer/generic-parameter-reaches-unverified.reject.lc`, `logical-layer/lend-proof-cell-to-unverified.reject.lc`, `logical-layer/lend-proof-holder-to-specified.reject.lc`, `logical-layer/lend-proof-holder-to-unverified.reject.lc`, `logical-layer/logical-values-in-std-vec.reject.lc`, `logical-layer/mut-reference-to-shared-proof-holder.reject.lc`, `logical-layer/mutable-iterator-to-unverified.reject.lc`, `logical-layer/mutex-guard-to-unverified.reject.lc`, `logical-layer/option-through-black-box.reject.lc`, `logical-layer/own-generic-type-to-unverified.reject.lc`, `logical-layer/own-generic-with-any.reject.lc`, `logical-layer/proof-free-logical-to-unverified.reject.lc`, `logical-layer/proof-only-logical-to-unverified.reject.lc`, `logical-layer/proof-sender-to-unverified.reject.lc`, `logical-layer/proof-through-any.reject.lc`, `logical-layer/proof-through-black-box.reject.lc`, `logical-layer/rc-cell-to-unverified.reject.lc`, `logical-layer/share-proof-holder-with-unverified.reject.lc`, `logical-layer/shared-iterator-to-unverified.reject.lc` |
 | `logic.boundary.loans` | `logical-layer/derived-debug-on-type-with-proof-field.accept.lc`, `logical-layer/proof-holder-as-shared-trait-object.accept.lc`, `logical-layer/proof-holder-formatted.accept.lc`, `logical-layer/proof-cell-formatted.reject.lc`, `logical-layer/proof-function-lent-by-reference.reject.lc`, `logical-layer/share-proof-holder-with-unverified.reject.lc` |
 | `logic.boundary.calls` | `logical-layer/closure-needing-proof-called.accept.lc`, `logical-layer/closure-over-sealed-value-to-unverified.accept.lc`, `logical-layer/ghost-function-as-value.accept.lc`, `logical-layer/proof-payload-function-as-value.accept.lc`, `logical-layer/closure-needing-proof-to-unverified.reject.lc`, `logical-layer/completable-function-to-unverified.reject.lc`, `logical-layer/proof-function-as-pointer.reject.lc`, `logical-layer/proof-function-as-trait-object.reject.lc`, `logical-layer/proof-function-lent-by-reference.reject.lc`, `logical-layer/proof-function-no-mangle.reject.lc`, `logical-layer/proof-function-to-specified-generic.reject.lc`, `logical-layer/proof-function-to-unverified.reject.lc` |
 | `logic.boundary.escape` | `logical-layer/fact-after-unknown-call.accept.lc`, `logical-layer/fact-re-established.accept.lc`, `logical-layer/mut-behind-trait-object-rewritten.accept.lc`, `logical-layer/owned-value-from-unverified.accept.lc`, `logical-layer/raw-write-to-other-local.accept.lc`, `logical-layer/trait-result-validated.accept.lc`, `logical-layer/unverified-callee-keeps-no-access.accept.lc`, `logical-layer/verified-call-keeps-facts.accept.lc`, `contracts/invariant-type-values-forgotten.reject.lc`, `logical-layer/marked-unverified-may-write.reject.lc`, `logical-layer/mut-behind-trait-object.reject.lc`, `logical-layer/trait-result-trusted.reject.lc`, `logical-layer/unverified-result-unknown.reject.lc` |
@@ -1124,13 +1193,15 @@ The rules below go into five new chapters of the specification: [The logical lay
 | `contracts.entry-values` | `contracts/final-value-at-return.accept.lc`, `contracts/entry-value-is-not-final.reject.lc` |
 | `contracts.final` | `contracts/final-value-at-return.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc` |
 | `contracts.calls.unrelated` | `contracts/call-once-result-kept.accept.lc`, `logical-layer/trait-result-validated.accept.lc`, `proofs/assumed-result.accept.lc`, `contracts/same-call-twice.reject.lc`, `logical-layer/trait-result-trusted.reject.lc`, `proofs/unproved-result-without-assumption.reject.lc` |
-| `contracts.invariants` | `contracts/filled-before-built.accept.lc`, `contracts/invariant-constructed.accept.lc`, `contracts/invariant-replaced-whole.accept.lc`, `contracts/struct-update-reuses-proof.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `contracts/built-before-filled.reject.lc`, `contracts/invariant-macro-construction.reject.lc`, `contracts/struct-update-changes-read-field.reject.lc` |
+| `contracts.invariants` | `contracts/filled-before-built.accept.lc`, `contracts/invariant-constructed.accept.lc`, `contracts/invariant-replaced-whole.accept.lc`, `contracts/stack-push-by-value.accept.lc`, `contracts/struct-update-reuses-proof.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `contracts/built-before-filled.reject.lc`, `contracts/invariant-macro-construction.reject.lc`, `contracts/struct-update-changes-read-field.reject.lc` |
 | `contracts.invariants.reads` | `contracts/invariant-reads-through-shared-reference.accept.lc`, `contracts/invariant-reads-through-mut-reference.reject.lc` |
-| `contracts.invariants.no-mutable-borrow` | `contracts/unread-field-borrowed.accept.lc`, `contracts/invariant-field-borrowed.reject.lc`, `contracts/proof-container-cleared.reject.lc`, `contracts/proof-field-borrow-outlives-assignment.reject.lc`, `contracts/proof-field-borrowed.reject.lc`, `contracts/proof-read-field-captured-mutably.reject.lc`, `contracts/proof-read-field-implicit-ref-mut.reject.lc`, `contracts/proof-read-field-ref-mut.reject.lc` |
-| `contracts.invariants.assignment` | `contracts/invariant-replaced-whole.accept.lc`, `contracts/proof-field-assigned.accept.lc`, `contracts/proof-in-cell-closed.accept.lc`, `contracts/assignment-needing-proof-in-closure.reject.lc`, `contracts/dependent-tuple-component-written.reject.lc`, `contracts/invariant-broken-by-assignment.reject.lc`, `contracts/invariant-field-assigned.reject.lc`, `contracts/option-proof-field.reject.lc`, `contracts/proof-container-replaced.reject.lc`, `contracts/proof-field-through-box.reject.lc` |
+| `contracts.invariants.no-mutable-borrow` | `contracts/unread-field-borrowed.accept.lc`, `contracts/element-of-read-field-lent.reject.lc`, `contracts/invariant-field-borrowed.reject.lc`, `contracts/proof-container-cleared.reject.lc`, `contracts/proof-field-borrow-outlives-assignment.reject.lc`, `contracts/proof-field-borrowed.reject.lc`, `contracts/proof-read-field-captured-mutably.reject.lc`, `contracts/proof-read-field-implicit-ref-mut.reject.lc`, `contracts/proof-read-field-ref-mut.reject.lc` |
+| `contracts.invariants.assignment` | `contracts/cursor-replaced-whole.accept.lc`, `contracts/invariant-replaced-whole.accept.lc`, `contracts/proof-field-assigned.accept.lc`, `contracts/proof-in-cell-closed.accept.lc`, `contracts/ring-push-back.accept.lc`, `contracts/stack-push-by-value.accept.lc`, `contracts/stack-push-with-stand-in.accept.lc`, `contracts/assignment-needing-proof-in-closure.reject.lc`, `contracts/dependent-tuple-component-written.reject.lc`, `contracts/invariant-broken-by-assignment.reject.lc`, `contracts/invariant-field-assigned.reject.lc`, `contracts/option-proof-field.reject.lc`, `contracts/proof-container-replaced.reject.lc`, `contracts/proof-field-through-box.reject.lc` |
 | `contracts.invariants.proof-holders` | `contracts/proof-field-assigned.accept.lc`, `contracts/dependent-tuple-component-written.reject.lc`, `contracts/option-proof-field.reject.lc`, `contracts/proof-container-cleared.reject.lc`, `contracts/proof-container-replaced.reject.lc`, `contracts/proof-field-borrowed.reject.lc` |
 | `contracts.unsafe-impls` | `contracts/hand-written-unsafe-impl.accept.lc`, `contracts/unsafe-send-on-invariant-type.accept.lc`, `contracts/macro-generated-unsafe-impl.reject.lc` |
-| `contracts.invariants.observed` | `contracts/filled-before-built.accept.lc`, `logical-layer/invariant-type-through-unverified.accept.lc`, `contracts/built-before-filled.reject.lc`, `contracts/invariant-type-values-forgotten.reject.lc` |
+| `contracts.invariants.observed` | `contracts/filled-before-built.accept.lc`, `contracts/stack-push-with-stand-in.accept.lc`, `logical-layer/invariant-type-through-unverified.accept.lc`, `contracts/built-before-filled.reject.lc`, `contracts/invariant-type-values-forgotten.reject.lc` |
+| `contracts.slots` | `contracts/ring-push-back.accept.lc`, `contracts/stack-push-through-slot.accept.lc` |
+| `contracts.slots.local` | `contracts/stack-push-through-slot.accept.lc`, `contracts/slot-moved-away.reject.lc`, `contracts/slot-not-filled-on-a-path.reject.lc`, `contracts/slot-taken-by-unverified.reject.lc` |
 | `export.plain-interface` | `export/dropped-postcondition.accept.lc`, `export/locus-logical-field.accept.lc`, `export/private-enum-with-invariant.accept.lc`, `export/private-logical-field.accept.lc`, `export/public-precondition-when-built.accept.lc`, `export/wrapped-precondition.accept.lc`, `export/model-bound.reject.lc`, `export/public-enum-with-invariant.reject.lc`, `export/public-logical-field.reject.lc`, `export/public-postcondition.reject.lc`, `export/public-precondition.reject.lc`, `export/public-proof-in-option.reject.lc` |
 | `export.invariants-closed` | `export/private-invariant-fields.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `export/public-invariant-field.reject.lc` |
 
@@ -1291,6 +1362,16 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 
 **Assigning a field that a proof reads, when the proof can be proved again,** and **an `open!` block** for changing such a field through a borrow. These were decisions 14 and 51. Withdrawn by decisions 66 and 67: a value that is valid at every point needs no rule for unwinding and no abort.
 
+**A closure in place of a slot,** `mem::replace_with(self, |old| new)`. It is sound as an ordinary library function. It needs logical code in the body of a runtime closure, which RFC 0001 rejects for now, and what is proved of the new value inside the closure does not reach the function's result without more machinery. A slot keeps the code in a straight line.
+
+**A block in place of a slot.** It is the syntax of `open!` under another reading, and the owner withdrew that syntax (decision 67).
+
+**A contract on `put`, in place of reading it as a write.** It would state that the place ends with the value given, and `take_out` would have to hand the caller that final value to state it with. A body that can compute from a value it has yet to produce can prove `False` (`contracts/final-in-ghost-write.reject.lc`).
+
+**A slot that only aborts, with no rule about paths.** A path that forgot `put` would abort when it ran. The rule makes it an error when the program is checked. The rule that a slot is never moved is needed either way: without it a slot can leak.
+
+**Every method of Locus's `Vec` returning its proof,** `new`, `len`, and `pop` included. A program ported from Rust calls those for their values, so each such call would change, also where no fact is wanted.
+
 **A mark on every verified function,** as `const fn` is marked. Rejected: every method of a type with proof fields would carry it, and what a derive generates could not.
 
 **A mark only where a plain signature hides a proof,** with every unmarked function unverified unless its signature holds logical data. The marks would then list the functions that turn a runtime check into a proof. Considered, and set aside for verified by default (decision 65), once it was clear that a function with nothing to prove costs nothing to call verified. A lint can still ask for `#[verified]` on such functions.
@@ -1426,6 +1507,13 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 82. **A standard type is swapped only when it has private state.** The owner: "Re: Result/Option/Box etc - do we even need to swap rust stdlib versions?" Integers, references, tuples, arrays, slices, `Box`, `Option`, `Result`, and ranges stay Rust's, with built-in operations that the language defines. Collections, cells, and locks are Locus's own types around the standard library's. A standard method on a type that stays, when a program wants a fact from it, is a function of Locus's library. Everything else is called as plain Rust. The owner accepted this split as proposed.
 83. **Until its collections are verified, Locus's library is trusted to keep the values its types are given,** so that a `Vec` of Locus's may hold proofs from the start. Proposed in reply to the owner, and accepted with the rest.
 
+**Decided by the owner on 2026-11-17,** in a session on how a value with an invariant is changed in place.
+
+84. **A value with an invariant is changed in three ways, each of which replaces it whole:** a method that takes the value and returns it; a valid value that stands in for it while the new one is built; and a slot, which moves it out of a `&mut` and has a new one put back. The owner, shown these and a fourth: "I like options 1-3."
+85. **Assigning the proof field again in place waits for `#[no(panic)]`.** The owner: "Maybe someday we will do option 4 too with no panic but not needed now".
+86. **A slot is a guard that stays a local, and a panic that would unwind past one aborts the process.** Told that a guard which can leak is unsound, and offered a closure, the guard with a rule that it stays a local, or a block, the owner chose the guard. How the rule is stated is this RFC's.
+87. **Locus's library has a `replace` whose result says that it returns what was there, and this RFC proposes the signatures of `Vec` that its examples need.** The owner, asked about each with decision 86: "yes to all".
+
 **Still for the owner,** in order of what they block. Each is already written into the spec and the examples as proposed, so accepting this RFC accepts it, and changing one changes its rule and examples:
 1. **Versions,** following the owner's direction toward SSA: every write makes a new version, even of the same value, and a proof never carries over to another version without a new proof.
 2. **One model per type,** declared by the type's own crate or by Locus's library.
@@ -1446,6 +1534,10 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 17. **The spelling `unsafe assume!(_)`.** The owner asked whether it should be "just 'assume' with assume implicitly being unsafe in this world". This RFC keeps `unsafe`: the owner's earlier ruling was that assuming is marked as `unsafe` is, and a reader who knows Rust and not Locus already searches for that word. The cost is one word at each assumption.
 18. **Which built-in operations the language defines** on the types that stay Rust's. Decided since, in [RFC 0004](0004-runtime-code.md), whose table lists each with what it means.
 19. **What an exported crate does with Locus's own types:** whether it depends on Locus's library as a Rust crate, or has them rewritten to the standard library's ([distribution-and-export](../../issues/distribution-and-export.md)). This RFC's export examples use none.
+20. **How a slot's rule is stated** (decision 86): that every path that leaves the variable's scope has passed it to `put`, checked when the program is checked and not left to the abort; that no `.await` lies between the two calls; and that `put` is read as a write, where every other call is known by its signature.
+21. **Three signatures of `Vec`, not six** (decision 87). The owner agreed to six, each returning its proof. This RFC proposes `push`, `set`, and `empty`, and keeps `new`, `len`, and `pop` in the standard library's shape: decided examples call `Vec::new()` and `len()` for their values, and one rejected example rests on `Vec::new()` giving no fact. `insert` waits for the example that needs it.
+22. **The proofs of `replace` and `take_out` are stated on snapshots,** so that they hold for a type without a model. The three signatures of `Vec` are written on models, as `view` is, and so need an element type that has one. Which of the two a signature of Locus's library is stated on is the standard library's RFC's.
+23. **What the three ways do not cover:** a `&mut` returned into a field that a proof reads, and a type with both an invariant and a destructor.
 
 **Left to later work,** each with its issue:
 - The rest of the runtime semantics, after [RFC 0004](0004-runtime-code.md): `&mut` parameters and reborrows, where borrows end, partial moves, and drops: [runtime-semantics](../../issues/runtime-semantics.md).
@@ -1460,7 +1552,7 @@ Cutting at the field of the type that closes the cycle keeps generic types unifo
 - How the kernel provides `Int`: the kernel RFC.
 - Mutable references stored in data, whose model carries a current and a final value.
 - A model of the logical layer, with the argument that its rules are sound: [soundness-model](../../issues/soundness-model.md).
-- Changing a field that an invariant reads through a borrow: [opening-invariants](../../issues/opening-invariants.md).
+- Assigning a proof field again in place, once a function can be claimed not to panic, and lending out a `&mut` into a field that a proof reads: [opening-invariants](../../issues/opening-invariants.md).
 - What is still awkward at the boundary: [opaque-certified-values](../../issues/opaque-certified-values.md).
 - A claim that a function cannot panic, `#[no(panic)]`, and leaving out the checks it makes unnecessary: [no-panic-claims](../../issues/no-panic-claims.md).
 - A default kind for a module or a crate, and lints over the two marks.

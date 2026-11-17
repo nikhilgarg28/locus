@@ -117,3 +117,26 @@ RFC 0002's decisions 66 and 67 record it. A field that a proof reads is never as
 What this costs is the reason the issue stays open: a method that takes `&mut self` cannot change a field that a proof reads, when the field is not `Copy`, without cloning it or putting a placeholder in its place, because Rust does not let a field be moved out of `*self`. Such types offer methods that take the value and return it.
 
 One shape for bringing changes in place back, noted in the same conversation: a block that takes the value out of a `&mut`, builds it again, and puts it back, aborting if a panic would unwind in between. It is option 1's guard with a different reading: nothing is ever in a broken state, because inside the block the function owns the parts by value.
+
+### 2026-11-17, conversation with the owner on changing a value with an invariant
+
+Shown four ways for a method that takes `&mut self` to change a field that a proof reads, the owner answered:
+
+> I like options 1-3.Maybe someday we will do option 4 too with no panic but not needed now
+
+The four were:
+
+1. a method that takes the value and returns it;
+2. a valid value that stands in for `*self` while the new one is built, with `mem::replace`;
+3. a guard that moves the value out of the `&mut` and has a new one put back, aborting if a panic would unwind in between;
+4. assigning the field in place and then the proof field again, as a loop assigns its proof variable.
+
+The third had been presented as a library type that needs nothing from the language. That was wrong: a guard that can leak is unsound, which is why Rust's scoped threads take a closure. Offered a closure, the guard with a rule that it stays a local, or a block, and asked about a `replace` with a contract and about signatures for `Vec`, the owner answered:
+
+> yes to all
+
+RFC 0002 records these as decisions 84 to 87, with the rules `contracts.slots` and `contracts.slots.local` and nine examples. It also says what the three ways do not cover: a `&mut` returned into a field that a proof reads, and a type with both an invariant and a destructor.
+
+Five programs were worked through by hand, and each could be written in these three ways. Three are examples now: a cursor over a buffer, a bounded stack in each of the three ways, and a ring buffer. A sorted vector's `insert` is not written. Its proof uses the old vector's order at the index before a moved item, and how a `Nat` is made from `j - 1` is not decided ([standard-library](standard-library.md)). A version of it that moves the new item down by swaps is not written either.
+
+This issue stays open for the fourth way, which waits for [no-panic-claims](no-panic-claims.md), and for lending out a `&mut`.
