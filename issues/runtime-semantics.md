@@ -92,3 +92,45 @@ The owner took up this issue as one question, what Locus knows about the value o
 **Deferred by the owner:** a way for a function of the program's own to declare what its result is, so that a call of it is understood as these operations are ([pure-functions](pure-functions.md)). "We will come back and examine pure functions later after B and C".
 
 Nothing here is in an RFC or the specification yet. It will be written with the other two parts.
+
+### 2026-11-17, conversation with the owner on loops
+
+The second part, loops, is decided. The reply had proposed an invariant written on the loop as an attribute. The owner proposed another way:
+
+> what if we didn't have invariants but mut proof variables which are reestablished by the programmer on each iteration?
+
+and, on the three questions that followed, "Yes all three decisions for B make sense." The owner then removed a rule from the proposal, under which a proof left behind by a write could not be read at all:
+
+> I'm not sure if we even need to have rules that stale proofs can't be used - what if we just said that if the proof is stale, it can not be used eventually unless the variable has current version? That may keep fewer concepts?
+
+**Decided:**
+
+- **There is no invariant construct.** A fact that a loop keeps is a proof variable declared `let mut` before the loop, which the body assigns again after it changes what the fact is about.
+- **Assigning it is always written.** Locus does not try a hole by itself when a proof has been left behind.
+- **A proof is about the values it was made from, and that is all.** There is no state in which a proof cannot be read. A proof that a write has left behind is still a proof, about the earlier values, and the rule that already exists does the rest: a proof must prove what its use requires, so it cannot stand where a fact about the current values is needed. The error is the one `proofs/stored-proof-after-clear.reject.lc` already shows.
+- **`mut` on a proof variable means what it means in Rust:** the variable may be assigned. Its proposition is written at its declaration, and each assignment is checked against that proposition at the values of that moment.
+- **Where paths join, a proof variable proves its proposition for the current values only if it does on every path.** The top of a loop is such a place: the paths are the entry and the end of each way through the body. This one rule is what makes the variable an invariant, and it covers `break`, `continue`, and nested loops with nothing more.
+- **At the top of a loop, a variable that the loop writes is known by its type, and by such proofs.** A variable that the loop does not write keeps what was known of it.
+- **`for i in a..b` gives `a <= i && i < b` in its body.** A loop whose kept fact mentions the index is written as a `while` with a counter of the program's own, for now, since `i` is not in scope where the proof would be declared.
+- **Termination is not asked for.**
+
+```rust prose the shape the owner chose; not yet a rule
+let mut bounds: @(lo <= hi && hi <= xs.len()) = _;
+while lo < hi {
+    let mid = lo + (hi - lo) / 2;
+    if xs[mid] < target {
+        lo = mid + 1;
+        bounds = _;
+    } else if xs[mid] > target {
+        hi = mid;
+        bounds = _;
+    } else {
+        return Some((mid, _));
+    }
+}
+```
+
+This is the tracked evidence that RFC 0002 had deferred to this issue, in a simpler form than it was sketched there: nothing follows a version, and a proof is assigned.
+
+The third part, overflow, is next.
+
