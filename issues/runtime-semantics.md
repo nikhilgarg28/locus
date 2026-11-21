@@ -172,6 +172,6 @@ The reviews of PR #25 found that RFC 0004's criterion for an understood operatio
 
 > Yes to all
 
-[RFC 0004](../design/rfcs/0004-runtime-code.md) records them as its decisions 7 to 10. An operation is understood when it is in one of two closed lists, what the language defines and a short list of library items, and comparisons are understood on integers and `bool` only. Shifts and bitwise operations on integers are left out for now. `debug_assert!` and a branch on `cfg!(debug_assertions)` give no fact. `?`, patterns, and each form of range indexing have rules of their own.
+[RFC 0004](../design/rfcs/0004-runtime-code.md) records them as its decisions 7 to 10. An operation is understood when it is in one of two closed lists, what the language defines and a short list of library items, and comparisons are understood on integers and `bool` only. Shifts and bitwise operations on integers are left out for now. `debug_assert!` is not special, and gives its fact in a configuration with debug assertions ([cfg-corner-cases](cfg-corner-cases.md)). `?`, patterns, and each form of range indexing have rules of their own.
 
 The owner also confirmed a rule that the specification lacked, on how a proof of a `forall` or of an implication is used. It is `proofs.forall`, listed by RFC 0003.

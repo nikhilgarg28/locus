@@ -30,9 +30,6 @@ In an arm of a `match`, in the body of an `if let`, and after a `let` with a pat
 r[runtime.try]
 `e?` is understood in two cases, decided by what rustc resolves it to: `e` is an `Option` and the function or closure that it returns from returns an `Option`; or `e` is a `Result` and that function or closure returns a `Result`. It continues with the payload of a `Some` or an `Ok`, and the context then holds that `e` was one with that payload. Otherwise it returns: for an `Option`, `None`; for a `Result` whose error type is the returned one's, an `Err` with the same error; and for one whose error type differs, an `Err` whose error is the result of a conversion, which is a call. In every other case, such as a function that returns a `Poll`, `e?` runs as Rust defines it and gives no fact: the value it continues with is known by its type. `?` is not accepted on a value whose type holds logical data, for now.
 
-r[runtime.debug-assertions]
-`cfg!(debug_assertions)` is a `bool` of which Locus knows nothing, in every build, and a branch on it is checked as a branch on any unknown condition: what it writes is joined with what was there before, and a fact established inside it is not known afterwards (`runtime.joins`). So the condition of a `debug_assert!`, a `debug_assert_eq!`, or a `debug_assert_ne!` is not known after it. A statement or a block under `#[cfg(debug_assertions)]`, or under its negation, is checked, where the configuration has it, as the body of such a branch. This limits what a proof may rest on. It does not make a proof hold in a configuration that was not checked: an item under that `cfg`, like every other `cfg`, is as the configuration being built has it.
-
 ## Writes and borrows
 
 r[runtime.writes]

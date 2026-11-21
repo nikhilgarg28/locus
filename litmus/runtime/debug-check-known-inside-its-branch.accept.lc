@@ -1,0 +1,16 @@
+//~ question: Is a check made in a branch on `cfg!(debug_assertions)` known inside that branch, whichever way the crate is built?
+//~ spec: runtime.conditions, runtime.operations.returned
+//~ rfc: 0004
+
+// With debug assertions, the branch runs and the `assert!` gives its condition.
+// Without them, the condition of the branch is `false`, and nothing in it is reached.
+// Either way the hole is filled, so this example does not depend on the configuration.
+fn bounded(n: u32) -> u32 {
+    if cfg!(debug_assertions) {
+        assert!(n < 100);
+        let small: @(n < 100) = _;
+    }
+    n
+}
+
+//~ run: bounded(5) => 5

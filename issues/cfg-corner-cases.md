@@ -72,6 +72,12 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 
 Moved into the repository from [GitHub issue #9](https://github.com/nikhilgarg28/locus/issues/9) on 2026-10-27. The text above is the issue's as it was then.
 
-### 2026-11-21, `debug_assertions` gives no fact
+### 2026-11-21, `debug_assert!` is not special
 
-The owner decided, in RFC 0004's decision 9, that `cfg!(debug_assertions)` is a `bool` of which Locus knows nothing in every build, so a `debug_assert!` gives no fact, and neither does a statement under `#[cfg(debug_assertions)]`. A branch on it is checked as a branch on any unknown condition, so what it writes is joined with what was there before. This limits what a proof may rest on, and it is not a guarantee across build profiles: an item under `cfg(debug_assertions)`, such as a constant with one value in a debug build and another in a release build, still differs, and a proof holds only in the configurations it was checked in. A second reviewer preferred facts for each configuration, which is not unsound, and pointed out the limit of this rule.
+RFC 0004's decision 9. It was first decided that `debug_assert!` gives no fact in any build, so that a program would not pass in the build it is written in and fail at release. A review showed that such a rule does not deliver that: a constant with one value under `cfg(debug_assertions)` and another under its negation still makes a proof true in one build and false in the other. Told so, the owner chose the reading that RFC 0001 already has:
+
+> I prefer codex's preferred reading more now.
+
+So `debug_assertions` is a `cfg` like any other. `debug_assert!` gives its fact in a configuration with debug assertions and none in one without, and a proof holds in the configurations it was checked in.
+
+One thing this leaves for tooling: a litmus example cannot state the configuration it is checked in, so no example can pin that a proof resting on a `debug_assert!` is accepted in a debug build and rejected in a release build. The one example that tried, `runtime/debug-assert-gives-nothing.reject.lc`, is removed, because its outcome now depends on the configuration.

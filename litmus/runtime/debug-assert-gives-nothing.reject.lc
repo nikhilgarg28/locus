@@ -1,8 +1,0 @@
-//~ question: Is the condition of a `debug_assert!` known after it?
-//~ spec: runtime.debug-assertions, runtime.joins
-//~ rfc: 0004
-
-fn checked(n: u32) -> (out: u32, @(out < 100)) {
-    debug_assert!(n < 100);
-    (n, _) //~ error: cannot prove `out < 100`: a release build leaves `debug_assert!` out, so its condition is not known here; use `assert!`
-}
