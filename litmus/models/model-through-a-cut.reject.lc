@@ -1,0 +1,19 @@
+//~ question: May a logic function read through a reference that its argument's snapshot cuts?
+//~ spec: models.snapshots.cut, models.snapshots
+//~ rfc: 0005
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+struct Node<'a> {
+    value: u32,
+    next: Option<Wrap<'a, Node<'a>>>,
+}
+
+logic fn next_value(node: &Node) -> Nat {
+    match node.next {
+        Some(wrap) => wrap.inner.value, //~ error: `wrap.inner` is an address here: `next` closes a cycle of references, so `Node`'s snapshot holds it as a `CutSnap`, and a logic function reads only the snapshot
+        None => 0,
+    }
+}

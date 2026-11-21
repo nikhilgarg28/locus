@@ -1,0 +1,17 @@
+//~ question: Does the name of a condition prove what the program checked?
+//~ spec: runtime.conditions, proofs.facts.named
+//~ rfc: 0005
+
+fn small_sum(a: u32, b: u32) -> Option<@(u32::wrap(a + b) < 10)> {
+    if small: a + b < 10 {
+        Some(small)
+    } else {
+        None
+    }
+}
+
+fn found() -> bool {
+    small_sum(3, 4).is_some()
+}
+
+//~ run: found() => true

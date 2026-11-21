@@ -1,0 +1,10 @@
+//~ question: May the proofs in two statics' initializers be read from each other?
+//~ spec: logic.const.well-founded
+//~ rfc: 0005
+
+struct Certified {
+    proof: @False,
+}
+
+static FIRST: Certified = Certified { proof: logic! { SECOND.proof } }; //~ error: the proof in `FIRST`'s initializer depends on `SECOND`, whose initializer depends on `FIRST`
+static SECOND: Certified = Certified { proof: logic! { FIRST.proof } }; //~ error: the proof in `SECOND`'s initializer depends on `FIRST`, whose initializer depends on `SECOND`

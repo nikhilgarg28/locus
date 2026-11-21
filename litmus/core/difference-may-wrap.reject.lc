@@ -1,0 +1,7 @@
+//~ question: Is a difference of unsigned integers at most its first operand, when nothing orders the two?
+//~ spec: core.wrap, runtime.arith.wrapping
+//~ rfc: 0005
+
+fn diff(a: u32, b: u32) -> (d: u32, @(d <= a)) {
+    (a - b, _) //~ error: cannot prove `d <= a`: `d` is `u32::wrap(a - b)`, and nothing shows that `b <= a`
+}

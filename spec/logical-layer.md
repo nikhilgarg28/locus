@@ -36,7 +36,7 @@ r[logic.ghost.types-forward]
 Locus never infers a logical type backward from a later use. A local whose type holds logical values gets that type from its annotation, or from what initializes it: a call's result, Locus syntax, or another value whose type is known.
 
 r[logic.ghost.type-identity]
-Two types that hold logical values are the same type only when they are built the same way from the same types and the same propositions: the same formula, about the same values. rustc compares only markers, so Locus checks this wherever one type must match another: an argument against its parameter, an assigned value against its place, an initializer against its field, and every use of a type parameter against the others. A proposition that is spelled differently, or that reads another version of a place, makes a different type, even when the two propositions are equivalent. A proof by value is proved again instead, and a value that holds one is rebuilt from its parts.
+Two types that hold logical values are the same type only when they are built the same way from the same types, and from propositions that convert to the same core term ([`core.conversion`](core.md)): the same formula, up to evaluation, about the same values. rustc compares only markers, so Locus checks this wherever one type must match another: an argument against its parameter, an assigned value against its place, an initializer against its field, and every use of a type parameter against the others. A proposition that reads another version of a place makes a different type, and so does one that is equivalent only by a proof, such as `0 < n` for `n > 0`. A proof by value is proved again instead, and a value that holds one is rebuilt from its parts.
 
 r[logic.ghost.dependent-tuples]
 A tuple type in which a later component's proposition reads an earlier component is one type. It instantiates a type parameter only as a whole, and never matches a generic tuple type such as `(A, B)`, whose components could then be replaced separately. A pattern takes such a tuple apart.
@@ -128,7 +128,7 @@ r[logic.fn.total]
 Every recursive call of a logic function is on a structurally smaller part of one of its arguments, or decreases the function's declared measure. For now, no logic function calls itself through another. A body that proof search completes is held to the same rule.
 
 r[logic.const.well-founded]
-A constant of logical type is not defined in terms of itself, directly or through other constants or logic functions.
+A constant of logical type is not defined in terms of itself, directly or through other constants or logic functions. The same holds for the logical data in the initializer of any constant or static whose type holds some: it does not depend on the item itself, directly, through other constants and statics, through logic functions, or through a field of the item. While an initializer is checked, the proof fields of the item it initializes are not available. A cycle of addresses among statics is not such a dependence.
 
 r[logic.code.statics]
 Logical code reads a static only when it is immutable. No `static mut`, and no static that is `extern`, `#[no_mangle]`, or `#[export_name]`, has a type that holds logical data.

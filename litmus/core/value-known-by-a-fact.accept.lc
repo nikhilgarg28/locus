@@ -1,0 +1,11 @@
+//~ question: Is the value that a write gave a place known afterwards, as a fact about the place's new value?
+//~ spec: core.values, runtime.facts
+//~ rfc: 0005
+
+fn reset(mut n: u32) -> u32 {
+    n = 3;
+    let small: @(n < 10) = _;
+    n
+}
+
+//~ run: reset(50) => 3

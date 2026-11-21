@@ -187,3 +187,21 @@ What that accepts:
 None of this is written into an RFC, a rule, or an example yet. Asked whether to write it out first, the owner chose to settle the questions that add forms to the same core before it is written once: what is known where paths join, how a kept proof variable is typed, a borrow's final value, where a snapshot is cut, and indexing a sequence.
 
 This issue stays open.
+
+### 2026-11-21, the core is written as RFC 0005
+
+A second round put six choices and four confirmations to the owner: what is known where paths join, how a kept proof variable is typed, where a snapshot is cut, indexing a sequence, `given(P)`, and what `linear` knows; and a borrow's final value, `for` ranges, initializers, and writes. The owner:
+
+> I'm okay with this - can you please give me a one pager of the core so that I can run it by Codex before we commit it to the repo
+
+That review asked for five corrections, all taken: constructor reasoning in `linear` for data types only, never for the constructors of a proposition; a kept proof at a join as a proof that elaboration builds by cases; an explicit induction rule for loops; a borrow's final value tied to the target's last write; and precise statements of `CutSnap`, of the default behind an unproved index, and of `compute`. Shown the revised summary, and asked whether to write a new RFC or a sixth revision of RFC 0002, the owner:
+
+> Go for it please.
+
+[RFC 0005](../design/rfcs/0005-core-terms.md) is the result, as a draft. It adds a chapter to the specification, [Core terms](../spec/core.md), with six rules; adds eight rules to four other chapters; and changes fifteen rules of RFC 0002, RFC 0003, and RFC 0004. It has had no adversarial review as written: the two reviews were of the summary.
+
+One thing in it differs from the summary the owner and the reviewer saw. The summary said that a proof about a borrow's final value could only be bound, moved, and returned until the borrow ends. A function such as `first_mut` could not then prove its own result. The RFC keeps the final value out of *values*, and lets proofs speak of it; its "Still for the owner" list says so.
+
+RFC 0003's own sections are not yet rewritten for the core. It carries a note that says where RFC 0005 differs, and its rules in the specification are restated.
+
+This issue stays open until the owner decides on RFC 0003 and RFC 0005.

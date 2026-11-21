@@ -1,0 +1,7 @@
+//~ question: May a sequence of proofs be indexed with no proof that the index is inside it?
+//~ spec: core.sequences.default
+//~ rfc: 0005
+
+logic fn absurd(proofs: Seq<@False>) -> @False {
+    proofs[0] //~ error: `@False` has no default, so `proofs[0]` needs a proof that 0 is inside the sequence: use `proofs.at(0, ...)` or `proofs.get(0)`
+}

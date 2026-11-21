@@ -1,0 +1,11 @@
+//~ question: Is a fact that only one branch of an `if` established known after the `if`?
+//~ spec: runtime.joins, runtime.facts
+//~ rfc: 0005
+
+fn peek(xs: &[u32], i: usize, look: bool) -> (seen: u32, @(i < xs.len())) {
+    let mut seen = 0;
+    if look {
+        seen = xs[i];
+    }
+    (seen, _) //~ error: cannot prove `i < xs.len()`: the index returned only on the path through the `if`, and a fact from one branch is not known after the branches meet
+}

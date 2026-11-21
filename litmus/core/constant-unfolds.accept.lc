@@ -1,0 +1,9 @@
+//~ question: Does a constant convert to its value?
+//~ spec: core.conversion, proofs.procedures.compute
+//~ rfc: 0005
+
+const LIMIT: u32 = 8;
+
+logic fn positive() -> @(LIMIT > 0) {
+    compute()
+}

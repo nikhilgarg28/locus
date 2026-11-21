@@ -1,0 +1,9 @@
+//~ question: Does a proof about one version of a place have the type of the same formula about a later version, when the later value would satisfy it?
+//~ spec: core.values, logic.ghost.type-identity
+//~ rfc: 0005
+
+fn reset(mut n: u32, small: @(n < 10)) -> u32 {
+    n = 3;
+    let still: @(n < 10) = small; //~ error: `small` proves `n < 10` for the value `n` had before `n = 3`, and this is about the value after it: the two are different values, and a hole would prove this one
+    n
+}

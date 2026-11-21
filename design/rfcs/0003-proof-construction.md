@@ -8,11 +8,14 @@
 
 A proof is a term: an expression in Rust's own syntax, built from calls, closures, constructors, `match`, `let`, and recursion. A small, closed list of *procedures*, `compute` and `linear`, may be called where a proof is expected, and each has a stated rule for what it proves and what it uses. A hole, `_`, tries three named things and nothing else. Whatever a procedure or a hole finds is a term that calls no procedure, and a command puts that term in the source when the author wants it kept. There is no tactic language.
 
+**[RFC 0005](0005-core-terms.md) restates this RFC's rules on core terms,** after two reviews found gaps in them. Where the two differ, RFC 0005 is the later text. It changes five things here: what a named condition proves in runtime code; that the equality functions work on core terms, so that an equality of models rewrites no field; what "evaluation" is, which is now conversion, and is part of when two propositions are the same; the steps of a hole and the theory of `linear`; and how a value is inferred for `_`. It adds `given(P)`, the written form of a fact that a hole takes from the context. The sections below are not yet rewritten for it.
+
 ## Motivation
 
 [RFC 0002](0002-logical-layer.md) defines what a proof is and leaves two things open: how a proof uses a definition or an equality, and what `_` may do. Without the first, a proof about a logic function cannot be written. Without the second, whether a program is accepted depends on a search that nothing describes.
 
 ```rust
+#[decreases(n)]
 logic fn double(n: Int) -> Int {
     if n <= 0 { 0 } else { double(n - 1) + 2 }
 }
@@ -143,13 +146,13 @@ The rules below go into [Propositions and proofs](../../spec/proofs.md).
 |---|---|
 | `proofs.holes` | `proofs/forall-used-by-call.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/forall-not-used-by-hole.reject.lc`, `proofs/hole-needs-a-lemma.reject.lc` |
 | `proofs.procedures` | `proofs/forall-used-by-call.accept.lc`, `proofs/named-condition.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/forall-not-used-by-hole.reject.lc`, `proofs/procedure-not-given-a-fact-in-scope.reject.lc`, `proofs/procedure-without-a-goal.reject.lc` |
-| `proofs.procedures.compute` | `proofs/compute-closed-term.accept.lc`, `proofs/compute-open-term.reject.lc` |
-| `proofs.procedures.linear` | `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/linear-with-division.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/hole-needs-a-lemma.reject.lc`, `proofs/linear-product-of-variables.reject.lc` |
+| `proofs.procedures.compute` | `core/constant-unfolds.accept.lc`, `proofs/compute-closed-term.accept.lc`, `proofs/compute-open-term.reject.lc` |
+| `proofs.procedures.linear` | `proofs/data-constructors-are-distinct.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/linear-with-division.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/hole-needs-a-lemma.reject.lc`, `proofs/linear-product-of-variables.reject.lc`, `proofs/proof-constructors-are-not-distinct.reject.lc` |
 | `proofs.procedures.expand` | `proofs/equality-chain-as-term.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc` |
-| `proofs.equality` | `proofs/equality-chain-as-term.accept.lc`, `proofs/rewrite-with-equality.accept.lc`, `proofs/equality-chain-mismatched.reject.lc` |
+| `proofs.equality` | `core/congruence-at-the-snapshot.accept.lc`, `proofs/equality-chain-as-term.accept.lc`, `proofs/rewrite-with-equality.accept.lc`, `core/congruence-through-a-model.reject.lc`, `core/rewrite-misses-a-field-read.reject.lc`, `proofs/equality-chain-mismatched.reject.lc` |
 | `proofs.unfold` | `proofs/unfold-logic-function.accept.lc`, `proofs/unfold-declared-proposition.reject.lc` |
-| `proofs.values.inferred` | `proofs/inferred-values.accept.lc`, `proofs/inferred-value-undetermined.reject.lc` |
-| `proofs.facts.named` | `proofs/named-condition.accept.lc`, `proofs/named-condition-after-branch.reject.lc` |
+| `proofs.values.inferred` | `proofs/inferred-values.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc`, `proofs/inferred-value-from-a-procedure.reject.lc`, `proofs/inferred-value-undetermined.reject.lc` |
+| `proofs.facts.named` | `proofs/named-condition.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `proofs/named-condition-after-branch.reject.lc`, `runtime/named-sum-may-wrap.reject.lc` |
 
 ## Interactions
 

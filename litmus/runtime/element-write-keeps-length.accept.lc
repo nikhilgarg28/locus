@@ -1,0 +1,21 @@
+//~ question: After a write to an element of a slice, is the slice known to have the length it had?
+//~ spec: runtime.writes, runtime.loops
+//~ rfc: 0005
+
+fn clear(xs: &mut [u32]) {
+    let mut i = 0;
+    let mut inside: @(i <= xs.len()) = _;
+    while i < xs.len() {
+        xs[i] = 0;
+        i += 1;
+        inside = _;
+    }
+}
+
+fn cleared() -> u32 {
+    let mut xs = [1, 2, 3];
+    clear(&mut xs);
+    xs[0] + xs[1] + xs[2]
+}
+
+//~ run: cleared() => 0

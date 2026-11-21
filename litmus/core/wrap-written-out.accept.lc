@@ -1,0 +1,10 @@
+//~ question: May a proposition speak of a wrapped result, with the type's `wrap`?
+//~ spec: core.wrap, runtime.arith.wrapping
+//~ rfc: 0005
+
+// No proof is owed for the sum, and none is needed for this result: it says what the program computes.
+fn next(i: u32) -> (j: u32, @(j == u32::wrap(i + 1))) {
+    (i + 1, _)
+}
+
+//~ run: next(4).0 => 5

@@ -207,3 +207,11 @@ The owner agreed that Locus's library has a `replace` whose result says that it 
 - `locus::std::mem` gains `replace`, `take_out`, and `Slot` ([opening-invariants](opening-invariants.md)).
 - Three signatures of `Vec` are proposed, not the six that were put to the owner. `push` and a new `set` return a proof in place of `()`, and `empty` is a constructor of its own name that returns its proof. `new`, `len`, and `pop` keep the standard library's shape, because decided examples call them for their values. This is a proposed answer to question 1 above: a method that returns `()` returns its proof instead, and a method that returns a value keeps its shape.
 - Two things this needs from the library's RFC: what each of these methods says about the items themselves, and how a `Nat` is made from an `Int` that is known not to be negative.
+
+### 2026-11-21, indexing a sequence
+
+[RFC 0005](../design/rfcs/0005-core-terms.md), a draft, proposes the answer to question 4. A sequence is indexed by an `Int`. `s.get(i)` gives a `Maybe`, `s.at(i, p)` takes a proof that `i` is inside the sequence, and `s.update(i, v)` is what a write to an element needs. `s[i]` with no proof exists only where the element type has a default that Locus derives from its structure, and outside the sequence it is that default, of which nothing is known. A proof type has no default, so an empty `Seq<@False>` gives no proof of `False`. A `Nat` is made from an `Int` with a proof that it is not negative.
+
+The owner agreed to this in the second round of 2026-11-21 ([proof-construction](proof-construction.md)). The list of types that have a default is the RFC's proposal.
+
+Still for this issue's RFC: whether the contracts of Locus's library are stated on snapshots, and the lemma that ties a library container's model to its snapshot's length.

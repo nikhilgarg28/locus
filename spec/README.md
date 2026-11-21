@@ -59,3 +59,4 @@ Each chapter is a file in this directory, listed here in reading order.
 6. [Contracts](contracts.md)
 7. [Exporting to Rust](export.md)
 8. [Runtime code](runtime.md)
+9. [Core terms](core.md)

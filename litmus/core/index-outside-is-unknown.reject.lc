@@ -1,0 +1,7 @@
+//~ question: Is anything known of an unproved index outside the sequence?
+//~ spec: core.sequences.default
+//~ rfc: 0005
+
+logic fn first_is_zero(xs: Seq<Int>, empty: @(xs.len() == 0)) -> @(xs[0] === 0) {
+    linear((empty,)) //~ error: cannot prove `xs[0] === 0`: 0 is outside `xs`, and nothing is known of an element outside a sequence
+}

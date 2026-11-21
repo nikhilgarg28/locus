@@ -1,0 +1,10 @@
+//~ question: May a proof cite, with `given`, the condition under which an operation returned?
+//~ spec: proofs.given, runtime.operations.returned
+//~ rfc: 0005
+
+fn at(xs: &[u32], i: usize) -> (x: u32, @(i < xs.len())) {
+    let x = xs[i];
+    (x, given(i < xs.len()))
+}
+
+//~ run: at(&[4, 5, 6], 1).0 => 5

@@ -1,0 +1,15 @@
+//~ question: May a proof cite the condition of the branch it is in, with `given`?
+//~ spec: proofs.given, runtime.conditions
+//~ rfc: 0005
+
+fn at_least(n: u32, floor: u32) -> (out: u32, @(out >= floor)) {
+    if n < floor {
+        (floor, linear(()))
+    } else {
+        // In this branch the context holds the negation of the condition.
+        (n, linear((given(!(n < floor)),)))
+    }
+}
+
+//~ run: at_least(3, 5).0 => 5
+//~ run: at_least(8, 5).0 => 8

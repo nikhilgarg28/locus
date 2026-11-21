@@ -1,0 +1,7 @@
+//~ question: Does `given` prove a proposition that no rule has put in the context?
+//~ spec: proofs.given, runtime.facts
+//~ rfc: 0005
+
+fn bounded(n: u32) -> @(n < 10) {
+    given(n < 10) //~ error: no fact in the context here is `n < 10`: `given` cites a fact that the program has established, and finds none
+}

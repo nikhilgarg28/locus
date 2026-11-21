@@ -1,0 +1,32 @@
+//~ question: May a function body read the place behind a cut reference, and do two reads with no write between give the same value?
+//~ spec: models.snapshots.cut
+//~ rfc: 0005
+
+struct Wrap<'a, T> {
+    inner: &'a T,
+}
+
+struct Node<'a> {
+    value: u32,
+    next: Option<Wrap<'a, Node<'a>>>,
+}
+
+fn same_twice(node: &Node) -> bool {
+    match &node.next {
+        Some(wrap) => {
+            let first = wrap.inner.value;
+            let second = wrap.inner.value;
+            let same: @(first == second) = _;
+            true
+        }
+        None => false,
+    }
+}
+
+fn linked() -> bool {
+    let last = Node { value: 1, next: None };
+    let first = Node { value: 2, next: Some(Wrap { inner: &last }) };
+    same_twice(&first)
+}
+
+//~ run: linked() => true

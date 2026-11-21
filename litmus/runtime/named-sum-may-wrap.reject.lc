@@ -1,0 +1,11 @@
+//~ question: Does the name of a condition prove the condition as a proposition, when the program evaluated it with machine arithmetic?
+//~ spec: runtime.conditions, proofs.facts.named
+//~ rfc: 0005
+
+fn small_sum(a: u32, b: u32) -> Option<@(a + b < 10)> {
+    if small: a + b < 10 {
+        Some(small) //~ error: `small` proves `u32::wrap(a + b) < 10`, the condition as the program evaluated it, and `a + b < 10` is about the true sum
+    } else {
+        None
+    }
+}

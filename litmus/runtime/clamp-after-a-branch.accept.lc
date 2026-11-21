@@ -1,0 +1,13 @@
+//~ question: Is a variable that one branch of an `if` assigned known afterwards as the `if` of its two values?
+//~ spec: runtime.joins
+//~ rfc: 0005
+
+fn clamp(mut n: u32) -> (out: u32, @(out <= 100)) {
+    if n > 100 {
+        n = 100;
+    }
+    (n, _)
+}
+
+//~ run: clamp(5).0 => 5
+//~ run: clamp(500).0 => 100

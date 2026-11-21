@@ -157,3 +157,11 @@ The owner asked for the three decided parts to be written down: "I suppose we ca
 [RFC 0004](../design/rfcs/0004-runtime-code.md) is the result, as a draft: it has had no adversarial review. It adds a chapter to the specification, [Runtime code](../spec/runtime.md), with eight rules and their examples. It lists what the owner decided, and what it proposes beyond that: that `Box::new` is understood, that what is known where paths join is what is known on every path and no more, the rows of its table that were not discussed one by one, that a kept proof's proposition is written, and `a..=b`.
 
 What stays in this issue is the rest of the runtime semantics: `&mut` parameters and reborrows, where borrows end, partial moves, drops and unwinding, calls that Locus cannot translate, and how much of obligation generation is trusted.
+
+### 2026-11-21, RFC 0005 answers part of this
+
+[RFC 0005](../design/rfcs/0005-core-terms.md), a draft, says what the context holds at each point of a function. Of this issue's list it answers: how versions are named, and that a value name is a variable; what is known where the branches of an `if` or a `match` meet, and at the top of a loop, with the induction that makes a kept proof an invariant; what a write to a field or an element leaves known; how the end of a mutable borrow is tied to the target's last write, and a reborrow to the value it was taken from; and that wrapping is exact.
+
+Still open here: what a verified function's summary of the places it may write records, and what a crate keeps of it for its callers; partial moves; drops and unwinding; which operations are understood and on which types, where the reviews of PR #25 found that comparisons must be limited to integers and `bool`; and how much of obligation generation is trusted. `trusted.obligations` now says that the rules which give the context its facts are part of it.
+
+A second reviewer recommends a small checked slice of the core before more examples are written: arithmetic, a join, one loop, and one mutable reborrow. That is the planned semantic slice of this issue, made smaller.

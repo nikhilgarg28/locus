@@ -8,6 +8,8 @@
 
 Locus understands a fixed list of runtime operations: those that Rust gives syntax, on the types that stay Rust's, and five functions beside them. Each has a value and a condition under which it returns, and once it has returned Locus knows both. Arithmetic means the wrapped result whichever way the crate is built, so nothing is owed where it is written. A fact that a loop keeps is a `let mut` proof variable that the program assigns again, and one rule, about where paths join, makes it an invariant. There is no invariant construct, and no way yet for a function of the program's own to join the list.
 
+**[RFC 0005](0005-core-terms.md) restates part of this RFC,** after two reviews found gaps in it. Where the two differ, RFC 0005 is the later text. It defines wrapping exactly; says what a condition, a write, a join, a loop, a `for` range, and the end of a borrow each put in the context; and gives a kept proof variable its type. The table of understood operations below is not yet revised: the reviews found, among other things, that comparisons must be limited to integers and `bool`.
+
 ## Motivation
 
 A proof is about values, and runtime code is what makes the values. [RFC 0003](0003-proof-construction.md) says that a hole uses "what is known at that point", and nothing yet says what that is for real code. Every accepted example so far is a straight line of comparisons and small arithmetic.
@@ -64,7 +66,7 @@ So in the motivating example, line 1 gives `hi === xs.len()`. Line 4 gives `mid 
 Rust defines the overflow of `+`, `-`, and `*` in both kinds of build, and never as undefined behavior. With overflow checks, which a debug build has by default, it panics. Without them, the result wraps. One statement is true in both: **if the operation returned, its result is the wrapped value.**
 
 - **`a + b` means the wrapped sum, whichever way the crate is built,** and nothing is owed where it is written. So a proof holds in a debug build and in a release build, as the [vision](../../VISION.md)'s first commitment asks, and plain Rust compiles unchanged.
-- **The true result follows when it is in range.** Locus knows the range of every machine integer, and that wrapping does nothing to a value in range. `linear` does this itself, since wrapping is a remainder by a literal.
+- **The true result follows when it is in range.** Locus knows the range of every machine integer, and that wrapping does nothing to a value in range. `linear` knows these two facts about wrapping, whose exact definition is [RFC 0005](0005-core-terms.md#wrapping)'s. An earlier revision called wrapping "a remainder by a literal", which is wrong for Locus's `%`: that one truncates toward zero.
 - **So overflow shows only where a proof needs the true value and the facts do not give the range:**
 
   ```rust
@@ -133,13 +135,13 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 | Rule | Examples |
 |---|---|
 | `runtime.operations` | `runtime/checked-sum.accept.lc`, `runtime/length-of-slice.accept.lc`, `runtime/for-over-an-iterator.reject.lc`, `runtime/method-that-is-a-call.reject.lc` |
-| `runtime.operations.returned` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/index-returned.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/index-not-yet-returned.reject.lc` |
+| `runtime.operations.returned` | `proofs/given-what-an-index-returned.accept.lc`, `runtime/assert-gives-its-condition.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/index-returned.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/index-not-yet-returned.reject.lc` |
 | `runtime.operations.conditions` | `runtime/checked-sum.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/index-returned.accept.lc` |
-| `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `runtime/sum-may-overflow.reject.lc` |
-| `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/kept-proof-left-behind.reject.lc` |
-| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
-| `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-loses-a-fact.reject.lc` |
-| `runtime.loops.for-range` | `runtime/for-over-a-range.accept.lc`, `runtime/for-over-an-iterator.reject.lc` |
+| `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc`, `runtime/sum-may-overflow.reject.lc` |
+| `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/kept-proof-borrowed.reject.lc`, `runtime/kept-proof-left-behind.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
+| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
+| `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/element-write-keeps-length.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-invariant-missed-at-continue.reject.lc`, `runtime/loop-loses-a-fact.reject.lc` |
+| `runtime.loops.for-range` | `runtime/for-over-a-range.accept.lc`, `runtime/for-over-an-iterator.reject.lc`, `runtime/range-bound-written-while-built.reject.lc`, `runtime/range-bounds-built-once.reject.lc` |
 
 ## Interactions
 
@@ -204,8 +206,6 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 - A claim that a loop ends ([termination-claims](../../issues/termination-claims.md)), and that a function cannot panic ([no-panic-claims](../../issues/no-panic-claims.md)).
 - Naming the fact of a `while` condition and of a `match` arm ([naming-facts-from-control-flow](../../issues/naming-facts-from-control-flow.md)).
 
-**Not yet said.** Found while writing [RFC 0002](0002-logical-layer.md)'s examples of values with invariants, which are written so as not to need them:
+**Said since, in [RFC 0005](0005-core-terms.md):** what a write to a field or to an element tells Locus, and what is known after a `while` ends.
 
-- **What a write to an item of an array or a slice tells Locus:** that the sequence is the old one with that item replaced, and that the write returns only if the index is in bounds. The table has no row for a write.
-- **That a slice's length is at most `isize::MAX`.** Without it, the sum of two indices into one buffer may wrap as far as Locus knows.
-- **What is known after a `while` ends:** that its condition is false. The rule for joins gives it after an `if` whose other branch returns, and nothing says it for a loop.
+**Withdrawn.** An earlier revision of this list proposed that a slice's length is at most `isize::MAX`. That is false for an element type of size zero, which a proof is: `vec![(); usize::MAX]` gives a slice longer than that. Rust's bound is on a slice's size in bytes, so it bounds the length only for an element type known not to be zero-sized. What holds of every runtime slice is that its length fits a `usize`.

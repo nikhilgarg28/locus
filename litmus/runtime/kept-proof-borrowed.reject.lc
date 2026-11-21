@@ -1,0 +1,14 @@
+//~ question: May a `let mut` proof variable be mutably borrowed?
+//~ spec: runtime.proofs.assigned
+//~ rfc: 0005
+
+fn read(k: u32, slot: &mut @(k < 10)) -> @(k < 10) {
+    *slot
+}
+
+fn stale(mut n: u32, small: @(n < 10)) -> u32 {
+    let mut ok: @(n < 10) = small;
+    n = 50;
+    let old = read(n, &mut ok); //~ error: a `let mut` proof variable is not mutably borrowed: `ok` holds a proof about the value `n` had before `n = 50`, and a `&mut @(n < 10)` would call it a proof about the current one
+    n
+}

@@ -1,0 +1,12 @@
+//~ question: Does a recursive logic function unfold on an argument that is not a literal?
+//~ spec: core.conversion
+//~ rfc: 0005
+
+#[decreases(n)]
+logic fn double(n: Int) -> Int {
+    if n <= 0 { 0 } else { double(n - 1) + 2 }
+}
+
+logic fn step(n: Int, positive: @(n > 0)) -> @(double(n) === double(n - 1) + 2) {
+    eq::refl(double(n)) //~ error: `double(n)` and `double(n - 1) + 2` do not convert: `double` calls itself, so it unfolds only on a literal; `eq::unfold(double)(n)` proves its equation
+}

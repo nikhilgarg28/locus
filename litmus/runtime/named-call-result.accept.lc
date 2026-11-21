@@ -1,0 +1,21 @@
+//~ question: May a condition that is the result of a call be named, and does the name prove that this one result was true?
+//~ spec: runtime.conditions
+//~ rfc: 0005
+
+fn ready() -> bool {
+    true
+}
+
+// `ready` is a call, so nothing is known of what it returns. The name says only
+// that the value it returned this time was `true`.
+fn once() -> u32 {
+    let is_ready = ready();
+    if yes: is_ready {
+        let known: @(is_ready) = yes;
+        1
+    } else {
+        0
+    }
+}
+
+//~ run: once() => 1

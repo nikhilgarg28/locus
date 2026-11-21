@@ -1,0 +1,28 @@
+//~ question: Does `eq::congr` carry an equality of snapshots through a logic function that reads a field?
+//~ spec: core.elaboration, proofs.equality
+//~ rfc: 0005
+
+struct Inner {
+    x: u32,
+}
+
+impl Model for Inner {
+    type Logic = Nat;
+    logic fn model(inner: &Inner) -> Nat {
+        0
+    }
+}
+
+#[derive(Model)]
+struct Outer {
+    inner: Inner,
+}
+
+logic fn x_of(o: &Outer) -> Nat {
+    o.inner.x
+}
+
+// `snap(a) === snap(b)` is an equality of the two snapshots, and a snapshot is what `x_of` takes.
+fn read(a: &Outer, b: &Outer, same: @(snap(a) === snap(b))) -> @(x_of(a) === x_of(b)) {
+    eq::congr(x_of, same)
+}

@@ -1,0 +1,18 @@
+//~ question: Does a proof variable that a loop assigns have a version at the top of the loop, when a `continue` leaves it behind?
+//~ spec: runtime.loops
+//~ rfc: 0005
+
+fn skip_odd(xs: &[u32]) -> usize {
+    let mut i = 0;
+    let mut inside: @(i <= xs.len()) = _;
+    while i < xs.len() {
+        if xs[i] % 2 == 1 {
+            i += 1;
+            continue;
+        }
+        let before = inside; //~ error: `inside` has no version here: the loop assigns it, and the path through `continue` writes `i` and leaves `inside` behind, so it is not an invariant of the loop
+        i += 1;
+        inside = _;
+    }
+    i
+}

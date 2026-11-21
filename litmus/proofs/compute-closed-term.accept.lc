@@ -2,6 +2,7 @@
 //~ spec: proofs.procedures.compute
 //~ rfc: 0003
 
+#[decreases(n)]
 logic fn double(n: Int) -> Int {
     if n <= 0 { 0 } else { double(n - 1) + 2 }
 }

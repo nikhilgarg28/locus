@@ -1,0 +1,13 @@
+//~ question: Are two propositions the same when evaluation brings them to the same term?
+//~ spec: core.conversion, logic.ghost.type-identity
+//~ rfc: 0005
+
+#[decreases(n)]
+logic fn double(n: Int) -> Int {
+    if n <= 0 { 0 } else { double(n - 1) + 2 }
+}
+
+// `double(3)` evaluates to 6, so `eq::refl(6)` has the type required.
+logic fn six() -> @(double(3) === 6) {
+    eq::refl(6)
+}

@@ -1,0 +1,9 @@
+//~ question: Is a cast to a wider unsigned type the value itself?
+//~ spec: core.wrap, runtime.arith.wrapping
+//~ rfc: 0005
+
+fn widen(x: u8) -> (y: u32, @(y == x)) {
+    (x as u32, _)
+}
+
+//~ run: widen(200).0 => 200
