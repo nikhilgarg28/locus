@@ -113,12 +113,26 @@ fn bump(p: &mut Pair, room: @(p.a < 100)) -> @(final!(p).a == p.a + 1 && final!(
 }
 ```
 
-- While a mutable borrow lives, the place it borrows has no value name. The reference's target has names of its own: the first equals the value the place had, and each write through the reference gives a new one. Here the target is `t₁ === p₁.a`, and after the write `t₂ === u32::wrap(t₁ + 1)`.
-- When the borrow ends, the value it ends with equals the target's name at that point, and the place gets a new name equal to it. Without this the final value would be a symbol related to nothing.
-- For a borrow of a part, the whole value's new name is its old value with that part replaced: `p₂ === Pair { a: t₂, b: p₁.b }`. A reborrow is a borrow of the target, and ends the same way.
-- At return, the borrow that `p` holds ends at `p₂`, so `final!(p)` is `p₂`. Both fields of `p₂` come from the constructed value by conversion, `room` puts `t₁ + 1` in range, and `linear` fills the hole.
-- Where a reborrow outlives the function that made it, as when `first_mut` returns `&mut pair.0`, the same equation is known there between the two final values: the pair ends as its old value with that part replaced by whatever the returned reference ends with. Both are still to come, which is why a proof may speak of them ([below](#a-borrows-final-value)).
-- A borrow given to a call ends in the callee or when the call returns, and the caller then knows of the place what the callee's proofs say of the value the borrow ended with.
+- **A place has its own value names, and a whole value is its parts.** A field of a struct, a component of a tuple, and a field of an enum's variant are places, and the value of the whole at a point is its constructor applied to the values its parts have there. This is the unit that rustc's borrow checker works in.
+- **A mutable borrow suspends the place it borrows, and no other.** While `r` lives, `p.a` has no value name, and `p.b` keeps its own: it can still be read, written, and borrowed.
+- **The reference's target has names of its own.** The first equals the value the place had, and each write through the reference gives a new one. Here the target is `t₁ === p₁.a`, and after the write `t₂ === u32::wrap(t₁ + 1)`.
+- **When the borrow ends, the value it ends with equals the target's name at that point,** and the place gets a new name equal to it. Without this the final value would be a symbol related to nothing. Here `p.a` becomes `t₂`, and `p` as a whole is `Pair { a: t₂, b: p₁.b }`, because `p.b` was never written.
+- At return, the borrow that `p` holds ends at that value, so `final!(p)` is it. Both fields come from the constructed value by conversion, `room` puts `t₁ + 1` in range, and `linear` fills the hole.
+- **A borrow of an element** of an array or a slice suspends the whole sequence, and at its end the sequence is its earlier value updated at that index.
+- **A borrow given to a call ends when the call returns,** unless the callee's result can hold it, as rustc decides from the signature (`contracts.final`). Then it ends when the result's borrow does. Either way the caller then knows of the place what the callee's proofs say of the value the borrow ended with.
+
+**Several loans of one value.**
+
+```rust
+fn split(p: &mut Pair) -> (a: &mut u32, b: &mut u32, @(final!(p).a == final!(a) && final!(p).b == final!(b))) {
+    (&mut p.a, &mut p.b, _)
+}
+```
+
+Both reborrows outlive `split`. The value that `p`'s borrow ends with is known there as the constructor applied, for each part, to the value its reborrow ends with when one is outstanding, and to the part's current value when none is: `Pair { a: final!(a), b: final!(b) }`. An earlier wording of this RFC rebuilt the parent once for each loan, as its old value with that one part replaced. For `split` that gives two equations, and each wrongly holds the other field at its old value.
+
+- A sibling written while another part is lent keeps what was written. After `let r = &mut p.a; p.b = 5; *r = 1;`, `p` is `Pair { a: 1, b: 5 }`.
+- **Where a part of the value has been moved out,** Locus gives the place a new name at the end of the borrow and no fact: it is known by its type. Such programs are valid Rust and stay accepted. What they prove about that place is nothing, until this is worked out.
 
 **A loop is an induction.**
 
@@ -179,10 +193,11 @@ fn absurd(t: &mut Tally) {
 
 `recover(_, about_the_end)` infers its first argument from the proof's type, and so hands the body the count that `r` will end with, before the body writes it. The count would then be one more than itself.
 
-**Until a mutable borrow ends, the value it ends with occurs only inside propositions and proofs.** An expression whose type is neither a proof type nor `Prop` is rejected when its core term mentions that value, however the value got there: written, inferred for a `_`, or returned by a logic function. The check is on core terms.
+**Until a mutable borrow ends, the value it ends with occurs only inside proofs and what they prove.** Every occurrence of it in a core term lies inside a term of a proof type, or inside the proposition of a proof type. A term of any other type that mentions it, and that is not part of a proof, is rejected. The check is on core terms, so it does not matter how the value got there: inferred for a `_`, or returned by a logic function.
 
-- A proof about a final value may be bound, combined with other proofs, and returned before the borrow ends. `first_mut`, which returns a `&mut` into a pair with a proof that relates the pair's final value to the reference's, needs exactly that to prove its own result.
-- This is sound because a proof cannot become a value: a match on a proof produces a proof (`proofs.elimination`), so nothing computed before the borrow ends, and written through it, can depend on what it ends with.
+- **A proof about a final value may be bound, combined with other proofs, and returned** before the borrow ends, and a lemma may be called at one, since its arguments are part of the proof it returns. `first_mut`, which returns a `&mut` into a pair with a proof that relates the pair's final value to the reference's, needs exactly that to prove its own result.
+- **`Prop` is no exception.** A proposition is a logical value: it can be stored in a ghost field and read back. With `recover` at `Prop`, a body could store `prop!(!predicted)` through the borrow, and the proposition the borrow ends with would be its own negation, which proves `False`. RFC 0002 names this program as the liar. The first text of this RFC exempted `Prop` by its type, and a review found the hole. What a future proposition may be is what a proof proves, never a value of its own.
+- **This is sound because only proofs depend on the final value, and a proof cannot become a value:** a match on a proof produces a proof (`proofs.elimination`). So nothing that is stored through the borrow before it ends can depend on what it ends with.
 - Once the borrow has ended, the value is the one the place holds, and nothing restricts it.
 
 ### When two propositions are the same
@@ -191,9 +206,11 @@ Two types that hold logical values are the same when they are built the same way
 
 1. arithmetic and comparisons on literals;
 2. an `if` on a literal, a `match` on a constructor, and a field of a constructed value;
-3. a call of a logic function that does not call itself, a model included, becomes its body, where every name in that body could be written at the point of the call;
+3. a call of a logic function that does not call itself, a model included, becomes its body;
 4. a call of a logic function that calls itself becomes its body only when the argument it recurs on is a constructor, or every argument its measure reads is a literal;
 5. a constant, and a ghost `let` that is not `mut`, become their values.
+
+Reductions 3 and 4 apply only where every name in the function's body could be written at the point of the call. `eq::unfold(f)` follows the same condition, and so does a term that a hole or a procedure finds: outside the module of a private name that its body reads, a function is known by the lemmas and contracts its module provides, and by no route by its body.
 
 | Pair | Converts? | Why |
 |---|---|---|
@@ -225,6 +242,7 @@ RFC 0002 cuts a field that closes a cycle of references, so that every snapshot 
 - **A cut field has the type `CutSnap<F>`,** for its declared type `F`: the snapshot of `F` with every reference in it held as its address. It is defined for every `F`, has no model, and is not `Snap<F>`, so it is not accepted where a `Snap<F>` is.
 - **A model or a logic function reads only snapshots,** so it reads nothing behind such an address. Otherwise a model would not be a function of the snapshot: two values with equal snapshots can have different referents there.
 - **A function body may read the place behind a cut reference,** as it reads any place. The read gives the value name of that place's current version, and two reads with no write between give the same name.
+- **A proof field reads nothing behind a cut.** With `struct A<'a> { next: &'a B<'a>, positive: @(next.value > 0) }`, where `B` holds a reference back to an `A`, the snapshot of an `A` holds `next` as an address, so `positive` would be a proof about something its own value does not hold. Such a proof field is rejected. An invariant over a cycle of references cannot speak of its neighbours for now.
 
 ### What a proof may cite
 
@@ -235,6 +253,7 @@ RFC 0002 cuts a field that closes a cycle of references, so that every snapshot 
 | A fact from a type | A lemma of Locus's library: `u8::range(x)`, `Nat::nonneg(n)` |
 
 - **`given(P)` searches for nothing.** It is the written form of what a hole takes from the context, and is what lets a hole expand to a term (`proofs.procedures.expand`).
+- **Expanding a hole may add a ghost `let`.** After `n += 1`, the fact in the context is about the value `n` had before, which the body can no longer spell. The expansion adds `let before = logic! { n };` where that value was current, and then writes `given(n === u32::wrap(before + 1))`. So a hole expands to a term and the names it needs, not always to a term alone.
 - **A hole tries three things, in order:** a proof in scope or a fact in the context of the proposition required; `compute()`; and `linear` over all of them.
 - **`linear` has a fixed theory:**
   - equality, with equal arguments giving equal results;
@@ -266,28 +285,31 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `core.elaboration` | `core/congruence-at-the-snapshot.accept.lc`, `core/congruence-through-a-model.reject.lc`, `core/rewrite-misses-a-field-read.reject.lc` |
 | `core.values` | `core/value-known-by-a-fact.accept.lc`, `core/value-name-per-version.reject.lc` |
 | `core.wrap` | `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc` |
-| `core.conversion` | `core/constant-unfolds.accept.lc`, `core/conversion-by-evaluation.accept.lc`, `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/private-body-stays-folded.reject.lc`, `core/recursive-call-stays-folded.reject.lc` |
+| `core.conversion` | `core/constant-unfolds.accept.lc`, `core/conversion-by-evaluation.accept.lc`, `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/private-body-stays-folded.reject.lc`, `core/recursive-call-stays-folded.reject.lc`, `proofs/unfold-private-body.reject.lc` |
 | `core.sequences` | `core/index-with-a-proof.accept.lc`, `core/index-without-bounds.reject.lc` |
 | `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
 | `models.snapshots` | `models/generic-snapshot-at-cycle.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
-| `models.snapshots.cut` | `models/body-reads-behind-a-cut.accept.lc`, `models/model-through-a-cut.reject.lc` |
+| `models.snapshots.cut` | `models/body-reads-behind-a-cut.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `models/model-through-a-cut.reject.lc` |
 | `logic.ghost.type-identity` | `core/conversion-by-evaluation.accept.lc`, `logical-layer/proof-holder-same-proposition.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/value-name-per-version.reject.lc`, `logical-layer/proof-holder-other-proposition.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
 | `logic.const.well-founded` | `logical-layer/logical-constant-chain.accept.lc`, `logical-layer/logical-constant-cycle.reject.lc`, `logical-layer/static-justifies-itself.reject.lc`, `logical-layer/statics-justify-each-other.reject.lc` |
-| `contracts.final` | `contracts/final-value-at-return.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc` |
-| `contracts.final.pending` | `contracts/final-value-in-a-proof.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc` |
+| `contracts.final` | `contracts/final-value-at-return.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc` |
+| `contracts.final.pending` | `contracts/final-value-in-a-proof.accept.lc`, `contracts/lemma-at-a-final-value.accept.lc`, `contracts/final-proposition-recovered-by-inference.reject.lc`, `contracts/final-value-recovered-by-inference.reject.lc` |
+| `contracts.invariants.reads` | `contracts/invariant-reads-through-shared-reference.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `contracts/invariant-reads-through-mut-reference.reject.lc` |
 | `proofs.holes` | `proofs/forall-used-by-call.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/forall-not-used-by-hole.reject.lc`, `proofs/hole-needs-a-lemma.reject.lc` |
 | `proofs.procedures.compute` | `core/constant-unfolds.accept.lc`, `proofs/compute-closed-term.accept.lc`, `proofs/compute-open-term.reject.lc` |
 | `proofs.procedures.linear` | `proofs/data-constructors-are-distinct.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/linear-with-division.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/hole-needs-a-lemma.reject.lc`, `proofs/linear-product-of-variables.reject.lc`, `proofs/proof-constructors-are-not-distinct.reject.lc` |
+| `proofs.procedures.expand` | `proofs/equality-chain-as-term.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-written-out-with-an-earlier-value.accept.lc` |
 | `proofs.equality` | `core/congruence-at-the-snapshot.accept.lc`, `proofs/equality-chain-as-term.accept.lc`, `proofs/rewrite-with-equality.accept.lc`, `core/congruence-through-a-model.reject.lc`, `core/rewrite-misses-a-field-read.reject.lc`, `proofs/equality-chain-mismatched.reject.lc` |
-| `proofs.values.inferred` | `proofs/inferred-values.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc`, `proofs/inferred-value-from-a-procedure.reject.lc`, `proofs/inferred-value-undetermined.reject.lc` |
+| `proofs.unfold` | `proofs/unfold-logic-function.accept.lc`, `proofs/unfold-declared-proposition.reject.lc`, `proofs/unfold-private-body.reject.lc` |
+| `proofs.values.inferred` | `contracts/lemma-at-a-final-value.accept.lc`, `proofs/inferred-values.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc`, `proofs/inferred-value-from-a-procedure.reject.lc`, `proofs/inferred-value-undetermined.reject.lc` |
 | `proofs.facts.named` | `proofs/named-condition.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `proofs/named-condition-after-branch.reject.lc`, `runtime/named-sum-may-wrap.reject.lc` |
 | `proofs.facts.types` | `proofs/range-of-a-machine-integer.accept.lc` |
-| `proofs.given` | `proofs/given-a-branch-condition.accept.lc`, `proofs/given-what-an-index-returned.accept.lc`, `proofs/given-a-fact-that-is-not-there.reject.lc` |
+| `proofs.given` | `proofs/given-a-branch-condition.accept.lc`, `proofs/given-what-an-index-returned.accept.lc`, `proofs/hole-written-out-with-an-earlier-value.accept.lc`, `proofs/given-a-fact-that-is-not-there.reject.lc` |
 | `runtime.facts` | `core/value-known-by-a-fact.accept.lc`, `proofs/given-a-fact-that-is-not-there.reject.lc`, `runtime/fact-from-one-branch.reject.lc` |
 | `runtime.conditions` | `proofs/given-a-branch-condition.accept.lc`, `runtime/named-call-result.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `runtime/named-sum-may-wrap.reject.lc` |
 | `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc`, `runtime/sum-may-overflow.reject.lc` |
-| `runtime.writes` | `runtime/element-write-keeps-length.accept.lc`, `runtime/field-write-updates-the-value.accept.lc` |
-| `runtime.borrows` | `runtime/write-through-a-reborrow.accept.lc`, `runtime/reborrow-ends-with-its-last-write.reject.lc` |
+| `runtime.writes` | `runtime/element-write-keeps-length.accept.lc`, `runtime/field-write-updates-the-value.accept.lc`, `runtime/sibling-written-during-a-borrow.accept.lc` |
+| `runtime.borrows` | `runtime/sibling-written-during-a-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `runtime/reborrow-ends-with-its-last-write.reject.lc`, `runtime/sibling-frozen-by-a-borrow.reject.lc` |
 | `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/kept-proof-borrowed.reject.lc`, `runtime/kept-proof-left-behind.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
 | `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
 | `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/element-write-keeps-length.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-invariant-missed-at-continue.reject.lc`, `runtime/loop-loses-a-fact.reject.lc` |
@@ -321,6 +343,14 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 
 **Making the whole cut field opaque.** Simpler, and it loses the field's parts that are not references.
 
+**Keeping a final value out of every type but proofs and `Prop`.** This was the first text of this RFC. A `Prop` can be stored, so the liar was still accepted.
+
+**Rebuilding a parent once for each loan.** Also the first text. It is right for one loan and wrong for two.
+
+**Rejecting a borrow of a value that is partly moved out.** That would reject valid Rust. Locus says nothing about the place instead.
+
+**Letting `eq::unfold` show a body that conversion will not.** Then a module's private representation is part of what its users' proofs rest on, and the claim that such a function is known by its contracts is false.
+
 **Widening conversion with laws of arithmetic or with facts about value names.** Then whether two types are the same would depend on a proof search, and RFC 0002's rule that a proof about one version never fits another by computation alone would go.
 
 ## Prior art
@@ -338,15 +368,17 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 1. **Logical code is elaborated to core terms, and conversion is part of when two types are the same.** Shown the core, five reductions, `u32::wrap`, and a choice between conversion in type identity and conversion only where written: "I'm okay with your recommendation and the rest of the idea looks reasonable." The recommendation was conversion in type identity, the five reductions, a constant and a ghost `let` as transparent while a runtime value stays a variable, and `<` and `>` kept separate.
 2. **Joins, kept proof variables, cut snapshots, indexing, `given`, and `linear`'s theory,** as this RFC has them, and four rules put for confirmation: a borrow's final value, `for` ranges, initializers, and writes. "I'm okay with this", with a request for a summary to put to a second reviewer before anything was written.
 3. **Written as a new RFC,** after that review and a revised summary: "Go for it please."
+4. **Five corrections after a review of this text,** which found that `Prop` had been exempted from the rule on final values, that a parent was rebuilt wrongly when two parts were lent, that a proof field could read past a cut, that an expanded hole could not name an earlier value, and that `eq::unfold` showed a private body. Shown a fix for each with a recommendation: "go with your recommendations".
 
 **Still for the owner.** Each is written into the rules and examples as proposed.
 
-1. **A final value is kept out of values, not out of proofs.** The summary said that a proof about one could only be bound, moved, and returned. See [Alternatives](#alternatives) for why that was wrong.
+1. **A final value occurs only inside proofs and what they prove.** The summary said that a proof about one could only be bound, moved, and returned, which would have kept `first_mut` from proving its own result. The first text of this RFC then exempted `Prop`, which was unsound. The rule as it stands is the owner's fourth decision above, and its exact statement is this RFC's.
 2. **What the second review changed,** which the owner saw in the revised summary: constructor reasoning for data types only; a kept proof at a join built by cases; the induction rule for loops, and that a proof variable which is not an invariant has no version at the top; a borrow's end tied to the last write; `CutSnap` cutting every reference; a derived default for unproved indexing; and `compute` taking its term from the goal.
 3. **The list of types that have a default.**
 4. **The names** `given`, `u8::range`, `Nat::nonneg`, and `CutSnap`.
 5. **That overrunning the step bound is an error,** and the bound's value, which is not chosen.
 6. **That a `let mut` of type `Option<@P>` is not a kept proof variable.**
+7. **That a place partly moved out is known by its type after a borrow,** and is not rejected. The recommendation put to the owner said "rejected", which would have refused valid Rust.
 
 **Left to later work:**
 
@@ -356,4 +388,5 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 - Shifts and bitwise operations, and whether `debug_assert!` gives a fact in a debug build.
 - Whether the contracts of Locus's library are stated on snapshots, and the lemma that ties a library container's model to its snapshot's length ([standard-library](../../issues/standard-library.md)).
 - A small checked slice of this core, which the second review recommends: arithmetic, a join, one loop, and one mutable reborrow.
+- What the review of this text left for later: a loop's condition that writes a place; a proof carried through several exits of a loop; equations between sequences; and what is known of a place that is partly moved out or not yet initialized when a borrow of it ends.
 - The remaining findings of the reviews, which this RFC does not touch.

@@ -1,0 +1,24 @@
+//~ question: May a lemma be called at the value a borrow will end with, before the borrow ends, when what it returns is a proof?
+//~ spec: contracts.final.pending, proofs.values.inferred
+//~ rfc: 0005
+
+fn first_mut(pair: &mut (u32, u32)) -> (r: &mut u32, @(final!(pair) === (final!(r), pair.1))) {
+    (&mut pair.0, _)
+}
+
+logic fn flipped(a: (Nat, Nat), b: (Nat, Nat), same: @(a === b)) -> @(b === a) {
+    same.symm()
+}
+
+fn second_kept() -> u32 {
+    let mut pair: (u32, u32) = (1, 2);
+    let (first, related) = first_mut(&mut pair);
+    // The two inferred values mention what `first` and `pair` will end with. They are
+    // arguments of a lemma, so they are part of the proof it returns.
+    let other_way = flipped(_, _, related);
+    *first = 9;
+    let kept: @(pair.1 == 2) = _;
+    pair.1
+}
+
+//~ run: second_kept() => 2

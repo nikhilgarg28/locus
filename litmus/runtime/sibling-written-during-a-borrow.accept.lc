@@ -1,0 +1,23 @@
+//~ question: Does a field that is written while its sibling is mutably borrowed keep what was written, when the borrow ends?
+//~ spec: runtime.borrows, runtime.writes
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn both(p: &mut Pair) -> @(final!(p).a == 1 && final!(p).b == 5) {
+    let r = &mut p.a;
+    p.b = 5;
+    *r = 1;
+    _
+}
+
+fn six() -> u32 {
+    let mut p = Pair { a: 0, b: 0 };
+    let set = both(&mut p);
+    p.a + p.b
+}
+
+//~ run: six() => 6

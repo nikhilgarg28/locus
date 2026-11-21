@@ -1,0 +1,23 @@
+//~ question: When a function returns reborrows of two fields, is the value its borrow ends with known from what both end with?
+//~ spec: runtime.borrows, contracts.final
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn split(p: &mut Pair) -> (a: &mut u32, b: &mut u32, @(final!(p).a == final!(a) && final!(p).b == final!(b))) {
+    (&mut p.a, &mut p.b, _)
+}
+
+fn three() -> u32 {
+    let mut p = Pair { a: 0, b: 0 };
+    let (a, b, ends) = split(&mut p);
+    *a = 1;
+    *b = 2;
+    let both: @(p.a == 1 && p.b == 2) = _;
+    p.a + p.b
+}
+
+//~ run: three() => 3
