@@ -6,6 +6,8 @@ logic fn lt_trans(a: Int, b: Int, c: Int, ab: @(a < b), bc: @(b < c)) -> @(a < c
     linear((ab, bc))
 }
 
-logic fn chain(x: Int, y: Int, z: Int, below: @(x + 1 <= y), yz: @(y < z)) -> @(x < z) {
-    lt_trans(_, _, _, linear((below,)), yz) //~ error: the first value is not determined: `yz` gives the second and the third, and `linear((below,))` is a procedure call, which has no proposition until one is required of it
+logic fn chain(x: Int, y: Int, z: Int, below: @(x + 1 <= y), yz: @(y < z)) -> @(y < z) {
+    // No proposition is required of this call, so only the proofs passed to it can determine its values.
+    let step = lt_trans(_, _, _, linear((below,)), yz); //~ error: the first value is not determined: `yz` gives the second and the third, and `linear((below,))` is a procedure call, which has no proposition until one is required of it
+    yz
 }
