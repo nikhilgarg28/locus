@@ -205,3 +205,25 @@ One thing in it differs from the summary the owner and the reviewer saw. The sum
 RFC 0003's own sections are not yet rewritten for the core. It carries a note that says where RFC 0005 differs, and its rules in the specification are restated.
 
 This issue stays open until the owner decides on RFC 0003 and RFC 0005.
+
+### 2026-11-21, RFC 0005's text reviewed and corrected
+
+A second tool reviewed RFC 0005 as written, at `9bf45cc`, and then two revisions of the corrections before they were pushed. It found one route to a contradiction and four gaps in the first text:
+
+- `Prop` was exempt from the rule that keeps a borrow's final value out of values. A proposition can be stored, so the liar was accepted.
+- A parent was rebuilt once for each loan, which is wrong when two parts are lent.
+- A proof field could read past a reference that its snapshot cuts.
+- An expanded hole could not name a value from before a write.
+- `eq::unfold` showed a body that conversion kept private.
+
+Shown a fix for each with a recommendation, the owner:
+
+> go with your recommendations and give me a summary of your changes before you change the PR - want to consult with codex
+
+The reviewer then found four cases that the fixes did not cover: a borrow kept through another parameter; two elements of an array lent by one pattern; a proof field inside a field that a snapshot cuts; and a future value that no ghost `let` can name. It also found that "known by its type" was the wrong thing to say of a value that is partly moved out, and that the rejection for cuts disagreed with the rule that no type is rejected for its snapshot. All are corrected. After the third summary the owner:
+
+> Please push
+
+RFC 0005 records the corrections, and lists under "Still for the owner" the choices in them that were this RFC's: that loans made by a pattern leave no fact about the elements; that a type with such a proof field in a cut field is rejected, where cutting only the references that close the cycle would keep it; and that one kind of proof has no form in source, where letting a body write `final!` inside a proof would give it one.
+
+The reviewer's last read found no new route to a contradiction. It read the documents; no compiler runs them.
