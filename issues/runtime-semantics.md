@@ -165,3 +165,13 @@ What stays in this issue is the rest of the runtime semantics: `&mut` parameters
 Still open here: what a verified function's summary of the places it may write records, and what a crate keeps of it for its callers; partial moves; drops and unwinding; which operations are understood and on which types, where the reviews of PR #25 found that comparisons must be limited to integers and `bool`; and how much of obligation generation is trusted. `trusted.obligations` now says that the rules which give the context its facts are part of it.
 
 A second reviewer recommends a small checked slice of the core before more examples are written: arithmetic, a join, one loop, and one mutable reborrow. That is the planned semantic slice of this issue, made smaller.
+
+### 2026-11-21, the table of understood operations
+
+The reviews of PR #25 found that RFC 0004's criterion for an understood operation was too wide: `==` on an `Option`, a slice, or a reference is syntax on a type that stays Rust's, and calls user code. Three choices and a list of confirmations were put to the owner together:
+
+> Yes to all
+
+[RFC 0004](../design/rfcs/0004-runtime-code.md) records them as its decisions 7 to 10. An operation is understood when it is in one of two closed lists, what the language defines and a short list of library items, and comparisons are understood on integers and `bool` only. Shifts and bitwise operations on integers are left out for now. `debug_assert!` and a branch on `cfg!(debug_assertions)` give no fact. `?`, patterns, and each form of range indexing have rules of their own.
+
+The owner also confirmed a rule that the specification lacked, on how a proof of a `forall` or of an implication is used. It is `proofs.forall`, listed by RFC 0003.

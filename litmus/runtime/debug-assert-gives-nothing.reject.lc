@@ -1,5 +1,5 @@
 //~ question: Is the condition of a `debug_assert!` known after it?
-//~ spec: runtime.operations.returned, runtime.joins
+//~ spec: runtime.debug-assertions, runtime.joins
 //~ rfc: 0004
 
 fn checked(n: u32) -> (out: u32, @(out < 100)) {

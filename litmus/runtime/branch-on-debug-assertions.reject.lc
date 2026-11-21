@@ -1,0 +1,11 @@
+//~ question: Is a check that runs only under `cfg!(debug_assertions)` known to have passed afterwards, in a build that has debug assertions on?
+//~ spec: runtime.debug-assertions, runtime.joins
+//~ rfc: 0004
+
+fn bounded(n: u32) -> u32 {
+    if cfg!(debug_assertions) {
+        assert!(n < 100);
+    }
+    let small: @(n < 100) = _; //~ error: cannot prove `n < 100`: the check ran only where `cfg!(debug_assertions)` held, which Locus takes as unknown in every build
+    n
+}

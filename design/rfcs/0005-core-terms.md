@@ -299,7 +299,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `contracts.final` | `contracts/final-value-at-return.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc`, `runtime/borrow-kept-by-another-parameter.reject.lc` |
 | `contracts.final.pending` | `contracts/final-value-by-the-goal.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/lemma-at-a-final-value.accept.lc`, `contracts/final-proposition-recovered-by-inference.reject.lc`, `contracts/final-value-recovered-by-inference.reject.lc` |
 | `contracts.invariants.reads` | `contracts/invariant-reads-through-shared-reference.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `contracts/invariant-reads-through-mut-reference.reject.lc`, `models/proof-field-inside-a-cut-field.reject.lc` |
-| `proofs.holes` | `proofs/forall-used-by-call.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/forall-not-used-by-hole.reject.lc`, `proofs/hole-needs-a-lemma.reject.lc` |
+| `proofs.holes` | `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/forall-not-used-by-hole.reject.lc`, `proofs/hole-needs-a-lemma.reject.lc` |
 | `proofs.procedures.compute` | `core/constant-unfolds.accept.lc`, `proofs/compute-closed-term.accept.lc`, `proofs/compute-open-term.reject.lc` |
 | `proofs.procedures.linear` | `proofs/data-constructors-are-distinct.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/linear-with-division.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/hole-needs-a-lemma.reject.lc`, `proofs/linear-product-of-variables.reject.lc`, `proofs/proof-constructors-are-not-distinct.reject.lc` |
 | `proofs.procedures.expand` | `contracts/final-value-by-the-goal.accept.lc`, `proofs/equality-chain-as-term.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-written-out-with-an-earlier-value.accept.lc` |
@@ -315,7 +315,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `runtime.writes` | `runtime/element-write-keeps-length.accept.lc`, `runtime/field-write-updates-the-value.accept.lc`, `runtime/sibling-written-during-a-borrow.accept.lc` |
 | `runtime.borrows` | `runtime/borrow-kept-by-another-parameter-and-used.accept.lc`, `runtime/elements-lent-by-a-pattern-and-written.accept.lc`, `runtime/sibling-written-during-a-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `runtime/borrow-kept-by-another-parameter.reject.lc`, `runtime/elements-lent-by-a-pattern.reject.lc`, `runtime/reborrow-ends-with-its-last-write.reject.lc`, `runtime/sibling-frozen-by-a-borrow.reject.lc` |
 | `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/kept-proof-borrowed.reject.lc`, `runtime/kept-proof-left-behind.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
-| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
+| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/branch-on-debug-assertions.reject.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
 | `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/element-write-keeps-length.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-invariant-missed-at-continue.reject.lc`, `runtime/loop-loses-a-fact.reject.lc` |
 | `runtime.loops.for-range` | `runtime/for-over-a-range.accept.lc`, `runtime/for-over-an-iterator.reject.lc`, `runtime/range-bound-written-while-built.reject.lc`, `runtime/range-bounds-built-once.reject.lc` |
 
@@ -391,10 +391,10 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 
 **Left to later work:**
 
-- Which operations are understood, and on which types. The reviews found that comparisons must be limited to integers and `bool`; RFC 0004 is not yet revised for that.
+- Which operations are understood, and on which types, is decided since: [RFC 0004](0004-runtime-code.md#understood-operations) has two closed lists.
 - What a verified function's summary of the places it may write records ([runtime-semantics](../../issues/runtime-semantics.md)).
 - How the measure obligation of a recursive call is written out.
-- Shifts and bitwise operations, and whether `debug_assert!` gives a fact in a debug build.
+- Shifts and bitwise operations on integers, which RFC 0004 leaves out for now.
 - Whether the contracts of Locus's library are stated on snapshots, and the lemma that ties a library container's model to its snapshot's length ([standard-library](../../issues/standard-library.md)).
 - A small checked slice of this core, which the second review recommends: arithmetic, a join, one loop, and one mutable reborrow.
 - What the review of this text left for later: a loop's condition that writes a place; a proof carried through several exits of a loop; equations between sequences; and what is known of a place that is partly moved out or not yet initialized when a borrow of it ends.

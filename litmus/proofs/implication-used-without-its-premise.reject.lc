@@ -1,0 +1,7 @@
+//~ question: Is a proof of an implication a proof of what it concludes?
+//~ spec: proofs.forall
+//~ rfc: 0003
+
+logic fn conclude(n: Int, step: @(n > 0 ==> n >= 1)) -> @(n >= 1) {
+    step //~ error: `step` proves `n > 0 ==> n >= 1`, and `n >= 1` is required: an implication is used by calling it with a proof of `n > 0`
+}

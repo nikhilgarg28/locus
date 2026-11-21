@@ -1,5 +1,5 @@
 //~ question: Is a proof of a `forall` used by calling it with a value?
-//~ spec: proofs.holes, proofs.procedures
+//~ spec: proofs.forall
 //~ rfc: 0003
 
 prop Even(n: Nat) {

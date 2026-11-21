@@ -71,3 +71,7 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 ### 2026-10-25, opened on GitHub as #9
 
 Moved into the repository from [GitHub issue #9](https://github.com/nikhilgarg28/locus/issues/9) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-11-21, `debug_assertions` gives no fact
+
+The owner decided, in RFC 0004's decision 9, that `cfg!(debug_assertions)` is a `bool` of which Locus knows nothing in every build, so a `debug_assert!` gives no fact, and neither does a statement under `#[cfg(debug_assertions)]`. What a program proves then does not depend on whether it is built for release. Every other `cfg` is still checked as the configuration being built has it, and `debug_assertions` still decides which code exists. A second reviewer preferred facts for each configuration, which is not unsound.

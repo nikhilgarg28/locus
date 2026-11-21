@@ -33,6 +33,9 @@ r[proofs.assume]
 
 A proof is a term: an expression built from the forms of this chapter. [RFC 0003](../design/rfcs/0003-proof-construction.md) explains the design. Two things find a proof when the program is checked, a hole and a procedure, and each finds a term that the kernel checks.
 
+r[proofs.forall]
+A proof of `forall |x: T| P` is a logical function from the values of `T` to proofs. Calling it with a value gives a proof of `P` at that value, and a logical closure `|x: T| p` proves it when `p` proves `P` for every `x`. A proof of `P ==> Q` is a logical function from the proofs of `P`: calling it with one gives a proof of `Q`, and a closure `|h: @P| q` proves it. Neither is used without the call: a proof of `P ==> Q` is not a proof of `Q`.
+
 r[proofs.holes]
 A proof hole, `_` or `prove!(P)`, is filled by trying three things in this order, and nothing else: a proof in scope, or a fact in the context ([`runtime.facts`](runtime.md)), of the proposition required; `compute()`; and `linear` given every proof in scope and every fact in the context. A hole that none of the three fills is an error.
 

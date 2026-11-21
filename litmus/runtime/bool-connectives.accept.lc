@@ -1,0 +1,17 @@
+//~ question: Are `&` and `!` on `bool`s the connectives, as `&&` is?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn both(a: u32, b: u32) -> Option<@(a < 10 && b < 10)> {
+    if (a < 10) & !(b >= 10) {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn found() -> bool {
+    both(3, 4).is_some()
+}
+
+//~ run: found() => true

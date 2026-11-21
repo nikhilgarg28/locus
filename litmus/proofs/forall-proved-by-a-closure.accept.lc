@@ -1,0 +1,7 @@
+//~ question: Is a `forall` proved by a logical closure from each value to a proof?
+//~ spec: proofs.forall
+//~ rfc: 0003
+
+logic fn all_non_negative() -> @(forall |n: Nat| n >= 0) {
+    |n: Nat| Nat::nonneg(n)
+}

@@ -1,0 +1,19 @@
+//~ question: After `e?` on an `Option` continues, is `e` known to have been a `Some` of the value it gave?
+//~ spec: runtime.try, runtime.operations
+//~ rfc: 0004
+
+fn sum(a: u32, b: u32) -> Option<(s: u32, @(s == a + b))> {
+    let s = a.checked_add(b)?;
+    Some((s, _))
+}
+
+fn fits() -> bool {
+    sum(2, 3).is_some()
+}
+
+fn overflows() -> bool {
+    sum(4_000_000_000, 4_000_000_000).is_some()
+}
+
+//~ run: fits() => true
+//~ run: overflows() => false

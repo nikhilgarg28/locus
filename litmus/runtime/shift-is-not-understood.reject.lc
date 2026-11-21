@@ -1,0 +1,7 @@
+//~ question: Is the result of a shift known as anything but a value of its type?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn half(n: u32) -> (h: u32, @(h <= n)) {
+    (n >> 1, _) //~ error: cannot prove `h <= n`: a shift is not an understood operation, so `h` is known only as a `u32`
+}
