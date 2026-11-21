@@ -1,0 +1,19 @@
+//~ question: Is a program accepted in which a callee keeps a borrow through another parameter and the caller writes through it, when it claims nothing about the borrowed place afterwards?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+fn stash<'a>(x: &'a mut u32, out: &mut Option<&'a mut u32>) {
+    *out = Some(x);
+}
+
+fn seven() -> u32 {
+    let mut x = 0;
+    let mut out = None;
+    stash(&mut x, &mut out);
+    if let Some(r) = out {
+        *r = 7;
+    }
+    x
+}
+
+//~ run: seven() => 7

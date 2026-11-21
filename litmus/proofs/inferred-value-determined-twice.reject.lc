@@ -1,0 +1,11 @@
+//~ question: Is a call accepted when the proofs passed to it and the proposition required of it determine different values for one `_`?
+//~ spec: proofs.values.inferred
+//~ rfc: 0005
+
+logic fn lt_trans(a: Int, b: Int, c: Int, ab: @(a < b), bc: @(b < c)) -> @(a < c) {
+    linear((ab, bc))
+}
+
+logic fn chain(x: Int, y: Int, z: Int, w: Int, xy: @(x < y), yz: @(y < z)) -> @(x < w) {
+    lt_trans(_, _, _, xy, yz) //~ error: the third value is determined twice: `yz` gives `z`, and the proposition required, `x < w`, gives `w`
+}
