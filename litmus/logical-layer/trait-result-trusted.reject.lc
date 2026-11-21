@@ -1,5 +1,5 @@
 //~ question: Does verified code know that a trait method's result has a property that only the trait's documentation promises?
-//~ spec: contracts.calls.unrelated, logic.boundary.escape
+//~ spec: contracts.calls.unrelated
 //~ rfc: 0002
 
 trait OneByte {

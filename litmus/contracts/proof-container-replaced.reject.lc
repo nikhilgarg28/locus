@@ -3,6 +3,7 @@
 //~ rfc: 0002
 
 use locus::std::prelude::*;
+use locus::std::vec;
 
 struct Hints {
     hints: Vec<@True>,

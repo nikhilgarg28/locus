@@ -3,6 +3,7 @@
 //~ rfc: 0001
 
 use locus::std::prelude::*;
+use locus::std::vec;
 
 struct Pair {
     a: u32,

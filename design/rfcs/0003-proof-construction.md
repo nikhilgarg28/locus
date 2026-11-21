@@ -60,7 +60,7 @@ RFC 0002 has every form but the last two.
 
 ### Library functions that search for nothing
 
-Each is a rule or a lemma, with an ordinary signature.
+Each is a rule or a lemma, and is called like any function. The checker gives the methods on proofs and `rewrite` their types.
 
 - **Equality.** For a proof `e` of `a === b`:
 
@@ -78,7 +78,7 @@ Each is a rule or a lemma, with an ordinary signature.
 
 ### Procedures
 
-A procedure is a function of Locus's library whose result is a proof of whatever proposition is expected where the call stands, in the way that the result of `collect()` is whatever collection is expected. Its signature is ordinary. Its body is the checker's.
+A procedure is a function of Locus's library whose result is a proof of whatever proposition is expected where the call stands, in the way that the result of `collect()` is whatever collection is expected. It is called like any function. Its body is the checker's, and so is the type of `linear`.
 
 | Procedure | Proves | Uses | Fails when |
 |---|---|---|---|

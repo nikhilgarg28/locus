@@ -1,5 +1,5 @@
 //~ question: Is a function with no logical data accepted when it uses Rust that Locus cannot reason about yet?
-//~ spec: logic.verified.restrictions, logic.boundary.logical-data
+//~ spec: logic.verified.restrictions
 //~ rfc: 0002
 
 // Verified by default, with nothing to prove: no proof, no logical data, no invariant.

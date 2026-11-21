@@ -2,6 +2,6 @@
 //~ spec: logic.unverified.functions, logic.verified.restrictions
 //~ rfc: 0002
 
-fn get(v: &[u32], i: usize, ok: @(i < v.len())) -> u32 { //~ error: `get` contains an `unsafe` block, so it is unverified, and an unverified function takes no proof
+fn get(v: &[u32], i: usize, ok: @(i < v.len())) -> u32 { //~ error: `get` takes a proof, so it is verified, and a verified function contains no `unsafe` block
     unsafe { *v.get_unchecked(i) }
 }

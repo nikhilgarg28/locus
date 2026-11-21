@@ -1,5 +1,5 @@
 //~ question: May verified code establish a property of a trait method's result by checking it at run time?
-//~ spec: contracts.calls.unrelated, logic.boundary.escape
+//~ spec: contracts.calls.unrelated
 //~ rfc: 0002
 
 trait OneByte {
