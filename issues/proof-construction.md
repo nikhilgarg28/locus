@@ -161,3 +161,29 @@ The owner accepted the proposal of the previous entry with one change, and asked
 [RFC 0003](../design/rfcs/0003-proof-construction.md) is the result, as a draft: it has had no adversarial review. It adds nine rules to the specification, under "Constructing proofs", each with examples. What the owner decided is listed in that RFC, and so is what the RFC proposes beyond it: what `else` binds in `if h: c`, that `linear` includes equality and reduces by evaluation first, that contradictory facts prove anything, the names, and that facts are passed as a tuple.
 
 This issue stays open until the owner decides on RFC 0003.
+
+### 2026-11-21, conversation with the owner on the reviews of PR #25
+
+RFC 0003 was reviewed adversarially at `f891be3`, and a second review by another tool followed at `e3659e8`. The reviews agree on one cause for most of what they found in this RFC: its rules are stated on source text, and "evaluation" means two things in it. Among the findings: a named condition proves more than the program checked; `eq::congr` and `rewrite` on an equality of runtime values reach fields that a model forgets; what `compute` finds cannot be written as a term; and about eleven accepted examples are not filled by the three steps a hole tries. None of this is repaired in the RFC yet.
+
+Proposed in reply: logical code is translated to a core language of typed terms before any rule applies, and the rules for equality, rewriting, inference, and evaluation are stated on those terms. The owner:
+
+> I'm okay with your recommendation and the rest of the idea looks reasonable.
+
+What that accepts:
+
+1. **Elaboration to core terms.** A place becomes a value name for one of its versions. A runtime value used as a value becomes `model(...)` of its snapshot. Arithmetic in runtime code has the value `wrap<T>(...)`. A runtime condition becomes one `Bool` term, and naming it gives a proof that this term is `true`.
+2. **Conversion is part of when two types are the same.** Two proof types are the same when their propositions convert to the same term. This is the choice that RFC 0002's decision 49 left to this RFC. `compute()` stays a procedure, and expands to `eq::refl(_)`.
+3. **Conversion is five reductions, and no others:**
+   - arithmetic and comparisons on literals;
+   - `if` on a literal, `match` on a constructor, and a field of a constructed value;
+   - a call of a logic function that does not recur, a model included, becomes its body, where every name in that body could be written at the point of use;
+   - a call of a recursive logic function becomes its body only when the argument it recurs on is a literal or a constructor;
+   - a constant, and a ghost `let` that is not `mut`, become their values.
+4. **A value name never unfolds.** A runtime value stays a variable with a fact about it, as RFC 0002 says of versions. Reduction is lazy, and stops at a fixed number of steps that the rule states.
+5. **`wrap` is exact,** defined with the Euclidean remainder, and a program writes it as `u32::wrap(e)`.
+6. **`<` and `>` stay separate,** neither defined from the other, so that conversion never makes two spellings of a proposition the same. `logical-layer/proof-holder-other-proposition.reject.lc` stays rejected.
+
+None of this is written into an RFC, a rule, or an example yet. Asked whether to write it out first, the owner chose to settle the questions that add forms to the same core before it is written once: what is known where paths join, how a kept proof variable is typed, a borrow's final value, where a snapshot is cut, and indexing a sequence.
+
+This issue stays open.
