@@ -1,5 +1,5 @@
 //~ question: Is a binary search's found index proved in bounds and right, with no fact kept by the loop?
-//~ spec: runtime.loops, runtime.operations.returned, runtime.arith.wrapping
+//~ spec: runtime.loops, runtime.operations.returned
 //~ rfc: 0004
 
 fn binary_search(xs: &[u32], target: u32) -> Option<(i: usize, @(i < xs.len() && xs[i] == target))> {
