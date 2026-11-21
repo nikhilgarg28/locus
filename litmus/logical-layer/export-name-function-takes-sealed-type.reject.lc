@@ -1,0 +1,14 @@
+//~ question: May a function with `#[export_name]` take a value of a sealed type?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+#[unsafe(export_name = "interval_width")]
+pub fn width(iv: Interval) -> u32 { //~ error: `width` is `#[export_name]`, so code outside the program can call it, and its parameter `iv` has the type `Interval`, which holds a proof
+    iv.hi - iv.lo
+}

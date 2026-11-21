@@ -3,7 +3,7 @@
 - **Kind:** design
 - **Status:** open
 - **Blocks:** Treating RFC 0002's rules as settled; the RFC for the runtime semantics, which defines the translation this model is about
-- **Rules:** `logic.boundary.plain-data`, `logic.boundary.escape`, `logic.unverified.plain-rust`, `logic.ghost.type-identity`, `logic.ghost.interior-mutability`, `contracts.final`, `contracts.invariants.assignment`, `models.snapshots.opaque`
+- **Rules:** `logic.boundary.plain-data`, `logic.boundary.escape`, `logic.unverified.plain-rust`, `logic.boundary.foreign`, `logic.ghost.type-identity`, `logic.ghost.interior-mutability`, `contracts.final`, `contracts.invariants.assignment`, `models.snapshots.opaque`
 
 ## Scope
 
@@ -78,3 +78,10 @@ RFC 0002's decisions 80 to 83 change what the model has to cover:
 - **Assumptions.** `unsafe assume!(P)` is an axiom at one place. The model should say that a result holds given the assumptions it lists, and that an assumption changes nothing else: the function stays verified, and no rule at the boundary is waived.
 - **No specifications.** Every call of the standard library is a call of unknown code. The operations that the language defines on Rust's built-in types take their place, and their meaning belongs to the runtime semantics.
 - **The library's wrapper types** are trusted to give back the values they were given, at the types they were given them (`trusted.library`). That is the property that the specifications of `Vec::push` and `Cell::set` used to state one function at a time.
+
+### 2026-11-21, conversation with the owner on foreign code
+
+RFC 0002's decision 88 adds a rule and an assumption that the model has to cover:
+- **Foreign code holds no logical data,** sealed or not (`logic.boundary.foreign`). The argument for a sealed value in unverified hands rests on Rust's privacy, which foreign code is not held to, so the model should treat foreign code as it treats an unverified function of the crate itself.
+- **`assumed.foreign`:** foreign code keeps to the signatures declared for it. The model should say which results rest on it: those that pass through a function that foreign code can call, or that call a foreign function.
+- **Not covered, and not decided.** `global_asm!` can name a Rust function with a `sym` operand and no `unsafe` code, and the body of a naked function is assembly under a Rust signature; neither is a crossing point that the rule names. And an unverified crate in edition 2021 can export a function that takes another crate's sealed type with no `unsafe` code, which the record of which crates contain `unsafe` code would not show. RFC 0002 lists both as still for the owner.

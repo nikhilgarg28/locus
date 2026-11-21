@@ -1,0 +1,18 @@
+//~ question: Is the foreign boundary's rule checked where a generic function with a foreign ABI is instantiated?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// As written, `first` names no logical data.
+extern "C" fn first<T>(x: T, y: T) -> T {
+    x
+}
+
+fn keep(p: Positive, q: Positive) -> Positive {
+    let f: extern "C" fn(Positive, Positive) -> Positive = first; //~ error: `first` has the ABI "C", and it is instantiated here with `Positive`, which holds a proof
+    f(p, q)
+}

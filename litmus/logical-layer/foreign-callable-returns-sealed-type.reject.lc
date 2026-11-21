@@ -1,0 +1,13 @@
+//~ question: May a function that foreign code can call return a value of a sealed type?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn smallest() -> Positive { //~ error: foreign code can call `smallest`, and its result has the type `Positive`, which holds a proof: only plain data crosses to foreign code
+    Positive { value: 1, nonzero: _ }
+}

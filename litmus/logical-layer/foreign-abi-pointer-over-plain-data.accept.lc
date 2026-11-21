@@ -1,0 +1,37 @@
+//~ question: May a function that foreign code can call take a function pointer with a foreign ABI, in a crate that has a sealed type, when both are over plain data?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+impl Positive {
+    fn new(value: u32) -> Option<Positive> {
+        if value > 0 { Some(Positive { value, nonzero: _ }) } else { None }
+    }
+}
+
+pub extern "C" fn double(n: u32) -> u32 {
+    n * 2
+}
+
+// What `f` returns is known only by its type.
+#[unsafe(no_mangle)]
+pub extern "C" fn apply_twice(f: extern "C" fn(u32) -> u32, n: u32) -> u32 {
+    f(f(n))
+}
+
+fn positive_twice(n: u32) -> Option<Positive> {
+    Positive::new(apply_twice(double, n))
+}
+
+fn twelve() -> u32 {
+    match positive_twice(3) {
+        Some(p) => p.value,
+        None => 0,
+    }
+}
+
+//~ run: twelve() => 12

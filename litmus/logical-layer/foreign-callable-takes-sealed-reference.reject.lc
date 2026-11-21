@@ -1,0 +1,14 @@
+//~ question: May a function that foreign code can call take a sealed type by shared reference?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// What the pointer leads to is whatever C put there.
+#[unsafe(no_mangle)]
+pub extern "C" fn reciprocal(p: &Positive) -> u32 { //~ error: foreign code can call `reciprocal`, and its parameter `p` has the type `&Positive`, which holds a proof behind the reference
+    100 / p.value
+}

@@ -215,3 +215,7 @@ The owner agreed that Locus's library has a `replace` whose result says that it 
 The owner agreed to this in the second round of 2026-11-21 ([proof-construction](proof-construction.md)). The list of types that have a default is the RFC's proposal.
 
 Still for this issue's RFC: whether the contracts of Locus's library are stated on snapshots, and the lemma that ties a library container's model to its snapshot's length.
+
+### 2026-11-21, handles for objects that foreign code holds
+
+RFC 0002's decision 88 lets only plain data cross to foreign code. A C interface over an object with an invariant usually hands out an opaque pointer to it, and under that rule a shim cannot give the pointer the object's type. The pattern that needs no `unsafe` code keeps the objects in a table on the Rust side and gives foreign code an integer key, which a verified function looks up, so that a stale or forged key is a failed lookup. Recorded here as library work, and not decided: whether Locus's library provides such a table, with what contract on a lookup, and how a key is kept from outliving its object.

@@ -494,7 +494,7 @@ Each stage has one representation, and each representation has one owner.
    - the interfaces of the dependencies, by hash;
    - the version of the semantic translation, and of the facts format;
    - the models from Locus's library that the proofs used;
-   - the assumptions stated with `unsafe assume!`, each with its proposition and its place, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.sound` with the named crates it relies on and each unverified function with `unsafe` code, and each `unsafe impl`, of a verified crate that the result passes through, by location, and `assumed.unsafe.invariants` with the types whose invariants it relies on;
+   - the assumptions stated with `unsafe assume!`, each with its proposition and its place, the axioms, and the trust model's entries the result depends on, by ID, including `assumed.unsafe.sound` with the named crates it relies on and each unverified function with `unsafe` code, and each `unsafe impl`, of a verified crate that the result passes through, by location, `assumed.unsafe.invariants` with the types whose invariants it relies on, and `assumed.foreign` with the functions of the build that foreign code can call and the foreign functions declared `safe` that verified code calls;
    - the certificate: the proofs, stored or found, that the kernel checked.
 
    The audit command prints it, and the vision's promise that a result can report its assumptions (commitment 4) is this list. Its format, and how stored proofs are found again, are [proof-search-and-storage](../../issues/proof-search-and-storage.md).
@@ -800,6 +800,10 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 43. **The pipeline follows the boundary of RFC 0002's decisions 61 to 67.** Unverified code is given nothing that exposes logical data, and that is checked for each instantiation, so an interface records, for each type parameter of a verified generic function, whether it reaches unverified code. `#[verified]` joins `#[unverified]` among Locus's names, and `open!` leaves them.
 44. **An item that exposes logical data is visible only to crates that Locus verifies** (RFC 0002, decisions 68 and 73). In the first stage and in export mode, other crates reach no function with a proof in its signature and no field that holds logical data or that a proof reads. A sealed struct may be public.
 45. **`locus!` blocks carry the full syntax, and come first.** This confirms decision 34. A block is erased by itself and checked with its crate, so a crate can be built by plain rustc without being checked; a result holds for the sources that Locus checked. `.lc` files follow, so that the macro is not needed for the syntax.
+
+**Decided by the owner on 2026-11-21,** with [RFC 0002's](0002-logical-layer.md#unresolved-questions) decision 88.
+
+46. **A manifest lists what crosses to foreign code.** Foreign code is given and gives only plain data (RFC 0002, decision 88), and is trusted to keep to the signatures declared for it (`assumed.foreign`). A function that foreign code can call has no `unsafe` code in its body, so a manifest lists each such function of the build, and each foreign function declared `safe` that verified code calls.
 
 **Still for the owner.** Each is written into the spec and the examples as proposed where an example can show it, so accepting this RFC accepts it. Item 1 has no rule yet, because an example would need a `.rs` file beside a `.lc` one, which the litmus format cannot yet express:
 1. `.rs` files may not name logical items, as proposed.

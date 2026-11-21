@@ -3,7 +3,7 @@
 - **Kind:** design
 - **Status:** open
 - **Blocks:** Using a proof to remove a runtime check
-- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `proofs.assume`
+- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `logic.boundary.foreign`, `proofs.assume`
 
 ## Scope
 
@@ -142,3 +142,15 @@ The owner accepted the proposal of the previous entry, with one change of his ow
 RFC 0002's decisions 80 to 83 record the result, and the text above the log is brought up to date. Two of the owner's questions are written into RFC 0002 as proposed and are still for the owner: whether a function that assumes a fact stays verified (proposed: yes), and whether the form is `unsafe assume!` or `assume!` alone (proposed: with `unsafe`).
 
 This issue stays open for what a constructor of proofs cannot do: let `unsafe` code sit behind a proof parameter. The other thing it cannot do, hand logical data to unverified generic code, is trusted in Locus's own library alone (decision 83).
+
+### 2026-11-21, conversation with the owner on foreign code
+
+RFC 0002's decision 88 fixes what crosses to foreign code: plain data only, in both directions and through function pointers whose ABI is not Rust's (`logic.boundary.foreign`). A sealed type could cross before, in the signature of a function that foreign code can call. The owner:
+
+> shouldn't be possible for foreign code to work with logical data i.e. we need some sort of boundary. Maybe all extern functions are unverified and the same rules apply?
+
+The rule proposed in reply restricts the signature alone, so that a safe shim can check its input with a verified constructor, and the owner agreed:
+
+> On extern, agree with your view.
+
+What this leaves for this issue is unchanged. A contract for a foreign function is still a wrapper of the program's own, whose signature states it and whose body assumes it with `unsafe assume!(_)`. The trust model's new entry, `assumed.foreign`, says only that foreign code keeps to its declared signatures; a contract would say what it does.
