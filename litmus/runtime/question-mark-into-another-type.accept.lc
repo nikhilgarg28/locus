@@ -1,0 +1,18 @@
+//~ question: Is a program accepted that uses `?` on a `Result` in a function that returns something other than a `Result`, when it claims nothing from it?
+//~ spec: runtime.try
+//~ rfc: 0004
+
+use std::task::Poll;
+
+// On an `Err`, this returns `Poll::Ready(Err(..))`: what `?` returns depends on the
+// type it returns into, so Locus keeps no fact here.
+fn ready(x: Result<u32, u8>) -> Poll<Result<u32, u8>> {
+    let n = x?;
+    Poll::Ready(Ok(n))
+}
+
+fn passes_an_error() -> bool {
+    matches!(ready(Err(7)), Poll::Ready(Err(7)))
+}
+
+//~ run: passes_an_error() => true

@@ -1,0 +1,8 @@
+//~ question: May `?` be written on an `Option` that holds a proof?
+//~ spec: runtime.try
+//~ rfc: 0004
+
+fn positive(n: u32, found: Option<@(n > 0)>) -> Option<u32> {
+    let proof = found?; //~ error: `?` on a value that holds a proof is not accepted yet: it goes through the `Try` trait, whose methods cannot carry logical values; match on `found` instead
+    Some(n)
+}

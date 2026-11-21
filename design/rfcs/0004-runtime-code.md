@@ -68,19 +68,23 @@ An earlier revision said "when Rust gives it syntax and it is applied to a type 
 | `a.checked_add(b)`, `checked_sub`, `checked_mul` | Machine integers | `Some` of the true result when it is in range, and `None` otherwise | Always |
 | `xs[a..b]` and the other range forms | An array or a slice | That part of the sequence | A condition for each form, below |
 | `for i in a..b`, `for i in a..=b` | Machine integers | The range fact of [RFC 0005](0005-core-terms.md) | |
-| `e?` | An `Option`, a `Result` | The payload, where it continues | Always |
+| `e?` | An `Option` in a function that returns one; a `Result` in a function that returns one | The payload, where it continues | Always |
 
 The split is real in Rust. The first list is built into the compiler for those types. The second is trait implementations and functions of `core`, which Locus trusts to mean what their rows say (`trusted.obligations`).
 
 - **One rule for all of them.** Once an understood operation has returned, Locus knows that its condition held and that its result is its value. After `let x = xs[i];` it knows `i < xs.len()`, and that `x` is the element at `i`. A panic proves nothing, and a return proves that the check passed.
 - **Each form of range indexing has its own condition.** `a..b` needs `a <= b && b <= xs.len()`. `a..=b` needs `a <= b + 1 && b < xs.len()`. `a..` needs `a <= xs.len()`, `..b` needs `b <= xs.len()`, `..=b` needs `b < xs.len()`, and `..` needs nothing.
-- **`e?` continues with the payload** of a `Some` or an `Ok`, and that `e` was one is known afterwards. Otherwise the function returns: a `None` as it is, and an `Err` with the same error when the two error types are the same. When they differ, the error passes through a conversion, which is a call, so the error returned is known by its type. `?` on a value that holds a proof is still deferred (RFC 0002).
+- **`e?` is understood in two cases:** an `Option` in a function or a closure that returns an `Option`, and a `Result` in one that returns a `Result`. What `?` does depends on the type it returns into as well as on its operand: in a function that returns a `Poll<Result<u32, u8>>`, `x?` on an `Err(7)` returns `Poll::Ready(Err(7))`. So the row is matched on both, by what rustc resolves.
+  - It continues with the payload of a `Some` or an `Ok`, and that `e` was one is known afterwards.
+  - Otherwise the function returns: a `None` as it is, and an `Err` with the same error when the two error types are the same. When they differ, the error passes through a conversion, which is a call, so the error returned is known by its type.
+  - In every other case `e?` runs as Rust defines it and gives no fact.
+  - `?` is not accepted on a value whose type holds logical data, for now: it goes through the `Try` trait, whose methods cannot carry logical values (RFC 0002).
 - **`assert!` needs no rule.** It is an `if` whose other branch does not return, so its condition holds afterwards.
 - **Operands are read in Rust's order of evaluation,** and an operation with no row gives no fact.
 
 #### Patterns
 
-In an arm of a `match`, in the body of an `if let`, and after a `let` with a pattern, the scrutinee is known to have matched the pattern, for a pattern built from bindings, wildcards, literals, ranges of integers, references, and the constructors of tuples, structs, and enums. In an arm of a `match`, each earlier arm is also known to have failed: its pattern did not match, or its guard did not hold. So in `match n { 0..=9 => A, _ => B }`, `n > 9` is known in `B`.
+In an arm of a `match`, in the body of an `if let`, and after a `let` with a pattern, the scrutinee is known to have matched the pattern, for a pattern built from bindings, wildcards, literals, ranges of integers, references, and the constructors of tuples, structs, and enums. In an arm of a `match`, each earlier arm is also known to have failed: its pattern did not match, or its guard did not hold. So for a `u32`, in `match n { 0..=9 => A, _ => B }`, `n > 9` is known in `B`. For a signed `n`, what is known there is `n < 0 || n > 9`.
 
 A slice pattern gives no fact about the sequence. The loans it makes are [RFC 0005](0005-core-terms.md)'s.
 
@@ -95,11 +99,12 @@ Each of these is a call, or gives a result that is known by its type:
 
 #### `debug_assert!` and build profiles
 
-`cfg!(debug_assertions)` is a `bool` of which Locus knows nothing, whichever way the crate is built. `debug_assert!(c)` is `if cfg!(debug_assertions) { assert!(c); }`, so its condition is established on one branch only, and is not known afterwards. The same holds for a statement or a block under `#[cfg(debug_assertions)]` or its negation: it gives no fact to the code after it.
+`cfg!(debug_assertions)` is a `bool` of which Locus knows nothing, whichever way the crate is built. A branch on it is checked as a branch on any unknown condition. `debug_assert!(c)` is `if cfg!(debug_assertions) { assert!(c); }`, so its condition is established on one branch only, and is not known afterwards. A statement or a block under `#[cfg(debug_assertions)]` or its negation is checked the same way, where the configuration has it.
 
-- **What a program proves does not depend on whether it is built for release.** Arithmetic is read the same way in both for this reason.
-- **Every other `cfg` is as [RFC 0001](0001-compiler-pipeline.md#configurations) has it,** checked for the configuration being built. `debug_assertions` is still part of the configuration, and decides which code exists.
-- **The other reading is not unsound.** With facts for each configuration, a program could pass every check in the build it is written in, and be rejected when built for release.
+- **The branch still runs as far as Locus knows.** What it writes is joined with what was there before, so `if cfg!(debug_assertions) { n = 50; }` leaves `n` as either value. Giving no fact does not mean the statement is ignored.
+- **This limits what a proof may rest on. It is not a guarantee across build profiles.** A proof holds in the configurations it was checked in, as [RFC 0001](0001-compiler-pipeline.md#configurations) says, and `debug_assertions` is one of the things a configuration fixes. With `#[cfg(debug_assertions)] const SELECTED: u32 = 1;` and `#[cfg(not(debug_assertions))] const SELECTED: u32 = 2;`, a function that returns `SELECTED` with a proof that it is 1 is accepted in a debug build and rejected in a release build, and neither proof says anything about the other build.
+- **What the rule buys** is that the commonest way for a proof to depend on the profile, a check that only a debug build runs, is closed. A guarantee would need both profiles to be checked, which `cargo locus build` does when each is built.
+- **The other reading is not unsound.** With a fact from `debug_assert!` in a debug build, a program could pass every check in the build it is written in, and be rejected when built for release.
 
 So in the motivating example, line 1 gives `hi === xs.len()`. Line 4 gives `mid < xs.len()`, the element, and, in each branch, how it compares with `target`. The hole on line 5 is filled from those, and needs nothing that the loop keeps.
 
@@ -180,11 +185,11 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 | `runtime.operations.returned` | `proofs/given-what-an-index-returned.accept.lc`, `runtime/assert-gives-its-condition.accept.lc`, `runtime/binary-search-found.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/inclusive-range-index-returned.accept.lc`, `runtime/index-returned.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/index-not-yet-returned.reject.lc` |
 | `runtime.operations.conditions` | `runtime/bool-cast-is-zero-or-one.accept.lc`, `runtime/checked-sum.accept.lc`, `runtime/division-returned.accept.lc`, `runtime/inclusive-range-index-returned.accept.lc`, `runtime/index-returned.accept.lc` |
 | `runtime.patterns` | `runtime/later-arm-knows-earlier-arms-failed.accept.lc`, `runtime/slice-pattern-gives-no-fact.reject.lc` |
-| `runtime.try` | `runtime/checked-sum-with-question-mark.accept.lc` |
-| `runtime.debug-assertions` | `runtime/debug-assert-with-no-claim.accept.lc`, `runtime/branch-on-debug-assertions.reject.lc`, `runtime/debug-assert-gives-nothing.reject.lc` |
+| `runtime.try` | `runtime/checked-sum-with-question-mark.accept.lc`, `runtime/question-mark-into-another-type.accept.lc`, `runtime/question-mark-on-a-proof-holder.reject.lc` |
+| `runtime.debug-assertions` | `runtime/debug-assert-with-no-claim.accept.lc`, `runtime/write-under-debug-assertions-joined.accept.lc`, `runtime/branch-on-debug-assertions.reject.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/write-under-debug-assertions.reject.lc` |
 | `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc`, `runtime/sum-may-overflow.reject.lc` |
 | `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/kept-proof-borrowed.reject.lc`, `runtime/kept-proof-left-behind.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
-| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/branch-on-debug-assertions.reject.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc` |
+| `runtime.joins` | `runtime/assert-gives-its-condition.accept.lc`, `runtime/clamp-after-a-branch.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/write-under-debug-assertions-joined.accept.lc`, `runtime/branch-on-debug-assertions.reject.lc`, `runtime/debug-assert-gives-nothing.reject.lc`, `runtime/fact-from-one-branch.reject.lc`, `runtime/kept-proof-on-one-path.reject.lc`, `runtime/write-under-debug-assertions.reject.lc` |
 | `runtime.loops` | `runtime/binary-search-found.accept.lc`, `runtime/element-write-keeps-length.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/loop-keeps-a-fact.accept.lc`, `runtime/loop-invariant-missed-at-continue.reject.lc`, `runtime/loop-loses-a-fact.reject.lc` |
 | `runtime.loops.for-range` | `runtime/for-over-a-range.accept.lc`, `runtime/for-over-an-iterator.reject.lc`, `runtime/range-bound-written-while-built.reject.lc`, `runtime/range-bounds-built-once.reject.lc` |
 
@@ -240,14 +245,14 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 
 7. **An operation is understood when it is in one of two closed lists,** what the language defines and a short list of library items, and comparisons are understood on integers and `bool` only.
 8. **Shifts and bitwise operations on integers are left out for now,** and on `bool` they are the connectives.
-9. **`debug_assert!` and a branch on `cfg!(debug_assertions)` give no fact.** A second reviewer preferred facts for each configuration, which RFC 0001 already has; the owner chose that what a program proves should not depend on the build profile.
+9. **`debug_assert!` and a branch on `cfg!(debug_assertions)` give no fact.** A second reviewer preferred facts for each configuration, which RFC 0001 already has. The reason put to the owner for this choice was that a program should not pass in the build it is written in and fail at release. A review of the text then showed that the rule does not guarantee that, since an item selected by `cfg(debug_assertions)` still differs between the two. So the rule is stated as a limit on what a proof may rest on, and a proof still holds only in the configurations it was checked in.
 10. **Confirmed with them:** `?` on an `Option`, and on a `Result` of one error type; rows for literals, constants, compound assignment, and patterns; what an arm of a `match` knows of the earlier arms; a condition for each form of range indexing; and that an operation with no row gives no fact.
 
 **Still for the owner.** Each is written into the rules and examples as proposed:
 
 1. **`Box::new` is understood.** RFC 0002 already lists a `Box`'s allocation among what the language defines, and six of its examples build one.
 2. **What is known where paths join is what is known on every path, and no more.** So a variable that two branches assign differently is known afterwards by its type and by the proofs kept about it. Knowing it as an `if` of the two values would say more, and can be added.
-3. **Details of the two lists that the owner did not see one by one:** a cast from a `bool`; that a reference pattern gives a fact, and a slice pattern none; that a statement under `#[cfg(debug_assertions)]` gives no fact, as a `debug_assert!` does; and that `&`, `|`, and `^` on `bool` do not short-circuit.
+3. **Details of the two lists that the owner did not see one by one:** a cast from a `bool`; that a reference pattern gives a fact, and a slice pattern none; that a statement under `#[cfg(debug_assertions)]` gives no fact, as a `debug_assert!` does; that `&`, `|`, and `^` on `bool` do not short-circuit; and that `?` is understood only where both its operand and the type it returns into are an `Option`, or both a `Result`.
 4. **A `let mut` proof variable's proposition must be written** at its declaration.
 5. **`a..=b`** gives `a <= i && i <= b`.
 

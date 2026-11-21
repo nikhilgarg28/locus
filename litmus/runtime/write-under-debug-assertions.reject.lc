@@ -1,0 +1,11 @@
+//~ question: After a write that runs only under `cfg!(debug_assertions)`, is a fact about the value from before the write still known of the variable?
+//~ spec: runtime.debug-assertions, runtime.joins
+//~ rfc: 0004
+
+fn reset(mut n: u32, small: @(n < 10)) -> u32 {
+    if cfg!(debug_assertions) {
+        n = 50;
+    }
+    let still: @(n < 10) = _; //~ error: cannot prove `n < 10`: `n` may have been written under `cfg!(debug_assertions)`, which Locus takes as unknown, so it is either 50 or the value it had
+    n
+}

@@ -350,7 +350,7 @@ A configuration is one way of building the crate:
 - the rustc that Locus is pinned to;
 - one target;
 - one set of enabled features;
-- one set of `cfg` values, including `debug_assertions` and `test`, and any that build scripts or `RUSTFLAGS` set; [RFC 0004](0004-runtime-code.md#debug_assert-and-build-profiles) makes one exception for `debug_assertions`: it is part of the configuration and decides which code exists, and it gives no fact, so that what a program proves does not depend on whether it is built for release.
+- one set of `cfg` values, including `debug_assertions` and `test`, and any that build scripts or `RUSTFLAGS` set; [RFC 0004](0004-runtime-code.md#debug_assert-and-build-profiles) treats `debug_assertions` specially in one way: Locus takes no fact from a check that runs only under it. That limits what a proof may rest on. `debug_assertions` is still part of the configuration, and a proof still holds only in the configurations it was checked in.
 - the environment that macros such as `env!` and `include!` read;
 - the resolved versions of the crate's dependencies, and their features.
 
