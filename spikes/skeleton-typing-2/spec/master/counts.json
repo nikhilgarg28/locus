@@ -1,0 +1,372 @@
+{
+ "configs": {
+  "p2x-v3": {
+   "package": "spec",
+   "features": "",
+   "env": {}
+  },
+  "p2x-v2": {
+   "package": "spec-p2x-v2",
+   "features": "locus/p3-v2",
+   "env": {}
+  },
+  "p2x-v0": {
+   "package": "spec-p2x-v0",
+   "features": "locus/p3-v0",
+   "env": {}
+  },
+  "p2i-v3": {
+   "package": "spec-p2i-v3",
+   "features": "locus/mixed-ops",
+   "env": {}
+  },
+  "p2i-v2": {
+   "package": "spec-p2i-v2",
+   "features": "locus/mixed-ops,locus/p3-v2",
+   "env": {}
+  },
+  "p2i-v0": {
+   "package": "spec-p2i-v0",
+   "features": "locus/mixed-ops,locus/p3-v0",
+   "env": {}
+  },
+  "rfc": {
+   "package": "spec-rfc",
+   "features": "locus/mixed-ops,locus/p3-v0",
+   "env": {
+    "LOCUS_SPIKE_LITERALS": "expected"
+   }
+  }
+ },
+ "counts": {
+  "s1-stack": {
+   "p2x-v3": {
+    "as Int": [
+     34
+    ],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [
+     42
+    ],
+    "model(x)": []
+   },
+   "p2x-v2": {
+    "as Int": [
+     34
+    ],
+    "a literal's type": [],
+    "=== true": [
+     42
+    ],
+    "Bool and Prop bridge": [
+     42
+    ],
+    "model(x)": []
+   },
+   "p2x-v0": {
+    "as Int": [
+     34
+    ],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v3": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [
+     42
+    ],
+    "model(x)": []
+   },
+   "p2i-v2": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [
+     42
+    ],
+    "Bool and Prop bridge": [
+     42
+    ],
+    "model(x)": []
+   },
+   "p2i-v0": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "rfc": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   }
+  },
+  "s2-sorted-vec": {
+   "p2x-v3": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2x-v2": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2x-v0": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v3": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v2": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v0": {
+    "as Int": [],
+    "a literal's type": [
+     17,
+     19,
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "rfc": {
+    "as Int": [],
+    "a literal's type": [
+     19,
+     19
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   }
+  },
+  "s3-binary-search": {
+   "p2x-v3": {
+    "as Int": [
+     28,
+     28,
+     28,
+     28,
+     43,
+     43
+    ],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2x-v2": {
+    "as Int": [
+     28,
+     28,
+     28,
+     28,
+     43,
+     43
+    ],
+    "a literal's type": [],
+    "=== true": [
+     32,
+     33,
+     65
+    ],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2x-v0": {
+    "as Int": [
+     28,
+     28,
+     28,
+     28,
+     43,
+     43
+    ],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v3": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v2": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [
+     32,
+     33,
+     65
+    ],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "p2i-v0": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   },
+   "rfc": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": []
+   }
+  },
+  "s4-container": {
+   "p2x-v3": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "p2x-v2": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "p2x-v0": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "p2i-v3": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "p2i-v2": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "p2i-v0": {
+    "as Int": [],
+    "a literal's type": [
+     36,
+     36,
+     89
+    ],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   },
+   "rfc": {
+    "as Int": [],
+    "a literal's type": [],
+    "=== true": [],
+    "Bool and Prop bridge": [],
+    "model(x)": [
+     78,
+     82
+    ]
+   }
+  }
+ }
+}

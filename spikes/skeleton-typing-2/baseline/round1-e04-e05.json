@@ -1,0 +1,845 @@
+{
+ "config": "before",
+ "features": null,
+ "env": {},
+ "packages": {
+  "skel": {
+   "bins": {
+    "e01-nat-for-seq": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        41
+       ],
+       "to": [
+        7,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        10,
+        17
+       ],
+       "to": [
+        10,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        10,
+        17
+       ],
+       "to": [
+        10,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        28
+       ],
+       "to": [
+        11,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        28
+       ],
+       "to": [
+        11,
+        47
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        27
+       ],
+       "to": [
+        12,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        27
+       ],
+       "to": [
+        12,
+        52
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e01-nat-for-seq.rs",
+         11,
+         43,
+         11,
+         44
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> skel/src/bin/e01-nat-for-seq.rs:11:43\n   |\n11 |         let from_a_place = logic! { count(n) };\n   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`\n   |                                     |\n   |                                     arguments to this function are incorrect\n   |\n   = note: expected struct `locus::Seq<locus::Nat>`\n              found struct `locus::Nat`\nnote: function defined here\n  --> skel/src/bin/e01-nat-for-seq.rs:7:14\n   |\n 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }\n   |              ^^^^^ ------------\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e01-nat-for-seq.rs",
+         12,
+         42,
+         12,
+         49
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> skel/src/bin/e01-nat-for-seq.rs:12:42\n   |\n12 |         let from_a_call = logic! { count(v.len()) };\n   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`\n   |                                    |\n   |                                    arguments to this function are incorrect\n   |\n   = note: expected struct `locus::Seq<locus::Nat>`\n              found struct `locus::Nat`\nnote: function defined here\n  --> skel/src/bin/e01-nat-for-seq.rs:7:14\n   |\n 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }\n   |              ^^^^^ ------------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e01-nat-for-seq.rs",
+         11,
+         43,
+         11,
+         44
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> skel/src/bin/e01-nat-for-seq.rs:11:43\n   |\n11 |         let from_a_place = logic! { count(n) };\n   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`\n   |                                     |\n   |                                     arguments to this function are incorrect\n   |\n   = note: expected struct `locus::Seq<locus::Nat>`\n              found struct `locus::Nat`\nnote: function defined here\n  --> skel/src/bin/e01-nat-for-seq.rs:7:14\n   |\n 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }\n   |              ^^^^^ ------------\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e01-nat-for-seq.rs",
+         12,
+         42,
+         12,
+         49
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> skel/src/bin/e01-nat-for-seq.rs:12:42\n   |\n12 |         let from_a_call = logic! { count(v.len()) };\n   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`\n   |                                    |\n   |                                    arguments to this function are incorrect\n   |\n   = note: expected struct `locus::Seq<locus::Nat>`\n              found struct `locus::Nat`\nnote: function defined here\n  --> skel/src/bin/e01-nat-for-seq.rs:7:14\n   |\n 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }\n   |              ^^^^^ ------------\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "e02-unknown-field": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0609",
+      "E0609"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        45
+       ],
+       "to": [
+        9,
+        88
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        26
+       ],
+       "to": [
+        12,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0609",
+         "no field `nom` on type `Rational`"
+        ],
+        [
+         "check",
+         "E0609",
+         "no field `nom` on type `Rational`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        26
+       ],
+       "to": [
+        12,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0609",
+         "no field `nom` on type `Rational`"
+        ],
+        [
+         "check",
+         "E0609",
+         "no field `nom` on type `Rational`"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        25
+       ],
+       "to": [
+        13,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0609",
+         "no field `denominator` on type `Rational`"
+        ],
+        [
+         "check",
+         "E0609",
+         "no field `denominator` on type `Rational`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        25
+       ],
+       "to": [
+        13,
+        56
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0609",
+         "no field `denominator` on type `Rational`"
+        ],
+        [
+         "check",
+         "E0609",
+         "no field `denominator` on type `Rational`"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0609",
+        "message": "no field `nom` on type `Rational`",
+        "place": [
+         "skel/src/bin/e02-unknown-field.rs",
+         12,
+         37,
+         12,
+         40
+        ],
+        "rendered": "error[E0609]: no field `nom` on type `Rational`\n  --> skel/src/bin/e02-unknown-field.rs:12:37\n   |\n12 |         let on_a_local = logic! { r.nom };\n   |                                     ^^^ unknown field\n   |\nhelp: a field with a similar name exists\n   |\n12 -         let on_a_local = logic! { r.nom };\n12 +         let on_a_local = logic! { r.num };\n   |\n\n"
+       },
+       {
+        "code": "E0609",
+        "message": "no field `denominator` on type `Rational`",
+        "place": [
+         "skel/src/bin/e02-unknown-field.rs",
+         13,
+         43,
+         13,
+         54
+        ],
+        "rendered": "error[E0609]: no field `denominator` on type `Rational`\n  --> skel/src/bin/e02-unknown-field.rs:13:43\n   |\n13 |         let on_a_call = logic! { twice(r).denominator };\n   |                                           ^^^^^^^^^^^ unknown field\n   |\n   = note: available fields are: `num`, `den`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0609",
+        "message": "no field `nom` on type `Rational`",
+        "place": [
+         "skel/src/bin/e02-unknown-field.rs",
+         12,
+         37,
+         12,
+         40
+        ],
+        "rendered": "error[E0609]: no field `nom` on type `Rational`\n  --> skel/src/bin/e02-unknown-field.rs:12:37\n   |\n12 |         let on_a_local = logic! { r.nom };\n   |                                     ^^^ unknown field\n   |\nhelp: a field with a similar name exists\n   |\n12 -         let on_a_local = logic! { r.nom };\n12 +         let on_a_local = logic! { r.num };\n   |\n\n"
+       },
+       {
+        "code": "E0609",
+        "message": "no field `denominator` on type `Rational`",
+        "place": [
+         "skel/src/bin/e02-unknown-field.rs",
+         13,
+         43,
+         13,
+         54
+        ],
+        "rendered": "error[E0609]: no field `denominator` on type `Rational`\n  --> skel/src/bin/e02-unknown-field.rs:13:43\n   |\n13 |         let on_a_call = logic! { twice(r).denominator };\n   |                                           ^^^^^^^^^^^ unknown field\n   |\n   = note: available fields are: `num`, `den`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "e03-missing-operator": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        19
+       ],
+       "to": [
+        11,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "the trait bound `Rational: AddLogic<_>` is not satisfied"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "the trait bound `Rational: AddLogic` is not satisfied"
+        ],
+        [
+         "check",
+         "E0277",
+         "the trait bound `Rational: AddLogic<_>` is not satisfied"
+        ],
+        [
+         "check",
+         "E0277",
+         "the trait bound `Rational: AddLogic` is not satisfied"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        19
+       ],
+       "to": [
+        11,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "the trait bound `Rational: AddLogic<_>` is not satisfied"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "the trait bound `Rational: AddLogic` is not satisfied"
+        ],
+        [
+         "check",
+         "E0277",
+         "the trait bound `Rational: AddLogic<_>` is not satisfied"
+        ],
+        [
+         "check",
+         "E0277",
+         "the trait bound `Rational: AddLogic` is not satisfied"
+        ]
+       ]
+      },
+      {
+       "kind": "prove!",
+       "from": [
+        12,
+        20
+       ],
+       "to": [
+        12,
+        33
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "a `Rational` and a `_` have no order in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "a `Rational` and a `_` have no order in logical code"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "the trait bound `Rational: AddLogic<_>` is not satisfied",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         11,
+         28,
+         11,
+         29
+        ],
+        "rendered": "error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied\n   --> skel/src/bin/e03-missing-operator.rs:11:28\n    |\n 11 |         let sum = logic! { r + r };\n    |                            ^ - required by a bound introduced by this call\n    |                            |\n    |                            unsatisfied trait bound\n    |\nhelp: the trait `AddLogic<_>` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:656:9\n    |\n656 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n660 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`\n...\n728 |         impl AddLogic<Nat> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`\n...\n732 |         impl AddLogic<Int> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`\nnote: required by a bound in `locus::sk::add`\n   --> locus/src/lib.rs:550:19\n    |\n550 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Rational` and a `_` have no order in logical code",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         12,
+         27,
+         12,
+         28
+        ],
+        "rendered": "error[E0277]: a `Rational` and a `_` have no order in logical code\n   --> skel/src/bin/e03-missing-operator.rs:12:27\n    |\n 12 |         let less = prove!(r < r);\n    |                           ^ - required by a bound introduced by this call\n    |                           |\n    |                           no order for these\n    |\nhelp: the trait `locus::sk::OrdLogic<_>` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `locus::sk::OrdLogic<Rhs>`\n   --> locus/src/lib.rs:524:13\n    |\n524 |             impl OrdLogic<$b> for $a {}\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^\n    |             |\n    |             `Nat` implements `locus::sk::OrdLogic`\n    |             `locus::Int` implements `locus::sk::OrdLogic`\n...\n527 |     comparable!(Int Int, Nat Nat);\n    |     ----------------------------- in this macro invocation\n...\n755 |     impl sk::OrdLogic<Nat> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `locus::sk::OrdLogic<Nat>`\n756 |     impl sk::OrdLogic<Int> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `locus::sk::OrdLogic<locus::Int>`\nnote: required by a bound in `locus::sk::lt`\n   --> locus/src/lib.rs:535:18\n    |\n535 |     pub fn lt<A: OrdLogic<B>, B>(_: A, _: B) -> Bool {\n    |                  ^^^^^^^^^^^ required by this bound in `lt`\n    = note: this error originates in the macro `comparable` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "the trait bound `Rational: AddLogic` is not satisfied",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         11,
+         30,
+         11,
+         31
+        ],
+        "rendered": "error[E0277]: the trait bound `Rational: AddLogic` is not satisfied\n   --> skel/src/bin/e03-missing-operator.rs:11:30\n    |\n 11 |         let sum = logic! { r + r };\n    |                              ^ unsatisfied trait bound\n    |\nhelp: the trait `AddLogic` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:656:9\n    |\n656 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n660 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`\n...\n728 |         impl AddLogic<Nat> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`\n...\n732 |         impl AddLogic<Int> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "the trait bound `Rational: AddLogic<_>` is not satisfied",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         11,
+         28,
+         11,
+         29
+        ],
+        "rendered": "error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied\n   --> skel/src/bin/e03-missing-operator.rs:11:28\n    |\n 11 |         let sum = logic! { r + r };\n    |                            ^ - required by a bound introduced by this call\n    |                            |\n    |                            unsatisfied trait bound\n    |\nhelp: the trait `AddLogic<_>` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:656:9\n    |\n656 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n660 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`\n...\n728 |         impl AddLogic<Nat> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`\n...\n732 |         impl AddLogic<Int> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`\nnote: required by a bound in `locus::sk::add`\n   --> locus/src/lib.rs:550:19\n    |\n550 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Rational` and a `_` have no order in logical code",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         12,
+         27,
+         12,
+         28
+        ],
+        "rendered": "error[E0277]: a `Rational` and a `_` have no order in logical code\n   --> skel/src/bin/e03-missing-operator.rs:12:27\n    |\n 12 |         let less = prove!(r < r);\n    |                           ^ - required by a bound introduced by this call\n    |                           |\n    |                           no order for these\n    |\nhelp: the trait `locus::sk::OrdLogic<_>` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `locus::sk::OrdLogic<Rhs>`\n   --> locus/src/lib.rs:524:13\n    |\n524 |             impl OrdLogic<$b> for $a {}\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^\n    |             |\n    |             `Nat` implements `locus::sk::OrdLogic`\n    |             `locus::Int` implements `locus::sk::OrdLogic`\n...\n527 |     comparable!(Int Int, Nat Nat);\n    |     ----------------------------- in this macro invocation\n...\n755 |     impl sk::OrdLogic<Nat> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `locus::sk::OrdLogic<Nat>`\n756 |     impl sk::OrdLogic<Int> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `locus::sk::OrdLogic<locus::Int>`\nnote: required by a bound in `locus::sk::lt`\n   --> locus/src/lib.rs:535:18\n    |\n535 |     pub fn lt<A: OrdLogic<B>, B>(_: A, _: B) -> Bool {\n    |                  ^^^^^^^^^^^ required by this bound in `lt`\n    = note: this error originates in the macro `comparable` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "the trait bound `Rational: AddLogic` is not satisfied",
+        "place": [
+         "skel/src/bin/e03-missing-operator.rs",
+         11,
+         30,
+         11,
+         31
+        ],
+        "rendered": "error[E0277]: the trait bound `Rational: AddLogic` is not satisfied\n   --> skel/src/bin/e03-missing-operator.rs:11:30\n    |\n 11 |         let sum = logic! { r + r };\n    |                              ^ unsatisfied trait bound\n    |\nhelp: the trait `AddLogic` is not implemented for `Rational`\n   --> skel/src/bin/e03-missing-operator.rs:8:12\n    |\n  8 |     struct Rational { num: Int, den: Int }\n    |            ^^^^^^^^\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:656:9\n    |\n656 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n660 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`\n...\n728 |         impl AddLogic<Nat> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`\n...\n732 |         impl AddLogic<Int> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "e04-bool-for-prop-parameter": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0271,E0308",
+      "E0271,E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        6,
+        37
+       ],
+       "to": [
+        6,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        8,
+        28
+       ],
+       "to": [
+        8,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as ModelOf>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as ModelOf>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        8,
+        28
+       ],
+       "to": [
+        8,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as ModelOf>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as ModelOf>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        28
+       ],
+       "to": [
+        9,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        9,
+        28
+       ],
+       "to": [
+        9,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as ModelOf>::Logic == Prop`",
+        "place": [
+         "skel/src/bin/e04-bool-for-prop-parameter.rs",
+         8,
+         43,
+         8,
+         47
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as ModelOf>::Logic == Prop`\n   --> skel/src/bin/e04-bool-for-prop-parameter.rs:8:43\n    |\n  8 |         let from_a_place = logic! { twice(flag) };\n    |                                           ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `locus::sk::arg`\n   --> locus/src/lib.rs:379:19\n    |\n379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {\n    |                   ^^^^^^^^^^^^^ required by this bound in `arg`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e04-bool-for-prop-parameter.rs",
+         9,
+         43,
+         9,
+         47
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> skel/src/bin/e04-bool-for-prop-parameter.rs:9:43\n  |\n9 |         let from_a_value = logic! { twice(true) };\n  |                                     ----- ^^^^ expected `Prop`, found `Bool`\n  |                                     |\n  |                                     arguments to this function are incorrect\n  |\nnote: function defined here\n --> skel/src/bin/e04-bool-for-prop-parameter.rs:6:14\n  |\n6 |     logic fn twice(p: Prop) -> Prop { p && p }\n  |              ^^^^^ -------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as ModelOf>::Logic == Prop`",
+        "place": [
+         "skel/src/bin/e04-bool-for-prop-parameter.rs",
+         8,
+         43,
+         8,
+         47
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as ModelOf>::Logic == Prop`\n   --> skel/src/bin/e04-bool-for-prop-parameter.rs:8:43\n    |\n  8 |         let from_a_place = logic! { twice(flag) };\n    |                                           ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `locus::sk::arg`\n   --> locus/src/lib.rs:379:19\n    |\n379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {\n    |                   ^^^^^^^^^^^^^ required by this bound in `arg`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "skel/src/bin/e04-bool-for-prop-parameter.rs",
+         9,
+         43,
+         9,
+         47
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> skel/src/bin/e04-bool-for-prop-parameter.rs:9:43\n  |\n9 |         let from_a_value = logic! { twice(true) };\n  |                                     ----- ^^^^ expected `Prop`, found `Bool`\n  |                                     |\n  |                                     arguments to this function are incorrect\n  |\nnote: function defined here\n --> skel/src/bin/e04-bool-for-prop-parameter.rs:6:14\n  |\n6 |     logic fn twice(p: Prop) -> Prop { p && p }\n  |              ^^^^^ -------\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "e05-missing-arm": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0004",
+      "E0004"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        36
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0004",
+         "non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered"
+        ],
+        [
+         "check",
+         "E0004",
+         "non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0004",
+        "message": "non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered",
+        "place": [
+         "skel/src/bin/e05-missing-arm.rs",
+         9,
+         15,
+         9,
+         16
+        ],
+        "rendered": "error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered\n  --> skel/src/bin/e05-missing-arm.rs:9:15\n   |\n 9 |         match t {\n   |               ^ pattern `__locus_view_Tree::Leaf` not covered\n   |\nnote: `__locus_view_Tree` defined here\n  --> skel/src/bin/e05-missing-arm.rs:7:10\n   |\n 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n   |          ^^^^\n   |          |\n   |          not covered\n   = note: the matched value is of type `__locus_view_Tree`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n   |\n10 |             Tree::Node(l, _, _) => depth(l) +, __locus_view_Tree::Leaf => todo!() 1,\n   |                                              ++++++++++++++++++++++++++++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0004",
+        "message": "non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered",
+        "place": [
+         "skel/src/bin/e05-missing-arm.rs",
+         9,
+         15,
+         9,
+         16
+        ],
+        "rendered": "error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered\n  --> skel/src/bin/e05-missing-arm.rs:9:15\n   |\n 9 |         match t {\n   |               ^ pattern `__locus_view_Tree::Leaf` not covered\n   |\nnote: `__locus_view_Tree` defined here\n  --> skel/src/bin/e05-missing-arm.rs:7:10\n   |\n 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n   |          ^^^^\n   |          |\n   |          not covered\n   = note: the matched value is of type `__locus_view_Tree`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n   |\n10 |             Tree::Node(l, _, _) => depth(l) +, __locus_view_Tree::Leaf => todo!() 1,\n   |                                              ++++++++++++++++++++++++++++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    }
+   },
+   "seconds": {
+    "runtime": 2.3664793968200684,
+    "check": 2.2385687828063965
+   }
+  }
+ }
+}

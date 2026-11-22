@@ -1,0 +1,23 @@
+# The first mode of spikes/marker-lowering, as it stands in the repository:
+# its library and its macro, copied unchanged, as a workspace of its own,
+# for comparison. Its packages' `src/bin` are links to this spike's copies of
+# the same files, so both lowerings compile the same sources.
+[workspace]
+resolver = "3"
+members = ["locus", "locus-macros", "cases", "corpus", "ghost-lets", "scale"]
+default-members = ["locus", "locus-macros"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.dependencies]
+proc-macro2 = "1"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }
+
+[profile.dev]
+debug = false
+incremental = false

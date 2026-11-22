@@ -1,0 +1,26 @@
+[package]
+name = "locus"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus-macros = { path = "../locus-macros" }
+
+[features]
+# The conversion policy. With no feature it is the owner's choice:
+# - P2 explicit: a `Nat` is made an `Int` only by `as Int`;
+# - P3 "V3": a comparison in logical code gives a `Prop`, and a `Bool` is a
+#   proposition where the grammar wants one.
+# `mixed-ops`: P2 implicit inside arithmetic and comparison operators.
+# `p3-v2`: V3 without the implicit conversion: `b === true` is written.
+# `p3-v0`: the first round's rule: a comparison gives a `Bool`, and a `Bool`
+#   is a proposition where the grammar wants one.
+# `p3-v1`: a comparison gives a `Bool`, and `b === true` is written.
+mixed-ops = []
+p3-v0 = []
+p3-v1 = []
+p3-v2 = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

@@ -1,0 +1,28 @@
+# A workspace of its own. Nothing here depends on a file outside this
+# directory: what it reuses from spikes/marker-lowering is copied.
+[workspace]
+resolver = "3"
+members = ["locus", "locus-macros", "cases", "corpus", "ghost-lets", "more", "skel", "scale", "spec", "spec-p2x-v2", "spec-p2x-v0", "spec-p2i-v3", "spec-p2i-v2", "spec-p2i-v0", "spec-rfc", "policy", "two-lib", "two-app", "corpus-explicit", "spec-omit"]
+# The sets hold programs that must be rejected, and tools/measure.py builds
+# their bins with --keep-going, so a plain `cargo build` builds only these.
+# `first-mode/` and `driver/` are workspaces of their own.
+exclude = ["first-mode", "driver"]
+default-members = ["locus", "locus-macros"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.dependencies]
+proc-macro2 = "1"
+
+# A crate whose code expands Locus's macros must declare the checking `cfg`.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }
+
+# The spike builds hundreds of small binaries in many configurations: no
+# debug information and no incremental state, so that target/ stays small.
+[profile.dev]
+debug = false
+incremental = false
