@@ -1,0 +1,20 @@
+# The existing spike's library and macro (spikes/locus-macro), copied
+# unchanged, as a workspace of its own: the one-marker lowering that this
+# spike's is compared against. Each package's `src/bin` is a link to the
+# directory of the same name beside this one, so both lowerings compile the
+# same files.
+[workspace]
+resolver = "3"
+members = ["locus", "locus-macros", "corpus", "ghost-lets", "cases"]
+default-members = ["locus", "locus-macros"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.dependencies]
+proc-macro2 = "1"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

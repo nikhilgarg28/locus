@@ -1,0 +1,409 @@
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo: cargo 1.97.0 (c980f4866 2026-06-30)
+
+## Cases, with the lowering of this spike
+== d01-derive: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: sizes: Rational 0, Tree 0, Pair<Tree> 0, List<Rational> 0, Tagged 4|debug: Rational Tree Pair List|build() => 7
+== d02-derive-lifetime: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: cases/src/bin/d02-derive-lifetime.rs:8:17: error: locus: the logical type `View` declares a lifetime parameter: no marker carries a lifetime
+  check:   cases/src/bin/d02-derive-lifetime.rs:8:17: error: locus: the logical type `View` declares a lifetime parameter: no marker carries a lifetime
+== d03-vec-mismatch: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+  runtime: cases/src/bin/d03-vec-mismatch.rs:9:32: error[E0308]: mismatched types: expected `Vec<Seq<Int>>`, found `Vec<Nat>`
+  check:   cases/src/bin/d03-vec-mismatch.rs:9:32: error[E0308]: mismatched types: expected `Vec<Seq<Int>>`, found `Vec<Nat>`
+== d04-no-equality: expect runtime=E0369 check=E0369; got runtime=E0369 check=E0369; as expected
+  runtime: cases/src/bin/d04-no-equality.rs:14:9: error[E0369]: binary operation `==` cannot be applied to type `Rational`
+  check:   cases/src/bin/d04-no-equality.rs:14:9: error[E0369]: binary operation `==` cannot be applied to type `Rational`
+== d05-field-type-unknown: expect runtime=ok check=E0425; got runtime=ok check=E0425; as expected
+  check:   cases/src/bin/d05-field-type-unknown.rs:9:12: error[E0425]: cannot find type `Integer` in this scope: not found in this scope
+== d06-bounded-impl-probe: expect runtime=ok check=ok; got runtime=ok check=E0599; DIFFERS
+  check:   cases/src/bin/d06-bounded-impl-probe.rs:27:34: error[E0599]: the associated function or constant `__logic_least` exists for struct `Pair<Untyped>`, but its trait bounds were not satisfied: associated function or constant cannot be called on `Pair<Untyped>` due to unsatisfied trait bounds
+== g01-only-logical: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: count(&vec![4, 5, 6]) => 3
+== g02-takes-nat: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => ("locus::Nat", 1)
+== g03-two-borrows: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => (true, true)
+== g04-returned-reference: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => (true, 1)
+== g05-mutable-borrow: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => 3
+== g06-generic-only: expect runtime=annotate check=annotate; got runtime=E0283 check=E0283; as expected
+  runtime: cases/src/bin/g06-generic-only.rs:10:13: error[E0283]: type annotations needed
+  check:   cases/src/bin/g06-generic-only.rs:10:13: error[E0283]: type annotations needed
+== g07-generic-annotated: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => 3
+== g08-shadowing: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(5) => (12, 12, 1, 7, 6, 11, 15)
+== g09-closure-capture: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => 2
+== g10-pattern: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => (3, 1, 1, 3)
+== g11-loop-assignment: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => (15, 15)
+== g12-snapshot-of-mut: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run() => [1, 2, 3]
+== g13-copied: expect runtime=annotate check=annotate; got runtime=E0282 check=E0282; as expected
+  runtime: cases/src/bin/g13-copied.rs:10:13: error[E0282]: type annotations needed
+  check:   cases/src/bin/g13-copied.rs:10:13: error[E0282]: type annotations needed
+== g14-tuple-component: expect runtime=ok check=ok; got runtime=E0282 check=E0282; DIFFERS
+  runtime: cases/src/bin/g14-tuple-component.rs:11:13: error[E0282]: type annotations needed for `(usize, _)`
+  check:   cases/src/bin/g14-tuple-component.rs:11:13: error[E0282]: type annotations needed for `(usize, _)`
+== g15-format-capture: expect runtime=annotate check=annotate; got runtime=ok check=ok; DIFFERS
+  both binaries print: run(&vec![4, 5, 6]) => "Untyped"
+== g16-single-implementation: expect runtime=annotate check=annotate; got runtime=E0283 check=E0283; as expected
+  runtime: cases/src/bin/g16-single-implementation.rs:18:13: error[E0283]: type annotations needed
+  check:   cases/src/bin/g16-single-implementation.rs:18:13: error[E0283]: type annotations needed
+== g17-in-another-macro: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => (1, 1)
+== g18-snap-mismatch: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run(&vec![4, 5, 6]) => 1
+== g19-hand-untyped-passed: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+  runtime: cases/src/bin/g19-hand-untyped-passed.rs:14:15: error[E0308]: mismatched types: expected `Nat`, found `Untyped`
+  check:   cases/src/bin/g19-hand-untyped-passed.rs:14:15: error[E0308]: mismatched types: expected `Nat`, found `Untyped`
+== g20-logic-where-runtime: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: cases/src/bin/g20-logic-where-runtime.rs:9:9: error[E0277]: the trait bound `usize: Logical` is not satisfied: the trait `Logical` is not implemented for `usize`
+  check:   cases/src/bin/g20-logic-where-runtime.rs:9:9: error[E0277]: the trait bound `usize: Logical` is not satisfied: the trait `Logical` is not implemented for `usize`
+== h01-snap-header: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: cases/src/bin/h01-snap-header.rs:10:23: error: locus: a snapshot type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+  check:   cases/src/bin/h01-snap-header.rs:10:23: error: locus: a snapshot type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+== h02-proof-header: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: cases/src/bin/h02-proof-header.rs:9:22: error: locus: a proof type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+  check:   cases/src/bin/h02-proof-header.rs:9:22: error: locus: a proof type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+== h03-snap-header-allowed: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: <Snap<bool> as Describe>::Width is locus::Nat|<Snap<&mut Vec<String>> as Describe>::Width is locus::Nat|from a proof of 2 == 2: written for a proof of 1 == 2
+== h04-snap-header-alias: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both binaries print: 
+== h05-hand-lifetime-marker: expect runtime=reject check=reject; got runtime=E0478,E0803 check=E0478,E0803; as expected
+  runtime: cases/src/bin/h05-hand-lifetime-marker.rs:13:10: error[E0478]: lifetime bound not satisfied
+  runtime: cases/src/bin/h05-hand-lifetime-marker.rs:13:22: error[E0803]: cannot infer an appropriate lifetime for lifetime parameter `'a` due to conflicting requirements
+  check:   cases/src/bin/h05-hand-lifetime-marker.rs:13:10: error[E0478]: lifetime bound not satisfied
+  check:   cases/src/bin/h05-hand-lifetime-marker.rs:13:22: error[E0803]: cannot infer an appropriate lifetime for lifetime parameter `'a` due to conflicting requirements
+== p01-hand-generic-value-probe: expect runtime=E0283 check=E0283; got runtime=E0283 check=E0283; as expected
+  runtime: cases/src/bin/p01-hand-generic-value-probe.rs:20:11: error[E0283]: type annotations needed: cannot infer type of the type parameter `T` declared on the function `is_max`
+  check:   cases/src/bin/p01-hand-generic-value-probe.rs:20:11: error[E0283]: type annotations needed: cannot infer type of the type parameter `T` declared on the function `is_max`
+== p02-hand-use-trait-member: expect runtime=E0658 check=E0658; got runtime=E0658 check=E0658; as expected
+  runtime: cases/src/bin/p02-hand-use-trait-member.rs:17:9: error[E0658]: `use` associated items of traits is unstable
+  check:   cases/src/bin/p02-hand-use-trait-member.rs:17:9: error[E0658]: `use` associated items of traits is unstable
+== t01-two-traits: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: newest() => (2, 5)|spec_only() => 3
+== t02-max-rational: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+  runtime: cases/src/bin/t02-max-rational.rs:61:35: error[E0277]: the trait bound `Rational: CheckedOrder` is not satisfied: unsatisfied trait bound
+  check:   cases/src/bin/t02-max-rational.rs:61:35: error[E0277]: the trait bound `Rational: CheckedOrder` is not satisfied: unsatisfied trait bound
+== t03-logical-impl-runs: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: cases/src/bin/t03-logical-impl-runs.rs:61:12: error: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checked`
+  check:   cases/src/bin/t03-logical-impl-runs.rs:61:12: error: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checked`
+== t04-library-traits: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run() => 15
+== t05-into-missing: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+  runtime: cases/src/bin/t05-into-missing.rs:17:17: error[E0277]: the trait bound `Rational: locus::FromLogic<locus::Bool>` is not satisfied: unsatisfied trait bound
+  check:   cases/src/bin/t05-into-missing.rs:17:17: error[E0277]: the trait bound `Rational: locus::FromLogic<locus::Bool>` is not satisfied: unsatisfied trait bound
+== t06-family: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: build() => (15, 4, 4)
+== t07-one-byte: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: first(&Letter(65)) => 65|first(&Letter(200)) => 0
+== t08-weaker-contract: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: first(&Wide(150)) => 150
+== t09-monoid: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run() => 6
+== t10-kind-fn-for-logic: expect runtime=reject check=reject; got runtime=E0046,E0407 check=E0046,E0407; as expected
+  runtime: cases/src/bin/t10-kind-fn-for-logic.rs:15:9: error[E0407]: method `le` is not a member of trait `OrderSpec`: not a member of trait `OrderSpec`
+  runtime: cases/src/bin/t10-kind-fn-for-logic.rs:14:5: error[E0046]: not all trait items implemented, missing: `__logic_le`: missing `__logic_le` in implementation
+  check:   cases/src/bin/t10-kind-fn-for-logic.rs:15:9: error[E0407]: method `le` is not a member of trait `OrderSpec`: not a member of trait `OrderSpec`
+  check:   cases/src/bin/t10-kind-fn-for-logic.rs:14:5: error[E0046]: not all trait items implemented, missing: `__logic_le`: missing `__logic_le` in implementation
+== t11-kind-logic-for-fn: expect runtime=reject check=reject; got runtime=E0046,E0407 check=E0046,E0407; as expected
+  runtime: cases/src/bin/t11-kind-logic-for-fn.rs:14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`: not a member of trait `OneByte`
+  runtime: cases/src/bin/t11-kind-logic-for-fn.rs:13:5: error[E0046]: not all trait items implemented, missing: `byte`: missing `byte` in implementation
+  check:   cases/src/bin/t11-kind-logic-for-fn.rs:14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`: not a member of trait `OneByte`
+  check:   cases/src/bin/t11-kind-logic-for-fn.rs:13:5: error[E0046]: not all trait items implemented, missing: `byte`: missing `byte` in implementation
+== t12-names-same-module: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run() => 15
+== t13a-imported-impl: expect runtime=ok check=ok; got runtime=E0277,E0405 check=E0277,E0405; DIFFERS
+  runtime: cases/src/bin/t13a-imported-impl.rs:20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  runtime: cases/src/bin/t13a-imported-impl.rs:20:24: error[E0277]: the trait bound `Rational: __locus_logic_OrderSpec` is not satisfied: unsatisfied trait bound
+  check:   cases/src/bin/t13a-imported-impl.rs:20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  check:   cases/src/bin/t13a-imported-impl.rs:20:24: error[E0277]: the trait bound `Rational: __locus_logic_OrderSpec` is not satisfied: unsatisfied trait bound
+== t13b-imported-parameter: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: 
+== t13c-imported-type: expect runtime=ok check=ok; got runtime=ok check=E0599; DIFFERS
+  check:   cases/src/bin/t13c-imported-type.rs:25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope: associated function or constant not found in `Rational`
+== t13d-imported-qualified: expect runtime=ok check=ok; got runtime=ok check=E0405; DIFFERS
+  check:   cases/src/bin/t13d-imported-qualified.rs:25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t14-imported-in-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: 
+== t15-names-trait-path: expect runtime=ok check=ok; got runtime=ok check=E0782; DIFFERS
+  check:   cases/src/bin/t15-names-trait-path.rs:20:23: error[E0782]: expected a type, found a trait
+== t16-names-trait-path-in-trait: expect runtime=ok check=ok; got runtime=ok check=E0790; DIFFERS
+  check:   cases/src/bin/t16-names-trait-path-in-trait.rs:19:23: error[E0790]: cannot call associated function on trait without specifying the corresponding `impl` type: cannot call associated function of trait
+== t17-default-member-split: expect runtime=ok check=ok; got runtime=E0277 check=E0277,E0599; DIFFERS
+  runtime: cases/src/bin/t17-default-member-split.rs:17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied: unsatisfied trait bound
+  check:   cases/src/bin/t17-default-member-split.rs:17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied: unsatisfied trait bound
+  check:   cases/src/bin/t17-default-member-split.rs:20:33: error[E0599]: no associated function or constant named `__logic_tag` found for struct `Thing` in the current scope: associated function or constant not found in `Thing`
+== t18-default-member-split-in-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: run() => 1
+== t19-runtime-name-clash: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both binaries print: same() => true
+== t20-hand-unmangled-clash: expect runtime=E0034 check=E0034; got runtime=E0034 check=E0034; as expected
+  runtime: cases/src/bin/t20-hand-unmangled-clash.rs:28:14: error[E0034]: multiple applicable items in scope: multiple `eq` found
+  check:   cases/src/bin/t20-hand-unmangled-clash.rs:28:14: error[E0034]: multiple applicable items in scope: multiple `eq` found
+== t21-provided-method-split: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both binaries print: run() => 7
+== t22-provided-method-joined: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: cases/src/bin/t22-provided-method-joined.rs:14:10: error: locus: a logical type implements only traits with no method that runs, and `Greet` has one
+  check:   cases/src/bin/t22-provided-method-joined.rs:14:10: error: locus: a logical type implements only traits with no method that runs, and `Greet` has one
+cases: 58, as expected: 47, differ: 11
+
+### Three of them with the existing spike's lowering (one marker), for comparison
+== g13-copied: old runtime=ok check=ok
+== g14-tuple-component: old runtime=ok check=ok
+== g20-logic-where-runtime: old runtime=E0308 check=E0308
+  old runtime: cases/src/bin/g20-logic-where-runtime.rs:9:9: error[E0308]: mismatched types: expected `usize`, found `LogicalData`
+
+### rustc's whole message for g16, in the runtime expansion
+error[E0283]: type annotations needed
+  --> cases/src/bin/g16-single-implementation.rs:18:13
+   |
+18 |         let before = logic! { v.len() };
+   |             ^^^^^^
+19 |         only(before)
+   |         ---- ------ type must be known at this point
+   |         |
+   |         required by a bound introduced by this call
+   |
+   = note: the type must implement `Monoid`
+help: the trait `Monoid` is implemented for `locus::Int`
+  --> cases/src/bin/g16-single-implementation.rs:11:5
+   |
+11 |     impl Monoid for Int {
+   |     ^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `only`
+  --> cases/src/bin/g16-single-implementation.rs:15:16
+   |
+15 |     fn only<M: Monoid>(m: M) -> &'static str { std::any::type_name::<M>() }
+   |                ^^^^^^ required by this bound in `only`
+help: consider giving `before` an explicit type, where the type for type parameter `M` is specified
+   |
+18 |         let before: /* Type */ = logic! { v.len() };
+   |                   ++++++++++++
+
+
+## Corpus: the existing spike's cases, with its lowering and with this one
+corpus/src/bin is identical to spikes/locus-macro/cases/src/bin
+baseline/ holds the library and macro of spikes/locus-macro, unchanged
+== after-move: old runtime=ok check=E0382; new runtime=ok check=E0382;
+  new check:   corpus/src/bin/after-move.rs:19:22: error[E0382]: borrow of moved value: `v`: value borrowed here after move
+== at-in-patterns: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== checked-indices: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== derive-eq-with-proof-field: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== during-mutable-borrow: old runtime=ok check=E0502; new runtime=ok check=E0502;
+  new check:   corpus/src/bin/during-mutable-borrow.rs:15:22: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable: immutable borrow occurs here
+== final-value-at-return: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== ghost-parameters: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== keywords-as-names: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== locus-macro-inside-rust-macro: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== logic-calls-logic-function: old runtime=ok check=ok; new runtime=ok check=ok;
+== logical-closure-in-body: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== logical-fields: old runtime=ok check=ok; new runtime=ok check=ok;
+== match-every-arm: old runtime=ok check=ok; new runtime=ok check=ok;
+== pub-locus-as-tuple-field-type: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== raw-identifier-logic: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== reproved-after-assignment: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== returned-borrow: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== same-is-a-proposition: old runtime=ok check=ok; new runtime=ok check=ok;
+== snapshot-survives-assignment: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== tokens-in-macro-input: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== underscore-in-rust-positions: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== wrapped-precondition: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print the example's run lines
+== x-joined-logical-type: old runtime=ok check=ok; new runtime=ok check=ok;
+  new: both binaries print: use_them() => 1
+== x-locus-name-collision: old runtime=E0433,E0659 check=E0433,E0659; new runtime=E0433,E0659 check=E0433,E0659;
+  new runtime: corpus/src/bin/x-locus-name-collision.rs:28:31: error[E0433]: cannot find module `locus` in this scope: `locus` is a struct, not a module
+  new runtime: corpus/src/bin/x-locus-name-collision.rs:5:5: error[E0659]: `locus` is ambiguous: ambiguous name
+  new check:   corpus/src/bin/x-locus-name-collision.rs:28:31: error[E0433]: cannot find module `locus` in this scope: `locus` is a struct, not a module
+  new check:   corpus/src/bin/x-locus-name-collision.rs:5:5: error[E0659]: `locus` is ambiguous: ambiguous name
+== x-logic-kind: old runtime=E0308 check=E0308; new runtime=ok check=ok;
+  CHANGED
+  old runtime: corpus/src/bin/x-logic-kind.rs:30:21: error[E0308]: mismatched types: expected `Erased`, found `LogicalData`
+  old runtime: corpus/src/bin/x-logic-kind.rs:30:43: error[E0308]: mismatched types: expected `Erased`, found `LogicalData`
+  old check:   corpus/src/bin/x-logic-kind.rs:30:21: error[E0308]: mismatched types: expected `Erased`, found `LogicalData`
+  old check:   corpus/src/bin/x-logic-kind.rs:30:43: error[E0308]: mismatched types: expected `Erased`, found `LogicalData`
+  new: both binaries print: annotated() => 2|unannotated() => 2
+== x-split-logical-type: old runtime=E0118 check=E0118,E0599; new runtime=ok check=ok;
+  CHANGED
+  old runtime: corpus/src/bin/x-split-logical-type.rs:20:5: error[E0118]: no nominal type found for inherent implementation: impl requires a nominal type
+  old check:   corpus/src/bin/x-split-logical-type.rs:20:5: error[E0118]: no nominal type found for inherent implementation: impl requires a nominal type
+  old check:   corpus/src/bin/x-split-logical-type.rs:30:40: error[E0599]: no associated function or constant named `origin` found for struct `LogicalData` in the current scope: associated function or constant not found in `LogicalData`
+  new: both binaries print: use_them() => 1
+accepted litmus examples: 20; compile in both expansions: old 20, new 20
+rejected litmus examples that fail in the checking expansion alone: old 2, new 2
+
+## Ghost lets: every litmus example with an unannotated `let x = logic! { .. };`
+ghost-lets/src/bin holds the 17 litmus examples with such a `let`, verbatim (19 `let`s)
+== gl-after-move: old runtime=ok check=E0382; new runtime=ok check=E0382;
+  new check:   ghost-lets/src/bin/gl-after-move.rs:18:22: error[E0382]: borrow of moved value: `v`: value borrowed here after move
+== gl-after-mutable-borrow-ends: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-before-move: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-branch-on-logical: old runtime=E0369 check=E0369; new runtime=E0283 check=E0283;
+  CHANGED
+  new runtime: ghost-lets/src/bin/gl-branch-on-logical.rs:12:9: error[E0283]: type annotations needed
+  new check:   ghost-lets/src/bin/gl-branch-on-logical.rs:12:9: error[E0283]: type annotations needed
+  old runtime: ghost-lets/src/bin/gl-branch-on-logical.rs:13:14: error[E0369]: binary operation `>` cannot be applied to type `LogicalData`
+  old check:   ghost-lets/src/bin/gl-branch-on-logical.rs:13:14: error[E0369]: binary operation `>` cannot be applied to type `LogicalData`
+== gl-cell-snapshot-kept-by-move: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-during-mutable-borrow: old runtime=ok check=E0502; new runtime=ok check=E0502;
+  new check:   ghost-lets/src/bin/gl-during-mutable-borrow.rs:14:22: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable: immutable borrow occurs here
+== gl-final-value-recovered-by-inference: old runtime=ok check=error; new runtime=ok check=ok;
+  CHANGED
+  old check:   ghost-lets/src/bin/gl-final-value-recovered-by-inference.rs:27:38: error: in expressions, `_` can only be used on the left-hand side of an assignment: `_` not allowed here
+== gl-hole-written-out-with-an-earlier-value: old runtime=E0369,E0425,E0599,error check=E0369,E0425,E0599,error; new runtime=E0425,E0599,error check=E0425,E0599,error;
+  CHANGED
+  new runtime: ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17: error: invalid comparison operator `===`
+  new runtime: ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope: associated function or constant not found in `u32`
+  new check:   ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17: error: invalid comparison operator `===`
+  new check:   ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope: associated function or constant not found in `u32`
+  old runtime: ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17: error: invalid comparison operator `===`
+  old runtime: ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope: associated function or constant not found in `u32`
+  old check:   ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17: error: invalid comparison operator `===`
+  old check:   ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope: associated function or constant not found in `u32`
+== gl-immutable-static-in-logic: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-logic-calls-logic-function: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-logic-calls-runtime-function: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-logic-in-async-block: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-logic-in-closure: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-operator-in-logic-block: old runtime=E0433 check=E0433; new runtime=E0433 check=E0433;
+  new runtime: ghost-lets/src/bin/gl-operator-in-logic-block.rs:11:12: error[E0433]: cannot find `std` in `locus`: could not find `std` in `locus`
+  new check:   ghost-lets/src/bin/gl-operator-in-logic-block.rs:11:12: error[E0433]: cannot find `std` in `locus`: could not find `std` in `locus`
+== gl-snapshot-survives-assignment: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-snapshot-unchanged: old runtime=ok check=ok; new runtime=ok check=ok;
+== gl-snapshot-with-associated-type-field: old runtime=ok check=ok; new runtime=ok check=ok;
+accepted litmus examples: 10; compile in both expansions: old 8, new 8
+
+## Ghost locals initialized by `logic!` with no annotation, by what this spike's lowering gave them
+corpus: 8 such `let`s; 6 hold the untyped marker, 2 are typed by rustc's inference
+ghost-lets: 19 such `let`s; 17 hold the untyped marker, 2 are typed by rustc's inference
+cases: 40 such `let`s; 18 hold the untyped marker, 22 are typed by rustc's inference
+
+## Every ghost local typed: which `let`s need an annotation the source does not have
+== logic-calls-logic-function: runtime=E0282
+  corpus/src/bin/logic-calls-logic-function.rs:17:9: error[E0282]: type annotations needed
+      let twice = logic! { double(v.len()) };
+== snapshot-survives-assignment: runtime=E0282
+  corpus/src/bin/snapshot-survives-assignment.rs:14:9: error[E0282]: type annotations needed
+      let before = logic! { n };
+== x-joined-logical-type: runtime=E0282
+  corpus/src/bin/x-joined-logical-type.rs:23:13: error[E0282]: type annotations needed
+      let d = logic! { double(3) };
+== x-split-logical-type: runtime=E0282
+  corpus/src/bin/x-split-logical-type.rs:29:13: error[E0282]: type annotations needed
+      let d = logic! { double(3) };
+corpus: 23 programs that compile both ways with the draft's rule; with every ghost local typed, 4 fail, at 4 `let`s
+== gl-after-mutable-borrow-ends: runtime=E0282
+  ghost-lets/src/bin/gl-after-mutable-borrow-ends.rs:15:9: error[E0282]: type annotations needed
+      let n = logic! { v.len() };
+== gl-before-move: runtime=E0282
+  ghost-lets/src/bin/gl-before-move.rs:17:9: error[E0282]: type annotations needed
+      let n = logic! { v.len() };
+== gl-cell-snapshot-kept-by-move: runtime=E0282
+  ghost-lets/src/bin/gl-cell-snapshot-kept-by-move.rs:15:9: error[E0282]: type annotations needed
+      let before = logic! { snap(c) };
+== gl-final-value-recovered-by-inference: runtime=E0282
+  ghost-lets/src/bin/gl-final-value-recovered-by-inference.rs:27:9: error[E0282]: type annotations needed
+      let predicted = logic! { recover(_, about_the_end) }; //~ error: this value would be the count that `r` ends with, and `r`'s borrow has not ended: until it does, that value occurs only inside propositions and proofs
+== gl-immutable-static-in-logic: runtime=E0282
+  ghost-lets/src/bin/gl-immutable-static-in-logic.rs:14:9: error[E0282]: type annotations needed
+      let a = logic! { LIMIT };
+== gl-logic-calls-logic-function: runtime=E0282
+  ghost-lets/src/bin/gl-logic-calls-logic-function.rs:16:9: error[E0282]: type annotations needed
+      let twice = logic! { double(v.len()) };
+== gl-logic-calls-runtime-function: runtime=E0282
+  ghost-lets/src/bin/gl-logic-calls-runtime-function.rs:16:9: error[E0282]: type annotations needed
+      let n = logic! { count(&v) }; //~ error: logical code cannot call the runtime function `count`
+== gl-logic-in-async-block: runtime=E0282
+  ghost-lets/src/bin/gl-logic-in-async-block.rs:14:13: error[E0282]: type annotations needed
+      let n = logic! { v.len() }; //~ error: logical code inside an async block is not supported
+== gl-logic-in-closure: runtime=E0282
+  ghost-lets/src/bin/gl-logic-in-closure.rs:14:13: error[E0282]: type annotations needed
+      let n = logic! { v.len() }; //~ error: logical code inside a closure is not supported
+== gl-snapshot-survives-assignment: runtime=E0282
+  ghost-lets/src/bin/gl-snapshot-survives-assignment.rs:13:9: error[E0282]: type annotations needed
+      let before = logic! { n };
+== gl-snapshot-unchanged: runtime=E0282
+  ghost-lets/src/bin/gl-snapshot-unchanged.rs:16:9: error[E0282]: type annotations needed
+      let first = logic! { snap(t) };
+== gl-snapshot-with-associated-type-field: runtime=E0282
+  ghost-lets/src/bin/gl-snapshot-with-associated-type-field.rs:21:9: error[E0282]: type annotations needed
+      let before = logic! { snap(h) };
+ghost-lets: 12 programs that compile both ways with the draft's rule; with every ghost local typed, 12 fail, at 12 `let`s
+== g01-only-logical: runtime=E0282
+  cases/src/bin/g01-only-logical.rs:10:13: error[E0282]: type annotations needed
+      let before = logic! { v.len() };
+== g08-shadowing: runtime=E0282
+  cases/src/bin/g08-shadowing.rs:14:13: error[E0282]: type annotations needed
+      let x = logic! { n };
+  cases/src/bin/g08-shadowing.rs:22:13: error[E0282]: type annotations needed
+      let x = logic! { n };
+  cases/src/bin/g08-shadowing.rs:41:13: error[E0282]: type annotations needed
+      let x = logic! { n };
+  cases/src/bin/g08-shadowing.rs:49:13: error[E0282]: type annotations needed
+      let x = logic! { n };
+  cases/src/bin/g08-shadowing.rs:71:13: error[E0282]: type annotations needed
+      let x = logic! { n };
+== g10-pattern: runtime=E0282
+  cases/src/bin/g10-pattern.rs:16:13: error[E0282]: type annotations needed for `(usize, _, locus::Nat)`
+      let (count, before, passed) = (v.len(), logic! { v.len() }, logic! { v.len() });
+== g11-loop-assignment: runtime=E0282
+  cases/src/bin/g11-loop-assignment.rs:13:13: error[E0282]: type annotations needed
+      let mut seen = logic! { 0 };
+== g12-snapshot-of-mut: runtime=E0282
+  cases/src/bin/g12-snapshot-of-mut.rs:19:13: error[E0282]: type annotations needed
+      let untyped = logic! { snap(*r) };
+== g15-format-capture: runtime=E0282
+  cases/src/bin/g15-format-capture.rs:10:13: error[E0282]: type annotations needed
+      let before = logic! { v.len() };
+== g17-in-another-macro: runtime=E0282
+  cases/src/bin/g17-in-another-macro.rs:10:13: error[E0282]: type annotations needed
+      let before = logic! { v.len() };
+== t01-two-traits: runtime=E0282
+  cases/src/bin/t01-two-traits.rs:56:13: error[E0282]: type annotations needed
+      let total = logic! { T::le_total(*a, *b) };
+  cases/src/bin/t01-two-traits.rs:76:13: error[E0282]: type annotations needed
+      let either = logic! { Rational::le_total(half, third) };
+== t09-monoid: runtime=E0282
+  cases/src/bin/t09-monoid.rs:41:13: error[E0282]: type annotations needed
+      let regrouped = logic! { M::assoc(m, m, m) };
+== t18-default-member-split-in-trait: runtime=E0282
+  cases/src/bin/t18-default-member-split-in-trait.rs:20:13: error[E0282]: type annotations needed
+      let t = logic! { Thing::tag() };
+cases: 29 programs that compile both ways with the draft's rule; with every ghost local typed, 10 fail, at 15 `let`s
+
+## Every case with the stubs of a trait's logic functions kept in the lowered trait
+== d06-bounded-impl-probe: expect runtime=ok check=ok; got runtime=ok check=E0599; DIFFERS
+  check:   cases/src/bin/d06-bounded-impl-probe.rs:27:34: error[E0599]: the associated function or constant `__logic_least` exists for struct `Pair<Untyped>`, but its trait bounds were not satisfied: associated function or constant cannot be called on `Pair<Untyped>` due to unsatisfied trait bounds
+== g14-tuple-component: expect runtime=ok check=ok; got runtime=E0282 check=E0282; DIFFERS
+  runtime: cases/src/bin/g14-tuple-component.rs:11:13: error[E0282]: type annotations needed for `(usize, _)`
+  check:   cases/src/bin/g14-tuple-component.rs:11:13: error[E0282]: type annotations needed for `(usize, _)`
+== g15-format-capture: expect runtime=annotate check=annotate; got runtime=ok check=ok; DIFFERS
+== h04-snap-header-alias: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+== t15-names-trait-path: expect runtime=ok check=ok; got runtime=ok check=E0790; DIFFERS
+  check:   cases/src/bin/t15-names-trait-path.rs:20:23: error[E0790]: cannot call associated function on trait without specifying the corresponding `impl` type: cannot call associated function of trait
+== t16-names-trait-path-in-trait: expect runtime=ok check=ok; got runtime=ok check=E0790; DIFFERS
+  check:   cases/src/bin/t16-names-trait-path-in-trait.rs:19:23: error[E0790]: cannot call associated function on trait without specifying the corresponding `impl` type: cannot call associated function of trait
+== t21-provided-method-split: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+cases: 58, as expected: 51, differ: 7
+
+wall time: 81 s

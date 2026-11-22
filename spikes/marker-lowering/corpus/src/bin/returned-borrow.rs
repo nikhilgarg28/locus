@@ -1,0 +1,33 @@
+//! Spike case for question 2: `litmus/contracts/returned-borrow.accept.lc`, its full text copied
+//! unchanged inside `locus! { ... }`. Written by `gen-cases.py`; `run.sh`
+//! checks that the copy is still exact. Line N of the example is line N + 7 here.
+//! `::locus` rather than `locus`: see `x-locus-name-collision.rs`.
+use ::locus::locus;
+
+locus! {
+//~ question: Can a function that returns a mutable borrow relate the final values of the borrow and of its source?
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (r: &mut u32, @(r == pair.0 && final!(pair) === (final!(r), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+fn nine() -> u32 {
+    let mut pair: (u32, u32) = (1, 2);
+    let (first, related) = first_mut(&mut pair);
+    *first = 9;
+    let is_nine: @(pair.0 == 9) = _;
+    pair.0
+}
+
+//~ run: nine() => 9
+
+}
+
+fn main() {
+    println!("expansion: {}", ::locus::__expansion!());
+    println!("{} => {:?}", r#"nine()"#, nine());
+}
