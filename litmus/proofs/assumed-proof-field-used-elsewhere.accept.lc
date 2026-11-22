@@ -1,0 +1,40 @@
+//~ question: May a function rely on a proof field of its argument, when the function that built the value assumed that proof?
+//~ spec: proofs.assume
+//~ rfc: 0002
+
+mod dep {
+    // Stands for a function of another crate, which promises a setting above zero
+    // in its documentation and in nothing that Locus can check.
+    #[unverified]
+    pub fn setting() -> u32 {
+        4
+    }
+}
+
+struct Positive {
+    n: u32,
+    ok: @(n > 0),
+}
+
+// The result of `trusted` lists this assumption.
+fn trusted() -> Positive {
+    let n = dep::setting();
+    Positive { n, ok: unsafe assume!(_) }
+}
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+// `recip` assumes nothing and calls nothing that does. Its result is about every valid
+// `Positive`, and lists no assumption. The program's result lists the one in `trusted`.
+fn recip(p: &Positive) -> u32 {
+    divide(100, p.n, p.ok)
+}
+
+fn quarter() -> u32 {
+    let p = trusted();
+    recip(&p)
+}
+
+//~ run: quarter() => 25

@@ -140,3 +140,11 @@ RFC 0002 records these as decisions 84 to 87, with the rules `contracts.slots` a
 Five programs were worked through by hand, and each could be written in these three ways. Three are examples now: a cursor over a buffer, a bounded stack in each of the three ways, and a ring buffer. A sorted vector's `insert` is not written. Its proof uses the old vector's order at the index before a moved item, and how a `Nat` is made from `j - 1` is not decided ([standard-library](standard-library.md)). A version of it that moves the new item down by swaps is not written either.
 
 This issue stays open for the fourth way, which waits for [no-panic-claims](no-panic-claims.md), and for lending out a `&mut`.
+
+### 2026-11-22, decision 66 confirmed tentatively
+
+A review found that RFC 0002's decision 66, under which an assignment to a field that a proof reads is rejected even when the proof could be proved again, was not in the owner's recorded words. Those words, quoted in the entry of 2026-11-16 above, were about not leaving an invariant broken for a time, and an assignment that proves the invariant for the new value never breaks it. Two examples had gone from accepted to rejected on the decision, and the three ways of 2026-11-17 build on it without stating it. Shown this among six rules that the review had left unsettled, the owner answered:
+
+> tentatively confirm the 6 open questions
+
+RFC 0002's decision 91 records it. No rule and no example changes. It stays open to revisit (RFC 0002, item 26).

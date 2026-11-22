@@ -81,3 +81,11 @@ Proposal: option 1, with one rule: what an exported crate shows to other crates 
 For the name: `locus` is reserved in a Locus crate's dependencies, as `std` and `core` are.
 
 For the rest of this issue, the proposal is to decide only what the first build needs, and leave publishing until build mode works: configurations under `[package.metadata.locus]`, the list of trusted crates per workspace, and each published crate carrying the list of assumptions its results rest on.
+
+### 2026-11-22, a public field of a sealed type
+
+`export.plain-interface` said in its lead that nothing other crates can reach exposes logical data, and in its clauses that no reachable field holds any. So `pub struct Pair { pub first: Interval, pub second: Interval }` was refused while a function that returns an `Option<Interval>` was accepted. Shown this among six rules that a review had left unsettled, with the proposal to say "exposes" throughout, the owner answered:
+
+> tentatively confirm the 6 open questions
+
+RFC 0002's decision 92 records it. A field that other crates can reach may have a sealed type, in a struct and in a variant of an enum; it may not expose logical data or be read by a proof field. `export.invariants-closed` and `contracts.invariants.observed` change with it, and the first stage follows. Three examples are added: `export/public-field-of-sealed-type.accept.lc`, `export/public-enum-with-sealed-payload.accept.lc`, and `export/public-sealed-field-read-by-proof.reject.lc`. It stays open to revisit (RFC 0002, item 26).

@@ -1,0 +1,30 @@
+//~ question: May an exported crate's public struct have a public field of a sealed type that one of its own proof fields reads?
+//~ spec: export.invariants-closed
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+impl Interval {
+    pub fn new(lo: u32, hi: u32) -> Option<Interval> {
+        if lo <= hi {
+            Some(Interval { lo, hi, ordered: _ })
+        } else {
+            None
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.hi - self.lo
+    }
+}
+
+// A Rust user could put a narrower interval in `span`, and `wide` would then be false.
+pub struct Window {
+    pub span: Interval, //~ error: `span` is read by the proof field `wide`, so it cannot be reachable from other crates
+    wide: @(span.hi - span.lo >= 10),
+}

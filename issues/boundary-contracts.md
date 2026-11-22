@@ -3,7 +3,7 @@
 - **Kind:** design
 - **Status:** open
 - **Blocks:** Using a proof to remove a runtime check
-- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `logic.boundary.foreign`, `proofs.assume`
+- **Rules:** `logic.unverified.functions`, `logic.unverified.plain-rust`, `logic.boundary.foreign`, `proofs.assume`, `proofs.assume.lint`
 
 ## Scope
 
@@ -154,3 +154,17 @@ The rule proposed in reply restricts the signature alone, so that a safe shim ca
 > On extern, agree with your view.
 
 What this leaves for this issue is unchanged. A contract for a foreign function is still a wrapper of the program's own, whose signature states it and whose body assumes it with `unsafe assume!(_)`. The trust model's new entry, `assumed.foreign`, says only that foreign code keeps to its declared signatures; a contract would say what it does.
+
+### 2026-11-22, six rules confirmed tentatively
+
+A review of RFC 0002 had left six rules unsettled, and they were put to the owner as a table of one line each. The owner answered:
+
+> tentatively confirm the 6 open questions
+
+Three are about assumptions and the boundary, and are RFC 0002's decisions 90, 93, and 94:
+
+- **What a result's list of assumptions covers.** A function's result is a theorem about valid arguments. It lists the assumptions in its own body and in the functions it calls, and not one made where a value it is given was built. The program's result lists every assumption in every crate it links, and is the list promised complete. `proofs.assume` says so now.
+- **A lint.** `unsafe assume!` keeps its spelling. Since the program that rustc compiles holds no `unsafe` for it, Locus has a lint, `locus::assumptions`, which a crate sets to forbid assumptions in its own code (`proofs.assume.lint`). The name, the levels, and the default are RFC 0002's proposal, which the owner has not seen.
+- **Loans through a generic function of another crate.** An interface records, for each type parameter, whether its values never reach unverified code, are only lent, or reach it otherwise, with the type of each value lent, so that the caller checks the loan at its own type (`logic.ghost.generic-instantiations`).
+
+All three stay open to revisit: RFC 0002 lists them, with what it chose in writing them, as item 26 of what is still for the owner. No example can show what a result lists, and the part of the third that crosses crates has no example either ([multi-file-litmus](multi-file-litmus.md)).

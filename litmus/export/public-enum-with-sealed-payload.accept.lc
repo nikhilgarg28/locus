@@ -1,0 +1,47 @@
+//~ question: May an exported crate's public enum have a payload of a sealed type?
+//~ spec: export.plain-interface
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+impl Interval {
+    pub fn new(lo: u32, hi: u32) -> Option<Interval> {
+        if lo <= hi {
+            Some(Interval { lo, hi, ordered: _ })
+        } else {
+            None
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.hi - self.lo
+    }
+}
+
+// Rust makes the payload public. It holds a proof only inside `Interval`,
+// which other crates can neither build nor open.
+pub enum Shape {
+    Span(Interval),
+    Dot,
+}
+
+pub fn extent(shape: &Shape) -> u32 {
+    match shape {
+        Shape::Span(span) => span.width(),
+        Shape::Dot => 0,
+    }
+}
+
+fn of_span() -> u32 {
+    match Interval::new(3, 8) {
+        Some(span) => extent(&Shape::Span(span)),
+        None => extent(&Shape::Dot),
+    }
+}
+
+//~ run: of_span() => 5

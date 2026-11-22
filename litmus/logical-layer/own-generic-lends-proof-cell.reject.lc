@@ -1,0 +1,23 @@
+//~ question: May the program's own generic function lend its argument to unverified code, when it is instantiated with a `Cell` that holds a proof?
+//~ spec: logic.ghost.generic-instantiations, logic.boundary.loans
+//~ rfc: 0002
+
+use locus::std::cell::Cell;
+
+// The same function as in the accepted example beside this one.
+fn show<T: std::fmt::Debug>(x: &T) -> String {
+    format!("{:?}", x)
+}
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn shown(n: u32) -> String {
+    let slot: Cell<Option<@(n > 0)>> = Cell::new(check(n));
+    show(&slot) //~ error: in `show::<Cell<Option<@(n > 0)>>>`, a `&T` is lent to the formatting code, which Locus does not verify, and a `Cell` can be written through a shared reference, so it cannot be lent
+}

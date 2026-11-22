@@ -1,0 +1,54 @@
+//~ question: May an exported crate's public struct have a public field of a sealed type, when no proof reads that field?
+//~ spec: export.plain-interface, export.invariants-closed, contracts.invariants.observed
+//~ rfc: 0002
+//~ mode: export
+
+pub struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+impl Interval {
+    pub fn new(lo: u32, hi: u32) -> Option<Interval> {
+        if lo <= hi {
+            Some(Interval { lo, hi, ordered: _ })
+        } else {
+            None
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.hi - self.lo
+    }
+}
+
+// `Pair` proves nothing of its own. A Rust user builds one from two intervals that
+// `Interval::new` returned, and may put another interval in either field.
+pub struct Pair {
+    pub first: Interval,
+    pub second: Interval,
+}
+
+// `Tagged` has a proof field of its own, which reads `id` and not `span`.
+// So other crates may reach `span`, and may not reach `id`.
+pub struct Tagged {
+    pub span: Interval,
+    id: u32,
+    known: @(id > 0),
+}
+
+pub fn wider(pair: &Pair) -> u32 {
+    let first = pair.first.width();
+    let second = pair.second.width();
+    if first > second { first } else { second }
+}
+
+fn widths() -> u32 {
+    match (Interval::new(1, 4), Interval::new(2, 9)) {
+        (Some(first), Some(second)) => wider(&Pair { first, second }),
+        _ => 0,
+    }
+}
+
+//~ run: widths() => 7

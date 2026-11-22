@@ -219,3 +219,24 @@ Still for this issue's RFC: whether the contracts of Locus's library are stated 
 ### 2026-11-21, handles for objects that foreign code holds
 
 RFC 0002's decision 88 lets only plain data cross to foreign code. A C interface over an object with an invariant usually hands out an opaque pointer to it, and under that rule a shim cannot give the pointer the object's type. The pattern that needs no `unsafe` code keeps the objects in a table on the Rust side and gives foreign code an integer key, which a verified function looks up, so that a stale or forged key is a failed lookup. Recorded here as library work, and not decided: whether Locus's library provides such a table, with what contract on a lookup, and how a key is kept from outliving its object.
+
+### 2026-11-22, the methods that are each type's own, and what the library's contracts are stated on
+
+One of RFC 0002's new decisions is about the library, and one question about it was put to the owner and is still open.
+
+**Decision 89, confirmed tentatively.** The owner, shown a table of six rules that a review had left unsettled, among them that a method reached through `Deref` is the standard library's and that each wrapper type lists its own methods:
+
+> tentatively confirm the 6 open questions
+
+So a method that one of Locus's types only forwards is a call of unverified code, and is rejected at an element type that exposes logical data. RFC 0002 lists the methods that are each type's own, starting from the ones its examples call: for `Vec`, `new`, `empty`, `len`, `push`, `pop`, `get`, `set`, `view`, `clear`, `iter`, `iter_mut`, indexing, iteration, and `vec!`; for `Cell`, `new`, `get`, and `set`; for `Rc`, `new` and `clone`; for `Mutex`, `new` and `lock`. The list is this RFC's and is for the library's RFC to complete. Not pinned: whether a forwarded method that only borrows is a loan at such an element type.
+
+**What the library's contracts are stated on: asked, and still open.** Offered contracts on snapshots with `v.len()` read as the snapshot's length, or contracts on models with a `Model` bound on each, the owner said:
+
+> Re: library contracts - I'm not following but will defer to you.
+
+The first was the recommendation. No decision is recorded from that reply, because the recommendation cannot be written as it was put:
+
+- `models/vector-without-element-model.reject.lc` rejects `points.len()` at an element type without a model, and would be accepted.
+- `models/derived-model-keeps-proof-holder.accept.lc` gets equal lengths from equal models, and two of the three examples of a stack state their postcondition on a model. Each would need a rule that a library container's model has its snapshot's length, as a step of conversion, since a hole calls no lemma. No RFC has that rule.
+
+So `Vec::view` and the three signatures of decision 87 are unchanged, and still speak of models with no `Model` bound, which is the gap the question was to close. RFC 0002 lists the question as item 27 of what is still for the owner, with three ways out and what each changes in those examples: a step of conversion from a library container's model to its snapshot's length, with the one rejected example changed; contracts on models with a `Model` bound on each method; or contracts on snapshots with a lemma that a program calls. It is to be decided with the design of traits ([traits-on-logical-types](traits-on-logical-types.md)), where what a contract on a snapshot can say is being worked out.

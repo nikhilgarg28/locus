@@ -53,3 +53,11 @@ For the rest of this issue: logical traits as type classes, following Lean, and 
 ### 2026-11-17, found while writing examples of values with invariants
 
 A sorted vector over `T: Ord` cannot state its invariant. A call of `cmp` tells Locus nothing ([RFC 0004](../design/rfcs/0004-runtime-code.md)), and no trait method has a contract. RFC 0002's examples of values with invariants hold `u32`s for this reason.
+
+### 2026-11-22, what the library's contracts are stated on
+
+A question about Locus's library is to be decided with this issue's design. `Vec::view` and the three signatures of `Vec` that RFC 0002 proposes speak of models with no `Model` bound, which `models.no-default` does not allow. Offered contracts on snapshots, with `v.len()` read as the snapshot's length, or contracts on models with a `Model` bound on each method, the owner said:
+
+> Re: library contracts - I'm not following but will defer to you.
+
+No decision is recorded from that reply. The first, which was the recommendation, cannot be written as it was put without changing what decided examples rest on. RFC 0002 lists the question, the three ways out, and what each changes in those examples, as item 27 of what is still for the owner, and [standard-library](standard-library.md) has the record. What a contract on a snapshot can say is part of this issue's design, so the owner was advised to settle the two together.

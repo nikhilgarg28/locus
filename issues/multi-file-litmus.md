@@ -31,3 +31,9 @@ Two more rules wait for examples that span crates. RFC 0002's decision 52 takes 
 ### 2026-11-09, conversation with the owner about PR #24
 
 The rule that waits for a second crate has changed with RFC 0002's decision 54: a function that calls into a crate with `unsafe` code that the project has not named is unverified, so it can state no proof. It still has no spec rule, for the same reason.
+
+### 2026-11-22, two more rules that one file cannot show
+
+RFC 0002's decision 94 has an interface record, for each type parameter of a generic function, how its values reach unverified code, so that a caller in another crate checks a loan at its own type without the body. An example of that needs two crates. `logical-layer/own-generic-lends-proof-holder.accept.lc` and `logical-layer/own-generic-lends-proof-cell.reject.lc` show the same check within one crate, where the body is at hand.
+
+Decision 90 says what a function's result and the program's result list among the assumptions. An example states whether a program is accepted and what it returns, and has no way to state what a result lists, in one file or in several.
