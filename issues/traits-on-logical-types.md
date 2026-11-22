@@ -95,3 +95,31 @@ One question the owner raised is not decided. Logical code reads a runtime value
 > now that Model is just a regular trait, why does the language care/know about it? What if everything in signatures and all capture in logic blocks was based on snapshots by default and using model required separate explicit mapping from snapshot to model?
 
 It would also answer what the library's contracts are stated on, the entry above. It rests on every type having a snapshot that rustc can name, which the second round shows holds for a value, `snap(x)`, and not for every type that a program can write.
+
+### 2026-11-22, the owner's answers on conversions, and on snapshots and models
+
+The entry above left three questions from the second round of the skeleton spike. Asked whether a `Nat` beside an `Int` in one operator may go without `as Int`, whether a literal stays a `Nat` where a `Nat` is expected, as RFC 0002 has it, and whether a contract ties a `bool` result to a proposition with a new connective, `<==>`, or with a library function, `decide(P)`, the owner said:
+
+> No, Yes, and go with library function/macro vs one more symbol
+
+So a `Nat` is written `as Int` wherever an `Int` is wanted, in an operator too; RFC 0002's rule for literals stands; and there is no `<==>`.
+
+The same day the owner worked out a design for snapshots, models, and capture with a second reviewer, asked for a recommendation on the whole of it, and had the reviewer answer that. On integers the owner said:
+
+> I'm not married to finite logical integers like Nat32 - totally happy to fall to single Nat/Int system, at least in common cases unless explicitly chosen.
+
+What came of the exchange, recorded here until the RFCs say it:
+
+- A runtime value used as a logical value is the model of its snapshot. The language supplies snapshots, a model may be declared, the default model is the snapshot, and `snap(x)` gives the snapshot. A snapshot never depends on a model.
+- The snapshot of a machine integer is a `Nat` or an `Int`. A captured value is valid for its type, so a captured `u8` is at most 255; nothing of the kind is assumed of a value that is only quantified over.
+- References and `Box` stay transparent in snapshots. Two equal snapshots say nothing about addresses.
+- A logic function takes logical types only. A runtime value given to one is its capture, and a method call on a runtime value resolves on the captured value's type.
+- A type parameter is read in logical code only under a bound the program writes, `T: Model`. A type that Locus cannot see has no model until a field of it is marked opaque or it is wrapped. This is a deliberate step back from "every runtime type has a snapshot".
+- Locus's collections keep their contents in a logical field, and give no mutable access to the standard collection inside. Their contracts speak of the elements' snapshots.
+- Permissions over memory, from which those collections would later be proved, are an RFC of their own ([permissioned-pointers](permissioned-pointers.md)).
+
+The owner then asked for all of it to be written into the RFCs once the third round of the spike reports:
+
+> Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
+
+None of it is in an RFC yet. [capture-family](../spikes/capture-family/README.md) shows the encoding in plain Rust, and a third round of the skeleton spike is testing it in the lowering.
