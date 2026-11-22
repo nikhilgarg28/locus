@@ -20,7 +20,7 @@ Plain Rust, edition 2021, rustc 1.97.0. No lowering and no Locus macro is involv
 - `lib/lg.rs` stands in for Locus's library with one type for each logical type: `Int`, `Nat`, `Bool`, `Prop`, a generic `Seq<T>`, `Snap<T>` in two encodings, and `Erased` for every proof, as today.
 - `lib/lu.rs` stands in for the library as it is today: `Int` and `Nat` are aliases of `LogicalData`.
 - `cases/` holds twenty programs. The first line of each says whether it must compile, or which error it must give. `c` cases use `lg`, and `r` cases use one marker.
-- `oracle/` is a rustc driver of about 110 lines, built against the compiler's own crates as [rustc-facts](../rustc-facts/README.md) is. After rustc has checked `oracle/sample.rs`, it builds types that appear nowhere in that file and asks rustc's trait solver about them.
+- `oracle/` is a rustc driver of about 120 lines, built against the compiler's own crates as [rustc-facts](../rustc-facts/README.md) is. After rustc has checked `oracle/sample.rs`, it builds types that appear nowhere in that file and asks rustc's trait solver about them.
 
 `./run.sh` runs all of it. The oracle needs `rustup component add rustc-dev llvm-tools --toolchain stable`, and is skipped without it.
 
