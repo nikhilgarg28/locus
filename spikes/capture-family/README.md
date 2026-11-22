@@ -18,13 +18,14 @@ The second round of [skeleton-typing](../skeleton-typing-2/README.md) could not 
 Plain Rust, edition 2024, rustc 1.97.0. No lowering and no macro: each file is the Rust that a lowering would have to produce, written by hand, as in [logical-markers](../logical-markers/README.md).
 
 - `lib.rs` stands in for Locus's library. One trait, `Model`, has two associated types: `Snap`, the snapshot, and `Logic`, the model. It is implemented for the machine integers with `Nat` and `Int` for both, and for `&T`, `&mut T`, `Box<T>`, and `[T]` in terms of `T`'s. `snap(&x)` and `capture(&x)` are stubs that return a value of each.
-- `cases/` holds thirteen programs. The first line of each says whether it must compile, or which error it must give.
+- `cases/` holds sixteen programs. The first line of each says whether it must compile, or which error it must give.
+- `lib2.rs`, used by the last three, splits the family into two traits: `Snapshot`, which lowering alone implements, and `Model`.
 
 `./run.sh` compiles each and compares.
 
 ## Results
 
-Run on 2026-11-22. All thirteen gave the outcome their first line states.
+Run on 2026-11-22. All sixteen gave the outcome their first line states.
 
 | Case | Outcome | What it shows |
 |---|---|---|
@@ -40,6 +41,9 @@ Run on 2026-11-22. All thirteen gave the outcome their first line states.
 | `c11` | compiles | The same clause behind a higher-ranked lifetime, `where for<'a> TcpStream: Has<'a>`, is not checked at the declaration. The struct has no model and is still an ordinary struct |
 | `c12` | E0277 | As `c11`, and then the struct is captured: "`TcpStream` cannot be read in logical code" |
 | `c13` | E0308 | The field marked opaque: its snapshot is `Opaque<TcpStream>`, a second field's is `Opaque<SocketAddr>`, and passing one where the other is wanted is a type error |
+| `c14` | compiles | With two traits. The generated `Snapshot` implementation and the generated default model carry the deferred clause; a model the program declares is an implementation of its own with no clause. The declared model reads a field's snapshot with that snapshot's own method, a default model's integer field is a `Nat`, and a struct with an unmarked `TcpStream` field is declared and used as plain Rust |
+| `c15` | E0277 | As `c14`, and then that struct is captured: "`TcpStream` cannot be read in logical code", at the capture |
+| `c16` | E0277 | As `c14`, and a model is declared for that struct: the same message, at the model |
 
 ## What it means
 
@@ -47,13 +51,14 @@ Run on 2026-11-22. All thirteen gave the outcome their first line states.
 2. **The default model can be the snapshot with no overlap,** because each type has exactly one implementation, written where the type is declared. That needs lowering to know, at the declaration, whether the program declares a model.
 3. **With `Nat` and `Int` as the integers' snapshots, capturing a struct and then reading a field agrees with reading the field and then capturing it,** for a struct of plain data. They differ only for a field whose type declares a model, and there the difference is a type error.
 4. **Some types can never be read:** a closure, a function item, and any type of a crate that Locus does not lower. A trait cannot be implemented for a closure except by a blanket implementation, which would overlap every other. So an implicit bound on every type parameter is not an option: it would refuse every closure argument.
-5. **A field of an unknown type need not break its struct.** The implementation can be made conditional in a way rustc checks only on use, and marking the field opaque gives it a snapshot type that is distinct for each foreign type.
+5. **A field of an unknown type need not break its struct.** The implementation can be made conditional in a way rustc checks only on use, and marking the field opaque gives it a snapshot type that is distinct for each foreign type. The third round of the skeleton spike found that this deferred form refused every declared model that reads a field, because the clause that defers the check also hides the field's snapshot type inside the implementation that carries it. `c14` shows the way out: defer only what lowering generates, the snapshot and the default model, and leave a declared model in an implementation of its own with no clause. A struct that Rust accepts then stays accepted, and has no snapshot until its field is marked.
 6. **A method that asks for the bound does not reliably fall through to the standard one.** It does when the element type is known and not when it is being inferred, so a design should not rest on it.
 
 ## Not tested
 
 - No lowering was written. Whether a macro can generate these implementations from a declaration alone is not shown, in particular for a field whose type is an associated type of a parameter.
-- `c11` rests on rustc not checking a higher-ranked `where` clause at the declaration. It does not on 1.97.0; whether that is meant to stay was not looked into.
+- `c11` and `c14` rest on rustc not checking a higher-ranked `where` clause at the declaration. It does not on 1.97.0; whether that is meant to stay was not looked into. If it cannot be relied on, a struct with an unmarked field of an unknown type is an error at its declaration (`c09`, `c10`).
+- `c14` is hand-written. The toy lowering of the skeleton spike has one trait and does not generate this form.
 - `Opaque<T>` keeps the lifetimes of a foreign type that has lifetime parameters.
 - Trait objects, two crates, a foreign trait's generic method, whose own type parameter cannot be given the bound, and a ghost field whose type mentions `T`'s snapshot in a struct that has no bound on `T`.
 - Locus's own checks. rustc types these programs and proves nothing.
