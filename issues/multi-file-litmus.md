@@ -37,3 +37,7 @@ The rule that waits for a second crate has changed with RFC 0002's decision 54: 
 RFC 0002's decision 94 has an interface record, for each type parameter of a generic function, how its values reach unverified code, so that a caller in another crate checks a loan at its own type without the body. An example of that needs two crates. `logical-layer/own-generic-lends-proof-holder.accept.lc` and `logical-layer/own-generic-lends-proof-cell.reject.lc` show the same check within one crate, where the body is at hand.
 
 Decision 90 says what a function's result and the program's result list among the assumptions. An example states whether a program is accepted and what it returns, and has no way to state what a result lists, in one file or in several.
+
+### 2026-11-22, the record of which crates contain `unsafe` code
+
+RFC 0002's decision 95 has the driver record an unverified crate as one that contains `unsafe` code when it has a function that foreign code can call, even when the crate writes no `unsafe`. The case behind it takes two crates: one that defines a sealed type, and one that Locus does not verify, which puts `#[no_mangle]` on a function that takes that type. And what it changes is what is recorded and listed, which an example has no way to state. So it has no rule and no example, as decision 52's record has none.

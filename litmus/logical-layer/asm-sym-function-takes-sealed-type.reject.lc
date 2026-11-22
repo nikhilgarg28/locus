@@ -1,0 +1,29 @@
+//~ question: May `asm!` name, with a `sym` operand, a function that takes a value of a sealed type?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+use std::arch::asm;
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+fn reciprocal(p: Positive) -> u32 {
+    100 / p.value
+}
+
+// Unverified: it contains `unsafe`. Its own signature is plain. The assembly is x86-64's.
+fn call_reciprocal(n: u32) -> u32 {
+    let out: u32;
+    unsafe {
+        asm!(
+            "call {target}",
+            target = sym reciprocal, //~ error: a `sym` operand gives `reciprocal` to assembly, which can call it with any bytes, and its parameter `p` has the type `Positive`, which holds a proof
+            in("edi") n,
+            lateout("eax") out,
+            clobber_abi("C"),
+        );
+    }
+    out
+}

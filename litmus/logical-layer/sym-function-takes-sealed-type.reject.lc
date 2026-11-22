@@ -1,0 +1,23 @@
+//~ question: May `global_asm!` name, with a `sym` operand, a function that takes a value of a sealed type?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+use std::arch::global_asm;
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// Rust's ABI, no attribute, and no `unsafe`: only the `sym` operand below gives it to foreign code.
+fn reciprocal(p: Positive) -> u32 {
+    100 / p.value
+}
+
+// x86-64 assembly: a symbol that C can call with any bytes, which jumps to `reciprocal`.
+global_asm!(
+    ".globl reciprocal_entry",
+    "reciprocal_entry:",
+    "jmp {target}",
+    target = sym reciprocal, //~ error: a `sym` operand gives `reciprocal` to assembly, which can call it with any bytes, and its parameter `p` has the type `Positive`, which holds a proof: take the plain value and build the `Positive` inside
+);

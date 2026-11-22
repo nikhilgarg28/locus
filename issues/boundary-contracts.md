@@ -168,3 +168,16 @@ Three are about assumptions and the boundary, and are RFC 0002's decisions 90, 9
 - **Loans through a generic function of another crate.** An interface records, for each type parameter, whether its values never reach unverified code, are only lent, or reach it otherwise, with the type of each value lent, so that the caller checks the loan at its own type (`logic.ghost.generic-instantiations`).
 
 All three stay open to revisit: RFC 0002 lists them, with what it chose in writing them, as item 26 of what is still for the owner. No example can show what a result lists, and the part of the third that crosses crates has no example either ([multi-file-litmus](multi-file-litmus.md)).
+
+### 2026-11-22, a function named by `sym`, a naked function, and what counts as `unsafe` code
+
+Three crossing points were left unwritten on 2026-11-21. Two recommendations for them were put to the owner: to count a function that foreign code can call as `unsafe` code when Locus records which unverified crates contain some, and to treat a function named by a `sym` operand as one that foreign code can call and a naked function as unverified. The owner's reply was to commit them with the six rules above:
+
+> we will try to commit all these changes including six boundary confirmations and extern rules
+
+RFC 0002 records them as its decisions 95 and 96, confirmed tentatively, and [soundness-model](soundness-model.md) quotes both recommendations. Two of this issue's rules change:
+
+- **`logic.boundary.foreign`.** A function that a `sym` operand of `asm!`, `global_asm!`, or `naked_asm!` names is one that foreign code can call, so no type that holds logical data appears in its signature. It is otherwise as any other function.
+- **`logic.unverified.functions`.** A naked function is unverified: its body is assembly. `logic.verified.restrictions` says that a verified function is not one, so a naked function whose signature holds logical data, or that is marked `#[verified]`, is rejected.
+
+What this leaves for this issue is unchanged. Assembly has no contract, as no unverified code has. A contract for a naked function, or for a symbol that a `global_asm!` defines, is a wrapper of the program's own, whose signature states it and whose body assumes it with `unsafe assume!(_)`.

@@ -85,3 +85,22 @@ RFC 0002's decision 88 adds a rule and an assumption that the model has to cover
 - **Foreign code holds no logical data,** sealed or not (`logic.boundary.foreign`). The argument for a sealed value in unverified hands rests on Rust's privacy, which foreign code is not held to, so the model should treat foreign code as it treats an unverified function of the crate itself.
 - **`assumed.foreign`:** foreign code keeps to the signatures declared for it. The model should say which results rest on it: those that pass through a function that foreign code can call, or that call a foreign function.
 - **Not covered, and not decided.** `global_asm!` can name a Rust function with a `sym` operand and no `unsafe` code, and the body of a naked function is assembly under a Rust signature; neither is a crossing point that the rule names. And an unverified crate in edition 2021 can export a function that takes another crate's sealed type with no `unsafe` code, which the record of which crates contain `unsafe` code would not show. RFC 0002 lists both as still for the owner.
+
+### 2026-11-22, the crossing points that the entry above left
+
+The entry of 2026-11-21 left three points not covered. Two recommendations for them were put to the owner:
+
+> In edition 2021, an unverified crate can put `#[no_mangle]` on a function that takes another crate's sealed type, with no `unsafe` anywhere. C can then call it with any bytes, and the crate is not listed among the assumptions. I recommend counting a function that foreign code can call as `unsafe` code when Locus records which unverified crates contain some.
+
+> Two smaller crossing points are also unwritten: `global_asm!` naming a Rust function through `sym`, and naked functions. I recommend treating a function named by `sym` as one foreign code can call, and a naked function as unverified.
+
+The owner's reply was to commit them with the six rules confirmed tentatively on the same day:
+
+> we will try to commit all these changes including six boundary confirmations and extern rules
+
+RFC 0002 records them as its decisions 95 and 96, confirmed tentatively. What the model has to cover:
+- **A function that a `sym` operand names is one that foreign code can call** (`logic.boundary.foreign`), in `asm!`, `global_asm!`, and `naked_asm!`, and a static that one names is one that foreign code can reach (`logic.code.statics`). The assembly of a `global_asm!` is foreign code, under `assumed.foreign`.
+- **A naked function is unverified** (`logic.unverified.functions`, `logic.verified.restrictions`). Its body is `unsafe` code of its crate, under `assumed.unsafe.sound`, so the model treats it as it treats any unverified function with `unsafe` code.
+- **An unverified crate that has a function that foreign code can call is recorded as a crate with `unsafe` code,** so it is taken to be sound only when the project names it. This has no rule and no example, since it is about what the driver records. The record does not reach two cases, which the model should say what rests on: a crate that no function of the program calls into, whose function only foreign code calls; and, in export mode, the crates that use the exported one, which Locus does not compile.
+
+Still not covered, and listed in RFC 0002 as item 25 of what is still for the owner: a `global_asm!` that names nothing, what else the record of `unsafe` code counts, and attributes such as `#[link_section]`. Item 28 lists what the RFC chose in writing the two decisions, which the owner has not seen one by one.
