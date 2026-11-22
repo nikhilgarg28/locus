@@ -37,16 +37,42 @@ use proc_macro2::{Delimiter, Group, Ident, Punct, Spacing, Span, TokenStream, To
 /// `let x = logic! { .. };` a typed binding, as if no ghost local could be
 /// left without a logical type, for a count. `LOCUS_SPIKE_IN_TRAIT=1` is
 /// `logic_members_in_trait` for every invocation, the library's included.
+///
+/// The crate's feature `stub-self` selects the spike's second mode, for
+/// every invocation: see `Cx::stub_self`. Two more directives belong to it:
+/// - `#![spike(logical(Rational, Pair))]` names logical types that another
+///   invocation declares, so that an `impl` for one is written for its stub.
+/// - `#![spike(always_marker_impl)]` writes the implementation for the marker
+///   even for a trait that has an implementation for a bare type parameter.
+///
+/// In every mode, an identifier of the source that starts with `__logic_` or
+/// `__locus_` is an error, unless `#![spike(allow_reserved_names)]` says not.
 #[proc_macro]
 pub fn locus(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let toks: Vec<TT> = TokenStream::from(input).into_iter().collect();
+    if cfg!(feature = "split") {
+        return split_expansion(&toks).into();
+    }
+    let stub_self = cfg!(feature = "stub-self");
     let mut cx = Cx {
         all_typed: std::env::var("LOCUS_SPIKE_ALL_TYPED").is_ok(),
-        members_in_trait: std::env::var("LOCUS_SPIKE_IN_TRAIT").is_ok(),
+        members_in_trait: stub_self || std::env::var("LOCUS_SPIKE_IN_TRAIT").is_ok(),
+        stub_self,
         ..Cx::default()
     };
     let start = take_directives(&toks, &mut cx);
     let toks = &toks[start..];
+    if !cx.allow_reserved_names {
+        if let Some(id) = reserved_name(toks) {
+            return error(
+                id.span(),
+                &format!(
+                    "`{id}` starts with a prefix that is reserved for the names Locus writes: `__logic_` and `__locus_`"
+                ),
+            )
+            .into();
+        }
+    }
     collect_items(toks, &mut cx);
     let mut out = TokenStream::new();
     for item in split_items(toks) {
@@ -59,6 +85,83 @@ pub fn locus(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     ));
     dump_expansion(&out);
     out.into()
+}
+
+/// The third variant, "split": the two expansions differ. Each item is
+/// lowered twice, and the library's `__when_checking!` and `__when_running!`
+/// keep one lowering under each `cfg`.
+///
+/// - The checking expansion is the first mode's, with a trait's stubs kept
+///   in the lowered trait: a type for each logical type, and ghost locals by
+///   the draft's rule.
+/// - The runtime expansion is the one-marker lowering. A trait all of whose
+///   items are logical is implemented there for every type, by one blanket
+///   implementation, and each `impl` of such a trait expands to nothing.
+fn split_expansion(toks: &[TT]) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut dump = TokenStream::new();
+    for running in [false, true] {
+        let mut cx = Cx {
+            members_in_trait: true,
+            stub_self: running,
+            running,
+            ..Cx::default()
+        };
+        let start = take_directives(toks, &mut cx);
+        let toks = &toks[start..];
+        if !cx.allow_reserved_names {
+            if let Some(id) = reserved_name(toks) {
+                return error(
+                    id.span(),
+                    &format!(
+                        "`{id}` starts with a prefix that is reserved for the names Locus writes: `__logic_` and `__locus_`"
+                    ),
+                );
+            }
+        }
+        collect_items(toks, &mut cx);
+        let mut half = TokenStream::new();
+        for item in split_items(toks) {
+            half.extend(lower_item(item, &cx, &Place::default()));
+        }
+        half.extend(parse(
+            "#[allow(unused_imports)] use ::locus::prelude::*;",
+            Span::call_site(),
+        ));
+        let keep = if running {
+            "::locus::__when_running!"
+        } else {
+            "::locus::__when_checking!"
+        };
+        out.extend(parse(keep, Span::call_site()));
+        out.extend([TT::Group(Group::new(Delimiter::Brace, half.clone()))]);
+        dump.extend(parse(
+            if running {
+                "mod __the_runtime_expansion"
+            } else {
+                "mod __the_checking_expansion"
+            },
+            Span::call_site(),
+        ));
+        dump.extend([TT::Group(Group::new(Delimiter::Brace, half))]);
+    }
+    dump_expansion(&dump);
+    out
+}
+
+/// An identifier of the source that starts with a prefix `locus!` uses for
+/// the names it writes. A mangled name is only out of reach of Rust code if
+/// no source can write it.
+fn reserved_name(toks: &[TT]) -> Option<Ident> {
+    toks.iter().find_map(|t| match t {
+        TT::Ident(id) => {
+            let name = id.to_string();
+            let name = name.strip_prefix("r#").unwrap_or(&name);
+            (name.starts_with("__logic_") || name.starts_with("__locus_")).then(|| id.clone())
+        }
+        TT::Group(g) => reserved_name(&collect(g.stream())),
+        _ => None,
+    })
 }
 
 /// With `LOCUS_SPIKE_EXPANSION=dir`, writes each expansion to
@@ -83,11 +186,25 @@ pub fn prove(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 #[proc_macro]
 pub fn logic(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    free_invocation(input.into(), "::locus::ghost()").into()
+    let marker = if cfg!(feature = "split") {
+        "{ #[cfg(__locus_check)] let m = ::locus::ghost(); #[cfg(not(__locus_check))] let m = ::locus::LogicalData; m }"
+    } else if cfg!(feature = "stub-self") {
+        "::locus::LogicalData"
+    } else {
+        "::locus::ghost()"
+    };
+    free_invocation(input.into(), marker).into()
 }
 #[proc_macro]
 pub fn prop(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    free_invocation(input.into(), "::locus::Prop").into()
+    let marker = if cfg!(feature = "split") {
+        "{ #[cfg(__locus_check)] let m = ::locus::Prop; #[cfg(not(__locus_check))] let m = ::locus::LogicalData; m }"
+    } else if cfg!(feature = "stub-self") {
+        "::locus::LogicalData"
+    } else {
+        "::locus::Prop"
+    };
+    free_invocation(input.into(), marker).into()
 }
 
 // ------------------------------------------------------------------- context
@@ -107,6 +224,27 @@ struct Cx {
     members_in_trait: bool,
     allow_ghost_headers: bool,
     all_typed: bool,
+    /// The second mode. Program text is lowered as the one-marker lowering
+    /// does it: every logical type written as the type of a value is the
+    /// marker `LogicalData`, and `logic!` gives it. Each logical type also
+    /// has a stub, `__locus_Name`, a zero-sized type of its own, which is
+    /// written only where an `impl` of a trait names a logical type. A trait
+    /// whose members are all logical gets one implementation for the marker.
+    /// Every probe is of a name.
+    stub_self: bool,
+    /// The third variant's runtime expansion: program text as in the second
+    /// mode, but no stub is written. A trait all of whose items are logical
+    /// is implemented for every type, and an `impl` of one is nothing.
+    running: bool,
+    /// `#![spike(logical(..))]`: logical types of other invocations.
+    declared_logical: Vec<String>,
+    always_marker_impl: bool,
+    /// `#![spike(allow_reserved_names)]`: an identifier with a reserved
+    /// prefix is not rejected, to show what it can do.
+    allow_reserved_names: bool,
+    /// Traits with an `impl` whose self type is a bare type parameter, in
+    /// this invocation.
+    blanket_traits: Vec<String>,
 }
 
 #[derive(Default)]
@@ -118,6 +256,11 @@ struct TraitInfo {
     runs: bool,
     /// The names in its list of supertraits.
     supers: Vec<String>,
+    /// The names of its parameters.
+    params: Vec<String>,
+    /// It declares an associated constant, or an associated type that is
+    /// not bounded by `Logical`: content that runs and is not a method.
+    other_runtime: bool,
 }
 
 impl Cx {
@@ -129,9 +272,66 @@ impl Cx {
         self.logical_types
             .iter()
             .map(|(n, k)| (n.as_str(), *k))
+            .chain(self.declared_logical.iter().map(|n| (n.as_str(), 0)))
             .chain(LIBRARY_LOGICAL.iter().copied())
             .find(|(n, _)| *n == name)
             .map(|(_, k)| k)
+    }
+
+    /// Second mode: whether every member of a trait is logical, its
+    /// supertraits included, so that the marker gets an implementation.
+    /// GUESS: known only for a trait of this invocation, and a supertrait
+    /// that is not of this invocation is known only by its name: the
+    /// library's logical traits, and the traits the marker has.
+    fn logic_only(&self, name: &str) -> bool {
+        const KNOWN: &[&str] = &[
+            "Logical",
+            "Sized",
+            "Clone",
+            "Copy",
+            "Debug",
+            "CloneEq",
+            "AddLogic",
+            "FromLogic",
+            "IntoLogic",
+            "Self",
+            "core",
+            "std",
+            "fmt",
+            "marker",
+            "locus",
+        ];
+        self.trait_info(name).is_some_and(|t| {
+            !t.runs
+                && !t.other_runtime
+                && t.supers.iter().all(|s| {
+                    s != name
+                        && (KNOWN.contains(&s.as_str())
+                            || t.params.contains(s)
+                            || self.logical(s).is_some()
+                            || self.logic_only(s))
+                })
+        })
+    }
+
+    /// Third variant, the expansion that runs: whether an `impl` of this
+    /// trait expands to nothing, because every type has the trait there.
+    /// GUESS, for a trait that this invocation does not declare: by name for
+    /// the library's, and otherwise exactly when the `impl` gives a logic
+    /// function and nothing that runs.
+    fn vanishes(&self, tr: &str, members: &[&[TT]]) -> bool {
+        const LIBRARY: &[&str] = &["Logical", "AddLogic", "FromLogic", "IntoLogic"];
+        match self.trait_info(tr) {
+            Some(_) => self.logic_only(tr),
+            None => {
+                LIBRARY.contains(&tr)
+                    || (members.iter().any(|m| logic_member(m).is_some())
+                        && !members.iter().any(|m| {
+                            let (_, _, a) = take_attrs(m);
+                            runtime_member(m).is_some() || ident(m.get(skip_vis(m, a)), "const")
+                        }))
+            }
+        }
     }
 
     fn trait_info(&self, name: &str) -> Option<&TraitInfo> {
@@ -160,6 +360,11 @@ struct Place {
     qualify: Option<(String, Vec<String>)>,
     /// A predicate to add to the stub's `where` clause.
     extra_where: Option<String>,
+    /// Type parameters in scope. Second mode: they are not names to probe.
+    generics: Vec<String>,
+    /// Second mode, in a trait: a logic function with no body gets one, so
+    /// that an `impl` need not give it.
+    default_body: bool,
 }
 
 /// The bindings of a runtime body, by lexical scope.
@@ -173,6 +378,8 @@ struct Scope {
     /// not probed as an item.
     locals: Vec<String>,
     logical_params: Vec<String>,
+    /// Type parameters in scope.
+    generics: Vec<String>,
 }
 
 impl Scope {
@@ -200,6 +407,26 @@ fn take_directives(toks: &[TT], cx: &mut Cx) -> usize {
         }
         cx.members_in_trait |= text.contains("logic_members_in_trait");
         cx.allow_ghost_headers |= text.contains("allow_ghost_headers");
+        cx.always_marker_impl |= text.contains("always_marker_impl");
+        cx.allow_reserved_names |= text.contains("allow_reserved_names");
+        // `spike(logical(A, B))`
+        let inner = collect(g.stream());
+        if let Some(args) = group(inner.get(1), Delimiter::Parenthesis) {
+            let args = collect(args.stream());
+            for (k, t) in args.iter().enumerate() {
+                if let (true, Some(names)) = (
+                    ident(Some(t), "logical"),
+                    group(args.get(k + 1), Delimiter::Parenthesis),
+                ) {
+                    cx.declared_logical.extend(
+                        names
+                            .stream()
+                            .into_iter()
+                            .filter_map(|t| ident_name(Some(&t))),
+                    );
+                }
+            }
+        }
         i += 3;
     }
     i
@@ -226,9 +453,10 @@ fn collect_items(toks: &[TT], cx: &mut Cx) {
             else {
                 continue;
             };
-            let (_, after) = generics_at(rest, t + 2);
+            let (generics, after) = generics_at(rest, t + 2);
             let mut info = TraitInfo {
                 name,
+                params: generic_names(generics),
                 ..TraitInfo::default()
             };
             for t in &rest[after..rest.len() - 1] {
@@ -245,9 +473,43 @@ fn collect_items(toks: &[TT], cx: &mut Cx) {
                     info.has_logic = true;
                 } else if m.iter().take(4).any(|t| ident(Some(t), "fn")) {
                     info.runs = true;
+                } else if ident(m.first(), "const")
+                    || (ident(m.first(), "type") && !m.iter().any(|t| ident(Some(t), "Logical")))
+                {
+                    info.other_runtime = true;
                 }
             }
             cx.traits.push(info);
+        } else if let Some(i_at) = rest.iter().take(2).position(|t| ident(Some(t), "impl")) {
+            // `impl<T: ..> Trait for T`: an implementation for a bare type
+            // parameter. Only the second mode uses this.
+            if !matches!(rest.last(), Some(TT::Group(_))) {
+                continue;
+            }
+            let header = &rest[..rest.len() - 1];
+            let (generics, after) = generics_at(header, i_at + 1);
+            let params = generic_names(generics);
+            let Some(f) = (after..header.len())
+                .find(|&k| ident(header.get(k), "for") && !punct(header.get(k + 1), '<'))
+            else {
+                continue;
+            };
+            let bare = ident_name(header.get(f + 1)).is_some_and(|n| params.contains(&n))
+                && (f + 2 == header.len() || ident(header.get(f + 2), "where"));
+            let mut depth = 0;
+            let mut name = None;
+            for t in &header[after..f] {
+                if punct(Some(t), '<') {
+                    depth += 1;
+                } else if punct(Some(t), '>') {
+                    depth -= 1;
+                } else if depth == 0 {
+                    name = ident_name(Some(t)).or(name);
+                }
+            }
+            if let (true, Some(name)) = (bare, name) {
+                cx.blanket_traits.push(name);
+            }
         }
     }
 }
@@ -501,7 +763,7 @@ fn lower_item(item: &[TT], cx: &Cx, place: &Place) -> TokenStream {
     match kw.as_deref() {
         Some("fn") if qualifiers_only("fn") => lower_fn(attrs, vis, rest, cx, false, place),
         Some(k @ ("struct" | "enum")) if derive_logical && qualifiers_only(k) => {
-            lower_logical_type(attrs, vis, rest)
+            lower_logical_type(attrs, vis, rest, cx)
         }
         Some(k @ ("struct" | "enum" | "union")) if qualifiers_only(k) => {
             out.extend(attrs);
@@ -667,9 +929,11 @@ fn lower_fn(
     };
     let mut sc = Scope {
         logical_params: place.logical_params.clone(),
+        generics: place.generics.clone(),
         ..Scope::default()
     };
     sc.logical_params.extend(logical_params(generics));
+    sc.generics.extend(generic_names(generics));
     let mut out = TokenStream::new();
     out.extend(attrs);
     if logic {
@@ -713,11 +977,23 @@ fn lower_fn(
             k += 1;
         }
     }
-    copy(&mut out, &tail[k..]);
+    // Second mode: a logic function of a trait always has a body.
+    let default_body = logic && place.default_body && body_at == toks.len();
+    if default_body {
+        for t in tail[k..].iter().filter(|t| !punct(Some(t), ';')) {
+            out.extend([t.clone()]);
+        }
+        out.extend(parse("{ ::locus::stub_body!([] []) }", span));
+    } else {
+        copy(&mut out, &tail[k..]);
+    }
     if let Some(TT::Group(body)) = toks.get(body_at) {
         if logic {
             // Parameters and the binders of logical closures are not items.
             let mut bound = sc.locals.clone();
+            if cx.stub_self {
+                bound.extend(sc.generics.iter().cloned());
+            }
             find_places(body.stream(), &mut bound, &mut Vec::new());
             let mut probes = Probes::default();
             find_items(body.stream(), cx, &bound, true, &mut probes);
@@ -968,7 +1244,7 @@ fn lower_fields(toks: &[TT], named: bool) -> TokenStream {
 /// and are not written: the struct holds only its parameters, in a
 /// `PhantomData<fn() -> (T,)>`, so it owns none of them. The checking
 /// expansion names the types of the fields in a function beside it.
-fn lower_logical_type(attrs: TokenStream, vis: TokenStream, toks: &[TT]) -> TokenStream {
+fn lower_logical_type(attrs: TokenStream, vis: TokenStream, toks: &[TT], cx: &Cx) -> TokenStream {
     let is_enum = ident(toks.first(), "enum");
     let name = ident_name(toks.get(1)).unwrap();
     let span = toks[1].span();
@@ -1023,6 +1299,12 @@ fn lower_logical_type(attrs: TokenStream, vis: TokenStream, toks: &[TT]) -> Toke
         )
     };
     let vis_s = vis.to_string();
+    // The type that holds the stub functions of the variants.
+    let owner = if cx.stub_self {
+        format!("__locus_{name}")
+    } else {
+        name.clone()
+    };
     let mut s = format!(
         "#[allow(dead_code)] {vis_s} struct {name}{decl} {{ {field} }}
          impl{plain} ::core::clone::Clone for {name}{args} {{ fn clone(&self) -> Self {{ *self }} }}
@@ -1036,6 +1318,32 @@ fn lower_logical_type(attrs: TokenStream, vis: TokenStream, toks: &[TT]) -> Toke
              fn __locus_marker() -> Self {{ {name} {{ {value} }} }}
          }}"
     );
+    if cx.stub_self {
+        // Second mode, as the one-marker lowering: a stub, of which no value
+        // is made, and the type's name as an alias of the marker.
+        let traits = if cx.running {
+            // Third variant, the expansion that runs: the stub only holds
+            // the type's inherent stubs. Every type is `Logical` there.
+            String::new()
+        } else {
+            format!(
+                "impl{plain} ::core::clone::Clone for {owner}{args} {{ fn clone(&self) -> Self {{ *self }} }}
+                 impl{plain} ::core::marker::Copy for {owner}{args} {{}}
+                 impl{bounded} ::locus::Logical for {owner}{args} {{
+                     fn __locus_marker() -> Self {{ ::locus::stub() }}
+                 }}
+                 impl{plain} ::locus::SnapOf for {owner}{args} {{ type S = Self; }}
+                 impl{plain} ::locus::__Stub for {owner}{args} {{}}
+                 impl{plain} ::locus::__Kind for {owner}{args} {{ type K = ::locus::__StubKind; }}"
+            )
+        };
+        s = format!(
+            "#[allow(non_camel_case_types, dead_code)] {vis_s} struct {owner}{decl} {{ {field} }}
+             impl{plain} ::locus::Proj for {owner}{args} {{ type Out = ::locus::LogicalData; }}
+             {traits}
+             #[allow(dead_code)] {vis_s} type {name}{args} = <{owner}{args} as ::locus::Proj>::Out;"
+        );
+    }
     // The types of the fields, for a probe: the checking expansion names
     // them, so that rustc resolves them, the type itself among them.
     let mut field_types: Vec<String> = Vec::new();
@@ -1066,7 +1374,7 @@ fn lower_logical_type(attrs: TokenStream, vis: TokenStream, toks: &[TT]) -> Toke
             ));
         }
         s.push_str(&format!(
-            "#[allow(non_snake_case, dead_code)] impl{plain} {name}{args} {{ {fns} }}"
+            "#[allow(non_snake_case, dead_code)] impl{plain} {owner}{args} {{ {fns} }}"
         ));
     } else if let Some(body) = body {
         for (part, _) in split_top(&body, ',') {
@@ -1218,16 +1526,18 @@ fn lower_trait(attrs: TokenStream, vis: TokenStream, toks: &[TT], cx: &Cx) -> To
     let runtime = Place {
         in_assoc: true,
         logical_params: logical.clone(),
+        generics: generic_names(generics),
         ..Place::default()
     };
     let stub = if cx.members_in_trait {
         Place {
             extra_where: Some("Self: ::core::marker::Sized".to_string()),
+            default_body: cx.stub_self,
             ..runtime.clone()
         }
     } else {
         Place {
-            qualify: Some((format!("{name}{args}"), assoc)),
+            qualify: Some((format!("{name}{args}"), assoc.clone())),
             extra_where: Some(format!("Self: ::core::marker::Sized + {name}{args}")),
             ..runtime.clone()
         }
@@ -1275,6 +1585,128 @@ fn lower_trait(attrs: TokenStream, vis: TokenStream, toks: &[TT], cx: &Cx) -> To
         copy(&mut out, bounds);
     }
     out.extend([regroup(body, kept)]);
+    // Second mode: one empty implementation for the marker, so that rustc
+    // accepts every bound on this trait that program text meets with a
+    // logical type. Not for a trait with an implementation for a bare type
+    // parameter, which would overlap it (E0119).
+    if cx.stub_self
+        && cx.logic_only(&name)
+        && (cx.running || cx.always_marker_impl || !cx.blanket_traits.contains(&name))
+    {
+        let params: Vec<String> = generic_parts(generics)
+            .iter()
+            .map(|p| {
+                without_default(p)
+                    .iter()
+                    .cloned()
+                    .collect::<TokenStream>()
+                    .to_string()
+            })
+            .collect();
+        let params = if params.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", params.join(", "))
+        };
+        let wheres: TokenStream = bounds
+            .iter()
+            .skip_while(|t| !ident(Some(t), "where"))
+            .cloned()
+            .collect();
+        let types: String = assoc
+            .iter()
+            .map(|a| format!("type {a} = ::locus::LogicalData;"))
+            .collect();
+        if cx.running {
+            // Third variant, the expansion that runs: every type has this
+            // trait, given its supertraits.
+            let own = |ts: TokenStream| -> String {
+                ts.into_iter()
+                    .map(|t| match t {
+                        TT::Ident(id) if id == "Self" => "__LocusT".to_string(),
+                        t => TokenStream::from(t).to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            };
+            let supers: TokenStream = bounds
+                .iter()
+                .skip(usize::from(single_colon(bounds, 0)))
+                .take_while(|t| !ident(Some(t), "where"))
+                .cloned()
+                .collect();
+            let supers = if supers.is_empty() {
+                String::new()
+            } else {
+                format!("+ {}", own(supers))
+            };
+            let params = params.trim_start_matches('<').trim_end_matches('>');
+            let comma = if params.is_empty() { "" } else { ", " };
+            out.extend(parse(
+                &format!(
+                    "#[allow(dead_code)] impl<{params}{comma}__LocusT: ?::core::marker::Sized {supers}> {name}{args} for __LocusT {} {{ {types} }}",
+                    own(wheres)
+                ),
+                span,
+            ));
+            return out;
+        }
+        out.extend(parse(
+            &format!(
+                "#[allow(dead_code)] impl{params} {name}{args} for ::locus::LogicalData {wheres} {{ {types} }}"
+            ),
+            span,
+        ));
+    }
+    out
+}
+
+/// Second mode: each name of a logical type, written as its stub.
+fn stubify(toks: &[TT], cx: &Cx) -> TokenStream {
+    let mut out = TokenStream::new();
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            TT::Ident(id) if cx.logical(&id.to_string()).is_some() => {
+                let name = id.to_string();
+                let in_path = i > 0 && punct(toks.get(i - 1), ':');
+                let local = cx.logical_types.iter().any(|(n, _)| *n == name)
+                    || cx.declared_logical.contains(&name);
+                if local || in_path {
+                    out.extend([TT::Ident(Ident::new(&format!("__locus_{name}"), id.span()))]);
+                } else {
+                    out.extend(parse(&format!("::locus::__locus_{name}"), id.span()));
+                }
+            }
+            // `Proof![..]` holds a proposition, which is not a type for rustc.
+            TT::Group(g)
+                if g.delimiter() == Delimiter::Bracket
+                    && punct(toks.get(i.wrapping_sub(1)), '!') =>
+            {
+                out.extend([t.clone()]);
+            }
+            TT::Group(g) => out.extend([regroup(g, stubify(&collect(g.stream()), cx))]),
+            t => out.extend([t.clone()]),
+        }
+    }
+    out
+}
+
+/// Second mode, where a snapshot type in a header is not rejected:
+/// `Snap<X>` is `::locus::__locus_Snap<X>`, the stub of a snapshot that has
+/// no structure. GUESS: the stub the snapshot family gives depends on `X`
+/// (the snapshot of a vector is a sequence), and `locus!` cannot compute it.
+/// Written as `<X as ::locus::SnapOf>::S`, which rustc could compute, the
+/// header conflicts with every other implementation of the trait (E0119):
+/// rustc does not normalize that type when it checks for overlap.
+fn snapshot_stubs(toks: &[TT]) -> Vec<TT> {
+    let mut out = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        if ident(Some(t), "Snap") && punct(toks.get(i + 1), '<') {
+            out.extend(parse("::locus::__locus_Snap", t.span()));
+        } else {
+            out.push(t.clone());
+        }
+    }
     out
 }
 
@@ -1399,9 +1831,101 @@ fn lower_impl(attrs: TokenStream, vis: TokenStream, toks: &[TT], cx: &Cx) -> Tok
             );
         }
     }
+    if cx.stub_self {
+        let place = Place {
+            in_assoc: true,
+            logical_params: logical.clone(),
+            generics: generic_names(generics),
+            ..Place::default()
+        };
+        // The self type's name: the last identifier outside `<...>`.
+        let mut depth = 0;
+        let mut self_name = String::new();
+        for t in self_ty {
+            if punct(Some(t), '<') {
+                depth += 1;
+            } else if punct(Some(t), '>') {
+                depth -= 1;
+            } else if depth == 0 {
+                self_name = ident_name(Some(t)).unwrap_or(self_name);
+            }
+        }
+        if let (true, Some(tr)) = (cx.running, &trait_name) {
+            if cx.vanishes(tr, &members) {
+                return out;
+            }
+        }
+        if trait_name.is_none() {
+            // An inherent `impl` of a logical type is on its stub, as in the
+            // one-marker lowering. Its members are program text.
+            let mut kept = TokenStream::new();
+            for member in &members {
+                kept.extend(lower_item(member, cx, &place));
+            }
+            let lowered = collect(lower_type(header));
+            out.extend(attrs);
+            out.extend(vis);
+            if self_logical && cx.logical(&self_name).is_some() {
+                out.extend(stubify(&lowered, cx));
+            } else {
+                out.extend(lowered);
+            }
+            out.extend([regroup(body, kept)]);
+            return out;
+        }
+        if self_logical && !cx.running {
+            // An implementation for a logical type is written for its stub,
+            // and every logical type its header names is a stub too, so that
+            // implementations for two logical types are for two Rust types.
+            // An associated type is given as a stub. The logic functions are
+            // not written: the trait's stubs have bodies, and a signature
+            // here could not be made to agree with the trait's, which says
+            // `Self` where this one names the type. The names their logical
+            // code calls are probed beside the `impl`.
+            let mut kept = TokenStream::new();
+            let mut probes = Probes::default();
+            for member in &members {
+                if logic_member(member).is_none() {
+                    kept.extend(stubify(&collect(lower_item(member, cx, &place)), cx));
+                } else if let Some(TT::Group(b)) = member.last() {
+                    let mut bound = place.generics.clone();
+                    for t in member.iter() {
+                        if let Some(g) = group(Some(t), Delimiter::Parenthesis) {
+                            bound.extend(pattern_binders(&collect(g.stream())));
+                            break;
+                        }
+                    }
+                    find_places(b.stream(), &mut bound, &mut Vec::new());
+                    find_items(b.stream(), cx, &bound, true, &mut probes);
+                }
+            }
+            out.extend(attrs);
+            out.extend(vis);
+            out.extend(stubify(&collect(lower_type(&snapshot_stubs(header))), cx));
+            out.extend([regroup(body, kept)]);
+            if !probes.names.is_empty() {
+                let span = header[impl_at].span();
+                let mut names = TokenStream::new();
+                for (k, name) in probes.names.iter().enumerate() {
+                    if k > 0 {
+                        names.extend(parse(",", span));
+                    }
+                    names.extend(name.clone());
+                }
+                out.extend(parse("::locus::names!", span));
+                let mut g = Group::new(Delimiter::Parenthesis, names);
+                g.set_span(span);
+                out.extend([TT::Group(g)]);
+                out.extend(parse(";", span));
+            }
+            return out;
+        }
+        // An implementation for a runtime type is program text: what follows.
+    }
     let runtime = Place {
         in_assoc: true,
         logical_params: logical,
+        generics: generic_names(generics),
         ..Place::default()
     };
     let has_logic = members.iter().any(|m| logic_member(m).is_some());
@@ -1486,9 +2010,11 @@ fn locus_macro_at(toks: &[TT], i: usize) -> Option<&'static str> {
 /// The library macro for a Locus macro written in a body. `logic!` gives an
 /// untyped marker only where it initializes, or is assigned to, a ghost
 /// local that only logical code mentions.
-fn kind_of(name: &str, untyped: bool) -> &'static str {
+fn kind_of(cx: &Cx, name: &str, untyped: bool) -> &'static str {
     match name {
         "prove" => "proof",
+        // Second mode: `logic!` and `prop!` give the one marker.
+        _ if cx.stub_self => "data",
         "prop" => "prop_value",
         _ if untyped => "untyped",
         _ => "data",
@@ -1558,7 +2084,7 @@ fn lower_seq(toks: &[TT], cx: &Cx, sc: &mut Scope) -> TokenStream {
                     }
                     _ if locus_macro_at(toks, i).is_some() => {
                         out.extend(lower_logic(
-                            kind_of(&s, false),
+                            kind_of(cx, &s, false),
                             any_group(toks.get(i + 2)).unwrap(),
                             id.span(),
                             cx,
@@ -1575,7 +2101,7 @@ fn lower_seq(toks: &[TT], cx: &Cx, sc: &mut Scope) -> TokenStream {
                         let name = locus_macro_at(toks, i + 2).unwrap();
                         copy(&mut out, &toks[i..i + 2]);
                         out.extend(lower_logic(
-                            kind_of(name, sc.untyped.contains(&s)),
+                            kind_of(cx, name, sc.untyped.contains(&s)),
                             any_group(toks.get(i + 4)).unwrap(),
                             toks[i + 2].span(),
                             cx,
@@ -1961,7 +2487,9 @@ fn lower_let(toks: &[TT], semi: Option<&TT>, rest: &[TT], cx: &Cx, sc: &mut Scop
     // holds an untyped marker; otherwise it is one binding whose type rustc
     // infers from runtime code.
     let untyped = |pat: &[TT]| match simple_binding(pat) {
-        Some(name) if !cx.all_typed => (!runtime_mention(rest, &name)).then_some(name),
+        Some(name) if !cx.all_typed && !cx.stub_self => {
+            (!runtime_mention(rest, &name)).then_some(name)
+        }
         _ => None,
     };
     let mut ghost_names = Vec::new();
@@ -2000,7 +2528,7 @@ fn lower_let(toks: &[TT], semi: Option<&TT>, rest: &[TT], cx: &Cx, sc: &mut Scop
                         if is_logic_invocation(e) {
                             let name = untyped(p);
                             s.extend(lower_logic(
-                                kind_of("logic", name.is_some()),
+                                kind_of(cx, "logic", name.is_some()),
                                 any_group(e.get(2)).unwrap(),
                                 e[0].span(),
                                 cx,
@@ -2026,8 +2554,24 @@ fn lower_let(toks: &[TT], semi: Option<&TT>, rest: &[TT], cx: &Cx, sc: &mut Scop
             } else {
                 None
             };
+            // Second mode: `let r: M = logic! { .. };` where `M` is a type
+            // parameter. The one marker is not an `M`, so the value is made
+            // through `M`'s bound `Logical`.
+            let of_parameter = cx.stub_self
+                && name == "logic"
+                && ty.len() == 1
+                && ident_name(ty.first()).is_some_and(|n| sc.generics.contains(&n));
+            let kind = if of_parameter {
+                "generic"
+            } else if cx.stub_self && name == "logic" && punct(ty.first(), '@') {
+                // As the one-marker toy: which marker a `logic!` gives is
+                // read from the annotation, a proof if it says `@P`.
+                "proof"
+            } else {
+                kind_of(cx, name, local.is_some())
+            };
             out.extend(lower_logic(
-                kind_of(name, local.is_some()),
+                kind,
                 any_group(init.get(2)).unwrap(),
                 init[0].span(),
                 cx,
@@ -2143,6 +2687,9 @@ fn lower_logic(kind: &str, g: &Group, span: Span, cx: &Cx, sc: &Scope) -> TokenS
     find_places(g.stream(), &mut bound, &mut places);
     // A local called in logical code is not an item.
     bound.extend(sc.locals.iter().cloned());
+    if cx.stub_self {
+        bound.extend(sc.generics.iter().cloned());
+    }
     let mut probes = Probes::default();
     find_items(g.stream(), cx, &bound, false, &mut probes);
     let mut args = TokenStream::new();
@@ -2302,6 +2849,10 @@ fn find_items(ts: TokenStream, cx: &Cx, bound: &[String], in_logic_fn: bool, out
         {
             continue;
         }
+        if cx.stub_self {
+            name_probes(&toks, k, bound, in_logic_fn, out);
+            continue;
+        }
         let mangle = |t: &TT| TT::Ident(Ident::new(&mangled(&name), t.span()));
         let colons =
             |at: usize| at >= 2 && punct(toks.get(at - 1), ':') && punct(toks.get(at - 2), ':');
@@ -2394,6 +2945,84 @@ fn find_items(ts: TokenStream, cx: &Cx, bound: &[String], in_logic_fn: bool, out
         }]);
         out.values.push(item);
     }
+}
+
+/// Second mode: the probes for the call whose name is `toks[k]`. Every probe
+/// is of a name, by `use path as _;`, and asks rustc to type nothing:
+///
+/// - `double(..)`, `geometry::area(..)`: the function;
+/// - `Rational::le(..)`, `OrderSpec::le(..)`, `Tree::Node(..)`: the type or
+///   the trait before the last segment, whichever it is;
+/// - `<Rational as OrderSpec>::le(..)`: the type and the trait;
+/// - `T::le(..)`, `Self::le(..)`: nothing, a type parameter is not a name to
+///   resolve.
+///
+/// Which member the last segment names, and of which implementation, is
+/// left to Locus and to the driver.
+fn name_probes(toks: &[TT], k: usize, bound: &[String], in_logic_fn: bool, out: &mut Probes) {
+    const NOT_ITEMS: &[&str] = &["snap", "final", "forall", "exists", "model", "old"];
+    let name = toks[k].to_string();
+    let colons =
+        |at: usize| at >= 2 && punct(toks.get(at - 1), ':') && punct(toks.get(at - 2), ':');
+    // A path without its generic arguments, unless it starts at a type
+    // parameter, at `Self`, or at a primitive type.
+    let path = |p: &[TT]| -> Option<TokenStream> {
+        let end = p
+            .iter()
+            .position(|t| punct(Some(t), '<'))
+            .unwrap_or(p.len());
+        let p = &p[..end];
+        let first = p.iter().find_map(|t| ident_name(Some(t)))?;
+        let single_lowercase = p.len() == 1 && lowercase(&first);
+        (first != "Self" && !bound.contains(&first) && !single_lowercase)
+            .then(|| p.iter().cloned().collect())
+    };
+    if colons(k) && k >= 3 && punct(toks.get(k - 3), '>') {
+        let mut depth = 0;
+        let mut open = None;
+        for b in (0..=k - 3).rev() {
+            if punct(toks.get(b), '>') {
+                depth += 1;
+            } else if punct(toks.get(b), '<') {
+                depth -= 1;
+                if depth == 0 {
+                    open = Some(b);
+                    break;
+                }
+            }
+        }
+        let Some(open) = open else { return };
+        let inner = &toks[open + 1..k - 3];
+        let as_at = inner
+            .iter()
+            .position(|t| ident(Some(t), "as"))
+            .unwrap_or(inner.len());
+        out.names.extend(path(&inner[..as_at]));
+        out.names
+            .extend(path(&inner[(as_at + 1).min(inner.len())..]));
+        return;
+    }
+    let mut start = k;
+    while colons(start) && start >= 3 && ident_name(toks.get(start - 3)).is_some() {
+        start -= 3;
+    }
+    if start == k {
+        if lowercase(&name) && !bound.contains(&name) && !NOT_ITEMS.contains(&name.as_str()) {
+            out.names.push(TokenStream::from(toks[k].clone()));
+        }
+        return;
+    }
+    if lowercase(&toks[k - 3].to_string()) {
+        // `geometry::area(..)`: a function in a module.
+        if lowercase(&name) {
+            out.names.push(toks[start..=k].iter().cloned().collect());
+        }
+        return;
+    }
+    if !lowercase(&name) && in_logic_fn {
+        return;
+    }
+    out.names.extend(path(&toks[start..k - 2]));
 }
 
 /// `prove!` and friends expanded by rustc: observe each place precisely

@@ -2,9 +2,12 @@
 # directory: what it reuses from spikes/locus-macro is copied.
 [workspace]
 resolver = "3"
-members = ["locus", "locus-macros", "cases", "corpus", "ghost-lets"]
-# `cases` and `corpus` hold programs that must be rejected, and run.sh builds
-# their bins one at a time, so a plain `cargo build` builds only these.
+members = ["locus", "locus-macros", "cases", "corpus", "ghost-lets", "more"]
+# `cases`, `corpus`, `ghost-lets` and `more` hold programs that must be
+# rejected, and run.sh builds their bins one at a time, so a plain
+# `cargo build` builds only these. This workspace is the first mode. The
+# second mode and the split variant are workspaces of their own, stub-self/
+# and split/, over the same case files.
 default-members = ["locus", "locus-macros"]
 
 [workspace.package]

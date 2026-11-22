@@ -1,0 +1,17 @@
+# The third variant of this spike, "split", as a workspace of its own: the
+# two expansions differ. Its library is `locus/` here, and its macro is
+# ../locus-macros with the feature `split`. The `src/bin` of the other
+# packages are links to the directories of the same name beside this one, so
+# every variant compiles the same files.
+[workspace]
+resolver = "3"
+members = ["locus", "cases", "more", "corpus", "ghost-lets"]
+default-members = ["locus"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }
