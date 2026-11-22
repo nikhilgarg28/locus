@@ -1,0 +1,10 @@
+//~ question: May a contract tie a `bool` result to a proposition with `iff`?
+//~ spec: logic.bool.iff, logic.bool.as-proposition
+//~ rfc: 0002
+
+fn is_zero(x: u32) -> (r: bool, @(iff(r, x == 0))) {
+    (x == 0, _)
+}
+
+//~ run: is_zero(0).0 => true
+//~ run: is_zero(3).0 => false

@@ -1,0 +1,7 @@
+//~ question: Is a proof of `iff` between two propositions that are not `Bool`s written as a proof of the two implications?
+//~ spec: logic.bool.iff, proofs.connectives
+//~ rfc: 0002
+
+logic fn swapped(a: Int, b: Int) -> @(iff(a === b, b === a)) {
+    And::Intro(|h: @(a === b)| h.symm(), |h: @(b === a)| h.symm())
+}

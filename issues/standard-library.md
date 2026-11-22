@@ -272,3 +272,9 @@ and then, answering that question:
 It is RFC 0002's decision 109. `xs[i]`, `s.get(i)`, `s.at(i, p)`, and `s.update(i, v)` take a `Nat`, `at` needs a proof only of `i < s.len()`, and a measure is a `Nat` or an `Int`. `core.sequences` changes, and the examples no longer write `xs[i as Int]`. RFC 0005 had already made an index outside a sequence defined, so nothing was undefined before; what the decision buys is that a negative index cannot be written.
 
 One thing is left with the library: **how an `Int` is turned into a `Nat`.** RFC 0002 says that it needs a proof that the `Int` is not negative, and gives it no spelling. Until it has one, `xs[i - 1]` and `xs[xs.len() - 1]` cannot be written. It is item 31 of what is still for the owner there.
+
+### 2026-11-22, `iff` replaces `decide`
+
+RFC 0002's decision 110 replaces the third part of decision 98. The library has `iff(p, q)`, a logic function that is the proposition `(p ==> q) && (q ==> p)`, and whose parameters each take a proposition or a `Bool`. It has no `decide`: the `Bool` of a proposition is written `if P { true } else { false }`, and a function of the library for it can come later. The owner's words are in RFC 0002 and in [proposition-syntax](proposition-syntax.md).
+
+`iff` is the first function of the library whose parameters take anything that converts to a `Prop`. How that is declared waits for traits ([traits-on-logical-types](traits-on-logical-types.md)).

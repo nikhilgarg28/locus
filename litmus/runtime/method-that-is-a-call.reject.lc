@@ -2,7 +2,7 @@
 //~ spec: runtime.operations
 //~ rfc: 0004
 
-fn empty(xs: &[u32]) -> (e: bool, @(e == decide(xs.len() == 0))) {
+fn empty(xs: &[u32]) -> (e: bool, @(iff(e, xs.len() == 0))) {
     let e = xs.is_empty();
-    (e, _) //~ error: cannot prove `e == decide(xs.len() == 0)`: `is_empty` is a call, so `e` is known only to be a `bool`; compare `xs.len()` with zero
+    (e, _) //~ error: cannot prove `iff(e, xs.len() == 0)`: `is_empty` is a call, so `e` is known only to be a `bool`; compare `xs.len()` with zero
 }

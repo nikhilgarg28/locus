@@ -1,7 +1,7 @@
 //~ question: May a `bool` result be stated equal to a comparison, with nothing between them?
-//~ spec: logic.bool.decide, logic.eq.comparisons
+//~ spec: logic.bool.iff, logic.eq.comparisons
 //~ rfc: 0002
 
-fn is_zero(x: u32) -> (r: bool, @(r === (x == 0))) { //~ error: `r` is a `Bool`, and `x == 0` is a proposition; write `r === decide(x == 0)`
+fn is_zero(x: u32) -> (r: bool, @(r === (x == 0))) { //~ error: `r` is a `Bool`, and `x == 0` is a proposition; write `iff(r, x == 0)`
     (x == 0, _)
 }

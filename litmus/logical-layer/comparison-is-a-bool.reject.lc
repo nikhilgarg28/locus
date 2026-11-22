@@ -3,7 +3,7 @@
 //~ rfc: 0002
 
 logic fn is_zero(n: Int) -> Bool {
-    n == 0 //~ error: `n == 0` is a proposition, not a `Bool`: a comparison gives a `Prop`; declare the result `Prop`, or write `decide(n == 0)`
+    n == 0 //~ error: `n == 0` is a proposition, not a `Bool`: a comparison gives a `Prop`; declare the result `Prop`, or write `if n == 0 { true } else { false }`
 }
 
 logic fn zero(n: Int, z: @is_zero(n)) -> @(n === 0) {

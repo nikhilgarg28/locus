@@ -139,3 +139,17 @@ What the entry of the owner's answers recorded "until the RFCs say it" is now RF
 - **A stated limit:** in a generic method of a trait that another crate declares, a value of the method's own type parameter cannot be captured, since the bound cannot be added.
 
 Still not written from that entry: Locus's collections and what their contracts speak of, the memory core, the names that lowering writes, and the lowering itself.
+
+### 2026-11-22, a conversion to `Prop` as one bound
+
+RFC 0002's decision 110 gives this issue's design one thing to carry. Asked about `iff`, the owner raised a conversion between logical types:
+
+> Do we need equivalent of From/Into for logical types? If we had one, maybe we could implement that for Bool to Prop and then require something like iff(x, y) to take Into<Prop> or something? Maybe same for <==> symbol?
+
+Told that the draft on traits has such a pair, `FromLogic` and `IntoLogic`, and that the rule for `Bool` could then be one bound, the owner decided:
+
+> In that case, let's adopt this and remove <==> in favor of iff -- it's not a common enough thing to warrant its own operator.
+
+So the positions at which a `Bool` is used as a proposition, which `logic.bool.as-proposition` lists, are to be restated as "takes anything that converts to `Prop`": a bound, `IntoLogic<Prop>` in the draft, with the library's one implementation, from `Bool`. A logic function may then ask it of its own parameters, as the library's `iff` does. None of this is in the specification yet. Until it is, the positions stay a list, with an argument of `iff` among them, and no program declares such a parameter.
+
+Not decided: whether a program may implement the conversion for a logical type of its own, and the names `FromLogic` and `IntoLogic`. Both are item 32 of what is still for the owner in RFC 0002.

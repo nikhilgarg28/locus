@@ -1,12 +1,12 @@
-//~ question: May a logic function return the `Bool` of a comparison, with `decide`?
-//~ spec: logic.bool.decide, logic.eq.comparisons
+//~ question: May a logic function return the `Bool` of a comparison, with an `if`?
+//~ spec: logic.bool.iff, logic.eq.comparisons
 //~ rfc: 0002
 
 logic fn small(n: Nat) -> Bool {
-    decide(n < 10)
+    if n < 10 { true } else { false }
 }
 
-// `decide` of a comparison is the comparison's `Bool`, so `s` proves what is required.
+// The `if` does not convert to its condition. `linear`, which a hole tries, splits on it, and gets the comparison from `s`.
 logic fn below_ten(n: Nat, s: @small(n)) -> @(n < 10) {
-    s
+    _
 }
