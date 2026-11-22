@@ -71,3 +71,11 @@ The owner decided:
 > Let's stay with nothing for now.
 
 [RFC 0004](../design/rfcs/0004-runtime-code.md) records it. This issue stays, as `later`, with the reply's leaning recorded: the form by body, when the question is taken up again.
+
+### 2026-11-22, conversation with the owner on traits
+
+With traits able to hold methods whose signatures carry proofs, the case that had no way round it has one: a law trait beside the standard one, whose own method returns the proof. An operator or the standard method on such a type still tells Locus nothing. The owner was asked whether some calls might be read as expressions after all, starting with a standard method that is generated from a law trait's own, then the observers of Locus's library, then a function of the program's own. The owner:
+
+> Fact is always proof in the result or small/finite list of facts language infers from some constructs (which we have already defined). Don't want to go back on that. And don't want to introduce pure functions either right now.
+
+This issue stays `later`.

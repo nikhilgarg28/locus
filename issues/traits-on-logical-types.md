@@ -61,3 +61,37 @@ A question about Locus's library is to be decided with this issue's design. `Vec
 > Re: library contracts - I'm not following but will defer to you.
 
 No decision is recorded from that reply. The first, which was the recommendation, cannot be written as it was put without changing what decided examples rest on. RFC 0002 lists the question, the three ways out, and what each changes in those examples, as item 27 of what is still for the owner, and [standard-library](standard-library.md) has the record. What a contract on a snapshot can say is part of this issue's design, so the owner was advised to settle the two together.
+
+### 2026-11-22, conversation with the owner after the spikes on lowering
+
+A logical type can implement a trait only if rustc can tell one logical type from another, and [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) lowers them all to one marker. Four spikes asked how to change that: [logical-markers](../spikes/logical-markers/README.md), [marker-lowering](../spikes/marker-lowering/README.md), [skeleton-typing](../spikes/skeleton-typing/README.md), and its [second round](../spikes/skeleton-typing-2/README.md). Two lowerings were left standing. In the first, each logical type is a zero-sized Rust type of its own, and lowering also writes each piece of logical code as a Rust expression over stubs, in a closure that is never called, so that rustc types logical code. In the second, there is one marker, and traits are split into those for runtime types and those for logical types. Shown both, with what each spike measured, the owner chose the first:
+
+> Yes I'm aligned with option 1 now and conversion policy is okay. Maybe Nat -> Int conversion shouldn't be implicit but others are okay? Similarly, should Bool -> Prop conversion be explicit or implicit? Starting with explicit is better - can always revise it later unless of course ergonomics are too poor.
+
+The conversion policy is the one the second round tested: what a literal's type is, when a `Nat` is used as an `Int`, when a `Bool` is used as a proposition, and what a runtime value is when it is given to a logic function.
+
+On the names that lowering writes, which a programmer never writes and rustc's messages show, such as `Proof` for the one marker of every proof:
+
+> Yes, using symbols to make error messages good is the right principle, please adopt it.
+
+On `Bool` and `Prop`, shown Lean's arrangement, in which a comparison is a proposition and a `Bool` is only the model of a runtime `bool`:
+
+> Re: booo/prop, Lean's model looks good so let's adopt that I guess?
+
+and then, told that Lean also uses a `Bool` as a proposition with nothing written:
+
+> fwiw, I'm also happy for Bool to convert to proposition implicitly if that ends up the being default and/or if lean does it too
+
+Asked whether a call may ever be read as an expression, so that an operator or a standard method on a type with a law trait would give its fact ([pure-functions](pure-functions.md)):
+
+> Fact is always proof in the result or small/finite list of facts language infers from some constructs (which we have already defined). Don't want to go back on that. And don't want to introduce pure functions either right now.
+
+So in runtime code `a < b` on a type of the program's own still tells Locus nothing, and the fact comes from the law trait's own method, called by name.
+
+None of this is in an RFC yet. Still for the owner, from the second round's measurements: whether a `Nat` beside an `Int` in one operator needs `as Int`, which is 7 of the 17 places where its four specifications write something that RFC 0002 lets a program omit; whether a literal given to a `Nat` parameter is a `Nat`, as RFC 0002 says now, which is 7 more; and how a contract ties a `bool` result to a proposition, for which the round tried `r <==> P` and `r === decide(P)`.
+
+One question the owner raised is not decided. Logical code reads a runtime value as its model, and RFC 0002 records "snapshots by default, and models only through `model(x)`" as rejected at the owner's direction. Now that `Model` would be an ordinary trait, the owner asked:
+
+> now that Model is just a regular trait, why does the language care/know about it? What if everything in signatures and all capture in logic blocks was based on snapshots by default and using model required separate explicit mapping from snapshot to model?
+
+It would also answer what the library's contracts are stated on, the entry above. It rests on every type having a snapshot that rustc can name, which the second round shows holds for a value, `snap(x)`, and not for every type that a program can write.
