@@ -1,0 +1,2037 @@
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo: cargo 1.97.0 (c980f4866 2026-06-30)
+
+## Hand probes of the encodings
+probes/p1.rs: p1::Nat p1::Nat p1::Nat p1::Nat p1::Nat|sizes 1 1
+probes/p2.rs: Light 1 Light0 0 Tree 0 TreeView 1
+probes/p4.rs: 32 8
+probes/p3.rs: error[E0072]: recursive type `Tree` has infinite size|error[E0072]: recursive type `A` has infinite size
+probes/p5.rs: error[E0283]: type annotations needed|24 | takes_bool(arg(&b)); // both give `Bool`|note: multiple `impl`s satisfying `bool: ArgAs<Bool, _>` found
+
+## The first mode (first-mode/: its library and macro, unchanged)
+corpus: built in 0.7s (runtime) and 0.6s (checking)
+ghost-lets: built in 0.4s (runtime) and 0.4s (checking)
+cases: built in 1.1s (runtime) and 1.2s (checking)
+## corpus (first): 26 files, 23 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 20
+  rejected litmus examples: 2; rustc rejects them in both expansions: 0; in the checking expansion alone: 2
+## ghost-lets (first): 17 files, 12 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 8
+  rejected litmus examples: 7; rustc rejects them in both expansions: 1; in the checking expansion alone: 2
+## cases (first): 58 files, 29 compile in both expansions
+
+## This spike's lowering: every file
+== after-move: expect litmus reject; got runtime=E0382 check=E0382; rustc rejects
+  runtime: 19:13: error[E0382]: borrow of moved value: `v`
+  check: 19:13: error[E0382]: borrow of moved value: `v`
+== at-in-patterns: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: bucket(7) => 7 | bucket(42) => 4
+== checked-indices: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2
+== derive-eq-with-proof-field: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: same(2, 7) => true
+== during-mutable-borrow: expect litmus reject; got runtime=E0502 check=E0502; rustc rejects
+  runtime: 15:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  check: 15:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+== final-value-at-return: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: six() => 6
+== ghost-parameters: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: ten_halved() => 5
+== keywords-as-names: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: read(prop(7)) => 7
+== locus-macro-inside-rust-macro: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: check(3) => 1
+== logic-calls-logic-function: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== logical-closure-in-body: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: commutes(3) => 3
+== logical-fields: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== match-every-arm: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== pub-locus-as-tuple-field-type: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: wrap() => 1
+== raw-identifier-logic: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: call() => 5
+== reproved-after-assignment: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: reproved() => 4
+== returned-borrow: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: nine() => 9
+== same-is-a-proposition: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== snapshot-survives-assignment: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: snapshot() => 0
+== tokens-in-macro-input: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: shown() => "@(x > 0)" | joined(1, 2) => (1, 2)
+== underscore-in-rust-positions: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: first_of((7, 9)) => 7 | zeros() => 4
+== wrapped-precondition: expect litmus accept; got runtime=ok check=ok; compiles both ways; prints as expected
+  both print: halve(10) => Some(5) | halve(7) => None
+== x-joined-logical-type: expect none; got runtime=ok check=ok; 
+  both print: use_them() => 1
+== x-locus-name-collision: expect none; got runtime=E0433,E0659 check=E0433,E0659; 
+  runtime: 28:31: error[E0433]: cannot find module `locus` in this scope
+  runtime: 5:5: error[E0659]: `locus` is ambiguous
+  check: 28:31: error[E0433]: cannot find module `locus` in this scope
+  check: 5:5: error[E0659]: `locus` is ambiguous
+== x-logic-kind: expect none; got runtime=ok check=ok; 
+  both print: annotated() => 2 | unannotated() => 2
+== x-split-logical-type: expect none; got runtime=ok check=ok; 
+  both print: use_them() => 1
+corpus: built in 0.7s (runtime) and 0.7s (checking)
+== gl-after-move: expect litmus reject; got runtime=E0382 check=E0382; rustc rejects
+  runtime: 18:13: error[E0382]: borrow of moved value: `v`
+  check: 18:13: error[E0382]: borrow of moved value: `v`
+== gl-after-mutable-borrow-ends: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-before-move: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-branch-on-logical: expect litmus reject; got runtime=E0369 check=E0369; rustc rejects
+  runtime: 13:14: error[E0369]: binary operation `>` cannot be applied to type `Nat`
+  check: 13:14: error[E0369]: binary operation `>` cannot be applied to type `Nat`
+== gl-cell-snapshot-kept-by-move: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-during-mutable-borrow: expect litmus reject; got runtime=E0502 check=E0502; rustc rejects
+  runtime: 14:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  check: 14:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+== gl-final-value-recovered-by-inference: expect litmus reject; got runtime=ok check=ok; rustc accepts
+  both print: 
+== gl-hole-written-out-with-an-earlier-value: expect litmus accept; got runtime=E0369,E0425,E0599,error check=E0369,E0425,E0599,error; DOES NOT COMPILE
+  runtime: 16:17: error[error]: invalid comparison operator `===`
+  runtime: 13:55: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope
+  check: 16:17: error[error]: invalid comparison operator `===`
+  check: 13:55: error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope
+== gl-immutable-static-in-logic: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-logic-calls-logic-function: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-logic-calls-runtime-function: expect litmus reject; got runtime=ok check=ok; rustc accepts
+  both print: 
+  logic! at 16:13: no skeleton: a borrow `&`
+== gl-logic-in-async-block: expect litmus reject; got runtime=ok check=ok; rustc accepts
+  both print: 
+== gl-logic-in-closure: expect litmus reject; got runtime=ok check=ok; rustc accepts
+  both print: 
+== gl-operator-in-logic-block: expect litmus accept; got runtime=E0433 check=E0433; DOES NOT COMPILE
+  runtime: 11:12: error[E0433]: cannot find `std` in `locus`
+  check: 11:12: error[E0433]: cannot find `std` in `locus`
+== gl-snapshot-survives-assignment: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-snapshot-unchanged: expect litmus accept; got runtime=ok check=ok; compiles both ways
+  both print: 
+== gl-snapshot-with-associated-type-field: expect litmus accept; got runtime=E0277 check=E0277; DOES NOT COMPILE
+  runtime: 21:32: error[E0277]: `F` has no snapshot type that rustc can name
+  runtime: 23:22: error[E0277]: `F` has no snapshot type that rustc can name
+  check: 21:32: error[E0277]: `F` has no snapshot type that rustc can name
+  check: 23:22: error[E0277]: `F` has no snapshot type that rustc can name
+ghost-lets: built in 0.4s (runtime) and 0.5s (checking)
+== d01-derive: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: sizes: Rational 0, Tree 0, Pair<Tree> 0, List<Rational> 0, Tagged 4 | debug: Rational Tree Pair List | build() => 7
+== d02-derive-lifetime: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: 8:17: error[error]: locus: the logical type `View` declares a lifetime parameter: no marker carries a lifetime
+  check: 8:17: error[error]: locus: the logical type `View` declares a lifetime parameter: no marker carries a lifetime
+== d03-vec-mismatch: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+  runtime: 9:32: error[E0308]: mismatched types
+  check: 9:32: error[E0308]: mismatched types
+== d04-no-equality: expect runtime=E0369 check=E0369; got runtime=E0369 check=E0369; as expected
+  runtime: 14:9: error[E0369]: binary operation `==` cannot be applied to type `Rational`
+  check: 14:9: error[E0369]: binary operation `==` cannot be applied to type `Rational`
+== d05-field-type-unknown: expect runtime=ok check=E0425; got runtime=E0425 check=E0425; DIFFERS
+  runtime: 9:12: error[E0425]: cannot find type `Integer` in this scope
+  check: 9:12: error[E0425]: cannot find type `Integer` in this scope
+== d06-bounded-impl-probe: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both print: run() => 1
+== g01-only-logical: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: count(&vec![4, 5, 6]) => 3
+== g02-takes-nat: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => ("locus::Nat", 1)
+== g03-two-borrows: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => (true, true)
+== g04-returned-reference: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => (true, 1)
+== g05-mutable-borrow: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 3
+== g06-generic-only: expect runtime=annotate check=annotate; got runtime=ok check=ok; DIFFERS
+  both print: run(&vec![4, 5, 6]) => 3
+== g07-generic-annotated: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 3
+== g08-shadowing: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(5) => (12, 12, 1, 7, 6, 11, 15)
+== g09-closure-capture: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 2
+== g10-pattern: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => (3, 1, 1, 3)
+== g11-loop-assignment: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 13:13: error[E0283]: type annotations needed
+  runtime: 19:31: error[E0283]: type annotations needed
+  check: 13:13: error[E0283]: type annotations needed
+  check: 19:31: error[E0283]: type annotations needed
+== g12-snapshot-of-mut: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => [1, 2, 3]
+== g13-copied: expect runtime=annotate check=annotate; got runtime=ok check=ok; DIFFERS
+  both print: run(&vec![4, 5, 6]) => 3
+== g14-tuple-component: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 3
+== g15-format-capture: expect runtime=annotate check=annotate; got runtime=ok check=ok; DIFFERS
+  both print: run(&vec![4, 5, 6]) => "Nat"
+== g16-single-implementation: expect runtime=annotate check=annotate; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 19:14: error[E0277]: the trait bound `Nat: Monoid` is not satisfied
+  check: 19:14: error[E0277]: the trait bound `Nat: Monoid` is not satisfied
+== g17-in-another-macro: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => (1, 1)
+== g18-snap-mismatch: expect runtime=ok check=ok; got runtime=E0308 check=E0308; DIFFERS
+  runtime: 15:20: error[E0308]: mismatched types
+  check: 15:20: error[E0308]: mismatched types
+== g19-hand-untyped-passed: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+  runtime: 14:15: error[E0308]: mismatched types
+  check: 14:15: error[E0308]: mismatched types
+== g20-logic-where-runtime: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+  runtime: 9:9: error[E0308]: mismatched types
+  check: 9:9: error[E0308]: mismatched types
+== h01-snap-header: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: 10:23: error[error]: locus: a snapshot type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+  check: 10:23: error[error]: locus: a snapshot type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+== h02-proof-header: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: 9:22: error[error]: locus: a proof type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+  check: 9:22: error[error]: locus: a proof type is written in the header of an `impl`: rustc would apply it to every proof, or to every snapshot
+== h03-snap-header-allowed: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 38:22: error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+  runtime: 42:22: error[E0277]: the trait bound `Seq<StringSnap>: Describe` is not satisfied
+  check: 38:22: error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+  check: 42:22: error[E0277]: the trait bound `Seq<StringSnap>: Describe` is not satisfied
+== h04-snap-header-alias: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both print: 
+== h05-hand-lifetime-marker: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: 13:22: error[E0277]: `View<'a>` has no snapshot type that rustc can name
+  runtime: 13:22: error[E0277]: `View<'a>` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:22: error[E0277]: `View<'a>` has no snapshot type that rustc can name
+  check: 13:22: error[E0277]: `View<'a>` has no model, so a value of it cannot be used as a value in logical code
+== p01-hand-generic-value-probe: expect runtime=E0283 check=E0283; got runtime=E0283 check=E0283; as expected
+  runtime: 20:11: error[E0283]: type annotations needed
+  check: 20:11: error[E0283]: type annotations needed
+== p02-hand-use-trait-member: expect runtime=E0658 check=E0658; got runtime=E0658 check=E0658; as expected
+  runtime: 17:9: error[E0658]: `use` associated items of traits is unstable
+  check: 17:9: error[E0658]: `use` associated items of traits is unstable
+== t01-two-traits: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: newest() => (2, 5) | spec_only() => 3
+  proposition in a signature at 13:49: no skeleton: a declaration with no body to hold it
+  proposition in a signature at 17:58: no skeleton: a declaration with no body to hold it
+== t02-max-rational: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+  runtime: 61:35: error[E0277]: the trait bound `Rational: CheckedOrder` is not satisfied
+  check: 61:35: error[E0277]: the trait bound `Rational: CheckedOrder` is not satisfied
+  proposition in a signature at 9:49: no skeleton: a declaration with no body to hold it
+  proposition in a signature at 13:58: no skeleton: a declaration with no body to hold it
+== t03-logical-impl-runs: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: 61:12: error[error]: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checked`
+  check: 61:12: error[error]: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checked`
+  proposition in a signature at 9:49: no skeleton: a declaration with no body to hold it
+  proposition in a signature at 13:58: no skeleton: a declaration with no body to hold it
+== t04-library-traits: expect runtime=ok check=ok; got runtime=E0308 check=E0308; DIFFERS
+  runtime: 24:61: error[E0308]: mismatched types
+  check: 24:61: error[E0308]: mismatched types
+== t05-into-missing: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+  runtime: 17:17: error[E0277]: the trait bound `Rational: locus::FromLogic<locus::Bool>` is not satisfied
+  check: 17:17: error[E0277]: the trait bound `Rational: locus::FromLogic<locus::Bool>` is not satisfied
+== t06-family: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: build() => (15, 4, 4)
+== t07-one-byte: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: first(&Letter(65)) => 65 | first(&Letter(200)) => 0
+  proposition in a signature at 11:36: no skeleton: a declaration with no body to hold it
+== t08-weaker-contract: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: first(&Wide(150)) => 150
+  proposition in a signature at 11:36: no skeleton: a declaration with no body to hold it
+== t09-monoid: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 48:40: error[E0283]: type annotations needed
+  check: 48:40: error[E0283]: type annotations needed
+  proposition in a signature at 13:17: no skeleton: a declaration with no body to hold it
+== t10-kind-fn-for-logic: expect runtime=reject check=reject; got runtime=E0046,E0407 check=E0046,E0407; as expected
+  runtime: 15:9: error[E0407]: method `le` is not a member of trait `OrderSpec`
+  runtime: 14:5: error[E0046]: not all trait items implemented, missing: `__logic_le`
+  check: 15:9: error[E0407]: method `le` is not a member of trait `OrderSpec`
+  check: 14:5: error[E0046]: not all trait items implemented, missing: `__logic_le`
+== t11-kind-logic-for-fn: expect runtime=reject check=reject; got runtime=E0046,E0407 check=E0046,E0407; as expected
+  runtime: 14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`
+  runtime: 13:5: error[E0046]: not all trait items implemented, missing: `byte`
+  check: 14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`
+  check: 13:5: error[E0046]: not all trait items implemented, missing: `byte`
+== t12-names-same-module: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => 15
+== t13a-imported-impl: expect runtime=ok check=ok; got runtime=E0277,E0405 check=E0277,E0405; DIFFERS
+  runtime: 20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  runtime: 20:24: error[E0277]: the trait bound `Rational: __locus_logic_OrderSpec` is not satisfied
+  check: 20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  check: 20:24: error[E0277]: the trait bound `Rational: __locus_logic_OrderSpec` is not satisfied
+== t13b-imported-parameter: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both print: 
+== t13c-imported-type: expect runtime=ok check=ok; got runtime=E0599 check=E0599; DIFFERS
+  runtime: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+  check: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+== t13d-imported-qualified: expect runtime=ok check=ok; got runtime=E0405 check=E0405; DIFFERS
+  runtime: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  check: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t14-imported-in-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both print: 
+== t15-names-trait-path: expect runtime=ok check=ok; got runtime=E0782 check=E0782; DIFFERS
+  runtime: 20:23: error[E0782]: expected a type, found a trait
+  check: 20:23: error[E0782]: expected a type, found a trait
+== t16-names-trait-path-in-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both print: 
+== t17-default-member-split: expect runtime=ok check=ok; got runtime=E0277,E0599 check=E0277,E0599; DIFFERS
+  runtime: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+  runtime: 20:33: error[E0599]: no associated function or constant named `__logic_tag` found for struct `Thing` in the current scope
+  check: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+  check: 20:33: error[E0599]: no associated function or constant named `__logic_tag` found for struct `Thing` in the current scope
+== t18-default-member-split-in-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => 1
+== t19-runtime-name-clash: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: same() => true
+== t20-hand-unmangled-clash: expect runtime=E0034 check=E0034; got runtime=E0034 check=E0034; as expected
+  runtime: 28:14: error[E0034]: multiple applicable items in scope
+  check: 28:14: error[E0034]: multiple applicable items in scope
+== t21-provided-method-split: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both print: run() => 7
+== t22-provided-method-joined: expect runtime=error check=error; got runtime=error check=error; as expected
+  runtime: 14:10: error[error]: locus: a logical type implements only traits with no method that runs, and `Greet` has one
+  check: 14:10: error[error]: locus: a logical type implements only traits with no method that runs, and `Greet` has one
+cases: built in 1.2s (runtime) and 1.3s (checking)
+== a01-calls: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Nat", "locus::Nat", "locus::Int")
+== a02-places: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ["locus::Nat", "locus::Nat", "locus::Seq<locus::Nat>", "(locus::Nat, locus::Bool)", "locus::Bool", "locus::Seq<locus::BoundedU32>", "a02_places::__locus_snap_Counter", "locus::Nat"]
+== a03-struct: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Int", "locus::Int", "a03_struct::Pair<a03_struct::Rational>", "locus::Int", 0)
+== a04-match: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a04_match::Tree", "locus::Nat", "locus::Nat", "locus::Nat", 0, 4)
+== a05-operators: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Bool", "locus::Prop", "locus::Int", "locus::Erased")
+== a06-if: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Int")
+== a07-literals: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ["locus::Nat", "locus::Int", "locus::Nat", "locus::Nat", "locus::Int", "locus::Int", "locus::Int"]
+== a08-quantifiers: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Prop", "locus::Erased")
+== a09-holes-proofs: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Erased", "locus::Nat", "locus::Erased")
+== c01-no-borrow: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ([1, 2, 3], "locus::Seq<locus::BoundedU32>", "c01_no_borrow::__locus_snap_Link")
+== c02-vec-as-seq: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (1, 2, 3, 4)
+== c03-snap-in-header: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: 18:48: error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+  check: 18:48: error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+== c04-snap-header-selected: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: at Snap<u32>: locus::Nat | at Snap<&mut Box<u32>>: locus::Nat
+== c05-no-snapshot: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 12:36: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+  runtime: 13:26: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+  check: 12:36: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+  check: 13:26: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+== c06-unbounded-parameter: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 14:20: error[E0277]: `T` has no snapshot type that rustc can name
+  runtime: 10:36: error[E0277]: `T` has no snapshot type that rustc can name
+  check: 14:20: error[E0277]: `T` has no snapshot type that rustc can name
+  check: 10:36: error[E0277]: `T` has no snapshot type that rustc can name
+== c07-two-snap-headers: expect runtime=ok check=ok; got runtime=E0119 check=E0119; DIFFERS
+  runtime: 13:5: error[E0119]: conflicting implementations of trait `Describe` for type `<u32 as Snapshot>::S`
+  check: 13:5: error[E0119]: conflicting implementations of trait `Describe` for type `<u32 as Snapshot>::S`
+== e01-nat-for-seq: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+  runtime: 11:43: error[E0308]: mismatched types
+  runtime: 12:42: error[E0308]: mismatched types
+  check: 11:43: error[E0308]: mismatched types
+  check: 12:42: error[E0308]: mismatched types
+== e02-unknown-field: expect runtime=reject check=reject; got runtime=E0609 check=E0609; as expected
+  runtime: 12:37: error[E0609]: no field `nom` on type `Rational`
+  runtime: 13:43: error[E0609]: no field `denominator` on type `Rational`
+  check: 12:37: error[E0609]: no field `nom` on type `Rational`
+  check: 13:43: error[E0609]: no field `denominator` on type `Rational`
+== e03-missing-operator: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: 11:28: error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied
+  runtime: 12:27: error[E0277]: a `Rational` and a `_` have no order in logical code
+  check: 11:28: error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied
+  check: 12:27: error[E0277]: a `Rational` and a `_` have no order in logical code
+== f13-copied: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 12:33: error[E0283]: type annotations needed
+  check: 12:33: error[E0283]: type annotations needed
+  logic! at 10:22: no skeleton: a cast with `as`
+== f14-tuple-component: expect runtime=ok check=ok; got runtime=E0282,E0283 check=E0282,E0283; DIFFERS
+  runtime: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+  runtime: 11:34: error[E0283]: type annotations needed
+  check: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+  check: 11:34: error[E0283]: type annotations needed
+  logic! at 10:30: no skeleton: a cast with `as`
+== f15-format-capture: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both print: run(&vec![4, 5, 6]) => "Untyped"
+  logic! at 10:22: no skeleton: a cast with `as`
+== f16-only-logical: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 13:30: error[E0277]: `Untyped` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:30: error[E0277]: `Untyped` has no model, so a value of it cannot be used as a value in logical code
+  logic! at 11:22: no skeleton: a cast with `as`
+  prove! at 12:20: no skeleton: it reads `before`, a ghost local that was left untyped
+== f17-tuple-copied: expect runtime=reject check=reject; got runtime=E0282,E0283 check=E0282,E0283; as expected
+  runtime: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+  runtime: 10:34: error[E0283]: type annotations needed
+  check: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+  check: 10:34: error[E0283]: type annotations needed
+  logic! at 9:30: no skeleton: a cast with `as`
+== x01-literal-alone: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 13:13: error[E0283]: type annotations needed
+  check: 13:13: error[E0283]: type annotations needed
+== x02-literal-backward: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both print: run() => ("locus::Nat", 1)
+== x03-nat-as-int-place: expect runtime=ok check=ok; got runtime=E0308 check=E0308; DIFFERS
+  runtime: 15:33: error[E0308]: mismatched types
+  runtime: 16:42: error[E0308]: mismatched types
+  check: 15:33: error[E0308]: mismatched types
+  check: 16:42: error[E0308]: mismatched types
+== x04-nat-as-int-value: expect runtime=ok check=ok; got runtime=E0308 check=E0308; DIFFERS
+  runtime: 12:33: error[E0308]: mismatched types
+  check: 12:33: error[E0308]: mismatched types
+== x05-generic-parameter: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 14:13: error[E0283]: type annotations needed
+  runtime: 15:13: error[E0283]: type annotations needed
+  check: 14:13: error[E0283]: type annotations needed
+  check: 15:13: error[E0283]: type annotations needed
+== x06-snapshot-expected: expect runtime=ok check=ok; got runtime=E0271,E0308 check=E0271,E0308; DIFFERS
+  runtime: 13:33: error[E0271]: type mismatch resolving `<Vec<u32> as ModelOf>::Logic == Seq<BoundedU32>`
+  runtime: 14:27: error[E0308]: mismatched types
+  check: 13:33: error[E0271]: type mismatch resolving `<Vec<u32> as ModelOf>::Logic == Seq<BoundedU32>`
+  check: 14:27: error[E0308]: mismatched types
+== x07-operand-unknown: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 20:35: error[E0283]: type annotations needed
+  check: 20:35: error[E0283]: type annotations needed
+== x08-nested-pattern: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => "locus::Nat"
+  logic fn at 11:40: no skeleton: a variant pattern inside a variant pattern
+== x09-missing-arm: expect runtime=reject check=reject; got runtime=E0004 check=E0004; as expected
+  runtime: 10:15: error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered
+  check: 10:15: error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered
+== x10-bool-for-prop: expect runtime=ok check=ok; got runtime=E0308 check=E0308; DIFFERS
+  runtime: 15:31: error[E0308]: mismatched types
+  check: 15:31: error[E0308]: mismatched types
+== x11-method-on-runtime-type: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 17:34: error[E0277]: `Stack` has no model, so a value of it cannot be used as a value in logical code
+  check: 17:34: error[E0277]: `Stack` has no model, so a value of it cannot be used as a value in logical code
+== x12-no-model: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: 13:29: error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+  runtime: 13:35: error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:29: error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:35: error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+== x13-inferred-forward: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Erased", "locus::Seq<locus::Nat>")
+== x14-view-imported: expect runtime=ok check=ok; got runtime=E0433 check=E0433; DIFFERS
+  runtime: 25:17: error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+  runtime: 26:17: error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+  check: 25:17: error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+  check: 26:17: error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+skel: built in 0.8s (runtime) and 0.9s (checking)
+== r01-runtime-wrapper: expect none; got runtime=ok check=ok; 
+  both print: run() => (1, 2)
+== r02-outside-self: expect none; got runtime=E0271 check=E0271; 
+  runtime: 17:40: error[E0271]: type mismatch resolving `<u32 as ModelOf>::Logic == Int`
+  check: 17:40: error[E0271]: type mismatch resolving `<u32 as ModelOf>::Logic == Int`
+== r02b-hand-outside-self-stub-arguments: expect none; got runtime=E0432 check=E0432; 
+  runtime: 8:15: error[E0432]: unresolved imports `locus::__locus_Int`, `locus::__locus_Nat`, `locus::LogicalData`
+  check: 8:15: error[E0432]: unresolved imports `locus::__locus_Int`, `locus::__locus_Nat`, `locus::LogicalData`
+== r02c-hand-stub-arguments-and-blanket: expect none; got runtime=E0432 check=E0432; 
+  runtime: 8:15: error[E0432]: unresolved imports `locus::__locus_Int`, `locus::LogicalData`
+  check: 8:15: error[E0432]: unresolved imports `locus::__locus_Int`, `locus::LogicalData`
+== r03-description: expect none; got runtime=ok check=ok; 
+  both print: run() => ((8, 1), (16, 2))
+== r04-blanket-conversions: expect none; got runtime=E0308 check=E0308; 
+  runtime: 29:39: error[E0308]: mismatched types
+  check: 29:39: error[E0308]: mismatched types
+== r05-blanket-conversions-marker: expect none; got runtime=E0308 check=E0308; 
+  runtime: 23:39: error[E0308]: mismatched types
+  check: 23:39: error[E0308]: mismatched types
+== r06-snapshot-identity: expect none; got runtime=E0119,E0277 check=E0119,E0277; 
+  runtime: 30:5: error[E0119]: conflicting implementations of trait `__locus_logic_OrderSpec` for type `locus::Nat`
+  runtime: 30:5: error[E0119]: conflicting implementations of trait `OrderSpec` for type `locus::Nat`
+  check: 30:5: error[E0119]: conflicting implementations of trait `__locus_logic_OrderSpec` for type `locus::Nat`
+  check: 30:5: error[E0119]: conflicting implementations of trait `OrderSpec` for type `locus::Nat`
+== r06b-hand-snapshot-family-in-header: expect none; got runtime=E0432 check=E0432; 
+  runtime: 6:15: error[E0432]: unresolved imports `locus::LogicalData`, `locus::SnapOf`
+  check: 6:15: error[E0432]: unresolved imports `locus::LogicalData`, `locus::SnapOf`
+== r07-reserved-name-allowed: expect none; got runtime=E0034 check=E0034; 
+  runtime: 21:31: error[E0034]: multiple applicable items in scope
+  check: 21:31: error[E0034]: multiple applicable items in scope
+== r08-reserved-name: expect none; got runtime=error check=error; 
+  runtime: 9:12: error[error]: locus: `__logic_answer` starts with a prefix that is reserved for the names Locus writes: `__logic_` and `__locus_`
+  check: 9:12: error[error]: locus: `__logic_answer` starts with a prefix that is reserved for the names Locus writes: `__logic_` and `__locus_`
+== r09-two-expansions-two-impls: expect none; got runtime=ok check=ok; 
+  both print: run() => "the fallback, for Inner"
+== r10-inherent-beats-trait: expect none; got runtime=ok check=ok; 
+  both print: run() => 2
+== r11-inherent-beats-trait-proof: expect none; got runtime=ok check=ok; 
+  both print: run() => "the branch was not taken"
+  proposition in a signature at 18:38: no skeleton: a declaration with no body to hold it
+== r12-trait-for-one-argument: expect none; got runtime=ok check=ok; 
+  both print: run() => 2
+== r13-autoref-order: expect none; got runtime=ok check=ok; 
+  both print: run() => (2, 2)
+== r14-associated-constant: expect none; got runtime=ok check=ok; 
+  both print: run() => 2
+== r15-type-identity: expect none; got runtime=ok check=ok; 
+  both print: run() => (true, false)
+== s01-two-impls: expect none; got runtime=E0277 check=E0277; 
+  runtime: 34:55: error[E0277]: the trait bound `locus::Nat: OrderSpec` is not satisfied
+  runtime: 34:86: error[E0277]: the trait bound `Prop: OrderSpec` is not satisfied
+  check: 34:55: error[E0277]: the trait bound `locus::Nat: OrderSpec` is not satisfied
+  check: 34:86: error[E0277]: the trait bound `Prop: OrderSpec` is not satisfied
+== s02-generic-self: expect none; got runtime=ok check=ok; 
+  both print: run() => 3
+== s03-bound-not-met: expect none; got runtime=E0277 check=E0277; 
+  runtime: 25:20: error[E0277]: the trait bound `locus::Bool: OrderSpec` is not satisfied
+  runtime: 26:14: error[E0277]: the trait bound `locus::Bool: OrderSpec` is not satisfied
+  check: 25:20: error[E0277]: the trait bound `locus::Bool: OrderSpec` is not satisfied
+  check: 26:14: error[E0277]: the trait bound `locus::Bool: OrderSpec` is not satisfied
+== s04-assoc-type: expect none; got runtime=ok check=ok; 
+  both print: build() => (15, 4, 4, "locus::Seq<locus::Nat>")
+== s05-assoc-proof-declared: expect none; got runtime=ok check=ok; 
+  both print: 
+== s06-assoc-proof-used: expect none; got runtime=ok check=ok; 
+  both print: build() => 7
+== s07-assoc-tuple-used: expect none; got runtime=ok check=ok; 
+  both print: build() => 7
+== s08-blanket-collision: expect none; got runtime=ok check=ok; 
+  both print: run() => 1
+== s09-blanket-serves-marker: expect none; got runtime=ok check=ok; 
+  both print: run() => 1
+== s10-blanket-logical-argument: expect none; got runtime=ok check=ok; 
+  both print: run() => 1
+== s11-hand-blanket-helper: expect none; got runtime=E0432 check=E0432; 
+  runtime: 6:15: error[E0432]: unresolved imports `locus::__Stub`, `locus::LogicalData`
+  check: 6:15: error[E0432]: unresolved imports `locus::__Stub`, `locus::LogicalData`
+== s12-hand-blanket-kind: expect none; got runtime=E0432 check=E0432; 
+  runtime: 5:15: error[E0432]: unresolved imports `locus::__Kind`, `locus::__StubKind`, `locus::LogicalData`
+  check: 5:15: error[E0432]: unresolved imports `locus::__Kind`, `locus::__StubKind`, `locus::LogicalData`
+== s13-hand-blanket-boxed: expect none; got runtime=E0432 check=E0432; 
+  runtime: 9:15: error[E0432]: unresolved imports `locus::LogicalData`, `locus::Proj`
+  check: 9:15: error[E0432]: unresolved imports `locus::LogicalData`, `locus::Proj`
+== s14-snapshot-passage: expect none; got runtime=E0308 check=E0308; 
+  runtime: 15:32: error[E0308]: mismatched types
+  check: 15:32: error[E0308]: mismatched types
+== s15-clone-eq: expect none; got runtime=E0405 check=E0405; 
+  runtime: 9:15: error[E0405]: cannot find trait `CloneEq` in this scope
+  check: 9:15: error[E0405]: cannot find trait `CloneEq` in this scope
+== s16-names: expect none; got runtime=E0277,E0405 check=E0277,E0405; 
+  runtime: 25:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  runtime: 42:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  check: 25:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  check: 42:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== s17-other-invocation: expect none; got runtime=ok check=ok; 
+  both print: run() => 1
+== s18-other-invocation-told: expect none; got runtime=ok check=ok; 
+  both print: run() => 1
+== s19-value-of-parameter-type: expect none; got runtime=ok check=ok; 
+  both print: run() => 6
+== s20-runtime-type-over-logical: expect none; got runtime=ok check=ok; 
+  both print: run() => 2
+== s21-logic-argument-generic: expect none; got runtime=E0283 check=E0283; 
+  runtime: 11:37: error[E0283]: type annotations needed
+  check: 11:37: error[E0283]: type annotations needed
+more: built in 0.8s (runtime) and 0.9s (checking)
+
+## Pieces of logical code, and ghost lets
+## corpus (sk): 26 files, 23 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 20
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  let annotation               pieces  11  translated  11  no error in either expansion  11  with an error   0
+  logic fn                     pieces  11  translated  11  no error in either expansion  11  with an error   0
+  logic!                       pieces  13  translated  13  no error in either expansion  11  with an error   2
+  prop arm                     pieces   2  translated   2  no error in either expansion   2  with an error   0
+  proposition in a field's type not attempted   1
+  proposition in a signature   pieces  13  translated  13  no error in either expansion  13  with an error   0
+  prove! (expanded by rustc)   pieces   1  translated   1  no error in either expansion   1  with an error   0
+  all                          pieces  51  translated  51  no error in either expansion  49  with an error   2
+  translated, and rustc reports an error in it:
+    after-move:19:13 (logic!; check+runtime): E0382: borrow of moved value: `v`
+    during-mutable-borrow:15:13 (logic!; check+runtime): E0502: cannot borrow `v` as immutable because it is also borrowed as mutable
+  ghost `let`s initialized by a `logic!`, by where their type comes from:
+    its skeleton (no annotation): 8
+    its skeleton (the `let` has an annotation): 5
+## ghost-lets (sk): 17 files, 11 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 7
+  rejected litmus examples: 7; rustc rejects them in both expansions: 3; in the checking expansion alone: 0
+  let annotation               pieces   6  translated   6  no error in either expansion   5  with an error   1
+  logic fn                     pieces   2  translated   2  no error in either expansion   2  with an error   0
+  logic!                       pieces  20  translated  19  no error in either expansion  16  with an error   3
+  proposition in a signature   pieces   3  translated   3  no error in either expansion   2  with an error   1
+  all                          pieces  31  translated  30  no error in either expansion  25  with an error   5
+  not translated:
+    gl-logic-calls-runtime-function:16:13 (logic!): a borrow `&`
+  translated, and rustc reports an error in it:
+    gl-after-move:18:13 (logic!; check+runtime): E0382: borrow of moved value: `v`
+    gl-during-mutable-borrow:14:13 (logic!; check+runtime): E0502: cannot borrow `v` as immutable because it is also borrowed as mutable
+    gl-hole-written-out-with-an-earlier-value:13:41 (proposition in a signature; check+runtime): E0599: no associated function or constant named `wrap` found for type `u32` in the current scope
+    gl-snapshot-with-associated-type-field:21:18 (logic!; check+runtime): E0277: `F` has no snapshot type that rustc can name
+    gl-snapshot-with-associated-type-field:23:16 (let annotation; check+runtime): E0277: `F` has no snapshot type that rustc can name
+  ghost `let`s initialized by a `logic!`, by where their type comes from:
+    its skeleton (no annotation): 18
+    none: left untyped (no annotation): 1
+## cases (sk): 58 files, 29 compile in both expansions
+  let annotation               pieces   3  translated   3  no error in either expansion   3  with an error   0
+  logic fn                     pieces  52  translated  52  no error in either expansion  51  with an error   1
+  logic!                       pieces  61  translated  61  no error in either expansion  58  with an error   3
+  prop!                        pieces  13  translated  13  no error in either expansion  10  with an error   3
+  proposition in a signature   pieces  32  translated  23  no error in either expansion  23  with an error   0
+  prove!                       pieces  22  translated  22  no error in either expansion  21  with an error   1
+  prove! (expanded by rustc)   pieces   1  translated   1  no error in either expansion   1  with an error   0
+  all                          pieces 184  translated 175  no error in either expansion 167  with an error   8
+  not translated:
+    t01-two-traits:13:49 (proposition in a signature): a declaration with no body to hold it
+    t01-two-traits:17:58 (proposition in a signature): a declaration with no body to hold it
+    t02-max-rational:9:49 (proposition in a signature): a declaration with no body to hold it
+    t02-max-rational:13:58 (proposition in a signature): a declaration with no body to hold it
+    t03-logical-impl-runs:9:49 (proposition in a signature): a declaration with no body to hold it
+    t03-logical-impl-runs:13:58 (proposition in a signature): a declaration with no body to hold it
+    t07-one-byte:11:36 (proposition in a signature): a declaration with no body to hold it
+    t08-weaker-contract:11:36 (proposition in a signature): a declaration with no body to hold it
+    t09-monoid:13:17 (proposition in a signature): a declaration with no body to hold it
+  translated, and rustc reports an error in it:
+    g11-loop-assignment:19:19 (prove!; check+runtime): E0283: type annotations needed
+    g20-logic-where-runtime:9:9 (logic!; check+runtime): E0308: mismatched types
+    t04-library-traits:24:43 (logic fn; check+runtime): E0308: mismatched types
+    t09-monoid:48:26 (logic!; check+runtime): E0283: type annotations needed
+    t13c-imported-type:25:17 (prop!; check+runtime): E0599: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+    t13d-imported-qualified:25:17 (prop!; check+runtime): E0405: cannot find trait `__locus_logic_OrderSpec` in this scope
+    t15-names-trait-path:20:17 (prop!; check+runtime): E0782: expected a type, found a trait
+    t17-default-member-split:20:17 (logic!; check+runtime): E0599: no associated function or constant named `__logic_tag` found for struct `Thing` in the current scope
+  ghost `let`s initialized by a `logic!`, by where their type comes from:
+    ... of which rustc asks for a type: 2
+    its skeleton (no annotation): 42
+    its skeleton (the `let` has an annotation): 10
+    g11-loop-assignment:13:24 (its skeleton (no annotation)): E0283: type annotations needed
+    t09-monoid:48:26 (its skeleton (the `let` has an annotation)): E0283: type annotations needed
+## skel (sk): 38 files, 16 compile in both expansions
+  let annotation               pieces   6  translated   6  no error in either expansion   4  with an error   2
+  logic fn                     pieces  36  translated  35  no error in either expansion  33  with an error   2
+  logic!                       pieces  72  translated  67  no error in either expansion  53  with an error  14
+  prop arm                     pieces   2  translated   2  no error in either expansion   2  with an error   0
+  prop!                        pieces   3  translated   3  no error in either expansion   2  with an error   1
+  proposition in a signature   pieces   5  translated   5  no error in either expansion   5  with an error   0
+  prove!                       pieces  10  translated   9  no error in either expansion   4  with an error   5
+  prove! (expanded by rustc)   pieces   1  translated   1  no error in either expansion   0  with an error   1
+  all                          pieces 135  translated 128  no error in either expansion 103  with an error  25
+  not translated:
+    f13-copied:10:22 (logic!): a cast with `as`
+    f14-tuple-component:10:30 (logic!): a cast with `as`
+    f15-format-capture:10:22 (logic!): a cast with `as`
+    f16-only-logical:11:22 (logic!): a cast with `as`
+    f16-only-logical:12:20 (prove!): it reads `before`, a ghost local that was left untyped
+    f17-tuple-copied:9:30 (logic!): a cast with `as`
+    x08-nested-pattern:11:40 (logic fn): a variant pattern inside a variant pattern
+  translated, and rustc reports an error in it:
+    c05-no-snapshot:12:22 (logic!; check+runtime): E0277: `BTreeSet<u32>` has no snapshot type that rustc can name
+    c05-no-snapshot:13:20 (let annotation; check+runtime): E0277: `BTreeSet<u32>` has no snapshot type that rustc can name
+    c06-unbounded-parameter:10:22 (logic!; check+runtime): E0277: `T` has no snapshot type that rustc can name
+    c06-unbounded-parameter:11:20 (let annotation; check+runtime): E0277: `T` has no snapshot type that rustc can name
+    e01-nat-for-seq:11:28 (logic!; check+runtime): E0308: mismatched types
+    e01-nat-for-seq:12:27 (logic!; check+runtime): E0308: mismatched types
+    e02-unknown-field:12:26 (logic!; check+runtime): E0609: no field `nom` on type `Rational`
+    e02-unknown-field:13:25 (logic!; check+runtime): E0609: no field `denominator` on type `Rational`
+    e03-missing-operator:11:19 (logic!; check+runtime): E0277: the trait bound `Rational: AddLogic<_>` is not satisfied
+    e03-missing-operator:12:20 (prove!; check+runtime): E0277: a `Rational` and a `_` have no order in logical code
+    f13-copied:12:20 (prove!; check+runtime): E0283: type annotations needed
+    f14-tuple-component:11:20 (prove!; check+runtime): E0283: type annotations needed
+    f16-only-logical:13:30 (prove! (expanded by rustc); check+runtime): E0277: `Untyped` has no model, so a value of it cannot be used as a value in logical code
+    f17-tuple-copied:10:20 (prove!; check+runtime): E0283: type annotations needed
+    x03-nat-as-int-place:15:17 (logic!; check+runtime): E0308: mismatched types
+    x03-nat-as-int-place:16:17 (logic!; check+runtime): E0308: mismatched types
+    x04-nat-as-int-value:12:17 (logic!; check+runtime): E0308: mismatched types
+    x06-snapshot-expected:13:17 (logic!; check+runtime): E0271: type mismatch resolving `<Vec<u32> as ModelOf>::Logic == Seq<BoundedU32>`
+    x06-snapshot-expected:14:27 (logic!; check+runtime): E0308: mismatched types
+    x07-operand-unknown:20:21 (logic!; check+runtime): E0283: type annotations needed
+    x09-missing-arm:9:35 (logic fn; check+runtime): E0004: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered
+    x10-bool-for-prop:15:17 (prop!; check+runtime): E0308: mismatched types
+    x11-method-on-runtime-type:17:25 (logic!; check+runtime): E0277: `Stack` has no model, so a value of it cannot be used as a value in logical code
+    x12-no-model:13:22 (prove!; check+runtime): E0277: `Token` has no model, so a value of it cannot be used as a value in logical code
+    x14-view-imported:23:43 (logic fn; check+runtime): E0433: cannot find module or crate `__locus_view_Tree` in this scope
+  ghost `let`s initialized by a `logic!`, by where their type comes from:
+    ... of which rustc asks for a type: 4
+    its skeleton (no annotation): 63
+    its skeleton (the `let` has an annotation): 3
+    none: left untyped (no annotation): 2
+    rustc's inference from runtime code (no annotation): 1
+    x01-literal-alone:13:20 (its skeleton (no annotation)): E0283: type annotations needed
+    x05-generic-parameter:14:17 (its skeleton (no annotation)): E0283: type annotations needed
+    x05-generic-parameter:15:17 (its skeleton (no annotation)): E0283: type annotations needed
+    x07-operand-unknown:20:21 (its skeleton (no annotation)): E0283: type annotations needed
+## more (sk): 39 files, 21 compile in both expansions
+  let annotation               pieces   1  translated   1  no error in either expansion   0  with an error   1
+  logic fn                     pieces  31  translated  31  no error in either expansion  27  with an error   4
+  logic!                       pieces   9  translated   9  no error in either expansion   8  with an error   1
+  prop!                        pieces   5  translated   5  no error in either expansion   4  with an error   1
+  proposition in a signature   pieces   7  translated   6  no error in either expansion   6  with an error   0
+  all                          pieces  53  translated  52  no error in either expansion  45  with an error   7
+  not translated:
+    r11-inherent-beats-trait-proof:18:38 (proposition in a signature): a declaration with no body to hold it
+  translated, and rustc reports an error in it:
+    r02-outside-self:17:38 (logic fn; check+runtime): E0271: type mismatch resolving `<u32 as ModelOf>::Logic == Int`
+    r04-blanket-conversions:29:39 (logic fn; check+runtime): E0308: mismatched types
+    r05-blanket-conversions-marker:23:39 (logic fn; check+runtime): E0308: mismatched types
+    r06-snapshot-identity:31:57 (logic fn; check+runtime): E0277: a `BoundedU32` and a `_` have no order in logical code
+    s03-bound-not-met:25:19 (let annotation; check+runtime): E0277: the trait bound `locus::Bool: OrderSpec` is not satisfied
+    s16-names:42:17 (prop!; check+runtime): E0405: cannot find trait `__locus_logic_OrderSpec` in this scope
+    s21-logic-argument-generic:11:28 (logic!; check+runtime): E0283: type annotations needed
+  ghost `let`s initialized by a `logic!`, by where their type comes from:
+    its skeleton (the `let` has an annotation): 4
+
+## What changed from the first mode
+== after-move: first: ok / E0382; skeleton: E0382
+  first, check: 19:22: error[E0382]: borrow of moved value: `v`
+  skeleton, runtime: 19:13: error[E0382]: borrow of moved value: `v`
+== during-mutable-borrow: first: ok / E0502; skeleton: E0502
+  first, check: 15:22: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  skeleton, runtime: 15:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+corpus: 26 files; compile in both expansions: first 23, skeleton 23; outcome or output differs in 2
+== gl-after-move: first: ok / E0382; skeleton: E0382
+  first, check: 18:22: error[E0382]: borrow of moved value: `v`
+  skeleton, runtime: 18:13: error[E0382]: borrow of moved value: `v`
+== gl-branch-on-logical: first: E0283; skeleton: E0369
+  first, runtime: 12:9: error[E0283]: type annotations needed
+  skeleton, runtime: 13:14: error[E0369]: binary operation `>` cannot be applied to type `Nat`
+== gl-during-mutable-borrow: first: ok / E0502; skeleton: E0502
+  first, check: 14:22: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  skeleton, runtime: 14:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+== gl-hole-written-out-with-an-earlier-value: first: E0425,E0599,error; skeleton: E0369,E0425,E0599,error
+  first, runtime: 16:17: error[error]: invalid comparison operator `===`
+  skeleton, runtime: 16:17: error[error]: invalid comparison operator `===`
+== gl-snapshot-with-associated-type-field: first: ok; skeleton: E0277
+  skeleton, runtime: 21:32: error[E0277]: `F` has no snapshot type that rustc can name
+ghost-lets: 17 files; compile in both expansions: first 12, skeleton 11; outcome or output differs in 5
+== d05-field-type-unknown: first: ok / E0425; skeleton: E0425
+  first, check: 9:12: error[E0425]: cannot find type `Integer` in this scope
+  skeleton, runtime: 9:12: error[E0425]: cannot find type `Integer` in this scope
+== d06-bounded-impl-probe: first: ok / E0599; skeleton: ok prints run() => 1
+  first, check: 27:34: error[E0599]: the associated function or constant `__logic_least` exists for struct `Pair<Untyped>`, but its trait bounds were not satisfied
+== g06-generic-only: first: E0283; skeleton: ok prints run(&vec![4, 5, 6]) => 3
+  first, runtime: 10:13: error[E0283]: type annotations needed
+== g11-loop-assignment: first: ok prints run(&vec![4, 5, 6]) => (15, 15); skeleton: E0283
+  skeleton, runtime: 13:13: error[E0283]: type annotations needed
+== g13-copied: first: E0282; skeleton: ok prints run(&vec![4, 5, 6]) => 3
+  first, runtime: 10:13: error[E0282]: type annotations needed
+== g14-tuple-component: first: E0282; skeleton: ok prints run(&vec![4, 5, 6]) => 3
+  first, runtime: 11:13: error[E0282]: type annotations needed for `(usize, _)`
+== g15-format-capture: first: ok prints run(&vec![4, 5, 6]) => "Untyped"; skeleton: ok prints run(&vec![4, 5, 6]) => "Nat"
+== g16-single-implementation: first: E0283; skeleton: E0277
+  first, runtime: 18:13: error[E0283]: type annotations needed
+  skeleton, runtime: 19:14: error[E0277]: the trait bound `Nat: Monoid` is not satisfied
+== g18-snap-mismatch: first: ok prints run(&vec![4, 5, 6]) => 1; skeleton: E0308
+  skeleton, runtime: 15:20: error[E0308]: mismatched types
+== g20-logic-where-runtime: first: E0277; skeleton: E0308
+  first, runtime: 9:9: error[E0277]: the trait bound `usize: Logical` is not satisfied
+  skeleton, runtime: 9:9: error[E0308]: mismatched types
+== h03-snap-header-allowed: first: ok prints <Snap<bool> as Describe>::Width is locus::Nat | <Snap<&mut Vec<String>> as Describe>::Width is locus::Nat | from a proof of 2 == 2: written for a proof of 1 == 2; skeleton: E0277
+  skeleton, runtime: 38:22: error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+== h05-hand-lifetime-marker: first: E0478,E0803; skeleton: E0277
+  first, runtime: 13:10: error[E0478]: lifetime bound not satisfied
+  skeleton, runtime: 13:22: error[E0277]: `View<'a>` has no snapshot type that rustc can name
+== t04-library-traits: first: ok prints run() => 15; skeleton: E0308
+  skeleton, runtime: 24:61: error[E0308]: mismatched types
+== t09-monoid: first: ok prints run() => 6; skeleton: E0283
+  skeleton, runtime: 48:40: error[E0283]: type annotations needed
+== t13c-imported-type: first: ok / E0599; skeleton: E0599
+  first, check: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+  skeleton, runtime: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+== t13d-imported-qualified: first: ok / E0405; skeleton: E0405
+  first, check: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+  skeleton, runtime: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t15-names-trait-path: first: ok / E0782; skeleton: E0782
+  first, check: 20:23: error[E0782]: expected a type, found a trait
+  skeleton, runtime: 20:23: error[E0782]: expected a type, found a trait
+== t16-names-trait-path-in-trait: first: ok / E0790; skeleton: ok
+  first, check: 19:23: error[E0790]: cannot call associated function on trait without specifying the corresponding `impl` type
+== t17-default-member-split: first: E0277 / E0277,E0599; skeleton: E0277,E0599
+  first, runtime: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+  skeleton, runtime: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+cases: 58 files; compile in both expansions: first 29, skeleton 29; outcome or output differs in 19
+
+## Variant: no operator on an Int and a Nat (feature homogeneous-ops)
+== logical-closure-in-body: default: ok prints commutes(3) => 3; homog: E0308
+  homog, runtime: 13:80: error[E0308]: mismatched types
+corpus: 26 files; compile in both expansions: default 23, homog 22; outcome or output differs in 1
+ghost-lets: 17 files; compile in both expansions: default 11, homog 11; outcome or output differs in 0
+cases: 58 files; compile in both expansions: default 29, homog 29; outcome or output differs in 0
+== a08-quantifiers: default: ok prints run() => ("locus::Prop", "locus::Erased"); homog: E0308
+  homog, runtime: 14:43: error[E0308]: mismatched types
+== f14-tuple-component: default: E0282,E0283; homog: E0282
+  default, runtime: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+  homog, runtime: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+== f17-tuple-copied: default: E0282,E0283; homog: E0282
+  default, runtime: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+  homog, runtime: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+skel: 38 files; compile in both expansions: default 16, homog 15; outcome or output differs in 3
+more: 39 files; compile in both expansions: default 21, homog 21; outcome or output differs in 0
+
+## Variant: a Nat place may be given where an Int is wanted (feature widen-args)
+corpus: 26 files; compile in both expansions: default 23, args 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: default 11, args 11; outcome or output differs in 0
+== t04-library-traits: default: E0308; args: E0283
+  default, runtime: 24:61: error[E0308]: mismatched types
+  args, runtime: 50:46: error[E0283]: type annotations needed
+cases: 58 files; compile in both expansions: default 29, args 29; outcome or output differs in 1
+== a04-match: default: ok prints run() => ("a04_match::Tree", "locus::Nat", "locus::Nat", "locus::Nat", 0, 4); args: E0283
+  args, runtime: 39:48: error[E0283]: type annotations needed
+== e01-nat-for-seq: default: E0308; args: E0271,E0277,E0308
+  default, runtime: 11:43: error[E0308]: mismatched types
+  args, runtime: 11:43: error[E0277]: a `locus::Nat` cannot be given where a `locus::Seq<locus::Nat>` is wanted in logical code
+== x03-nat-as-int-place: default: E0308; args: ok prints run() => ("locus::Int", "x03_nat_as_int_place::Rational")
+  default, runtime: 15:33: error[E0308]: mismatched types
+skel: 38 files; compile in both expansions: default 16, args 16; outcome or output differs in 3
+== r02-outside-self: default: E0271; args: ok prints run() => 3
+  default, runtime: 17:40: error[E0271]: type mismatch resolving `<u32 as ModelOf>::Logic == Int`
+== r04-blanket-conversions: default: E0308; args: ok prints run() => 7
+  default, runtime: 29:39: error[E0308]: mismatched types
+== r05-blanket-conversions-marker: default: E0308; args: ok prints run() => 7
+  default, runtime: 23:39: error[E0308]: mismatched types
+more: 39 files; compile in both expansions: default 21, args 24; outcome or output differs in 3
+
+## Variant: a lone literal in an unannotated let is an Int (LOCUS_SPIKE_LITERAL_INT=1)
+corpus: 26 files; compile in both expansions: default 23, litint 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: default 11, litint 11; outcome or output differs in 0
+== g05-mutable-borrow: default: ok prints run(&vec![4, 5, 6]) => 3; litint: E0308
+  litint, runtime: 18:30: error[E0308]: mismatched types
+== g11-loop-assignment: default: E0283; litint: E0308
+  default, runtime: 13:13: error[E0283]: type annotations needed
+  litint, runtime: 30:27: error[E0308]: mismatched types
+cases: 58 files; compile in both expansions: default 29, litint 28; outcome or output differs in 2
+== x01-literal-alone: default: E0283; litint: ok prints run() => "locus::Int"
+  default, runtime: 13:13: error[E0283]: type annotations needed
+== x02-literal-backward: default: ok prints run() => ("locus::Nat", 1); litint: E0308
+  litint, runtime: 14:36: error[E0308]: mismatched types
+skel: 38 files; compile in both expansions: default 16, litint 16; outcome or output differs in 2
+more: 39 files; compile in both expansions: default 21, litint 21; outcome or output differs in 0
+
+## Variant: a trait's stubs are items of the lowered trait (LOCUS_SPIKE_IN_TRAIT=1)
+corpus: 26 files; compile in both expansions: default 23, intrait 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: default 11, intrait 11; outcome or output differs in 0
+== t13a-imported-impl: default: E0277,E0405; intrait: ok
+  default, runtime: 20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t13c-imported-type: default: E0599; intrait: ok
+  default, runtime: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+== t13d-imported-qualified: default: E0405; intrait: ok
+  default, runtime: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t15-names-trait-path: default: E0782; intrait: ok
+  default, runtime: 20:23: error[E0782]: expected a type, found a trait
+== t17-default-member-split: default: E0277,E0599; intrait: ok prints run() => 1
+  default, runtime: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+cases: 58 files; compile in both expansions: default 29, intrait 34; outcome or output differs in 5
+skel: 38 files; compile in both expansions: default 16, intrait 16; outcome or output differs in 0
+== r07-reserved-name-allowed: default: E0034; intrait: E0308,E0428
+  default, runtime: 21:31: error[E0034]: multiple applicable items in scope
+  intrait, runtime: 13:9: error[E0428]: the name `__logic_answer` is defined multiple times
+== s16-names: default: E0277,E0405; intrait: ok prints run() => 15
+  default, runtime: 25:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+more: 39 files; compile in both expansions: default 21, intrait 22; outcome or output differs in 2
+
+## Fallback, checked: initializers with no skeleton (skel/f*), the first mode's guess
+== f13-copied: expect runtime=ok check=ok; got runtime=E0283 check=E0283; DIFFERS
+  runtime: 12:33: error[E0283]: type annotations needed
+  check: 12:33: error[E0283]: type annotations needed
+  logic! at 10:22: no skeleton: a cast with `as`
+== f14-tuple-component: expect runtime=ok check=ok; got runtime=E0282,E0283 check=E0282,E0283; DIFFERS
+  runtime: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+  runtime: 11:34: error[E0283]: type annotations needed
+  check: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+  check: 11:34: error[E0283]: type annotations needed
+  logic! at 10:30: no skeleton: a cast with `as`
+== f15-format-capture: expect runtime=reject check=reject; got runtime=error check=error; as expected
+  runtime: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  logic! at 10:22: no skeleton: a cast with `as`
+== f16-only-logical: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 13:30: error[E0277]: `locus::Untyped` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:30: error[E0277]: `locus::Untyped` has no model, so a value of it cannot be used as a value in logical code
+  logic! at 11:22: no skeleton: a cast with `as`
+  prove! at 12:20: no skeleton: it reads `before`, a ghost local that was left untyped
+== f17-tuple-copied: expect runtime=reject check=reject; got runtime=E0282,E0283 check=E0282,E0283; as expected
+  runtime: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+  runtime: 10:34: error[E0283]: type annotations needed
+  check: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+  check: 10:34: error[E0283]: type annotations needed
+  logic! at 9:30: no skeleton: a cast with `as`
+skel: built in 0.2s (runtime) and 0.2s (checking)
+
+## The same, every such local left untyped (LOCUS_SPIKE_FALLBACK_UNTYPED=1)
+== f13-copied: expect runtime=ok check=ok; got runtime=error check=error; DIFFERS
+  runtime: 11:21: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:21: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  logic! at 10:22: no skeleton: a cast with `as`
+  prove! at 12:20: no skeleton: it reads `before`, a ghost local that was left untyped
+== f14-tuple-component: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 3
+  logic! at 10:30: no skeleton: a cast with `as`
+  prove! at 11:20: no skeleton: it reads `pair`, a ghost local that was left untyped
+== f15-format-capture: expect runtime=reject check=reject; got runtime=error check=error; as expected
+  runtime: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  logic! at 10:22: no skeleton: a cast with `as`
+== f16-only-logical: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 13:30: error[E0277]: `locus::Untyped` has no model, so a value of it cannot be used as a value in logical code
+  check: 13:30: error[E0277]: `locus::Untyped` has no model, so a value of it cannot be used as a value in logical code
+  logic! at 11:22: no skeleton: a cast with `as`
+  prove! at 12:20: no skeleton: it reads `before`, a ghost local that was left untyped
+== f17-tuple-copied: expect runtime=reject check=reject; got runtime=error check=error; as expected
+  runtime: 11:20: error[error]: locus: the ghost local `pair` has no logical type for rustc, and it is used here outside logical code: its type is `(usize, locus::Untyped)`. Write th
+  check: 11:20: error[error]: locus: the ghost local `pair` has no logical type for rustc, and it is used here outside logical code: its type is `(usize, locus::Untyped)`. Write th
+  logic! at 9:30: no skeleton: a cast with `as`
+  prove! at 10:20: no skeleton: it reads `pair`, a ghost local that was left untyped
+skel: built in 0.2s (runtime) and 0.1s (checking)
+
+## g13, g14, g15 of the first spike with no skeleton at all (LOCUS_SPIKE_NO_SKELETON=1), the first mode's guess
+== g13-copied: expect runtime=annotate check=annotate; got runtime=E0282 check=E0282; as expected
+  runtime: 10:13: error[E0282]: type annotations needed
+  check: 10:13: error[E0282]: type annotations needed
+== g14-tuple-component: expect runtime=ok check=ok; got runtime=E0282 check=E0282; DIFFERS
+  runtime: 11:13: error[E0282]: type annotations needed for `(usize, _)`
+  check: 11:13: error[E0282]: type annotations needed for `(usize, _)`
+== g15-format-capture: expect runtime=annotate check=annotate; got runtime=error check=error; DIFFERS
+  runtime: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+== g16-single-implementation: expect runtime=annotate check=annotate; got runtime=E0283 check=E0283; as expected
+  runtime: 18:13: error[E0283]: type annotations needed
+
+## The same, every such local left untyped
+== g13-copied: expect runtime=annotate check=annotate; got runtime=error check=error; DIFFERS
+  runtime: 11:21: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:21: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+== g14-tuple-component: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run(&vec![4, 5, 6]) => 3
+== g15-format-capture: expect runtime=annotate check=annotate; got runtime=error check=error; DIFFERS
+  runtime: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+  check: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write the type 
+== g16-single-implementation: expect runtime=annotate check=annotate; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 19:14: error[E0277]: the trait bound `locus::Untyped: Monoid` is not satisfied
+
+## The check on every file, with skeletons: what it adds to rustc's errors
+corpus: 26 files; compile in both expansions: default 23, checked 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: default 11, checked 11; outcome or output differs in 0
+cases: 58 files; compile in both expansions: default 29, checked 29; outcome or output differs in 0
+== f15-format-capture: default: ok prints run(&vec![4, 5, 6]) => "Untyped"; checked: error
+  checked, runtime: 11:19: error[error]: locus: the ghost local `before` has no logical type for rustc, and it is used here outside logical code: its type is `locus::Untyped`. Write
+skel: 38 files; compile in both expansions: default 16, checked 15; outcome or output differs in 1
+more: 39 files; compile in both expansions: default 21, checked 21; outcome or output differs in 0
+
+## Both programs agree: the call listings of the two expansions
+corpus: binaries that both expansions accept: 23; calls, method calls and constants listed in each: 55; binaries with one resolved differently: 0
+corpus: built in 0.7s (runtime) and 1.3s (checking)
+ghost-lets: binaries that both expansions accept: 11; calls, method calls and constants listed in each: 16; binaries with one resolved differently: 0
+ghost-lets: built in 0.5s (runtime) and 0.6s (checking)
+cases: binaries that both expansions accept: 29; calls, method calls and constants listed in each: 133; binaries with one resolved differently: 0
+cases: built in 1.4s (runtime) and 1.2s (checking)
+skel: binaries that both expansions accept: 16; calls, method calls and constants listed in each: 114; binaries with one resolved differently: 0
+skel: built in 1.3s (runtime) and 0.8s (checking)
+more: binaries that both expansions accept: 21; calls, method calls and constants listed in each: 69; binaries with one resolved differently: 0
+more: built in 0.9s (runtime) and 1.4s (checking)
+
+### The nine cases of the first spike that the brief names
+== r01-runtime-wrapper: both expansions compile; 5 lines in each listing, the same; prints ['run() => (1, 2)']
+== r02-outside-self: got runtime=E0271 check=E0271: no listing to compare
+== r03-description: both expansions compile; 5 lines in each listing, the same; prints ['run() => ((8, 1), (16, 2))']
+== r04-blanket-conversions: got runtime=E0308 check=E0308: no listing to compare
+== r09-two-expansions-two-impls: both expansions compile; 3 lines in each listing, the same; prints ['run() => "the fallback, for Inner"']
+== r10-inherent-beats-trait: both expansions compile; 3 lines in each listing, the same; prints ['run() => 2']
+== r11-inherent-beats-trait-proof: both expansions compile; 4 lines in each listing, the same; prints ['run() => "the branch was not taken"']
+== r13-autoref-order: both expansions compile; 5 lines in each listing, the same; prints ['run() => (2, 2)']
+== r14-associated-constant: both expansions compile; 2 lines in each listing, the same; prints ['run() => 2']
+
+### r02 and r04 with the feature widen-args, under which they compile
+== r02-outside-self: expect none; got runtime=ok check=ok; 
+== r02b-hand-outside-self-stub-arguments: expect none; got runtime=E0432 check=E0432; 
+== r02c-hand-stub-arguments-and-blanket: expect none; got runtime=E0432 check=E0432; 
+== r04-blanket-conversions: expect none; got runtime=ok check=ok; 
+more: binaries that both expansions accept: 6; calls, method calls and constants listed in each: 32; binaries with one resolved differently: 0
+more: built in 0.9s (runtime) and 0.3s (checking)
+
+### The listing of r10, runtime expansion and then checking expansion
+main:034:031 => the definition at 29:5 | run with []
+of_nat:027:039 => the definition at 24:9 | Tag::tag -> <Wrap<T> as Tag>::tag with [Wrap<Nat>]
+run:029:022 => the definition at 27:5 | of_nat with []
+--
+main:034:031 => the definition at 29:5 | run with []
+of_nat:027:039 => the definition at 24:9 | Tag::tag -> <Wrap<T> as Tag>::tag with [Wrap<Nat>]
+run:029:022 => the definition at 27:5 | of_nat with []
+
+### The listing of t01, runtime expansion (the checking expansion's is the same)
+<Rational as __locus_logic_OrderSpec>::__logic_le_total::{closure#0}:029:068 => the definition at 28:15 | __locus_logic_OrderSpec::__logic_le -> <Rational as __locus_logic_OrderSpec>::__logic_le with [Rational]
+<Rational as __locus_logic_OrderSpec>::__logic_le_total::{closure#0}:029:090 => the definition at 28:15 | __locus_logic_OrderSpec::__logic_le -> <Rational as __locus_logic_OrderSpec>::__logic_le with [Rational]
+<Version as CheckedOrder>::le_checked::{closure#0}:041:071 => the definition at 34:15 | __locus_logic_OrderSpec::__logic_le -> <Version as __locus_logic_OrderSpec>::__logic_le with [Version]
+<Version as CheckedOrder>::le_checked::{closure#1}:043:045 => the definition at 34:15 | __locus_logic_OrderSpec::__logic_le -> <Version as __locus_logic_OrderSpec>::__logic_le with [Version]
+<Version as __locus_logic_OrderSpec>::__logic_le_total::{closure#0}:037:065 => the definition at 34:15 | __locus_logic_OrderSpec::__logic_le -> <Version as __locus_logic_OrderSpec>::__logic_le with [Version]
+<Version as __locus_logic_OrderSpec>::__logic_le_total::{closure#0}:037:086 => the definition at 34:15 | __locus_logic_OrderSpec::__logic_le -> <Version as __locus_logic_OrderSpec>::__logic_le with [Version]
+bounded::{closure#0}:073:053 => the definition at 49:11 | is_max with [T/#0]
+is_max::{closure#0}:050:012 => the definition at 12:15 | __locus_logic_OrderSpec::__logic_le with [T/#0]
+is_max::{closure#0}:050:027 => the definition at 12:15 | __locus_logic_OrderSpec::__logic_le with [T/#0]
+main:084:034 => the definition at 64:5 | newest with []
+main:085:037 => the definition at 75:5 | spec_only with []
+max:055:031 => the definition at 17:9 | CheckedOrder::le_checked with [T/#0]
+max::{closure#0}:054:069 => the definition at 49:11 | is_max with [T/#0]
+max::{closure#1}:056:033 => the definition at 13:15 | __locus_logic_OrderSpec::__logic_le_total with [T/#0]
+max::{closure#2}:058:024 => the definition at 49:11 | is_max with [T/#0]
+max::{closure#3}:060:024 => the definition at 49:11 | is_max with [T/#0]
+newest:067:029 => the definition at 54:5 | max with [Version]
+spec_only:078:009 => the definition at 73:5 | bounded with [Rational]
+spec_only::{closure#0}:077:020 => the definition at 49:11 | is_max with [Rational]
+spec_only::{closure#1}:076:041 => the definition at 29:15 | __locus_logic_OrderSpec::__logic_le_total -> <Rational as __locus_logic_OrderSpec>::__logic_le_total with [Rational]
+(identical)
+
+## Diagnostics: three deliberate type errors in logical code, rustc's whole messages
+### e01-nat-for-seq, the runtime expansion: 2 errors
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:11:43
+   |
+11 |         let from_a_place = logic! { count(n) };
+   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`
+   |                                     |
+   |                                     arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:12:42
+   |
+12 |         let from_a_call = logic! { count(v.len()) };
+   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`
+   |                                    |
+   |                                    arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+### e01-nat-for-seq, the checking expansion: 2 errors
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:11:43
+   |
+11 |         let from_a_place = logic! { count(n) };
+   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`
+   |                                     |
+   |                                     arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:12:42
+   |
+12 |         let from_a_call = logic! { count(v.len()) };
+   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`
+   |                                    |
+   |                                    arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+### e02-unknown-field, the runtime expansion: 2 errors
+error[E0609]: no field `nom` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:12:37
+   |
+12 |         let on_a_local = logic! { r.nom };
+   |                                     ^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+12 -         let on_a_local = logic! { r.nom };
+12 +         let on_a_local = logic! { r.num };
+   |
+
+error[E0609]: no field `denominator` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:13:43
+   |
+13 |         let on_a_call = logic! { twice(r).denominator };
+   |                                           ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `num`, `den`
+
+### e02-unknown-field, the checking expansion: 2 errors
+error[E0609]: no field `nom` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:12:37
+   |
+12 |         let on_a_local = logic! { r.nom };
+   |                                     ^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+12 -         let on_a_local = logic! { r.nom };
+12 +         let on_a_local = logic! { r.num };
+   |
+
+error[E0609]: no field `denominator` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:13:43
+   |
+13 |         let on_a_call = logic! { twice(r).denominator };
+   |                                           ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `num`, `den`
+
+### e03-missing-operator, the runtime expansion: 3 errors
+error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:28
+    |
+ 11 |         let sum = logic! { r + r };
+    |                            ^ - required by a bound introduced by this call
+    |                            |
+    |                            unsatisfied trait bound
+    |
+help: the trait `AddLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+note: required by a bound in `locus::sk::add`
+   --> locus/src/lib.rs:550:19
+    |
+550 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+
+error[E0277]: a `Rational` and a `_` have no order in logical code
+   --> skel/src/bin/e03-missing-operator.rs:12:27
+    |
+ 12 |         let less = prove!(r < r);
+    |                           ^ - required by a bound introduced by this call
+    |                           |
+    |                           no order for these
+    |
+help: the trait `locus::sk::OrdLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `locus::sk::OrdLogic<Rhs>`
+   --> locus/src/lib.rs:524:13
+    |
+524 |             impl OrdLogic<$b> for $a {}
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^
+    |             |
+    |             `Nat` implements `locus::sk::OrdLogic`
+    |             `locus::Int` implements `locus::sk::OrdLogic`
+...
+527 |     comparable!(Int Int, Nat Nat);
+    |     ----------------------------- in this macro invocation
+...
+755 |     impl sk::OrdLogic<Nat> for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `locus::sk::OrdLogic<Nat>`
+756 |     impl sk::OrdLogic<Int> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `locus::sk::OrdLogic<locus::Int>`
+note: required by a bound in `locus::sk::lt`
+   --> locus/src/lib.rs:535:18
+    |
+535 |     pub fn lt<A: OrdLogic<B>, B>(_: A, _: B) -> Bool {
+    |                  ^^^^^^^^^^^ required by this bound in `lt`
+    = note: this error originates in the macro `comparable` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Rational: AddLogic` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:30
+    |
+ 11 |         let sum = logic! { r + r };
+    |                              ^ unsatisfied trait bound
+    |
+help: the trait `AddLogic` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+
+### e03-missing-operator, the checking expansion: 3 errors
+error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:28
+    |
+ 11 |         let sum = logic! { r + r };
+    |                            ^ - required by a bound introduced by this call
+    |                            |
+    |                            unsatisfied trait bound
+    |
+help: the trait `AddLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+note: required by a bound in `locus::sk::add`
+   --> locus/src/lib.rs:550:19
+    |
+550 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+
+error[E0277]: a `Rational` and a `_` have no order in logical code
+   --> skel/src/bin/e03-missing-operator.rs:12:27
+    |
+ 12 |         let less = prove!(r < r);
+    |                           ^ - required by a bound introduced by this call
+    |                           |
+    |                           no order for these
+    |
+help: the trait `locus::sk::OrdLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `locus::sk::OrdLogic<Rhs>`
+   --> locus/src/lib.rs:524:13
+    |
+524 |             impl OrdLogic<$b> for $a {}
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^
+    |             |
+    |             `Nat` implements `locus::sk::OrdLogic`
+    |             `locus::Int` implements `locus::sk::OrdLogic`
+...
+527 |     comparable!(Int Int, Nat Nat);
+    |     ----------------------------- in this macro invocation
+...
+755 |     impl sk::OrdLogic<Nat> for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `locus::sk::OrdLogic<Nat>`
+756 |     impl sk::OrdLogic<Int> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `locus::sk::OrdLogic<locus::Int>`
+note: required by a bound in `locus::sk::lt`
+   --> locus/src/lib.rs:535:18
+    |
+535 |     pub fn lt<A: OrdLogic<B>, B>(_: A, _: B) -> Bool {
+    |                  ^^^^^^^^^^^ required by this bound in `lt`
+    = note: this error originates in the macro `comparable` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Rational: AddLogic` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:30
+    |
+ 11 |         let sum = logic! { r + r };
+    |                              ^ unsatisfied trait bound
+    |
+help: the trait `AddLogic` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+
+## Some of the others
+### x01-literal-alone, the runtime expansion: 1 errors
+error[E0283]: type annotations needed
+   --> skel/src/bin/x01-literal-alone.rs:13:13
+    |
+ 13 |         let zero = logic! { 0 };
+    |             ^^^^            - type must be known at this point
+    |
+    = note: the type must implement `locus::sk::Literal`
+help: the following types implement trait `locus::sk::Literal`
+   --> locus/src/lib.rs:408:5
+    |
+408 |     impl Literal for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^ `locus::Int`
+409 |     impl Literal for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^ `Nat`
+note: required by a bound in `locus::sk::lit`
+   --> locus/src/lib.rs:410:19
+    |
+410 |     pub fn lit<L: Literal>(_: u128) -> L {
+    |                   ^^^^^^^ required by this bound in `lit`
+help: consider giving `zero` an explicit type
+    |
+ 13 |         let zero: /* Type */ = logic! { 0 };
+    |                 ++++++++++++
+
+### x05-generic-parameter, the runtime expansion: 2 errors
+error[E0283]: type annotations needed
+   --> skel/src/bin/x05-generic-parameter.rs:14:13
+    |
+ 14 |         let a = logic! { same(n) };
+    |             ^                 -
+    |                               |
+    |                               type must be known at this point
+    |                               required by a bound introduced by this call
+    |
+    = note: multiple `impl`s satisfying `u32: locus::sk::ArgAs<_, _>` found in the `locus` crate:
+            - impl<T> locus::sk::ArgAs<<T as ModelOf>::Logic, locus::sk::ViaModel> for T
+              where T: Runtime, T: ?Sized;
+            - impl<T> locus::sk::ArgAs<T, locus::sk::ViaSelf> for T;
+note: required by a bound in `locus::sk::arg`
+   --> locus/src/lib.rs:379:19
+    |
+379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {
+    |                   ^^^^^^^^^^^^^ required by this bound in `arg`
+help: consider giving `a` an explicit type
+    |
+ 14 |         let a: /* Type */ = logic! { same(n) };
+    |              ++++++++++++
+
+error[E0283]: type annotations needed
+   --> skel/src/bin/x05-generic-parameter.rs:15:13
+    |
+ 15 |         let b = logic! { twice(n) };
+    |             ^                  -
+    |                                |
+    |                                type must be known at this point
+    |                                required by a bound introduced by this call
+    |
+    = note: multiple `impl`s satisfying `u32: locus::sk::ArgAs<_, _>` found in the `locus` crate:
+            - impl<T> locus::sk::ArgAs<<T as ModelOf>::Logic, locus::sk::ViaModel> for T
+              where T: Runtime, T: ?Sized;
+            - impl<T> locus::sk::ArgAs<T, locus::sk::ViaSelf> for T;
+note: required by a bound in `locus::sk::arg`
+   --> locus/src/lib.rs:379:19
+    |
+379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {
+    |                   ^^^^^^^^^^^^^ required by this bound in `arg`
+help: consider giving `b` an explicit type
+    |
+ 15 |         let b: /* Type */ = logic! { twice(n) };
+    |              ++++++++++++
+
+### x06-snapshot-expected, the runtime expansion: 2 errors
+error[E0271]: type mismatch resolving `<Vec<u32> as ModelOf>::Logic == Seq<BoundedU32>`
+   --> skel/src/bin/x06-snapshot-expected.rs:13:33
+    |
+ 13 |         let n = logic! { length(*v) };
+    |                                 ^-
+    |                                 ||
+    |                                 |required by a bound introduced by this call
+    |                                 expected `Seq<BoundedU32>`, found `Seq<Nat>`
+    |
+    = note: expected struct `Seq<BoundedU32>`
+               found struct `Seq<locus::Nat>`
+note: required by a bound in `locus::sk::arg`
+   --> locus/src/lib.rs:379:19
+    |
+379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {
+    |                   ^^^^^^^^^^^^^ required by this bound in `arg`
+
+error[E0308]: mismatched types
+  --> skel/src/bin/x06-snapshot-expected.rs:14:27
+   |
+14 |         let s: Snap<u8> = logic! { b };
+   |                --------   ^^^^^ expected `BoundedU8`, found `Nat`
+   |                |
+   |                expected due to this
+   |
+   = note: this error originates in the macro `::locus::skeleton` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+### x09-missing-arm, the runtime expansion: 1 errors
+error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered
+  --> skel/src/bin/x09-missing-arm.rs:10:15
+   |
+10 |         match t {
+   |               ^ pattern `__locus_view_Tree::Leaf` not covered
+   |
+note: `__locus_view_Tree` defined here
+  --> skel/src/bin/x09-missing-arm.rs:8:10
+   |
+ 8 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }
+   |          ^^^^
+   |          |
+   |          not covered
+   = note: the matched value is of type `__locus_view_Tree`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+   |
+11 ~             Tree::Node(_, n, _) => n,
+12 ~             __locus_view_Tree::Leaf => todo!(),
+   |
+
+### x12-no-model, the runtime expansion: 2 errors
+error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+   --> skel/src/bin/x12-no-model.rs:13:29
+    |
+ 13 |         let values = prove!(t === u);
+    |                             ^ this is read as a value
+    |
+help: the trait `ModelOf` is not implemented for `Token`
+   --> skel/src/bin/x12-no-model.rs:8:5
+    |
+  8 |     struct Token { id: u32 }
+    |     ^^^^^^^^^^^^
+    = note: declare a model for `Token`, or write `snap(..)` to use its snapshot
+    = help: the following other types implement trait `ModelOf`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              Address
+              BoundedI128
+              BoundedI16
+              BoundedI32
+            and 38 others
+    = note: required for `&Token` to implement `ModelOf`
+note: required by a bound in `locus::sk::model_of`
+   --> locus/src/lib.rs:373:24
+    |
+373 |     pub fn model_of<T: ModelOf + ?Sized>(_: &T) -> T::Logic {
+    |                        ^^^^^^^ required by this bound in `model_of`
+
+error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+   --> skel/src/bin/x12-no-model.rs:13:35
+    |
+ 13 |         let values = prove!(t === u);
+    |                                   ^ this is read as a value
+    |
+help: the trait `ModelOf` is not implemented for `Token`
+   --> skel/src/bin/x12-no-model.rs:8:5
+    |
+  8 |     struct Token { id: u32 }
+    |     ^^^^^^^^^^^^
+    = note: declare a model for `Token`, or write `snap(..)` to use its snapshot
+    = help: the following other types implement trait `ModelOf`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              Address
+              BoundedI128
+              BoundedI16
+              BoundedI32
+            and 38 others
+    = note: required for `&Token` to implement `ModelOf`
+note: required by a bound in `locus::sk::model_of`
+   --> locus/src/lib.rs:373:24
+    |
+373 |     pub fn model_of<T: ModelOf + ?Sized>(_: &T) -> T::Logic {
+    |                        ^^^^^^^ required by this bound in `model_of`
+
+### x14-view-imported, the runtime expansion: 2 errors
+error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+  --> skel/src/bin/x14-view-imported.rs:25:17
+   |
+25 |                 Tree::Leaf => 0,
+   |                 ^^^^ use of unresolved module or unlinked crate `__locus_view_Tree`
+   |
+   = help: if you wanted to use a crate named `__locus_view_Tree`, use `cargo add __locus_view_Tree` to add it to your `Cargo.toml`
+help: consider importing this enum
+   |
+22 +         use crate::shapes::__locus_view_Tree;
+   |
+
+error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+  --> skel/src/bin/x14-view-imported.rs:26:17
+   |
+26 |                 Tree::Node(_, n, _) => n,
+   |                 ^^^^ use of unresolved module or unlinked crate `__locus_view_Tree`
+   |
+   = help: if you wanted to use a crate named `__locus_view_Tree`, use `cargo add __locus_view_Tree` to add it to your `Cargo.toml`
+help: consider importing this enum
+   |
+22 +         use crate::shapes::__locus_view_Tree;
+   |
+
+### c06-unbounded-parameter, the runtime expansion: 4 errors
+error[E0277]: `T` has no snapshot type that rustc can name
+  --> skel/src/bin/c06-unbounded-parameter.rs:14:20
+   |
+14 |     fn takes<T>(s: Snap<T>) -> u32 { 1 }
+   |                    ^^^^^^^ its snapshot is taken here
+   |
+   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot
+help: consider restricting type parameter `T` with trait `Snapshot`
+   |
+14 |     fn takes<T: locus::Snapshot>(s: Snap<T>) -> u32 { 1 }
+   |               +++++++++++++++++
+
+error[E0277]: `T` has no snapshot type that rustc can name
+   --> skel/src/bin/c06-unbounded-parameter.rs:10:36
+    |
+ 10 |         let before = logic! { snap(*x) };
+    |                               ---- ^^ its snapshot is taken here
+    |                               |
+    |                               required by a bound introduced by this call
+    |
+    = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot
+note: required by a bound in `locus::sk::snap`
+   --> locus/src/lib.rs:383:20
+    |
+383 |     pub fn snap<T: Snapshot + ?Sized>(_: &T) -> Snap<T> {
+    |                    ^^^^^^^^ required by this bound in `snap`
+help: consider restricting type parameter `T` with trait `Snapshot`
+    |
+  9 |     fn unbounded<T: locus::Snapshot>(x: &T) -> u32 {
+    |                   +++++++++++++++++
+
+### c07-two-snap-headers, the runtime expansion: 1 errors
+error[E0119]: conflicting implementations of trait `Describe` for type `<u32 as Snapshot>::S`
+  --> skel/src/bin/c07-two-snap-headers.rs:13:5
+   |
+12 |     impl Describe for Snap<u32> { type Width = Nat; }
+   |     --------------------------- first implementation here
+13 |     impl Describe for Snap<u8> { type Width = Int; }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `<u32 as Snapshot>::S`
+
+### g18-snap-mismatch, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+  --> cases/src/bin/g18-snap-mismatch.rs:15:20
+   |
+15 |         wants_flag(before)
+   |         ---------- ^^^^^^ expected `Bool`, found `Seq<BoundedU32>`
+   |         |
+   |         arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Bool`
+              found struct `Seq<BoundedU32>`
+note: function defined here
+  --> cases/src/bin/g18-snap-mismatch.rs:11:8
+   |
+11 |     fn wants_flag(flag: Snap<bool>) -> u32 { 1 }
+   |        ^^^^^^^^^^     ------------
+
+
+## Cost: build time with and without skeletons
+corpus, runtime expansion, cargo build, with skeletons: median 2.06s of 5 (min 1.92s, max 2.14s); 23 of 26 binaries built
+corpus, runtime expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 2.00s of 5 (min 1.96s, max 2.04s); 25 of 26 binaries built
+corpus, runtime expansion, cargo build, the first mode: median 1.94s of 5 (min 1.92s, max 2.35s); 25 of 26 binaries built
+corpus, check expansion, cargo build, with skeletons: median 1.91s of 5 (min 1.85s, max 1.97s); 23 of 26 binaries built
+corpus, check expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 2.09s of 5 (min 1.95s, max 2.15s); 23 of 26 binaries built
+corpus, check expansion, cargo build, the first mode: median 1.78s of 5 (min 1.72s, max 1.97s); 23 of 26 binaries built
+cases, runtime expansion, cargo build, with skeletons: median 4.05s of 5 (min 3.84s, max 4.09s); 29 of 58 binaries built
+cases, runtime expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 3.71s of 5 (min 3.62s, max 3.94s); 32 of 58 binaries built
+cases, runtime expansion, cargo build, the first mode: median 3.90s of 5 (min 3.61s, max 4.06s); 35 of 58 binaries built
+cases, check expansion, cargo build, with skeletons: median 4.23s of 5 (min 4.11s, max 4.28s); 29 of 58 binaries built
+cases, check expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 3.95s of 5 (min 3.87s, max 3.98s); 27 of 58 binaries built
+cases, check expansion, cargo build, the first mode: median 3.67s of 5 (min 3.51s, max 3.73s); 29 of 58 binaries built
+scale/src/bin/scale.rs: Written by tools/gen-scale.py: 500 functions, 2001 pieces of logical code.
+scale, runtime expansion, cargo check, with skeletons: median 0.67s of 5 (min 0.64s, max 0.72s)
+scale, runtime expansion, cargo check, without (LOCUS_SPIKE_NO_SKELETON=1): median 0.43s of 5 (min 0.40s, max 0.50s)
+scale, runtime expansion, cargo check, the first mode: median 0.40s of 5 (min 0.38s, max 0.41s)
+scale, check expansion, cargo check, with skeletons: median 0.64s of 5 (min 0.62s, max 0.71s)
+scale, check expansion, cargo check, without (LOCUS_SPIKE_NO_SKELETON=1): median 0.46s of 5 (min 0.42s, max 0.51s)
+scale, check expansion, cargo check, the first mode: median 0.44s of 5 (min 0.41s, max 0.51s)
+scale, runtime expansion, cargo build, with skeletons: median 0.73s of 5 (min 0.71s, max 0.80s); 1 of 1 binaries built
+scale, runtime expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 0.46s of 5 (min 0.44s, max 0.48s); 1 of 1 binaries built
+scale, runtime expansion, cargo build, the first mode: median 0.43s of 5 (min 0.41s, max 0.48s); 1 of 1 binaries built
+scale, check expansion, cargo build, with skeletons: median 0.77s of 5 (min 0.70s, max 0.86s); 1 of 1 binaries built
+scale, check expansion, cargo build, without (LOCUS_SPIKE_NO_SKELETON=1): median 0.50s of 5 (min 0.48s, max 0.61s); 1 of 1 binaries built
+scale, check expansion, cargo build, the first mode: median 0.48s of 5 (min 0.46s, max 0.50s); 1 of 1 binaries built
+
+## What locus! writes
+### logical-fields
+struct Tree {}
+impl Clone for Tree {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Tree {}
+impl Debug for Tree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Tree")
+    }
+}
+impl ModelOf for Tree {
+    type Logic = Self;
+}
+impl Snapshot for Tree {
+    type S = Self;
+}
+impl Logical for Tree {
+    fn __locus_marker() -> Self {
+        Tree {}
+    }
+}
+impl Tree {
+    const Leaf: Tree = Tree {};
+    fn Node(_: Tree, _: Nat, _: Tree) -> Tree {
+        stub()
+    }
+}
+enum __locus_view_Tree {
+    Leaf,
+    Node(Tree, Nat, Tree),
+}
+impl sk::HasView<__locus_view_Tree> for Tree {}
+struct Span {
+    start: Nat,
+    length: Nat,
+}
+impl Clone for Span {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Span {}
+impl Debug for Span {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Span")
+    }
+}
+impl ModelOf for Span {
+    type Logic = Self;
+}
+impl Snapshot for Span {
+    type S = Self;
+}
+impl Logical for Span {
+    fn __locus_marker() -> Self {
+        Span {
+            start: Logical::__locus_marker(),
+            length: Logical::__locus_marker(),
+        }
+    }
+}
+impl sk::HasView<Span> for Span {}
+fn size(t: Tree) -> Nat {
+    sk::body(|| match sk::view(sk::model_of(&t)) {
+        __locus_view_Tree::Leaf => sk::lit(0),
+        __locus_view_Tree::Node(left, _, right) => sk::add(
+            {
+                let __locus_l = size(sk::arg(&left));
+                let __locus_r = sk::lit_like(&__locus_l, 1);
+                sk::add(__locus_l, __locus_r)
+            },
+            size(sk::arg(&right)),
+        ),
+    })
+}
+fn count(xs: Seq<Nat>) -> Nat {
+    sk::body(|| sk::model_of(&xs).__logic_len())
+}
+use prelude::*;
+### returned-borrow
+fn first_mut(
+    pair: &mut (u32, u32),
+) -> (
+    &mut u32,
+    Proof!
+[r == pair.0 && final ! (pair) === (final!(r), pair.1)],
+) {
+    sk::holds1(|r: &mut u32| {
+        sk::and(
+            sk::eq(sk::model_of(&r), sk::model_of(&pair.0)),
+            sk::same(
+                sk::model_of(&(*sk::final_of(&pair))),
+                (
+                    sk::model_of(&(*sk::final_of(&r))),
+                    sk::model_of(&pair.1),
+                ),
+            ),
+        )
+    });
+    (&mut pair.0, proof! ([] [] []))
+}
+fn nine() -> u32 {
+    let mut pair: (u32, u32) = (1, 2);
+    let (first, related) = first_mut(&mut pair);
+    *first = 9;
+    let is_nine: Proof![pair.0 == 9] = proof!
+    ([] [] []);
+    sk::holds(|| {
+        let __locus_l = sk::model_of(&pair.0);
+        let __locus_r = sk::lit_like(&__locus_l, 9);
+        sk::eq(__locus_l, __locus_r)
+    });
+    pair.0
+}
+use prelude::*;
+### checked-indices
+fn in_bounds(items: &[u32], wanted: &[usize]) -> Vec<(usize, Proof![i < items.len()])> {
+    sk::holds1(|i: usize| {
+        sk::lt(
+            sk::model_of(&i),
+            sk::model_of(&items).__logic_len(),
+        )
+    });
+    let mut checked: Vec<(usize, Proof![i < items.len()])> = Vec::new();
+    sk::holds1(|i: usize| {
+        sk::lt(
+            sk::model_of(&i),
+            sk::model_of(&items).__logic_len(),
+        )
+    });
+    for &i in wanted {
+        if i < items.len() {
+            checked.push((i, proof! ([] [] [])));
+        }
+    }
+    checked
+}
+use prelude::*;
+### match-every-arm
+fn Even(n: Nat) -> Prop {
+    sk::holds(|| {
+        let __locus_l = sk::model_of(&n);
+        let __locus_r = sk::lit_like(&__locus_l, 0);
+        sk::eq(__locus_l, __locus_r)
+    });
+    sk::holds1(|m: Nat| {
+        sk::and(
+            sk::eq(sk::model_of(&n), {
+                let __locus_l = sk::model_of(&m);
+                let __locus_r = sk::lit_like(&__locus_l, 2);
+                sk::add(__locus_l, __locus_r)
+            }),
+            Even(sk::arg(&m)),
+        )
+    });
+    stub()
+}
+struct Even {}
+impl Even {
+    fn Zero() -> Erased {
+        stub()
+    }
+    fn Step(m: Nat) -> Erased {
+        stub()
+    }
+}
+enum __locus_view_Even {
+    Zero,
+    Step(Nat),
+}
+impl sk::PropView for __locus_view_Even {}
+fn one_is_not_even(h: Proof![Even(1)]) -> Proof![False] {
+    sk::holds(|| Even(sk::lit(1)));
+    sk::holds(|| False);
+    sk::body(|| match sk::view(sk::model_of(&h)) {
+        __locus_view_Even::Zero => {
+            let one_is_zero = Erased;
+            sk::hole()
+        }
+        __locus_view_Even::Step(m) => {
+            let one_is_step = Erased;
+            sk::hole()
+        }
+    })
+}
+use prelude::*;
+### a02-places
+struct Counter {
+    hits: u32,
+    limit: u8,
+}
+struct __locus_snap_Counter {}
+impl Clone for __locus_snap_Counter {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Counter {}
+impl Debug for __locus_snap_Counter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Counter>")
+    }
+}
+impl ModelOf for __locus_snap_Counter {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Counter {
+    type S = Self;
+}
+impl Logical for __locus_snap_Counter {
+    fn __locus_marker() -> Self {
+        __locus_snap_Counter {}
+    }
+}
+impl Snapshot for Counter {
+    type S = __locus_snap_Counter;
+}
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+fn first_mut(
+    pair: &mut (u32, u32),
+) -> (
+    &mut u32,
+    Proof! [final ! (pair) === (final!(r), pair.1)],
+) {
+    sk::holds1(|r: &mut u32| {
+        sk::same(
+            sk::model_of(&(*sk::final_of(&pair))),
+            (
+                sk::model_of(&(*sk::final_of(&r))),
+                sk::model_of(&pair.1),
+            ),
+        )
+    });
+    (&mut pair.0, proof! ([] [] []))
+}
+fn run(c: &Counter, r: &mut Vec<u32>, pair: (u32, bool)) -> Vec<&'static str> {
+    let a = skeleton!
+    (typed { sk :: model_of(& c.hits) } c.hits);
+    let b = skeleton!
+    (typed
+    {
+        sk ::
+        add(sk :: model_of(& c.hits), sk ::
+        model_of(& c.limit))
+    } c.hits + c.limit);
+    let d = ::
+    locus :: skeleton! (typed { sk :: model_of(& (* r)) } * r);
+    let e = skeleton!
+    (typed { sk :: model_of(& pair) } pair);
+    let f = skeleton!
+    (typed { sk :: model_of(& pair.1) } pair.1);
+    let g = skeleton!
+    (typed { sk :: snap(& (* r)) } snap(*r));
+    let h = skeleton!
+    (typed { sk :: snap(& c) } snap(c));
+    let mut two = (1u32, 2u32);
+    let (one, related) = first_mut(&mut two);
+    let end = skeleton!
+    (typed
+    { sk :: model_of(& (* sk :: final_of(& one))) }
+    final ! (one));
+    let ends: :: locus
+    :: Proof! [final ! (one) >= 0 && final ! (one) === end] = :: locus ::
+    proof! ([] [] []);
+    sk::holds(|| {
+        sk::and(
+            {
+                let __locus_l = sk::model_of(&(*sk::final_of(&one)));
+                let __locus_r = sk::lit_like(&__locus_l, 0);
+                sk::ge(__locus_l, __locus_r)
+            },
+            sk::same(
+                sk::model_of(&(*sk::final_of(&one))),
+                sk::model_of(&end),
+            ),
+        )
+    });
+    *one = 5;
+    vec![
+        type_of(&a),
+        type_of(&b),
+        type_of(&d),
+        type_of(&e),
+        type_of(&f),
+        type_of(&g),
+        type_of(&h),
+        type_of(&end),
+    ]
+}
+use prelude::*;
+### a05-operators
+fn ops(a: Int, b: Int, n: Nat, m: Nat, p: Bool, q: Bool) -> Prop {
+    sk::prop_body(|| {
+        sk::implies(
+            sk::and(
+                sk::eq(
+                    sk::sub(
+                        sk::add(
+                            sk::model_of(&a),
+                            sk::mul(sk::model_of(&b), sk::model_of(&a)),
+                        ),
+                        sk::rem(
+                            sk::div(sk::model_of(&b), sk::model_of(&a)),
+                            sk::model_of(&b),
+                        ),
+                    ),
+                    sk::model_of(&a),
+                ),
+                sk::gt(
+                    sk::add(sk::model_of(&n), sk::model_of(&m)),
+                    sk::model_of(&m),
+                ),
+            ),
+            sk::and(
+                sk::not(
+                    (sk::or(sk::model_of(&p), sk::model_of(&q))),
+                ),
+                sk::same(sk::model_of(&a), sk::model_of(&b)),
+            ),
+        )
+    })
+}
+fn both(p: Bool, q: Bool) -> Bool {
+    sk::body(|| {
+        sk::or(
+            sk::and(
+                sk::model_of(&p),
+                sk::not(sk::model_of(&q)),
+            ),
+            sk::ne(sk::model_of(&p), sk::model_of(&q)),
+        )
+    })
+}
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+fn run(x: u32, y: u32, flag: bool) -> (&'static str, &'static str, &'static str, &'static str) {
+    let b = skeleton!
+    (typed
+    {
+        sk ::
+        and(sk ::
+        gt({
+            let __locus_l = sk :: model_of(& x); let __locus_r =
+            sk :: lit_like(& __locus_l, 1); sk ::
+            add(__locus_l, __locus_r)
+        }, sk :: model_of(& y)), sk ::
+        model_of(& flag))
+    } x + 1 > y && flag);
+    let p = ::
+    locus :: skeleton!
+    (prop_value
+    {
+        sk ::
+        implies(sk ::
+        and(sk ::
+        gt({
+            let __locus_l = sk :: model_of(& x); let __locus_r =
+            sk :: lit_like(& __locus_l, 1); sk ::
+            add(__locus_l, __locus_r)
+        }, sk :: model_of(& x)),
+        (sk ::
+        or(sk ::
+        eq(sk :: model_of(& x), sk :: model_of(& y)),
+        sk ::
+        ne(sk :: model_of(& x), sk ::
+        model_of(& y))))), sk ::
+        le(sk :: model_of(& x), sk ::
+        add(sk :: model_of(& x), sk ::
+        model_of(& y))))
+    } x + 1 > x && (x == y || x != y) ==> x <= x + y);
+    let d = skeleton!
+    (typed
+    {
+        sk ::
+        sub(sk :: model_of(& x), sk :: model_of(& y))
+    } x - y);
+    let h = :: locus ::
+    skeleton!
+    (proved
+    {
+        sk ::
+        implies(sk ::
+        and(sk ::
+        same(sk :: model_of(& x), sk ::
+        model_of(& x)), sk :: model_of(& flag)),
+        {
+            let __locus_l = sk :: model_of(& x); let __locus_r =
+            sk :: lit_like(& __locus_l, 0); sk ::
+            ge(__locus_l, __locus_r)
+        })
+    } x === x && flag ==> x >= 0);
+    let holds: Proof![flag || !flag] = proof!
+    ([] [] []);
+    sk::holds(|| {
+        sk::or(
+            sk::model_of(&flag),
+            sk::not(sk::model_of(&flag)),
+        )
+    });
+    (type_of(&b), type_of(&p), type_of(&d), type_of(&h))
+}
+use prelude::*;
+
+run.sh all: 333 seconds
+exit 0
+
+# Appended afterwards: ./run.sh probes, run again after probes/p6.rs was added
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo: cargo 1.97.0 (c980f4866 2026-06-30)
+
+## Hand probes of the encodings
+probes/p1.rs: p1::Nat p1::Nat p1::Nat p1::Nat p1::Nat|sizes 1 1
+probes/p2.rs: Light 1 Light0 0 Tree 0 TreeView 1
+probes/p4.rs: 32 8
+probes/p3.rs: error[E0072]: recursive type `Tree` has infinite size|error[E0072]: recursive type `A` has infinite size
+probes/p5.rs: error[E0283]: type annotations needed|24 | takes_bool(arg(&b)); // both give `Bool`|note: multiple `impl`s satisfying `bool: ArgAs<Bool, _>` found
+probes/p6.rs: error[E0658]: usage of qualified paths in this context is experimental|11 | <Tree as HasView>::View::Node(n) => n,
+
+run.sh probes: 1 seconds
+
+# Appended afterwards: two more messages from the same reports, which ./run.sh diagnostics now prints too
+### c03-snap-in-header, the runtime expansion: 1 errors
+error[E0277]: the trait bound `locus::Bool: Describe` is not satisfied
+  --> skel/src/bin/c03-snap-in-header.rs:18:48
+   |
+18 |     println!("at Snap<bool>: {}", type_name::<<::locus::Snap<bool> as Describe>::Width>());
+   |                                                ^^^^^^^^^^^^^^^^^^^ the trait `Describe` is not implemented for `locus::Bool`
+   |
+help: the trait `Describe` is implemented for `<u32 as Snapshot>::S`
+  --> skel/src/bin/c03-snap-in-header.rs:11:5
+   |
+11 |     impl Describe for Snap<u32> { type Width = Nat; }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+### after-move, the runtime expansion: 1 errors
+error[E0382]: borrow of moved value: `v`
+  --> corpus/src/bin/after-move.rs:19:13
+   |
+17 |     let v = vec![1, 2, 3];
+   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait
+18 |     let count = consume(v);
+   |                         - value moved here
+19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved
+   |             ^^^^^    - borrow occurs due to use in closure
+   |             |
+   |             value borrowed here after move
+   |
+note: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary
+  --> corpus/src/bin/after-move.rs:12:15
+   |
+12 | fn consume(v: Vec<u32>) -> usize {
+   |    -------    ^^^^^^^^ this parameter takes ownership of the value
+   |    |
+   |    in this function
+   = note: this error originates in the macro `::locus::skeleton` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider cloning the value if the performance cost is acceptable
+   |
+18 |     let count = consume(v.clone());
+   |                          ++++++++
+
