@@ -1,0 +1,12 @@
+//~ question: Is an integer literal with nothing beside it a `Nat`, because a later use wants one?
+//~ spec: logic.arith.literals, logic.ghost.types-forward
+//~ rfc: 0002
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n
+}
+
+fn start(n: u32) -> u32 {
+    let zero = logic! { 0 };
+    grow(n, zero) //~ error: `zero` is an `Int`, and the parameter `by` is a `Nat`: a literal of which nothing is expected is an `Int`; write `logic! { 0 as Nat }`
+}

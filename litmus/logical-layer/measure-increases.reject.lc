@@ -2,7 +2,7 @@
 //~ spec: logic.fn.total
 //~ rfc: 0002
 
-#[decreases(n)]
+#[decreases(n as Int)]
 logic fn climb(n: Nat) -> Nat {
     if n > 100 {
         0

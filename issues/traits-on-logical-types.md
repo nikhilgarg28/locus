@@ -123,3 +123,9 @@ The owner then asked for all of it to be written into the RFCs once the third ro
 > Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
 
 None of it is in an RFC yet. [capture-family](../spikes/capture-family/README.md) shows the encoding in plain Rust, and a third round of the skeleton spike is testing it in the lowering.
+
+### 2026-11-22, the decisions on conversions are in RFC 0002
+
+The owner's answers on `Bool` and `Prop`, on `Nat` and `Int`, on literals, and on `decide`, quoted in the two entries above, are now RFC 0002's decisions 97 and 98, with the rules `logic.eq.comparisons`, `logic.bool.as-proposition`, `logic.bool.decide`, `logic.arith.nat-to-int`, and `logic.arith.literals`, and their examples. What those decisions needed that the owner did not see one by one is item 29 of what is still for the owner there.
+
+Nothing else in those entries is written yet: not the names that lowering writes, and not snapshots, models, capture, or the lowering itself. This issue stays open for them and for its own question.

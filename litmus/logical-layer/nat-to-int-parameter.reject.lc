@@ -1,0 +1,11 @@
+//~ question: May a `Nat` be given to a parameter of type `Int`, with nothing written?
+//~ spec: logic.arith.nat-to-int
+//~ rfc: 0002
+
+logic fn negate(i: Int) -> Int {
+    0 - i
+}
+
+logic fn below_zero(n: Nat) -> Int {
+    negate(n) //~ error: `n` is a `Nat`, and the parameter `i` of `negate` is an `Int`; write `negate(n as Int)`
+}

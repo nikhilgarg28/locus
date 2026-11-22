@@ -1,0 +1,12 @@
+//~ question: Is a `Bool` given to a parameter of type `Prop`, or bound to a local of that type, when it is written `b === true`?
+//~ spec: logic.bool.as-proposition
+//~ rfc: 0002
+
+logic fn twice(p: Prop) -> Prop {
+    p && p
+}
+
+fn both(flag: bool, h: @twice(flag === true)) -> u32 {
+    let p: Prop = logic! { flag === true };
+    0
+}

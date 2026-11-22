@@ -1,0 +1,10 @@
+//~ question: May a contract tie a `bool` result to a proposition with `decide`?
+//~ spec: logic.bool.decide
+//~ rfc: 0002
+
+fn is_zero(x: u32) -> (r: bool, @(r === decide(x == 0))) {
+    (x == 0, _)
+}
+
+//~ run: is_zero(0).0 => true
+//~ run: is_zero(3).0 => false

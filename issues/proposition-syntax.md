@@ -48,3 +48,12 @@ Moved into the repository from [GitHub issue #5](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-22, comparisons are propositions, and there is no `<==>`
+
+RFC 0002's decisions 97 and 98 record two answers of the owner's that are about what is written inside a proposition. The owner's words are quoted there and in [traits-on-logical-types](traits-on-logical-types.md).
+
+- `==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a `Prop`, and a `Bool` is used as a proposition, with nothing written, at the positions where the form of the code asks for one. `&&`, `||`, and `!` are connectives on propositions, and operators on `Bool`s when every operand is a `Bool`. The rule `proofs.connectives` is reworded for this.
+- There is no connective for "exactly when". Offered `<==>` or a function of the library, the owner chose the function: a contract writes `r === decide(P)`, or two implications.
+
+The list of positions, and that `==` is a proposition as the orderings are, are RFC 0002's proposal, and are item 29 of what is still for the owner there.

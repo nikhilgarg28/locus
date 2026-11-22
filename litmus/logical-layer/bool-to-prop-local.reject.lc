@@ -1,0 +1,8 @@
+//~ question: Is a `Bool` used as a proposition when it is bound to a local whose type is written `Prop`?
+//~ spec: logic.bool.as-proposition
+//~ rfc: 0002
+
+fn keep(flag: bool) -> u32 {
+    let p: Prop = logic! { flag }; //~ error: `flag` is a `Bool`, and `p` is a `Prop`; write `logic! { flag === true }`
+    0
+}

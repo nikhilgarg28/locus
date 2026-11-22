@@ -1,0 +1,12 @@
+//~ question: May a logic function return the `Bool` of a comparison, with `decide`?
+//~ spec: logic.bool.decide, logic.eq.comparisons
+//~ rfc: 0002
+
+logic fn small(n: Nat) -> Bool {
+    decide(n < 10)
+}
+
+// `decide` of a comparison is the comparison's `Bool`, so `s` proves what is required.
+logic fn below_ten(n: Nat, s: @small(n)) -> @(n < 10) {
+    s
+}

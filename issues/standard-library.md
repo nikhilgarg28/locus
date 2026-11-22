@@ -240,3 +240,11 @@ The first was the recommendation. No decision is recorded from that reply, becau
 - `models/derived-model-keeps-proof-holder.accept.lc` gets equal lengths from equal models, and two of the three examples of a stack state their postcondition on a model. Each would need a rule that a library container's model has its snapshot's length, as a step of conversion, since a hole calls no lemma. No RFC has that rule.
 
 So `Vec::view` and the three signatures of decision 87 are unchanged, and still speak of models with no `Model` bound, which is the gap the question was to close. RFC 0002 lists the question as item 27 of what is still for the owner, with three ways out and what each changes in those examples: a step of conversion from a library container's model to its snapshot's length, with the one rejected example changed; contracts on models with a `Model` bound on each method; or contracts on snapshots with a lemma that a program calls. It is to be decided with the design of traits ([traits-on-logical-types](traits-on-logical-types.md)), where what a contract on a snapshot can say is being worked out.
+
+### 2026-11-22, `decide`, and two questions that the decision on `Nat` and `Int` raises
+
+RFC 0002's decision 98 gives the library one function and leaves two questions with it.
+
+- **`decide(P)` is the library's:** a logic function from `Prop` to `Bool`, `true` exactly when `P` holds. The owner chose it over a connective `<==>`: "go with library function/macro vs one more symbol". The name, and that it is a function and not a macro, are RFC 0002's proposal (`logic.bool.decide`).
+- **The index of a sequence.** Since that decision a `Nat` is used as an `Int` only where it is written `as Int`, and RFC 0005 indexes a sequence by an `Int`. So `xs[i]` for a `usize` or a `Nat` is now written `xs[i as Int]`, in four examples, in RFC 0002's first example, and in RFC 0004's. The alternative is a sequence that a `Nat` indexes as well, which is how the second round of the skeleton spike had it. Not decided: the owner was asked about operators, and this is item 29 of what is still for the owner in RFC 0002.
+- **What `wrap` takes.** `core.wrap` says "an integer". Decided examples give `u32::wrap` a `Nat`, and their error texts an `Int`, and no rule states its parameter or its result. Those examples are unchanged. The same item lists it.

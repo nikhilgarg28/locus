@@ -1,0 +1,15 @@
+//~ question: Is an integer literal a `Nat` where a `Nat` is expected: as an argument for a `Nat` parameter, and beside a `Nat` in an operator?
+//~ spec: logic.arith.literals
+//~ rfc: 0002
+
+logic fn double(n: Nat) -> Nat {
+    n + n
+}
+
+logic fn six() -> Nat {
+    double(3)
+}
+
+logic fn next(n: Nat) -> Nat {
+    n + 1
+}

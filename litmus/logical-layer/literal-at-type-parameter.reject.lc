@@ -1,0 +1,11 @@
+//~ question: Does an integer literal have a type when the parameter it is given to has a type parameter for its type?
+//~ spec: logic.arith.literals
+//~ rfc: 0002
+
+logic fn same<T>(t: T) -> T {
+    t
+}
+
+logic fn four() -> Int {
+    same(4) //~ error: nothing gives `4` a type: the parameter `t` of `same` has the type parameter `T`; write `4 as Int` or `4 as Nat`
+}

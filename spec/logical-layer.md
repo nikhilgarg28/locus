@@ -22,6 +22,12 @@ A logical type, or a proposition declared with `prop`, refers to itself, directl
 r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
 
+r[logic.arith.nat-to-int]
+A `Nat` is used as an `Int` only where the program writes it as one, `n as Int`. An arithmetic operator, a comparison, `===`, and `!==` take two `Int`s or two `Nat`s, never one of each. And a `Nat` is not accepted where an `Int` is expected: as an argument for a parameter of type `Int`, as the value of a field, a local, or a result of that type, as the index of a sequence ([`core.sequences`](core.md)), or as the measure of a logic function, which is an `Int`.
+
+r[logic.arith.literals]
+An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expected, as it is beside a `Nat` in an operator and as an argument for a parameter of type `Nat`. A literal of which nothing is expected is an `Int`, whatever a later use of it wants ([`logic.ghost.types-forward`](#ghost-values)). Where a literal is the argument for a parameter whose type is a type parameter of the function called, nothing gives it a type, and the program writes one: `4 as Nat` or `4 as Int`.
+
 ## Ghost values
 
 Values of logical types, proofs included, are *ghost*: they exist only for checking. They may appear in logical code, as parameters, results, locals, and fields of logical type, and inside runtime types as type arguments.
@@ -122,7 +128,13 @@ r[logic.eq.snapshots]
 Two snapshots are equal exactly when they are the same variant and their fields' snapshots are equal. The opaque parts of a snapshot, such as a `Cell`'s, are values that Locus knows nothing about, except that a move or a copy keeps them.
 
 r[logic.eq.comparisons]
-`==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, where `a == b` is true exactly when `a === b`, and each ordering agrees with the order of the integers. A `Bool` used as a proposition stands for the proposition that it is true.
+`==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a proposition, of type `Prop`, and never a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, on two operands of one type, where `a == b` holds exactly when `a === b`, `a != b` exactly when `a !== b`, and each ordering agrees with the order of the integers. In a core term a comparison is the proposition that a `Bool` is `true` ([`logic.bool.as-proposition`](#logical-code)), so what this specification says of a `Bool` used as a proposition, it says of a comparison.
+
+r[logic.bool.as-proposition]
+A `Bool` is the model of a runtime `bool`, and the type of `true` and `false`. It is used as a proposition, with nothing written, at the positions where the form of the code requires a proposition: as the proposition of a proof type `@( .. )`, and of `prop!( .. )` and `prove!( .. )`; as the body of a `forall` or an `exists`; as an operand of `==>`; as an operand of `&&` or `||` whose other operand is a proposition; and as the body of a logic function declared to return `Prop`. There `b` stands for the proposition `b === true`. `&&`, `||`, and `!` whose operands are all `Bool`s are operators on `Bool`s and give a `Bool`, wherever they are written. At every other position a `Bool` is not a `Prop`: as an argument for a parameter of type `Prop`, or as the value of a local or a field of that type, it is written `b === true`.
+
+r[logic.bool.decide]
+`decide(P)`, of Locus's library, is a logic function from `Prop` to `Bool`: it is `true` exactly when `P` holds, and `false` otherwise. `decide` of a `Bool` used as a proposition is that `Bool`, so `decide` of a comparison is the comparison's `Bool`. Logical code has no connective for "exactly when": a contract ties a `bool` result `r` to a proposition `P` as `r === decide(P)`, or with two implications.
 
 r[logic.code.no-runtime-calls]
 Logical code does not call runtime functions or methods, and does not mutate runtime state.

@@ -1,0 +1,18 @@
+//~ question: Is a `Bool` used as a proposition, with nothing written, where the form of the code asks for a proposition?
+//~ spec: logic.bool.as-proposition
+//~ rfc: 0002
+
+struct Gate {
+    open: bool,
+    width: u32,
+}
+
+// The body of a logic function that returns `Prop`.
+logic fn holds(flag: Bool) -> Prop {
+    flag
+}
+
+// The proposition of a proof type, and an operand of `&&` beside a comparison.
+fn pass(g: &Gate, n: u32, allowed: @(g.open), fits: @(g.open && n <= g.width)) -> u32 {
+    n
+}

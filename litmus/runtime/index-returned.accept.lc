@@ -2,7 +2,7 @@
 //~ spec: runtime.operations.returned, runtime.operations.conditions
 //~ rfc: 0004
 
-fn at(xs: &[u32], i: usize) -> (x: u32, @(i < xs.len() && x == xs[i])) {
+fn at(xs: &[u32], i: usize) -> (x: u32, @(i < xs.len() && x == xs[i as Int])) {
     let x = xs[i];
     (x, _)
 }
