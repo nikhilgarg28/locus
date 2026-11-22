@@ -1,0 +1,13 @@
+//~ question: May a logic function's measure be an `Int`, when it is shown not to be negative at each recursive call?
+//~ spec: logic.fn.total, logic.arith.nat-subtraction
+//~ rfc: 0002
+
+// `hi - lo` is an `Int`. Under `lo < hi`, it is still not negative at `lo + 1`, and it is smaller.
+#[decreases(hi - lo)]
+logic fn span(lo: Nat, hi: Nat) -> Nat {
+    if lo < hi {
+        span(lo + 1, hi) + 1
+    } else {
+        0
+    }
+}

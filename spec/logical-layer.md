@@ -23,10 +23,10 @@ r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
 
 r[logic.arith.nat-to-int]
-A `Nat` is used as an `Int` only where the program writes it as one, `n as Int`. An arithmetic operator, a comparison, `===`, and `!==` take two `Int`s or two `Nat`s, never one of each. And a `Nat` is not accepted where an `Int` is expected: as an argument for a parameter of type `Int`, as the value of a field, a local, or a result of that type, as the index of a sequence ([`core.sequences`](core.md)), or as the measure of a logic function, which is an `Int`.
+A `Nat` is used as an `Int` only where the program writes it as one, `n as Int`. An arithmetic operator, a comparison, `===`, and `!==` take two `Int`s or two `Nat`s, never one of each. And a `Nat` is not accepted where an `Int` is expected: as an argument for a parameter of type `Int`, or as the value of a field, a local, or a result of that type.
 
 r[logic.arith.literals]
-An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expected, as it is beside a `Nat` in an operator and as an argument for a parameter of type `Nat`. A literal of which nothing is expected is an `Int`, whatever a later use of it wants ([`logic.ghost.types-forward`](#ghost-values)). Where a literal is the argument for a parameter whose type is a type parameter of the function called, nothing gives it a type, and the program writes one: `4 as Nat` or `4 as Int`.
+An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expected, as it is beside a `Nat` in an operator, as an argument for a parameter of type `Nat`, and as the index of a sequence ([`core.sequences`](core.md)). A literal of which nothing is expected is an `Int`, whatever a later use of it wants ([`logic.ghost.types-forward`](#ghost-values)). Where a literal is the argument for a parameter whose type is a type parameter of the function called, nothing gives it a type, and the program writes one: `4 as Nat` or `4 as Int`.
 
 ## Ghost values
 
@@ -143,7 +143,7 @@ r[logic.code.no-runtime-calls]
 Logical code does not call runtime functions or methods, and does not mutate runtime state.
 
 r[logic.fn.total]
-Every recursive call of a logic function is on a structurally smaller part of one of its arguments, or decreases the function's declared measure. For now, no logic function calls itself through another. A body that proof search completes is held to the same rule.
+Every recursive call of a logic function is on a structurally smaller part of one of its arguments, or decreases the function's declared measure. A measure is a `Nat` or an `Int`. At each recursive call, the measure at the call's arguments is smaller than at the parameters and is not negative, which for an `Int` is part of what is proved. For now, no logic function calls itself through another. A body that proof search completes is held to the same rule.
 
 r[logic.const.well-founded]
 A constant of logical type is not defined in terms of itself, directly or through other constants or logic functions. The same holds for the logical data in the initializer of any constant or static whose type holds some: it does not depend on the item itself, directly, through other constants and statics, through logic functions, or through a field of the item. While an initializer is checked, the proof fields of the item it initializes are not available. A cycle of addresses among statics is not such a dependence.

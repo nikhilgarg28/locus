@@ -3,5 +3,5 @@
 //~ rfc: 0005
 
 logic fn head(proofs: Seq<@True>) -> @True {
-    proofs.at(0, linear(())) //~ error: cannot prove `0 <= 0 && 0 < proofs.len()` from the facts given, of which there are none: it fails for an empty sequence
+    proofs.at(0, linear(())) //~ error: cannot prove `0 < proofs.len()` from the facts given, of which there are none: it fails for an empty sequence
 }

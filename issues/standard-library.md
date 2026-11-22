@@ -258,3 +258,17 @@ RFC 0002's decisions 99 to 108 leave these with the library's RFC.
 - **`valid` for each collection.** The snapshot of a library collection is valid when every element's is (`models.valid`).
 - **`u8::range` is given a place.** With the snapshot of a `u8` a `Nat`, a lemma from any `Nat` to its being at most 255 would be false, so `proofs.facts.types` now says that the lemma takes a place of type `u8`.
 - **Item 27 is unchanged,** and was written before these decisions: it speaks of `models.no-default`, which is removed, and of `models/vector-without-element-model`, which is now accepted. What the library's contracts speak of, and Locus's collections, are for the change that follows.
+
+### 2026-11-22, a sequence is indexed by a `Nat` only
+
+The entry above left the index of a sequence undecided. To the recommendation "letting an index and a measure each be a `Nat` or an `Int`", the owner said:
+
+> Yes. In fact, shouldn't index always be Nat?
+
+and then, answering that question:
+
+> Yes, I think it's better to only let Nat go in index - yes, requires some proof for converting to Nat but isn't that meaningful? Else we may have equivalent of UB in logical stuff?
+
+It is RFC 0002's decision 109. `xs[i]`, `s.get(i)`, `s.at(i, p)`, and `s.update(i, v)` take a `Nat`, `at` needs a proof only of `i < s.len()`, and a measure is a `Nat` or an `Int`. `core.sequences` changes, and the examples no longer write `xs[i as Int]`. RFC 0005 had already made an index outside a sequence defined, so nothing was undefined before; what the decision buys is that a negative index cannot be written.
+
+One thing is left with the library: **how an `Int` is turned into a `Nat`.** RFC 0002 says that it needs a proof that the `Int` is not negative, and gives it no spelling. Until it has one, `xs[i - 1]` and `xs[xs.len() - 1]` cannot be written. It is item 31 of what is still for the owner there.

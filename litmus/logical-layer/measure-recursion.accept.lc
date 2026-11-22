@@ -2,7 +2,7 @@
 //~ spec: logic.fn.total
 //~ rfc: 0002
 
-#[decreases(n as Int)]
+#[decreases(n)]
 logic fn halvings(n: Nat) -> Nat {
     if n < 2 {
         0

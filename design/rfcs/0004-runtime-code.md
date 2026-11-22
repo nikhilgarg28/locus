@@ -15,7 +15,7 @@ Locus understands a fixed list of runtime operations: those that the language it
 A proof is about values, and runtime code is what makes the values. [RFC 0003](0003-proof-construction.md) says that a hole uses "what is known at that point", and nothing yet says what that is for real code. Every accepted example so far is a straight line of comparisons and small arithmetic.
 
 ```rust
-fn binary_search(xs: &[u32], target: u32) -> Option<(i: usize, @(i < xs.len() && xs[i as Int] == target))> {
+fn binary_search(xs: &[u32], target: u32) -> Option<(i: usize, @(i < xs.len() && xs[i] == target))> {
     let mut lo = 0;
     let mut hi = xs.len();              // (1) what is known of `hi`?
     while lo < hi {                     // (2) what is known at the top, every time round?

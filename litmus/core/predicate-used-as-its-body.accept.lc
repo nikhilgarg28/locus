@@ -3,7 +3,7 @@
 //~ rfc: 0005
 
 logic fn below(xs: Seq<Int>, cap: Int) -> Prop {
-    forall |i: Int| 0 <= i && i < xs.len() as Int ==> xs[i] < cap
+    forall |i: Nat| i < xs.len() ==> xs[i] < cap
 }
 
 // `below(xs, cap)` converts to its `forall`, so `all` is called as one.

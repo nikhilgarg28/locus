@@ -1,8 +1,8 @@
 //~ question: May a logic function's measure be a `Nat`, with nothing written?
-//~ spec: logic.arith.nat-to-int, logic.fn.total
+//~ spec: logic.fn.total
 //~ rfc: 0002
 
-#[decreases(n)] //~ error: a measure is an `Int`, and `n` is a `Nat`; write `#[decreases(n as Int)]`
+#[decreases(n)]
 logic fn halvings(n: Nat) -> Nat {
     if n < 2 {
         0

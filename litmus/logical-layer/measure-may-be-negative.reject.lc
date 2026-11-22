@@ -1,0 +1,12 @@
+//~ question: May a logic function's measure be an `Int` that could be negative at a recursive call?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+#[decreases(hi - lo)]
+logic fn span(lo: Nat, hi: Nat) -> Nat {
+    if lo === hi {
+        0
+    } else {
+        span(lo + 1, hi) + 1 //~ error: cannot prove that the measure is not negative at this call: `hi - (lo + 1) >= 0` fails where `lo` is above `hi`
+    }
+}

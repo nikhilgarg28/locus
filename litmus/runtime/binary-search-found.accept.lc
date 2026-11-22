@@ -2,7 +2,7 @@
 //~ spec: runtime.loops, runtime.operations.returned
 //~ rfc: 0004
 
-fn binary_search(xs: &[u32], target: u32) -> Option<(i: usize, @(i < xs.len() && xs[i as Int] == target))> {
+fn binary_search(xs: &[u32], target: u32) -> Option<(i: usize, @(i < xs.len() && xs[i] == target))> {
     let mut lo = 0;
     let mut hi = xs.len();
     while lo < hi {

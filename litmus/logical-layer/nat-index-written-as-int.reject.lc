@@ -1,7 +1,7 @@
 //~ question: May a sequence be indexed by a `Nat` that is written `i as Int`?
-//~ spec: logic.arith.nat-to-int
+//~ spec: core.sequences
 //~ rfc: 0002
 
 logic fn item(xs: Seq<Nat>, i: Nat) -> Nat {
-    xs[i as Int]
+    xs[i as Int] //~ error: a sequence is indexed by a `Nat`, and `i as Int` is an `Int`; write `xs[i]`
 }

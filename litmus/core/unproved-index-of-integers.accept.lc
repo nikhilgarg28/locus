@@ -3,9 +3,9 @@
 //~ rfc: 0005
 
 logic fn sorted(xs: Seq<Int>) -> Prop {
-    forall |i: Int, j: Int| 0 <= i && i <= j && j < xs.len() as Int ==> xs[i] <= xs[j]
+    forall |i: Nat, j: Nat| i <= j && j < xs.len() ==> xs[i] <= xs[j]
 }
 
-logic fn first_is_least(xs: Seq<Int>, ordered: @sorted(xs), k: Int, inside: @(0 <= k && k < xs.len() as Int)) -> @(xs[0] <= xs[k]) {
+logic fn first_is_least(xs: Seq<Int>, ordered: @sorted(xs), k: Nat, inside: @(k < xs.len())) -> @(xs[0] <= xs[k]) {
     ordered(0, k)(linear((inside,)))
 }

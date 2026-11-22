@@ -229,11 +229,11 @@ Reductions 3 and 4 apply only where every name in the function's body could be w
 
 ### Sequences
 
-- `s.len()`; `s.get(i)`, a `Maybe` that is empty outside the sequence; `s.at(i, p)`, for a proof `p` that `i` is inside it; and `s.update(i, v)`, which a write to an element needs. The index is an `Int`.
+- `s.len()`; `s.get(i)`, a `Maybe` that is empty outside the sequence; `s.at(i, p)`, for a proof `p` of `i < s.len()`; and `s.update(i, v)`, which a write to an element needs. The index is a `Nat`, and only a `Nat` ([RFC 0002](0002-logical-layer.md), decision 109). An earlier revision of this RFC indexed a sequence by an `Int`.
 - **`s[i]` with no proof exists only where the element type has a default,** a term that Locus derives from the type's structure: `Int`, `Nat`, `Bool`, a sequence, a `Maybe`, a tuple or a logical struct without proof fields whose parts all have one, and the snapshot of a machine integer, a `bool`, or a struct, tuple, array, or slice built from those. A proof type, a type parameter, and an opaque snapshot have none.
 - Outside the sequence, `s[i]` is that default, and the default never converts to anything, so nothing is known of it.
 - An unrestricted `s[i]` would be unsound: the element at 0 of an empty `Seq<@False>` would be a proof of `False`. RFC 0002 had warned of this and left the operation as a placeholder.
-- A `Nat` is made from an `Int` with a proof that it is not negative.
+- A `Nat` is made from an `Int` with a proof that it is not negative. So an `Int`, such as `i - 1`, is not an index until it is made one. How that is spelled is the library's.
 
 ### Where a snapshot is cut
 
@@ -289,7 +289,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `core.values` | `core/value-known-by-a-fact.accept.lc`, `core/value-name-per-version.reject.lc` |
 | `core.wrap` | `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `models/captured-fields-wrap-written.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc` |
 | `core.conversion` | `core/constant-unfolds.accept.lc`, `core/conversion-by-evaluation.accept.lc`, `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/private-body-stays-folded.reject.lc`, `core/recursive-call-stays-folded.reject.lc`, `proofs/unfold-private-body.reject.lc` |
-| `core.sequences` | `core/index-with-a-proof.accept.lc`, `core/index-without-bounds.reject.lc` |
+| `core.sequences` | `core/index-with-a-proof.accept.lc`, `logical-layer/nat-index.accept.lc`, `core/index-without-bounds.reject.lc`, `logical-layer/int-index.reject.lc`, `logical-layer/nat-index-written-as-int.reject.lc` |
 | `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `models/model-defined-for-every-snapshot.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
 | `models.snapshots` | `models/captured-fields-wrap-written.accept.lc`, `models/field-of-capture-and-capture-of-field.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/integer-snapshots-are-one-type.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `models/equal-snapshots-say-nothing-of-addresses.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
 | `models.snapshots.cut` | `models/body-reads-behind-a-cut.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/proof-field-inside-a-cut-field.reject.lc` |

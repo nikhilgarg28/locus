@@ -21,7 +21,7 @@ Two core terms *convert* when these reductions bring them to the same term, up t
 ## Sequences
 
 r[core.sequences]
-A sequence has a length, `s.len()`, and is indexed by an `Int`. `s.get(i)` is a `Maybe` of the element at `i`, which is empty when `i` is negative or not less than the length. `s.at(i, p)` is the element at `i`, for a proof `p` of `0 <= i && i < s.len() as Int`. `s.update(i, v)` is the sequence with `v` at `i`, of the same length, and is `s` itself when `i` is outside it.
+A sequence has a length, `s.len()`, which is a `Nat`, and is indexed by a `Nat`, and only by a `Nat`: `s[i]`, `s.get(i)`, `s.at(i, p)`, and `s.update(i, v)` each take one. An `Int`, such as the result of a subtraction, is not an index until it is turned into a `Nat`, which needs a proof that it is not negative. `s.get(i)` is a `Maybe` of the element at `i`, which is empty when `i` is not less than the length. `s.at(i, p)` is the element at `i`, for a proof `p` of `i < s.len()`. `s.update(i, v)` is the sequence with `v` at `i`, of the same length, and is `s` itself when `i` is outside it.
 
 r[core.sequences.default]
 `s[i]`, with no proof, is allowed only when the element type has a *default*, a term that Locus derives from the type's structure: `Int`, `Nat`, `Bool`, a sequence, a `Maybe`, a tuple or a logical struct without proof fields whose parts all have one, and the snapshot of a machine integer, of a `bool`, or of a struct, tuple, array, or slice built from those. A proof type, a type parameter, and an opaque snapshot have none. `s[i]` is the element at `i` when `i` is inside the sequence, and otherwise the default, which converts to nothing else: nothing is known of it.
