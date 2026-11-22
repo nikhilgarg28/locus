@@ -1,0 +1,861 @@
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo: cargo 1.97.0 (c980f4866 2026-06-30)
+
+## The cases of this round (family/src/bin), both expansions
+== a01-default-is-the-snapshot: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a01_default_is_the_snapshot::Point_Snap<locus::Nat, locus::Int>", "locus::Nat", "locus::Nat", "locus::Prop")
+== a02-declared-model: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Seq<locus::Nat>", "a02_declared_model::Stack_Snap<locus::Seq<locus::Nat>, locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Int")
+== a03-wrapper-confused: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+== a04-generic-conditional: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a04_generic_conditional::Pair_Snap<locus::Nat, locus::Seq<locus::Nat>>", "locus::Nat", "locus::Seq<locus::Int>", "a04_generic_conditional::Pair_Snap<a04_generic_conditional::Stack_Snap<locus::Seq<locus::Nat>>, locus::Seq<a04_generic_conditional::Stack_Snap<locus::Seq<locus::Nat>>>>")
+== a05-associated-type-field: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a05_associated_type_field::Kept_Snap<locus::Nat, locus::Nat>", "locus::Nat")
+== a05e-associated-type-field-unbounded: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a06-opaque-field: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a06_opaque_field::Server_Snap<locus::Opaque<std::net::tcp::TcpListener>, locus::Opaque<core::net::socket_addr::SocketAddr>, locus::Opaque<&str>, locus::Nat>", "locus::Opaque<std::net::tcp::TcpListener>", "locus::Prop")
+== a06e-two-foreign-snapshots-mixed: expect runtime=E0308 check=E0308; got runtime=E0308 check=E0308; as expected
+== a06f-opaque-field-selected-first: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a07-foreign-field-unmarked: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a07r-foreign-field-unmarked-read: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a08-missing-bound-fn: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a09-missing-bound-impl: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a10-missing-bound-trait-method: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== a11-model-in-another-invocation: expect runtime=error check=error; got runtime=error check=error; as expected
+== a12-logic-fn-runtime-parameter: expect runtime=error check=error; got runtime=error check=error; as expected
+== a13e-method-on-snapshot: expect runtime=E0599 check=E0599; got runtime=E0599 check=E0599; as expected
+== a14-model-of-the-snapshots-type: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("a14_model_of_the_snapshots_type::Inner_Snap<locus::Nat>", "a14_model_of_the_snapshots_type::Inner_Snap<locus::Nat>", "locus::Prop")
+== c1-vec-ghost-field-no-bound: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (3, 2, 1, "locus::VecSnap<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", [5, 6])
+== c2-vec-get-mut-nested: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ([[1, 9], [2]], "locus::Seq<locus::Seq<locus::Nat>>", "locus::Prop")
+== c3e-index-mut-contract: expect runtime=E0053 check=E0053; got runtime=E0053 check=E0053; as expected
+== c4e-vec-push-without-model: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== c5e-vec-standard-mutation: expect runtime=E0596 check=E0596; got runtime=E0596 check=E0596; as expected
+== c6e-ghost-field-of-the-sequence-type: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== c7e-bound-on-the-struct: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== d1-generic-snapshot-where-concrete: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Nat", "locus::Seq<locus::Nat>", "locus::Nat")
+== d2a-trait-impl-own-trait: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Seq<locus::Nat>")
+== d2b-foreign-trait-generic-method: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== d2c-foreign-trait-bound-added: expect runtime=E0276 check=E0276; got runtime=E0276 check=E0276; as expected
+== d3-another-invocation: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("d3_another_invocation::first::Counter_Snap<locus::Nat>", "locus::Nat", "locus::Seq<locus::Nat>", "locus::Nat")
+== d4-reference-snapshot-after-borrow: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (3, 9, "locus::Nat", "d4_reference_snapshot_after_borrow::Holder_Snap<locus::Nat, locus::Seq<locus::Nat>>")
+== d6-no-overlap: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Seq<locus::Nat>", "(locus::Nat, locus::traits::Maybe<locus::Int>)", "d6_no_overlap::Point_Snap<locus::Nat>", "locus::Seq<d6_no_overlap::Point_Snap<locus::Nat>>", "locus::traits::Maybe<(locus::Nat, locus::Seq<locus::Bool>)>", "locus::Nat")
+== d6e-second-implementation: expect runtime=E0119 check=E0119; got runtime=E0119 check=E0119; as expected
+== d7-model-selection-visibility: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Nat", "locus::Nat")
+== d7e-unbounded-parameter: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== e1-closure-and-function-item: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (4, 3, 12)
+== e1e-closure-where-model-is-asked: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== e2-trait-object-not-read: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (6, "e2_trait_object_not_read::Scene_Snap<locus::Opaque<alloc::vec::Vec<alloc::boxed::Box<dyn e2_trait_object_not_read::Shape>>>, locus::Opaque<alloc::boxed::Box<dyn core::fmt::Debug>>, locus::Nat>")
+== e2e-trait-object-read: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== e2f-trait-object-field-unmarked: expect runtime=E0277 check=E0277; got runtime=E0277 check=E0277; as expected
+== f1e-forged-inside-locus: expect runtime=error check=error; got runtime=error check=error; as expected
+== f2-forbid-unsafe-code: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => "f2_forbid_unsafe_code::Point_Snap<locus::Nat>"
+== g2-associated-type-field-opaque: expect runtime=E0310 check=E0310; got runtime=E0310 check=E0310; as expected
+== g2w-associated-type-field-opaque-static: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+  both print: run() => 1
+== h1-derive-model: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Seq<locus::Nat>", "h1_derive_model::Point_Logic", "locus::Nat", "h1_derive_model::Pair_Logic<locus::Nat, locus::Seq<locus::Int>>", "locus::Seq<locus::Int>", "h1_derive_model::List_Logic", "locus::Nat")
+== m1e-model-without-a-type: expect runtime=annotate check=annotate; got runtime=E0282 check=E0282; as expected
+== v1-valid: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Prop", "locus::Prop", "locus::Prop", "locus::Prop", "locus::Prop")
+family: built in 1.1s (runtime) and 1.1s (checking)
+family: 47 cases; as their first line says, in both expansions: 47; compile and run in both: 20
+## family (sk): 47 files, 20 compile in both expansions
+  all                          pieces 180  translated 131  no error in either expansion 115  with an error  16
+
+## The four specifications
+### Round 2's text (spec/), unedited, under the new rules
+== s1-stack: expect runtime=ok check=ok; got runtime=E0046,E0599,error check=E0046,E0599,error; DIFFERS
+  runtime: 17:24: error[error]: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or the type of its model
+  runtime: 23:23: error[error]: locus: a logic function's parameters are logical types, and `self` is a runtime type: write `Snap<Stack>`, or the type of its model
+== s2-sorted-vec: expect runtime=ok check=ok; got runtime=E0046,E0283,error check=E0046,E0283,error; DIFFERS
+  runtime: 43:24: error[error]: locus: a logic function's parameters are logical types, and `v : & SortedVec` is a runtime type: write `Snap<SortedVec>`, or the type of its model
+  runtime: 41:5: error[E0046]: not all trait items implemented, missing: `__logic_model`
+== s3-binary-search: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== s4-container: expect runtime=ok check=ok; got runtime=E0046,E0277,E0283,error check=E0046,E0277,E0283,error; DIFFERS
+  runtime: 51:24: error[error]: locus: a logic function's parameters are logical types, and `e : & Even` is a runtime type: write `Snap<Even>`, or the type of its model
+  runtime: 49:5: error[E0046]: not all trait items implemented, missing: `__logic_model`
+### Rewritten for the new rules (spec3/), both expansions
+== s1-stack: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (3, 2, 3, false)
+== s2-sorted-vec: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => [1, 3, 4, 7, 9]
+== s3-binary-search: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ((true, 2), (false, 0))
+== s4-container: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (2, 6)
+spec3: built in 0.2s (runtime) and 0.2s (checking)
+  all                          pieces 106  translated 102  no error in either expansion 102  with an error   0
+### With the standard library's own Vec given no model (--features locus/no-std-vec-model)
+== s1-stack: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== s2-sorted-vec: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== s3-binary-search: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== s4-container: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+### What the source now writes that round 2's did not (tools/spec3-table.py)
+                   lines changed    bound   opaque     snap    model    param   method elements   result   import     less
+s1-stack              93      11        0        0        5        0        2        5        2        3        1        1
+s2-sorted-vec         91       5        0        0        0        0        1        0        1        1        2        1
+s3-binary-search      81       0        0        0        0        0        0        0        0        0        0        0
+s4-container         110      13        2        0        0        0        1        0        6        1        1        3
+all four             375      29        2        0        5        0        4        5        9        5        4        5
+places where round 3 writes something round 2 did not: 34; places where it writes less: 5
+columns: bound = a `T: Model` bound; opaque = an `#[opaque]` mark; snap = `snap(..)`; model = `model(..)`; param = a logic function's parameter, from a runtime type; method = a method call moved from a place to its snapshot; elements = other: `.elements()` on a vector's snapshot; result = other: a library method's result carries its fact (`.0`); import = other: Locus's `Vec` is imported; less = (written no longer: `model(x)` of a place)
+s1-stack: snap: lines [36, 48, 49, 69]; param: lines [19, 25]; method: lines [36, 48, 49, 69]; elements: lines [19, 25]; result: lines [41, 60, 65]; import: lines [9]; less: lines [51]
+s2-sorted-vec: param: lines [44]; elements: lines [44]; result: lines [60]; import: lines [9, 78]; less: lines [56]
+s3-binary-search: nothing
+s4-container: bound: lines [57, 63]; param: lines [52]; elements: lines [60, 64, 68, 69, 77]; result: lines [103]; import: lines [10]; less: lines [79, 82, 83]
+
+## The litmus corpus
+### Unedited (corpus/, ghost-lets/) and with round 2's edits (corpus-explicit/), against round 2
+corpus: 26 files; compile in both expansions: round2 18, round3 18; outcome or output differs in 0
+corpus-explicit: 26 files; compile in both expansions: round2 23, round3 23; outcome or output differs in 0
+== gl-snapshot-with-associated-type-field: round2: ok; round3: E0277
+  round3, runtime: 21:32: error[E0277]: `<F as Family>::Out` cannot be read in logical code
+ghost-lets: 17 files; compile in both expansions: round2 12, round3 11; outcome or output differs in 1
+### The edited copy of this round (ghost-lets3/: one line of one file), against ghost-lets/
+< gl-snapshot-with-associated-type-field.rs:20:fn kept<F: Family>(h: Holder<F>) -> Holder<F> {
+> gl-snapshot-with-associated-type-field.rs:20:fn kept<F: Family>(h: Holder<F>) -> Holder<F> where F::Out: Model {
+## corpus (sk): 26 files, 18 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 17
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  all                          pieces  58  translated  52  no error in either expansion  45  with an error   7
+## corpus-explicit (sk): 26 files, 23 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 20
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  all                          pieces  58  translated  52  no error in either expansion  50  with an error   2
+## ghost-lets (sk): 17 files, 11 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 7
+  rejected litmus examples: 7; rustc rejects them in both expansions: 3; in the checking expansion alone: 0
+  all                          pieces  34  translated  30  no error in either expansion  25  with an error   5
+## ghost-lets3 (sk): 17 files, 12 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 8
+  rejected litmus examples: 7; rustc rejects them in both expansions: 3; in the checking expansion alone: 0
+  all                          pieces  34  translated  30  no error in either expansion  27  with an error   3
+### The same example with the field marked #[opaque] instead (family/g2, g2w)
+== g2-associated-type-field-opaque: expect runtime=E0310 check=E0310; got runtime=E0310 check=E0310; as expected
+  runtime: 11:22: error[E0310]: the associated type `<F as Family>::Out` may not live long enough
+== g2w-associated-type-field-opaque-static: expect runtime=ok check=ok; got runtime=ok check=ok; as expected
+### With the standard library's own Vec given no model
+== after-move: default: E0382; no-std-vec-model: E0277
+  default, runtime: 19:13: error[E0382]: borrow of moved value: `v`
+  no-std-vec-model, runtime: 19:22: error[E0277]: `std::vec::Vec<u32>` cannot be read in logical code
+== during-mutable-borrow: default: E0502; no-std-vec-model: E0277
+  default, runtime: 15:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  no-std-vec-model, runtime: 15:22: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+== logic-calls-logic-function: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 17:33: error[E0277]: `std::vec::Vec<u32>` cannot be read in logical code
+corpus-explicit: 26 files; compile in both expansions: default 23, no-std-vec-model 22; outcome or output differs in 3
+== gl-after-move: default: E0382; no-std-vec-model: E0277
+  default, runtime: 18:13: error[E0382]: borrow of moved value: `v`
+  no-std-vec-model, runtime: 18:22: error[E0277]: `std::vec::Vec<u32>` cannot be read in logical code
+== gl-after-mutable-borrow-ends: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 15:22: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+== gl-before-move: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 17:22: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+== gl-branch-on-logical: default: E0369; no-std-vec-model: E0277
+  default, runtime: 13:14: error[E0369]: binary operation `>` cannot be applied to type `Nat`
+  no-std-vec-model, runtime: 12:26: error[E0277]: `std::vec::Vec<u32>` cannot be read in logical code
+== gl-during-mutable-borrow: default: E0502; no-std-vec-model: E0277
+  default, runtime: 14:13: error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable
+  no-std-vec-model, runtime: 14:22: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+== gl-logic-calls-logic-function: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 16:33: error[E0277]: `std::vec::Vec<u32>` cannot be read in logical code
+== gl-logic-in-async-block: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 14:26: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+== gl-logic-in-closure: default: ok; no-std-vec-model: E0277
+  no-std-vec-model, runtime: 14:26: error[E0277]: `std::vec::Vec<{integer}>` cannot be read in logical code
+ghost-lets3: 17 files; compile in both expansions: default 12, no-std-vec-model 7; outcome or output differs in 8
+### The repository's whole litmus tree, from its text: logic functions with a runtime-typed parameter (tools/litmus-scan.py)
+474 examples; 26 logic functions in 19 files declare a parameter with a runtime type (by outcome: accept 7, reject 12)
+  contracts/stack-push-through-slot.accept.lc (1); contracts/stack-push-with-stand-in.accept.lc (1); core/congruence-at-the-snapshot.accept.lc (2); core/congruence-through-a-model.reject.lc (2); core/rewrite-misses-a-field-read.reject.lc (2); logical-layer/equal-models-equal-field-models.accept.lc (1); logical-layer/equal-models-not-equal-fields.reject.lc (1); logical-layer/logic-fn-model-result.accept.lc (1); logical-layer/logic-fn-runtime-result.reject.lc (1); models/derive-model-through-generic-cycle.reject.lc (1); models/hand-written-model.accept.lc (1); models/model-for-foreign-type.reject.lc (1); models/model-helper-reads-fields.accept.lc (2); models/model-of-itself.reject.lc (1); models/model-reads-cell.reject.lc (1); models/model-through-a-cut.reject.lc (1); models/model-through-helper.reject.lc (2); models/models-depend-on-each-other.reject.lc (2); models/two-models.reject.lc (2)
+
+## Forgery and authorization: two lowered crates and one that is not
+== app: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (13, 57, "two_lib::Rational", "two_lib::Sign", "app::Weight", "locus::Nat", "locus::Nat") | across() => ("two_lib::Meter_Snap<locus::Nat>", "locus::Seq<locus::Nat>", "app::Rig_Snap<two_lib::Meter_Snap<locus::Nat>, two_lib::Stack_Snap<locus::Seq<locus::Nat>, locus::Nat>, two_lib::Pair_Snap<app::Scale_Snap<locus::Nat>, app::Scale_Snap<locus::Nat>>>", "locus::Nat", "locus::Int")
+== forge-with-unsafe: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: forged => ("locus::Nat", "locus::Seq<locus::Nat>", "locus::Nat")
+== forge-without-unsafe: expect runtime=E0200 check=E0200; got runtime=E0200 check=E0200; as expected
+  runtime: 9:1: error[E0200]: the trait `Model` requires an `unsafe impl` declaration
+### forge-without-unsafe, the runtime expansion: 1 errors
+error[E0200]: the trait `Model` requires an `unsafe impl` declaration
+ --> two-plain/src/bin/forge-without-unsafe.rs:9:1
+  |
+9 | impl locus::Model for Mine {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: the trait `Model` enforces invariants that the compiler can't check. Review the trait documentation and make sure this implementation upholds those invariants before adding the `unsafe` keyword
+help: add `unsafe` to this trait implementation
+  |
+9 | unsafe impl locus::Model for Mine {
+  | ++++++
+### The driver's listing: every implementation of Model each crate sees (crate | type | origin)
+-- two_lib.models: 47 of Locus's library, and:
+two_lib | Maybe<T> | lowering: the expansion of `locus!`
+two_lib | Meter | lowering: the expansion of `locus!`
+two_lib | Meter_Snap<F0> | lowering: the expansion of `locus!`
+two_lib | Pair<T> | lowering: the expansion of `locus!`
+two_lib | Pair_Snap<F0, F1> | lowering: the expansion of `locus!`
+two_lib | Rational | lowering: the expansion of `locus!`
+two_lib | Sign | lowering: the expansion of `locus!`
+two_lib | Stack | lowering: the expansion of `locus!`
+two_lib | Stack_Snap<F0, F1> | lowering: the expansion of `locus!`
+-- app.models: 47 of Locus's library, and:
+app | Rig | lowering: the expansion of `locus!`
+app | Rig_Snap<F0, F1, F2> | lowering: the expansion of `locus!`
+app | Scale | lowering: the expansion of `locus!`
+app | Scale_Snap<F0> | lowering: the expansion of `locus!`
+app | Weight | lowering: the expansion of `locus!`
+two_lib | two_lib::Maybe<T> | lowering: the expansion of `locus!`
+two_lib | two_lib::Meter | lowering: the expansion of `locus!`
+two_lib | two_lib::Meter_Snap<F0> | lowering: the expansion of `locus!`
+two_lib | two_lib::Pair<T> | lowering: the expansion of `locus!`
+two_lib | two_lib::Pair_Snap<F0, F1> | lowering: the expansion of `locus!`
+two_lib | two_lib::Rational | lowering: the expansion of `locus!`
+two_lib | two_lib::Sign | lowering: the expansion of `locus!`
+two_lib | two_lib::Stack | lowering: the expansion of `locus!`
+two_lib | two_lib::Stack_Snap<F0, F1> | lowering: the expansion of `locus!`
+-- forge_with_unsafe.models: 47 of Locus's library, and:
+forge_with_unsafe | Mine | WRITTEN BY HAND
+forge_with_unsafe | Other | WRITTEN BY HAND, through the macro `locus`
+two_lib | two_lib::Maybe<T> | lowering: the expansion of `locus!`
+two_lib | two_lib::Meter | lowering: the expansion of `locus!`
+two_lib | two_lib::Meter_Snap<F0> | lowering: the expansion of `locus!`
+two_lib | two_lib::Pair<T> | lowering: the expansion of `locus!`
+two_lib | two_lib::Pair_Snap<F0, F1> | lowering: the expansion of `locus!`
+two_lib | two_lib::Rational | lowering: the expansion of `locus!`
+two_lib | two_lib::Sign | lowering: the expansion of `locus!`
+two_lib | two_lib::Stack | lowering: the expansion of `locus!`
+two_lib | two_lib::Stack_Snap<F0, F1> | lowering: the expansion of `locus!`
+-- over every crate of two-app, two-plain and family that compiled: implementations outside Locus's library, by origin
+      1 WRITTEN BY HAND
+      1 WRITTEN BY HAND, through the macro `locus`
+     80 lowering: the expansion of `locus!`
+-- those not written by lowering:
+forge_with_unsafe | Mine | WRITTEN BY HAND
+forge_with_unsafe | Other | WRITTEN BY HAND, through the macro `locus`
+
+## A field whose type has no model: the plain form (default) and the conditional form (LOCUS_SPIKE_DEFERRED=1)
+### Declarations at which the plain form reports a field's type (tools/opaque-needed.py)
+corpus: 0 declarations need a mark
+ghost-lets: 0 declarations need a mark
+cases: 0 declarations need a mark
+skel: 0 declarations need a mark
+more: 0 declarations need a mark
+spec: 0 declarations need a mark
+policy: 0 declarations need a mark; 2 need a bound: n1-snapshot-bounds-inserted:13 `Keep`: `T`; n4-snapshot-other-invocation:12 `Keep`: `T`
+spec-omit: 0 declarations need a mark
+two-app: 0 declarations need a mark
+corpus-explicit: 0 declarations need a mark
+family: 3 declarations need a mark: a07-foreign-field-unmarked:8 `Server`: `TcpListener`; a07r-foreign-field-unmarked-read:6 `Server`: `TcpListener`; e2f-trait-object-field-unmarked:7 `Scene`: `(dyn Shape + 'static)`
+spec3: 0 declarations need a mark
+ghost-lets3: 0 declarations need a mark
+two-plain: 0 declarations need a mark
+all: 3 declarations need an `#[opaque]` mark, and 2 a bound on the type
+declarations of structs and enums that lowering saw: declared model 22; default model 104; derived model 6
+### Every file whose outcome differs between the two forms
+corpus: 26 files; compile in both expansions: plain 18, deferred 18; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: plain 11, deferred 11; outcome or output differs in 0
+cases: 58 files; compile in both expansions: plain 18, deferred 18; outcome or output differs in 0
+== c01-no-borrow: plain: ok prints run() => ([1, 2, 3], "locus::Seq<locus::Nat>", "c01_no_borrow::Link_Snap<locus::Nat, locus::Nat>"); deferred: E0308,error
+  deferred, runtime: 10:12: error[E0308]: mismatched types
+skel: 38 files; compile in both expansions: plain 13, deferred 12; outcome or output differs in 1
+more: 39 files; compile in both expansions: plain 14, deferred 14; outcome or output differs in 0
+spec: 4 files; compile in both expansions: plain 1, deferred 1; outcome or output differs in 0
+== d5-models: plain: E0046,E0282,error; deferred: E0046,E0275,error
+  plain, runtime: 11:24: error[error]: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or the type of its mod
+  deferred, runtime: 11:24: error[error]: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or the type of its mod
+policy: 35 files; compile in both expansions: plain 15, deferred 15; outcome or output differs in 1
+spec-omit: 8 files; compile in both expansions: plain 0, deferred 0; outcome or output differs in 0
+== app: plain: ok prints run() => (13, 57, "two_lib::Rational", "two_lib::Sign", "app::Weight", "locus::Nat", "locus::Nat") | across() => ("two_lib::Meter_Snap<locus::Nat>", "locus::Seq<locus::Nat>", "app::Rig_Snap<two_lib::Meter_
+  deferred, runtime: ?: error[E0308]: in the crate `two_lib`: mismatched types
+two-app: 1 files; compile in both expansions: plain 1, deferred 0; outcome or output differs in 1
+corpus-explicit: 26 files; compile in both expansions: plain 23, deferred 23; outcome or output differs in 0
+== a02-declared-model: plain: ok prints run() => ("locus::Seq<locus::Nat>", "a02_declared_model::Stack_Snap<locus::Seq<locus::Nat>, locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus
+  deferred, runtime: 13:52: error[E0308]: mismatched types
+== a04-generic-conditional: plain: ok prints run() => ("a04_generic_conditional::Pair_Snap<locus::Nat, locus::Seq<locus::Nat>>", "locus::Nat", "locus::Seq<locus::Int>", "a04_generic_conditional::Pair_Snap<a04_generic_conditional::
+  deferred, runtime: 12:52: error[E0308]: mismatched types
+== a07-foreign-field-unmarked: plain: E0277; deferred: ok prints run() => 1
+  plain, runtime: 8:12: error[E0277]: `TcpListener` cannot be read in logical code
+== a14-model-of-the-snapshots-type: plain: ok prints run() => ("a14_model_of_the_snapshots_type::Inner_Snap<locus::Nat>", "a14_model_of_the_snapshots_type::Inner_Snap<locus::Nat>", "locus::Prop"); deferred: E0308
+  deferred, runtime: 13:55: error[E0308]: mismatched types
+== d3-another-invocation: plain: ok prints run() => ("d3_another_invocation::first::Counter_Snap<locus::Nat>", "locus::Nat", "locus::Seq<locus::Nat>", "locus::Nat"); deferred: E0308
+  deferred, runtime: 14:56: error[E0308]: mismatched types
+== d4-reference-snapshot-after-borrow: plain: ok prints run() => (3, 9, "locus::Nat", "d4_reference_snapshot_after_borrow::Holder_Snap<locus::Nat, locus::Seq<locus::Nat>>"); deferred: E0308,error
+  deferred, runtime: 8:12: error[E0308]: mismatched types
+== d6e-second-implementation: plain: E0119; deferred: E0119,E0282
+  plain, runtime: 6:12: error[E0119]: conflicting implementations of trait `Model` for type `Point`
+  deferred, runtime: 6:12: error[E0119]: conflicting implementations of trait `Model` for type `Point`
+== d7-model-selection-visibility: plain: ok prints run() => ("locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Seq<locus::Nat>", "locus::Nat", "locus::Nat"); deferred: E0308
+  deferred, runtime: 14:56: error[E0308]: mismatched types
+== e2f-trait-object-field-unmarked: plain: E0277; deferred: ok prints run() => 1
+  plain, runtime: 7:12: error[E0277]: `(dyn Shape + 'static)` cannot be read in logical code
+== h1-derive-model: plain: ok prints run() => ("locus::Seq<locus::Nat>", "h1_derive_model::Point_Logic", "locus::Nat", "h1_derive_model::Pair_Logic<locus::Nat, locus::Seq<locus::Int>>", "locus::Seq<locus::Int>", "h1_derive_model::
+  deferred, runtime: 18:10: error[E0275]: overflow evaluating the requirement `Box<List>: locus::Model`
+== m1e-model-without-a-type: plain: E0282; deferred: E0282,E0308
+  plain, runtime: 15:29: error[E0282]: type annotations needed
+  deferred, runtime: 10:52: error[E0308]: mismatched types
+== v1-valid: plain: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Prop", "locus::Prop", "locus::Prop"); deferred: E0275
+  deferred, runtime: 10:10: error[E0275]: overflow evaluating the requirement `Box<Shape>: locus::Model`
+family: 47 files; compile in both expansions: plain 20, deferred 14; outcome or output differs in 12
+== s1-stack: plain: ok prints run() => (3, 2, 3, false); deferred: E0599
+  deferred, runtime: 19:70: error[E0599]: no method named `__logic_elements` found for associated type `<locus::Vec<u32> as Deferred<'static>>::Snap` in the current scope
+== s2-sorted-vec: plain: ok prints run() => [1, 3, 4, 7, 9]; deferred: E0599
+  deferred, runtime: 44:66: error[E0599]: no method named `__logic_elements` found for associated type `<locus::Vec<u32> as Deferred<'static>>::Snap` in the current scope
+== s4-container: plain: ok prints run() => (2, 6); deferred: E0308
+  deferred, runtime: 52:46: error[E0308]: mismatched types
+spec3: 4 files; compile in both expansions: plain 4, deferred 1; outcome or output differs in 3
+ghost-lets3: 17 files; compile in both expansions: plain 12, deferred 12; outcome or output differs in 0
+== forge-with-unsafe: plain: ok prints forged => ("locus::Nat", "locus::Seq<locus::Nat>", "locus::Nat"); deferred: E0308
+  deferred, runtime: ?: error[E0308]: in the crate `two_lib`: mismatched types
+== forge-without-unsafe: plain: E0200; deferred: E0308
+  plain, runtime: 9:1: error[E0200]: the trait `Model` requires an `unsafe impl` declaration
+  deferred, runtime: ?: error[E0308]: in the crate `two_lib`: mismatched types
+two-plain: 2 files; compile in both expansions: plain 1, deferred 0; outcome or output differs in 2
+### The message of the plain form, at the declaration
+### a07-foreign-field-unmarked, the runtime expansion: 1 errors
+error[E0277]: `TcpListener` cannot be read in logical code
+ --> family/src/bin/a07-foreign-field-unmarked.rs:8:12
+  |
+8 |     struct Server { sock: std::net::TcpListener, n: u32 }
+  |            ^^^^^^ this type has no snapshot that Locus knows
+  |
+  = help: the trait `Model` is not implemented for `TcpListener`
+  = note: for a type parameter, add the bound `TcpListener: Model`
+  = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+  = help: the following other types implement trait `Model`:
+            &T
+            &mut T
+            (A, B)
+            (A, B, C)
+            *const T
+            *mut T
+            Address
+            Box<T>
+          and 40 others
+  = note: this error originates in the macro `locus` (in Nightly builds, run with -Z macro-backtrace for more info)
+### The message of the conditional form, where the struct is first read
+### a07r-foreign-field-unmarked-read, the runtime expansion: 1 errors
+error[E0277]: `TcpListener` cannot be read in logical code
+ --> family/src/bin/a07r-foreign-field-unmarked-read.rs:7:51
+  |
+7 |     fn read(s: &Server) -> u32 { let c = logic! { snap(s) }; 1 }
+  |                                                   ^^^^ this type has no snapshot that Locus knows
+  |
+  = help: the trait `Model` is not implemented for `TcpListener`
+  = note: for a type parameter, add the bound `TcpListener: Model`
+  = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+  = help: the following other types implement trait `Model`:
+            &T
+            &mut T
+            (A, B)
+            (A, B, C)
+            *const T
+            *mut T
+            Address
+            Box<T>
+          and 40 others
+  = note: required for `TcpListener` to implement `Deferred<'static>`
+
+## Round 2's suite under the new library and lowering
+### 25: a logic function declares a parameter with a runtime type: now an error from lowering
+  cases/t01-two-traits: E0308 -> E0046,E0277,E0308,error | now 34:21: locus: a logic function's parameters are logical types, and `a : Version` is a runtime type: write `Snap<Version>`, or t
+  cases/t02-max-rational: E0277,E0308 -> E0046,E0277,E0308,error | now 30:21: locus: a logic function's parameters are logical types, and `a : Version` is a runtime type: write `Snap<Version>`, or t
+  cases/t03-logical-impl-runs: E0308,error -> E0046,E0277,E0308,error | now 30:21: locus: a logic function's parameters are logical types, and `a : Version` is a runtime type: write `Snap<Version>`, or t
+  cases/t11-kind-logic-for-fn: E0046,E0308,E0407 -> E0046,error | now 14:23: locus: a logic function's parameters are logical types, and `l : Letter` is a runtime type: write `Snap<Letter>`, or the
+  cases/t12-names-same-module: E0308 -> E0046,E0277,E0308,error | now 23:21: locus: a logic function's parameters are logical types, and `a : Version` is a runtime type: write `Snap<Version>`, or t
+  cases/t19-runtime-name-clash: E0308 -> E0046,E0308,error | now 17:21: locus: a logic function's parameters are logical types, and `a : Version` is a runtime type: write `Snap<Version>`, or t
+  skel/x11-method-on-runtime-type: ok -> E0599,error | now 11:23: locus: a logic function's parameters are logical types, and `self` is a runtime type: write `Snap<Stack>`, or the type o
+  more/r02-outside-self: E0271 -> E0046,error | now 17:23: locus: a logic function's parameters are logical types, and `x : u32` is a runtime type: write `Snap<u32>`, or the type 
+  more/r09-two-expansions-two-impls: ok -> E0046,error | now 16:23: locus: a logic function's parameters are logical types, and `x : u32` is a runtime type: write `Snap<u32>`, or the type 
+  more/s02-generic-self: E0308 -> E0046,E0308,error | now 47:21: locus: a logic function's parameters are logical types, and `a : Pair < T >` is a runtime type: write `Snap<Pair < T >>`
+  more/s20-runtime-type-over-logical: E0308 -> E0046,error | now 22:21: locus: a logic function's parameters are logical types, and `a : Pair < Rational >` is a runtime type: write `Snap<Pair 
+  spec/s1-stack: ok -> E0046,E0599,error | now 17:24: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or
+  spec/s2-sorted-vec: ok -> E0046,E0283,error | now 43:24: locus: a logic function's parameters are logical types, and `v : & SortedVec` is a runtime type: write `Snap<SortedVec>`
+  spec/s4-container: ok -> E0046,E0277,E0283,error | now 51:24: locus: a logic function's parameters are logical types, and `e : & Even` is a runtime type: write `Snap<Even>`, or the t
+  policy/d2-trait-method-contract: ok -> E0277,E0599,error | now 9:28: locus: a logic function's parameters are logical types, and `self : & Self` is a runtime type: write `Snap<Self>`, or th
+  policy/d2e-trait-method-contract-error: E0277 -> E0277,E0599,error | now 8:24: locus: a logic function's parameters are logical types, and `self : & Self` is a runtime type: write `Snap<Self>`, or th
+  policy/d5-models: ok -> E0046,E0282,error | now 11:24: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or
+  policy/p4a-place-arguments: ok -> error | now 11:22: locus: a logic function's parameters are logical types, and `c : & Counter` is a runtime type: write `Snap<Counter>`, or
+  policy/p5-method-order: ok -> E0046,E0599,error | now 12:24: locus: a logic function's parameters are logical types, and `s : & Stack` is a runtime type: write `Snap<Stack>`, or the
+  spec-omit/o1a-stack: E0277 -> E0046,E0599,error | now 17:24: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or
+  spec-omit/o1b-stack: E0308 -> E0046,E0308,E0599,error | now 17:24: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or
+  spec-omit/o2a-sorted-vec: E0308 -> E0046,E0283,E0308,error | now 43:24: locus: a logic function's parameters are logical types, and `v : & SortedVec` is a runtime type: write `Snap<SortedVec>`
+  spec-omit/o2b-sorted-vec: E0308 -> E0046,E0283,E0308,error | now 43:24: locus: a logic function's parameters are logical types, and `v : & SortedVec` is a runtime type: write `Snap<SortedVec>`
+  spec-omit/o4a-container: E0308 -> E0046,E0277,E0283,error | now 51:24: locus: a logic function's parameters are logical types, and `e : & Even` is a runtime type: write `Snap<Even>`, or the t
+  spec-omit/o4b-container: E0308 -> E0046,E0277,E0283,E0308,error | now 51:24: locus: a logic function's parameters are logical types, and `e : & Even` is a runtime type: write `Snap<Even>`, or the t
+### 2: the source names round 2's trait `Snapshot`, which is gone
+  skel/c02-vec-as-seq: ok -> E0405 | now 12:19: cannot find trait `Snapshot` in this scope
+  skel/c06-unbounded-parameter: ok -> E0277,E0405 | now 15:19: cannot find trait `Snapshot` in this scope
+### 3: a type parameter, or an associated type of one, is read with no `Model` bound: none is inserted
+  ghost-lets/gl-snapshot-with-associated-type-field: ok -> E0277 | now 21:32: `<F as Family>::Out` cannot be read in logical code
+  policy/n1-snapshot-bounds-inserted: ok -> E0277 | now 10:35: `T` cannot be read in logical code
+  policy/n2-snapshot-in-trait-impl: ok -> E0277 | now 12:74: `T` cannot be read in logical code
+### 2: a type that nothing declares a model for is read: there is no opaque fallback
+  skel/c05-no-snapshot: ok -> E0277 | now 12:36: `BTreeSet<u32>` cannot be read in logical code
+  policy/n6-snapshot-opaque-mixes: ok -> E0277 | now 12:40: `BTreeSet<u32>` cannot be read in logical code
+### 3: compiles in both rounds and prints other type names: an integer's snapshot is a `Nat` or an `Int`, and a declared type's snapshot has its fields
+  skel/a02-places: ok -> ok | prints run() => ["locus::Nat", "locus::Nat", "locus::Seq<locus::Nat>", "(locus::Nat, locus::Bool)", "locus::Bool", "locus::Seq<locus::Nat>", "a02_places::Counter_Snap<locus::Nat
+  skel/c01-no-borrow: ok -> ok | prints run() => ([1, 2, 3], "locus::Seq<locus::Nat>", "c01_no_borrow::Link_Snap<locus::Nat, locus::Nat>")
+  two-app/app: ok -> ok | prints run() => (13, 57, "two_lib::Rational", "two_lib::Sign", "app::Weight", "locus::Nat", "locus::Nat") | across() => ("two_lib::Meter_Snap<locus::Nat>", "locus::Seq<locus::Na
+### 4: now compiles
+  skel/x05-generic-parameter: E0283 -> ok | round 2 said: type annotations needed
+  skel/x06-snapshot-expected: E0271,E0308 -> ok | round 2 said: type mismatch resolving `<Vec<u32> as Model>::Logic == Seq<BoundedU32>`
+  skel/x12-no-model: E0277 -> ok | round 2 said: `Token` has no model, so a value of it cannot be used as a value in logical code
+  policy/p4b-type-parameter-omitted: E0283 -> ok | round 2 said: type annotations needed
+### 8: rejected in both rounds, with other errors
+  cases/t13b-imported-parameter: E0308 -> E0277,E0308 | now 21:55: mismatched types
+  cases/t13d-imported-qualified: E0308 -> E0277,E0308 | now 21:55: mismatched types
+  cases/t14-imported-in-trait: E0308 -> E0277,E0308 | now 20:55: mismatched types
+  more/r06-snapshot-identity: E0119,E0277,E0308 -> E0119,E0308 | now 30:5: conflicting implementations of trait `OrderSpec` for type `locus::Nat`
+  more/s16-names: E0308 -> E0277,E0308 | now 26:55: mismatched types
+  policy/e04-bool-for-prop-parameter: E0271,E0308 -> E0308 | now 8:43: mismatched types
+  policy/p2a-omitted-as-int: E0271,E0277 -> E0277,E0308 | now 9:28: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+  policy/v8-bool-still-written: E0271,E0308 -> E0308 | now 11:45: mismatched types
+corpus: 26 files; compile in both expansions: round 2 18, round 3 18; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: round 2 12, round 3 11; outcome or output differs in 1
+cases: 58 files; compile in both expansions: round 2 18, round 3 18; outcome or output differs in 9
+skel: 38 files; compile in both expansions: round 2 14, round 3 13; outcome or output differs in 9
+more: 39 files; compile in both expansions: round 2 15, round 3 14; outcome or output differs in 6
+spec: 4 files; compile in both expansions: round 2 4, round 3 1; outcome or output differs in 3
+policy: 35 files; compile in both expansions: round 2 21, round 3 15; outcome or output differs in 12
+spec-omit: 8 files; compile in both expansions: round 2 0, round 3 0; outcome or output differs in 6
+two-app: 1 files; compile in both expansions: round 2 1, round 3 1; outcome or output differs in 1
+corpus-explicit: 26 files; compile in both expansions: round 2 23, round 3 23; outcome or output differs in 0
+all: outcome or output differs in 47: param 25; snapshot-trait 2; unbounded 3; no-model 2; names 3; now-ok 4; other-errors 8
+### The same suite with the standard library's own Vec given no model
+corpus: 26 files; compile in both expansions: default 18, no-std-vec-model 17; outcome or output differs in 3
+ghost-lets: 17 files; compile in both expansions: default 11, no-std-vec-model 6; outcome or output differs in 8
+cases: 58 files; compile in both expansions: default 18, no-std-vec-model 5; outcome or output differs in 15
+skel: 38 files; compile in both expansions: default 13, no-std-vec-model 7; outcome or output differs in 12
+more: 39 files; compile in both expansions: default 14, no-std-vec-model 14; outcome or output differs in 1
+spec: 4 files; compile in both expansions: default 1, no-std-vec-model 1; outcome or output differs in 3
+policy: 35 files; compile in both expansions: default 15, no-std-vec-model 12; outcome or output differs in 6
+spec-omit: 8 files; compile in both expansions: default 0, no-std-vec-model 0; outcome or output differs in 6
+two-app: 1 files; compile in both expansions: default 1, no-std-vec-model 0; outcome or output differs in 1
+corpus-explicit: 26 files; compile in both expansions: default 23, no-std-vec-model 22; outcome or output differs in 3
+
+## Both programs agree: the call listings of the two expansions, every accepted binary
+corpus: binaries that both expansions accept: 18; calls, method calls and constants listed in each: 44; binaries with one resolved differently: 0
+corpus: built in 0.5s (runtime) and 0.5s (checking)
+ghost-lets: binaries that both expansions accept: 11; calls, method calls and constants listed in each: 16; binaries with one resolved differently: 0
+ghost-lets: built in 0.4s (runtime) and 0.3s (checking)
+cases: binaries that both expansions accept: 18; calls, method calls and constants listed in each: 71; binaries with one resolved differently: 0
+cases: built in 0.9s (runtime) and 0.9s (checking)
+skel: binaries that both expansions accept: 13; calls, method calls and constants listed in each: 66; binaries with one resolved differently: 0
+skel: built in 0.6s (runtime) and 0.7s (checking)
+more: binaries that both expansions accept: 14; calls, method calls and constants listed in each: 49; binaries with one resolved differently: 0
+more: built in 0.6s (runtime) and 0.7s (checking)
+spec: binaries that both expansions accept: 1; calls, method calls and constants listed in each: 15; binaries with one resolved differently: 0
+spec: built in 0.2s (runtime) and 0.2s (checking)
+policy: binaries that both expansions accept: 15; calls, method calls and constants listed in each: 83; binaries with one resolved differently: 0
+policy: built in 0.7s (runtime) and 0.7s (checking)
+spec-omit: binaries that both expansions accept: 0; calls, method calls and constants listed in each: 0; binaries with one resolved differently: 0
+spec-omit: built in 0.3s (runtime) and 0.3s (checking)
+two-app: binaries that both expansions accept: 1; calls, method calls and constants listed in each: 38; binaries with one resolved differently: 0
+two-app: built in 0.2s (runtime) and 0.3s (checking)
+corpus-explicit: binaries that both expansions accept: 23; calls, method calls and constants listed in each: 55; binaries with one resolved differently: 0
+corpus-explicit: built in 0.6s (runtime) and 0.7s (checking)
+family: binaries that both expansions accept: 20; calls, method calls and constants listed in each: 176; binaries with one resolved differently: 0
+family: built in 1.0s (runtime) and 0.9s (checking)
+spec3: binaries that both expansions accept: 4; calls, method calls and constants listed in each: 82; binaries with one resolved differently: 0
+spec3: built in 0.2s (runtime) and 0.2s (checking)
+ghost-lets3: binaries that both expansions accept: 12; calls, method calls and constants listed in each: 16; binaries with one resolved differently: 0
+ghost-lets3: built in 0.4s (runtime) and 0.4s (checking)
+two-plain: binaries that both expansions accept: 1; calls, method calls and constants listed in each: 7; binaries with one resolved differently: 0
+two-plain: built in 0.1s (runtime) and 0.1s (checking)
+all sets: binaries that both expansions accept: 151; lines in each listing: 718; binaries with a difference: 0
+### The stack: where its calls resolve (runtime expansion; the checking one is the same)
+Stack::new::{closure#0}:036:071 => the definition at 25:15 | Stack::__logic_room with []
+Stack::push::{closure#0}:048:055 => the definition at 25:15 | Stack::__logic_room with []
+Stack::push::{closure#1}:049:062 => the definition at 25:15 | Stack::__logic_room with []
+Stack::push::{closure#1}:049:097 => the definition at 25:15 | Stack::__logic_room with []
+Stack::push_then_top::{closure#0}:069:064 => the definition at 25:15 | Stack::__logic_room with []
+
+## rustc's messages, whole
+### a08-missing-bound-fn, the runtime expansion: 2 errors
+error[E0277]: `T` cannot be read in logical code
+   --> family/src/bin/a08-missing-bound-fn.rs:6:51
+    |
+  6 |     fn g<T>(x: &T) -> u32 { let s = logic! { snap(x) }; 1 }
+    |                                              ---- ^ this type has no snapshot that Locus knows
+    |                                              |
+    |                                              required by a bound introduced by this call
+    |
+    = note: for a type parameter, add the bound `T: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = note: required for `&T` to implement `Model`
+note: required by a bound in `snap`
+   --> locus/src/lib.rs:721:20
+    |
+721 |     pub fn snap<T: Model + ?Sized>(_: &T) -> T::Snap {
+    |                    ^^^^^ required by this bound in `snap`
+help: consider restricting type parameter `T` with trait `Model`
+    |
+  6 |     fn g<T: locus::Model>(x: &T) -> u32 { let s = logic! { snap(x) }; 1 }
+    |           ++++++++++++++
+### a09-missing-bound-impl, the runtime expansion: 2 errors
+error[E0277]: `T` cannot be read in logical code
+   --> family/src/bin/a09-missing-bound-impl.rs:7:46
+    |
+  7 |         fn count(&self) -> (n: usize, @(n == self.items.len())) { (self.items.len(), _) }
+    |                                              ----^^^^^^
+    |                                              |
+    |                                              this type has no snapshot that Locus knows
+    |                                              required by a bound introduced by this call
+    |
+    = note: for a type parameter, add the bound `T: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = note: required for `std::vec::Vec<T>` to implement `Model`
+note: required by a bound in `capture`
+   --> locus/src/lib.rs:717:23
+    |
+717 |     pub fn capture<T: Model + ?Sized>(_: &T) -> T::Logic {
+    |                       ^^^^^ required by this bound in `capture`
+help: consider restricting type parameter `T` with trait `Model`
+    |
+  6 |     impl<T: locus::Model> Shelf<T> {
+    |           ++++++++++++++
+### a10-missing-bound-trait-method, the runtime expansion: 2 errors
+error[E0277]: `T` cannot be read in logical code
+   --> family/src/bin/a10-missing-bound-trait-method.rs:9:65
+    |
+  9 |         fn keep<T>(&self, x: &T) -> u32 { let s = logic! { snap(x) }; 1 }
+    |                                                            ---- ^ this type has no snapshot that Locus knows
+    |                                                            |
+    |                                                            required by a bound introduced by this call
+    |
+    = note: for a type parameter, add the bound `T: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = note: required for `&T` to implement `Model`
+note: required by a bound in `snap`
+   --> locus/src/lib.rs:721:20
+    |
+721 |     pub fn snap<T: Model + ?Sized>(_: &T) -> T::Snap {
+    |                    ^^^^^ required by this bound in `snap`
+help: consider restricting type parameter `T` with trait `Model`
+    |
+  9 |         fn keep<T: locus::Model>(&self, x: &T) -> u32 { let s = logic! { snap(x) }; 1 }
+    |                  ++++++++++++++
+### a05e-associated-type-field-unbounded, the runtime expansion: 1 errors
+error[E0277]: `<F as Family>::Out` cannot be read in logical code
+ --> family/src/bin/a05e-associated-type-field-unbounded.rs:7:63
+  |
+7 |     fn kept<F: Family>(k: &Kept<F>) -> u32 { let s = logic! { snap(k) }; 1 }
+  |                                                               ^^^^ this type has no snapshot that Locus knows
+  |
+  = help: the trait `Model` is not implemented for `<F as Family>::Out`
+  = note: for a type parameter, add the bound `<F as Family>::Out: Model`
+  = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+note: required for `Kept<F>` to implement `Model`
+ --> family/src/bin/a05e-associated-type-field-unbounded.rs:6:12
+  |
+6 |     struct Kept<F: Family> { out: F::Out, n: u32 }
+  |            ^^^^
+  = note: this error originates in the macro `locus` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider further restricting the associated type
+  |
+7 |     fn kept<F: Family>(k: &Kept<F>) -> u32 where <F as Family>::Out: Model { let s = logic! { snap(k) }; 1 }
+  |                                            +++++++++++++++++++++++++++++++
+### a03-wrapper-confused, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+  --> family/src/bin/a03-wrapper-confused.rs:17:40
+   |
+17 |         let wrong = logic! { takes_seq(whole.s) };
+   |                              --------- ^^^^^ expected `Seq<Nat>`, found `Stack_Snap<Seq<Nat>, Nat>`
+   |                              |
+   |                              arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<_>`
+              found struct `Stack_Snap<locus::Seq<_>, locus::Nat>`
+note: function defined here
+  --> family/src/bin/a03-wrapper-confused.rs:13:14
+   |
+13 |     logic fn takes_seq(xs: Seq<Nat>) -> Seq<Nat> { xs }
+   |              ^^^^^^^^^ ------------
+### a06e-two-foreign-snapshots-mixed, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+   --> family/src/bin/a06e-two-foreign-snapshots-mixed.rs:12:47
+    |
+ 12 |         let mixed = logic! { snap(s).sock === snap(s).peer };
+    |                                           -   ^^^^^^^^^^^^ expected `Opaque<TcpListener>`, found `Opaque<SocketAddr>`
+    |                                           |
+    |                                           arguments to this function are incorrect
+    |
+    = note: expected struct `Opaque<TcpListener>`
+               found struct `Opaque<std::net::SocketAddr>`
+note: function defined here
+   --> locus/src/lib.rs:857:12
+    |
+857 |     pub fn same<T>(_: T, _: T) -> Prop {
+    |            ^^^^
+### a06f-opaque-field-selected-first, the runtime expansion: 2 errors
+error[E0277]: `TcpListener` cannot be read in logical code
+   --> family/src/bin/a06f-opaque-field-selected-first.rs:10:39
+    |
+ 10 |         let selected_first = logic! { s.sock };
+    |                                       -^^^^^
+    |                                       |
+    |                                       this type has no snapshot that Locus knows
+    |                                       required by a bound introduced by this call
+    |
+    = help: the trait `Model` is not implemented for `TcpListener`
+    = note: for a type parameter, add the bound `TcpListener: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = help: the following other types implement trait `Model`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              *const T
+              *mut T
+              Address
+              Box<T>
+            and 40 others
+note: required by a bound in `capture`
+   --> locus/src/lib.rs:717:23
+    |
+717 |     pub fn capture<T: Model + ?Sized>(_: &T) -> T::Logic {
+    |                       ^^^^^ required by this bound in `capture`
+### a11-model-in-another-invocation, the runtime expansion: 1 errors
+error: locus: a model is declared in the `locus!` that declares its type, where lowering writes the type's one implementation of `Model`: `Stack` is not declared here
+ --> family/src/bin/a11-model-in-another-invocation.rs:9:5
+  |
+9 |     impl Model for Stack {
+  |     ^^^^
+### a12-logic-fn-runtime-parameter, the runtime expansion: 3 errors
+error: locus: a logic function's parameters are logical types, and `stack : & Stack` is a runtime type: write `Snap<Stack>`, or the type of its model
+ --> family/src/bin/a12-logic-fn-runtime-parameter.rs:8:18
+  |
+8 |     logic fn top(stack: &Stack) -> Nat { stack.items.last() }
+  |                  ^^^^^
+### f1e-forged-inside-locus, the runtime expansion: 1 errors
+error: locus: `__logic_model` starts with a prefix that is reserved for the names Locus writes: `__logic_` and `__locus_`
+  --> family/src/bin/f1e-forged-inside-locus.rs:13:16
+   |
+13 |             fn __logic_model(s: ::locus::Nat) -> ::locus::Nat { s }
+   |                ^^^^^^^^^^^^^
+### a13e-method-on-snapshot, the runtime expansion: 1 errors
+error[E0599]: no method named `__logic_room` found for struct `Stack_Snap<F0, F1>` in the current scope
+  --> family/src/bin/a13e-method-on-snapshot.rs:15:42
+   |
+ 8 |     struct Stack { items: Vec<u32>, cap: usize }
+   |            ----- method `__logic_room` not found for this struct
+...
+15 |         let as_method = logic! { snap(s).room() };
+   |                                          ^^^^
+   |
+help: there is a method `__logic_into` with a similar name
+   |
+15 -         let as_method = logic! { snap(s).room() };
+15 +         let as_method = logic! { snap(s).__logic_into() };
+   |
+### d2b-foreign-trait-generic-method, the runtime expansion: 2 errors
+error[E0277]: `I` cannot be read in logical code
+   --> family/src/bin/d2b-foreign-trait-generic-method.rs:10:40
+    |
+ 10 |             let before = logic! { snap(iter) };
+    |                                   ---- ^^^^ this type has no snapshot that Locus knows
+    |                                   |
+    |                                   required by a bound introduced by this call
+    |
+    = note: for a type parameter, add the bound `I: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+note: required by a bound in `snap`
+   --> locus/src/lib.rs:721:20
+    |
+721 |     pub fn snap<T: Model + ?Sized>(_: &T) -> T::Snap {
+    |                    ^^^^^ required by this bound in `snap`
+help: consider further restricting type parameter `I` with trait `Model`
+    |
+  9 |         fn extend<I: IntoIterator<Item = u32> + locus::Model>(&mut self, iter: I) {
+    |                                               ++++++++++++++
+### d2c-foreign-trait-bound-added, the runtime expansion: 1 errors
+error[E0276]: impl has stricter requirements than trait
+ --> family/src/bin/d2c-foreign-trait-bound-added.rs:8:49
+  |
+8 |         fn extend<I: IntoIterator<Item = u32> + Model>(&mut self, iter: I) {
+  |                                                 ^^^^^ impl has extra requirement `I: locus::Model`
+### d6e-second-implementation, the runtime expansion: 1 errors
+error[E0119]: conflicting implementations of trait `Model` for type `Point`
+ --> family/src/bin/d6e-second-implementation.rs:6:12
+  |
+6 |     struct Point { x: u32 }
+  |            ^^^^^ conflicting implementation for `Point`
+...
+9 | unsafe impl ::locus::Model for Point {
+  | ------------------------------------ first implementation here
+  |
+  = note: this error originates in the macro `locus` (in Nightly builds, run with -Z macro-backtrace for more info)
+### e1e-closure-where-model-is-asked, the runtime expansion: 2 errors
+error[E0277]: `{closure@family/src/bin/e1e-closure-where-model-is-asked.rs:10:21: 10:24}` cannot be read in logical code
+  --> family/src/bin/e1e-closure-where-model-is-asked.rs:10:21
+   |
+10 |         (apply_read(|x| x + k, 2), apply_read(twice, 2))
+   |          ---------- ^^^^^^^^^ this type has no snapshot that Locus knows
+   |          |
+   |          required by a bound introduced by this call
+   |
+   = help: the trait `locus::Model` is not implemented for closure `{closure@family/src/bin/e1e-closure-where-model-is-asked.rs:10:21: 10:24}`
+   = note: for a type parameter, add the bound `{closure@family/src/bin/e1e-closure-where-model-is-asked.rs:10:21: 10:24}: Model`
+   = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+note: required by a bound in `apply_read`
+  --> family/src/bin/e1e-closure-where-model-is-asked.rs:7:39
+   |
+ 7 |     fn apply_read<F: Fn(u32) -> u32 + Model>(f: F, x: u32) -> u32 { let s = logic! { snap(f) }; f(x) }
+   |                                       ^^^^^ required by this bound in `apply_read`
+help: use parentheses to call this closure
+   |
+10 |         (apply_read((|x| x + k)(/* u32 */), 2), apply_read(twice, 2))
+   |                     +         ++++++++++++
+### e2e-trait-object-read, the runtime expansion: 4 errors
+error[E0277]: `dyn Shape` cannot be read in logical code
+   --> family/src/bin/e2e-trait-object-read.rs:8:31
+    |
+  8 |         let a = logic! { snap(shape) };
+    |                          ---- ^^^^^ this type has no snapshot that Locus knows
+    |                          |
+    |                          required by a bound introduced by this call
+    |
+    = help: the trait `Model` is not implemented for `dyn Shape`
+    = note: for a type parameter, add the bound `dyn Shape: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = help: the following other types implement trait `Model`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              *const T
+              *mut T
+              Address
+              Box<T>
+            and 38 others
+    = note: required for `Box<dyn Shape>` to implement `Model`
+note: required by a bound in `snap`
+   --> locus/src/lib.rs:721:20
+    |
+721 |     pub fn snap<T: Model + ?Sized>(_: &T) -> T::Snap {
+    |                    ^^^^^ required by this bound in `snap`
+### e2f-trait-object-field-unmarked, the runtime expansion: 1 errors
+error[E0277]: `(dyn Shape + 'static)` cannot be read in logical code
+ --> family/src/bin/e2f-trait-object-field-unmarked.rs:7:12
+  |
+7 |     struct Scene { shapes: Vec<Box<dyn Shape>>, count: u32 }
+  |            ^^^^^ this type has no snapshot that Locus knows
+  |
+  = help: the trait `Model` is not implemented for `(dyn Shape + 'static)`
+  = note: for a type parameter, add the bound `(dyn Shape + 'static): Model`
+  = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+  = help: the following other types implement trait `Model`:
+            &T
+            &mut T
+            (A, B)
+            (A, B, C)
+            *const T
+            *mut T
+            Address
+            Box<T>
+          and 40 others
+  = note: required for `Box<(dyn Shape + 'static)>` to implement `Model`
+  = note: this error originates in the macro `locus` (in Nightly builds, run with -Z macro-backtrace for more info)
+### c3e-index-mut-contract, the runtime expansion: 1 errors
+error[E0053]: method `index_mut` has an incompatible type for trait
+  --> family/src/bin/c3e-index-mut-contract.rs:14:16
+   |
+14 |             -> (r: &mut u32, @(snap(final!(self).cells).elements() === snap(self.cells).elements().set(i, snap(final!(r)))))
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `&mut u32`, found `(&mut u32, Proof)`
+   |
+   = note: expected signature `fn(&mut Row, _) -> &mut u32`
+              found signature `fn(&mut Row, _) -> (&mut u32, Proof)`
+help: change the output type to match the trait
+   |
+14 -             -> (r: &mut u32, @(snap(final!(self).cells).elements() === snap(self.cells).elements().set(i, snap(final!(r)))))
+14 +             -> &mut u32
+   |
+### c4e-vec-push-without-model, the runtime expansion: 1 errors
+error[E0277]: `{closure@family/src/bin/c4e-vec-push-without-model.rs:11:23: 11:36}` cannot be read in logical code
+   --> family/src/bin/c4e-vec-push-without-model.rs:11:18
+    |
+ 11 |         closures.push(move |x: u32| x + k);
+    |                  ^^^^ ------------- consider calling this closure
+    |                  |
+    |                  this type has no snapshot that Locus knows
+    |
+    = help: the trait `Model` is not implemented for closure `{closure@family/src/bin/c4e-vec-push-without-model.rs:11:23: 11:36}`
+    = note: for a type parameter, add the bound `{closure@family/src/bin/c4e-vec-push-without-model.rs:11:23: 11:36}: Model`
+    = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+    = help: the following other types implement trait `Model`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              *const T
+              *mut T
+              Address
+              Box<T>
+            and 38 others
+note: required by a bound in `locus::vec_contracts::<impl locus::Vec<T>>::push`
+   --> locus/src/lib.rs:598:17
+    |
+598 |         impl<T: Model> Vec<T> {
+    |                 ^^^^^ required by this bound in `locus::vec_contracts::<impl Vec<T>>::push`
+599 |             pub fn push(&mut self, x: T)
+    |                    ---- required by a bound in this associated function
+### c5e-vec-standard-mutation, the runtime expansion: 1 errors
+error[E0596]: cannot borrow data in dereference of `locus::Vec<u32>` as mutable
+  --> family/src/bin/c5e-vec-standard-mutation.rs:10:9
+   |
+10 |         v.truncate(0);
+   |         ^ cannot borrow as mutable
+   |
+   = help: trait `DerefMut` is required to modify through a dereference, but it is not implemented for `locus::Vec<u32>`
+### c6e-ghost-field-of-the-sequence-type, the runtime expansion: 1 errors
+error[E0277]: `T` cannot be read in logical code
+ --> family/src/bin/c6e-ghost-field-of-the-sequence-type.rs:8:19
+  |
+8 |         contents: Seq<Snap<T>>,
+  |                   ^^^^^^^^^^^^ this type has no snapshot that Locus knows
+  |
+  = note: for a type parameter, add the bound `T: Model`
+  = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+help: consider restricting type parameter `T` with trait `Model`
+  |
+6 |     pub struct Naive<T: locus::Model> {
+  |                       ++++++++++++++
+### c7e-bound-on-the-struct, the runtime expansion: 3 errors
+error[E0277]: `T` cannot be read in logical code
+  --> family/src/bin/c7e-bound-on-the-struct.rs:10:21
+   |
+10 |     fn count<T>(v: &Bounded<T>) -> usize { v.inner.len() }
+   |                     ^^^^^^^^^^ this type has no snapshot that Locus knows
+   |
+   = note: for a type parameter, add the bound `T: Model`
+   = note: for a type of a crate that Locus does not check, mark the field `#[opaque]` or wrap the type in a struct of your own
+note: required by a bound in `Bounded`
+  --> family/src/bin/c7e-bound-on-the-struct.rs:6:27
+   |
+ 6 |     pub struct Bounded<T: Model> {
+   |                           ^^^^^ required by this bound in `Bounded`
+help: consider restricting type parameter `T` with trait `Model`
+   |
+10 |     fn count<T: locus::Model>(v: &Bounded<T>) -> usize { v.inner.len() }
+   |               ++++++++++++++
+### `model(s)` with no type written
+### m1e-model-without-a-type, the runtime expansion: 1 errors
+error[E0282]: type annotations needed
+  --> family/src/bin/m1e-model-without-a-type.rs:15:29
+   |
+15 |         let bare = logic! { model(snap(s)).len() };
+   |                             ^^^^^^^^^^^^^^ cannot infer type
+
+run.sh all: 79 seconds

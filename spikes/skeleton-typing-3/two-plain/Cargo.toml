@@ -1,0 +1,12 @@
+[package]
+name = "two-plain"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus = { path = "../locus" }
+two-lib = { path = "../two-lib" }
+
+[lints]
+workspace = true

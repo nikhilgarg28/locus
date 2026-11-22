@@ -1,0 +1,5356 @@
+{
+ "config": "sk",
+ "features": null,
+ "env": {},
+ "packages": {
+  "corpus": {
+   "bins": {
+    "after-move": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0382",
+      "E0382"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        19,
+        13
+       ],
+       "to": [
+        19,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        19,
+        13
+       ],
+       "to": [
+        19,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "corpus/src/bin/after-move.rs",
+         19,
+         13,
+         19,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> corpus/src/bin/after-move.rs:19:13\n   |\n17 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n18 |     let count = consume(v);\n   |                         - value moved here\n19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> corpus/src/bin/after-move.rs:12:15\n   |\n12 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n18 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "corpus/src/bin/after-move.rs",
+         19,
+         13,
+         19,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> corpus/src/bin/after-move.rs:19:13\n   |\n17 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n18 |     let count = consume(v);\n   |                         - value moved here\n19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> corpus/src/bin/after-move.rs:12:15\n   |\n12 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n18 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "at-in-patterns": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "bucket(7) => 7",
+       "bucket(42) => 4"
+      ],
+      [
+       "expansion: checking",
+       "bucket(7) => 7",
+       "bucket(42) => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "checked-indices": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        66
+       ],
+       "to": [
+        12,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        38
+       ],
+       "to": [
+        13,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2"
+      ],
+      [
+       "expansion: checking",
+       "in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "derive-eq-with-proof-field": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        16,
+        15
+       ],
+       "to": [
+        16,
+        25
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "same(2, 7) => true"
+      ],
+      [
+       "expansion: checking",
+       "same(2, 7) => true"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "during-mutable-borrow": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0502",
+      "E0502"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "corpus/src/bin/during-mutable-borrow.rs",
+         15,
+         13,
+         15,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> corpus/src/bin/during-mutable-borrow.rs:15:13\n   |\n14 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n15 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n16 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "corpus/src/bin/during-mutable-borrow.rs",
+         15,
+         13,
+         15,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> corpus/src/bin/during-mutable-borrow.rs:15:13\n   |\n14 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n15 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n16 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "final-value-at-return": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        35
+       ],
+       "to": [
+        12,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        56
+       ],
+       "to": [
+        12,
+        88
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        20,
+        18
+       ],
+       "to": [
+        20,
+        26
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "six() => 6"
+      ],
+      [
+       "expansion: checking",
+       "six() => 6"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "ghost-parameters": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        25
+       ],
+       "to": [
+        12,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "ten_halved() => 5"
+      ],
+      [
+       "expansion: checking",
+       "ten_halved() => 5"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "keywords-as-names": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "read(prop(7)) => 7"
+      ],
+      [
+       "expansion: checking",
+       "read(prop(7)) => 7"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "locus-macro-inside-rust-macro": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        22
+       ],
+       "to": [
+        13,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "prove! (expanded by rustc)",
+       "from": [
+        13,
+        46
+       ],
+       "to": [
+        13,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "check(3) => 1"
+      ],
+      [
+       "expansion: checking",
+       "check(3) => 1"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "logic-calls-logic-function": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        32
+       ],
+       "to": [
+        14,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "logical-closure-in-body": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        51
+       ],
+       "to": [
+        13,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        51
+       ],
+       "to": [
+        13,
+        94
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        15
+       ],
+       "to": [
+        13,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `Nat` and a `locus::Int` in logical code"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         76,
+         13,
+         77
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:76\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                            ^ - required by a bound introduced by this call\n    |                                                                            |\n    |                                                                            this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         86,
+         13,
+         87
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:86\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                                      ^ - required by a bound introduced by this call\n    |                                                                                      |\n    |                                                                                      this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         32,
+         13,
+         33
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:32\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                ^ - required by a bound introduced by this call\n    |                                |\n    |                                this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         42,
+         13,
+         43
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:42\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                          ^ - required by a bound introduced by this call\n    |                                          |\n    |                                          this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         78,
+         13,
+         79
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:78\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                              ^ this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         88,
+         13,
+         89
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:88\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                                        ^ this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         76,
+         13,
+         77
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:76\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                            ^ - required by a bound introduced by this call\n    |                                                                            |\n    |                                                                            this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         86,
+         13,
+         87
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:86\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                                      ^ - required by a bound introduced by this call\n    |                                                                                      |\n    |                                                                                      this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         32,
+         13,
+         33
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:32\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                ^ - required by a bound introduced by this call\n    |                                |\n    |                                this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         42,
+         13,
+         43
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:42\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                          ^ - required by a bound introduced by this call\n    |                                          |\n    |                                          this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         78,
+         13,
+         79
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:78\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                              ^ this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `Nat` and a `locus::Int` in logical code",
+        "place": [
+         "corpus/src/bin/logical-closure-in-body.rs",
+         13,
+         88,
+         13,
+         89
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `Nat` and a `locus::Int` in logical code\n   --> corpus/src/bin/logical-closure-in-body.rs:13:88\n    |\n 13 |     let all: @(forall |n: Int| n + x === x + n) = logic! { |n: Int| prove!(n + x === x + n) };\n    |                                                                                        ^ this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ]
+     },
+     "verdict": "DOES NOT COMPILE"
+    },
+    "logical-fields": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        24,
+        31
+       ],
+       "to": [
+        29,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "`match` arms have incompatible types"
+        ],
+        [
+         "check",
+         "E0308",
+         "`match` arms have incompatible types"
+        ]
+       ]
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        37
+       ],
+       "to": [
+        33,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "`match` arms have incompatible types",
+        "place": [
+         "corpus/src/bin/logical-fields.rs",
+         27,
+         54,
+         27,
+         55
+        ],
+        "rendered": "error[E0308]: `match` arms have incompatible types\n  --> corpus/src/bin/logical-fields.rs:27:54\n   |\n25 | /     match t {\n26 | |         Tree::Leaf => 0,\n   | |                       - this is found to be of type `locus::Int`\n27 | |         Tree::Node(left, _, right) => size(left) + 1 + size(right),\n   | |                                                      ^ expected `Int`, found `Nat`\n28 | |     }\n   | |_____- `match` arms have incompatible types\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "`match` arms have incompatible types",
+        "place": [
+         "corpus/src/bin/logical-fields.rs",
+         27,
+         54,
+         27,
+         55
+        ],
+        "rendered": "error[E0308]: `match` arms have incompatible types\n  --> corpus/src/bin/logical-fields.rs:27:54\n   |\n25 | /     match t {\n26 | |         Tree::Leaf => 0,\n   | |                       - this is found to be of type `locus::Int`\n27 | |         Tree::Node(left, _, right) => size(left) + 1 + size(right),\n   | |                                                      ^ expected `Int`, found `Nat`\n28 | |     }\n   | |_____- `match` arms have incompatible types\n\n"
+       }
+      ]
+     },
+     "verdict": "DOES NOT COMPILE"
+    },
+    "match-every-arm": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "prop arm",
+       "from": [
+        13,
+        13
+       ],
+       "to": [
+        13,
+        23
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "prop arm",
+       "from": [
+        14,
+        21
+       ],
+       "to": [
+        14,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        30
+       ],
+       "to": [
+        17,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        43
+       ],
+       "to": [
+        17,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        49
+       ],
+       "to": [
+        22,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/match-every-arm.rs",
+         17,
+         35,
+         17,
+         36
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/match-every-arm.rs:17:35\n   |\n17 | logic fn one_is_not_even(h: @Even(1)) -> @False {\n   |                              ---- ^ expected `Nat`, found `Int`\n   |                              |\n   |                              arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/match-every-arm.rs:12:6\n   |\n12 | prop Even(n: Nat) {\n   |      ^^^^\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/match-every-arm.rs",
+         17,
+         35,
+         17,
+         36
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/match-every-arm.rs:17:35\n   |\n17 | logic fn one_is_not_even(h: @Even(1)) -> @False {\n   |                              ---- ^ expected `Nat`, found `Int`\n   |                              |\n   |                              arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/match-every-arm.rs:12:6\n   |\n12 | prop Even(n: Nat) {\n   |      ^^^^\n\n"
+       }
+      ]
+     },
+     "verdict": "DOES NOT COMPILE"
+    },
+    "pub-locus-as-tuple-field-type": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "wrap() => 1"
+      ],
+      [
+       "expansion: checking",
+       "wrap() => 1"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "raw-identifier-logic": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "call() => 5"
+      ],
+      [
+       "expansion: checking",
+       "call() => 5"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "reproved-after-assignment": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "let annotation",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        27
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        24
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "reproved() => 4"
+      ],
+      [
+       "expansion: checking",
+       "reproved() => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "returned-borrow": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        23
+       ],
+       "to": [
+        13,
+        76
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        22,
+        19
+       ],
+       "to": [
+        22,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "nine() => 9"
+      ],
+      [
+       "expansion: checking",
+       "nine() => 9"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "same-is-a-proposition": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        18,
+        27
+       ],
+       "to": [
+        18,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        18,
+        55
+       ],
+       "to": [
+        20,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        22,
+        33
+       ],
+       "to": [
+        22,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        22,
+        63
+       ],
+       "to": [
+        24,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "snapshot-survives-assignment": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        15,
+        20
+       ],
+       "to": [
+        15,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "snapshot() => 0"
+      ],
+      [
+       "expansion: checking",
+       "snapshot() => 0"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "tokens-in-macro-input": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "shown() => \"@(x > 0)\"",
+       "joined(1, 2) => (1, 2)"
+      ],
+      [
+       "expansion: checking",
+       "shown() => \"@(x > 0)\"",
+       "joined(1, 2) => (1, 2)"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "underscore-in-rust-positions": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "first_of((7, 9)) => 7",
+       "zeros() => 4"
+      ],
+      [
+       "expansion: checking",
+       "first_of((7, 9)) => 7",
+       "zeros() => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "wrapped-precondition": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        41
+       ],
+       "to": [
+        13,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "halve(10) => Some(5)",
+       "halve(7) => None"
+      ],
+      [
+       "expansion: checking",
+       "halve(10) => Some(5)",
+       "halve(7) => None"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "x-joined-logical-type": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        36
+       ],
+       "to": [
+        14,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        36
+       ],
+       "to": [
+        19,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        37
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        24,
+        24
+       ],
+       "to": [
+        24,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        24,
+        24
+       ],
+       "to": [
+        24,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/x-joined-logical-type.rs",
+         23,
+         33,
+         23,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/x-joined-logical-type.rs:23:33\n   |\n23 |         let d = logic! { double(3) };\n   |                          ------ ^ expected `Nat`, found `Int`\n   |                          |\n   |                          arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/x-joined-logical-type.rs:12:14\n   |\n12 |     logic fn double(n: Nat) -> Nat {\n   |              ^^^^^^ ------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/x-joined-logical-type.rs",
+         23,
+         33,
+         23,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/x-joined-logical-type.rs:23:33\n   |\n23 |         let d = logic! { double(3) };\n   |                          ------ ^ expected `Nat`, found `Int`\n   |                          |\n   |                          arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/x-joined-logical-type.rs:12:14\n   |\n12 |     logic fn double(n: Nat) -> Nat {\n   |              ^^^^^^ ------\n\n"
+       }
+      ]
+     },
+     "verdict": ""
+    },
+    "x-locus-name-collision": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "E0433,E0659",
+      "E0433,E0659"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0433",
+        "message": "cannot find module `locus` in this scope",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0433]: cannot find module `locus` in this scope\n  --> corpus/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ `locus` is a struct, not a module\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         5,
+         5,
+         5,
+         10
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus/src/bin/x-locus-name-collision.rs:5:5\n   |\n 5 | use locus::locus;\n   |     ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0433",
+        "message": "cannot find module `locus` in this scope",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0433]: cannot find module `locus` in this scope\n  --> corpus/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ `locus` is a struct, not a module\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         5,
+         5,
+         5,
+         10
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus/src/bin/x-locus-name-collision.rs:5:5\n   |\n 5 | use locus::locus;\n   |     ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       }
+      ]
+     },
+     "verdict": ""
+    },
+    "x-logic-kind": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        35
+       ],
+       "to": [
+        9,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        49
+       ],
+       "to": [
+        11,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        24
+       ],
+       "to": [
+        13,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        25
+       ],
+       "to": [
+        17,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        22,
+        37
+       ],
+       "to": [
+        22,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        22,
+        37
+       ],
+       "to": [
+        22,
+        59
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        22,
+        21
+       ],
+       "to": [
+        22,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        47
+       ],
+       "to": [
+        23,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        47
+       ],
+       "to": [
+        23,
+        82
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        23,
+        19
+       ],
+       "to": [
+        23,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        29,
+        19
+       ],
+       "to": [
+        29,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        29,
+        19
+       ],
+       "to": [
+        29,
+        54
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "annotated() => 2",
+       "unannotated() => 2"
+      ],
+      [
+       "expansion: checking",
+       "annotated() => 2",
+       "unannotated() => 2"
+      ]
+     ],
+     "verdict": ""
+    },
+    "x-split-logical-type": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        14,
+        36
+       ],
+       "to": [
+        16,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        36
+       ],
+       "to": [
+        23,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        29,
+        17
+       ],
+       "to": [
+        29,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        29,
+        17
+       ],
+       "to": [
+        29,
+        37
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        30,
+        24
+       ],
+       "to": [
+        30,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        30,
+        24
+       ],
+       "to": [
+        30,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/x-split-logical-type.rs",
+         29,
+         33,
+         29,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/x-split-logical-type.rs:29:33\n   |\n29 |         let d = logic! { double(3) };\n   |                          ------ ^ expected `Nat`, found `Int`\n   |                          |\n   |                          arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/x-split-logical-type.rs:14:14\n   |\n14 |     logic fn double(n: Nat) -> Nat {\n   |              ^^^^^^ ------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "corpus/src/bin/x-split-logical-type.rs",
+         29,
+         33,
+         29,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> corpus/src/bin/x-split-logical-type.rs:29:33\n   |\n29 |         let d = logic! { double(3) };\n   |                          ------ ^ expected `Nat`, found `Int`\n   |                          |\n   |                          arguments to this function are incorrect\n   |\nnote: function defined here\n  --> corpus/src/bin/x-split-logical-type.rs:14:14\n   |\n14 |     logic fn double(n: Nat) -> Nat {\n   |              ^^^^^^ ------\n\n"
+       }
+      ]
+     },
+     "verdict": ""
+    }
+   },
+   "seconds": {
+    "runtime": 2.6486639976501465,
+    "check": 2.4056575298309326
+   }
+  },
+  "corpus-explicit": {
+   "bins": {
+    "after-move": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0382",
+      "E0382"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        19,
+        13
+       ],
+       "to": [
+        19,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        19,
+        13
+       ],
+       "to": [
+        19,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "corpus-explicit/src/bin/after-move.rs",
+         19,
+         13,
+         19,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> corpus-explicit/src/bin/after-move.rs:19:13\n   |\n17 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n18 |     let count = consume(v);\n   |                         - value moved here\n19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> corpus-explicit/src/bin/after-move.rs:12:15\n   |\n12 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n18 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "corpus-explicit/src/bin/after-move.rs",
+         19,
+         13,
+         19,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> corpus-explicit/src/bin/after-move.rs:19:13\n   |\n17 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n18 |     let count = consume(v);\n   |                         - value moved here\n19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> corpus-explicit/src/bin/after-move.rs:12:15\n   |\n12 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n18 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "at-in-patterns": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "bucket(7) => 7",
+       "bucket(42) => 4"
+      ],
+      [
+       "expansion: checking",
+       "bucket(7) => 7",
+       "bucket(42) => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "checked-indices": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        66
+       ],
+       "to": [
+        12,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        38
+       ],
+       "to": [
+        13,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2"
+      ],
+      [
+       "expansion: checking",
+       "in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "derive-eq-with-proof-field": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        16,
+        15
+       ],
+       "to": [
+        16,
+        25
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "same(2, 7) => true"
+      ],
+      [
+       "expansion: checking",
+       "same(2, 7) => true"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "during-mutable-borrow": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0502",
+      "E0502"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "corpus-explicit/src/bin/during-mutable-borrow.rs",
+         15,
+         13,
+         15,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> corpus-explicit/src/bin/during-mutable-borrow.rs:15:13\n   |\n14 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n15 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n16 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "corpus-explicit/src/bin/during-mutable-borrow.rs",
+         15,
+         13,
+         15,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> corpus-explicit/src/bin/during-mutable-borrow.rs:15:13\n   |\n14 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n15 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n16 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "final-value-at-return": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        35
+       ],
+       "to": [
+        12,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        56
+       ],
+       "to": [
+        12,
+        88
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        20,
+        18
+       ],
+       "to": [
+        20,
+        26
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "six() => 6"
+      ],
+      [
+       "expansion: checking",
+       "six() => 6"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "ghost-parameters": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        25
+       ],
+       "to": [
+        12,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "ten_halved() => 5"
+      ],
+      [
+       "expansion: checking",
+       "ten_halved() => 5"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "keywords-as-names": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "read(prop(7)) => 7"
+      ],
+      [
+       "expansion: checking",
+       "read(prop(7)) => 7"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "locus-macro-inside-rust-macro": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        22
+       ],
+       "to": [
+        13,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "prove! (expanded by rustc)",
+       "from": [
+        13,
+        46
+       ],
+       "to": [
+        13,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "check(3) => 1"
+      ],
+      [
+       "expansion: checking",
+       "check(3) => 1"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "logic-calls-logic-function": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        32
+       ],
+       "to": [
+        14,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "logical-closure-in-body": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        65
+       ],
+       "to": [
+        13,
+        122
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        65
+       ],
+       "to": [
+        13,
+        122
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        15
+       ],
+       "to": [
+        13,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "commutes(3) => 3"
+      ],
+      [
+       "expansion: checking",
+       "commutes(3) => 3"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "logical-fields": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        24,
+        31
+       ],
+       "to": [
+        29,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        37
+       ],
+       "to": [
+        33,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "match-every-arm": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "prop arm",
+       "from": [
+        13,
+        13
+       ],
+       "to": [
+        13,
+        23
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "prop arm",
+       "from": [
+        14,
+        21
+       ],
+       "to": [
+        14,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        30
+       ],
+       "to": [
+        17,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        50
+       ],
+       "to": [
+        17,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        56
+       ],
+       "to": [
+        22,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "pub-locus-as-tuple-field-type": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "wrap() => 1"
+      ],
+      [
+       "expansion: checking",
+       "wrap() => 1"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "raw-identifier-logic": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "call() => 5"
+      ],
+      [
+       "expansion: checking",
+       "call() => 5"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "reproved-after-assignment": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "let annotation",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        27
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        24
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "reproved() => 4"
+      ],
+      [
+       "expansion: checking",
+       "reproved() => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "returned-borrow": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        23
+       ],
+       "to": [
+        13,
+        76
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        22,
+        19
+       ],
+       "to": [
+        22,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "nine() => 9"
+      ],
+      [
+       "expansion: checking",
+       "nine() => 9"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "same-is-a-proposition": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        18,
+        27
+       ],
+       "to": [
+        18,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        18,
+        55
+       ],
+       "to": [
+        20,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        22,
+        33
+       ],
+       "to": [
+        22,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        22,
+        63
+       ],
+       "to": [
+        24,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "snapshot-survives-assignment": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        15,
+        20
+       ],
+       "to": [
+        15,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        17,
+        17
+       ],
+       "to": [
+        17,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "snapshot() => 0"
+      ],
+      [
+       "expansion: checking",
+       "snapshot() => 0"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "tokens-in-macro-input": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "shown() => \"@(x > 0)\"",
+       "joined(1, 2) => (1, 2)"
+      ],
+      [
+       "expansion: checking",
+       "shown() => \"@(x > 0)\"",
+       "joined(1, 2) => (1, 2)"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "underscore-in-rust-positions": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "first_of((7, 9)) => 7",
+       "zeros() => 4"
+      ],
+      [
+       "expansion: checking",
+       "first_of((7, 9)) => 7",
+       "zeros() => 4"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "wrapped-precondition": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        41
+       ],
+       "to": [
+        13,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "halve(10) => Some(5)",
+       "halve(7) => None"
+      ],
+      [
+       "expansion: checking",
+       "halve(10) => Some(5)",
+       "halve(7) => None"
+      ]
+     ],
+     "verdict": "compiles both ways; prints as expected"
+    },
+    "x-joined-logical-type": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        36
+       ],
+       "to": [
+        14,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        36
+       ],
+       "to": [
+        19,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        44
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        24,
+        24
+       ],
+       "to": [
+        24,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        24,
+        24
+       ],
+       "to": [
+        24,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "use_them() => 1"
+      ],
+      [
+       "expansion: checking",
+       "use_them() => 1"
+      ]
+     ],
+     "verdict": ""
+    },
+    "x-locus-name-collision": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "E0433,E0659",
+      "E0433,E0659"
+     ],
+     "pieces": [],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0433",
+        "message": "cannot find module `locus` in this scope",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0433]: cannot find module `locus` in this scope\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ `locus` is a struct, not a module\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         5,
+         5,
+         5,
+         10
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:5:5\n   |\n 5 | use locus::locus;\n   |     ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0433",
+        "message": "cannot find module `locus` in this scope",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0433]: cannot find module `locus` in this scope\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ `locus` is a struct, not a module\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         5,
+         5,
+         5,
+         10
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:5:5\n   |\n 5 | use locus::locus;\n   |     ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       },
+       {
+        "code": "E0659",
+        "message": "`locus` is ambiguous",
+        "place": [
+         "corpus-explicit/src/bin/x-locus-name-collision.rs",
+         28,
+         31,
+         28,
+         36
+        ],
+        "rendered": "error[E0659]: `locus` is ambiguous\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:28:31\n   |\n28 |     println!(\"expansion: {}\", locus::__expansion!());\n   |                               ^^^^^ ambiguous name\n   |\n   = note: ambiguous because of a conflict between a macro-expanded name and a less macro-expanded name from outer scope during import or macro resolution\n   = note: `locus` could refer to a crate passed with `--extern`\n   = help: use `::locus` to refer to this crate unambiguously\nnote: `locus` could also refer to the struct defined here\n  --> corpus-explicit/src/bin/x-locus-name-collision.rs:13:1\n   |\n13 | pub struct locus;\n   | ^^^^^^^^^^^^^^^^^\n   = help: use `crate::locus` to refer to this struct unambiguously\n\n"
+       }
+      ]
+     },
+     "verdict": ""
+    },
+    "x-logic-kind": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        35
+       ],
+       "to": [
+        9,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        49
+       ],
+       "to": [
+        11,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        24
+       ],
+       "to": [
+        13,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        17,
+        25
+       ],
+       "to": [
+        17,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        22,
+        37
+       ],
+       "to": [
+        22,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        22,
+        37
+       ],
+       "to": [
+        22,
+        59
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        22,
+        21
+       ],
+       "to": [
+        22,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        47
+       ],
+       "to": [
+        23,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        47
+       ],
+       "to": [
+        23,
+        82
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        23,
+        19
+       ],
+       "to": [
+        23,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        29,
+        19
+       ],
+       "to": [
+        29,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        29,
+        19
+       ],
+       "to": [
+        29,
+        54
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "annotated() => 2",
+       "unannotated() => 2"
+      ],
+      [
+       "expansion: checking",
+       "annotated() => 2",
+       "unannotated() => 2"
+      ]
+     ],
+     "verdict": ""
+    },
+    "x-split-logical-type": {
+     "expect": [
+      "none",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        14,
+        36
+       ],
+       "to": [
+        16,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        36
+       ],
+       "to": [
+        23,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        29,
+        17
+       ],
+       "to": [
+        29,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        29,
+        17
+       ],
+       "to": [
+        29,
+        44
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        30,
+        24
+       ],
+       "to": [
+        30,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        30,
+        24
+       ],
+       "to": [
+        30,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "use_them() => 1"
+      ],
+      [
+       "expansion: checking",
+       "use_them() => 1"
+      ]
+     ],
+     "verdict": ""
+    }
+   },
+   "seconds": {
+    "runtime": 0.6424350738525391,
+    "check": 0.6361987590789795
+   }
+  },
+  "ghost-lets": {
+   "bins": {
+    "gl-after-move": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0382",
+      "E0382"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        18,
+        13
+       ],
+       "to": [
+        18,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        18,
+        13
+       ],
+       "to": [
+        18,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0382",
+         "borrow of moved value: `v`"
+        ],
+        [
+         "check",
+         "E0382",
+         "borrow of moved value: `v`"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "ghost-lets/src/bin/gl-after-move.rs",
+         18,
+         13,
+         18,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> ghost-lets/src/bin/gl-after-move.rs:18:13\n   |\n16 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n17 |     let count = consume(v);\n   |                         - value moved here\n18 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> ghost-lets/src/bin/gl-after-move.rs:11:15\n   |\n11 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n17 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0382",
+        "message": "borrow of moved value: `v`",
+        "place": [
+         "ghost-lets/src/bin/gl-after-move.rs",
+         18,
+         13,
+         18,
+         18
+        ],
+        "rendered": "error[E0382]: borrow of moved value: `v`\n  --> ghost-lets/src/bin/gl-after-move.rs:18:13\n   |\n16 |     let v = vec![1, 2, 3];\n   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait\n17 |     let count = consume(v);\n   |                         - value moved here\n18 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved\n   |             ^^^^^    - borrow occurs due to use in closure\n   |             |\n   |             value borrowed here after move\n   |\nnote: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary\n  --> ghost-lets/src/bin/gl-after-move.rs:11:15\n   |\n11 | fn consume(v: Vec<u32>) -> usize {\n   |    -------    ^^^^^^^^ this parameter takes ownership of the value\n   |    |\n   |    in this function\nhelp: consider cloning the value if the performance cost is acceptable\n   |\n17 |     let count = consume(v.clone());\n   |                          ++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "gl-after-mutable-borrow-ends": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-before-move": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        13
+       ],
+       "to": [
+        17,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        17,
+        13
+       ],
+       "to": [
+        17,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-branch-on-logical": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0369",
+      "E0369"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        17
+       ],
+       "to": [
+        12,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        17
+       ],
+       "to": [
+        12,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0369",
+        "message": "binary operation `>` cannot be applied to type `Nat`",
+        "place": [
+         "ghost-lets/src/bin/gl-branch-on-logical.rs",
+         13,
+         14,
+         13,
+         15
+        ],
+        "rendered": "error[E0369]: binary operation `>` cannot be applied to type `Nat`\n  --> ghost-lets/src/bin/gl-branch-on-logical.rs:13:14\n   |\n13 |     if count > 0 { //~ error: runtime code cannot branch on a logical value\n   |        ----- ^ - {integer}\n   |        |\n   |        Nat\n   |\nnote: `Nat` does not implement `PartialOrd<{integer}>`\n  --> locus/src/lib.rs:90:9\n   |\n90 |         pub struct $name;\n   |         ^^^^^^^^^^^^^^^^^ `Nat` is defined in another crate\n...\n99 | marker!(Int, Nat, Bool, Prop);\n   | ----------------------------- in this macro invocation\n   = note: this error originates in the macro `marker` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0369",
+        "message": "binary operation `>` cannot be applied to type `Nat`",
+        "place": [
+         "ghost-lets/src/bin/gl-branch-on-logical.rs",
+         13,
+         14,
+         13,
+         15
+        ],
+        "rendered": "error[E0369]: binary operation `>` cannot be applied to type `Nat`\n  --> ghost-lets/src/bin/gl-branch-on-logical.rs:13:14\n   |\n13 |     if count > 0 { //~ error: runtime code cannot branch on a logical value\n   |        ----- ^ - {integer}\n   |        |\n   |        Nat\n   |\nnote: `Nat` does not implement `PartialOrd<{integer}>`\n  --> locus/src/lib.rs:90:9\n   |\n90 |         pub struct $name;\n   |         ^^^^^^^^^^^^^^^^^ `Nat` is defined in another crate\n...\n99 | marker!(Int, Nat, Bool, Prop);\n   | ----------------------------- in this macro invocation\n   = note: this error originates in the macro `marker` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "gl-cell-snapshot-kept-by-move": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        18
+       ],
+       "to": [
+        15,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        18
+       ],
+       "to": [
+        15,
+        36
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        17,
+        16
+       ],
+       "to": [
+        17,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-during-mutable-borrow": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "E0502",
+      "E0502"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        13
+       ],
+       "to": [
+        14,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        13
+       ],
+       "to": [
+        14,
+        31
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ],
+        [
+         "check",
+         "E0502",
+         "cannot borrow `v` as immutable because it is also borrowed as mutable"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "ghost-lets/src/bin/gl-during-mutable-borrow.rs",
+         14,
+         13,
+         14,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> ghost-lets/src/bin/gl-during-mutable-borrow.rs:14:13\n   |\n13 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n14 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n15 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0502",
+        "message": "cannot borrow `v` as immutable because it is also borrowed as mutable",
+        "place": [
+         "ghost-lets/src/bin/gl-during-mutable-borrow.rs",
+         14,
+         13,
+         14,
+         18
+        ],
+        "rendered": "error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable\n  --> ghost-lets/src/bin/gl-during-mutable-borrow.rs:14:13\n   |\n13 |     let r = &mut v;\n   |             ------ mutable borrow occurs here\n14 |     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed\n   |             ^^^^^    - second borrow occurs due to use of `v` in closure\n   |             |\n   |             immutable borrow occurs here\n15 |     r.push(4);\n   |     - mutable borrow later used here\n\n"
+       }
+      ]
+     },
+     "verdict": "rustc rejects"
+    },
+    "gl-final-value-recovered-by-inference": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        16,
+        44
+       ],
+       "to": [
+        16,
+        81
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        20,
+        33
+       ],
+       "to": [
+        20,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        20,
+        51
+       ],
+       "to": [
+        22,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        27,
+        21
+       ],
+       "to": [
+        27,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        27,
+        21
+       ],
+       "to": [
+        27,
+        57
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        28,
+        15
+       ],
+       "to": [
+        28,
+        39
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "rustc accepts"
+    },
+    "gl-hole-written-out-with-an-earlier-value": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "E0369,E0425,E0599,error",
+      "E0369,E0425,E0599,error"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        13,
+        41
+       ],
+       "to": [
+        13,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0599",
+         "no associated function or constant named `wrap` found for type `u32` in the current scope"
+        ],
+        [
+         "check",
+         "E0599",
+         "no associated function or constant named `wrap` found for type `u32` in the current scope"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        30
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "error",
+        "message": "invalid comparison operator `===`",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         17,
+         16,
+         20
+        ],
+        "rendered": "error: invalid comparison operator `===`\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                 ^^^\n   |\nhelp: `===` is not a valid comparison operator, use `==`\n   |\n16 -     (n, given(n === u32::wrap(before + 1)))\n16 +     (n, given(n == u32::wrap(before + 1)))\n   |\n\n"
+       },
+       {
+        "code": "E0599",
+        "message": "no associated function or constant named `wrap` found for type `u32` in the current scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         13,
+         55,
+         13,
+         59
+        ],
+        "rendered": "error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:13:55\n   |\n13 | fn increment(mut n: u32) -> (out: u32, @(out === u32::wrap(n + 1))) {\n   |                                                       ^^^^ associated function or constant not found in `u32`\n\n"
+       },
+       {
+        "code": "E0599",
+        "message": "no associated function or constant named `wrap` found for type `u32` in the current scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         26,
+         16,
+         30
+        ],
+        "rendered": "error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                          ^^^^ associated function or constant not found in `u32`\n\n"
+       },
+       {
+        "code": "E0369",
+        "message": "cannot add `{integer}` to `Nat`",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         38,
+         16,
+         39
+        ],
+        "rendered": "error[E0369]: cannot add `{integer}` to `Nat`\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:38\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                               ------ ^ - {integer}\n   |                               |\n   |                               Nat\n   |\nnote: `Nat` does not implement `Add<{integer}>`\n  --> locus/src/lib.rs:90:9\n   |\n90 |         pub struct $name;\n   |         ^^^^^^^^^^^^^^^^^ `Nat` is defined in another crate\n...\n99 | marker!(Int, Nat, Bool, Prop);\n   | ----------------------------- in this macro invocation\n   = note: this error originates in the macro `marker` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       },
+       {
+        "code": "E0425",
+        "message": "cannot find function `given` in this scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         9,
+         16,
+         14
+        ],
+        "rendered": "error[E0425]: cannot find function `given` in this scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:9\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |         ^^^^^ not found in this scope\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "error",
+        "message": "invalid comparison operator `===`",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         17,
+         16,
+         20
+        ],
+        "rendered": "error: invalid comparison operator `===`\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:17\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                 ^^^\n   |\nhelp: `===` is not a valid comparison operator, use `==`\n   |\n16 -     (n, given(n === u32::wrap(before + 1)))\n16 +     (n, given(n == u32::wrap(before + 1)))\n   |\n\n"
+       },
+       {
+        "code": "E0599",
+        "message": "no associated function or constant named `wrap` found for type `u32` in the current scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         13,
+         55,
+         13,
+         59
+        ],
+        "rendered": "error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:13:55\n   |\n13 | fn increment(mut n: u32) -> (out: u32, @(out === u32::wrap(n + 1))) {\n   |                                                       ^^^^ associated function or constant not found in `u32`\n\n"
+       },
+       {
+        "code": "E0599",
+        "message": "no associated function or constant named `wrap` found for type `u32` in the current scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         26,
+         16,
+         30
+        ],
+        "rendered": "error[E0599]: no associated function or constant named `wrap` found for type `u32` in the current scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:26\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                          ^^^^ associated function or constant not found in `u32`\n\n"
+       },
+       {
+        "code": "E0369",
+        "message": "cannot add `{integer}` to `Nat`",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         38,
+         16,
+         39
+        ],
+        "rendered": "error[E0369]: cannot add `{integer}` to `Nat`\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:38\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |                               ------ ^ - {integer}\n   |                               |\n   |                               Nat\n   |\nnote: `Nat` does not implement `Add<{integer}>`\n  --> locus/src/lib.rs:90:9\n   |\n90 |         pub struct $name;\n   |         ^^^^^^^^^^^^^^^^^ `Nat` is defined in another crate\n...\n99 | marker!(Int, Nat, Bool, Prop);\n   | ----------------------------- in this macro invocation\n   = note: this error originates in the macro `marker` (in Nightly builds, run with -Z macro-backtrace for more info)\n\n"
+       },
+       {
+        "code": "E0425",
+        "message": "cannot find function `given` in this scope",
+        "place": [
+         "ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs",
+         16,
+         9,
+         16,
+         14
+        ],
+        "rendered": "error[E0425]: cannot find function `given` in this scope\n  --> ghost-lets/src/bin/gl-hole-written-out-with-an-earlier-value.rs:16:9\n   |\n16 |     (n, given(n === u32::wrap(before + 1)))\n   |         ^^^^^ not found in this scope\n\n"
+       }
+      ]
+     },
+     "verdict": "DOES NOT COMPILE"
+    },
+    "gl-immutable-static-in-logic": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        13
+       ],
+       "to": [
+        14,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        13
+       ],
+       "to": [
+        14,
+        29
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        29
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        16,
+        16
+       ],
+       "to": [
+        16,
+        25
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-logic-calls-logic-function": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        11,
+        32
+       ],
+       "to": [
+        13,
+        2
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-logic-calls-runtime-function": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        13
+       ],
+       "to": [
+        16,
+        33
+       ],
+       "status": "not translated",
+       "detail": "a borrow `&`",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        13
+       ],
+       "to": [
+        16,
+        33
+       ],
+       "status": "none: left untyped",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "rustc accepts"
+    },
+    "gl-logic-in-async-block": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "rustc accepts"
+    },
+    "gl-logic-in-closure": {
+     "expect": [
+      "litmus reject",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "rustc accepts"
+    },
+    "gl-operator-in-logic-block": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "E0433",
+      "E0433"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        13
+       ],
+       "to": [
+        15,
+        29
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0433",
+        "message": "cannot find `std` in `locus`",
+        "place": [
+         "ghost-lets/src/bin/gl-operator-in-logic-block.rs",
+         11,
+         12,
+         11,
+         15
+        ],
+        "rendered": "error[E0433]: cannot find `std` in `locus`\n  --> ghost-lets/src/bin/gl-operator-in-logic-block.rs:11:12\n   |\n11 | use locus::std::vec::Vec;\n   |            ^^^ could not find `std` in `locus`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0433",
+        "message": "cannot find `std` in `locus`",
+        "place": [
+         "ghost-lets/src/bin/gl-operator-in-logic-block.rs",
+         11,
+         12,
+         11,
+         15
+        ],
+        "rendered": "error[E0433]: cannot find `std` in `locus`\n  --> ghost-lets/src/bin/gl-operator-in-logic-block.rs:11:12\n   |\n11 | use locus::std::vec::Vec;\n   |            ^^^ could not find `std` in `locus`\n\n"
+       }
+      ]
+     },
+     "verdict": "DOES NOT COMPILE"
+    },
+    "gl-snapshot-survives-assignment": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        18
+       ],
+       "to": [
+        13,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        18
+       ],
+       "to": [
+        13,
+        30
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-snapshot-unchanged": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        18
+       ],
+       "to": [
+        17,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        17,
+        18
+       ],
+       "to": [
+        17,
+        36
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        18,
+        16
+       ],
+       "to": [
+        18,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    },
+    "gl-snapshot-with-associated-type-field": {
+     "expect": [
+      "litmus accept",
+      null
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "snapshot bound",
+       "from": [
+        20,
+        4
+       ],
+       "to": [
+        20,
+        8
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        21,
+        18
+       ],
+       "to": [
+        21,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        21,
+        18
+       ],
+       "to": [
+        21,
+        36
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        23,
+        16
+       ],
+       "to": [
+        23,
+        40
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime"
+      ],
+      [
+       "expansion: checking"
+      ]
+     ],
+     "verdict": "compiles both ways"
+    }
+   },
+   "seconds": {
+    "runtime": 0.4000120162963867,
+    "check": 0.42157649993896484
+   }
+  }
+ }
+}

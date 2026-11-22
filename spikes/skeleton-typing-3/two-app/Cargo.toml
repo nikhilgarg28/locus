@@ -1,0 +1,13 @@
+[package]
+name = "two-app"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+autobins = true
+
+[dependencies]
+locus = { path = "../locus" }
+two-lib = { path = "../two-lib" }
+
+[lints]
+workspace = true

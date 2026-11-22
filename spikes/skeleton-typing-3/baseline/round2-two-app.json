@@ -1,0 +1,365 @@
+{
+ "config": "sk",
+ "features": null,
+ "env": {},
+ "packages": {
+  "two-app": {
+   "bins": {
+    "app": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        51
+       ],
+       "to": [
+        15,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        16,
+        41
+       ],
+       "to": [
+        16,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        16,
+        60
+       ],
+       "to": [
+        16,
+        65
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        22,
+        50
+       ],
+       "to": [
+        22,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        38
+       ],
+       "to": [
+        23,
+        68
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        24,
+        38
+       ],
+       "to": [
+        24,
+        68
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        24,
+        83
+       ],
+       "to": [
+        24,
+        91
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        28,
+        55
+       ],
+       "to": [
+        34,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        39,
+        20
+       ],
+       "to": [
+        39,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        39,
+        20
+       ],
+       "to": [
+        39,
+        58
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        40,
+        23
+       ],
+       "to": [
+        40,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        40,
+        23
+       ],
+       "to": [
+        40,
+        48
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        41,
+        20
+       ],
+       "to": [
+        41,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        41,
+        20
+       ],
+       "to": [
+        41,
+        56
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        42,
+        23
+       ],
+       "to": [
+        42,
+        105
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        42,
+        23
+       ],
+       "to": [
+        42,
+        105
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        43,
+        21
+       ],
+       "to": [
+        43,
+        68
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        43,
+        21
+       ],
+       "to": [
+        43,
+        68
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        44,
+        23
+       ],
+       "to": [
+        44,
+        107
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        45,
+        17
+       ],
+       "to": [
+        45,
+        71
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        45,
+        17
+       ],
+       "to": [
+        45,
+        71
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        52,
+        21
+       ],
+       "to": [
+        52,
+        86
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        54,
+        32
+       ],
+       "to": [
+        54,
+        64
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (13, 57, \"two_lib::Rational\", \"two_lib::Sign\", \"app::Weight\", \"locus::Nat\", \"locus::Nat\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (13, 57, \"two_lib::Rational\", \"two_lib::Sign\", \"app::Weight\", \"locus::Nat\", \"locus::Nat\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    }
+   },
+   "seconds": {
+    "runtime": 0.23168206214904785,
+    "check": 0.23107576370239258
+   }
+  }
+ }
+}

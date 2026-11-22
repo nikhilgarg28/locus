@@ -1,0 +1,3720 @@
+{
+ "config": "sk",
+ "features": null,
+ "env": {},
+ "packages": {
+  "spec-omit": {
+   "bins": {
+    "o1a-stack": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        12,
+        19
+       ],
+       "to": [
+        12,
+        39
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        51
+       ],
+       "to": [
+        17,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        23,
+        36
+       ],
+       "to": [
+        23,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        27,
+        59
+       ],
+       "to": [
+        27,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        29,
+        57
+       ],
+       "to": [
+        29,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        29,
+        95
+       ],
+       "to": [
+        29,
+        100
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        57
+       ],
+       "to": [
+        31,
+        84
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        85
+       ],
+       "to": [
+        31,
+        90
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        34,
+        47
+       ],
+       "to": [
+        34,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`==` is not defined on a `locus::Int` and a `locus::Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`==` is not defined on a `locus::Int` and a `locus::Nat` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        38,
+        42
+       ],
+       "to": [
+        38,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        42,
+        46
+       ],
+       "to": [
+        42,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        46,
+        47
+       ],
+       "to": [
+        46,
+        64
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        47,
+        17
+       ],
+       "to": [
+        47,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        49,
+        26
+       ],
+       "to": [
+        49,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        49,
+        26
+       ],
+       "to": [
+        49,
+        48
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        50,
+        26
+       ],
+       "to": [
+        50,
+        64
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        50,
+        26
+       ],
+       "to": [
+        50,
+        64
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        55,
+        42
+       ],
+       "to": [
+        55,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        56,
+        26
+       ],
+       "to": [
+        56,
+        98
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        62,
+        38
+       ],
+       "to": [
+        62,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        62,
+        69
+       ],
+       "to": [
+        62,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        56
+       ],
+       "to": [
+        67,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        88
+       ],
+       "to": [
+        67,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        69,
+        24
+       ],
+       "to": [
+        69,
+        61
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        69,
+        24
+       ],
+       "to": [
+        69,
+        61
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Int` and a `locus::Nat` in logical code",
+        "place": [
+         "spec-omit/src/bin/o1a-stack.rs",
+         34,
+         64,
+         34,
+         72
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Int` and a `locus::Nat` in logical code\n   --> spec-omit/src/bin/o1a-stack.rs:34:64\n    |\n 34 |         pub fn new(cap: usize) -> (s: Stack, @(s.len() == 0 && s.room() == cap)) {\n    |                                                                ^^^^^^^^ - required by a bound introduced by this call\n    |                                                                |\n    |                                                                this is a `locus::Int`, and the other side is a `locus::Nat`\n    |\n    = help: the trait `Equality<locus::Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Int` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:615:5\n    |\n615 |     impl Equality for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n620 |     impl Equality<NoSuchOperand> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Int` and a `locus::Nat` in logical code",
+        "place": [
+         "spec-omit/src/bin/o1a-stack.rs",
+         34,
+         64,
+         34,
+         72
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Int` and a `locus::Nat` in logical code\n   --> spec-omit/src/bin/o1a-stack.rs:34:64\n    |\n 34 |         pub fn new(cap: usize) -> (s: Stack, @(s.len() == 0 && s.room() == cap)) {\n    |                                                                ^^^^^^^^ - required by a bound introduced by this call\n    |                                                                |\n    |                                                                this is a `locus::Int`, and the other side is a `locus::Nat`\n    |\n    = help: the trait `Equality<locus::Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Int` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:615:5\n    |\n615 |     impl Equality for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n620 |     impl Equality<NoSuchOperand> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o1b-stack": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        12,
+        19
+       ],
+       "to": [
+        12,
+        39
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        51
+       ],
+       "to": [
+        17,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        23,
+        36
+       ],
+       "to": [
+        23,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        27,
+        59
+       ],
+       "to": [
+        27,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        29,
+        57
+       ],
+       "to": [
+        29,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        29,
+        95
+       ],
+       "to": [
+        29,
+        100
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        57
+       ],
+       "to": [
+        31,
+        84
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        85
+       ],
+       "to": [
+        31,
+        90
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        34,
+        47
+       ],
+       "to": [
+        34,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        38,
+        42
+       ],
+       "to": [
+        38,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        42,
+        46
+       ],
+       "to": [
+        42,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        46,
+        47
+       ],
+       "to": [
+        46,
+        64
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        47,
+        17
+       ],
+       "to": [
+        47,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        49,
+        26
+       ],
+       "to": [
+        49,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        49,
+        26
+       ],
+       "to": [
+        49,
+        48
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        50,
+        26
+       ],
+       "to": [
+        50,
+        64
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        50,
+        26
+       ],
+       "to": [
+        50,
+        64
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        55,
+        42
+       ],
+       "to": [
+        55,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        56,
+        26
+       ],
+       "to": [
+        56,
+        98
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        62,
+        38
+       ],
+       "to": [
+        62,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        62,
+        69
+       ],
+       "to": [
+        62,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        56
+       ],
+       "to": [
+        67,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        88
+       ],
+       "to": [
+        67,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        69,
+        24
+       ],
+       "to": [
+        69,
+        61
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        69,
+        24
+       ],
+       "to": [
+        69,
+        61
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o1b-stack.rs",
+         42,
+         64,
+         42,
+         65
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> spec-omit/src/bin/o1b-stack.rs:42:64\n   |\n42 |         pub fn is_empty(&self) -> (r: bool, @(r == (self.len() == 0))) {\n   |                                                                ^ expected `Bool`, found `Prop`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o1b-stack.rs",
+         42,
+         64,
+         42,
+         65
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> spec-omit/src/bin/o1b-stack.rs:42:64\n   |\n42 |         pub fn is_empty(&self) -> (r: bool, @(r == (self.len() == 0))) {\n   |                                                                ^ expected `Bool`, found `Prop`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o2a-sorted-vec": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        43
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        49
+       ],
+       "to": [
+        21,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "`if` and `else` have incompatible types"
+        ],
+        [
+         "check",
+         "E0308",
+         "`if` and `else` have incompatible types"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        57
+       ],
+       "to": [
+        23,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        23,
+        84
+       ],
+       "to": [
+        23,
+        89
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        26,
+        64
+       ],
+       "to": [
+        26,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        27,
+        13
+       ],
+       "to": [
+        27,
+        81
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        27,
+        82
+       ],
+       "to": [
+        27,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        50
+       ],
+       "to": [
+        31,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        32,
+        18
+       ],
+       "to": [
+        32,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        33,
+        17
+       ],
+       "to": [
+        33,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        34,
+        11
+       ],
+       "to": [
+        34,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        34,
+        38
+       ],
+       "to": [
+        34,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        38,
+        19
+       ],
+       "to": [
+        38,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        43,
+        51
+       ],
+       "to": [
+        43,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        47,
+        41
+       ],
+       "to": [
+        47,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        52,
+        29
+       ],
+       "to": [
+        52,
+        91
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        53,
+        18
+       ],
+       "to": [
+        53,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        55,
+        23
+       ],
+       "to": [
+        55,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        55,
+        23
+       ],
+       "to": [
+        55,
+        45
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        57,
+        30
+       ],
+       "to": [
+        57,
+        76
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        58,
+        32
+       ],
+       "to": [
+        58,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        64,
+        25
+       ],
+       "to": [
+        64,
+        91
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        65,
+        26
+       ],
+       "to": [
+        65,
+        65
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        65,
+        26
+       ],
+       "to": [
+        65,
+        65
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        66,
+        27
+       ],
+       "to": [
+        66,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        68,
+        24
+       ],
+       "to": [
+        68,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        68,
+        24
+       ],
+       "to": [
+        68,
+        78
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        72,
+        48
+       ],
+       "to": [
+        72,
+        74
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "`if` and `else` have incompatible types",
+        "place": [
+         "spec-omit/src/bin/o2a-sorted-vec.rs",
+         19,
+         59,
+         19,
+         60
+        ],
+        "rendered": "error[E0308]: `if` and `else` have incompatible types\n  --> spec-omit/src/bin/o2a-sorted-vec.rs:19:59\n   |\n16 | /         if xs.len() == 0 {\n17 | |             0\n   | |             - expected because of this\n18 | |         } else {\n19 | |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1 as Nat), x)\n   | |                                                           ^ expected `Int`, found `Nat`\n20 | |         }\n   | |_________- `if` and `else` have incompatible types\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "`if` and `else` have incompatible types",
+        "place": [
+         "spec-omit/src/bin/o2a-sorted-vec.rs",
+         19,
+         59,
+         19,
+         60
+        ],
+        "rendered": "error[E0308]: `if` and `else` have incompatible types\n  --> spec-omit/src/bin/o2a-sorted-vec.rs:19:59\n   |\n16 | /         if xs.len() == 0 {\n17 | |             0\n   | |             - expected because of this\n18 | |         } else {\n19 | |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1 as Nat), x)\n   | |                                                           ^ expected `Int`, found `Nat`\n20 | |         }\n   | |_________- `if` and `else` have incompatible types\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o2b-sorted-vec": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        43
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        49
+       ],
+       "to": [
+        21,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        57
+       ],
+       "to": [
+        23,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        23,
+        84
+       ],
+       "to": [
+        23,
+        89
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        26,
+        64
+       ],
+       "to": [
+        26,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        27,
+        13
+       ],
+       "to": [
+        27,
+        81
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        27,
+        82
+       ],
+       "to": [
+        27,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        50
+       ],
+       "to": [
+        31,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        32,
+        18
+       ],
+       "to": [
+        32,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        33,
+        17
+       ],
+       "to": [
+        33,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        34,
+        11
+       ],
+       "to": [
+        34,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        34,
+        38
+       ],
+       "to": [
+        34,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        38,
+        19
+       ],
+       "to": [
+        38,
+        34
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        43,
+        51
+       ],
+       "to": [
+        43,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        47,
+        41
+       ],
+       "to": [
+        47,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        52,
+        29
+       ],
+       "to": [
+        52,
+        91
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        53,
+        18
+       ],
+       "to": [
+        53,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        55,
+        23
+       ],
+       "to": [
+        55,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        55,
+        23
+       ],
+       "to": [
+        55,
+        45
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        57,
+        30
+       ],
+       "to": [
+        57,
+        76
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        58,
+        32
+       ],
+       "to": [
+        58,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        64,
+        25
+       ],
+       "to": [
+        64,
+        91
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        65,
+        26
+       ],
+       "to": [
+        65,
+        65
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        65,
+        26
+       ],
+       "to": [
+        65,
+        65
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        66,
+        27
+       ],
+       "to": [
+        66,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        68,
+        24
+       ],
+       "to": [
+        68,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        68,
+        24
+       ],
+       "to": [
+        68,
+        78
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        72,
+        48
+       ],
+       "to": [
+        72,
+        74
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o2b-sorted-vec.rs",
+         19,
+         75,
+         19,
+         76
+        ],
+        "rendered": "error[E0308]: mismatched types\n   --> spec-omit/src/bin/o2b-sorted-vec.rs:19:75\n    |\n 19 |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1), x)\n    |                                                                      ---- ^ expected `Nat`, found `Int`\n    |                                                                      |\n    |                                                                      arguments to this method are incorrect\n    |\nnote: method defined here\n   --> locus/src/lib.rs:948:26\n    |\n948 |             pub logic fn skip(self, n: Nat) -> Seq<T> { builtin }\n    |                          ^^^^\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o2b-sorted-vec.rs",
+         19,
+         75,
+         19,
+         76
+        ],
+        "rendered": "error[E0308]: mismatched types\n   --> spec-omit/src/bin/o2b-sorted-vec.rs:19:75\n    |\n 19 |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1), x)\n    |                                                                      ---- ^ expected `Nat`, found `Int`\n    |                                                                      |\n    |                                                                      arguments to this method are incorrect\n    |\nnote: method defined here\n   --> locus/src/lib.rs:948:26\n    |\n948 |             pub logic fn skip(self, n: Nat) -> Seq<T> { builtin }\n    |                          ^^^^\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o3a-binary-search": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        43
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        53
+       ],
+       "to": [
+        17,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        20,
+        66
+       ],
+       "to": [
+        20,
+        72
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        20,
+        85
+       ],
+       "to": [
+        20,
+        112
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        21,
+        13
+       ],
+       "to": [
+        21,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        52
+       ],
+       "to": [
+        21,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        65
+       ],
+       "to": [
+        23,
+        71
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        84
+       ],
+       "to": [
+        23,
+        111
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        24,
+        13
+       ],
+       "to": [
+        24,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        24,
+        68
+       ],
+       "to": [
+        24,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        27,
+        48
+       ],
+       "to": [
+        27,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        28,
+        13
+       ],
+       "to": [
+        28,
+        94
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        28,
+        95
+       ],
+       "to": [
+        28,
+        100
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        30,
+        49
+       ],
+       "to": [
+        30,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        32,
+        14
+       ],
+       "to": [
+        32,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        33,
+        14
+       ],
+       "to": [
+        33,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        37,
+        25
+       ],
+       "to": [
+        37,
+        63
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        38,
+        25
+       ],
+       "to": [
+        38,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        39,
+        25
+       ],
+       "to": [
+        39,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        41,
+        23
+       ],
+       "to": [
+        41,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        41,
+        23
+       ],
+       "to": [
+        41,
+        41
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        43,
+        26
+       ],
+       "to": [
+        43,
+        60
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`==` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`==` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        44,
+        26
+       ],
+       "to": [
+        44,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        44,
+        26
+       ],
+       "to": [
+        44,
+        56
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        46,
+        28
+       ],
+       "to": [
+        46,
+        60
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        49,
+        25
+       ],
+       "to": [
+        49,
+        71
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        53,
+        25
+       ],
+       "to": [
+        53,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        57,
+        27
+       ],
+       "to": [
+        57,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        59,
+        21
+       ],
+       "to": [
+        59,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        60,
+        22
+       ],
+       "to": [
+        60,
+        40
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        65,
+        46
+       ],
+       "to": [
+        65,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        65,
+        72
+       ],
+       "to": [
+        65,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3a-binary-search.rs",
+         43,
+         27,
+         43,
+         30
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3a-binary-search.rs:43:27\n    |\n 43 |             let middle: @(mid == lo as Int + (hi - lo) / 2) = _;\n    |                           ^^^ - required by a bound introduced by this call\n    |                           |\n    |                           this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `Equality<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Nat` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:616:5\n    |\n616 |     impl Equality for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n622 |     impl Equality<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3a-binary-search.rs",
+         43,
+         27,
+         43,
+         30
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3a-binary-search.rs:43:27\n    |\n 43 |             let middle: @(mid == lo as Int + (hi - lo) / 2) = _;\n    |                           ^^^ - required by a bound introduced by this call\n    |                           |\n    |                           this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `Equality<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Nat` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:616:5\n    |\n616 |     impl Equality for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n622 |     impl Equality<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o3b-binary-search": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        43
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        53
+       ],
+       "to": [
+        17,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        20,
+        66
+       ],
+       "to": [
+        20,
+        72
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        20,
+        85
+       ],
+       "to": [
+        20,
+        112
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        21,
+        13
+       ],
+       "to": [
+        21,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        52
+       ],
+       "to": [
+        21,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        65
+       ],
+       "to": [
+        23,
+        71
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        23,
+        84
+       ],
+       "to": [
+        23,
+        111
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        24,
+        13
+       ],
+       "to": [
+        24,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        24,
+        68
+       ],
+       "to": [
+        24,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        27,
+        48
+       ],
+       "to": [
+        27,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        28,
+        13
+       ],
+       "to": [
+        28,
+        87
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        28,
+        88
+       ],
+       "to": [
+        28,
+        93
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        30,
+        49
+       ],
+       "to": [
+        30,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        32,
+        14
+       ],
+       "to": [
+        32,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        33,
+        14
+       ],
+       "to": [
+        33,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        37,
+        25
+       ],
+       "to": [
+        37,
+        63
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        38,
+        25
+       ],
+       "to": [
+        38,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        39,
+        25
+       ],
+       "to": [
+        39,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        41,
+        23
+       ],
+       "to": [
+        41,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        41,
+        23
+       ],
+       "to": [
+        41,
+        41
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        43,
+        26
+       ],
+       "to": [
+        43,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        44,
+        26
+       ],
+       "to": [
+        44,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        44,
+        26
+       ],
+       "to": [
+        44,
+        56
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        46,
+        28
+       ],
+       "to": [
+        46,
+        60
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        49,
+        25
+       ],
+       "to": [
+        49,
+        71
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        53,
+        25
+       ],
+       "to": [
+        53,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        57,
+        27
+       ],
+       "to": [
+        57,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        59,
+        21
+       ],
+       "to": [
+        59,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        60,
+        22
+       ],
+       "to": [
+        60,
+        40
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        65,
+        46
+       ],
+       "to": [
+        65,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        65,
+        72
+       ],
+       "to": [
+        65,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3b-binary-search.rs",
+         28,
+         14,
+         28,
+         16
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3b-binary-search.rs:28:14\n    |\n 28 |         -> @(lo + (hi - lo) / 2 >= lo as Int && lo as Int + (hi - lo) / 2 < hi as Int) { _ }\n    |              ^^ - required by a bound introduced by this call\n    |              |\n    |              this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3b-binary-search.rs",
+         28,
+         17,
+         28,
+         18
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3b-binary-search.rs:28:17\n    |\n 28 |         -> @(lo + (hi - lo) / 2 >= lo as Int && lo as Int + (hi - lo) / 2 < hi as Int) { _ }\n    |                 ^ this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3b-binary-search.rs",
+         28,
+         14,
+         28,
+         16
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3b-binary-search.rs:28:14\n    |\n 28 |         -> @(lo + (hi - lo) / 2 >= lo as Int && lo as Int + (hi - lo) / 2 < hi as Int) { _ }\n    |              ^^ - required by a bound introduced by this call\n    |              |\n    |              this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Nat` and a `locus::Int` in logical code",
+        "place": [
+         "spec-omit/src/bin/o3b-binary-search.rs",
+         28,
+         17,
+         28,
+         18
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Nat` and a `locus::Int` in logical code\n   --> spec-omit/src/bin/o3b-binary-search.rs:28:17\n    |\n 28 |         -> @(lo + (hi - lo) / 2 >= lo as Int && lo as Int + (hi - lo) / 2 < hi as Int) { _ }\n    |                 ^ this is a `locus::Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `AddLogic<locus::Int>` is not implemented for `locus::Nat`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Nat` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:903:9\n    |\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o4a-container": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        15,
+        49
+       ],
+       "to": [
+        15,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        19,
+        38
+       ],
+       "to": [
+        19,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        20,
+        38
+       ],
+       "to": [
+        20,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        21,
+        48
+       ],
+       "to": [
+        21,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        78
+       ],
+       "to": [
+        21,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        29,
+        38
+       ],
+       "to": [
+        29,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        30,
+        38
+       ],
+       "to": [
+        30,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        51
+       ],
+       "to": [
+        31,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        81
+       ],
+       "to": [
+        31,
+        86
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        35,
+        51
+       ],
+       "to": [
+        37,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        39,
+        64
+       ],
+       "to": [
+        39,
+        109
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        39,
+        110
+       ],
+       "to": [
+        39,
+        115
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        41,
+        54
+       ],
+       "to": [
+        41,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        46,
+        16
+       ],
+       "to": [
+        46,
+        28
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        51,
+        41
+       ],
+       "to": [
+        51,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        56,
+        16
+       ],
+       "to": [
+        56,
+        21
+       ],
+       "status": "inserted",
+       "detail": "on a type",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        59,
+        16
+       ],
+       "to": [
+        59,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        62,
+        5
+       ],
+       "to": [
+        62,
+        9
+       ],
+       "status": "inserted",
+       "detail": "on an impl",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        63,
+        52
+       ],
+       "to": [
+        63,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        44
+       ],
+       "to": [
+        67,
+        81
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        68,
+        17
+       ],
+       "to": [
+        68,
+        79
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        76,
+        12
+       ],
+       "to": [
+        76,
+        23
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        76,
+        69
+       ],
+       "to": [
+        76,
+        108
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        77,
+        13
+       ],
+       "to": [
+        78,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        81,
+        22
+       ],
+       "to": [
+        81,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        81,
+        22
+       ],
+       "to": [
+        81,
+        51
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        82,
+        21
+       ],
+       "to": [
+        82,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        82,
+        21
+       ],
+       "to": [
+        82,
+        58
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        87,
+        52
+       ],
+       "to": [
+        87,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        89,
+        26
+       ],
+       "to": [
+        89,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o4a-container.rs",
+         82,
+         54,
+         82,
+         55
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> spec-omit/src/bin/o4a-container.rs:82:54\n   |\n76 |     pub fn put_weighed<T: Model>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))\n   |                        - found this type parameter\n...\n82 |         let added = logic! { total_of_pushed(before, x) };\n   |                              ---------------         ^ expected associated type, found type parameter `T`\n   |                              |\n   |                              arguments to this function are incorrect\n   |\n   = note: expected associated type `<T as locus::Model>::Logic`\n               found type parameter `T`\nnote: function defined here\n  --> spec-omit/src/bin/o4a-container.rs:39:14\n   |\n39 |     logic fn total_of_pushed<W: Weighed>(xs: Seq<W>, x: W) -> @(total(xs.push(x)) == total(xs) + x.weight()) { _ }\n   |              ^^^^^^^^^^^^^^^                         ----\nhelp: consider further restricting this bound\n   |\n76 |     pub fn put_weighed<T: Model<Logic = T>>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))\n   |                                +++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o4a-container.rs",
+         82,
+         54,
+         82,
+         55
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> spec-omit/src/bin/o4a-container.rs:82:54\n   |\n76 |     pub fn put_weighed<T: Model>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))\n   |                        - found this type parameter\n...\n82 |         let added = logic! { total_of_pushed(before, x) };\n   |                              ---------------         ^ expected associated type, found type parameter `T`\n   |                              |\n   |                              arguments to this function are incorrect\n   |\n   = note: expected associated type `<T as locus::Model>::Logic`\n               found type parameter `T`\nnote: function defined here\n  --> spec-omit/src/bin/o4a-container.rs:39:14\n   |\n39 |     logic fn total_of_pushed<W: Weighed>(xs: Seq<W>, x: W) -> @(total(xs.push(x)) == total(xs) + x.weight()) { _ }\n   |              ^^^^^^^^^^^^^^^                         ----\nhelp: consider further restricting this bound\n   |\n76 |     pub fn put_weighed<T: Model<Logic = T>>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))\n   |                                +++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "o4b-container": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        15,
+        49
+       ],
+       "to": [
+        15,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        19,
+        38
+       ],
+       "to": [
+        19,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        20,
+        38
+       ],
+       "to": [
+        20,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        21,
+        48
+       ],
+       "to": [
+        21,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        78
+       ],
+       "to": [
+        21,
+        83
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        29,
+        38
+       ],
+       "to": [
+        29,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        30,
+        38
+       ],
+       "to": [
+        30,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        31,
+        51
+       ],
+       "to": [
+        31,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        31,
+        81
+       ],
+       "to": [
+        31,
+        86
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        35,
+        51
+       ],
+       "to": [
+        37,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        39,
+        64
+       ],
+       "to": [
+        39,
+        109
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        39,
+        110
+       ],
+       "to": [
+        39,
+        115
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        41,
+        54
+       ],
+       "to": [
+        41,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        46,
+        16
+       ],
+       "to": [
+        46,
+        28
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        51,
+        41
+       ],
+       "to": [
+        51,
+        48
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        56,
+        16
+       ],
+       "to": [
+        56,
+        21
+       ],
+       "status": "inserted",
+       "detail": "on a type",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        59,
+        16
+       ],
+       "to": [
+        59,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        62,
+        5
+       ],
+       "to": [
+        62,
+        9
+       ],
+       "status": "inserted",
+       "detail": "on an impl",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        63,
+        52
+       ],
+       "to": [
+        63,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        67,
+        44
+       ],
+       "to": [
+        67,
+        81
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        68,
+        17
+       ],
+       "to": [
+        68,
+        79
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        76,
+        12
+       ],
+       "to": [
+        76,
+        23
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        76,
+        69
+       ],
+       "to": [
+        76,
+        108
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        77,
+        13
+       ],
+       "to": [
+        78,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        81,
+        22
+       ],
+       "to": [
+        81,
+        51
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        81,
+        22
+       ],
+       "to": [
+        81,
+        51
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        82,
+        21
+       ],
+       "to": [
+        82,
+        65
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        82,
+        21
+       ],
+       "to": [
+        82,
+        65
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        87,
+        52
+       ],
+       "to": [
+        87,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        89,
+        26
+       ],
+       "to": [
+        89,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o4b-container.rs",
+         89,
+         55,
+         89,
+         56
+        ],
+        "rendered": "error[E0308]: mismatched types\n   --> spec-omit/src/bin/o4b-container.rs:89:55\n    |\n 89 |         let mut so_far: @(w == total(shelf.items.take(0))) = _;\n    |                                                  ---- ^ expected `Nat`, found `Int`\n    |                                                  |\n    |                                                  arguments to this method are incorrect\n    |\nnote: method defined here\n   --> locus/src/lib.rs:949:26\n    |\n949 |             pub logic fn take(self, n: Nat) -> Seq<T> { builtin }\n    |                          ^^^^\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "spec-omit/src/bin/o4b-container.rs",
+         89,
+         55,
+         89,
+         56
+        ],
+        "rendered": "error[E0308]: mismatched types\n   --> spec-omit/src/bin/o4b-container.rs:89:55\n    |\n 89 |         let mut so_far: @(w == total(shelf.items.take(0))) = _;\n    |                                                  ---- ^ expected `Nat`, found `Int`\n    |                                                  |\n    |                                                  arguments to this method are incorrect\n    |\nnote: method defined here\n   --> locus/src/lib.rs:949:26\n    |\n949 |             pub logic fn take(self, n: Nat) -> Seq<T> { builtin }\n    |                          ^^^^\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    }
+   },
+   "seconds": {
+    "runtime": 0.31658411026000977,
+    "check": 0.3363187313079834
+   }
+  }
+ }
+}
