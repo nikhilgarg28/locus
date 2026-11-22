@@ -1,8 +1,8 @@
-//~ question: May a logic function with a runtime parameter give a logical result?
-//~ spec: logic.code.logical-values
+//~ question: Does a logic function that is given a runtime place receive its capture, and give a logical result?
+//~ spec: logic.code.logical-values, logic.fn.parameters
 //~ rfc: 0002
 
-logic fn count(xs: &[u32]) -> Nat {
+logic fn count(xs: Seq<Nat>) -> Nat {
     xs.len()
 }
 

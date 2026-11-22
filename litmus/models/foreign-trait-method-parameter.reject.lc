@@ -1,0 +1,16 @@
+//~ question: May logical code read a value of the type parameter of a method that a trait of another crate declares?
+//~ spec: models.capture.bound
+//~ rfc: 0002
+
+struct Bag {
+    count: usize,
+}
+
+impl Extend<u32> for Bag {
+    fn extend<I: IntoIterator<Item = u32>>(&mut self, iter: I) {
+        let before = logic! { snap(iter) }; //~ error: `I` cannot be read in logical code, and the bound `I: Model` cannot be added: `extend` is declared by `Extend`, a trait of another crate
+        for _ in iter {
+            self.count += 1;
+        }
+    }
+}

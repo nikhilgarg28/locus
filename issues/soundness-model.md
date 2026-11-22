@@ -104,3 +104,12 @@ RFC 0002 records them as its decisions 95 and 96, confirmed tentatively. What th
 - **An unverified crate that has a function that foreign code can call is recorded as a crate with `unsafe` code,** so it is taken to be sound only when the project names it. This has no rule and no example, since it is about what the driver records. The record does not reach two cases, which the model should say what rests on: a crate that no function of the program calls into, whose function only foreign code calls; and, in export mode, the crates that use the exported one, which Locus does not compile.
 
 Still not covered, and listed in RFC 0002 as item 25 of what is still for the owner: a `global_asm!` that names nothing, what else the record of `unsafe` code counts, and attributes such as `#[link_section]`. Item 28 lists what the RFC chose in writing the two decisions, which the owner has not seen one by one.
+
+### 2026-11-22, what the decisions on snapshots and models ask of the model
+
+RFC 0002's decisions 99 to 108 change four things that the model has to cover.
+
+- **A snapshot type holds values that no runtime value has,** since the snapshot of a `u8` is a `Nat`. What is known of a captured value is `valid`, a proposition that the language defines from the type's structure, and that a captured value is valid is a fact that the language infers (`models.valid.captured`). The model should show that every runtime value's snapshot is valid, for the language's types and for the snapshots that Locus's library declares.
+- **The default model is the snapshot,** and a declared model is for a type at all its type arguments. A model for one instantiation would let generic code prove, through the default, what is false at that instantiation (`models.one-per-type`).
+- **A cycle that closes through an associated type** was closed by making the field opaque (decision 48). The field is now read under a bound, and the type has no snapshot at a type argument where the field's type leads back to it (`models.snapshots.seen`). The argument rests on a `Model` bound holding exactly for the types that have a snapshot. No spike tested it.
+- **A snapshot value can be built in logical code,** with its type's constructor. Its proof fields are proved, so it carries no proof that was not checked.

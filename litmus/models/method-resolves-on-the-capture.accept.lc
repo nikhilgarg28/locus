@@ -1,0 +1,20 @@
+//~ question: Does a method call on a runtime place resolve on the type of its capture?
+//~ spec: models.capture.methods
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+// `s` is captured as a `Seq<Nat>`, and `len` is that type's.
+fn nonempty(s: &Stack, some: @(s.len() > 0)) -> u32 {
+    1
+}

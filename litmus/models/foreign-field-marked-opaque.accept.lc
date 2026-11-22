@@ -1,0 +1,20 @@
+//~ question: May a struct hold a field of a type that Locus cannot see, when the field is marked `#[opaque]`, and does a move keep its snapshot?
+//~ spec: models.snapshots.opaque, logic.eq.snapshots
+//~ rfc: 0002
+
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    #[opaque]
+    listener: TcpListener,
+    #[opaque]
+    local: SocketAddr,
+    port: u16,
+}
+
+fn kept(server: Server) -> Server {
+    let before = logic! { snap(server) };
+    let moved = server;
+    let same: @(snap(moved) === before) = _;
+    moved
+}

@@ -6,13 +6,13 @@ struct Stack {
     items: Vec<u32>,
 }
 
-logic fn size(stack: &Stack) -> Nat {
+logic fn size(stack: Snap<Stack>) -> Nat {
     stack.items.len()
 }
 
 impl Model for Stack {
     type Logic = Nat;
-    logic fn model(stack: &Stack) -> Nat {
+    logic fn model(stack: Snap<Stack>) -> Nat {
         size(stack)
     }
 }

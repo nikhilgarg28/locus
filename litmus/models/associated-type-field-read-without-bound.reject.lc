@@ -1,0 +1,18 @@
+//~ question: May the snapshot of a value with an associated-type field be taken where no bound reads the field's type?
+//~ spec: models.capture.bound
+//~ rfc: 0002
+
+trait Family {
+    type Out;
+}
+
+struct Holder<F: Family> {
+    id: u32,
+    item: F::Out,
+}
+
+fn kept<F: Family>(h: Holder<F>) -> Holder<F> {
+    let before = logic! { snap(h) }; //~ error: `F::Out` cannot be read in logical code, and `Holder<F>` holds one in its field `item`: add the bound `F::Out: Model`
+    let moved = h;
+    moved
+}

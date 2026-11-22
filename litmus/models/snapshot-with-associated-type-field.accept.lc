@@ -1,5 +1,5 @@
-//~ question: May the snapshot of a value with an associated-type field be held and compared, though not looked into?
-//~ spec: models.snapshots.opaque, logic.eq.snapshots
+//~ question: May the snapshot of a value with an associated-type field be held and compared, where the function writes the bound that reads the field's type?
+//~ spec: models.capture.bound, logic.eq.snapshots
 //~ rfc: 0002
 
 trait Family {
@@ -11,7 +11,7 @@ struct Holder<F: Family> {
     item: F::Out,
 }
 
-fn kept<F: Family>(h: Holder<F>) -> Holder<F> {
+fn kept<F: Family>(h: Holder<F>) -> Holder<F> where F::Out: Model {
     let before = logic! { snap(h) };
     let moved = h;
     let same: @(snap(moved) === before) = _;

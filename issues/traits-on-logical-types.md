@@ -129,3 +129,13 @@ None of it is in an RFC yet. [capture-family](../spikes/capture-family/README.md
 The owner's answers on `Bool` and `Prop`, on `Nat` and `Int`, on literals, and on `decide`, quoted in the two entries above, are now RFC 0002's decisions 97 and 98, with the rules `logic.eq.comparisons`, `logic.bool.as-proposition`, `logic.bool.decide`, `logic.arith.nat-to-int`, and `logic.arith.literals`, and their examples. What those decisions needed that the owner did not see one by one is item 29 of what is still for the owner there.
 
 Nothing else in those entries is written yet: not the names that lowering writes, and not snapshots, models, capture, or the lowering itself. This issue stays open for them and for its own question.
+
+### 2026-11-22, snapshots, models, and capture are in RFC 0002
+
+What the entry of the owner's answers recorded "until the RFCs say it" is now RFC 0002's decisions 99 to 108, for capture, integers, validity, references, logic functions, type parameters, and types that Locus cannot see. Two things in it bear on this issue.
+
+- **`models.bounds-on-functions` changes.** A `Model` bound may now be written on an `impl` and on a type's own declaration, as well as on a function. It still never appears on a trait, which is left for this issue's design. Only a trait's own type parameter is pinned by an example. A supertrait, and a trait method's own type parameter, are not; the third round of the spike needed `trait Bounded: Model` for a logic function over `Snap<Self>`.
+- **A generic type still cannot derive its model,** though the reason this issue records, that the derive would need a `Model` bound on its `impl`, no longer holds. RFC 0002 keeps the restriction until the owner has seen it lifted.
+- **A stated limit:** in a generic method of a trait that another crate declares, a value of the method's own type parameter cannot be captured, since the bound cannot be added.
+
+Still not written from that entry: Locus's collections and what their contracts speak of, the memory core, the names that lowering writes, and the lowering itself.

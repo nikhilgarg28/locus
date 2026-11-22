@@ -1,0 +1,23 @@
+//~ question: Is a runtime place given to a parameter of snapshot type read as its snapshot, with nothing written?
+//~ spec: models.observation, logic.fn.parameters
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+logic fn room(stack: Snap<Stack>) -> Int {
+    stack.cap - stack.items.len()
+}
+
+fn has_room(s: &Stack, some: @(room(s) > 0)) -> u32 { //~ error: `s` is captured as its model, a `Seq<Nat>`, and `room` takes a `Snap<Stack>`: write `room(snap(s))`
+    1
+}

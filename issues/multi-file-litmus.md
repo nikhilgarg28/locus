@@ -41,3 +41,7 @@ Decision 90 says what a function's result and the program's result list among th
 ### 2026-11-22, the record of which crates contain `unsafe` code
 
 RFC 0002's decision 95 has the driver record an unverified crate as one that contains `unsafe` code when it has a function that foreign code can call, even when the crate writes no `unsafe`. The case behind it takes two crates: one that defines a sealed type, and one that Locus does not verify, which puts `#[no_mangle]` on a function that takes that type. And what it changes is what is recorded and listed, which an example has no way to state. So it has no rule and no example, as decision 52's record has none.
+
+### 2026-11-22, where a model is declared, and a type declared in plain Rust
+
+Two clauses of RFC 0002's decisions on models need two files to show. `models.declared-by-owner` says that a model is declared in the `locus!` block or the `.lc` file that declares its type, so a model in another file of the type's own crate is rejected; an example is one `.lc` file, and shows only a model for a type of another crate. And `models.snapshots.seen` gives a struct declared in a plain `.rs` file no snapshot.

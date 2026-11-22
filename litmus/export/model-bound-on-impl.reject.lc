@@ -1,0 +1,15 @@
+//~ question: May an exported crate have a `Model` bound on an `impl`?
+//~ spec: models.bounds-on-functions
+//~ rfc: 0002
+//~ mode: export
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T: Model> Pair<T> { //~ error: an exported program has no `Model`, and removing the bound from an `impl` could change which implementation a call selects, so an exported crate has a `Model` bound only on a function
+    fn first(&self) -> &T {
+        &self.first
+    }
+}

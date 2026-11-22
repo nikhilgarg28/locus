@@ -1,0 +1,9 @@
+//~ question: May logical code read a closure?
+//~ spec: models.snapshots.seen
+//~ rfc: 0002
+
+fn twice(x: u32) -> u32 {
+    let double = |n: u32| n * 2;
+    let before = logic! { snap(double) }; //~ error: a closure has no snapshot and no model, so `double` cannot be read in logical code
+    double(x)
+}

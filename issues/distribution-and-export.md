@@ -89,3 +89,7 @@ For the rest of this issue, the proposal is to decide only what the first build 
 > tentatively confirm the 6 open questions
 
 RFC 0002's decision 92 records it. A field that other crates can reach may have a sealed type, in a struct and in a variant of an enum; it may not expose logical data or be read by a proof field. `export.invariants-closed` and `contracts.invariants.observed` change with it, and the first stage follows. Three examples are added: `export/public-field-of-sealed-type.accept.lc`, `export/public-enum-with-sealed-payload.accept.lc`, and `export/public-sealed-field-read-by-proof.reject.lc`. It stays open to revisit (RFC 0002, item 26).
+
+### 2026-11-22, a `Model` bound in an exported crate
+
+RFC 0002's decision 106 lets a `Model` bound be written on an `impl` and on a type's own declaration. The rule had kept it to a function's type parameters for a reason about export: an exported program has no `Model`, and removing the bound from an `impl` could change which implementation a call selects. That reason still holds in export mode, so `models.bounds-on-functions` keeps the old rule there. A crate whose type needs the bound, such as one with a proof field that reads a field of a generic type, builds and does not export. What an exported program does with such a bound is for the RFC on lowering.

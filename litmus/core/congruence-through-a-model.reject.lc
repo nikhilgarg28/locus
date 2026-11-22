@@ -8,7 +8,7 @@ struct Inner {
 
 impl Model for Inner {
     type Logic = Nat;
-    logic fn model(inner: &Inner) -> Nat {
+    logic fn model(inner: Snap<Inner>) -> Nat {
         0
     }
 }
@@ -18,10 +18,10 @@ struct Outer {
     inner: Inner,
 }
 
-logic fn x_of(o: &Outer) -> Nat {
+logic fn x_of(o: Snap<Outer>) -> Nat {
     o.inner.x
 }
 
-fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(a) === x_of(b)) {
+fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(snap(a)) === x_of(snap(b))) {
     eq::congr(x_of, same) //~ error: `same` is an equality of the models of `a` and `b`, and `x_of` takes a snapshot: `eq::congr` needs a function of what the equality is between
 }

@@ -70,5 +70,5 @@ r[proofs.given]
 `given(P)` is a proof of `P` when `P` converts to a fact that is in the context at that point ([`runtime.facts`](runtime.md)). It searches for nothing, and it is an error when no fact there is `P`.
 
 r[proofs.facts.types]
-Locus's library has a lemma for each fact that a type gives: for each machine integer type, that a value of the type lies in its range, as in `u8::range(x)`, and for `Nat`, that one is not negative, `Nat::nonneg(n)`. `linear` and a hole use these facts without being given them.
+Locus's library has a lemma for each fact that a type gives: for each machine integer type, that a value captured from a place of the type lies in its range ([`models.valid.captured`](models.md#valid-snapshots)), as in `u8::range(x)` for a place `x` of type `u8`, and for `Nat`, that one is not negative, `Nat::nonneg(n)`. `u8::range` is given a place: of a `Nat` that no place of type `u8` gave, nothing of the kind is known. `linear` and a hole use these facts without being given them.
 

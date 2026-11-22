@@ -1,0 +1,14 @@
+//~ question: Does the range of a machine integer reach a field of a captured struct?
+//~ spec: models.valid.captured, models.valid
+//~ rfc: 0002
+
+struct Pixel {
+    red: u8,
+    green: u8,
+}
+
+fn dim(p: &Pixel) -> u32 {
+    let whole = logic! { p };
+    let fits: @(whole.red <= 255) = _;
+    0
+}

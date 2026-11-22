@@ -21,14 +21,14 @@ fn small_sum(a: u32, b: u32) -> Option<@(a + b < 10)> {
 In a release build `small_sum(u32::MAX, 5)` returns a proof. The program compared the wrapped sum, 4, and the proposition is about the true one. The rule said that `small` proves "`c`", and `c` means one thing as runtime code and another as a proposition.
 
 ```rust prose accepted by the rules as RFC 0003 stated them
-logic fn x_of(o: &Outer) -> Nat { o.inner.x }
+logic fn x_of(o: Snap<Outer>) -> Nat { o.inner.x }
 
-fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(a) === x_of(b)) {
+fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(snap(a)) === x_of(snap(b))) {
     eq::congr(x_of, same)
 }
 ```
 
-`a === b` compares models, and `Outer`'s model forgets `x`. The rule for `eq::congr` spoke of "`a`" and "`b`", and did not say that the `a` in `a === b` and the `a` in `x_of(a)` are different things.
+`a === b` compares models, and `Outer`'s model forgets `x`. The rule for `eq::congr` spoke of "`a`" and "`b`", and did not say that the `a` in `a === b` and the `a` in `x_of(snap(a))` are different things: the first is the model of `a`, and the second its snapshot.
 
 A third gap is not an attack. RFC 0003 used "evaluation" for what `compute` does and for what a hole allows of a known proof, and never defined it. Its own examples need two different definitions, and RFC 0002's decision 49 had left the question of when two propositions are the same to it.
 
@@ -50,10 +50,10 @@ A program never writes a value name. Diagnostics show one as the place and where
 ### From source to core
 
 1. **A place becomes the value name of its current version,** with its projections: `p.x` is `p₁.x`.
-2. **A runtime value used as a value becomes the model of that.** An operand, a method's receiver, either side of `===`, and an argument of a logical parameter are such uses. `snap(x)` is the value name itself.
-3. **A logic function with a runtime-typed parameter receives the snapshot.**
+2. **A runtime place that logical code reads becomes the model of that:** its capture ([RFC 0002](0002-logical-layer.md#snapshots-and-models)). An operand, a method's receiver, either side of `===`, and an argument are such reads. `snap(x)` is the value name itself.
+3. **A logic function takes logical values only,** so a snapshot reaches one as `snap(x)`.
 
-So `same: @(a === b)` is a proof of `model(a₁) === model(b₁)`, and `x_of(a)` is `x_of(a₁)`. `eq::congr(x_of, same)` asks for `x_of` of a model, which is a type error: `x_of` takes a snapshot. `big.rewrite(same)`, for a proof `big` of `a.inner.x > 5`, finds no `model(a₁)` in `a₁.inner.x`, and is an error too.
+So `same: @(a === b)` is a proof of `model(a₁) === model(b₁)`, and `x_of(snap(a))` is `x_of(a₁)`. `eq::congr(x_of, same)` asks for `x_of` of a model, which is a type error: `x_of` takes a snapshot. `big.rewrite(same)`, for a proof `big` of `a.inner.x > 5`, finds no `model(a₁)` in `a₁.inner.x`, and is an error too.
 
 ### Wrapping
 
@@ -243,7 +243,7 @@ RFC 0002 cuts a field that closes a cycle of references, so that every snapshot 
 - **A model or a logic function reads only snapshots,** so it reads nothing behind such an address. Otherwise a model would not be a function of the snapshot: two values with equal snapshots can have different referents there.
 - **A function body may read the place behind a cut reference,** as it reads any place. The read gives the value name of that place's current version, and two reads with no write between give the same name.
 - **A proof field reads nothing behind a cut.** With `struct A<'a> { next: &'a B<'a>, positive: @(next.value > 0) }`, where `B` holds a reference back to an `A`, the snapshot of an `A` holds `next` as an address, so `positive` would be a proof about something its own value does not hold. Such a proof field is rejected. An invariant over a cycle of references cannot speak of its neighbours for now.
-- **Nor is such a proof field held inside a cut field.** `struct Checked<'a> { r: &'a u32, positive: @(*r > 0) }` is legal by itself. Inside a field that closes a cycle, every reference is an address, `r` included, and `positive` is left about nothing. So a type that holds such a proof field, at any depth and at the type arguments in use, has no `CutSnap`. `Checked` stays legal, with its ordinary snapshot, wherever it is not in a cut field; a type that would hold it in one is rejected, and so is `CutSnap<Checked>` written directly. This is a rejection and not an opaque snapshot, the fallback that RFC 0002 gives a type it cannot describe: a proof field cannot be opaque about what it proves. The check is on the snapshot as cut, not on each declaration alone.
+- **Nor is such a proof field held inside a cut field.** `struct Checked<'a> { r: &'a u32, positive: @(*r > 0) }` is legal by itself. Inside a field that closes a cycle, every reference is an address, `r` included, and `positive` is left about nothing. So a type that holds such a proof field, at any depth and at the type arguments in use, has no `CutSnap`. `Checked` stays legal, with its ordinary snapshot, wherever it is not in a cut field; a type that would hold it in one is rejected, and so is `CutSnap<Checked>` written directly. This is a rejection and not an opaque snapshot: a proof field cannot be opaque about what it proves. The check is on the snapshot as cut, not on each declaration alone.
 
 ### What a proof may cite
 
@@ -251,7 +251,7 @@ RFC 0002 cuts a field that closes a cycle of references, so that every snapshot 
 |---|---|
 | A definition | Nothing: conversion |
 | A fact in the context | `given(P)`, accepted only when `P` converts to a fact that is in the context at that point |
-| A fact from a type | A lemma of Locus's library: `u8::range(x)`, `Nat::nonneg(n)` |
+| A fact from a type | A lemma of Locus's library: `u8::range(x)`, for a place `x` of type `u8`, and `Nat::nonneg(n)` |
 
 - **`given(P)` searches for nothing.** It is the written form of what a hole takes from the context, and is what lets a hole expand to a term (`proofs.procedures.expand`).
 - **Expanding a hole may add a ghost `let`.** After `n += 1`, the fact in the context is about the value `n` had before, which the body can no longer spell. The expansion adds `let before = logic! { n };` where that value was current, and then writes `given(n === u32::wrap(before + 1))`. So a hole expands to a term and the names it needs, not always to a term alone.
@@ -287,13 +287,13 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 |---|---|
 | `core.elaboration` | `core/congruence-at-the-snapshot.accept.lc`, `core/congruence-through-a-model.reject.lc`, `core/rewrite-misses-a-field-read.reject.lc` |
 | `core.values` | `core/value-known-by-a-fact.accept.lc`, `core/value-name-per-version.reject.lc` |
-| `core.wrap` | `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc` |
+| `core.wrap` | `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `models/captured-fields-wrap-written.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc` |
 | `core.conversion` | `core/constant-unfolds.accept.lc`, `core/conversion-by-evaluation.accept.lc`, `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/private-body-stays-folded.reject.lc`, `core/recursive-call-stays-folded.reject.lc`, `proofs/unfold-private-body.reject.lc` |
 | `core.sequences` | `core/index-with-a-proof.accept.lc`, `core/index-without-bounds.reject.lc` |
-| `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
-| `models.snapshots` | `models/generic-snapshot-at-cycle.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
+| `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `models/model-defined-for-every-snapshot.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
+| `models.snapshots` | `models/captured-fields-wrap-written.accept.lc`, `models/field-of-capture-and-capture-of-field.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/integer-snapshots-are-one-type.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `models/equal-snapshots-say-nothing-of-addresses.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
 | `models.snapshots.cut` | `models/body-reads-behind-a-cut.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/proof-field-inside-a-cut-field.reject.lc` |
-| `models.snapshots.opaque` | `models/snapshot-with-associated-type-field.accept.lc`, `models/snapshot-of-union.reject.lc`, `models/snapshot-through-associated-type.reject.lc` |
+| `models.snapshots.opaque` | `models/foreign-field-marked-opaque.accept.lc`, `models/opaque-field-through-the-snapshot.accept.lc`, `models/foreign-field-unmarked.reject.lc`, `models/opaque-field-read-as-a-place.reject.lc`, `models/opaque-fields-of-two-types.reject.lc`, `models/snapshot-of-union.reject.lc` |
 | `logic.ghost.type-identity` | `core/conversion-by-evaluation.accept.lc`, `logical-layer/proof-holder-same-proposition.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/value-name-per-version.reject.lc`, `logical-layer/proof-holder-other-proposition.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
 | `logic.const.well-founded` | `logical-layer/logical-constant-chain.accept.lc`, `logical-layer/logical-constant-cycle.reject.lc`, `logical-layer/static-justifies-itself.reject.lc`, `logical-layer/statics-justify-each-other.reject.lc` |
 | `contracts.final` | `contracts/final-value-at-return.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc`, `runtime/borrow-kept-by-another-parameter.reject.lc` |
@@ -307,11 +307,11 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `proofs.unfold` | `proofs/unfold-logic-function.accept.lc`, `proofs/unfold-declared-proposition.reject.lc`, `proofs/unfold-private-body.reject.lc` |
 | `proofs.values.inferred` | `contracts/final-value-by-the-goal.accept.lc`, `contracts/lemma-at-a-final-value.accept.lc`, `proofs/inferred-value-from-the-goal.accept.lc`, `proofs/inferred-values.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc`, `proofs/inferred-value-determined-twice.reject.lc`, `proofs/inferred-value-from-a-procedure.reject.lc`, `proofs/inferred-value-undetermined.reject.lc`, `proofs/reflexivity-of-two-values.reject.lc` |
 | `proofs.facts.named` | `proofs/named-condition.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `proofs/named-condition-after-branch.reject.lc`, `runtime/named-sum-may-wrap.reject.lc` |
-| `proofs.facts.types` | `proofs/range-of-a-machine-integer.accept.lc` |
+| `proofs.facts.types` | `proofs/range-of-a-machine-integer.accept.lc`, `proofs/range-of-a-nat.reject.lc` |
 | `proofs.given` | `proofs/given-a-branch-condition.accept.lc`, `proofs/given-what-an-index-returned.accept.lc`, `proofs/hole-written-out-with-an-earlier-value.accept.lc`, `proofs/given-a-fact-that-is-not-there.reject.lc` |
 | `runtime.facts` | `core/value-known-by-a-fact.accept.lc`, `proofs/given-a-fact-that-is-not-there.reject.lc`, `runtime/fact-from-one-branch.reject.lc` |
 | `runtime.conditions` | `proofs/given-a-branch-condition.accept.lc`, `runtime/debug-check-known-inside-its-branch.accept.lc`, `runtime/named-call-result.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `runtime/named-sum-may-wrap.reject.lc` |
-| `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc`, `runtime/sum-may-overflow.reject.lc` |
+| `runtime.arith.wrapping` | `contracts/cursor-replaced-whole.accept.lc`, `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `models/captured-fields-wrap-written.accept.lc`, `runtime/midpoint-in-range.accept.lc`, `runtime/sum-in-range.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `runtime/sum-may-overflow.reject.lc` |
 | `runtime.writes` | `runtime/element-write-keeps-length.accept.lc`, `runtime/field-write-updates-the-value.accept.lc`, `runtime/sibling-written-during-a-borrow.accept.lc` |
 | `runtime.borrows` | `runtime/borrow-kept-by-another-parameter-and-used.accept.lc`, `runtime/elements-lent-by-a-pattern-and-written.accept.lc`, `runtime/sibling-written-during-a-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `runtime/borrow-kept-by-another-parameter.reject.lc`, `runtime/elements-lent-by-a-pattern.reject.lc`, `runtime/reborrow-ends-with-its-last-write.reject.lc`, `runtime/sibling-frozen-by-a-borrow.reject.lc` |
 | `runtime.proofs.assigned` | `runtime/kept-proof-assigned-again.accept.lc`, `runtime/kept-proof-on-every-path.accept.lc`, `runtime/loop-invariant-by-induction.accept.lc`, `runtime/kept-proof-borrowed.reject.lc`, `runtime/kept-proof-left-behind.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |

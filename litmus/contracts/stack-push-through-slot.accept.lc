@@ -13,7 +13,7 @@ struct Stack {
 
 impl Model for Stack {
     type Logic = Seq<Nat>;
-    logic fn model(stack: &Stack) -> Seq<Nat> {
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items
     }
 }

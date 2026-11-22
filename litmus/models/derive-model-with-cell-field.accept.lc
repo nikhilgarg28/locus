@@ -1,0 +1,11 @@
+//~ question: May a type derive its model when one of its fields is a `Cell`, whose model is its snapshot?
+//~ spec: models.derived
+//~ rfc: 0002
+
+use std::cell::Cell;
+
+#[derive(Model)]
+struct Counter {
+    id: u32,
+    hits: Cell<u32>,
+}

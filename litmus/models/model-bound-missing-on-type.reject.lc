@@ -1,0 +1,11 @@
+//~ question: May a proof field read a field that names a type parameter when the type's declaration writes no `Model` bound?
+//~ spec: models.capture.bound
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Shelf<T> {
+    items: Vec<T>,
+    limit: usize,
+    fits: @(items.len() <= limit), //~ error: `T` cannot be read in logical code, and `fits` reads `items`, a `Vec<T>`: add the bound `T: Model` to `Shelf`
+}

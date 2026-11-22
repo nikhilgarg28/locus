@@ -1,0 +1,14 @@
+//~ question: May a declared model take a proof that its snapshot is valid?
+//~ spec: models.total
+//~ rfc: 0002
+
+struct Word {
+    bytes: [u8; 4],
+}
+
+impl Model for Word {
+    type Logic = Nat;
+    logic fn model(w: Snap<Word>, valid: @Word::valid(w)) -> Nat { //~ error: a model takes its type's snapshot and nothing else: it is defined for every `Snap<Word>`, valid or not
+        w.bytes[3]
+    }
+}

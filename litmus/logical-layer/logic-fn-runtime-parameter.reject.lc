@@ -1,0 +1,7 @@
+//~ question: May a logic function declare a parameter with a runtime type?
+//~ spec: logic.fn.parameters
+//~ rfc: 0002
+
+logic fn count(xs: &[u32]) -> Nat { //~ error: a logic function's parameters are logical types, and `&[u32]` is a runtime type: write `Snap<[u32]>`, or the type of its model, `Seq<Nat>`
+    xs.len()
+}

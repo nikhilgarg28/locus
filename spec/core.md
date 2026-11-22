@@ -5,7 +5,7 @@ Logical code is not checked as it is spelled. It is translated to a small langua
 ## Elaboration
 
 r[core.elaboration]
-Logical code is elaborated to *core terms* before any rule of this specification about equality, rewriting, inferred values, or conversion applies, and those rules speak of core terms, not of how a program spells them. In a core term, a place is the value name of the version it has at that point, with its projections; a runtime value used as a value is the model of that ([`models.observation`](models.md)); `snap(x)` is the value name itself; and a logic function whose parameter has a runtime type is applied to the snapshot.
+Logical code is elaborated to *core terms* before any rule of this specification about equality, rewriting, inferred values, or conversion applies, and those rules speak of core terms, not of how a program spells them. In a core term, a place is the value name of the version it has at that point, with its projections; a runtime place that logical code reads is its capture, the model of that ([`models.observation`](models.md)), as an argument too; and `snap(x)` is the value name itself.
 
 r[core.values]
 A value name stands for the snapshot of one version of a runtime place ([`proofs.versions`](proofs.md)). It is a variable: conversion never replaces it by another term, and what is known of it is the facts in the context ([`runtime.facts`](runtime.md)). Two versions of one place have two value names, whatever values they hold.

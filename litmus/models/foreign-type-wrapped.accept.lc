@@ -1,0 +1,21 @@
+//~ question: May a type that Locus cannot see be given to a generic function that asks for `Model`, wrapped in a struct of the program's own?
+//~ spec: models.capture.bound, models.snapshots.seen
+//~ rfc: 0002
+
+use std::net::TcpListener;
+
+fn kept<T: Model>(value: T) -> T {
+    let before = logic! { snap(value) };
+    let moved = value;
+    let same: @(snap(moved) === before) = _;
+    moved
+}
+
+struct Listener {
+    #[opaque]
+    inner: TcpListener,
+}
+
+fn keep(listener: Listener) -> Listener {
+    kept(listener)
+}

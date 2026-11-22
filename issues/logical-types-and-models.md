@@ -54,3 +54,26 @@ Moved into the repository from [GitHub issue #4](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-22, snapshots, models, and capture are in RFC 0002
+
+The owner's decisions on snapshots, models, and capture are RFC 0002's decisions 99 to 108. The owner settled six constraints with a second reviewer, asked for a recommendation on the whole design, had the reviewer amend it, and on the amended recommendation said:
+
+> Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
+
+The third round of the skeleton spike then succeeded ([skeleton-typing-3](../spikes/skeleton-typing-3/README.md)). What is written:
+
+- **A place that logical code reads is captured:** it stands for the model of the place's snapshot. With no model declared, the model is the snapshot. `models.no-default` is removed, and `models.default` replaces it.
+- **The snapshot of a machine integer is a `Nat` or an `Int`.** A captured value is valid for its type (`models.valid`, `models.valid.captured`, `models.valid.not-assumed`), which replaces `models.integer-range`.
+- **A logic function takes logical types only** (`logic.fn.parameters`), and a method call on a place resolves on the type of its capture (`models.capture.methods`).
+- **A type parameter is read under a written bound** (`models.capture.bound`), which may now be on an `impl` and on a type's declaration (`models.bounds-on-functions`).
+- **A type that Locus cannot see has neither a snapshot nor a model** until a field of it is marked `#[opaque]` (`models.snapshots.seen`, `models.snapshots.opaque`).
+- **A model is declared with its type,** for the type at all its type arguments (`models.declared-by-owner`, `models.one-per-type`), and takes its snapshot and no proof (`models.total`).
+
+Four decided examples change their outcome, and 26 logic functions in 19 examples no longer declare a parameter with a runtime type. The pull request lists each.
+
+The owner saw the recommendations and the amendments, and not the rule texts. What the writing chose is item 30 of what is still for the owner in RFC 0002. Two of its points need the owner's word before anything else: that a captured value is valid is a fact that the language infers, and a struct that Rust accepts is now rejected when it has a field of a type that Locus cannot see and no mark ([unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md)).
+
+One example is open and linked here: `litmus/models/method-on-a-snapshot.open.lc`, on whether `snap(s).room()` means `Stack::room(snap(s))`.
+
+The summary under "Status" above predates this, and several of its lines no longer hold. RFC 0002 is the current text.

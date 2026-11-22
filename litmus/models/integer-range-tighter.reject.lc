@@ -1,5 +1,5 @@
-//~ question: Does the model of a machine integer lie within a range narrower than its type's?
-//~ spec: models.integer-range
+//~ question: Does a value captured from a place of a machine integer type lie within a range narrower than the type's?
+//~ spec: models.valid.captured, models.valid
 //~ rfc: 0002
 
 fn tighter(x: u8) -> @(x < 255) {

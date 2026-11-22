@@ -8,14 +8,14 @@ struct Celsius {
 
 impl Model for Celsius {
     type Logic = Int;
-    logic fn model(c: &Celsius) -> Int {
+    logic fn model(c: Snap<Celsius>) -> Int {
         c.degrees
     }
 }
 
 impl Model for Celsius { //~ error: `Celsius` already has a model
     type Logic = Int;
-    logic fn model(c: &Celsius) -> Int {
+    logic fn model(c: Snap<Celsius>) -> Int {
         c.degrees + 273
     }
 }

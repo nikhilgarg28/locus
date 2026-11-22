@@ -1,5 +1,5 @@
-//~ question: Does a snapshot look into a field whose type is an associated type of the declaring type's parameter?
-//~ spec: models.snapshots.opaque
+//~ question: Does a type have a snapshot at a type argument whose associated type leads back to the type itself?
+//~ spec: models.snapshots.seen
 //~ rfc: 0002
 
 trait Family {
@@ -20,6 +20,6 @@ impl Family for K {
 // which closes through the `impl`.
 static A: Node<K> = Node { next: &A };
 
-logic fn absurd(s: Snap<Node<K>>) -> @False {
-    absurd(s.next) //~ error: `s.next` is opaque: `Node` declares `next` with the associated type `F::Out`, so its snapshot holds nothing that logical code can look into
+logic fn absurd(s: Snap<Node<K>>) -> @False { //~ error: `Node<K>` has no snapshot: its field `next` is a `K::Out`, which is `&'static Node<K>`, so the snapshot of a `Node<K>` would hold itself
+    absurd(s.next)
 }

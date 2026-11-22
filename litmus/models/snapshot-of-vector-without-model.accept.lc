@@ -1,5 +1,5 @@
-//~ question: May logical code take the length of a vector whose elements have no model, through its snapshot?
-//~ spec: models.snapshots, models.no-default
+//~ question: May logical code take the length of a vector whose elements have no declared model, through its snapshot?
+//~ spec: models.snapshots
 //~ rfc: 0002
 
 struct Point {

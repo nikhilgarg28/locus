@@ -1,0 +1,7 @@
+//~ question: Is the captured length of an array the length in its type?
+//~ spec: models.valid.captured, models.valid
+//~ rfc: 0002
+
+fn four(bytes: &[u8; 4]) -> @(bytes.len() == 4) {
+    _
+}

@@ -1,0 +1,16 @@
+//~ question: Is a sum of captured integer fields that wrapped described by writing `wrap`?
+//~ spec: models.snapshots, core.wrap, runtime.arith.wrapping
+//~ rfc: 0002
+
+struct Span {
+    lo: u32,
+    hi: u32,
+    mid: u32,
+}
+
+fn set_mid(r: &mut Span) {
+    let before = logic! { *r };
+    r.mid = (r.lo + r.hi) / 2;
+    let after = logic! { *r };
+    let midpoint: @(after.mid === u32::wrap(before.lo + before.hi) / 2) = _;
+}

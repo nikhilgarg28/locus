@@ -1,5 +1,5 @@
 //~ question: Does a fact proven about a generic wrapper's snapshot hold at a type argument that closes a cycle through the wrapper?
-//~ spec: models.snapshots, logic.ghost.generic-instantiations
+//~ spec: models.snapshots, logic.ghost.generic-instantiations, models.capture.bound
 //~ rfc: 0002
 
 struct Wrap<'a, T> {
@@ -10,7 +10,7 @@ struct Node<'a> {
     w: Wrap<'a, Node<'a>>,
 }
 
-fn same<T>(a: &Wrap<T>, b: &Wrap<T>, inner: @(snap(a.inner) === snap(b.inner))) -> @(snap(a) === snap(b)) {
+fn same<T: Model>(a: &Wrap<T>, b: &Wrap<T>, inner: @(snap(a.inner) === snap(b.inner))) -> @(snap(a) === snap(b)) {
     _
 }
 

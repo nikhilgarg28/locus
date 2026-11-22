@@ -1,0 +1,21 @@
+//~ question: Is a tuple's model the tuple of its components' models?
+//~ spec: models.by-parts
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+// A tuple is built by the language, so the capture of the pair holds the stack's model.
+fn same_stack(pair: &(Stack, u32)) -> u32 {
+    let whole = logic! { pair };
+    let same: @(whole.0.len() == pair.0.len()) = _;
+    0
+}

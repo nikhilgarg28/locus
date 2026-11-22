@@ -1,0 +1,7 @@
+//~ question: May a logic function take a value of a type parameter that is bounded by `Model`?
+//~ spec: logic.fn.parameters
+//~ rfc: 0002
+
+logic fn alike<T: Model>(a: T, b: T) -> Prop { //~ error: a logic function's parameters are logical types, and `T` is bounded by `Model`, so it stands for a runtime type: write `Snap<T>`, or `T::Logic`
+    a === b
+}

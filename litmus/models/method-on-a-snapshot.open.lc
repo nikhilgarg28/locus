@@ -1,0 +1,26 @@
+//~ question: May a logic function that a type declares over its snapshot be called as a method on the snapshot?
+//~ issue: logical-types-and-models
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+impl Stack {
+    logic fn room(stack: Snap<Stack>) -> Int {
+        stack.cap - stack.items.len()
+    }
+}
+
+// `Stack::room(snap(s))` is accepted. Whether this form means the same is not decided.
+fn has_room(s: &Stack, some: @(snap(s).room() > 0)) -> u32 {
+    1
+}

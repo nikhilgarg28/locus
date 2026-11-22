@@ -248,3 +248,13 @@ RFC 0002's decision 98 gives the library one function and leaves two questions w
 - **`decide(P)` is the library's:** a logic function from `Prop` to `Bool`, `true` exactly when `P` holds. The owner chose it over a connective `<==>`: "go with library function/macro vs one more symbol". The name, and that it is a function and not a macro, are RFC 0002's proposal (`logic.bool.decide`).
 - **The index of a sequence.** Since that decision a `Nat` is used as an `Int` only where it is written `as Int`, and RFC 0005 indexes a sequence by an `Int`. So `xs[i]` for a `usize` or a `Nat` is now written `xs[i as Int]`, in four examples, in RFC 0002's first example, and in RFC 0004's. The alternative is a sequence that a `Nat` indexes as well, which is how the second round of the skeleton spike had it. Not decided: the owner was asked about operators, and this is item 29 of what is still for the owner in RFC 0002.
 - **What `wrap` takes.** `core.wrap` says "an integer". Decided examples give `u32::wrap` a `Nat`, and their error texts an `Int`, and no rule states its parameter or its result. Those examples are unchanged. The same item lists it.
+
+### 2026-11-22, what the decisions on snapshots and models leave to the library
+
+RFC 0002's decisions 99 to 108 leave these with the library's RFC.
+
+- **Which types of the standard library it declares a snapshot and a model for.** A type has neither unless Locus lowers it or the library declares one (decision 107). RFC 0002's examples need `Option`, `Result`, `Vec`, and the types with interior mutability. Until the library declares one for `char`, `str`, `String`, the floating-point types, maps, `Rc`, and `Arc`, a field of such a type is marked `#[opaque]`, as a field of type `TcpListener` is.
+- **What models a `Result`.** RFC 0002 says that it is built from the payloads' models, and names no logical type for it.
+- **`valid` for each collection.** The snapshot of a library collection is valid when every element's is (`models.valid`).
+- **`u8::range` is given a place.** With the snapshot of a `u8` a `Nat`, a lemma from any `Nat` to its being at most 255 would be false, so `proofs.facts.types` now says that the lemma takes a place of type `u8`.
+- **Item 27 is unchanged,** and was written before these decisions: it speaks of `models.no-default`, which is removed, and of `models/vector-without-element-model`, which is now accepted. What the library's contracts speak of, and Locus's collections, are for the change that follows.

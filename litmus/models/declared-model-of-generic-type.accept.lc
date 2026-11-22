@@ -1,0 +1,18 @@
+//~ question: May a model be declared for a generic type at all its type arguments, under a `Model` bound on its `impl`?
+//~ spec: models.one-per-type, models.bounds-on-functions
+//~ rfc: 0002
+
+struct Wrap<T> {
+    inner: T,
+}
+
+impl<T: Model> Model for Wrap<T> {
+    type Logic = Snap<T>;
+    logic fn model(w: Snap<Wrap<T>>) -> Snap<T> {
+        w.inner
+    }
+}
+
+fn unwrapped(w: &Wrap<u32>) -> @(w === snap(w.inner)) {
+    _
+}

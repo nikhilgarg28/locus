@@ -1,0 +1,14 @@
+//~ question: May a declared model rely on its snapshot being one that a value has?
+//~ spec: models.total, models.valid.not-assumed
+//~ rfc: 0002
+
+struct Word {
+    bytes: [u8; 4],
+}
+
+impl Model for Word {
+    type Logic = Nat;
+    logic fn model(w: Snap<Word>) -> Nat {
+        w.bytes.at(3, _) //~ error: cannot prove that 3 is inside `w.bytes`: a model is given every `Snap<Word>`, and only one captured from a place is known to hold four bytes
+    }
+}

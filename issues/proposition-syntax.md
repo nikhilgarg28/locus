@@ -57,3 +57,7 @@ RFC 0002's decisions 97 and 98 record two answers of the owner's that are about 
 - There is no connective for "exactly when". Offered `<==>` or a function of the library, the owner chose the function: a contract writes `r === decide(P)`, or two implications.
 
 The list of positions, and that `==` is a proposition as the orderings are, are RFC 0002's proposal, and are item 29 of what is still for the owner there.
+
+### 2026-11-22, forms that the decisions on snapshots and models use
+
+RFC 0002's decisions 99 to 108 write four forms that this issue may respell: the attribute `#[opaque]` on a field; `T::valid(s)`, the proposition that a snapshot is valid, as a logic function of the type; `T::model(s)`, a type's model applied to a snapshot value; and a snapshot value built with its type's own constructor, as in `Inner { n: 0 }`. The owner saw none of the four spellings one by one. They are in item 30 of what is still for the owner there.

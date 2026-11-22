@@ -11,7 +11,7 @@ struct Node<'a> {
     next: Option<Wrap<'a, Node<'a>>>,
 }
 
-logic fn next_value(node: &Node) -> Nat {
+logic fn next_value(node: Snap<Node>) -> Nat {
     match node.next {
         Some(wrap) => wrap.inner.value, //~ error: `wrap.inner` is an address here: `next` closes a cycle of references, so `Node`'s snapshot holds it as a `CutSnap`, and a logic function reads only the snapshot
         None => 0,

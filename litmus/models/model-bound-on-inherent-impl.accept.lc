@@ -1,0 +1,14 @@
+//~ question: May a `Model` bound appear on an `impl` of a generic type, so that its methods read values of the type parameter?
+//~ spec: models.bounds-on-functions, models.capture.bound
+//~ rfc: 0002
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T: Model> Pair<T> {
+    fn swap(self) -> (out: Pair<T>, @(out.first === self.second && out.second === self.first)) {
+        (Pair { first: self.second, second: self.first }, _)
+    }
+}

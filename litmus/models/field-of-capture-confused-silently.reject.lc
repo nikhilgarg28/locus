@@ -1,0 +1,28 @@
+//~ question: Is the field of a capture equal to the capture of the field, when the field's declared model has its snapshot's own type?
+//~ spec: models.capture.fields
+//~ rfc: 0002
+
+struct Inner {
+    n: u32,
+}
+
+// A model with the type of the snapshot: the snapshot with `n` replaced by 0.
+impl Model for Inner {
+    type Logic = Snap<Inner>;
+    logic fn model(s: Snap<Inner>) -> Snap<Inner> {
+        Inner { n: 0 }
+    }
+}
+
+// `Outer` declares no model, so its model is its snapshot, which holds `Inner`'s snapshot.
+struct Outer {
+    inner: Inner,
+}
+
+fn confused(outer: &Outer, seven: @(outer.inner.n == 7)) -> u32 {
+    let whole = logic! { outer };
+    let part = logic! { outer.inner };
+    // Both sides have the type `Snap<Inner>`, so this is well typed. It is false: `n` is 7 on the left and 0 on the right.
+    let same: @(whole.inner === part) = _; //~ error: cannot prove `whole.inner === part`: `whole.inner` is the snapshot of `outer.inner`, and `part` is its model
+    outer.inner.n
+}

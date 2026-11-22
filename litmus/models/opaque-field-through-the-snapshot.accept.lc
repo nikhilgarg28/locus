@@ -1,0 +1,20 @@
+//~ question: Is the opaque value of a marked field reached through the snapshot of the value that holds it?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    #[opaque]
+    listener: TcpListener,
+    #[opaque]
+    local: SocketAddr,
+    port: u16,
+}
+
+fn held(server: &Server) -> u32 {
+    let first = logic! { snap(server).listener };
+    let second = logic! { snap(server).listener };
+    let same: @(first === second) = _;
+    0
+}

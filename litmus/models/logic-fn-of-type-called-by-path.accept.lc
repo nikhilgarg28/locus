@@ -1,0 +1,25 @@
+//~ question: Is a logic function that a type declares over its snapshot called by its path, on the snapshot?
+//~ spec: models.capture.methods, logic.fn.parameters
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+impl Stack {
+    logic fn room(stack: Snap<Stack>) -> Int {
+        stack.cap - stack.items.len()
+    }
+}
+
+fn has_room(s: &Stack, some: @(Stack::room(snap(s)) > 0)) -> u32 {
+    1
+}

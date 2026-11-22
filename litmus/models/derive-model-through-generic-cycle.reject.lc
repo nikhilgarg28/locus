@@ -6,14 +6,7 @@ struct Wrap<'a, T> {
     inner: &'a T,
 }
 
-impl<'a> Model for Wrap<'a, Node<'a>> {
-    type Logic = Snap<Node<'a>>;
-    logic fn model(w: &Wrap<'a, Node<'a>>) -> Snap<Node<'a>> {
-        snap(w.inner)
-    }
-}
-
-#[derive(Model)] //~ error: cannot derive `Model` for `Node`: it reaches itself through the reference in `Wrap`'s field `inner`, so its model type would have no values
+#[derive(Model)] //~ error: cannot derive `Model` for `Node`: it reaches itself through the reference in `Wrap`'s field `inner`, so its field `w` is cut in its snapshot, and a cut field has no model
 struct Node<'a> {
     w: Wrap<'a, Node<'a>>,
 }

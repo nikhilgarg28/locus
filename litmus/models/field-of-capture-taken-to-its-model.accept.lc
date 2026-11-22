@@ -1,0 +1,25 @@
+//~ question: Is a type's model applied to a snapshot by the type's path?
+//~ spec: models.capture.fields, models.observation
+//~ rfc: 0002
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items
+    }
+}
+
+// `Shelf` declares no model, so its model is its snapshot, which holds `Stack`'s snapshot.
+struct Shelf {
+    stack: Stack,
+}
+
+fn same_stack(shelf: &Shelf) -> u32 {
+    let whole = logic! { shelf };
+    let same: @(Stack::model(whole.stack) === shelf.stack) = _;
+    0
+}

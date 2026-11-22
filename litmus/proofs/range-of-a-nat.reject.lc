@@ -1,0 +1,7 @@
+//~ question: May the range of a machine integer be cited for a `Nat` that no place of that type gave?
+//~ spec: proofs.facts.types, models.valid.not-assumed
+//~ rfc: 0005
+
+logic fn fits(n: Nat) -> @(n <= 255) {
+    linear((u8::range(n),)) //~ error: `u8::range` is given a place of type `u8`, and `n` is a `Nat` that no such place gave: nothing says that it lies in a `u8`'s range
+}

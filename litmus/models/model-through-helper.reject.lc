@@ -6,13 +6,13 @@ struct Stack {
     items: Vec<u32>,
 }
 
-logic fn size(stack: &Stack) -> Nat {
-    model(stack) //~ error: `size` takes a `Stack` to its model, and the model of `Stack` calls `size`, so the model would depend on itself
+logic fn size(stack: Snap<Stack>) -> Nat {
+    Stack::model(stack) //~ error: `size` takes a `Stack` to its model, and the model of `Stack` calls `size`, so the model would depend on itself
 }
 
 impl Model for Stack {
     type Logic = Nat;
-    logic fn model(stack: &Stack) -> Nat {
+    logic fn model(stack: Snap<Stack>) -> Nat {
         size(stack)
     }
 }

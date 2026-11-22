@@ -8,7 +8,7 @@ struct Inner {
 
 impl Model for Inner {
     type Logic = Nat;
-    logic fn model(inner: &Inner) -> Nat {
+    logic fn model(inner: Snap<Inner>) -> Nat {
         0
     }
 }
