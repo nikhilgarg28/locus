@@ -92,7 +92,7 @@ What the third rule does:
 
 - **`impl From<Nat> for Ratio` is rejected,** for a logical `Ratio`. The standard `From` has a method that runs. At a logical type it would be a function on markers that logical code cannot call, with a result known only by its type. And the standard library's blanket `Into` over it would be unverified code handed logical data by value, which RFC 0002's boundary forbids.
 - **A conversion between logical types is a logic function,** of a trait that declares it so: `FromLogic`, below.
-- **RFC 0002's protection stays.** `PartialEq`, `Ord`, and `Hash` have methods that runs, so no program gives them to a logical type, and rustc still rejects `==` on two `Vec<Nat>`s.
+- **RFC 0002's protection stays.** `PartialEq`, `Ord`, and `Hash` have methods that run, so no program gives them to a logical type, and rustc still rejects `==` on two `Vec<Nat>`s.
 - **No ordinary Rust trait gains a logical implementation.** A trait that a program implements for a logical type declares only logic members, so it is a Locus trait by its declaration, and every implementation of it is checked.
 - **It is checked after rustc.** Lowering sees tokens. It cannot see that a trait of another module or crate has a method with a default body, and it cannot see through an alias to a logical type ([marker-lowering](../../spikes/marker-lowering/README.md), `t21`: with the trait in another invocation, `half.hello()` ran on a logical value). So the rule is judged from what rustc resolved, with the checks that [RFC 0001](0001-compiler-pipeline.md#what-rustc-decides-and-what-locus-checks-after-it) lists as made after it.
 

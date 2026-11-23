@@ -28,6 +28,7 @@ impl<T: Bounded> Bounded for (T, T) {
     }
 }
 
-logic fn pair_of_tallies(p: (Tally, Tally)) -> @(<(Tally, Tally)>::weight(p) >= 0) {
-    linear((<(Tally, Tally)>::above(p),))
+// At a concrete type rustc selects the implementation for pairs, with `Tally`'s evidence.
+logic fn pair_of_tallies(p: (Tally, Tally)) -> @(<(Tally, Tally)>::weight(p) >= <(Tally, Tally)>::floor()) {
+    <(Tally, Tally)>::above(p)
 }
