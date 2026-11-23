@@ -2,7 +2,7 @@
 
 - **Kind:** decision
 - **Status:** open
-- **Blocks:** `traits.model-bounds` of RFC 0006, and with it one specification trait for a logical type and a runtime type
+- **Blocks:** Nothing now. The owner decided the first option on 2026-11-22 (see the log). The issue closes when RFC 0006 is accepted
 - **Rules:** `models.snapshots.seen`, `collections.element-types`, `logic.fn.parameters`, `traits.model-bounds`
 
 ## Question
@@ -35,3 +35,11 @@ By [the specification's own rule](../spec/README.md#when-sources-disagree), neit
 ### 2026-11-23, raised while writing RFC 0006
 
 Found while bringing the RFC on traits into the repository. Its fourth draft said: "Whether `Snap` of a logical type is that type is for RFC 0002 to say." RFC 0002's rules do not say it, its text says it of the model, and its examples need it of the bound. RFC 0006 states it as part of `traits.model-bounds` and lists it second among what is still for the owner.
+
+### 2026-11-23, the owner had already decided it
+
+The question was put to the owner before RFC 0006 was in the repository. On 2026-11-22, shown three decisions on traits and snapshots as "They stand as I put them: snapshots as a type family, the snapshot of a logical type being that type, and the strict rule on logical types staying.", the owner said:
+
+> The three decisions are fine.
+
+So the first option is the owner's: a logical type is its own snapshot and its own model, and meets a `Model` bound. It was missed when RFC 0006 was written, and found in the record afterwards. `models.snapshots.seen` now says it, and `logic.fn.parameters` lets a type parameter bounded by `Model` stand for a logical type. [RFC 0006](../design/rfcs/0006-traits.md) records it as its decision 14. No example changes: each decided example the question named already had the outcome the first option gives.
