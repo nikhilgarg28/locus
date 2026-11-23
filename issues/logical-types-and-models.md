@@ -81,3 +81,9 @@ The summary under "Status" above predates this, and several of its lines no long
 ### 2026-11-23, an unmarked field does not reject its struct
 
 The entry above says that a struct that Rust accepts is rejected when it has a field of a type that Locus cannot see and no mark. That was this change's first text of `models.snapshots.opaque`, and it is corrected: such a struct is declared and used as in Rust, and has no snapshot and no model until the field is marked, which is what the recommendation that the owner approved had. [unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md) has the record, and what is still open there.
+
+### 2026-11-23, the snapshot of a vector is no longer one that a library declares
+
+RFC 0002's decision 113 removes the one snapshot that Locus's library declared for a type built on raw pointers. `Snap<Vec<T>>` was a `Seq<Snap<T>>`, trusted. Now the standard library's `Vec` has neither a snapshot nor a model, and the `Vec` of Locus's library is a struct whose snapshot is the struct's: the standard library's vector as an opaque part, and a logical field with the elements' snapshots, which `snap(v).elements()` gives. Its model is still a `Seq` of the elements' models, declared by the library with the type and checked. `models.snapshots`, `models.snapshots.seen`, and `models.by-parts` change for it.
+
+In the examples, a model that read `stack.items` as a sequence now reads `stack.items.elements()`, and a vector that logical code reads is imported from `locus::std`. `models/method-on-a-snapshot.open.lc` is still open, and is changed the same way.

@@ -181,3 +181,13 @@ RFC 0002 records them as its decisions 95 and 96, confirmed tentatively, and [so
 - **`logic.unverified.functions`.** A naked function is unverified: its body is assembly. `logic.verified.restrictions` says that a verified function is not one, so a naked function whose signature holds logical data, or that is marked `#[verified]`, is rejected.
 
 What this leaves for this issue is unchanged. Assembly has no contract, as no unverified code has. A contract for a naked function, or for a symbol that a `global_asm!` defines, is a wrapper of the program's own, whose signature states it and whose body assumes it with `unsafe assume!(_)`.
+
+### 2026-11-23, Locus's collections, and question 4
+
+RFC 0002's decisions 113 to 118 bear on question 4 above, "models for types built on raw pointers, which a contract needs something to speak about".
+
+- **No model is declared for a type built on raw pointers.** The standard library's `Vec` has neither a snapshot nor a model. Locus's own `Vec` is a struct that holds it and, in a logical field, the snapshots of its elements. A contract speaks of that field, through `snap(v).elements()`.
+- **What ties the field to the vector is trusted** (`trusted.library`): that each method of Locus's library does to the standard library's vector what its contract says of the field. A proof that says what the standard library's vector returned, as `len`'s does, is assumed with `unsafe assume!` and listed, as before.
+- **A value that changes through `&self`** is still ruled out the same way: a type with interior mutability has no logical field, and its snapshot holds nothing of its contents (`models.frozen-data`).
+
+This is for Locus's own library only. A program's own type built on raw pointers has no such field: its functions that handle the pointers are unverified, and an unverified function names no type that holds logical data. So what this issue is open for is unchanged, and question 6, on permissions, is where a program's own type would get the same ([permissioned-pointers](permissioned-pointers.md)).

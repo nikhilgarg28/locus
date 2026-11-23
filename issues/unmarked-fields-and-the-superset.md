@@ -79,3 +79,9 @@ The owner was told: a value that is code and not data, which is a closure, a fun
 `VISION.md` now has the proposed words, in the same PR: the language "gives a snapshot, which is what the value is, to every runtime value whose type it can see: its own types, the types a Locus program declares, and those its library describes". [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) records it in decision 53.
 
 This issue stays open for its other point: the form in which decision 107 is given to rustc rests on rustc not checking a `where` clause behind a higher-ranked lifetime at a declaration, which nobody has established as intended.
+
+### 2026-11-23, the standard library's `Vec` is now a type that Locus cannot see
+
+RFC 0002's decision 113 gives the standard library's `Vec`, and its other collections, neither a snapshot nor a model. So a field of type `std::vec::Vec<u32>` is now among the fields that this issue is about: the struct that holds it is declared and used as it is in Rust, and has no snapshot until the field is marked `#[opaque]` or the vector is Locus's. Before, Locus's library declared a snapshot for it.
+
+Nothing in the question changes. The case is more common than `TcpListener`'s: a program that states something about a struct with a vector in it imports Locus's `Vec`.

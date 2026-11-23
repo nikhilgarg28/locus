@@ -7,7 +7,7 @@
 
 ## Question
 
-What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. What the library holds is below. Everything in this list is proposed, for this issue's RFC, and nothing in it is decided beyond those four decisions.
+What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. Decisions 113 to 118 say what a collection among them is: a struct that keeps its contents in a logical field, with contracts that speak of the elements' snapshots. What the library holds is below. Everything in this list is proposed, for this issue's RFC, and nothing in it is decided beyond those decisions.
 
 ### 1. Logical types
 
@@ -51,7 +51,7 @@ What makes a proof short to write and to read. The design is [proof-construction
 
 Each is a trusted entry with its reason (`trusted.library-specs`).
 
-- **In RFC 0002:** integers, `bool`, references, `Box`, arrays, slices, `Vec`, `Option`, and tuples. The standard library's `Vec` keeps its model, so that one received from Rust code has the same model once it is converted to Locus's.
+- **In RFC 0002:** integers, `bool`, references, `Box`, arrays, slices, `Option`, and tuples. The standard library's `Vec` has neither a snapshot nor a model (decision 113): one received from Rust code is converted with `from_std`, and its contents are then known through the methods of Locus's `Vec`. The model of Locus's own `Vec` is not a trusted entry: the library declares it with the type, and Locus checks it.
 - **To add:** `char`, `str`, `Result`, ranges, and `Rc` and `Arc`, which are to be transparent as `Box` is, with `Weak` opaque.
 - **Opaque:** a type with no model has its opaque snapshot. `Cell`, `RefCell`, `Mutex`, and the atomics have nothing else.
 
@@ -59,7 +59,7 @@ Each is a trusted entry with its reason (`trusted.library-specs`).
 
 RFC 0002's decisions 81 to 83. `locus::std` mirrors the standard library's modules, so that a path is found by putting `locus::` in front.
 
-- **Types around the standard library's:** `Vec`, `String`, `VecDeque`, the maps and sets, `Rc`, `Arc`, the cells, the locks, and the atomics. Each holds the standard library's type, dereferences to it so that its other methods are there, converts to and from it in constant time, and gives contracts in the signatures of the methods it defines.
+- **Types around the standard library's:** `Vec`, `String`, `VecDeque`, the maps and sets, `Rc`, `Arc`, the cells, the locks, and the atomics. Each holds the standard library's type, dereferences to it by shared reference so that its methods that take `&self` are there, converts to and from it in constant time, and gives contracts in the signatures of the methods it defines. A collection among them keeps the snapshots of its elements in a logical field, gives no mutable access to the standard library's collection inside it, and has `into_std` and `from_std` as the way out and back (decisions 113 to 118).
 - **Functions for the types that stay Rust's,** under names of their own, for when a program wants a fact from a standard method:
   - `option` and `result`: `map`, `and_then`, `take`, `replace`, `unwrap_or`, written with `match` and so verified;
   - `num`: checked, wrapping, and saturating arithmetic, `min`, `max`, `abs`, `pow`, verified against the arithmetic of section 1;
@@ -79,7 +79,7 @@ Later: [permissioned-pointers](permissioned-pointers.md). They are what the type
 
 ## Questions it must answer
 
-1. **Whether a method that keeps the standard library's name keeps its shape.** `len` could return a `usize`, as Rust's does, with the fact coming from a view of the vector as a slice, whose length the language defines; or it could return the number with its proof, so that `let (n, p) = v.len();` is how a length is read. RFC 0002's litmus examples take the first, with one method of Locus's own, `Vec::view`; its text shows the second for `push`.
+1. **Whether a method that keeps the standard library's name keeps its shape.** `len` could return a `usize`, as Rust's does, with the fact coming from a view of the vector as a slice, whose length the language defines; or it could return the number with its proof, so that `let (n, p) = v.len();` is how a length is read. RFC 0002's litmus examples took the first, with one method of Locus's own, `Vec::view`; its text showed the second for `push`. Decided for `Vec` (decision 117): a method that states a fact returns its proof, so `len` returns the number and then the proof. The other types are still open.
 2. **Which built-in operations the language defines** on the types that stay Rust's, and so are not library at all (RFC 0002, item 18 of what is still for the owner).
 3. **Which standard traits each type forwards,** and what a program does for a trait of another crate, which only that crate or Locus's library can implement.
 4. **Indexing of sequences,** as in section 1.
@@ -278,3 +278,35 @@ One thing is left with the library: **how an `Int` is turned into a `Nat`.** RFC
 RFC 0002's decision 110 replaces the third part of decision 98. The library has `iff(p, q)`, a logic function that is the proposition `(p ==> q) && (q ==> p)`, and whose parameters each take a proposition or a `Bool`. It has no `decide`: the `Bool` of a proposition is written `if P { true } else { false }`, and a function of the library for it can come later. The owner's words are in RFC 0002 and in [proposition-syntax](proposition-syntax.md).
 
 `iff` is the first function of the library whose parameters take anything that converts to a `Prop`. How that is declared waits for traits ([traits-on-logical-types](traits-on-logical-types.md)).
+
+### 2026-11-23, Locus's collections keep their contents in a logical field
+
+RFC 0002's decisions 113 to 118 write the eighth and the tenth of the ten recommendations on snapshots, models, and permissions, as a second reviewer amended them. The owner accepted the amended recommendation on 2026-11-22:
+
+> Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
+
+The third round of [the skeleton spike](../spikes/skeleton-typing-3/README.md) then succeeded, and its section C built the `Vec` that the RFC writes. On what the library's contracts speak of, which the entry of 2026-11-22 above left open, nothing new was asked of the owner. The reply quoted there deferred to the recommendation, which the reviewer has since amended and the owner accepted with the rest.
+
+**What is decided.**
+
+- **A collection keeps its contents in a logical field** (decision 113). Locus's `Vec<T>` is a struct around the standard library's vector, with a logical field that holds the elements' snapshots, in order. Its snapshot is the struct's, and no library declares it. `snap(v).elements()` is a `Seq<Snap<T>>`, and the model is a `Seq<T::Logic>` that Locus checks. The standard library's own `Vec` has neither a snapshot nor a model.
+- **The trust is relocated, not reduced** (decision 114). What is trusted is that each method does to the standard library's vector what its contract says of the logical field (`trusted.library`). `trusted.library-specs` no longer covers a collection.
+- **No mutable access to the standard library's collection inside** (decision 115). A collection implements `Deref` to it at most, and never `DerefMut`. `into_std` and `from_std` are the way out and back. This amends decision 89: a method of the standard library's type that takes `&mut self` is not reached at all.
+- **A mutable loan of an element** (decision 116): `get_mut` returns a `&mut T` and a proof that the final contents are the old ones with that slot set to the snapshot of the element's final value. `IndexMut` cannot carry a contract, so `v[i] = x` gives no fact.
+- **Contracts speak of the elements' snapshots** (decision 117). RFC 0002 writes the signatures of `new`, `empty`, `len`, `push`, `pop`, `get`, `get_mut`, `set`, `clear`, `view`, `into_std`, and `from_std`. The fact about a model is a lemma, `Vec::<T>::model_len`, called where an invariant is stated on a model.
+- **Collections are for element types that have a model** (decision 118). For any other, a program uses the standard library's collection as plain Rust.
+
+**What it settles here.** Question 1, for `Vec`. Section 5's line on `Vec`, and section 6's on what a type around the standard library's is, which are rewritten above. And item 27 of RFC 0002, which the entries of 2026-11-22 recorded as open.
+
+**What it leaves to this issue's RFC.**
+
+- The observers and the contracts of `String`, `VecDeque`, the maps, and the sets, which follow `Vec`.
+- What `Rc` and `Arc` are: the same arrangement fits them, with one value as the contents, and section 5 had proposed them transparent as `Box` is.
+- Whether a type with interior mutability, which has no logical field, dereferences mutably to the standard library's.
+- The rest of `Vec`'s methods. `insert`, `remove`, `truncate`, `extend`, and `sort` are not there until they are the library's own, since nothing forwards a method that takes `&mut self`.
+- What `iter` and `iter_mut` return, and what is known after them.
+- The operations and lemmas on `Seq`. The signatures use `s.push(x)`, which no RFC defines, and each contract states the length beside the contents because nothing yet takes the length of `s.push(x)` from the equation.
+- The lemmas that tie a model to the contents beyond the length, and the same lemma for arrays and slices: `view` gives a slice with the vector's contents, and no rule yet takes the length of a slice's model to the length of its snapshot.
+- Contracts for capacity, for what a method leaves untouched, for allocation failure, and for panics. The reviewer's point: equal snapshots keep what snapshots represent, which under a transparent `Box` is not the allocation.
+
+**What the owner did not see** is item 33 of what is still for the owner in RFC 0002. The most pressing: that the standard library's `Vec` can no longer be read in logical code, that `len` and `pop` return their proofs so that a call for the value alone is written `v.len().0`, and that after `v[i] = x` nothing is known of a vector, its length included.

@@ -25,7 +25,7 @@ This issue is the design of the pointers and of what they need from the language
 8. **Shared ownership and interior mutability.** `Rc`, `Arc`, `Cell`, `RefCell`, and `Mutex` need permissions that several holders share and ghost state behind a runtime check. A permission with one holder does not give them.
 9. **What the compiler gives `Box` alone,** such as moving out of `*b` and coercing to `Box<dyn Trait>`, which a library type cannot have.
 10. **Meeting Rust crates.** A Locus `Vec` is not `std::vec::Vec`. How one becomes the other, and what `Vec` names in a `.lc` file.
-11. **The soundness of the primitive layer:** the argument that its `unsafe` code keeps Rust's rules, aliasing included, whenever each `requires` holds. It is what replaces `trusted.library-specs` for collections, and it belongs with [soundness-model](soundness-model.md).
+11. **The soundness of the primitive layer:** the argument that its `unsafe` code keeps Rust's rules, aliasing included, whenever each `requires` holds. It is what replaces, for collections, the part of `trusted.library` that covers a collection's logical field (RFC 0002, decision 114), and it belongs with [soundness-model](soundness-model.md).
 12. **Whether a program's own `unsafe` code can use the same pointers,** so that `assumed.unsafe.sound` is discharged for a function instead of assumed.
 
 ## Log
@@ -67,3 +67,26 @@ RFC 0002's decision 75 records it. Locus's `Box`, `Vec`, and `String` keep the l
 RFC 0002's decisions 81 and 83 set the stage before this design: Locus's library first provides its collections as wrappers around the standard library's, with contracts that are assumed, and is trusted to keep the values they are given. This design then replaces a wrapper with a verified collection, without changing its signatures. Two things follow for the questions above:
 - question 10, how a Locus collection meets Rust crates, has its answer for the wrapper stage: the wrapper holds the standard library's type, so it converts in constant time by value and by reference. Whether a rebuilt collection can still lend itself as a `&std::vec::Vec<T>` depends on holding that type as its storage;
 - the two things that `unsafe assume!` cannot do are this design's to deliver: `unsafe` code behind a proof parameter, which is how a proof removes a bounds check, and a collection that holds proofs with no unverified code touching them.
+
+### 2026-11-23, the direction for the memory core, and what the collections are until it exists
+
+RFC 0002's decision 119: permissions are an RFC of their own. No rule is written for them, and none is added by this entry. It records the direction, from the ninth of the ten recommendations on snapshots, models, and permissions, as a second reviewer amended them. The owner accepted the amended recommendation on 2026-11-22:
+
+> Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
+
+The owner had said of permissions earlier:
+
+> I expect permissions to be a private ZST with logical data inside.
+
+**The direction.**
+
+- **A pointer with no authority, and a permission beside it.** The permission is a zero-sized runtime value that is not `Copy` and that holds a block's logical state. A primitive relates the state before and after: it consumes a permission and returns the next, or takes one by `&mut` with a contract on its final value. Verus's `PPtr` and `PointsTo` are the reference.
+- **No new kind of value.** A permission is a sealed runtime struct with a logical field, as decision 69 has it. What it needs is a trust entry for the primitives, and so an RFC.
+- **The same collections, proved instead of trusted.** Decisions 113 to 118 give Locus's collections their contents in a logical field, on trust that the library keeps the field in step with the standard library's collection (`trusted.library`). On permissions the contents would be proved. The public observers, `snap(v).elements()`, and the contracts would be the same. The representation of the snapshot would not be, and no program reads it.
+- **Uniqueness is a property of live resources.** rustc keeps a value that is not `Copy` to one holder. That is never a theorem about snapshots of such values, which are logical values and can be copied: two equal snapshots of a permission do not show that there is one permission.
+- **Consuming a type that implements `Drop` needs a precise construct.** This is question 5. The recommendation suggested a `dismantle` that lowering generates, private to the type's module, as the inverse of the constructor. The reviewer: whatever the construct is, it must consume the value once, suppress the destructor, transfer every field, and define what happens on unwinding.
+- **A fresh allocation's identity is an unknown value, distinct from every live one.** Allocation is not a function of its arguments, which decision 44 asks of what a verified function means, so the core has to say this. References and `Box` stay transparent in snapshots (decision 102), which keeps identity out of ordinary data.
+
+**From the recommendation, and not examined since.** The first verified method would be the first real test of RFC 0003's proof forms. No case was found in which safe unverified code that holds a sealed permission breaks it, which is question 4 of [opaque-certified-values](opaque-certified-values.md). And Verus's split into typed access, raw regions, and the right to free can come later, beneath one combined permission.
+
+**What changes above.** Question 11 said that the soundness argument of the primitive layer replaces `trusted.library-specs` for collections. Since decision 114 that entry no longer covers a collection, and what the argument replaces is the trust in the logical field. Question 4, a mutable borrow of a slot, has its contract for the wrapper stage: `get_mut` returns the borrow and a proof that the final contents are the old ones with the slot's final value (decision 116). It is trusted there, and is to be proved here.

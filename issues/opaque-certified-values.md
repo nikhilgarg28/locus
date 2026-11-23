@@ -62,3 +62,9 @@ The owner also agreed to leave the boundary at signatures (decision 77): Locus d
 ### 2026-11-16, conversation with the owner on reaching the standard library
 
 RFC 0002's decisions 80 to 83 end the specifications of standard functions. So the one code that may be given exposed logical data, apart from a loan, is Locus's own library, and "without a specification" above now reads "that Locus does not verify". The standard library's `Option::take` on an `Option<@P>` joins the list of what is rejected ([`logical-layer/lend-proof-holder-to-specified.reject.lc`](../litmus/logical-layer/lend-proof-holder-to-specified.reject.lc)); `match` does the same work ([`logical-layer/proof-holder-taken-apart.accept.lc`](../litmus/logical-layer/proof-holder-taken-apart.accept.lc)).
+
+### 2026-11-23, a collection of Locus's library is a sealed type
+
+RFC 0002's decision 113 puts a logical field in each collection of Locus's library. So a `Vec<u32>` of Locus's holds logical data in a field of its own and exposes none: by `logic.boundary.logical-data` it is a sealed type, where before it was plain data. Unverified code of another crate may hold one, move it, and give it back, and what comes back is known only by its type. An unverified function of a Locus crate names none, and takes the standard library's `Vec` or a slice.
+
+A `Vec` of Locus's whose elements hold proofs is still not lent to unverified code, also by shared reference: the standard library's vector inside it has no snapshot, so `logic.boundary.loans` does not apply. So `{:?}` on a `Vec<Option<@P>>` stays among what is awkward.

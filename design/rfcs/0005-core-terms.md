@@ -395,7 +395,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 - What a verified function's summary of the places it may write records ([runtime-semantics](../../issues/runtime-semantics.md)).
 - How the measure obligation of a recursive call is written out.
 - Shifts and bitwise operations on integers, which RFC 0004 leaves out for now.
-- Whether the contracts of Locus's library are stated on snapshots, and the lemma that ties a library container's model to its snapshot's length ([standard-library](../../issues/standard-library.md)).
+- The lemmas that tie a model to a snapshot's length. [RFC 0002](0002-logical-layer.md) has since decided that the contracts of Locus's library are stated on the elements' snapshots (its decision 117), and has the lemma for a `Vec` of Locus's library, `Vec::<T>::model_len`. The same lemma for an array or a slice, and the lemmas on sequences, are the library's ([standard-library](../../issues/standard-library.md)).
 - A small checked slice of this core, which the second review recommends: arithmetic, a join, one loop, and one mutable reborrow.
 - What the review of this text left for later: a loop's condition that writes a place; a proof carried through several exits of a loop; equations between sequences; and what is known of a place that is partly moved out or not yet initialized when a borrow of it ends.
 - The remaining findings of the reviews, which this RFC does not touch.

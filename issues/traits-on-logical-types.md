@@ -187,3 +187,11 @@ The vision's fifth commitment says the language gives every runtime value a snap
 > sure but I'd like to understand what kind of types it won't be able to see?
 
 The owner was told which: values that are code and not data (a closure, a function item, a function pointer, a trait object, a type that `impl Trait` hides); a type of a crate that Locus does not lower; and a type of the standard library that Locus's library has not yet declared. The vision is not edited until the owner says so.
+
+### 2026-11-23, what the library's contracts are stated on is decided, and what it leaves for traits
+
+The entry of 2026-11-22 above recorded a question about Locus's library as one to settle with this issue's design. It is decided without it: RFC 0002's decision 117 states the contracts of the library on the elements' snapshots, `snap(v).elements()`, with a lemma to the model, and [standard-library](standard-library.md) has the record. Three things stay with traits:
+
+- **An operator cannot carry a contract.** `Index` and `IndexMut` fix the signatures of their methods, so on a `Vec` of Locus's library `v[i]` and `v[i] = x` run and state nothing (`collections.vec.indexing`), and `get`, `set`, and `get_mut` are the forms that do. The third round of the skeleton spike saw rustc's E0053 for an `index_mut` that returns a proof. A contract on a trait's method is what would lift this.
+- **The methods with contracts are in an `impl` with a `Model` bound,** `impl<T: Model> Vec<T>`, which decision 106 allows. At an element type with no model a call of one is rejected, and is never the standard library's method of the same name (`collections.element-types`).
+- **The observer is called as a method on a snapshot,** `snap(v).elements()`. The library writes it on the snapshot's own type. Whether a program's own type can give its snapshot a method is `models/method-on-a-snapshot.open.lc`, which is still open.
