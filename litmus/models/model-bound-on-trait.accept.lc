@@ -1,0 +1,7 @@
+//~ question: May a `Model` bound appear on a trait?
+//~ spec: models.bounds-on-functions, traits.model-bounds
+//~ rfc: 0002
+
+trait Holds<T: Model> {
+    fn count(&self) -> usize;
+}

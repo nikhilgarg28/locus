@@ -463,16 +463,16 @@ A new chapter of the specification, [Traits](../../spec/traits.md), and one rule
 
 | Rule | Examples |
 |---|---|
-| `traits.rust` | `traits/implementations-differ-in-a-logical-argument.accept.lc`, `traits/two-logical-types-one-trait.accept.lc`, `traits/bound-not-met-by-logical-type.reject.lc` |
+| `traits.rust` | `traits/implementations-differ-in-a-logical-argument.accept.lc`, `traits/two-logical-types-one-trait.accept.lc`, `traits/bound-not-met-by-logical-type.reject.lc`, `traits/implementation-missing-for-a-bound.reject.lc` |
 | `traits.members` | `traits/contract-on-a-trait-method.accept.lc`, `traits/logical-associated-type-beside-a-method.accept.lc`, `traits/two-logical-types-one-trait.accept.lc`, `traits/logical-associated-constant.reject.lc` |
 | `traits.members.kind` | `traits/specification-and-code-in-two-traits.accept.lc`, `traits/method-given-for-a-logic-function.reject.lc` |
 | `traits.logical` | `traits/ghost-value-of-any-logical-type.accept.lc`, `traits/logical-implemented-by-hand.reject.lc`, `traits/runtime-value-where-logical-is-asked.reject.lc`, `traits/self-as-a-value-without-logical-supertrait.reject.lc` |
-| `traits.model-bounds` | `traits/model-as-supertrait.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/self-read-without-model-supertrait.reject.lc` |
+| `traits.model-bounds` | `models/model-bound-on-trait.accept.lc`, `traits/model-as-supertrait.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/self-read-without-model-supertrait.reject.lc` |
 | `traits.impls.conform` | `traits/contract-on-a-trait-method.accept.lc`, `traits/stronger-contract-in-implementation.reject.lc`, `traits/weaker-contract-in-implementation.reject.lc` |
-| `traits.impls.headers` | `traits/implementations-differ-in-a-logical-argument.accept.lc`, `traits/logical-associated-type-beside-a-method.accept.lc`, `traits/snapshot-type-in-header-through-alias.reject.lc` |
+| `traits.impls.headers` | `traits/implementations-differ-in-a-logical-argument.accept.lc`, `traits/logical-associated-type-beside-a-method.accept.lc`, `logical-layer/proof-in-trait-impl.reject.lc`, `traits/snapshot-type-in-header-through-alias.reject.lc` |
 | `traits.impls.logical-types` | `traits/conversion-between-logical-types.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/code-trait-for-logical-type.reject.lc`, `traits/provided-method-on-logical-type.reject.lc`, `traits/standard-from-for-logical-type.reject.lc` |
 | `traits.impls.acyclic` | `traits/implementation-under-a-bound.accept.lc`, `traits/evidence-defined-by-itself.reject.lc` |
-| `traits.evidence` | `traits/contract-on-a-trait-method.accept.lc`, `traits/fact-from-the-method-called-by-name.accept.lc`, `traits/implementation-under-a-bound.accept.lc`, `traits/lemma-of-a-bound-called.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc` |
+| `traits.evidence` | `traits/contract-on-a-trait-method.accept.lc`, `traits/fact-from-the-method-called-by-name.accept.lc`, `traits/implementation-under-a-bound.accept.lc`, `traits/lemma-of-a-bound-called.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/implementation-missing-for-a-bound.reject.lc`, `traits/method-result-in-a-proposition.reject.lc` |
 | `traits.bounds` | `traits/implementation-under-a-bound.accept.lc`, `traits/lemma-of-a-bound-called.accept.lc`, `traits/two-logical-types-one-trait.accept.lc`, `traits/logic-function-opaque-under-a-bound.reject.lc` |
 | `traits.names` | `traits/logic-function-beside-a-method-of-the-same-name.accept.lc`, `traits/member-named-through-its-trait.accept.lc`, `traits/logical-member-of-two-traits.reject.lc` |
 | `traits.dyn` | `traits/trait-object-of-a-plain-trait.accept.lc`, `traits/trait-object-of-a-locus-trait.reject.lc` |

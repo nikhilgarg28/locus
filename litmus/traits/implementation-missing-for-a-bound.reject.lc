@@ -1,0 +1,19 @@
+//~ question: Is an implementation with a bound used at a type argument that does not meet the bound?
+//~ spec: traits.evidence, traits.rust
+//~ rfc: 0006
+
+trait Bounded: Logical {
+    logic fn floor() -> Int;
+}
+
+impl Bounded for Int {
+    logic fn floor() -> Int { 0 }
+}
+
+impl<T: Bounded> Bounded for (T, T) {
+    logic fn floor() -> Int { T::floor() + T::floor() }
+}
+
+logic fn floor_of_flags() -> Int {
+    <(Bool, Bool)>::floor() //~ error: `(Bool, Bool)` does not implement `Bounded`, since `Bool` does not: there is evidence for the pair only where there is evidence for its component
+}
