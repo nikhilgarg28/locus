@@ -1,0 +1,15 @@
+//~ question: May an implementation state a weaker contract on a method than its trait does?
+//~ spec: traits.impls.conform
+//~ rfc: 0006
+
+trait OneByte {
+    fn byte(&self) -> (b: u8, @(b < 128));
+}
+
+struct Wide(u8);
+
+impl OneByte for Wide {
+    fn byte(&self) -> (b: u8, @(b < 200)) { //~ error: the signature of `byte` is not its trait's: the trait says `b < 128`
+        if small: self.0 < 200 { (self.0, small) } else { (0, _) }
+    }
+}

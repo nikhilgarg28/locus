@@ -1,0 +1,11 @@
+//~ question: Do the types of the language and of the standard library implement `CloneEq`, by Locus's library?
+//~ spec: traits.laws.adapters
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+fn duplicate(x: &Option<u32>) -> (copy: Option<u32>, @(snap(copy) === snap(x))) {
+    x.clone_eq()
+}
+
+//~ run: duplicate(&Some(3)).0 => Some(3)

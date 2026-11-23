@@ -1,0 +1,15 @@
+//~ question: May a runtime function be generic over every logical type, by the bound `Logical`?
+//~ spec: traits.logical
+//~ rfc: 0006
+
+fn keep<G: Logical>(g: G) -> G {
+    g
+}
+
+fn kept(n: u32) -> u32 {
+    let before = logic! { n };
+    let same = keep(before);
+    n
+}
+
+//~ run: kept(4) => 4

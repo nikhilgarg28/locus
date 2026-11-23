@@ -1,0 +1,13 @@
+//~ question: Does a call of a trait's lemma give generic code what the lemma returns?
+//~ spec: traits.bounds, traits.evidence
+//~ rfc: 0006
+
+trait Monoid: Logical {
+    logic fn unit() -> Self;
+    logic fn op(a: Self, b: Self) -> Self;
+    logic fn unit_left(a: Self) -> @(Self::op(Self::unit(), a) === a);
+}
+
+logic fn unit_twice<M: Monoid>() -> @(M::op(M::unit(), M::unit()) === M::unit()) {
+    M::unit_left(M::unit())
+}

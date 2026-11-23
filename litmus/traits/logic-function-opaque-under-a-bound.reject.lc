@@ -1,0 +1,13 @@
+//~ question: Does a hole prove a fact about a trait's logic functions under a bound, where only a lemma of the trait gives it?
+//~ spec: traits.bounds
+//~ rfc: 0006
+
+trait Monoid: Logical {
+    logic fn unit() -> Self;
+    logic fn op(a: Self, b: Self) -> Self;
+    logic fn unit_left(a: Self) -> @(Self::op(Self::unit(), a) === a);
+}
+
+logic fn unit_twice<M: Monoid>() -> @(M::op(M::unit(), M::unit()) === M::unit()) {
+    _ //~ error: cannot prove `M::op(M::unit(), M::unit()) === M::unit()`: under the bound `M: Monoid` neither `op` nor `unit` unfolds, and a hole calls no lemma; call `M::unit_left(M::unit())`
+}

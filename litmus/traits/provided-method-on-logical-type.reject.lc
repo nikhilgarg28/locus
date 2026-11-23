@@ -1,0 +1,16 @@
+//~ question: May a logical type implement a trait whose only method that runs has a default body?
+//~ spec: traits.impls.logical-types
+//~ rfc: 0006
+
+trait Greets {
+    fn hello(&self) -> u32 {
+        7
+    }
+}
+
+#[derive(Logical)]
+struct Half {
+    twice: Int,
+}
+
+impl Greets for Half {} //~ error: `Greets` has a method that runs, `hello`, and `Half` is a logical type: the method's default body would run on a ghost value

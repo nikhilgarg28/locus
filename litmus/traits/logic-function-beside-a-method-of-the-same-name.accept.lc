@@ -1,0 +1,24 @@
+//~ question: Does a method call in runtime code still mean the standard method, on a type whose trait declares a logic function of the same name?
+//~ spec: traits.names, traits.operators
+//~ rfc: 0006
+
+trait SameSpec: Model {
+    logic fn eq(a: Snap<Self>, b: Snap<Self>) -> Prop;
+}
+
+#[derive(PartialEq)]
+struct Version {
+    major: u32,
+}
+
+impl SameSpec for Version {
+    logic fn eq(a: Snap<Version>, b: Snap<Version>) -> Prop { a.major == b.major }
+}
+
+// Runtime code: `PartialEq::eq`, as in Rust. The logic function `eq` is no candidate.
+fn same(a: &Version, b: &Version) -> bool {
+    a.eq(b)
+}
+
+//~ run: same(&Version { major: 2 }, &Version { major: 2 }) => true
+//~ run: same(&Version { major: 2 }, &Version { major: 3 }) => false

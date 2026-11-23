@@ -1,0 +1,26 @@
+//~ question: May a type with a proof field derive `CloneEq`, so that the copy carries the invariant?
+//~ spec: traits.laws.derive, traits.laws.provided
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+#[derive(CloneEq)]
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn copied_hi() -> u32 {
+    let i = Interval { lo: 1, hi: 4, ordered: _ };
+    let (copy, same) = i.clone_eq();
+    copy.hi
+}
+
+// The derive also gives `Clone`, which runs the same code.
+fn cloned_lo() -> u32 {
+    Interval { lo: 1, hi: 4, ordered: _ }.clone().lo
+}
+
+//~ run: copied_hi() => 4
+//~ run: cloned_lo() => 1

@@ -1,0 +1,12 @@
+//~ question: May a logic function of a program take a parameter that converts to `Prop`, and be given a `Bool` or a proposition?
+//~ spec: traits.conversions, logic.bool.as-proposition
+//~ rfc: 0006
+
+logic fn both<P: IntoLogic<Prop>, Q: IntoLogic<Prop>>(p: P, q: Q) -> Prop {
+    p.into() && q.into()
+}
+
+// `ready` is captured as a `Bool`, and `n < 10` is a `Prop`: each converts.
+fn checked(ready: bool, n: u32, ok: @(ready && n < 10)) -> @both(ready, n < 10) {
+    ok
+}

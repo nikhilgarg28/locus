@@ -1,0 +1,13 @@
+//~ question: Is `+` defined in logical code on a logical type that does not implement `AddLogic`?
+//~ spec: traits.operators
+//~ rfc: 0006
+
+#[derive(Logical)]
+struct Ratio {
+    num: Int,
+    den: Int,
+}
+
+logic fn sum(a: Ratio, b: Ratio) -> Ratio {
+    a + b //~ error: `+` is not defined on a `Ratio` in logical code: implement `AddLogic` for it
+}

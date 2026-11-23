@@ -1,0 +1,29 @@
+//~ question: May a trait with no logical content still be used as a trait object, in a program that has Locus traits too?
+//~ spec: traits.dyn
+//~ rfc: 0006
+
+trait Named {
+    fn id(&self) -> u32;
+}
+
+trait Capped {
+    logic fn cap() -> Nat;
+}
+
+struct Small;
+
+impl Named for Small {
+    fn id(&self) -> u32 {
+        3
+    }
+}
+
+impl Capped for Small {
+    logic fn cap() -> Nat { 10 }
+}
+
+fn pick(n: &dyn Named) -> u32 {
+    n.id()
+}
+
+//~ run: pick(&Small) => 3

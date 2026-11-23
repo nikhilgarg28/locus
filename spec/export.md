@@ -18,3 +18,6 @@ When a crate is exported, every invocation of one of Locus's macros, and every c
 
 r[export.function-values]
 When a crate is exported, a function with ghost parameters or a ghost result may be used as a value wherever it may be when the crate is built, which is within verified code ([`logic.boundary.calls`](logical-layer.md#the-boundary-with-unverified-code)).
+
+r[export.traits]
+When a crate is exported, no item or implementation that other crates can reach has a bound on a Locus trait ([`traits.members`](traits.md#what-a-trait-holds)), in a parameter list or in a `where` clause, on a type parameter or on an associated type. An implementation that a law implementation generates ([`traits.laws.provided`](traits.md#law-traits)) is held to this too. Code that uses an exported crate is built without Locus, so nothing checks an implementation of a Locus trait that it writes, and no evidence could be given for it. Inside the crate, and on what is declared `pub(locus)`, such a bound stands as it does when the crate is built.

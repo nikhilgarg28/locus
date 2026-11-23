@@ -1,0 +1,20 @@
+//~ question: May a program implement `CloneEq` for a type that already has a `Clone` of the standard library?
+//~ spec: traits.laws.adapters, traits.laws.provided
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+struct Local(u32);
+
+// A `Clone` that does not copy, which Rust allows.
+impl Clone for Local {
+    fn clone(&self) -> Local {
+        Local(0)
+    }
+}
+
+impl CloneEq for Box<Local> { //~ error: this implementation generates `Clone for Box<Local>`, which conflicts with the standard library's `Clone for Box<T>`: only Locus's library stands a law beside an implementation that exists
+    fn clone_eq(&self) -> (copy: Box<Local>, @(snap(copy) === snap(self))) {
+        (Box::new(Local(self.0)), _)
+    }
+}

@@ -1,0 +1,17 @@
+//~ question: Does the standard `clone` give the fact that `clone_eq` states, on a type that implements `CloneEq`?
+//~ spec: traits.operators, traits.laws.provided
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+struct Meters(u32);
+
+impl CloneEq for Meters {
+    fn clone_eq(&self) -> (copy: Meters, @(snap(copy) === snap(self))) {
+        (Meters(self.0), _)
+    }
+}
+
+fn duplicate(m: &Meters) -> (copy: Meters, @(snap(copy) === snap(m))) {
+    (m.clone(), _) //~ error: cannot prove `snap(copy) === snap(m)`: `clone` is the standard method, which states no contract; call `m.clone_eq()`
+}

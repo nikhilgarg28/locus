@@ -1,0 +1,21 @@
+//~ question: May a logic function of a trait be named through the trait, through the type, and by a qualified path?
+//~ spec: traits.names
+//~ rfc: 0006
+
+trait Wide: Logical {
+    logic fn size(x: Self) -> Nat;
+}
+
+#[derive(Logical)]
+struct Grid {
+    w: Nat,
+    d: Nat,
+}
+
+impl Wide for Grid {
+    logic fn size(g: Grid) -> Nat { g.w }
+}
+
+logic fn three_names(g: Grid) -> @(Wide::size(g) === Grid::size(g) && Grid::size(g) === <Grid as Wide>::size(g)) {
+    _
+}

@@ -1,0 +1,24 @@
+//~ question: May a program declare a conversion to a logical type of its own, and use it through `into`?
+//~ spec: traits.conversions, traits.impls.logical-types
+//~ rfc: 0006
+
+#[derive(Logical)]
+struct Ratio {
+    num: Int,
+    den: Int,
+}
+
+impl FromLogic<Nat> for Ratio {
+    logic fn from(n: Nat) -> Ratio {
+        Ratio { num: n as Int, den: 1 }
+    }
+}
+
+// `Nat: IntoLogic<Ratio>` is the library's implementation, over the one above.
+logic fn whole(n: Nat) -> Ratio {
+    n.into()
+}
+
+logic fn three() -> @(whole(3).num === 3) {
+    _
+}

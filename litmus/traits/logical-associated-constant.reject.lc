@@ -1,0 +1,8 @@
+//~ question: May a trait hold an associated constant of a logical type?
+//~ spec: traits.members
+//~ rfc: 0006
+
+trait Monoid: Logical {
+    const UNIT: Self; //~ error: a trait holds no associated constant of a logical type, for now: write a logic function, `logic fn unit() -> Self`
+    logic fn op(a: Self, b: Self) -> Self;
+}

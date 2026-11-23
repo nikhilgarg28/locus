@@ -1,0 +1,21 @@
+//~ question: May two implementations of one trait for one runtime type differ only in a logical type argument?
+//~ spec: traits.impls.headers, traits.rust
+//~ rfc: 0006
+
+struct Meters(u32);
+
+trait Scale<By: Logical> {
+    logic fn scaled(by: By) -> Int;
+}
+
+impl Scale<Int> for Meters {
+    logic fn scaled(by: Int) -> Int { by * 100 }
+}
+
+impl Scale<Nat> for Meters {
+    logic fn scaled(by: Nat) -> Int { by as Int }
+}
+
+logic fn both() -> @(<Meters as Scale<Int>>::scaled(2) === 200 && <Meters as Scale<Nat>>::scaled(2) === 2) {
+    _
+}

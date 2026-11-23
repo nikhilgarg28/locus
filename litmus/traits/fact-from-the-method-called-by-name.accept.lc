@@ -1,0 +1,34 @@
+//~ question: Does the method of the trait that states the contract, called by name, give the fact that `<=` does not?
+//~ spec: traits.operators, traits.evidence
+//~ rfc: 0006
+
+trait OrderSpec: Model {
+    logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
+    logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
+}
+
+trait CheckedOrder: OrderSpec {
+    fn le_checked(&self, other: &Self) -> (r: bool, @(iff(r, Self::le(snap(self), snap(other)))));
+}
+
+#[derive(PartialEq, PartialOrd)]
+struct Height {
+    cm: u32,
+}
+
+impl OrderSpec for Height {
+    logic fn le(a: Snap<Height>, b: Snap<Height>) -> Prop { a.cm <= b.cm }
+    logic fn le_total(a: Snap<Height>, b: Snap<Height>) -> @(Height::le(a, b) || Height::le(b, a)) { _ }
+}
+
+impl CheckedOrder for Height {
+    fn le_checked(&self, other: &Height) -> (r: bool, @(iff(r, Height::le(snap(self), snap(other))))) {
+        (self.cm <= other.cm, _)
+    }
+}
+
+fn lower(a: &Height, b: &Height) -> (first: bool, @(iff(first, Height::le(snap(a), snap(b))))) {
+    a.le_checked(b)
+}
+
+//~ run: lower(&Height { cm: 150 }, &Height { cm: 180 }).0 => true

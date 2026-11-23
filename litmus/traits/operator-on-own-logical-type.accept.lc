@@ -1,0 +1,24 @@
+//~ question: Is `+` on a logical type of a program the logic function of the library's `AddLogic`, in generic logical code too?
+//~ spec: traits.operators
+//~ rfc: 0006
+
+#[derive(Logical)]
+struct Ratio {
+    num: Int,
+    den: Int,
+}
+
+impl AddLogic for Ratio {
+    type Output = Ratio;
+    logic fn add(a: Ratio, b: Ratio) -> Ratio {
+        Ratio { num: a.num * b.den + b.num * a.den, den: a.den * b.den }
+    }
+}
+
+logic fn twice<T: AddLogic<Output = T>>(x: T) -> T {
+    x + x
+}
+
+logic fn half_and_half() -> @(twice(Ratio { num: 1, den: 2 }).den === 4) {
+    _
+}

@@ -1,0 +1,11 @@
+//~ question: May a trait whose method returns a proof be used as a trait object?
+//~ spec: traits.dyn
+//~ rfc: 0006
+
+trait OneByte {
+    fn byte(&self) -> (b: u8, @(b < 128));
+}
+
+fn first(p: &dyn OneByte) -> u8 { //~ error: `OneByte` is a Locus trait, and is not used as a trait object: write `fn first<P: OneByte>(p: &P)`
+    p.byte().0
+}

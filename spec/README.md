@@ -61,3 +61,4 @@ Each chapter is a file in this directory, listed here in reading order.
 8. [Runtime code](runtime.md)
 9. [Core terms](core.md)
 10. [Locus's collections](collections.md)
+11. [Traits](traits.md)

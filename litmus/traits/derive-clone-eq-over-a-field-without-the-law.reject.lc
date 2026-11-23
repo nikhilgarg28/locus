@@ -1,0 +1,19 @@
+//~ question: May a type derive `CloneEq` when a field has a `Clone` and no `CloneEq`?
+//~ spec: traits.laws.derive
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+struct Odd(u32);
+
+// A `Clone` that does not copy, which Rust allows.
+impl Clone for Odd {
+    fn clone(&self) -> Odd {
+        Odd(0)
+    }
+}
+
+#[derive(CloneEq)] //~ error: the field `inner` has the type `Odd`, which does not implement `CloneEq`: its `clone` states no law
+struct Wrapper {
+    inner: Odd,
+}

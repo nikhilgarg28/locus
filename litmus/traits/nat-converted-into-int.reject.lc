@@ -1,0 +1,7 @@
+//~ question: Does a `Nat` convert to an `Int` through `into`?
+//~ spec: traits.conversions, logic.arith.nat-to-int
+//~ rfc: 0006
+
+logic fn widen(n: Nat) -> Int {
+    n.into() //~ error: `Nat` does not implement `IntoLogic<Int>`: the library has no conversion from `Nat` to `Int`; write `n as Int`
+}
