@@ -310,3 +310,14 @@ The third round of [the skeleton spike](../spikes/skeleton-typing-3/README.md) t
 - Contracts for capacity, for what a method leaves untouched, for allocation failure, and for panics. The reviewer's point: equal snapshots keep what snapshots represent, which under a transparent `Box` is not the allocation.
 
 **What the owner did not see** is item 33 of what is still for the owner in RFC 0002. The most pressing: that the standard library's `Vec` can no longer be read in logical code, that `len` and `pop` return their proofs so that a call for the value alone is written `v.len().0`, and that after `v[i] = x` nothing is known of a vector, its length included.
+
+### 2026-11-23, what RFC 0006 asks of Locus's library
+
+[RFC 0006](../design/rfcs/0006-traits.md), a draft, names traits of Locus's library, and leaves their contents to the library's RFC:
+
+- **Conversions between logical types:** `FromLogic<T>` and `IntoLogic<U>`, with the identity and the blanket implementation, and one implementation of `FromLogic<Bool>` for `Prop` (`traits.conversions`). There is none from `Nat` for `Int`.
+- **Logical operator traits:** `AddLogic`, `SubLogic`, `MulLogic`, `DivLogic`, `RemLogic`, `NegLogic`, and `OrdLogic`, which `Int` and `Nat` implement with the built-in operators (`traits.operators`). Only the names and which operator each means are fixed.
+- **`CloneEq`,** the one law trait that is a rule: its method, that every logical type has it built in, that a program's implementation generates `Clone`, the derive, and that the library's implementations for the language's and the standard library's types are adapters (`traits.laws.provided`, `traits.laws.adapters`, `traits.laws.derive`). Which types have an adapter is the library's. The examples assume `u32` and `Option<T>`, and import the trait as `locus::std::clone::CloneEq`.
+- **The other law traits are a sketch,** with placeholder names: `EqLaw`, `OrdLaw`, `PartialOrdLaw`, `HashLaw`, `BorrowLaw`, `IterLaw`, `IndexLaw`, `DerefLaw`, `AddLaw`, `DefaultLaw`, `FromLaw`. `IndexLaw` is what would give `v[i]` on a `Vec` of Locus's library a checked method to rest on, though the operator itself still states nothing (`collections.vec.indexing`).
+
+The trust model gains `trusted.library-laws`: that each adapter agrees with the standard implementation it stands beside.

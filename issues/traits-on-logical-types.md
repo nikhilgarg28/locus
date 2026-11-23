@@ -23,7 +23,7 @@ Generic specifications such as "sorted by `T: Ord`", the operators that the libr
 
 ## Options
 
-To be laid out in an RFC.
+Laid out in [RFC 0006](../design/rfcs/0006-traits.md), a draft, with the alternatives it turns down.
 
 ## Log
 
@@ -195,3 +195,29 @@ The entry of 2026-11-22 above recorded a question about Locus's library as one t
 - **An operator cannot carry a contract.** `Index` and `IndexMut` fix the signatures of their methods, so on a `Vec` of Locus's library `v[i]` and `v[i] = x` run and state nothing (`collections.vec.indexing`), and `get`, `set`, and `get_mut` are the forms that do. The third round of the skeleton spike saw rustc's E0053 for an `index_mut` that returns a proof. A contract on a trait's method is what would lift this.
 - **The methods with contracts are in an `impl` with a `Model` bound,** `impl<T: Model> Vec<T>`, which decision 106 allows. At an element type with no model a call of one is rejected, and is never the standard library's method of the same name (`collections.element-types`).
 - **The observer is called as a method on a snapshot,** `snap(v).elements()`. The library writes it on the snapshot's own type. Whether a program's own type can give its snapshot a method is `models/method-on-a-snapshot.open.lc`, which is still open.
+
+### 2026-11-23, RFC 0006 is in the repository, as a draft
+
+The design that this issue asks for is [RFC 0006](../design/rfcs/0006-traits.md), with a new chapter of the specification, [Traits](../spec/traits.md), and its examples in `litmus/traits/`. It is a draft: it has had three reviews as four drafts outside the repository, and none of the text as it now stands. It keeps the owner's words for each decision it rests on, eleven from the conversations on traits and two that the entries above record: that a fact is a proof in a result, and that the conversion to `Prop` is one bound.
+
+What it answers of this issue's question:
+
+- **Logical traits.** There is one set of traits, Rust's, for runtime types and logical types alike, and rustc resolves them. A trait may hold logic functions, logical associated types, and logical values in its methods' signatures.
+- **Operators.** In runtime code an operator is always Rust's, and tells Locus nothing on a type of the program's own. In logical code it is built in on `Int`, `Nat`, and `Bool`, and otherwise a logic function of a trait of Locus's library, such as `AddLogic`.
+- **Runtime traits and models.** A law trait stands beside the standard one under its own name, as `CloneEq` beside `Clone`, and the fact comes from the law's method, called by name. The library's law traits are sketched and are not rules.
+- **Traits with contracts.** A trait method's signature may hold proofs, an implementation's signature is exactly the trait's, and a bound is evidence in the core, so generic code is checked once.
+- **The conversion to `Prop`.** `logic.bool.as-proposition` is restated: each position takes a value of any type that converts to `Prop`, which is a type that implements `IntoLogic<Prop>`, and the library has one implementation, from `Bool`. A logic function of a program may ask it of its own parameters.
+- **A `Model` bound in a trait.** RFC 0002 left "never on a trait" to this design. RFC 0006 lifts it: `Model` may be a supertrait, and a bound on an associated type or a parameter of a trait or of its method. `models/model-bound-on-trait` was rejected and is accepted.
+
+Five rules of RFC 0002 change for it, and stay in RFC 0002's table: `logic.ghost.no-trait-impls`, `logic.ghost.marker-traits`, `logic.bool.as-proposition`, `models.capture.bound`, and `models.bounds-on-functions`. This issue's two rules are among them.
+
+What it does not answer: generic `#[derive(Model)]`, which RFC 0002 still restricts; `?` on a value that holds proofs, which stays Rust's and states nothing; `==` on a logical type of a program's own; and contracts on closures.
+
+Still for the owner, as RFC 0006 lists it. Two points are questions that this issue has recorded as undecided:
+
+- **Whether a program may implement the conversion to `Prop` for a logical type of its own.** RFC 0006 writes the reading that accepts less: only the library's one implementation, from `Bool`, and a program's `impl FromLogic<Flag> for Prop` is rejected (`traits/conversion-to-prop-for-own-type.reject.lc`).
+- **The names `FromLogic` and `IntoLogic`,** which are the draft's.
+
+One point is a disagreement between sources, and has an issue of its own: [logical-types-under-a-model-bound](logical-types-under-a-model-bound.md).
+
+Two sentences of [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) speak of `logic.ghost.no-trait-impls` as it was: that lowering rejects a logical type that a header writes, and that no accepted program can show the two programs resolving every call alike. RFC 0006 does not change RFC 0001. With it such programs exist: `traits/implementations-differ-in-a-logical-argument.accept.lc` is one.

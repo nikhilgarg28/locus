@@ -573,10 +573,10 @@ Written from memory, and not checked against sources for this draft.
 
 ### Still for the owner
 
-Written as proposed, and not things the owner said. Most pressing first.
+Written as proposed, and not things the owner said. Most pressing first. [traits-on-logical-types](../../issues/traits-on-logical-types.md) stays open for them.
 
 1. **A `Model` bound may be written in a trait:** as a supertrait, on an associated type, and on a type parameter of a trait or of its method. RFC 0002 said "never on a trait" and left it to this RFC. One decided example flips to accepted for it.
-2. **A logical type meets a `Model` bound, as its own snapshot and model.** RFC 0002's text and examples rely on it and no rule of RFC 0002 says it: `models.snapshots.seen` lists the types that have a snapshot, and no logical type is among them. `logic.fn.parameters` says that a type parameter bounded by `Model` "stands for a runtime type"; with this rule it may stand for a logical type too. That text is not changed here.
+2. **A logical type meets a `Model` bound, as its own snapshot and model.** RFC 0002's text and examples rely on it and no rule of RFC 0002 says it: `models.snapshots.seen` lists the types that have a snapshot, and no logical type is among them. `logic.fn.parameters` says that a type parameter bounded by `Model` "stands for a runtime type"; with this rule it may stand for a logical type too. That text is not changed here. The disagreement is a decision issue: [logical-types-under-a-model-bound](../../issues/logical-types-under-a-model-bound.md).
 3. **One specification serves both kinds of type by being written over `Snap<Self>`.** The fourth draft wrote `Self`, which RFC 0002's decision 105 no longer allows at a runtime type. The alternative that accepts less, a specification on the model's type alone, is among the alternatives.
 4. **A program implements no conversion to `Prop`.** Only `Bool` converts, by the library's one implementation. This is the reading that accepts less.
 5. **A program writes no implementation, for a logical type, of a trait with a method that runs,** and the built-in implementations are the six lines of the table, `CloneEq` among them.

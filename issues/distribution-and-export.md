@@ -103,3 +103,13 @@ An exported program cannot depend on Locus's library, so its ghost values are th
 ### 2026-11-23, Locus's own collections hold logical data
 
 What an exported crate does with Locus's own types is still open here. RFC 0002's decision 113 adds one fact to it: a collection of Locus's library now holds logical data, the snapshots of its elements in a logical field, and at an element type of plain data it is a sealed type. So an exported signature that names a `Vec<u32>` of Locus's names a sealed type of another crate, which decision 92 allows where it exposes no logical data. Rewriting such a type to the standard library's, the other way this issue lists, would now also drop the logical field. The contracts of its methods, each of which returns a proof, are not part of what an exported crate shows either way.
+
+### 2026-11-23, a bound on a Locus trait in an exported crate
+
+[RFC 0006](../design/rfcs/0006-traits.md), a draft, adds one rule to the chapter on exporting. `export.traits`: no item or implementation that other crates can reach has a bound on a Locus trait, an implementation that a law implementation generates included. Code that uses an exported crate is built without Locus, so nothing checks an implementation of a Locus trait that it writes.
+
+Three things are left to this issue:
+
+- **Evidence that an exported program cannot forge.** Lifting the rule needs it. It makes the question whether an exported crate depends on Locus's library or carries its own copies a question of soundness.
+- **A `Model` bound in a trait.** RFC 0006 allows it when a crate is built. In an exported crate the bound still appears only on a function (`models.bounds-on-functions`), so a crate with such a trait builds and does not export.
+- **Two implementations that differ only in a logical type argument,** such as `impl Tag for Vec<Int>` and `impl Tag for Vec<Nat>` for a trait with a method that runs. They are two Rust types in both programs of a build. What an exported program does with them is not written.

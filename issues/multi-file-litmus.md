@@ -49,3 +49,13 @@ Two clauses of RFC 0002's decisions on models need two files to show. `models.de
 ### 2026-11-23, an implementation of `Model` in plain Rust
 
 One more rule has a part that one file cannot show. `compat.names.model-impls` says that only Locus writes an implementation of `Model`, and that one written in plain Rust is refused: in a `.rs` file, outside a `locus!` block, or in a crate that Locus does not lower, verified or not ([RFC 0001](../design/rfcs/0001-compiler-pipeline.md), decision 51). Its two examples show what a `.lc` file can: an `unsafe impl Model` written in Locus code, which is rejected, and a crate that forbids `unsafe` code and declares a model, which is accepted. The refusal in another file or crate, which is the driver's, has no example.
+
+### 2026-11-23, three things in RFC 0006 that one file cannot show
+
+[RFC 0006](../design/rfcs/0006-traits.md), a draft, states three things without a rule, in [the chapter on traits](../spec/traits.md#what-has-no-rule), because each needs a second crate or a second file:
+
+- that a Locus trait is implemented only in crates that Locus verifies, and that an implementation of one in another crate of a build is an error;
+- that the orphan rule applies to a logical type as to any type: a crate implements its own trait for a logical type of Locus's library, and the library's trait for its own logical type, and not the library's trait for the library's type. One file shows the first two (`traits/two-logical-types-one-trait.accept.lc`, `traits/operator-on-own-logical-type.accept.lc`);
+- that a trait of another crate is read as its crate declared it: which members are logic functions, and which methods run. The rule that a logical type implements no trait with a method that runs is judged after rustc for this reason, and its example has the trait in the same file (`traits/provided-method-on-logical-type.reject.lc`).
+
+The fourth draft of the RFC had the first as a rule, `traits.impls.checked`. It becomes one when an example can pin it.

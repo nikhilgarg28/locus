@@ -79,3 +79,9 @@ With traits able to hold methods whose signatures carry proofs, the case that ha
 > Fact is always proof in the result or small/finite list of facts language infers from some constructs (which we have already defined). Don't want to go back on that. And don't want to introduce pure functions either right now.
 
 This issue stays `later`.
+
+### 2026-11-23, RFC 0006 records the decision, and two ideas go to its alternatives
+
+[RFC 0006](../design/rfcs/0006-traits.md) quotes the owner's words of the entry above as its decision 12. Two ideas that its fourth draft had listed as open are not pursued, and are among its alternatives with those words: a condition that binds a law's proof, so that `if h: a < b` would bind what `lt_checked` returns, and a standard method that Locus understands where a law implementation generated it. In runtime code an operator or a standard method on a type that has a law trait states nothing (`traits.operators`), and `traits/runtime-comparison-gives-no-fact.reject.lc` and `traits/standard-clone-gives-no-fact.reject.lc` pin it.
+
+This issue stays `later`.
