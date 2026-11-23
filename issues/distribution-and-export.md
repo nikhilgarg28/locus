@@ -93,3 +93,9 @@ RFC 0002's decision 92 records it. A field that other crates can reach may have 
 ### 2026-11-22, a `Model` bound in an exported crate
 
 RFC 0002's decision 106 lets a `Model` bound be written on an `impl` and on a type's own declaration. The rule had kept it to a function's type parameters for a reason about export: an exported program has no `Model`, and removing the bound from an `impl` could change which implementation a call selects. That reason still holds in export mode, so `models.bounds-on-functions` keeps the old rule there. A crate whose type needs the bound, such as one with a proof field that reads a field of a generic type, builds and does not export. What an exported program does with such a bound is for the RFC on lowering.
+
+### 2026-11-23, export mode's markers
+
+[RFC 0001](../design/rfcs/0001-compiler-pipeline.md)'s decision 49 gives each logical type a Rust type of its own, and has rustc type logical code against the stubs of Locus's library. That leaves a question for export mode, which RFC 0001 lists under what is still for the owner (item 10) and does not settle.
+
+An exported program cannot depend on Locus's library, so its ghost values are the crate's own markers: `Proof`, and one for each logical type that its runtime types hold. Before, the checking program of export mode used those same two private markers, so the two programs had the same types. Now the checking program types logical code against the library's logical types. The two programs then have corresponding types, not the same ones, and RFC 0001's reason for build mode, that the same types give the same resolution in both programs, has to be made again for export mode: by validation, which already compares every typed body, or by another arrangement. No spike looked at export mode.

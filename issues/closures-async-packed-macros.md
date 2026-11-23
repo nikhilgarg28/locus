@@ -50,3 +50,9 @@ Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `car
 ### 2026-10-28, PR #10
 
 After the third review, the owner decided that an assignment that needs a proof, such as one to a field that a proof field reads, is rejected inside a runtime closure or an async block until this issue decides how closures are checked: RFC 0002, decision 42, `contracts.invariants.assignment`, and `contracts/assignment-needing-proof-in-closure.reject.lc`. A `move` closure that captures a whole `&mut Interval` and assigns `r.hi = r.lo` has no logical code in its body, but still has the obligation. When closures are supported, the obligation must be proved for each call's state at entry, not from facts known when the closure was made.
+
+### 2026-11-23, an expansion no longer needs to know which roots are ghost
+
+The point above on how Locus's macros observe places when rustc expands them asked how such an expansion observes precisely: it must not take `&before.a` when `before` is a logical snapshot, and must observe `pair.a` alone when `pair` is a runtime value. [RFC 0001](../design/rfcs/0001-compiler-pipeline.md)'s decision 49 changes the ground under it. A snapshot's type now has its fields, and each piece of logical code has a typing skeleton, a closure that is never called, which is written the same way for a ghost root and a runtime one and borrows only the fields it reads. So RFC 0001 no longer writes the record of ghost bindings that its decision 20 kept for such expansions, and lists that under what is still for the owner (item 9), since the owner has not seen it. The first round of [skeleton-typing](../spikes/skeleton-typing/README.md) typed its corpus's `prove!` inside `vec![..]` with no such record.
+
+Logical code inside a closure or an async block is still rejected (`observe.captures.rejected`): a skeleton there would add its borrows to what the closure or future captures.

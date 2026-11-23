@@ -896,7 +896,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 
 **rust-analyzer's libraries instead of a rustc driver.** These work on stable Rust without `RUSTC_BOOTSTRAP`. But rust-analyzer's type inference is not rustc's, and where they differ, proofs would be about a program other than the one that runs. Its borrow checking is also not rustc's. It remains a candidate for editor support, where speed matters more than authority.
 
-**Charon** exports rustc's MIR in a stable format, and is a candidate source of typed bodies for [runtime-semantics](../../issues/runtime-semantics.md). Run on the checking program, it could also report what the probes ask. It pins its own nightly, and adopting it would make its format part of the trusted path.
+**Charon** exports rustc's MIR in a stable format, and is a candidate source of typed bodies for [runtime-semantics](../../issues/runtime-semantics.md). Run on the checking program, it could also report the types that rustc gives the typing skeletons. It pins its own nightly, and adopting it would make its format part of the trusted path.
 
 **One marker for every logical value, and two families of traits.** This is the second of the two lowerings that were left standing when the owner chose (decision 49). Regular traits are for runtime types. Logical traits are for logical types, and rustc sees one only as an empty trait that the marker implements. Locus types logical code itself, and asks rustc through the driver, on stub types that appear nowhere in the program, which implementation of a logical trait applies.
 - *For:* this RFC would stand nearly as it was. Logical code would keep a typing of its own, with RFC 0002's implicit conversions, and a build would gain nothing. In [marker-lowering](../../spikes/marker-lowering/README.md), the driver answered 55 of 55 such questions as expected.
@@ -1045,6 +1045,7 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 10. **Smaller choices of the writing:**
     - the names beyond those the owner's words give, which are the spikes': `prop`, each stub's name, `Stack_Snap` for a snapshot type, and how a logical enum's variants print;
     - what the marker of a logical value prints under `Debug` is not decided. Only `Proof` is pinned by an example;
+    - the owner had named `LogicalData` so that rustc's errors say that a value is logical (RFC 0002, decision 10). With a type for each logical type an error names the type itself, such as `Nat`, and no longer says that it is logical;
     - in build mode, a read in a skeleton counts as a use for rustc's lints;
     - what a closure that is never called costs in an unoptimized build is not measured, and commitment 2 of the vision says that proofs cost nothing at run time;
     - export mode's markers are the exported program's own `Proof` and one marker for each logical type it holds. How its two programs are kept to the same types, when the checking program types logical code against the library's logical types, is not worked out, and waits for export mode ([distribution-and-export](../../issues/distribution-and-export.md));

@@ -153,3 +153,15 @@ Told that the draft on traits has such a pair, `FromLogic` and `IntoLogic`, and 
 So the positions at which a `Bool` is used as a proposition, which `logic.bool.as-proposition` lists, are to be restated as "takes anything that converts to `Prop`": a bound, `IntoLogic<Prop>` in the draft, with the library's one implementation, from `Bool`. A logic function may then ask it of its own parameters, as the library's `iff` does. None of this is in the specification yet. Until it is, the positions stay a list, with an argument of `iff` among them, and no program declares such a parameter.
 
 Not decided: whether a program may implement the conversion for a logical type of its own, and the names `FromLogic` and `IntoLogic`. Both are item 32 of what is still for the owner in RFC 0002.
+
+### 2026-11-23, the lowering and the names are in RFC 0001
+
+What the entries of 2026-11-22 left unwritten, the lowering itself and the names that lowering writes, is now [RFC 0001](../design/rfcs/0001-compiler-pipeline.md)'s decisions 49 to 52, with the owner's words quoted there.
+
+- **Each logical type is a zero-sized Rust type of its own,** the same in both programs, and every proof is one marker, `Proof`. So rustc can tell `Int` from `Nat`, which is what a trait on a logical type needs.
+- **rustc types logical code,** through a typing skeleton that lowering writes for each piece of it, so it resolves traits inside logical code too.
+- **A trait's logic functions have their stubs in the lowered trait,** under reserved names, which a program may not write (`compat.names.reserved`). So plain Rust code cannot implement a trait that has a logic function.
+- **`Model` is an `unsafe` trait,** which only lowering and Locus's library implement (`compat.names.model-impls`).
+- **Nothing changes in how facts enter the logic.** A call in runtime code is still not read as an expression.
+
+RFC 0001 writes nothing else about traits. `logic.ghost.no-trait-impls` stands as it was, so no `impl` names a logical type yet, and which traits a logical type may implement is still this issue's design. One thing in RFC 0001 waits for it: that the two programs resolve every call alike has no rule, because under the present rules no accepted program can show it. The cases that broke the rejected encodings all write an `impl` at a logical type argument ([marker-lowering](../spikes/marker-lowering/README.md), `r09` to `r14`), and become examples when such an `impl` is allowed.

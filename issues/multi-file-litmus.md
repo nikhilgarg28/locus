@@ -45,3 +45,7 @@ RFC 0002's decision 95 has the driver record an unverified crate as one that con
 ### 2026-11-22, where a model is declared, and a type declared in plain Rust
 
 Two clauses of RFC 0002's decisions on models need two files to show. `models.declared-by-owner` says that a model is declared in the `locus!` block or the `.lc` file that declares its type, so a model in another file of the type's own crate is rejected; an example is one `.lc` file, and shows only a model for a type of another crate. And `models.snapshots.seen` gives a struct declared in a plain `.rs` file no snapshot.
+
+### 2026-11-23, an implementation of `Model` in plain Rust
+
+One more rule has a part that one file cannot show. `compat.names.model-impls` says that only Locus writes an implementation of `Model`, and that one written in plain Rust is refused: in a `.rs` file, outside a `locus!` block, or in a crate that Locus does not lower, verified or not ([RFC 0001](../design/rfcs/0001-compiler-pipeline.md), decision 51). Its two examples show what a `.lc` file can: an `unsafe impl Model` written in Locus code, which is rejected, and a crate that forbids `unsafe` code and declares a model, which is accepted. The refusal in another file or crate, which is the driver's, has no example.
