@@ -165,3 +165,25 @@ What the entries of 2026-11-22 left unwritten, the lowering itself and the names
 - **Nothing changes in how facts enter the logic.** A call in runtime code is still not read as an expression.
 
 RFC 0001 writes nothing else about traits. `logic.ghost.no-trait-impls` stands as it was, so no `impl` names a logical type yet, and which traits a logical type may implement is still this issue's design. One thing in RFC 0001 waits for it: that the two programs resolve every call alike has no rule, because under the present rules no accepted program can show it. The cases that broke the rejected encodings all write an `impl` at a logical type argument ([marker-lowering](../spikes/marker-lowering/README.md), `r09` to `r14`), and become examples when such an `impl` is allowed.
+
+### 2026-11-23, three answers from the owner
+
+Three things that RFC 0002 had listed for the owner were put to the owner again.
+
+That every value captured from a runtime place is valid for its type is a fact the language infers, where the owner had said the language infers only the small list of facts it already infers. Told that it generalizes the fact about a machine integer's range to lengths, elements, payloads, and fields:
+
+> good idea, let's do it.
+
+RFC 0002 records it as decision 112.
+
+An `Int` had no way to become a `Nat`, so the last element of a sequence, `xs[xs.len() - 1]`, could not be written:
+
+> Maybe it should be a function `as_nat` or just `nat` on Int which requires a proof?
+
+RFC 0002 records it as decision 111, with `as_nat`, which stands beside `n as Int`.
+
+The vision's fifth commitment says the language gives every runtime value a snapshot, and RFC 0002's decision 107 gives one only to a type that Locus can see ([unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md)). Shown the words that issue proposes for the vision:
+
+> sure but I'd like to understand what kind of types it won't be able to see?
+
+The owner was told which: values that are code and not data (a closure, a function item, a function pointer, a trait object, a type that `impl Trait` hides); a type of a crate that Locus does not lower; and a type of the standard library that Locus's library has not yet declared. The vision is not edited until the owner says so.

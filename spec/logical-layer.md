@@ -25,6 +25,9 @@ Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives
 r[logic.arith.nat-to-int]
 A `Nat` is used as an `Int` only where the program writes it as one, `n as Int`. An arithmetic operator, a comparison, `===`, and `!==` take two `Int`s or two `Nat`s, never one of each. And a `Nat` is not accepted where an `Int` is expected: as an argument for a parameter of type `Int`, or as the value of a field, a local, or a result of that type.
 
+r[logic.arith.int-to-nat]
+`i.as_nat(p)`, of Locus's library, is a logic function on `Int`: the `Nat` that equals `i`, for a proof `p` of `i >= 0`, so that `i.as_nat(p) as Int === i`. An `Int` becomes a `Nat` in no other way: `as` does not turn an `Int` into a `Nat`, though `4 as Nat` names the type of a literal ([`logic.arith.literals`](#logical-types)).
+
 r[logic.arith.literals]
 An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expected, as it is beside a `Nat` in an operator, as an argument for a parameter of type `Nat`, and as the index of a sequence ([`core.sequences`](core.md)). A literal of which nothing is expected is an `Int`, whatever a later use of it wants ([`logic.ghost.types-forward`](#ghost-values)). Where a literal is the argument for a parameter whose type is a type parameter of the function called, nothing gives it a type, and the program writes one: `4 as Nat` or `4 as Int`.
 

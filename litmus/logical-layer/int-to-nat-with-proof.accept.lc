@@ -1,0 +1,8 @@
+//~ question: May an `Int` that is known not to be negative index a sequence, once `as_nat` has turned it into a `Nat`?
+//~ spec: logic.arith.int-to-nat, core.sequences
+//~ rfc: 0002
+
+// `xs.len() - 1` is an `Int`. The hole proves `xs.len() - 1 >= 0` from `nonempty`, by linear arithmetic.
+logic fn last(xs: Seq<Nat>, nonempty: @(xs.len() > 0)) -> Nat {
+    xs[(xs.len() - 1).as_nat(_)]
+}

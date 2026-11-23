@@ -1,0 +1,7 @@
+//~ question: May `as_nat` turn an `Int` into a `Nat` when nothing shows that the `Int` is not negative?
+//~ spec: logic.arith.int-to-nat
+//~ rfc: 0002
+
+logic fn previous(xs: Seq<Nat>, i: Nat) -> Nat {
+    xs[(i - 1).as_nat(_)] //~ error: cannot prove `i - 1 >= 0`: `i` may be zero, and `as_nat` needs a proof that the `Int` is not negative
+}
