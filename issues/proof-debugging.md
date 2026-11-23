@@ -16,7 +16,7 @@ Writing any proof that `_` does not find at once. Lean's users work in a view th
 
 ## What can be shown, and when
 
-- **Nothing logical exists when the program runs.** Proofs and logical values are erased, and a marker carries no proposition and no value. So `{:?}` on a proof prints `Erased` (RFC 0002, decision 76), and there is nothing more to print. A build that kept logical values so that they could be printed would be another program, and the vision's commitment 2 says that erasure changes nothing about what a program does.
+- **Nothing logical exists when the program runs.** Proofs and logical values are erased, and a marker carries no proposition and no value. So `{:?}` on a proof prints `Proof`, its marker's name (RFC 0002, decision 76; RFC 0001, decision 50), and there is nothing more to print. A build that kept logical values so that they could be printed would be another program, and the vision's commitment 2 says that erasure changes nothing about what a program does.
 - **Everything logical exists when the program is checked.** So seeing it is a matter of diagnostics, not of output.
 
 ## Options

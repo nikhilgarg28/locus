@@ -24,7 +24,7 @@ What logical types and models Locus has, and what logical code may read from run
 - **Equality.** On runtime values, `===` compares models, and never implies equal fields. This fixes a contradiction found in review, where field-wise equality of values without a model passed through a field whose model forgets something.
 - **Fields are read as places.** Logical code reads a value's visible fields this way whatever its model is. It never reads inside an `UnsafeCell` or through a raw pointer, so no model reads data that changes while the value is shared.
 - **Method calls in logical code.** Method calls, indexing and dereferences in logical code work on models, never on runtime methods or overloaded `Deref` and `Index`.
-- **Logical and proof fields** stay in types, as zero-sized markers (`ErasedData` and `Erased`). Reading one is observed as a shared borrow of that field alone.
+- **Logical and proof fields** stay in types, as zero-sized markers (`Proof` for a proof, and a marker of its own for each logical type). Reading one is observed as a shared borrow of that field alone.
 
 The examples that this issue used to list as open are decided in [#10](https://github.com/nikhilgarg28/locus/pull/10): `litmus/observation/before-move.accept.lc`, `after-mutable-borrow-ends.accept.lc`, and `proof-before-move.accept.lc`. They also depend on the minimum facts that RFC 0002 requires of the runtime semantics ([#6](runtime-semantics.md)).
 

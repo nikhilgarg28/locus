@@ -55,7 +55,7 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 
 **Interactions with erasure, the guard, and validation**
 17. **`cfg!()` in expressions.** Both branches are compiled and type-checked, but the value is fixed per configuration. The runtime semantics must know it, and erasure keeps it.
-18. **`cfg_attr`** on types that carry proofs or logical fields, for example `#[cfg_attr(feature = "serde", derive(Serialize))]`. The derive sees logical fields as markers: `ErasedData` implements only `Clone`, `Copy`, and `Debug`, so serde's derive fails on a logical data field unless told to skip it.
+18. **`cfg_attr`** on types that carry proofs or logical fields, for example `#[cfg_attr(feature = "serde", derive(Serialize))]`. The derive sees logical fields as markers: a logical type's marker implements only `Clone`, `Copy`, and `Debug`, so serde's derive fails on a logical data field unless told to skip it.
 19. **Removing code no checked configuration enables.** This changes what an unchecked configuration would see. The guard fires there anyway, but rustc may also report errors caused by the removed code, which makes the guard's message harder to find. Can the guard's error be made to come first, or alone?
 20. **The guard's key set must come from the source, not the output.** Once erasure removes a branch, the output no longer mentions its `cfg` name.
 21. **Doctests in build mode.** rustdoc compiles doctests outside Cargo's `RUSTC_WRAPPER`, so build mode's rule that every crate depending on a Locus crate is checked does not reach them. Options: run rustdoc's compilations through Locus's driver, or do not run the doctests of Locus crates.
