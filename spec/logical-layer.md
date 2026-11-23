@@ -33,10 +33,10 @@ An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expe
 Values of logical types, proofs included, are *ghost*: they exist only for checking. They may appear in logical code, as parameters, results, locals, and fields of logical type, and inside runtime types as type arguments.
 
 r[logic.ghost.erased]
-Values of logical types have no runtime representation. At run time, a ghost value is a zero-sized marker: `Erased` for a proof, and `LogicalData` for any other logical value. Inside a runtime type and as the type of a field, a logical type is its marker, and a tuple keeps its shape, with a marker for each logical component. Logical code is never evaluated at run time.
+Values of logical types have no runtime representation. At run time, a ghost value is a zero-sized marker: `Proof` for a proof, whatever it proves, and for any other logical value a marker of its logical type's own, so that a `Nat` and an `Int` are two types to rustc. A marker carries no proposition and no value. Inside a runtime type and as the type of a field, a logical type is its marker, and a tuple keeps its shape, with a marker for each logical component. Logical code is never evaluated at run time.
 
 r[logic.ghost.marker-traits]
-`Erased` implements `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, and `Hash`, which are right for proofs because any two proofs of a proposition are equal. `LogicalData` implements only `Clone`, `Copy`, and `Debug`. Neither implements a trait that makes a value from nothing, such as `Default`.
+`Proof`, the marker of every proof, implements `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, and `Hash`, which are right for proofs because any two proofs of a proposition are equal. Under `Debug` it prints as `Proof`. The marker of every other logical type implements only `Clone`, `Copy`, and `Debug`. None implements a trait that makes a value from nothing, such as `Default`.
 
 r[logic.ghost.types-forward]
 Locus never infers a logical type backward from a later use. A local whose type holds logical values gets that type from its annotation, or from what initializes it: a call's result, Locus syntax, or another value whose type is known.

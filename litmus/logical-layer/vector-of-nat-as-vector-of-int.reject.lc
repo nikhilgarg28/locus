@@ -1,0 +1,15 @@
+//~ question: Is a vector of `Nat`s accepted where a vector of `Int`s is wanted, since both hold only markers at run time?
+//~ spec: logic.ghost.erased
+//~ rfc: 0001
+
+use locus::std::vec::Vec;
+
+fn count(values: &Vec<Int>) -> usize {
+    values.len()
+}
+
+fn counted() -> usize {
+    let mut values: Vec<Nat> = Vec::new();
+    values.push(logic! { 3 });
+    count(&values) //~ error: `values` is a `Vec<Nat>`, and `count` takes a `Vec<Int>`: a `Nat` and an `Int` are two types, at run time as in the logic
+}

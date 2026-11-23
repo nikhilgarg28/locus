@@ -1,0 +1,26 @@
+//~ question: May a program write a name that only resembles a prefix that Locus reserves?
+//~ spec: compat.names.reserved, compat.superset.same-meaning
+//~ rfc: 0001
+
+trait Quiz {
+    fn __logic(&self) -> u32;
+    fn logic_answer(&self) -> u32;
+}
+
+impl Quiz for u32 {
+    fn __logic(&self) -> u32 {
+        *self
+    }
+
+    fn logic_answer(&self) -> u32 {
+        *self + 1
+    }
+}
+
+fn answers() -> (u32, u32, u32) {
+    let _locus_seen = 7;
+    let __locus = 9;
+    (_locus_seen.__logic(), _locus_seen.logic_answer(), __locus)
+}
+
+//~ run: answers() => (7, 8, 9)

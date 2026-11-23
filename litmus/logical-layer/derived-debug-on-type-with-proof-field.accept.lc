@@ -16,4 +16,4 @@ fn shown() -> String {
     format!("{:?}", Interval { lo: 1, hi: 4, ordered: _ })
 }
 
-//~ run: shown() => "Interval { lo: 1, hi: 4, ordered: Erased }"
+//~ run: shown() => "Interval { lo: 1, hi: 4, ordered: Proof }"

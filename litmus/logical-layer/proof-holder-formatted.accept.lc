@@ -1,5 +1,5 @@
 //~ question: May an `Option` holding a proof be printed with `{:?}`?
-//~ spec: logic.boundary.loans
+//~ spec: logic.boundary.loans, logic.ghost.marker-traits
 //~ rfc: 0002
 
 fn check(n: u32) -> Option<@(n > 0)> {
@@ -17,5 +17,5 @@ fn shown(n: u32) -> String {
     format!("{:?}", found)
 }
 
-//~ run: shown(4) => "Some(Erased)"
+//~ run: shown(4) => "Some(Proof)"
 //~ run: shown(0) => "None"

@@ -19,4 +19,4 @@ fn shown(n: u32) -> String {
     format!("{:?}", hidden)
 }
 
-//~ run: shown(4) => "Some(Erased)"
+//~ run: shown(4) => "Some(Proof)"

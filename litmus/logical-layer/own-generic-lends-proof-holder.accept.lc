@@ -21,5 +21,5 @@ fn shown(n: u32) -> String {
     show(&found)
 }
 
-//~ run: shown(4) => "Some(Erased)"
+//~ run: shown(4) => "Some(Proof)"
 //~ run: shown(0) => "None"

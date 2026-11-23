@@ -11,7 +11,7 @@ struct Interval {
 }
 
 // Verified, since it takes `Self`. It hands the formatter plain fields only,
-// where the derived `Debug` would also print `ordered: Erased`.
+// where the derived `Debug` would also print `ordered: Proof`.
 impl fmt::Debug for Interval {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Interval").field("lo", &self.lo).field("hi", &self.hi).finish()
