@@ -2,6 +2,8 @@
 //~ spec: logic.ghost.no-runtime-control
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn describe(v: &Vec<u32>) -> u32 {
     let count = logic! { v.len() };
     if count > 0 { //~ error: runtime code cannot branch on a logical value

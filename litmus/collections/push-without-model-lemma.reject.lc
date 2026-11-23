@@ -1,0 +1,25 @@
+//~ question: Does the proof that `push` of Locus's `Vec` returns re-establish an invariant stated on the vector's model, when the library's lemma is not called?
+//~ spec: collections.model
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    // `items` is read as a place, so this is the length of its model.
+    fits: @(items.len() <= cap),
+}
+
+impl Stack {
+    fn push(self, x: u32) -> (Stack, bool) {
+        let Stack { mut items, cap, fits } = self;
+        let (n, counted) = items.len();
+        if n < cap {
+            let grew = items.push(x);
+            (Stack { items, cap, fits: _ }, true) //~ error: cannot prove `items.len() <= cap`: `items.len()` is the length of the model of `items`, and `counted` and `grew` speak of `snap(items).elements()`; call the lemma `Vec::<u32>::model_len(snap(items))`
+        } else {
+            (Stack { items, cap, fits }, false)
+        }
+    }
+}

@@ -17,8 +17,11 @@ struct Ring {
 impl Ring {
     // A queue in the buffer given, whose length is its capacity.
     fn new(buf: Vec<u32>) -> Option<Ring> {
-        let (seen, same) = buf.view();
-        if seen.len() > 0 {
+        // `inside` is stated on the model of `buf`, and `len` speaks of its contents:
+        // the library's lemma gives the model the length of the contents.
+        let (n, counted) = buf.len();
+        if n > 0 {
+            let same = logic! { Vec::<u32>::model_len(snap(buf)) };
             Some(Ring { buf, head: 0, len: 0, inside: _ })
         } else {
             None
@@ -28,8 +31,9 @@ impl Ring {
     fn push_back(&mut self, x: u32) -> bool {
         let (slot, taken, was) = mem::take_out(self);
         let Ring { mut buf, head, len, inside } = taken;
-        let (seen, same) = buf.view();
-        let cap = seen.len();
+        let (cap, counted) = buf.len();
+        // What `inside` says of the buffer as it was, in terms of its contents.
+        let before = logic! { Vec::<u32>::model_len(snap(buf)) };
         if len == cap {
             slot.put(Ring { buf, head, len, inside });
             return false;
@@ -37,8 +41,9 @@ impl Ring {
         // The first free place, found without a sum that could wrap.
         let room = cap - head;
         let at = if len < room { head + len } else { len - room };
-        // `set` on Locus's `Vec` returns a proof that the length is as it was.
+        // `set` on Locus's `Vec` returns a proof that the length of the contents is as it was.
         let written = buf.set(at, x);
+        let after = logic! { Vec::<u32>::model_len(snap(buf)) };
         slot.put(Ring { buf, head, len: len + 1, inside: _ });
         true
     }

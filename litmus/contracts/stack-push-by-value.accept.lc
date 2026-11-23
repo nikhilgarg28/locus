@@ -1,5 +1,5 @@
 //~ question: May a method that takes a value with an invariant take it apart, change a field that a proof reads, and build it again?
-//~ spec: contracts.invariants, contracts.invariants.assignment
+//~ spec: contracts.invariants, contracts.invariants.assignment, collections.model
 //~ rfc: 0002
 
 use locus::std::vec::Vec;
@@ -13,17 +13,22 @@ struct Stack {
 impl Stack {
     fn new(cap: usize) -> Stack {
         // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
+        // `fits` is stated on the model of `items`, and the library's lemma gives the model
+        // the length of the contents.
         let (items, empty) = Vec::empty();
+        let same = logic! { Vec::<u32>::model_len(snap(items)) };
         Stack { items, cap, fits: _ }
     }
 
     // The stack with `x` on it when there was room, and the stack as it was when there was none.
     fn push(self, x: u32) -> (Stack, bool) {
         let Stack { mut items, cap, fits } = self;
-        let (seen, same) = items.view();
-        if seen.len() < cap {
-            // `push` on Locus's `Vec` returns a proof that the vector grew by one.
+        // `len` on Locus's `Vec` returns the length, with a proof that it is the length of the contents.
+        let (n, counted) = items.len();
+        if n < cap {
+            // `push` on Locus's `Vec` returns a proof that the contents grew by one.
             let grew = items.push(x);
+            let same = logic! { Vec::<u32>::model_len(snap(items)) };
             (Stack { items, cap, fits: _ }, true)
         } else {
             (Stack { items, cap, fits }, false)

@@ -2,11 +2,13 @@
 //~ spec: logic.code.no-runtime-calls
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn count(v: &Vec<u32>) -> usize {
-    v.len()
+    v.len().0
 }
 
 fn f(v: Vec<u32>) -> usize {
     let n = logic! { count(&v) }; //~ error: logical code cannot call the runtime function `count`
-    v.len()
+    v.len().0
 }

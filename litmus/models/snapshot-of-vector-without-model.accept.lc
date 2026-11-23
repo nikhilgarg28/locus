@@ -1,12 +1,14 @@
 //~ question: May logical code take the length of a vector whose elements have no declared model, through its snapshot?
-//~ spec: models.snapshots
+//~ spec: models.snapshots, collections.contents
 //~ rfc: 0002
+
+use locus::std::vec::Vec;
 
 struct Point {
     x: u32,
     y: u32,
 }
 
-fn first(points: &Vec<Point>, nonempty: @(snap(points).len() > 0)) -> u32 {
+fn first(points: &Vec<Point>, nonempty: @(snap(points).elements().len() > 0)) -> u32 {
     points[0].x
 }

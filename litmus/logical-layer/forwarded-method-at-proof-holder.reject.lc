@@ -1,5 +1,5 @@
 //~ question: May a method that Locus's `Vec` only forwards to the standard library's be called on a vector whose elements hold proofs?
-//~ spec: logic.boundary.plain-data
+//~ spec: logic.boundary.plain-data, collections.std-inside
 //~ rfc: 0002
 
 use locus::std::vec::Vec;
@@ -12,12 +12,11 @@ fn check(n: u32) -> Option<@(n > 0)> {
     }
 }
 
-fn one_left(n: u32) -> usize {
+fn reserved(n: u32) -> usize {
     let mut found: Vec<Option<@(n > 0)>> = Vec::new();
     found.push(check(n));
     found.push(check(n));
-    // `swap_remove` is not among the methods of Locus's `Vec`. Through `Deref` this is the
-    // standard library's own `swap_remove`, called at an element type that holds a proof.
-    found.swap_remove(0); //~ error: `swap_remove` is the standard library's, reached through `Deref`, and Locus does not verify it, so it cannot be called on a `Vec` whose elements hold proofs
-    found.len()
+    // `capacity` is not among the methods of Locus's `Vec`. Through `Deref` this is the
+    // standard library's own `capacity`, called at an element type that holds a proof.
+    found.capacity() //~ error: `capacity` is the standard library's, reached through `Deref`, and Locus does not verify it, so it cannot be called on a `Vec` whose elements hold proofs
 }

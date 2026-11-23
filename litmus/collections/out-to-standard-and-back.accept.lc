@@ -1,0 +1,26 @@
+//~ question: May a vector of Locus's library be given to the standard library's own methods by converting it out and back?
+//~ spec: collections.std-inside, collections.vec.contracts
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn without_repeats(items: Vec<u32>) -> usize {
+    // Out: the standard library's vector, as plain Rust. `dedup` is the standard library's own.
+    let mut plain = items.into_std();
+    plain.dedup();
+    // Back. Nothing is known of the contents now, and `len` says what their length is.
+    let items = Vec::from_std(plain);
+    let (n, counted) = items.len();
+    let known: @(n == snap(items).elements().len()) = counted;
+    n
+}
+
+fn two_left() -> usize {
+    let mut items = Vec::new();
+    items.push(4);
+    items.push(4);
+    items.push(6);
+    without_repeats(items)
+}
+
+//~ run: two_left() => 2

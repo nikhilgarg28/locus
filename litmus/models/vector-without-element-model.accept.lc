@@ -1,6 +1,8 @@
 //~ question: Does a vector whose elements have no declared model have a model?
-//~ spec: models.default
+//~ spec: models.default, models.by-parts, collections.model
 //~ rfc: 0002
+
+use locus::std::vec::Vec;
 
 struct Point {
     x: u32,

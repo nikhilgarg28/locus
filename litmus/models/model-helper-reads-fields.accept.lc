@@ -2,12 +2,14 @@
 //~ spec: models.own-definition
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
 }
 
 logic fn size(stack: Snap<Stack>) -> Nat {
-    stack.items.len()
+    stack.items.elements().len()
 }
 
 impl Model for Stack {

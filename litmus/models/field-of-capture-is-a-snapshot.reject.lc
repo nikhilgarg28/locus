@@ -2,6 +2,8 @@
 //~ spec: models.capture.fields, models.by-parts
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
 }
@@ -9,7 +11,7 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items
+        stack.items.elements()
     }
 }
 

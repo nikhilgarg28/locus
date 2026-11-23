@@ -15,11 +15,12 @@ impl Stack {
     fn push(&mut self, x: u32) -> bool {
         let (slot, taken, was) = mem::take_out(self);
         let Stack { mut items, cap, fits } = taken;
-        let (seen, same) = items.view();
-        if seen.len() >= cap {
+        let (n, counted) = items.len();
+        if n >= cap {
             return false; //~ error: this path leaves `slot` without passing it to `put`, so `*self` would hold nothing
         }
         let grew = items.push(x);
+        let same = logic! { Vec::<u32>::model_len(snap(items)) };
         slot.put(Stack { items, cap, fits: _ });
         true
     }

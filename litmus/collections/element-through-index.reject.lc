@@ -1,0 +1,9 @@
+//~ question: Does `v[i]` on a vector of Locus's library say which element it returns?
+//~ spec: collections.vec.indexing
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn first(v: &Vec<u32>, some: @(0 < snap(v).elements().len())) -> (got: u32, @(snap(got) === snap(v).elements().at(0, some))) {
+    (v[0], _) //~ error: cannot prove `snap(got) === snap(v).elements().at(0, some)`: `v[0]` is `Index::index`, which states no contract, so nothing says which element it returned; `v.get(0, some)` does
+}

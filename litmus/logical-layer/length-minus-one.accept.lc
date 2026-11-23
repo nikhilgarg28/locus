@@ -2,6 +2,8 @@
 //~ spec: logic.arith.nat-subtraction
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn last_index(v: &Vec<u32>) -> @(v.len() == 0 ==> v.len() - 1 == -1) {
     _
 }

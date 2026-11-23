@@ -2,6 +2,8 @@
 //~ spec: models.capture.methods
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
     cap: usize,
@@ -10,7 +12,7 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items
+        stack.items.elements()
     }
 }
 

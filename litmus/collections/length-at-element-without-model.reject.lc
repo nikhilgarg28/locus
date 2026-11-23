@@ -1,0 +1,12 @@
+//~ question: Is `len` on a vector of Locus's library the standard library's `len` when the element type has no model?
+//~ spec: collections.element-types
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+use std::net::SocketAddr;
+
+// `SocketAddr` is a type of the standard library for which Locus's library declares nothing.
+// rustc resolves this call through `Deref` to the standard library's `len`, which returns a `usize` alone.
+fn peers(known: &Vec<SocketAddr>) -> usize {
+    known.len() //~ error: `len` of Locus's `Vec` asks for an element type that has a model, and `SocketAddr` has none: the call is not taken to be the standard library's `len`; use the standard library's `Vec` for these elements
+}

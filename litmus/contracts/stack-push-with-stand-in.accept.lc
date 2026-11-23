@@ -14,14 +14,17 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items
+        stack.items.elements()
     }
 }
 
 impl Stack {
     fn new(cap: usize) -> Stack {
         // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
+        // `fits` is stated on the model of `items`, and the library's lemma gives the model
+        // the length of the contents.
         let (items, empty) = Vec::empty();
+        let same = logic! { Vec::<u32>::model_len(snap(items)) };
         Stack { items, cap, fits: _ }
     }
 
@@ -32,9 +35,10 @@ impl Stack {
         // `replace` is Locus's library's, and `was` proves that `taken` is what was there.
         let (taken, was) = mem::replace(self, Stack::new(0));
         let Stack { mut items, cap, fits } = taken;
-        let (seen, same) = items.view();
-        if seen.len() < cap {
+        let (n, counted) = items.len();
+        if n < cap {
             let grew = items.push(x);
+            let same = logic! { Vec::<u32>::model_len(snap(items)) };
             *self = Stack { items, cap, fits: _ };
             (true, _)
         } else {

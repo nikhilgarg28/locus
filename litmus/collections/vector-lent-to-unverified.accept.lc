@@ -1,0 +1,23 @@
+//~ question: May a vector of Locus's library that holds plain data be lent mutably to code Locus does not verify?
+//~ spec: collections.contents, logic.boundary.plain-data
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+// A `Vec<u32>` of Locus's holds logical data in a field of its own, and exposes none, so it
+// is a sealed type. `black_box` can move it and give it back, and cannot reach its fields.
+fn length_after(v: &mut Vec<u32>) -> usize {
+    std::hint::black_box(&mut *v);
+    // Nothing is known of the contents now. `len` says what their length is.
+    let (n, counted) = v.len();
+    n
+}
+
+fn two() -> usize {
+    let mut v: Vec<u32> = Vec::new();
+    v.push(4);
+    v.push(5);
+    length_after(&mut v)
+}
+
+//~ run: two() => 2

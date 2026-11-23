@@ -1,0 +1,9 @@
+//~ question: Is the snapshot of a vector of Locus's library itself a sequence?
+//~ spec: collections.contents, models.snapshots
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn first(v: &Vec<u32>, nonempty: @(snap(v).len() > 0)) -> u32 { //~ error: the snapshot of a `Vec` is not a sequence, and has no `len`: its contents are `snap(v).elements()`
+    v[0]
+}

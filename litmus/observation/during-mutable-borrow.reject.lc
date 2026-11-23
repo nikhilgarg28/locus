@@ -2,10 +2,13 @@
 //~ spec: observe.place.readable
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 fn f() -> usize {
     let mut v = vec![1, 2, 3];
     let r = &mut v;
     let n = logic! { v.len() }; //~ error: logical code reads `v` while `v` is mutably borrowed
     r.push(4);
-    v.len()
+    v.len().0
 }

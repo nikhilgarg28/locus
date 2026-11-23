@@ -2,12 +2,15 @@
 //~ spec: observe.place.readable, models.observation
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 fn f() -> usize {
     let mut v = vec![1, 2, 3];
     let r = &mut v;
     r.push(4);
     let n = logic! { v.len() };
-    v.len()
+    v.len().0
 }
 
 //~ run: f() => 4

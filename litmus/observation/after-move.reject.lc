@@ -2,8 +2,11 @@
 //~ spec: observe.place.readable
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 fn consume(v: Vec<u32>) -> usize {
-    v.len()
+    v.len().0
 }
 
 fn f() -> usize {

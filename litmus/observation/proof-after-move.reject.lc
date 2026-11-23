@@ -2,8 +2,10 @@
 //~ spec: observe.place.readable
 //~ rfc: 0001
 
+use locus::std::vec::Vec;
+
 fn consume(v: Vec<u32>) -> usize {
-    v.len()
+    v.len().0
 }
 
 fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {

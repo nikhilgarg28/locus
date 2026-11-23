@@ -2,6 +2,8 @@
 //~ spec: models.own-definition
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
 }

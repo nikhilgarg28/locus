@@ -1,0 +1,21 @@
+//~ question: May a method of the standard library's `Vec` that takes `&mut self`, and that Locus's `Vec` does not define, be called on a vector of plain data?
+//~ spec: logic.boundary.plain-data, collections.std-inside
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn without_first(mut items: Vec<u32>) -> usize {
+    // `swap_remove` is not among the methods of Locus's `Vec`, and it takes `&mut self`.
+    // Locus's `Vec` dereferences to the standard library's by shared reference only,
+    // so the standard library's own `swap_remove` is not reached.
+    items.swap_remove(0); //~ error: cannot borrow the standard library's `Vec` inside `items` as mutable: Locus's `Vec` implements `Deref` and not `DerefMut`, so `swap_remove`, which takes `&mut self`, is not reached; go out with `into_std` and back with `from_std`
+    items.len().0
+}
+
+fn two_left() -> usize {
+    let mut items = Vec::new();
+    items.push(4);
+    items.push(5);
+    items.push(6);
+    without_first(items)
+}

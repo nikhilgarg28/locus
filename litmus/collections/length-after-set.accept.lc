@@ -1,0 +1,12 @@
+//~ question: After `set` on a vector of Locus's library, is the length of its contents known to be what it was?
+//~ spec: collections.vec.contracts
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn overwrite(v: &mut Vec<u32>, x: u32) -> @(snap(final!(v)).elements().len() == snap(v).elements().len()) {
+    // `written` proves that 0 was inside the vector, that the contents are the old ones
+    // with `x` at 0, and that their length is what it was.
+    let written = v.set(0, x);
+    _
+}

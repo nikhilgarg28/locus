@@ -1,0 +1,15 @@
+//~ question: When a mutable loan of one element of a vector ends, are the vector's contents the old ones with the element's final value in that slot?
+//~ spec: collections.vec.element-loan, contracts.final
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn replace_first(v: &mut Vec<u32>, x: u32, some: @(0 < snap(v).elements().len()))
+    -> @(snap(final!(v)).elements() === snap(v).elements().update(0, snap(x)))
+{
+    // `lent` proves that when `first` is no longer used, the contents are the old ones
+    // with the value that `*first` then has at 0.
+    let (first, lent) = v.get_mut(0, some);
+    *first = x;
+    _
+}

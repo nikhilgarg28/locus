@@ -7,5 +7,5 @@ use locus::std::vec::Vec;
 fn next(v: &Vec<Nat>) -> usize {
     let k = v[0];
     let m = logic! { k + 1 };
-    v.len()
+    v.len().0
 }

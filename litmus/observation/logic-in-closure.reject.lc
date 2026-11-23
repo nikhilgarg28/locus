@@ -2,11 +2,14 @@
 //~ spec: observe.captures.rejected
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 fn f() -> usize {
     let v = vec![1, 2, 3];
     let count = || {
         let n = logic! { v.len() }; //~ error: logical code inside a closure is not supported
-        v.len()
+        v.len().0
     };
     count()
 }

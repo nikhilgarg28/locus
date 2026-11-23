@@ -2,6 +2,8 @@
 //~ spec: models.one-per-type, models.declared-by-owner, models.frozen-data, models.own-definition
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
 }
@@ -9,6 +11,6 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items
+        stack.items.elements()
     }
 }

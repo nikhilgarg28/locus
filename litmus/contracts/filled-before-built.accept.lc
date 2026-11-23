@@ -15,10 +15,12 @@ struct Filled {
 // which unwinding drops as one.
 fn filled(len: usize, make: fn() -> u32) -> Option<Filled> {
     let items: Vec<u32> = vec![make(); len];
-    // `view` is a method of Locus's `Vec`: the vector as a slice, with a proof
-    // that the two hold the same items. Its body assumes that proof.
-    let (seen, same) = items.view();
-    if seen.len() == len {
+    // `len` on Locus's `Vec` returns the length, with a proof that it is the length of the
+    // contents. `full` is stated on the model of `items`, and the library's lemma gives the
+    // model the length of the contents.
+    let (n, counted) = items.len();
+    if n == len {
+        let same = logic! { Vec::<u32>::model_len(snap(items)) };
         Some(Filled { items, len, full: _ })
     } else {
         None

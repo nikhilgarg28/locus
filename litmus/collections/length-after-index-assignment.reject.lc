@@ -1,0 +1,10 @@
+//~ question: After `v[i] = x` on a vector of Locus's library, is the length of its contents known to be what it was?
+//~ spec: collections.vec.indexing
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn overwrite(v: &mut Vec<u32>, x: u32) -> @(snap(final!(v)).elements().len() == snap(v).elements().len()) {
+    v[0] = x;
+    _ //~ error: cannot prove `snap(final!(v)).elements().len() == snap(v).elements().len()`: `v[0] = x` is `IndexMut::index_mut`, which states no contract, so nothing is known of `v` after it; `v.set(0, x)` returns the proof
+}

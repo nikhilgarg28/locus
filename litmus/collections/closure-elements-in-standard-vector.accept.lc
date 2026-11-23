@@ -1,0 +1,12 @@
+//~ question: May a vector of the standard library hold elements whose type has no model, as plain Rust?
+//~ spec: collections.element-types
+//~ rfc: 0002
+
+// No `use locus::std::vec::Vec;`, so `Vec` is the standard library's. No logical code reads it.
+fn one_step(k: u32) -> u32 {
+    let mut steps = Vec::new();
+    steps.push(move |x: u32| x + k);
+    steps[0](1)
+}
+
+//~ run: one_step(4) => 5

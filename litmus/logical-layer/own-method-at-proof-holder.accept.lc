@@ -20,8 +20,8 @@ fn hundred_over(n: u32) -> u32 {
     let mut found: Vec<Option<@(n > 0)>> = Vec::new();
     found.push(check(n));
     // `pop` is Locus's method. The library keeps the elements in the standard library's `Vec`,
-    // and is trusted to give back what it was given.
-    match found.pop() {
+    // and is trusted to give back what it was given. It returns the element and then its proof.
+    match found.pop().0 {
         Some(Some(positive)) => divide(100, n, positive),
         _ => 0,
     }

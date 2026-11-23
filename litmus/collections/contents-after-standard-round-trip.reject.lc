@@ -1,0 +1,13 @@
+//~ question: Is anything known of a vector's contents after it has been converted to the standard library's `Vec` and back?
+//~ spec: collections.std-inside
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn round_trip(items: Vec<u32>) -> Vec<u32> {
+    let before = logic! { snap(items).elements() };
+    let plain = items.into_std();
+    let back = Vec::from_std(plain);
+    let same: @(snap(back).elements() === before) = _; //~ error: cannot prove `snap(back).elements() === before`: `from_std` states no contract, so nothing is known of the contents of the vector it returns
+    back
+}

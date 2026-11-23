@@ -2,6 +2,8 @@
 //~ spec: models.observation, logic.fn.parameters
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 struct Stack {
     items: Vec<u32>,
     cap: usize,
@@ -10,12 +12,12 @@ struct Stack {
 impl Model for Stack {
     type Logic = Seq<Nat>;
     logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items
+        stack.items.elements()
     }
 }
 
 logic fn room(stack: Snap<Stack>) -> Int {
-    stack.cap - stack.items.len()
+    stack.cap - stack.items.elements().len()
 }
 
 fn has_room(s: &Stack, some: @(room(s) > 0)) -> u32 { //~ error: `s` is captured as its model, a `Seq<Nat>`, and `room` takes a `Snap<Stack>`: write `room(snap(s))`
