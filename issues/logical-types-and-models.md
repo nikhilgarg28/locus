@@ -77,3 +77,7 @@ The owner saw the recommendations and the amendments, and not the rule texts. Wh
 One example is open and linked here: `litmus/models/method-on-a-snapshot.open.lc`, on whether `snap(s).room()` means `Stack::room(snap(s))`.
 
 The summary under "Status" above predates this, and several of its lines no longer hold. RFC 0002 is the current text.
+
+### 2026-11-23, an unmarked field does not reject its struct
+
+The entry above says that a struct that Rust accepts is rejected when it has a field of a type that Locus cannot see and no mark. That was this change's first text of `models.snapshots.opaque`, and it is corrected: such a struct is declared and used as in Rust, and has no snapshot and no model until the field is marked, which is what the recommendation that the owner approved had. [unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md) has the record, and what is still open there.

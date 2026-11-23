@@ -2,7 +2,7 @@
 
 - **Kind:** decision
 - **Status:** open
-- **Blocks:** Accepting RFC 0002's decision 107 as it is written, and what RFC 0001 says of a `.rs` file renamed to `.lc`
+- **Blocks:** Relying on RFC 0002's decision 107 while it rests on a behaviour of rustc that is not established as intended, and the wording of commitment 5 of the vision
 - **Rules:** `models.snapshots.opaque`, `models.snapshots.seen`, `compat.superset.same-meaning`
 
 ## Question
@@ -44,3 +44,16 @@ Nothing is blocked from being written: the rule and its examples are in RFC 0002
 ### 2026-11-22, raised while writing RFC 0002's decisions 99 to 108
 
 The owner accepted a recommendation in which a type that Locus cannot see has no model until a field is marked or the type is wrapped, and in which a struct with an unmarked field still compiled. The third round of the spike made the error at the declaration its default, and RFC 0002 writes that. Neither the recommendation nor the spike speaks of commitment 1, so the question is put here.
+
+### 2026-11-23, the rule is written without the error at the declaration
+
+The third round of the skeleton spike had found that deferring the check, so that a struct with an unmarked field still compiles, refused every declared model that reads a field. [capture-family](../spikes/capture-family/README.md) now explains that and avoids it, in three more cases. With the snapshot and the model as two traits, only what lowering generates is deferred, the snapshot and the default model, and a model that the program declares is an implementation of its own with no clause. A struct with an unmarked field of type `TcpStream` then compiles and is used as plain Rust (`c14`), the error is at the capture when it is read in logical code (`c15`), and at the model when one is declared for it (`c16`). The three cases are hand-written; the toy lowering of the third round has one trait and does not generate this form.
+
+So RFC 0002 now writes the rule as the recommendation that the owner approved had it. `models.snapshots.opaque` no longer rejects the struct: it has no snapshot and no model until the field is marked, and the error comes where a place of it is captured, where `snap` or `Snap<T>` is written of it, where a model is declared or derived for it, and where a `Model` bound is asked of it. Commitment 1 of the vision and `compat.superset.same-meaning` stand untouched, and the question above, as it was asked, is answered: no.
+
+The example named above is now `litmus/models/foreign-field-unmarked.accept.lc`. `litmus/models/unmarked-struct-captured.reject.lc` and `litmus/models/unmarked-struct-model-declared.reject.lc` are the rejected side. The text above the log is left as it was written, apart from the `Blocks` line.
+
+Two things are still the owner's, and keep this issue open.
+
+- **The form rests on rustc not checking a `where` clause behind a higher-ranked lifetime at a declaration.** That holds on rustc 1.97.0, and nobody has established it as intended. If it cannot be relied on, the choice returns between the error at the declaration, which is an exception to commitment 1, and staged typing, which gives up building with stock `cargo build`.
+- **Commitment 5 of the vision** says that the language "gives every runtime value a snapshot, which is what the value is". Decision 107 steps back from that for a type that Locus cannot see, so the sentence needs the owner's edit. Proposed words, for the owner to take or change: the language "gives a snapshot, which is what the value is, to every runtime value whose type it can see: its own types, the types a Locus program declares, and those its library describes". `VISION.md` is not edited here.

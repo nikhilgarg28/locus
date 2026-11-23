@@ -1,0 +1,19 @@
+//~ question: May logical code capture a struct whose field of a type that Locus cannot see is marked `#[opaque]`?
+//~ spec: models.snapshots.opaque, models.default
+//~ rfc: 0002
+
+use std::net::TcpListener;
+
+struct Server {
+    #[opaque]
+    listener: TcpListener,
+    port: u16,
+}
+
+// `Server` declares no model, so its capture is its snapshot, which a move keeps, opaque value included.
+fn kept(server: Server) -> Server {
+    let before = logic! { server };
+    let moved = server;
+    let same: @(moved === before) = _;
+    moved
+}
