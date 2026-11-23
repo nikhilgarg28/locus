@@ -65,3 +65,17 @@ Two things are still the owner's, and keep this issue open.
 Under "Costs and limits" the RFC states what this issue stays open for: the form rests on rustc not checking a `where` clause behind a higher-ranked lifetime where an implementation is declared, which holds on rustc 1.97.0 and which nobody has established as intended. If it cannot be relied on, the choice is between an error at the declaration, which is an exception to commitment 1 of the vision, and staged typing, which the RFC keeps in reserve among its alternatives and which gives up building with stock `cargo build`. It is item 7 of what is still for the owner there.
 
 Nothing here is decided by that text, and this issue is not closed. The wording of commitment 5 of the vision is still the owner's, as the entry above says. Two other sentences of the vision are raised in [typed-logical-code-and-the-vision](typed-logical-code-and-the-vision.md).
+
+### 2026-11-23, the vision's fifth commitment is edited
+
+Shown the words proposed above for commitment 5, the owner first asked which types those are:
+
+> sure but I'd like to understand what kind of types it won't be able to see?
+
+The owner was told: a value that is code and not data, which is a closure, a function item, a function pointer, a trait object, and a type that `impl Trait` hides; a type of a crate that Locus does not lower; and a type of the standard library that Locus's library has not yet declared. Then, of this and the other recommendations then open:
+
+> Follow all your recommendation - please go ahead and reflect them in the PR
+
+`VISION.md` now has the proposed words, in the same PR: the language "gives a snapshot, which is what the value is, to every runtime value whose type it can see: its own types, the types a Locus program declares, and those its library describes". [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) records it in decision 53.
+
+This issue stays open for its other point: the form in which decision 107 is given to rustc rests on rustc not checking a `where` clause behind a higher-ranked lifetime at a declaration, which nobody has established as intended.

@@ -65,3 +65,13 @@ Commitment 7 says that Locus builds programs "by lowering them to Rust, in which
 ### 2026-11-23, raised while writing RFC 0001's decisions 49 to 52
 
 The owner chose the lowering in which each logical type is a Rust type of its own and rustc types logical code, and adopted the principle that every name lowering writes and rustc can show reads as the programmer thinks. Neither answer spoke of the vision. Writing them into RFC 0001 found the two sentences above. `VISION.md` is not edited: RFC 0001 lists both points under what is still for the owner, as items 6 and 10.
+
+### 2026-11-23, the owner's decision, and the vision edited
+
+The owner was told that this issue proposes words for the two sentences, with the recommendation to take them, and said:
+
+> Follow all your recommendation - please go ahead and reflect them in the PR
+
+`VISION.md` is edited in the same PR. Commitment 6 now has the first of the two wordings proposed above: "logical code reaches it only as code that it types and never runs, and logical items only as stubs that are never called". Commitment 1 has the first option: "The one exception is a program that writes a name that Locus reserves: `__locus_check`, the `cfg` name of its checking compile, or an identifier that begins with `__locus_` or `__logic_`." That is what `compat.names.reserved` already says, so the two examples keep their outcomes. [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) records it as decision 53. The owner did not read the words themselves.
+
+The issue stays open until RFC 0001 is accepted, since a decision closes by the RFC that decided it. One point it recorded is not a matter of words, and is still to be measured: whether a build keeps anything of the closures that are never called (commitment 2).

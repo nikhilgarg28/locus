@@ -1025,6 +1025,17 @@ This RFC instead uses syntax for proofs, logic functions, and propositions, and 
 51. **`Model` is an `unsafe trait`.** The snapshot and the model of a type are given to rustc by implementations that lowering writes where the type is declared (RFC 0002, decisions 106 to 108). A program never writes `unsafe` for it: lowering does. Asked why it is `unsafe`, and told that a sealed Rust trait cannot be implemented downstream at all, that the real rule is the driver refusing any implementation that lowering or Locus's library did not write, and that `unsafe` is a second guard for builds in which the driver does not run, the owner said: "And yes, okay with unsafe trait for Model."
 52. **Nothing changes in how facts enter the logic.** "Fact is always proof in the result or small/finite list of facts language infers from some constructs (which we have already defined). Don't want to go back on that. And don't want to introduce pure functions either right now." So rustc's typing of logical code gives Locus types, and no facts. This confirms decision 3.
 
+**Decided by the owner on 2026-11-23,** on what decisions 49 to 52 had left for the owner. Told that two issues propose words for three sentences of the vision, and given five choices made in writing those decisions, each as one line, the owner said: "Follow all your recommendation - please go ahead and reflect them in the PR".
+
+53. **The choices put to the owner stand as written, and the vision says what the lowering does.**
+    - **The vision is edited,** in the same change. Its sixth commitment now says that logical code reaches rustc "only as code that it types and never runs, and logical items only as stubs that are never called". Its first names the reserved names as its one exception: `__locus_check`, and an identifier that begins with `__locus_` or `__logic_`. Its fifth gives a snapshot "to every runtime value whose type it can see" (RFC 0002, decision 107). The words are those that [typed-logical-code-and-the-vision](../../issues/typed-logical-code-and-the-vision.md) and [unmarked-fields-and-the-superset](../../issues/unmarked-fields-and-the-superset.md) proposed; where an issue proposed two, the first is taken. The owner was told that the issues propose words, and did not read the words themselves.
+    - **Both prefixes are reserved,** `__logic_` and `__locus_` (item 6).
+    - **A ghost local's type never flows backward,** as a check that Locus makes after rustc (item 9).
+    - **Every piece of logical code has a skeleton,** with no fallback to an untyped marker (item 9).
+    - **Plain Rust does not implement a trait that has a logic function,** which follows from where a trait's stubs live.
+    - **An `unsafe impl Model` written in Locus code is rejected, and what lowering writes is not the program's `unsafe` code,** so `#![forbid(unsafe_code)]` still compiles (item 8).
+    - The owner saw each as one line, and not the rule texts. Items 6 to 10 below stay, for their reasons and for what they list beyond these.
+
 **Still for the owner.** Each is written into the spec and the examples as proposed where an example can show it, so accepting this RFC accepts it. Item 1 has no rule yet, because an example would need a `.rs` file beside a `.lc` one, which the litmus format cannot yet express:
 1. `.rs` files may not name logical items, as proposed.
 2. Logical code in closures and async blocks, and reads of packed fields, are rejected for now, as proposed.
