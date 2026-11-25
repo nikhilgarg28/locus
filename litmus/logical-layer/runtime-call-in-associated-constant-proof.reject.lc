@@ -1,0 +1,23 @@
+//~ question: May a proof field in the initializer of an associated constant of a generic `impl` be given by a call of a runtime function?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+struct Certified {
+    proof: @False,
+}
+
+// `proofs/diverging-runtime-proof.accept.lc`, made `const`.
+const fn never() -> @False {
+    loop {}
+}
+
+struct Holder<T>(T);
+
+impl<T> Holder<T> {
+    // rustc evaluates `BAD` only for a use in code it compiles, and the one use is logical.
+    const BAD: Certified = Certified { proof: never() }; //~ error: the proof field `proof` of `BAD` is given by a call of `never`: in a constant's initializer every proof comes from logical code, since rustc may never evaluate the call
+}
+
+fn absurd() -> @False {
+    logic! { Holder::<u32>::BAD.proof }
+}

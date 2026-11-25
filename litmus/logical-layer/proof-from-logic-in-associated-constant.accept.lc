@@ -1,0 +1,17 @@
+//~ question: May an associated constant of a generic `impl` hold a proof that its initializer gives by logical code, and may logical code read it?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+struct Checked {
+    proof: @(1 == 1),
+}
+
+struct Holder<T>(T);
+
+impl<T> Holder<T> {
+    const GOOD: Checked = Checked { proof: _ };
+}
+
+fn trivial() -> @(1 == 1) {
+    logic! { Holder::<u32>::GOOD.proof }
+}
