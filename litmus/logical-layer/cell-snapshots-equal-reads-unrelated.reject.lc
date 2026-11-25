@@ -1,0 +1,15 @@
+//~ question: Does the equality of two `Cell`s' snapshots relate what reads of them return?
+//~ spec: models.frozen-data, logic.eq.snapshots
+//~ rfc: 0008
+
+use std::cell::Cell;
+
+fn read_alike() -> u32 {
+    let a = Cell::new(1u32);
+    let b = Cell::new(1u32);
+    let same: @(snap(a) === snap(b)) = _;
+    let x = a.get();
+    let y = b.get();
+    let equal: @(x == y) = _; //~ error: cannot prove `x == y`: `snap(a) === snap(b)` holds because both snapshots are `Unit`, and says nothing of what `get` returns
+    x + y
+}

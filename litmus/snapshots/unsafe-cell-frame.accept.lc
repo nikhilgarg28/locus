@@ -1,6 +1,9 @@
 //~ question: Does an UnsafeCell payload update leave its unit observation unchanged?
-//~ spec: models.frozen-data, models.capture.footprint
+//~ spec: models.frozen-data
 //~ rfc: 0008
+
+// Both sides are `Unit`, so this holds whatever the body does: it pins the snapshot of an
+// `UnsafeCell`, not the frame rule, which `snapshots/cell-beside-field-frame.accept.lc` tests.
 
 use std::cell::UnsafeCell;
 fn update(cell: &mut UnsafeCell<u32>) -> @(snap(final!(cell)) === snap(cell)) {

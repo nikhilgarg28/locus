@@ -1,0 +1,21 @@
+//~ question: Does a call given a mutable reference to a struct with a cell leave the struct's snapshot as it was, when the call writes only inside the cell?
+//~ spec: models.capture.footprint, logic.boundary.escape
+//~ rfc: 0008
+
+use std::cell::Cell;
+
+struct Counter {
+    id: u32,
+    hits: Cell<u32>,
+}
+
+fn touch(c: &mut Counter) {
+    c.hits.set(c.hits.get() + 1);
+}
+
+fn changed(c: &mut Counter) -> u32 {
+    let before = logic! { snap(c) };
+    touch(c);
+    let same: @(snap(c) === before) = _; //~ error: cannot prove `snap(c) === before`: `touch` is given `c` mutably, so it may write `id`, which the snapshot observes, and its signature says nothing of it
+    c.id
+}

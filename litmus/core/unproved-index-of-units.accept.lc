@@ -1,0 +1,9 @@
+//~ question: May a sequence of `Unit` snapshots be indexed with no proof?
+//~ spec: core.sequences.default, models.frozen-data
+//~ rfc: 0005
+
+use std::cell::Cell;
+
+logic fn first(cells: Seq<Snap<Cell<u32>>>) -> Snap<Cell<u32>> {
+    cells[0]
+}
