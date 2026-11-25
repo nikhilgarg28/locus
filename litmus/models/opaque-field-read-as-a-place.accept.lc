@@ -1,0 +1,17 @@
+//~ question: May a field wrapped in `Opaque<T>` be captured by reading it as a place?
+//~ spec: models.snapshots.opaque, models.snapshots.seen
+//~ rfc: 0002
+
+use locus::Opaque;
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
+    port: u16,
+}
+
+fn held(server: &Server) -> u32 {
+    let listener = logic! { server.listener };
+    0
+}

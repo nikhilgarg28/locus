@@ -7,7 +7,7 @@ use locus::std::vec::Vec;
 struct Stack {
     items: Vec<u32>,
     cap: usize,
-    fits: @(items.len() <= cap),
+    fits: @(items.elements().len() <= cap),
 }
 
 impl Stack {

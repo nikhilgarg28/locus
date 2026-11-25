@@ -36,6 +36,8 @@ fn first<P: OneByte>(p: &P) -> u8 {
 
 ## Design
 
+**Snapshot reconciliation:** [RFC 0008](0008-snapshot-capture-and-views.md) replaces implicit models with snapshot capture and ordinary explicit `View`, uses type-based `Unit` barriers, and updates collection APIs. The current design below incorporates it; numbered historical decisions retain their original rationale and are superseded where the RFC 0008 inventory says so.
+
 ### The principle: a trait is Rust's
 
 The owner: "I want us to have a system that is as close semantically to Rust as possible so that it feels familiar." And: "I obviously don't want to get in the business of full trait resolution - something simpler is doable but full trait resolution should be left to rustc."
@@ -101,7 +103,7 @@ What the third rule does:
 The owner, of syntax that would let one trait hold both and be implemented in part: "couldn't one always write two traits - one just with logical stuff and one with non-logical stuff and set bounds explicitly? as in, is it worth adding language features here for this". One can, and this RFC adds no such syntax.
 
 ```rust
-trait OrderSpec: Model {
+trait OrderSpec: Snapshot {
     logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
     logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
 }
@@ -126,7 +128,7 @@ fn max<'a, T: CheckedOrder>(a: &'a T, b: &'a T) -> (m: &'a T, @(is_max::<T>(snap
 **Accepted.** `max::<Rational>` is rejected by rustc: `Rational` does not implement `CheckedOrder`, and by the third rule cannot.
 
 - **Each operation and law is declared once.** The second trait adds only the method that runs. This is the shape of `PartialEq` and `Eq`.
-- **One specification serves both kinds of type.** A logic function takes logical types only (RFC 0002, decision 105), so the specification is written over `Snap<Self>`, and the trait has `Model` as a supertrait, which is what lets it name `Snap<Self>` (`traits.model-bounds`, [below](#a-model-bound-in-a-trait)). At a runtime type that is the type's snapshot. A logical type is its own snapshot, so `impl OrderSpec for Rational` writes `logic fn le(a: Rational, b: Rational) -> Prop`.
+- **One specification serves both kinds of type.** A logic function takes logical types only (RFC 0002, decision 105), so the specification is written over `Snap<Self>`, and the trait has `Snapshot` as a supertrait, which is what lets it name `Snap<Self>` (`traits.model-bounds`, [below](#a-model-bound-in-a-trait)). At a runtime type that is the type's snapshot. A logical type is its own snapshot, so `impl OrderSpec for Rational` writes `logic fn le(a: Rational, b: Rational) -> Prop`.
 - **A comparison is a proposition** (RFC 0002, decision 97), so `le` returns `Prop`, and the method ties its `bool` to it with `iff` (decision 110).
 - **The bounds say which is wanted.** Generic logical code asks for `OrderSpec`, and generic code that runs asks for `CheckedOrder`.
 - **A call names the type.** A snapshot's type does not say which type it is a snapshot of, since `Snap<u32>` and `Snap<u64>` are both `Nat`, so a generic call over snapshots is written `is_max::<T>(..)`, as RFC 0002 says of `alike::<T>(..)`.
@@ -161,7 +163,7 @@ impl<T: Logical, U: FromLogic<T>> IntoLogic<U> for T {
 }
 
 // Iterators. The specification is a relation between states; the code returns a proof of one step.
-pub trait IterSpec: Iterator<Item: Model> + Model {
+pub trait IterSpec: Iterator<Item: Snapshot> + Snapshot {
     logic fn step(before: Snap<Self>, item: Snap<Option<Self::Item>>, after: Snap<Self>) -> Prop;
 }
 pub trait CheckedIter: IterSpec {
@@ -172,17 +174,16 @@ pub trait CheckedIter: IterSpec {
 
 `twice` is the function the third review gave as rejected when written against Rust's `Add`. Against `AddLogic` it is accepted. That is the cost to state plainly: for an operation that both worlds have, Locus's library has a logical trait beside the standard one, and generic logical code names the logical one. `FromLogic` has no implementation from `Nat` for `Int`: that conversion is `n as Int` and nothing else (RFC 0002, decision 98).
 
-### A `Model` bound in a trait
+### A model bound in a trait
 
-RFC 0002 lets a `Model` bound stand on a function, an `impl`, and a type's declaration, and "never on a trait", which it left for this RFC (decision 106). This RFC lifts that (`traits.model-bounds`):
+The heading retains existing links. The capture bound is now `Snapshot`; an optional ordinary `View` is separate ([RFC 0008](0008-snapshot-capture-and-views.md)).
 
-- **`Model` may be a supertrait,** and a bound on an associated type or on a type parameter of a trait or of its method. It is then in scope in the trait and in each implementation, as a bound on a function is in its body.
-- **It is what a contract that reads `self` needs.** In a trait, `Self` is a type parameter, and a value of a type parameter is captured only under a written bound (`models.capture.bound`). So `OrderSpec`, `IterSpec`, and `CloneEq` each say `Model`. Without it, `snap(self)` in a trait is an error, and rustc's own help says what to write. The third round of the spike needed exactly this: `pub trait Bounded: Model { logic fn limit_spec(s: Snap<Self>) -> Nat; .. }`, across two crates.
-- **None is implied.** RFC 0002 inserts no bound, and this RFC keeps to that.
-- **A logical type meets the bound.** It is its own snapshot and its own model. RFC 0002 already has this where it matters to its examples: a logical field is its own part of a snapshot, "a logical type, itself" is in its list of models, and a `Vec<Nat>` of Locus's library is pushed to under `impl<T: Model> Vec<T>`. It is stated here as a rule because a specification trait over `Snap<Self>` depends on it.
-- **In an exported crate nothing changes.** There a `Model` bound still appears only on a function (`models.bounds-on-functions`), so a crate with such a trait builds and does not export.
+- `Snapshot` may be a supertrait or a bound on an associated type, trait parameter, or method parameter. It supplies `Snap<Self>` for contracts that capture `self`.
+- A logical type meets `Snapshot` with itself as its snapshot; this does not automatically implement a view.
+- `View: Snapshot` is an ordinary logic-only library trait with associated logical type `V` and `logic fn view(s: Snap<Self>) -> Self::V`. Its coherence, visibility, and totality rules are ordinary trait rules.
+- Export restrictions on logical bounds remain. There is no inferred bound and no implicit view conversion.
 
-One decided example changes its outcome: `models/model-bound-on-trait`, which wrote `trait Holds<T: Model>`, was rejected and is accepted.
+The earlier `models/model-bound-on-trait` outcome change belongs to this RFC's original trait-bound decision. RFC 0008 changes its spelling to `Snapshot`, not its accepted outcome.
 
 ### Evidence: what a bound means
 
@@ -242,7 +243,7 @@ impl OneByte for Wide {
 - **Generic code is checked once,** and what it proves holds at every instantiation, because it holds for any evidence and an instantiation supplies some. The boundary with unverified code is still checked for each instantiation, as RFC 0002 has it.
 - **A bound may stand wherever Rust allows one.**
 
-**Names** (`traits.names`). A logic function of a trait is named as Rust names an associated function: `Rational::le(a, b)`, `T::le(a, b)`, `Self::le(a, b)`, `<T as OrderSpec>::le(a, b)`, and through the trait, `OrderSpec::le(a, b)`, where the arguments give the type. rustc resolves each, in the typing skeleton. The fourth draft kept logic functions out of the lowered trait, so that none could be a candidate in rustc's resolution of Rust code. RFC 0001 puts their stubs in the trait under reserved names, which gives the same and fixes what the hidden trait broke: a method call that runtime code writes never finds a stub (`t19`). `compat.names.no-methods` still holds for `Logical` and `Model`. A law trait has a method that runs, such as `clone_eq`, so a program imports it by name.
+**Names** (`traits.names`). A logic function of a trait is named as Rust names an associated function: `Rational::le(a, b)`, `T::le(a, b)`, `Self::le(a, b)`, `<T as OrderSpec>::le(a, b)`, and through the trait, `OrderSpec::le(a, b)`, where the arguments give the type. rustc resolves each, in the typing skeleton. The fourth draft kept logic functions out of the lowered trait, so that none could be a candidate in rustc's resolution of Rust code. RFC 0001 puts their stubs in the trait under reserved names, which gives the same and fixes what the hidden trait broke: a method call that runtime code writes never finds a stub (`t19`). `compat.names.no-methods` still holds for `Logical` and `Snapshot`; explicit `View` is imported and used like other logical traits. A law trait has a method that runs, such as `clone_eq`, so a program imports it by name.
 
 ### No definition depends on itself
 
@@ -271,16 +272,16 @@ impl Truth for Int {
 - **Evidence for a concrete type is a finite term.**
 - **A trait is split where a helper needs less.** Tracking which members generic code uses is listed as open.
 - **Runtime methods are not held to this.** One that never returns gives its caller no proof.
-- **RFC 0002's rule for models is an instance.** `models.own-definition` says that a model never depends on itself, and `Model` is a trait whose logic function is the model.
+- **Explicit views obey the same cycle rule.** `models.own-definition` applies to ordinary `View` definitions and helpers; `Snapshot` has no user-supplied model function.
 
 ### `Logical`
 
-The owner: "I assume we will have a trait called Logical for logical types (already satisfied for say Nat, Seq etc) and a trait called Model."
+The original design requested logical-kind and capture bounds as traits. RFC 0008 names the latter `Snapshot`.
 
 - **`Logical` holds for exactly the logical types** (`traits.logical`). Locus defines it. It has no member that a program can name and no implementation written by hand.
 - **It is a bound like any other:** `fn keep<G: Logical>(g: G) -> G` takes any ghost value.
-- **A trait whose logic functions take or return `Self` as a value says `Logical`.** A logic function takes and returns logical types only, and in a trait `Self` may be any type. `Monoid: Logical` writes it. None is implied, as none is for `Model`.
-- **A logic function's own type parameters are RFC 0002's.** They range over logical types unless bounded by `Model` (`logic.fn.parameters`). The fourth draft had them range over every type, with `Logical` implied where the signature needed it. RFC 0002's decisions 105 and 106 came after it and replace that.
+- **A trait whose logic functions take or return `Self` as a value says `Logical`.** A logic function takes and returns logical types only, and in a trait `Self` may be any type. `Monoid: Logical` writes it. None is implied, as none is for `Snapshot`.
+- **A logic function's own type parameters are RFC 0002's.** They range over logical types unless bounded by `Snapshot` (`logic.fn.parameters`). The fourth draft had them range over every type, with `Logical` implied where the signature needed it. RFC 0002's decisions 105 and 106 came after it and replace that.
 
 ### The implementations that are built in
 
@@ -290,7 +291,7 @@ The strict rule is about what a program writes. These are the implementations th
 |---|---|---|
 | Every logical type | `Logical`; `Clone`, `Copy`, `Debug`; `CloneEq` | The language's. `Clone`, `Copy`, and `Debug` are RFC 0002's (`logic.ghost.marker-traits`), and this RFC adds `CloneEq` |
 | `Proof`, the marker of every proof | Also `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` | RFC 0002's: any two proofs of a proposition are equal |
-| Every logical type | `Model`, as its own snapshot and model | The language's (`traits.model-bounds`) |
+| Every logical type | `Snapshot`, as its own snapshot | The language's (`traits.model-bounds`) |
 | Every logical type `T` | `FromLogic<T>`, the identity, and `IntoLogic<U>` wherever `U: FromLogic<T>` | Locus's library, written in Locus and checked |
 | `Prop` | `FromLogic<Bool>` | Locus's library: its one conversion to `Prop` |
 | `Int`, `Nat` | The logical operator traits, with the built-in operators as their logic functions | Locus's library, so that `twice` applies at `Int` |
@@ -338,7 +339,7 @@ A **law trait** is a Locus trait of Locus's library that stands beside a trait o
 
 ```rust
 // Locus's library.
-pub trait CloneEq: Clone + Model {
+pub trait CloneEq: Clone + Snapshot {
     fn clone_eq(&self) -> (copy: Self, @(snap(copy) === snap(self)));
 }
 // `CloneEq` provides `Clone`:  fn clone(&self) -> Self { self.clone_eq().0 }
@@ -359,7 +360,7 @@ impl CloneEq for Meters {
 - **An implementation of a law trait in a program always generates the provided implementations** (`traits.laws.provided`), as `From` gives `Into` in Rust. The orphan rule forbids a blanket implementation here, so Locus writes the provided one beside each implementation of the law trait. Its body is checked like any other code.
 - **Where the type already implements the provided trait, that is a conflict and an error.** So the standard method and the law's method are the same code by construction. `impl CloneEq for Box<Local>`, where `Local` has a `Clone` that does not copy, is rejected: tested with rustc 1.97, the standard `clone` of that box gives 8 where a correct `clone_eq` gives 7.
 - **An adapter stands beside an implementation that already exists,** and only Locus's library writes one (`traits.laws.adapters`). It names that implementation, and its bounds carry the law for every part the existing implementation uses. That the two agree is trusted, pair by pair, and a result lists every adapter that a contract it uses rests on. This is new trust, and the entry is `trusted.library-laws`.
-- **The law is on snapshots, so `CloneEq` says `Model`.** Its contract reads `self`.
+- **The law is on snapshots, so `CloneEq` says `Snapshot`.** Its contract reads `self`.
 
 **The derive.**
 
@@ -389,6 +390,7 @@ impl CloneEq for Interval {
 
 - **Each proof field is the original's proof, carried along the fields' equations,** as a written term. It does not depend on proof search, and it works for an invariant that no procedure understands.
 - **Each equation is at the snapshot the containing type uses for that field.** Where the type's snapshot cuts a field ([RFC 0005](0005-core-terms.md)), the field's `CloneEq` proves the wrong equation: it is about `Snap<F>`, and the type holds a `CutSnap<F>`, which keeps addresses. A cut field is copied where its type is `Copy`, and otherwise the derive is rejected with a message that names the field.
+- **An `Opaque<T>` field uses its library `CloneEq` implementation,** which can clone the payload under `T: Clone` and prove equality of the `Unit` snapshots. It supplies no behavioral equivalence of the payload.
 - **A field of a logical type is copied.** Its type has `CloneEq` built in.
 - **The bound `CloneEq` is put on each type parameter, except one bounded by `Logical`.**
 - **It is checked like any other code,** so it adds no trust, and it is not written beside `#[derive(Clone)]`, which it provides.
@@ -399,7 +401,7 @@ impl CloneEq for Interval {
 
 - **A Locus trait is implemented only in crates that Locus verifies.** RFC 0001 already closes part of this: a trait with a logic function has a stub that plain Rust cannot write. A trait whose only logical content is a proof in a method's signature has none, and a crate written in Rust alone could implement the lowered trait and return any `Proof` it can make. In a build, such an implementation in any crate is an error, wherever it would be used. This needs two crates to show, so it is stated in [the chapter](../../spec/traits.md#what-has-no-rule) without a rule.
 - **An exported crate cannot rely on that,** because its users are built without Locus. A Rust user could implement the exported `CloneEq` for a type of its own and hand it to an exported `impl<T: CloneEq> Clone for Pair<T>`.
-- **So an exported crate has no reachable item or implementation with a bound on a Locus trait** (`export.traits`), generated implementations included. A `Model` bound in an exported crate stays RFC 0002's: only on a function.
+- **So an exported crate has no reachable item or implementation with a bound on a Locus trait** (`export.traits`), generated implementations included. A `Snapshot` bound in an exported crate stays RFC 0002's: only on a function.
 - **Lifting this needs evidence that an exported program cannot forge.** That makes RFC 0002's open question, whether an exported crate depends on Locus's library or carries its own copies, a question of soundness.
 
 ### Left out
@@ -411,51 +413,15 @@ impl CloneEq for Interval {
 
 ## A sketch of the library's law traits
 
-The owner: "I also want us to sketch out all the so called Law traits for common traits in Rust." This section is a sketch for the library's RFC. Nothing in it is a rule of this one, and the names are placeholders.
+[RFC 0007](0007-provided-trait-implementations.md) records the unreviewed generalized provider syntax and method inventory. Laws name an explicit specification over `Snap<Self>`, such as `EqSpec::equiv`, and checked methods tie their results to that same specification. A type may implement the specification alone. `LawfulEq`, checked equality, and hash compatibility are separate obligations; implementing a library view supplies none automatically.
 
-**What an operation means is stated on the model, by a logical trait such as `OrdLogic` or `AddLogic`, and a law trait says that the runtime method computes it.** A model may forget, so "equal" for `==` is "equal models". `CloneEq` is the exception: it is on snapshots, because it must carry an invariant over every field.
+`CloneEq` remains a whole-snapshot law, not equality of a chosen view. For Locus's vector, the native field contributes `Unit`, so element `CloneEq` proofs can establish equality of its logical contents and hence the whole vector snapshot. Ordinary `Clone` alone cannot. An `Opaque<F>` payload contributes equal snapshots even if cloning changes its hidden executable behavior; this law is intentionally only an observation law.
 
-**A model type does not fix every operation on a runtime type.** `u32` and `u64` both have the model `Nat`, and `u32`'s `+` wraps at one width. So a law trait names its own logic function where the model's operator is not what the method computes.
+A hash law must prove that its observations cannot distinguish inputs equal under the same named `EqSpec`. Reading hidden runtime payload is not automatically forbidden, but a hash that depends on a difference erased by that equality cannot satisfy the law. Cross-type borrowing must establish agreement of the pair's actual hash protocol and order; a common view type alone does not establish either.
 
-```rust
-pub trait OrdLogic: Logical {
-    logic fn le(a: Self, b: Self) -> Prop;
-    // lemmas: reflexive, transitive, antisymmetric for `===`, total
-}
+Native `Hash::hash<H: Hasher>` cannot silently acquire a stronger checked-hasher bound. Its bridge remains open, as do generic `Clone`/`CloneEq` overlap and fact transport at ordinary proof-dropping bridge calls. The provider proposal does not amend `contracts.calls.unrelated` merely by generating forwarding code.
 
-pub trait EqLaw: Model + Eq {
-    fn eq_checked(&self, other: &Self) -> (r: bool, @(iff(r, *self === *other)));
-}
-
-pub trait OrdLaw: EqLaw + Ord + Model<Logic: OrdLogic> {
-    fn le_checked(&self, other: &Self) -> (r: bool, @(iff(r, *self <= *other)));
-}
-```
-
-In the two contracts `*self` and `*other` are captures, so `===` and `<=` are the models'.
-
-| Law trait | Beside | Its method | The proof says | Provides |
-|---|---|---|---|---|
-| `CloneEq` | `Clone` | `clone_eq` | The copy's snapshot is the original's | `Clone` |
-| `EqLaw` | `PartialEq`, `Eq` | `eq_checked` | True exactly when the models are equal | `PartialEq`, `Eq` |
-| `OrdLaw` | `PartialOrd`, `Ord` | `le_checked`, `lt_checked`, `cmp_checked` | The result is the models' order | `PartialOrd`, `Ord` |
-| `PartialOrdLaw` | `PartialOrd` alone | `partial_cmp_checked` | The result is the model's partial comparison, which may give none | `PartialOrd` |
-| `HashLaw` | `Hash` | `hash_writes` | The hasher calls it makes are a function of the model | `Hash` |
-| `BorrowLaw<B>` | `Borrow<B>` | `borrow_checked` | The borrowed value has the same model, and the pair agree on order and on hasher calls | `Borrow<B>` |
-| `IterLaw` | `Iterator` | `next_checked` | The states before and after, and the item, satisfy the iterator's step relation | `Iterator` |
-| `IndexLaw<I>` | `Index<I>` | `in_bounds_checked`, and `index_checked` with a proof | The result is the element at `i` | `Index<I>`, which checks and panics |
-| `DerefLaw` | `Deref` | `deref_checked` | The target is a function of the snapshot | `Deref` |
-| `AddLaw` and the other operators | `Add` and the rest | `add_checked` | The result's model is the law's own function of the operands' models | `Add` and the rest |
-| `DefaultLaw` | `Default` | `default_checked` | The model is the declared default | `Default` |
-| `FromLaw<T>` | `From<T>` | `from_checked` | The model is the declared conversion | `From<T>` |
-
-- **No law trait:** `Copy`, `Debug`, `Display`, `Error`, `Any`, `Sized`, `Send`, `Sync`, `Unpin`. `Drop` waits for `#[no(panic)]`, and the `Fn` traits for contracts on closures.
-- **Machine integers get no arithmetic adapter.** RFC 0004 already says what `+` on them means, wrapped.
-- **`PartialOrdLaw` assumes nothing reflexive,** since `NaN` compares with nothing, itself included.
-- **`HashLaw` speaks of the sequence of hasher calls,** not of bytes joined together, because a hasher may tell `write(b"ab")` from two writes. The standard `hash` is generic over every `Hasher` and cannot ask more of it, so the law's method yields the calls and the provided `hash` makes them on whatever hasher it is given.
-- **`BorrowLaw` states agreement for the pair.** That each side's hash is a function of the model is not enough: an owned type may hash a tag that its borrowed form does not, and a lookup by the borrowed form then misses (tested by the reviewer). It is not required of every two types with one model: `u32` and `u64` hash differently.
-- **`IterLaw` is a relation between states.** That an iterator ends with a known finite sequence, and that it keeps returning `None`, are further law traits over it.
-- **`IndexLaw` shows a method that needs a proof.** The provided `index` calls `in_bounds_checked`, then `index_checked` with the proof, or panics. It is what would let `v[i]` on Locus's `Vec` rest on a checked method, though the operator itself still states nothing (`collections.vec.indexing`).
+Machine types may share `Snap<u32> = Snap<u64> = Nat` while their executable operations wrap differently. Their specifications therefore identify the source operation and width explicitly. No law is inferred from the shared snapshot type.
 
 ## Rules
 
@@ -499,12 +465,12 @@ A new chapter of the specification, [Traits](../../spec/traits.md), and one rule
 
 | Area | Effect |
 |---|---|
-| Types | Logical types implement traits. `Logical` is a trait, and a logical type meets a `Model` bound as its own snapshot and model. A logical associated type may be any logical type. A trait may have `Model` as a supertrait. |
+| Types | Logical types implement traits. `Logical` is a trait, and a logical type meets a `Snapshot` bound as its own snapshot. A logical associated type may be any logical type. A trait may have `Snapshot` as a supertrait. |
 | Propositions and proofs | A bound is an evidence parameter in the core. A trait's logic function is opaque under a bound and the implementation's body at a concrete type. Conversion gains no reduction. A value used as a proposition is one whose type converts to `Prop`, which for now is a `Bool`. |
 | Ownership and mutation | None. A contract on a trait method that takes `&mut self` names `final!(self)` as any signature does. |
 | Erasure and runtime behavior | Logical values are zero-sized as before. A program gives a logical type no method that runs, so nothing of a program's runs on a marker. A generated implementation is real code, and is the law's own method. Two implementations that differ in a logical type argument are two implementations at run time too, so which code runs can follow a logical type, though never a logical value. |
 | Rust interoperability | One set of traits, resolved by rustc. A Locus trait is implemented only in verified crates, and an exported crate exposes no bound on one. For an operation that both worlds have, the library has a logical trait beside the standard one. |
-| Diagnostics | New errors: a signature that is not the trait's; a member given in the other kind; a proof type or a snapshot type in a header; a logical type given a trait with a method that runs; evidence that depends on itself; a conflict with a generated implementation; a conversion to `Prop` written by a program; a Locus trait as a trait object; and a bound on a Locus trait that an exported crate shows. The missing `Model` supertrait is rustc's error, with its help. |
+| Diagnostics | New errors: a signature that is not the trait's; a member given in the other kind; a proof type or a snapshot type in a header; a logical type given a trait with a method that runs; evidence that depends on itself; a conflict with a generated implementation; a conversion to `Prop` written by a program; a Locus trait as a trait object; and a bound on a Locus trait that an exported crate shows. The missing `Snapshot` supertrait is rustc's error, with its help. |
 | Trust model | One new entry, `trusted.library-laws`, one line for each adapter. `trusted.ghost-checks` and `trusted.driver` cover more: the checks this RFC makes after rustc, and refusing an implementation of a Locus trait in a crate that Locus does not verify. |
 
 ## Alternatives

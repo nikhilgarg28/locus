@@ -1,0 +1,28 @@
+//~ question: Is the field of a capture equal to the capture of the field, when the field's declared view has its snapshot's own type?
+//~ spec: models.capture.fields
+//~ rfc: 0002
+
+struct Inner {
+    n: u32,
+}
+
+// A view with the type of the snapshot: the snapshot with `n` replaced by 0.
+impl View for Inner {
+    type V = Snap<Inner>;
+    logic fn view(s: Snap<Inner>) -> Snap<Inner> {
+        Inner { n: 0 }
+    }
+}
+
+// Capture of `Outer` holds `Inner`'s snapshot; its view is not applied.
+struct Outer {
+    inner: Inner,
+}
+
+fn confused(outer: &Outer, seven: @(outer.inner.n == 7)) -> u32 {
+    let whole = logic! { outer };
+    let part = logic! { outer.inner };
+    // The view is explicit; both capture orders yield the same snapshot.
+    let same: @(whole.inner === part) = _;
+    outer.inner.n
+}

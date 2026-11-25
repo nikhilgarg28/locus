@@ -9,14 +9,14 @@ struct Stack {
     cap: usize,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }
 
-// `s` is captured as a `Seq<Nat>`, and `len` is that type's.
-fn nonempty(s: &Stack, some: @(s.len() > 0)) -> u32 {
+// `s.items` captures the vector snapshot; `elements()` exposes its sequence.
+fn nonempty(s: &Stack, some: @(s.items.elements().len() > 0)) -> u32 {
     1
 }

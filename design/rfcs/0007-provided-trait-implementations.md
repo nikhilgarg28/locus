@@ -10,10 +10,9 @@
 **Draft proposal.** Checked traits may contain nested `impl` blocks that supply ordinary trait implementations. These are per-implementation templates, not blanket impls. Locus generates and verifies the bodies; rustc retains ownership, overlap and trait-selection rules. The initial library connects equality, cloning and ordering to Rust traits, and specifies checked hashing separately.
 
 This is a design record, not a proposed acceptance decision. It preserves the
-owner's chosen nested `impl` syntax and `Self` scoping. No spec rule, decided
-litmus outcome, or trust entry changes in this PR. RFC 0006 is reserved for the
-traits draft being prepared separately; this draft depends on that work and on
-the current RFCs 0001 to 0005. The source is the
+owner's chosen nested `impl` syntax and `Self` scoping. This RFC introduces no normative rule or trust entry before review. It depends on
+the traits proposal in RFC 0006 and the snapshot reconciliation in RFC 0008;
+other changes in the containing PR are tracked separately. The source is the
 [design one-pager](https://chatgpt.com/space/page_ec1c67b2ba4c8191b70aa8e87d62fc07).
 
 **Interaction requiring review:** the intended availability of a bridge's fact
@@ -22,8 +21,8 @@ at an ordinary call is not supplied by current
 the separately defined observations of runtime operations. Generating a wrapper
 that drops a proof does not, by itself, give that proof to a caller. How a bridge
 exports a checked call fact is an unresolved part of this draft, not an implicit
-amendment of the existing rule. The trait signatures also depend on the pending
-design for logical members and `Model` bounds on traits.
+amendment of the existing rule. The trait signatures also depend on the proposed
+design for logical members and `Snapshot` bounds on traits.
 
 ## Motivation
 
@@ -87,7 +86,7 @@ Signatures below are schematic. `S` means an admissible frozen snapshot of the i
 
 These are a proposed signature inventory, not compilable source or settled
 standard-library interfaces. In particular, admissibility premises and required
-`Model` bounds must be written explicitly when the signatures become source:
+`Snapshot` bounds must be written explicitly when the signatures become source:
 a quantified `Snap<T>` is not automatically valid. The one-pager's schematic
 biconditional is written `iff` below, following the current RFC 0002.
 
@@ -96,7 +95,7 @@ biconditional is written `iff` below, following the current RFC 0002.
 | `EqSpec` | `logic fn equiv(a:S, b:S) -> Bool` | None |
 | `EqChecked: EqSpec` | `fn eq_checked(&self, rhs:&Self) -> (r:bool, @(r === E(a0,b0)))` | `PartialEq`; `eq` delegates, `ne` uses its verified default |
 | `LawfulEq: EqChecked` | `logic fn refl(a:S) -> @(E(a,a))`; `logic fn sym(a:S,b:S) -> @(E(a,b) ==> E(b,a))`; `logic fn trans(a:S,b:S,c:S) -> @(E(a,b) && E(b,c) ==> E(a,c))` | `Eq` via `impl Eq for Self {}` |
-| `CloneEq: EqSpec` | `fn clone_eq(&self) -> (r:Self, @(E(snap(r),a0)))` | `Clone`; `clone` delegates, `clone_from` uses its verified default |
+| `CloneEq: Snapshot` | `fn clone_eq(&self) -> (r:Self, @(snap(r) === a0))` | `Clone`; `clone` delegates, `clone_from` uses its verified default |
 | `OrdSpec: EqSpec` | `logic fn compare(a:S,b:S) -> O` | None |
 | `OrdChecked: OrdSpec` | `fn cmp_checked(&self,rhs:&Self) -> (r:Ordering, @(snap(r) === C(a0,b0)))` | None until order laws are established |
 | `TotalOrd: OrdChecked + LawfulEq` | `logic fn equal(a:S,b:S) -> @(iff(C(a,b) === Equal, E(a,b)))`; `logic fn reverse(a:S,b:S) -> @(C(a,b) === reverse_order(C(b,a)))`; `logic fn le_trans(a:S,b:S,c:S) -> @(L(a,b) && L(b,c) ==> L(a,c))` | `Ord` and `PartialOrd`; `partial_cmp` returns `Some(cmp_checked(...).0)` |
@@ -106,7 +105,7 @@ biconditional is written `iff` below, following the current RFC 0002.
 | `HashChecked<H: HasherChecked>: HashSpec<H>` | `fn hash_checked(&self,h:&mut H) -> @(h1 === feed(a0,h0))` | Standard `Hash` bridge remains open |
 | `HashEq<H: HasherChecked>: EqChecked + HashChecked<H>` | `logic fn respects_eq(a:S,b:S,s:H::State) -> @(E(a,b) ==> feed(a,s) === feed(b,s))` | None |
 
-`HashEq` uses equality of resulting logical hasher states, a stronger composable guarantee than equal final digests. `HasherChecked` operations must depend only on their specified state and input, with the declared state-preservation guarantees. All equality, clone, order and hash laws reference the same selected `EqSpec`; equality may ignore representation details. `CloneEq` preserves that equivalence, not deep-copy independence.
+`HashEq` uses equality of resulting logical hasher states, a stronger composable guarantee than equal final digests. `HasherChecked` operations must depend only on their specified state and input, with the declared state-preservation guarantees. Equality, order and hash laws reference the same selected `EqSpec`, which may ignore representation details. `CloneEq` instead preserves whole snapshots under RFC 0008; it implies neither deep-copy independence nor equivalence of hidden executable behavior.
 
 **Independent adoption.** `EqSpec` needs neither executable equality nor laws. `EqChecked` supplies `PartialEq` without proving reflexivity; `LawfulEq` adds those proofs and Rust `Eq`. `CloneEq` need not require hashing or ordering. `HashChecked<H>` needs no equality; `HashEq<H>` needs no `LawfulEq`—an always-false equality makes compatibility vacuous. Verified hash collections require both, with the chosen checked hasher.
 
@@ -126,7 +125,7 @@ implementation identity.
 
 | Area | Effect |
 | --- | --- |
-| Types | Instantiates nested implementation templates and exports their bounds. Non-`Self` targets, conditional bounds, logical members, snapshot validity and `Model` requirements need elaboration. |
+| Types | Instantiates nested implementation templates and exports their bounds. Non-`Self` targets, conditional bounds, logical members, snapshot validity and `Snapshot` requirements need elaboration. |
 | Propositions and proofs | Law traits refer to shared specification identities. Transport of facts through a result that omits the proof remains open against `contracts.calls.unrelated`. |
 | Ownership and mutation | rustc checks generated receivers, arguments and loans. Delegation must preserve declared effects and final-borrow guarantees; returned-reference examples need a spike. |
 | Erasure and runtime behavior | Generated bodies perform the checked operation and project its runtime result. Proof erasure does not authorize calling the operation twice or changing trait selection between programs. |
@@ -175,7 +174,7 @@ Tracked in [provided-trait-implementations](../../issues/provided-trait-implemen
 4. How can standard `Hash::hash<H: Hasher>` retain its unrestricted signature
    while offering a checked protocol? A stronger `H: HasherChecked` bound cannot
    simply be added to the trait method.
-5. What explicit validity premises, `Model` bounds, frames, default-method
+5. What explicit validity premises, `Snapshot` bounds, frames, default-method
    contracts, and export restrictions make the signature inventory precise?
 6. Should later versions accept explicitly verified alternate target
    implementations, and what evidence must their callers receive?

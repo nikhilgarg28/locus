@@ -1,16 +1,16 @@
-//~ question: May logical code capture a struct whose field of a type that Locus cannot see is marked `#[opaque]`?
+//~ question: May logical code capture a struct whose field of a type that Locus cannot see is wrapped in `Opaque<T>`?
 //~ spec: models.snapshots.opaque, models.default
 //~ rfc: 0002
 
+use locus::Opaque;
 use std::net::TcpListener;
 
 struct Server {
-    #[opaque]
-    listener: TcpListener,
+    listener: Opaque<TcpListener>,
     port: u16,
 }
 
-// `Server` declares no model, so its capture is its snapshot, which a move keeps, opaque value included.
+// A move preserves the structural snapshot, including the wrapper's Unit field.
 fn kept(server: Server) -> Server {
     let before = logic! { server };
     let moved = server;

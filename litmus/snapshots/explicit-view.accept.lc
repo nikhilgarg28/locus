@@ -1,0 +1,13 @@
+//~ question: Does explicitly mapping element views leave capture unchanged?
+//~ spec: collections.model, models.by-parts, models.total
+//~ rfc: 0008
+
+use locus::std::vec::Vec;
+struct Entry { key: u32, cache: u32 }
+impl View for Entry {
+    type V = Nat;
+    logic fn view(s: Snap<Entry>) -> Nat { s.key }
+}
+logic fn keys(s: Snap<Vec<Entry>>) -> Seq<Nat> {
+    Vec::<Entry>::view(s)
+}

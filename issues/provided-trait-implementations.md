@@ -45,3 +45,7 @@ The owner approved nested `impl Trait for Type` syntax, chose the `Self`
 scoping above, and requested: "push this as unreviewed RFC - we will come
 review/critique it later as PR". RFC 0007 preserves that scope. It changes no
 spec rules, decided examples, or trust entries.
+
+### 2026-11-24, snapshot/view reconciliation proposed
+
+[RFC 0008](../design/rfcs/0008-snapshot-capture-and-views.md) replaces implicit models with compiler-generated snapshot capture and ordinary explicit views. `Opaque<T>` and `UnsafeCell<T>` snapshot to `Unit`; field-erasure attributes are removed. Collection wrappers keep logical contents with generated conditional storage and offer native-shaped and checked methods. Existing unresolved lowering, loan, coherence, and bridge-fact questions remain open; [snapshot-view-reconciliation](snapshot-view-reconciliation.md) links the validation gates. This update does not rewrite the earlier log or mark an RFC accepted.

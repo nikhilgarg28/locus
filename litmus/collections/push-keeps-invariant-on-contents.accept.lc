@@ -22,10 +22,10 @@ impl Stack {
     fn push(self, x: u32) -> (Stack, bool) {
         let Stack { mut items, cap, fits } = self;
         // `counted` proves that `n` is the length of the contents.
-        let (n, counted) = items.len();
+        let (n, counted) = items.len_checked();
         if n < cap {
             // `grew` proves that the contents are one longer than they were.
-            let grew = items.push(x);
+            let grew = items.push_checked(x);
             (Stack { items, cap, fits: _ }, true)
         } else {
             (Stack { items, cap, fits }, false)

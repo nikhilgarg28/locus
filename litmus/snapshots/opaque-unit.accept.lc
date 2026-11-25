@@ -1,0 +1,6 @@
+//~ question: Do arbitrary payload types share the Unit snapshot without a payload bound?
+//~ spec: models.snapshots.opaque, models.frozen-data
+//~ rfc: 0008
+
+use locus::Opaque;
+fn same<A, B>(a: &Opaque<A>, b: &Opaque<B>) -> @(a === b) { _ }

@@ -1,4 +1,4 @@
-//~ question: For a field whose declared model has its snapshot's own type, are the field of the capture and the capture of the field two values?
+//~ question: For a field whose declared view has its snapshot's own type, do both capture orders retain the same field?
 //~ spec: models.capture.fields, models.snapshots
 //~ rfc: 0002
 
@@ -6,15 +6,15 @@ struct Inner {
     n: u32,
 }
 
-// A model with the type of the snapshot: the snapshot with `n` replaced by 0.
-impl Model for Inner {
-    type Logic = Snap<Inner>;
-    logic fn model(s: Snap<Inner>) -> Snap<Inner> {
+// A view with the type of the snapshot: the snapshot with `n` replaced by 0.
+impl View for Inner {
+    type V = Snap<Inner>;
+    logic fn view(s: Snap<Inner>) -> Snap<Inner> {
         Inner { n: 0 }
     }
 }
 
-// `Outer` declares no model, so its model is its snapshot, which holds `Inner`'s snapshot.
+// Capture of `Outer` holds `Inner`'s snapshot; its view is not applied.
 struct Outer {
     inner: Inner,
 }
@@ -24,7 +24,7 @@ fn both(outer: &Outer, seven: @(outer.inner.n == 7)) -> u32 {
     let part = logic! { outer.inner };
     // Captured, then the field selected: the field's snapshot, in which `n` is 7.
     let kept: @(whole.inner.n == 7) = _;
-    // The field selected, then captured: the field's model, in which `n` is 0.
-    let forgotten: @(part.n == 0) = _;
+    // The field selected, then captured: the same snapshot, in which `n` is 7.
+    let retained: @(part.n == 7) = _;
     outer.inner.n
 }

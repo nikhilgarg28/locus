@@ -1,0 +1,17 @@
+//~ question: Are the opaque snapshots of two fields of different types values of one type?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+use locus::Opaque;
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
+    port: u16,
+}
+
+fn mixed(server: &Server) -> u32 {
+    let same: @(snap(server).listener === snap(server).local) = _;
+    0
+}

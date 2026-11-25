@@ -1,8 +1,8 @@
-//~ question: May a trait have `Model` as a supertrait, so that the contract of its method reads `self`?
+//~ question: May a trait have `Snapshot` as a supertrait, so that the contract of its method reads `self`?
 //~ spec: traits.model-bounds
 //~ rfc: 0006
 
-trait Stable: Model {
+trait Stable: Snapshot {
     fn touch(&mut self) -> @(snap(final!(self)) === snap(self));
 }
 

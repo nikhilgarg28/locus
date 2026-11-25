@@ -1,4 +1,4 @@
-//~ question: May a `Model` bound appear on an `impl`?
+//~ question: May a `Snapshot` bound appear on an `impl`?
 //~ spec: models.bounds-on-functions
 //~ rfc: 0002
 
@@ -6,7 +6,7 @@ trait Describe {
     fn describe(&self) -> u32;
 }
 
-impl<T: Model> Describe for T {
+impl<T: Snapshot> Describe for T {
     fn describe(&self) -> u32 {
         1
     }

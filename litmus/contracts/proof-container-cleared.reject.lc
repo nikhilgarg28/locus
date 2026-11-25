@@ -6,7 +6,7 @@ use locus::std::vec::Vec;
 
 struct Hints {
     hints: Vec<@True>,
-    nonempty: @(hints.len() > 0),
+    nonempty: @(hints.elements().len() > 0),
 }
 
 fn clear(s: &mut Hints) {

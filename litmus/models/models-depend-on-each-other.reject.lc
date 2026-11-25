@@ -11,19 +11,19 @@ struct Link {
     to: Node,
 }
 
-impl Model for Node {
-    type Logic = Nat;
-    logic fn model(n: Snap<Node>) -> Nat {
+impl View for Node {
+    type V = Nat;
+    logic fn view(n: Snap<Node>) -> Nat {
         match n.next {
-            Some(link) => Link::model(link), //~ error: the model of `Node` depends on itself, through the model of `Link`
+            Some(link) => Link::view(link), //~ error: these view implementations form unsupported mutual logical recursion
             None => n.value,
         }
     }
 }
 
-impl Model for Link {
-    type Logic = Nat;
-    logic fn model(l: Snap<Link>) -> Nat {
-        Node::model(l.to)
+impl View for Link {
+    type V = Nat;
+    logic fn view(l: Snap<Link>) -> Nat {
+        Node::view(l.to)
     }
 }

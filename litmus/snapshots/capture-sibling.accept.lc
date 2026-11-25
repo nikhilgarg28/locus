@@ -1,0 +1,12 @@
+//~ question: Does capture of a disjoint field avoid borrowing an unavailable parent?
+//~ spec: models.capture.available, models.capture.fields
+//~ rfc: 0008
+
+struct Pair { left: u32, right: u32 }
+fn sibling(p: &mut Pair) -> u32 {
+    let loan = &mut p.left;
+    let before = logic! { p.right };
+    *loan = 3;
+    let same: @(p.right === before) = _;
+    p.right
+}

@@ -5,7 +5,7 @@ Logical code is not checked as it is spelled. It is translated to a small langua
 ## Elaboration
 
 r[core.elaboration]
-Logical code is elaborated to *core terms* before any rule of this specification about equality, rewriting, inferred values, or conversion applies, and those rules speak of core terms, not of how a program spells them. In a core term, a place is the value name of the version it has at that point, with its projections; a runtime place that logical code reads is its capture, the model of that ([`models.observation`](models.md)), as an argument too; and `snap(x)` is the value name itself.
+Logical code is elaborated to *core terms* before any rule of this specification about equality, rewriting, inferred values, or conversion applies, and those rules speak of core terms, not of how a program spells them. In a core term, a place is the value name of the version it has at that point, with its projections; a runtime place that logical code reads is its capture, the snapshot of that ([`models.observation`](models.md)), as an argument too; and `snap(x)` is the value name itself.
 
 r[core.values]
 A value name stands for the snapshot of one version of a runtime place ([`proofs.versions`](proofs.md)). It is a variable: conversion never replaces it by another term, and what is known of it is the facts in the context ([`runtime.facts`](runtime.md)). Two versions of one place have two value names, whatever values they hold.
@@ -16,7 +16,7 @@ For a machine integer type `T` of `w` bits, with `M` the `w`th power of two, `wr
 ## Conversion
 
 r[core.conversion]
-Two core terms *convert* when these reductions bring them to the same term, up to the names of bound variables: arithmetic and comparisons on literals; an `if` on a literal, a `match` on a constructor, and a field of a constructed value; a call of a logic function that does not call itself, a model included, which becomes its body; a call of a logic function that calls itself, which becomes its body only when the argument it recurs on is a constructor or, for a declared measure, every argument the measure reads is a literal; either only where every name in the body could be written at the point of the call; and a constant or a ghost `let` that is not `mut`, which becomes its value. Nothing else converts: no law of arithmetic, and no fact about a value name. Reduction is tried only as far as a comparison needs, within a fixed number of steps, and a comparison that does not finish within it is an error, not a finding that the terms differ.
+Two core terms *convert* when these reductions bring them to the same term, up to the names of bound variables: arithmetic and comparisons on literals; an `if` on a literal, a `match` on a constructor, and a field of a constructed value; a call of a logic function that does not call itself, an explicitly called view included, which becomes its body; a call of a logic function that calls itself, which becomes its body only when the argument it recurs on is a constructor or, for a declared measure, every argument the measure reads is a literal; either only where every name in the body could be written at the point of the call; and a constant or a ghost `let` that is not `mut`, which becomes its value. Nothing else converts: no law of arithmetic, and no fact about a value name. Reduction is tried only as far as a comparison needs, within a fixed number of steps, and a comparison that does not finish within it is an error, not a finding that the terms differ.
 
 ## Sequences
 

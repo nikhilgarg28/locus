@@ -1,0 +1,11 @@
+//~ question: Does a new symbolic stamp prove a distinct numeric value?
+//~ spec: models.stamps
+//~ rfc: 0008
+
+fn mint() -> Nat { logic! { 0 } }
+fn distinct() -> @(1 == 1) {
+    let a = mint();
+    let b = mint();
+    let different: @(a !== b) = _; //~ error: mint supplies no uniqueness guarantee
+    _
+}

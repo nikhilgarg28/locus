@@ -4,7 +4,7 @@
 
 use locus::std::vec::Vec;
 
-fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
-    let (count, again): (usize, @(v.len() > 0)) = (v.len().0, nonempty);
+fn f(v: Vec<u32>, nonempty: @(v.elements().len() > 0)) -> usize {
+    let (count, again): (usize, @(v.elements().len() > 0)) = (v.len(), nonempty);
     count
 }

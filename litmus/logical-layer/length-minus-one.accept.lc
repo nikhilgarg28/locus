@@ -4,6 +4,6 @@
 
 use locus::std::vec::Vec;
 
-fn last_index(v: &Vec<u32>) -> @(v.len() == 0 ==> v.len() - 1 == -1) {
+fn last_index(v: &Vec<u32>) -> @(v.elements().len() == 0 ==> v.elements().len() - 1 == -1) {
     _
 }

@@ -1,0 +1,9 @@
+//~ question: Does an UnsafeCell payload update leave its unit observation unchanged?
+//~ spec: models.frozen-data, models.capture.footprint
+//~ rfc: 0008
+
+use std::cell::UnsafeCell;
+fn update(cell: &mut UnsafeCell<u32>) -> @(snap(final!(cell)) === snap(cell)) {
+    *cell.get_mut() = 9;
+    _
+}

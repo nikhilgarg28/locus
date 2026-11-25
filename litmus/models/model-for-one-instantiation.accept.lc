@@ -1,0 +1,14 @@
+//~ question: May a view be declared for one instantiation of a generic type?
+//~ spec: models.one-per-type
+//~ rfc: 0002
+
+struct Wrap<T> {
+    inner: T,
+}
+
+impl View for Wrap<u32> {
+    type V = Nat;
+    logic fn view(w: Snap<Wrap<u32>>) -> Nat {
+        w.inner
+    }
+}

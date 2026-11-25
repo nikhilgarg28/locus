@@ -5,7 +5,7 @@
 use locus::std::vec::Vec;
 
 fn count(values: &Vec<Int>) -> usize {
-    values.len().0
+    values.len()
 }
 
 fn counted() -> usize {

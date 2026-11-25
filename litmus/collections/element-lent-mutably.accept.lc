@@ -9,7 +9,7 @@ fn replace_first(v: &mut Vec<u32>, x: u32, some: @(0 < snap(v).elements().len())
 {
     // `lent` proves that when `first` is no longer used, the contents are the old ones
     // with the value that `*first` then has at 0.
-    let (first, lent) = v.get_mut(0, some);
+    let (first, lent) = v.get_mut_checked(0, some);
     *first = x;
     _
 }

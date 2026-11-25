@@ -6,7 +6,7 @@ use locus::std::vec::Vec;
 
 fn drained(v: &mut Vec<u32>) -> (empty: bool, @(empty ==> snap(v).elements().len() == 0)) {
     // `popped` proves that `last` is `None` exactly when the contents had length 0.
-    let (last, popped) = v.pop();
+    let (last, popped) = v.pop_checked();
     match last {
         None => (true, _),
         Some(_) => (false, _),

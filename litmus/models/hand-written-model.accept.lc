@@ -1,4 +1,4 @@
-//~ question: May a type declare one model of its own, reading frozen data?
+//~ question: May a type declare one view of its own, reading frozen data?
 //~ spec: models.one-per-type, models.declared-by-owner, models.frozen-data, models.own-definition
 //~ rfc: 0002
 
@@ -8,9 +8,9 @@ struct Stack {
     items: Vec<u32>,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }

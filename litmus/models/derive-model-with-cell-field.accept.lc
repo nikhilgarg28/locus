@@ -1,11 +1,12 @@
-//~ question: May a type derive its model when one of its fields is a `Cell`, whose model is its snapshot?
-//~ spec: models.derived
+//~ question: May a type have a structural snapshot when one of its fields is a `Cell`, whose payload is omitted from capture?
+//~ spec: models.snapshots
 //~ rfc: 0002
 
 use std::cell::Cell;
 
-#[derive(Model)]
 struct Counter {
     id: u32,
     hits: Cell<u32>,
 }
+
+fn observed(c: &Counter) -> @(snap(c).id === c.id) { _ }

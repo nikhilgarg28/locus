@@ -5,10 +5,10 @@
 use locus::std::vec::Vec;
 
 fn consume(v: Vec<u32>) -> usize {
-    v.len().0
+    v.len()
 }
 
-fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
-    let again: @(v.len() > 0) = nonempty;
+fn f(v: Vec<u32>, nonempty: @(v.elements().len() > 0)) -> usize {
+    let again: @(v.elements().len() > 0) = nonempty;
     consume(v)
 }

@@ -9,7 +9,7 @@ use locus::std::vec::Vec;
 fn length_after(v: &mut Vec<u32>) -> usize {
     std::hint::black_box(&mut *v);
     // Nothing is known of the contents now. `len` says what their length is.
-    let (n, counted) = v.len();
+    let (n, counted) = v.len_checked();
     n
 }
 

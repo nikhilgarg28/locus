@@ -2,7 +2,7 @@
 //~ spec: traits.members.kind, traits.model-bounds, traits.evidence, traits.impls.logical-types
 //~ rfc: 0006
 
-trait OrderSpec: Model {
+trait OrderSpec: Snapshot {
     logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
     logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
 }

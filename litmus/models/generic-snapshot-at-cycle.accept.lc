@@ -10,7 +10,7 @@ struct Node<'a> {
     w: Wrap<'a, Node<'a>>,
 }
 
-fn same<T: Model>(a: &Wrap<T>, b: &Wrap<T>, inner: @(snap(a.inner) === snap(b.inner))) -> @(snap(a) === snap(b)) {
+fn same<T: Snapshot>(a: &Wrap<T>, b: &Wrap<T>, inner: @(snap(a.inner) === snap(b.inner))) -> @(snap(a) === snap(b)) {
     _
 }
 

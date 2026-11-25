@@ -6,7 +6,7 @@ struct Wrap<'a, T> {
     inner: &'a T,
 }
 
-#[derive(Model)] //~ error: cannot derive `Model` for `Node`: it reaches itself through the reference in `Wrap`'s field `inner`, so its field `w` is cut in its snapshot, and a cut field has no model
+#[derive(Model)] //~ error: Locus supplies no Model derive; write an explicit library view
 struct Node<'a> {
     w: Wrap<'a, Node<'a>>,
 }

@@ -1,0 +1,10 @@
+//~ question: Does a write through a borrowed conditional logical field preserve its value?
+//~ spec: models.storage, runtime.borrows
+//~ rfc: 0008
+
+struct Holder<T> { values: Seq<Snap<T>> }
+fn replace<T: Snapshot>(h: &mut Holder<T>, s: Seq<Snap<T>>) -> @(final!(h).values === s) {
+    let slot = &mut h.values;
+    *slot = s;
+    _
+}

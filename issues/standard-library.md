@@ -321,3 +321,7 @@ The third round of [the skeleton spike](../spikes/skeleton-typing-3/README.md) t
 - **The other law traits are a sketch,** with placeholder names: `EqLaw`, `OrdLaw`, `PartialOrdLaw`, `HashLaw`, `BorrowLaw`, `IterLaw`, `IndexLaw`, `DerefLaw`, `AddLaw`, `DefaultLaw`, `FromLaw`. `IndexLaw` is what would give `v[i]` on a `Vec` of Locus's library a checked method to rest on, though the operator itself still states nothing (`collections.vec.indexing`).
 
 The trust model gains `trusted.library-laws`: that each adapter agrees with the standard implementation it stands beside.
+
+### 2026-11-24, snapshot/view reconciliation proposed
+
+[RFC 0008](../design/rfcs/0008-snapshot-capture-and-views.md) replaces implicit models with compiler-generated snapshot capture and ordinary explicit views. `Opaque<T>` and `UnsafeCell<T>` snapshot to `Unit`; field-erasure attributes are removed. Collection wrappers keep logical contents with generated conditional storage and offer native-shaped and checked methods. Existing unresolved lowering, loan, coherence, and bridge-fact questions remain open; [snapshot-view-reconciliation](snapshot-view-reconciliation.md) links the validation gates. This update does not rewrite the earlier log or mark an RFC accepted.

@@ -1,14 +1,13 @@
-//~ question: Is the opaque value of a marked field reached through the snapshot of the value that holds it?
+//~ question: Is the opaque value of a wrapped field reached through the snapshot of the value that holds it?
 //~ spec: models.snapshots.opaque
 //~ rfc: 0002
 
+use locus::Opaque;
 use std::net::{SocketAddr, TcpListener};
 
 struct Server {
-    #[opaque]
-    listener: TcpListener,
-    #[opaque]
-    local: SocketAddr,
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
     port: u16,
 }
 

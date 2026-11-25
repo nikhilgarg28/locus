@@ -24,13 +24,13 @@ r[compat.syntax.contextual-keywords]
 
 ## Locus names
 
-Locus's macros (`logic!`, `prop!`, `prove!`), its `verified` and `unverified` attributes, its `Logical` and `Model` derives, its `Model` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are. Its `opaque` attribute, which marks a field ([`models.snapshots.opaque`](models.md#snapshots)), is read where the field is declared.
+Locus's macros (`logic!`, `prop!`, `prove!`), its `verified` and `unverified` attributes, its `Logical` derive, its compiler-controlled `Snapshot` trait and ordinary library `View` trait, and the logical types and functions of its standard library are ordinary names, found the way the names in Rust's standard prelude are. `Opaque<T>` is a library wrapper with a language-defined unit snapshot; no field attribute changes capture.
 
 r[compat.names.shadowable]
 A program's own definitions and imports take precedence over Locus's names, as they would over the standard prelude's, including a glob-imported macro with the same name as one of Locus's.
 
 r[compat.names.no-methods]
-Traits among Locus's names have no methods, associated functions, or associated constants that a program can name, so that having them in scope never changes what a method call or path in Rust code resolves to. A logic function that such a trait declares, as `Model` declares `model`, is not an item that Rust code can name: what rustc is given for it has a reserved name ([`compat.names.reserved`](#locus-names)).
+Traits among Locus's names have no methods, associated functions, or associated constants that a program can name, so that having them in scope never changes what a method call or path in Rust code resolves to. A logic function that such a trait declares, as `View` declares `view`, is not an item that Rust code can name: what rustc is given for it has a reserved name ([`compat.names.reserved`](#locus-names)).
 
 r[compat.names.macros-expand]
 Locus's macros are expanded like any other macro, wherever rustc expands macros: directly, inside another macro's input, in a macro's output, and under another name. A Locus macro name that is never expanded, as inside `stringify!`, is only tokens.
@@ -39,4 +39,4 @@ r[compat.names.reserved]
 A program does not write an identifier that begins with `__logic_` or `__locus_`. Locus reserves both prefixes for the names that it writes for rustc and that must be the same in every crate, such as the name under which a trait holds what rustc is given for a logic function. A source that writes such an identifier is rejected, wherever it writes it: as the name of an item, a field, a parameter, or a local, in a path, and among the tokens of a macro's input. An identifier that only resembles a prefix, such as `__logic` or `_locus_x`, is not reserved.
 
 r[compat.names.model-impls]
-Only Locus writes an implementation of `Model`. A program declares a model in Locus code, as `impl Model for T` with no `unsafe`, where `T` is declared ([`models.declared-by-owner`](models.md#models)), or derives one, and from that Locus writes the implementation that rustc is given, as it writes one for every type that it lowers. In what rustc is given, `Model` is an `unsafe` trait. A program that writes `unsafe impl Model` is rejected, and so is an implementation of `Model` in plain Rust: in a `.rs` file, outside a `locus!` block, or in a crate that Locus does not lower. The implementation that Locus writes is not `unsafe` code of the program: a crate that forbids `unsafe` code may declare types and models, and the implementation is not one of the `unsafe impl`s that [`contracts.unsafe-impls`](contracts.md) rejects on a type with proof fields.
+Only compiler lowering and designated library support implement `Snapshot`. In generated Rust it is an `unsafe` trait; a user-written implementation, safe or unsafe and in any crate, is rejected by the driver. Generated implementations are not unsafe code authored by the program, so `#![forbid(unsafe_code)]` remains compatible with ordinary declarations. `View` is separate: a program writes its ordinary safe implementation under normal trait and visibility rules, with no same-file requirement and no compiler-created default. No `derive(Model)` or source field attribute changes snapshot behavior.

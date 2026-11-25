@@ -5,11 +5,11 @@
 use locus::std::vec::Vec;
 
 fn consume(v: Vec<u32>) -> usize {
-    v.len().0
+    v.len()
 }
 
-fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
+fn f(v: Vec<u32>, nonempty: @(v.elements().len() > 0)) -> usize {
     let count = consume(v);
-    let again: @(v.len() > 0) = nonempty; //~ error: logical code reads `v` after `v` was moved
+    let again: @(v.elements().len() > 0) = nonempty; //~ error: logical code reads `v` after `v` was moved
     count
 }

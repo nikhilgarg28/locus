@@ -9,9 +9,9 @@ struct Stack {
     cap: usize,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }
@@ -22,6 +22,6 @@ impl Stack {
     }
 }
 
-fn has_room(s: &Stack, some: @(s.room() > 0)) -> u32 { //~ error: `s` is captured as its model, a `Seq<Nat>`, which has no `room`, and nothing else is tried: call the logic function of `Stack` by its path, `Stack::room(snap(s))`
+fn has_room(s: &Stack, some: @(s.room() > 0)) -> u32 { //~ error: the captured Stack snapshot has no room method; call Stack::room(snap(s)) explicitly
     1
 }

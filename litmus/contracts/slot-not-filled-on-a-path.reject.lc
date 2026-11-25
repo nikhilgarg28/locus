@@ -8,19 +8,19 @@ use locus::std::vec::Vec;
 struct Stack {
     items: Vec<u32>,
     cap: usize,
-    fits: @(items.len() <= cap),
+    fits: @(items.elements().len() <= cap),
 }
 
 impl Stack {
     fn push(&mut self, x: u32) -> bool {
         let (slot, taken, was) = mem::take_out(self);
         let Stack { mut items, cap, fits } = taken;
-        let (n, counted) = items.len();
+        let (n, counted) = items.len_checked();
         if n >= cap {
             return false; //~ error: this path leaves `slot` without passing it to `put`, so `*self` would hold nothing
         }
-        let grew = items.push(x);
-        let same = logic! { Vec::<u32>::model_len(snap(items)) };
+        let grew = items.push_checked(x);
+
         slot.put(Stack { items, cap, fits: _ });
         true
     }

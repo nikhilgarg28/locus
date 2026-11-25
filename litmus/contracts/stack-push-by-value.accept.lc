@@ -7,28 +7,27 @@ use locus::std::vec::Vec;
 struct Stack {
     items: Vec<u32>,
     cap: usize,
-    fits: @(items.len() <= cap),
+    fits: @(items.elements().len() <= cap),
 }
 
 impl Stack {
     fn new(cap: usize) -> Stack {
         // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
-        // `fits` is stated on the model of `items`, and the library's lemma gives the model
-        // the length of the contents.
+        // The empty proof establishes the contents length used by `fits`.
         let (items, empty) = Vec::empty();
-        let same = logic! { Vec::<u32>::model_len(snap(items)) };
+
         Stack { items, cap, fits: _ }
     }
 
     // The stack with `x` on it when there was room, and the stack as it was when there was none.
     fn push(self, x: u32) -> (Stack, bool) {
         let Stack { mut items, cap, fits } = self;
-        // `len` on Locus's `Vec` returns the length, with a proof that it is the length of the contents.
-        let (n, counted) = items.len();
+        // `len_checked` on Locus's `Vec` returns the length, with a proof that it is the length of the contents.
+        let (n, counted) = items.len_checked();
         if n < cap {
-            // `push` on Locus's `Vec` returns a proof that the contents grew by one.
-            let grew = items.push(x);
-            let same = logic! { Vec::<u32>::model_len(snap(items)) };
+            // `push_checked` on Locus's `Vec` returns a proof that the contents grew by one.
+            let grew = items.push_checked(x);
+
             (Stack { items, cap, fits: _ }, true)
         } else {
             (Stack { items, cap, fits }, false)

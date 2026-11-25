@@ -1,5 +1,5 @@
-//~ question: Is the field of a capture its type's model, when the struct that holds it declares no model?
-//~ spec: models.capture.fields, models.by-parts
+//~ question: Is the field of a capture its type's view, when the struct that holds it declares no view?
+//~ spec: models.capture.fields, models.by-parts, models.default
 //~ rfc: 0002
 
 use locus::std::vec::Vec;
@@ -8,20 +8,20 @@ struct Stack {
     items: Vec<u32>,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }
 
-// `Shelf` declares no model, so its model is its snapshot, which holds `Stack`'s snapshot.
+// Capture of `Shelf` holds `Stack`'s snapshot; views are explicit.
 struct Shelf {
     stack: Stack,
 }
 
 fn same_length(shelf: &Shelf) -> u32 {
     let whole = logic! { shelf };
-    let same: @(whole.stack.len() == shelf.stack.len()) = _; //~ error: `whole.stack` is the snapshot of a `Stack`, which has no `len`: a snapshot holds its fields' snapshots, not their models; write `Stack::model(whole.stack)`
+    let same: @(whole.stack.len() == Stack::view(snap(shelf.stack)).len()) = _; //~ error: `whole.stack` is the snapshot of a `Stack`, which has no `len`: a snapshot holds its fields' snapshots, not their models; write `Stack::view(whole.stack)`
     0
 }

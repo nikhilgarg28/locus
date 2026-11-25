@@ -1,4 +1,4 @@
-//~ question: May a model call a logic function that reads the value's fields?
+//~ question: May a view call a logic function that reads the value's fields?
 //~ spec: models.own-definition
 //~ rfc: 0002
 
@@ -12,9 +12,9 @@ logic fn size(stack: Snap<Stack>) -> Nat {
     stack.items.elements().len()
 }
 
-impl Model for Stack {
-    type Logic = Nat;
-    logic fn model(stack: Snap<Stack>) -> Nat {
+impl View for Stack {
+    type V = Nat;
+    logic fn view(stack: Snap<Stack>) -> Nat {
         size(stack)
     }
 }

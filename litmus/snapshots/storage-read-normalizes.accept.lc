@@ -1,0 +1,10 @@
+//~ question: Do deferred fields with source integers of different widths read as the same logical type?
+//~ spec: models.storage
+//~ rfc: 0008
+
+struct Holder<T> { values: Seq<Snap<T>> }
+fn transfer(a: &Holder<u8>, b: &mut Holder<u32>) -> @(final!(b).values === a.values) {
+    let s: Seq<Nat> = logic! { a.values };
+    b.values = s;
+    _
+}

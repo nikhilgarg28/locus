@@ -1,0 +1,11 @@
+//~ question: Do two calls to a constant-bodied function expose equal logical results without a contract?
+//~ spec: models.stamps, contracts.calls.unrelated
+//~ rfc: 0008
+
+fn mint() -> Nat { logic! { 0 } }
+fn same() -> @(1 == 1) {
+    let a = mint();
+    let b = mint();
+    let equal: @(a === b) = _; //~ error: separate call results are unrelated without a returned proof
+    _
+}

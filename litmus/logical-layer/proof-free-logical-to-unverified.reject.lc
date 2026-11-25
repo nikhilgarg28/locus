@@ -14,5 +14,5 @@ fn lend(c: Count) -> usize {
     let mut held: Vec<Count> = Vec::new();
     held.push(c);
     std::hint::black_box(&mut held); //~ error: `held` is a `Vec<Count>`, which holds logical data, so it cannot be lent to `black_box`, which Locus does not verify
-    held.len().0
+    held.len()
 }

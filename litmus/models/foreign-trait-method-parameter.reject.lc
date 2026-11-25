@@ -8,7 +8,7 @@ struct Bag {
 
 impl Extend<u32> for Bag {
     fn extend<I: IntoIterator<Item = u32>>(&mut self, iter: I) {
-        let before = logic! { snap(iter) }; //~ error: `I` cannot be read in logical code, and the bound `I: Model` cannot be added: `extend` is declared by `Extend`, a trait of another crate
+        let before = logic! { snap(iter) }; //~ error: `I` cannot be read in logical code, and the bound `I: Snapshot` cannot be added: `extend` is declared by `Extend`, a trait of another crate
         for _ in iter {
             self.count += 1;
         }

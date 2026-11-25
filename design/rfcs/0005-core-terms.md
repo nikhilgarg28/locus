@@ -6,7 +6,7 @@
 
 ## Summary
 
-Every logical expression is translated to a term of a small core language before any rule about proofs applies, and the rules for equality, rewriting, inferred values, and evaluation are stated on those terms. The core makes explicit what source leaves implicit: which version of a place is meant, whether a value is read as its snapshot or its model, that machine arithmetic wraps, and what a runtime condition evaluated to. This RFC also says what the context holds at each point of a function, when two propositions are the same, and what a proof may cite.
+Every logical expression is translated to a term of a small core language before any rule about proofs applies, and the rules for equality, rewriting, inferred values, and evaluation are stated on those terms. The core makes explicit what source leaves implicit: which version of a place is meant, which explicit view calls are applied to a captured snapshot, that machine arithmetic wraps, and what a runtime condition evaluated to. This RFC also says what the context holds at each point of a function, when two propositions are the same, and what a proof may cite.
 
 ## Motivation
 
@@ -23,12 +23,12 @@ In a release build `small_sum(u32::MAX, 5)` returns a proof. The program compare
 ```rust prose accepted by the rules as RFC 0003 stated them
 logic fn x_of(o: Snap<Outer>) -> Nat { o.inner.x }
 
-fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(snap(a)) === x_of(snap(b))) {
+fn read(a: &Outer, b: &Outer, same: @(Outer::view(snap(a)) === Outer::view(snap(b)))) -> @(x_of(snap(a)) === x_of(snap(b))) {
     eq::congr(x_of, same)
 }
 ```
 
-`a === b` compares models, and `Outer`'s model forgets `x`. The rule for `eq::congr` spoke of "`a`" and "`b`", and did not say that the `a` in `a === b` and the `a` in `x_of(snap(a))` are different things: the first is the model of `a`, and the second its snapshot.
+The original counterexample used implicit model capture. RFC 0008 removes that implicit step: `a === b` now compares snapshots and can justify congruence on them. The rejected variant above explicitly compares views that forget `x`; equality of those views still cannot justify equality of snapshots.
 
 A third gap is not an attack. RFC 0003 used "evaluation" for what `compute` does and for what a hole allows of a known proof, and never defined it. Its own examples need two different definitions, and RFC 0002's decision 49 had left the question of when two propositions are the same to it.
 
@@ -39,7 +39,7 @@ A third gap is not an attack. RFC 0003 used "evaluation" for what `compute` does
 | Core term | What it is |
 |---|---|
 | A value name, written `n₁` here | The snapshot of one version of a runtime place, of type `Snap<T>`. A variable: nothing replaces it by another term |
-| `model(t)` | The model of a snapshot, for a type that has one |
+| An explicit `T::view(t)` call | An ordinary logical function application; never inserted by capture |
 | `wrap` at a machine integer type | An integer brought into the type's range, exactly as the machine does |
 | The value a borrow ends with | What `final!(r)` denotes, for one borrow |
 | Literals, constructors, fields, `if`, `match`, logical closures, calls of logic functions, `forall`, `exists`, `===`, comparisons | As in RFC 0002. `<` and `>` are separate, and neither is defined from the other |
@@ -50,10 +50,10 @@ A program never writes a value name. Diagnostics show one as the place and where
 ### From source to core
 
 1. **A place becomes the value name of its current version,** with its projections: `p.x` is `p₁.x`.
-2. **A runtime place that logical code reads becomes the model of that:** its capture ([RFC 0002](0002-logical-layer.md#snapshots-and-models)). An operand, a method's receiver, either side of `===`, and an argument are such reads. `snap(x)` is the value name itself.
-3. **A logic function takes logical values only,** so a snapshot reaches one as `snap(x)`.
+2. **A runtime place that logical code reads becomes that snapshot:** its capture ([RFC 0002](0002-logical-layer.md#snapshots-and-models)). An operand, a method's receiver, either side of `===`, and an argument are such reads. `snap(x)` is the value name itself.
+3. **A logic function takes logical values only.** A runtime argument is captured as its snapshot, with or without explicit `snap(x)`. A view is applied only when called.
 
-So `same: @(a === b)` is a proof of `model(a₁) === model(b₁)`, and `x_of(snap(a))` is `x_of(a₁)`. `eq::congr(x_of, same)` asks for `x_of` of a model, which is a type error: `x_of` takes a snapshot. `big.rewrite(same)`, for a proof `big` of `a.inner.x > 5`, finds no `model(a₁)` in `a₁.inner.x`, and is an error too.
+Thus `same: @(a === b)` proves `a₁ === b₁`; congruence on `x_of` is valid. A proof of `Outer::view(a₁) === Outer::view(b₁)` instead concerns different core terms. It cannot rewrite a bare snapshot field or satisfy congruence for a function expecting snapshots.
 
 ### Wrapping
 
@@ -206,7 +206,7 @@ Two types that hold logical values are the same when they are built the same way
 
 1. arithmetic and comparisons on literals;
 2. an `if` on a literal, a `match` on a constructor, and a field of a constructed value;
-3. a call of a logic function that does not call itself, a model included, becomes its body;
+3. a call of a logic function that does not call itself, an explicitly called view included, becomes its body;
 4. a call of a logic function that calls itself becomes its body only when the argument it recurs on is a constructor, or every argument its measure reads is a literal;
 5. a constant, and a ghost `let` that is not `mut`, become their values.
 
@@ -239,8 +239,8 @@ Reductions 3 and 4 apply only where every name in the function's body could be w
 
 RFC 0002 cuts a field that closes a cycle of references, so that every snapshot is finite, and said both that a type's snapshot is the same wherever it appears and that the cut field's references hold only addresses. Those two do not fit: with `struct Wrap<'a, T> { inner: &'a T }` and `struct Node<'a> { w: Wrap<'a, Node<'a>> }`, the `w` inside `Snap<Node>` is not a `Snap<Wrap<Node>>`.
 
-- **A cut field has the type `CutSnap<F>`,** for its declared type `F`: the snapshot of `F` with every reference in it held as its address. It is defined for every `F`, has no model, and is not `Snap<F>`, so it is not accepted where a `Snap<F>` is.
-- **A model or a logic function reads only snapshots,** so it reads nothing behind such an address. Otherwise a model would not be a function of the snapshot: two values with equal snapshots can have different referents there.
+- **A cut field has the type `CutSnap<F>`,** for its declared type `F`: the snapshot of `F` with every reference in it held as its address. It is defined for every `F`, has no implicit view, and is not `Snap<F>`, so it is not accepted where a `Snap<F>` is.
+- **An explicit view or another logic function reads only snapshots,** so it reads nothing behind such an address. Otherwise a model would not be a function of the snapshot: two values with equal snapshots can have different referents there.
 - **A function body may read the place behind a cut reference,** as it reads any place. The read gives the value name of that place's current version, and two reads with no write between give the same name.
 - **A proof field reads nothing behind a cut.** With `struct A<'a> { next: &'a B<'a>, positive: @(next.value > 0) }`, where `B` holds a reference back to an `A`, the snapshot of an `A` holds `next` as an address, so `positive` would be a proof about something its own value does not hold. Such a proof field is rejected. An invariant over a cycle of references cannot speak of its neighbours for now.
 - **Nor is such a proof field held inside a cut field.** `struct Checked<'a> { r: &'a u32, positive: @(*r > 0) }` is legal by itself. Inside a field that closes a cycle, every reference is an address, `r` included, and `positive` is left about nothing. So a type that holds such a proof field, at any depth and at the type arguments in use, has no `CutSnap`. `Checked` stays legal, with its ordinary snapshot, wherever it is not in a cut field; a type that would hold it in one is rejected, and so is `CutSnap<Checked>` written directly. This is a rejection and not an opaque snapshot: a proof field cannot be opaque about what it proves. The check is on the snapshot as cut, not on each declaration alone.
@@ -293,7 +293,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `models/model-defined-for-every-snapshot.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
 | `models.snapshots` | `models/captured-fields-wrap-written.accept.lc`, `models/field-of-capture-and-capture-of-field.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/integer-snapshots-are-one-type.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `collections/vector-snapshot-is-not-a-sequence.reject.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `models/equal-snapshots-say-nothing-of-addresses.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
 | `models.snapshots.cut` | `models/body-reads-behind-a-cut.accept.lc`, `contracts/invariant-reads-behind-a-cut.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/proof-field-inside-a-cut-field.reject.lc` |
-| `models.snapshots.opaque` | `models/foreign-field-marked-opaque.accept.lc`, `models/foreign-field-unmarked.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/opaque-field-through-the-snapshot.accept.lc`, `models/opaque-field-read-as-a-place.reject.lc`, `models/opaque-fields-of-two-types.reject.lc`, `models/snapshot-of-union.reject.lc`, `models/unmarked-struct-captured.reject.lc`, `models/unmarked-struct-model-declared.reject.lc` |
+| `models.snapshots.opaque` | `models/foreign-field-marked-opaque.accept.lc`, `models/foreign-field-unmarked.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/opaque-field-through-the-snapshot.accept.lc`, `models/opaque-field-read-as-a-place.accept.lc`, `models/opaque-fields-of-two-types.accept.lc`, `models/snapshot-of-union.reject.lc`, `models/unmarked-struct-captured.reject.lc`, `models/unmarked-struct-model-declared.reject.lc` |
 | `logic.ghost.type-identity` | `core/conversion-by-evaluation.accept.lc`, `logical-layer/proof-holder-same-proposition.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/value-name-per-version.reject.lc`, `logical-layer/proof-holder-other-proposition.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc` |
 | `logic.const.well-founded` | `logical-layer/logical-constant-chain.accept.lc`, `logical-layer/logical-constant-cycle.reject.lc`, `logical-layer/static-justifies-itself.reject.lc`, `logical-layer/statics-justify-each-other.reject.lc` |
 | `contracts.final` | `collections/element-lent-mutably.accept.lc`, `contracts/final-value-at-return.accept.lc`, `contracts/final-value-in-a-proof.accept.lc`, `contracts/local-borrow-final.accept.lc`, `contracts/returned-borrow.accept.lc`, `runtime/two-reborrows-returned.accept.lc`, `runtime/write-through-a-reborrow.accept.lc`, `contracts/final-escapes-through-parameter.reject.lc`, `contracts/final-in-ghost-write.reject.lc`, `contracts/final-reads-no-place.reject.lc`, `contracts/final-through-captured-lifetime.reject.lc`, `contracts/wrong-final.reject.lc`, `runtime/borrow-kept-by-another-parameter.reject.lc` |

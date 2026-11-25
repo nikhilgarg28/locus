@@ -1,4 +1,4 @@
-//~ question: Inside its own model function, may a snapshot be taken to the model being defined?
+//~ question: Inside its own view function, may a snapshot be taken to the view being defined?
 //~ spec: models.own-definition
 //~ rfc: 0002
 
@@ -8,9 +8,9 @@ struct Stack {
     items: Vec<u32>,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        Stack::model(stack) //~ error: inside `model`, `stack` cannot be taken to the `Seq<Nat>` being defined; read its fields instead
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        Stack::view(stack) //~ error: the recursive logical call does not decrease structurally or by a declared measure
     }
 }

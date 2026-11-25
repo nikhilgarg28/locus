@@ -8,7 +8,7 @@ fn logical_payloads() -> usize {
     let mut values: Vec<Nat> = Vec::new();
     values.push(logic! { 3 });
     values.push(logic! { 4 });
-    values.len().0
+    values.len()
 }
 
 //~ run: logical_payloads() => 2

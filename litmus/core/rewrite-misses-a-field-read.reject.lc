@@ -6,14 +6,13 @@ struct Inner {
     x: u32,
 }
 
-impl Model for Inner {
-    type Logic = Nat;
-    logic fn model(inner: Snap<Inner>) -> Nat {
+impl View for Inner {
+    type V = Nat;
+    logic fn view(inner: Snap<Inner>) -> Nat {
         0
     }
 }
 
-#[derive(Model)]
 struct Outer {
     inner: Inner,
 }
@@ -22,6 +21,6 @@ logic fn x_of(o: Snap<Outer>) -> Nat {
     o.inner.x
 }
 
-fn read(a: &Outer, b: &Outer, big: @(a.inner.x > 5), same: @(a === b)) -> @(b.inner.x > 5) {
-    big.rewrite(same) //~ error: `rewrite` finds nothing to replace: `same` is about the model of `a`, and `big` reads the field `a.inner.x`, which is no part of that model
+fn read(a: &Outer, b: &Outer, big: @(a.inner.x > 5), same: @(Inner::view(snap(a.inner)) === Inner::view(snap(b.inner)))) -> @(b.inner.x > 5) {
+    big.rewrite(same) //~ error: `rewrite` finds nothing to replace: `same` is about the view of `a`, and `big` reads the field `a.inner.x`, which is no part of that view
 }

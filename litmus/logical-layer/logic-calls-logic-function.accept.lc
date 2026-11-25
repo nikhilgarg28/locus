@@ -9,6 +9,6 @@ logic fn double(n: Nat) -> Nat {
 }
 
 fn f(v: Vec<u32>) -> usize {
-    let twice = logic! { double(v.len()) };
-    v.len().0
+    let twice = logic! { double(v.elements().len()) };
+    v.len()
 }

@@ -1,4 +1,4 @@
-//~ question: May a generic function pass a vector of Locus's library on with no `Model` bound on the element type?
+//~ question: May a generic function pass a vector of Locus's library on with no `Snapshot` bound on the element type?
 //~ spec: collections.element-types, collections.contents
 //~ rfc: 0002
 
@@ -12,7 +12,7 @@ fn pass_on<T>(v: Vec<T>) -> Vec<T> {
 fn kept() -> usize {
     let mut v: Vec<u32> = Vec::new();
     v.push(7);
-    pass_on(v).len().0
+    pass_on(v).len()
 }
 
 //~ run: kept() => 1

@@ -1,7 +1,7 @@
-//~ question: May logical code read a value whose type is a type parameter with no `Model` bound?
+//~ question: May logical code read a value whose type is a type parameter with no `Snapshot` bound?
 //~ spec: models.capture.bound
 //~ rfc: 0002
 
-fn same<T>(a: &T, b: &T, equal: @(snap(a) === snap(b))) -> u32 { //~ error: `T` cannot be read in logical code: add the bound `T: Model`
+fn same<T>(a: &T, b: &T, equal: @(snap(a) === snap(b))) -> u32 { //~ error: `T` cannot be read in logical code: add the bound `T: Snapshot`
     1
 }

@@ -1,0 +1,10 @@
+//~ question: Does an explicitly declared view leave snapshot equality and field capture unchanged?
+//~ spec: models.default, models.derived, models.capture.fields
+//~ rfc: 0008
+
+struct Pair { a: u32, b: u32 }
+impl View for Pair {
+    type V = Nat;
+    logic fn view(s: Snap<Pair>) -> Nat { s.a }
+}
+fn fields(p: &Pair, q: &Pair, same: @(p === q)) -> @(p.b === q.b) { _ }

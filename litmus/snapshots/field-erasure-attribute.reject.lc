@@ -1,0 +1,8 @@
+//~ question: Can a field attribute install the unit snapshot rule?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0008
+
+struct Cache {
+    #[snapshot_erased] //~ error: no field attribute changes capture; choose Opaque<T>
+    payload: u32,
+}

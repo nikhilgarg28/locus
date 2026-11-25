@@ -92,7 +92,7 @@ A slice pattern gives no fact about the sequence. The loans it makes are [RFC 00
 
 Each of these is a call, or gives a result that is known by its type:
 
-- **A comparison on any other type:** an `Option`, a tuple, an array, a slice, a reference, a `Box`, a `char`, and every type of the program's own. `&Number(0) == &Number(1)` can be `true`. `char` can join when it has a model, and references, tuples, and arrays of integers can each be added as a row.
+- **A comparison on any other type:** an `Option`, a tuple, an array, a slice, a reference, a `Box`, a `char`, and every type of the program's own. `&Number(0) == &Number(1)` can be `true`. `char` comparison can join when its snapshot and operation semantics are supported, and references, tuples, and arrays of integers can each be added as a row.
 - **Shifts, and `&`, `|`, `^`, and `!` on integers.** Each needs an exact meaning first: a signed `>>` rounds down where `/` truncates, and `<<` drops high bits.
 - **Floating-point numbers,** whose `==` is not equality, and **casts** from a `char` or an enum, and to or from a pointer.
 - **`opt.unwrap()`, `xs.get(i)`, `xs.iter()`,** an operator on a type of the program's own, and every method of `Option` and `Result`. The owner on the methods: "it's always possible to add more later".

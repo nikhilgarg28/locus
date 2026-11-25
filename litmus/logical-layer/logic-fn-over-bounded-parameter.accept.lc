@@ -2,10 +2,10 @@
 //~ spec: logic.fn.parameters, models.capture.bound
 //~ rfc: 0002
 
-logic fn alike<T: Model>(a: Snap<T>, b: Snap<T>) -> Prop {
+logic fn alike<T: Snapshot>(a: Snap<T>, b: Snap<T>) -> Prop {
     a === b
 }
 
-fn same<T: Model>(x: &T, y: &T, equal: @alike::<T>(snap(x), snap(y))) -> @(snap(x) === snap(y)) {
+fn same<T: Snapshot>(x: &T, y: &T, equal: @alike::<T>(snap(x), snap(y))) -> @(snap(x) === snap(y)) {
     _
 }

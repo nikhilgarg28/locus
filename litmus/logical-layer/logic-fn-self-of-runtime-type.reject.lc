@@ -11,6 +11,6 @@ struct Stack {
 
 impl Stack {
     logic fn room(self) -> Int { //~ error: a logic function's parameters are logical types, and `self` here is a `Stack`, a runtime type: write `stack: Snap<Stack>`
-        self.cap - self.items.len()
+        self.cap - self.items.elements().len()
     }
 }

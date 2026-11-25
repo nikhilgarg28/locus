@@ -1,4 +1,4 @@
-//~ question: May logical code capture a struct that has an unmarked field of a type that Locus cannot see?
+//~ question: May logical code capture a struct that has an unwrapped field of a type that Locus cannot see?
 //~ spec: models.snapshots.opaque, models.snapshots.seen
 //~ rfc: 0002
 
@@ -10,6 +10,6 @@ struct Server {
 }
 
 fn port_of(server: &Server) -> u16 {
-    let whole = logic! { server }; //~ error: `Server` has no snapshot, so `server` cannot be captured: its field `listener` is a `TcpListener`, which Locus cannot see; mark the field `#[opaque]`
+    let whole = logic! { server }; //~ error: `Server` has no snapshot, so `server` cannot be captured: its field `listener` is a `TcpListener`, which Locus cannot see; wrap the field in `Opaque<T>`
     server.port
 }

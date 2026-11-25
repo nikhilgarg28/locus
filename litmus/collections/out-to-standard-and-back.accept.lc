@@ -10,7 +10,7 @@ fn without_repeats(items: Vec<u32>) -> usize {
     plain.dedup();
     // Back. Nothing is known of the contents now, and `len` says what their length is.
     let items = Vec::from_std(plain);
-    let (n, counted) = items.len();
+    let (n, counted) = items.len_checked();
     let known: @(n == snap(items).elements().len()) = counted;
     n
 }

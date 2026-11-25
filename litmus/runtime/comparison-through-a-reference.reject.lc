@@ -2,7 +2,6 @@
 //~ spec: runtime.operations
 //~ rfc: 0004
 
-#[derive(Model)]
 struct Number(u32);
 
 impl PartialEq for Number {

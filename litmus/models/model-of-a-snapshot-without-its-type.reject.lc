@@ -1,4 +1,4 @@
-//~ question: May `model` be applied to a snapshot value without naming the type it is a snapshot of?
+//~ question: May `view` be applied to a snapshot value without naming the type it is a snapshot of?
 //~ spec: models.observation
 //~ rfc: 0002
 
@@ -8,20 +8,20 @@ struct Stack {
     items: Vec<u32>,
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }
 
-// `Shelf` declares no model, so its model is its snapshot, which holds `Stack`'s snapshot.
+// Capture of `Shelf` holds `Stack`'s snapshot; views are explicit.
 struct Shelf {
     stack: Stack,
 }
 
 fn same_stack(shelf: &Shelf) -> u32 {
     let whole = logic! { shelf };
-    let same: @(model(whole.stack) === shelf.stack) = _; //~ error: `model` is given a snapshot value, whose type does not say which type it is a snapshot of: write `Stack::model(whole.stack)`
+    let same: @(view(whole.stack) === shelf.stack) = _; //~ error: `view` is given a snapshot value, whose type does not say which type it is a snapshot of: write `Stack::view(whole.stack)`
     0
 }

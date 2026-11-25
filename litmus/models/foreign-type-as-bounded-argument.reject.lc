@@ -1,10 +1,10 @@
-//~ question: May a type that Locus cannot see be given to a generic function that asks for `Model`?
+//~ question: May a type that Locus cannot see be given to a generic function that asks for `Snapshot`?
 //~ spec: models.capture.bound, models.snapshots.seen
 //~ rfc: 0002
 
 use std::net::TcpListener;
 
-fn kept<T: Model>(value: T) -> T {
+fn kept<T: Snapshot>(value: T) -> T {
     let before = logic! { snap(value) };
     let moved = value;
     let same: @(snap(moved) === before) = _;
@@ -12,5 +12,5 @@ fn kept<T: Model>(value: T) -> T {
 }
 
 fn keep(listener: TcpListener) -> TcpListener {
-    kept(listener) //~ error: `TcpListener` has no model, so it cannot be the `T` of `kept`, which asks for `T: Model`; wrap it in a struct of the program's own, with the field marked `#[opaque]`
+    kept(listener) //~ error: `TcpListener` has no snapshot, so it cannot be the `T` of `kept`, which asks for `T: Snapshot`; wrap it in a struct of the program's own, with the field wrapped in `Opaque<T>`
 }

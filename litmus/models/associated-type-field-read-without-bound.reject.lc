@@ -12,7 +12,7 @@ struct Holder<F: Family> {
 }
 
 fn kept<F: Family>(h: Holder<F>) -> Holder<F> {
-    let before = logic! { snap(h) }; //~ error: `F::Out` cannot be read in logical code, and `Holder<F>` holds one in its field `item`: add the bound `F::Out: Model`
+    let before = logic! { snap(h) }; //~ error: `F::Out` cannot be read in logical code, and `Holder<F>` holds one in its field `item`: add the bound `F::Out: Snapshot`
     let moved = h;
     moved
 }

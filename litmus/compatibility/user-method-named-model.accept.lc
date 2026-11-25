@@ -1,4 +1,4 @@
-//~ question: Does a program's own method named `model` keep its meaning beside Locus's `Model` trait?
+//~ question: Does a program's own method named `model` keep its meaning beside Locus's `Snapshot` trait?
 //~ spec: compat.names.no-methods, compat.superset.same-meaning
 //~ rfc: 0001
 

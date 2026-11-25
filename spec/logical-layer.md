@@ -2,7 +2,7 @@
 
 Locus adds logical types, whose values exist only for checking, and logical code, which computes with them. This chapter says what is logical, where logical values may appear, and what logical code may do. [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the design.
 
-Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the model types that `#[derive(Model)]` generates, the snapshot type `Snap<T>` of each runtime type `T` that has one, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
+Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the snapshot type `Snap<T>` of each runtime type `T` that has one, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
 
 ## What a verified program means
 
@@ -17,7 +17,7 @@ r[logic.types.tuples]
 A tuple type is logical when it has at least one component and all its components are logical. The unit type `()` is a runtime type.
 
 r[logic.types.positive]
-A logical type, or a proposition declared with `prop`, refers to itself, directly or through other logical types, snapshot types and derived model types included, only in strictly positive positions: never in a parameter of a logical function type, which includes the premise of `==>`, the operand of `!`, and the domain of `forall` and `exists`.
+A logical type, or a proposition declared with `prop`, refers to itself, directly or through other logical types, generated snapshot types included, only in strictly positive positions: never in a parameter of a logical function type, which includes the premise of `==>`, the operand of `!`, and the domain of `forall` and `exists`.
 
 r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
@@ -66,7 +66,7 @@ r[logic.ghost.no-runtime-control]
 Runtime control flow never depends on a logical value.
 
 r[logic.ghost.positions-logical]
-An argument for a proof parameter, or for a parameter of logical type, is a binding that holds a ghost value, or logical code, never a call of a runtime function. Elsewhere, a runtime call that produces a ghost value stays where it is. Outside logical code, a runtime value is never taken to its model implicitly: where a ghost value is expected, as such an argument or as the initializer of a logical field or a ghost local, a runtime value is written as logical code, such as `logic! { x }`.
+An argument for a proof parameter, or for a parameter of logical type, is a binding that holds a ghost value, or logical code, never a call of a runtime function. Elsewhere, a runtime call that produces a ghost value stays where it is. Outside logical code, a runtime value is never captured implicitly: where a ghost value is expected, as such an argument or as the initializer of a logical field or a ghost local, a runtime value is written as logical code, such as `logic! { x }`.
 
 r[logic.ghost.shown-by-source]
 Outside delimited logical code, a binding is *shown to be ghost* only when it is a parameter of logical type, its type annotation holds a logical type, it is initialized by logical code, or it is bound by a proof pattern. An operator, method call, or field access there is logical code only when each operand is logical code or a binding shown to be ghost. Any other ghost value can be passed on and stored, but computing with it needs `logic!`.
@@ -116,28 +116,28 @@ A sealed type's proof fields are an obligation that Locus places on `unsafe` cod
 
 ## Logical code
 
-Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on bindings shown to be ghost. In it, a runtime place that is read is captured: it stands for the model of its [snapshot](models.md).
+Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on bindings shown to be ghost. In it, a runtime place that is read is captured: it stands for its language-generated [snapshot](models.md).
 
 r[logic.code.logical-values]
-Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its capture, which is the model of the place's snapshot, or the snapshot itself where the code writes `snap` ([`models.observation`](models.md#models)).
+Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its language-generated snapshot, whether capture is implicit or written `snap` ([`models.observation`](models.md#models)).
 
 r[logic.fn.parameters]
-Each parameter of a logic function has a logical type, which `Snap<T>` and the type of a model are. A parameter written with a runtime type, such as `xs: &[u32]`, or `self` in an `impl` of a runtime type, is rejected. A runtime place given as an argument is its capture ([`models.observation`](models.md#models)), whatever the type of the parameter, and `snap(x)` gives its snapshot. A type parameter of a logic function ranges over logical types, unless it is bounded by `Model`: it then stands for any type that has a model, a runtime type or a logical one ([`models.snapshots.seen`](models.md#snapshots)), of which the function names `Snap<T>` and `T::Logic`, and takes no value of type `T` itself.
+Each parameter of a logic function has a logical type, which `Snap<T>` and the result type of an explicit view are. A parameter written with a runtime type, such as `xs: &[u32]`, or `self` in an `impl` of a runtime type, is rejected. A runtime place given as an argument is its capture ([`models.observation`](models.md#models)), whatever the type of the parameter, and `snap(x)` gives its snapshot. A type parameter of a logic function ranges over logical types, unless it is bounded by `Snapshot`: it then stands for any type that has a snapshot, a runtime type or a logical one ([`models.snapshots.seen`](models.md#snapshots)), of which the function names `Snap<T>`, and takes no value of type `T` itself.
 
 r[logic.eq.same]
 `a === b` is the proposition that the logical values `a` and `b` are equal, and `a !== b` its negation. Every logical type has it, and it cannot be overloaded.
 
 r[logic.eq.runtime-values]
-On runtime places, `a === b` is the equality of their captures, which are their models. For a type with a declared model it implies nothing about the values beyond their models: not that their snapshots or their fields are equal. For a type with none, the model is the snapshot ([`models.default`](models.md#models)), and it is the equality of the two snapshots.
+On runtime places, `a === b` compares their snapshots. No view is applied; adding a view changes no equality. Explicitly comparing view results gives only that chosen abstraction's equality, not equality of its input snapshots.
 
 r[logic.eq.snapshots]
-Two snapshots are equal exactly when they are the same variant and their fields' snapshots are equal. The opaque parts of a snapshot, such as a `Cell`'s, are values that Locus knows nothing about, except that a move or a copy keeps them.
+Snapshot equality compares retained variant tags and component observations. `Unit` components from `Opaque` and `UnsafeCell` contribute no distinction. Supported abstract external snapshots are not singletons. Equality of snapshots implies neither equal omitted state, equivalent arbitrary runtime calls, aliasing, nor interchangeable permissions.
 
 r[logic.eq.comparisons]
 `==`, `!=`, `<`, `<=`, `>`, and `>=` in logical code give a proposition, of type `Prop`, and never a `Bool`. For now they are defined only on `Int`, `Nat`, and `Bool`, on two operands of one type, where `a == b` holds exactly when `a === b`, `a != b` exactly when `a !== b`, and each ordering agrees with the order of the integers. In a core term a comparison is the proposition that a `Bool` is `true` ([`logic.bool.as-proposition`](#logical-code)), so what this specification says of a `Bool` used as a proposition, it says of a comparison.
 
 r[logic.bool.as-proposition]
-A `Bool` is the model of a runtime `bool`, and the type of `true` and `false`. A value of a type that converts to `Prop` ([`traits.conversions`](traits.md#conversions-and-operators)), which a `Bool` is, and for now nothing else but a proposition itself, is used as a proposition, with nothing written, at the positions where the form of the code requires a proposition: as the proposition of a proof type `@( .. )`, and of `prop!( .. )` and `prove!( .. )`; as the body of a `forall` or an `exists`; as an operand of `==>`; as an operand of `&&` or `||` whose other operand is a proposition; as the body of a logic function declared to return `Prop`; and as an argument for a parameter whose type is a type parameter bounded by `IntoLogic<Prop>`, as each parameter of `iff` is ([`logic.bool.iff`](#logical-code)). There a `Bool` `b` stands for the proposition `b === true`, which is what the library's conversion gives. `&&`, `||`, and `!` whose operands are all `Bool`s are operators on `Bool`s and give a `Bool`, wherever they are written. At every other position a `Bool` is not a `Prop`: as an argument for a parameter of type `Prop`, or as the value of a local or a field of that type, it is written `b === true`.
+A `Bool` is the snapshot of a runtime `bool`, and the type of `true` and `false`. A value of a type that converts to `Prop` ([`traits.conversions`](traits.md#conversions-and-operators)), which a `Bool` is, and for now nothing else but a proposition itself, is used as a proposition, with nothing written, at the positions where the form of the code requires a proposition: as the proposition of a proof type `@( .. )`, and of `prop!( .. )` and `prove!( .. )`; as the body of a `forall` or an `exists`; as an operand of `==>`; as an operand of `&&` or `||` whose other operand is a proposition; as the body of a logic function declared to return `Prop`; and as an argument for a parameter whose type is a type parameter bounded by `IntoLogic<Prop>`, as each parameter of `iff` is ([`logic.bool.iff`](#logical-code)). There a `Bool` `b` stands for the proposition `b === true`, which is what the library's conversion gives. `&&`, `||`, and `!` whose operands are all `Bool`s are operators on `Bool`s and give a `Bool`, wherever they are written. At every other position a `Bool` is not a `Prop`: as an argument for a parameter of type `Prop`, or as the value of a local or a field of that type, it is written `b === true`.
 
 r[logic.bool.iff]
 `iff(p, q)`, of Locus's library, is a logic function that gives the proposition `(p ==> q) && (q ==> p)`. Each of its two parameters takes a proposition or a `Bool`, and takes nothing else: a `Bool` there stands for the proposition that it is true ([`logic.bool.as-proposition`](#logical-code)). Logical code has no connective for "exactly when", and no function from a proposition to a `Bool`. A contract ties a `bool` result `r` to a proposition `P` as `iff(r, P)`, or with two implications, and the `Bool` of a proposition `P` is written `if P { true } else { false }`.

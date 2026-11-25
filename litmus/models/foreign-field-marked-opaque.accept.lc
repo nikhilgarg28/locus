@@ -1,14 +1,13 @@
-//~ question: May a struct hold a field of a type that Locus cannot see, when the field is marked `#[opaque]`, and does a move keep its snapshot?
+//~ question: May a struct hold a field of a type that Locus cannot see, when the field is wrapped in `Opaque<T>`, and does a move keep its snapshot?
 //~ spec: models.snapshots.opaque, logic.eq.snapshots
 //~ rfc: 0002
 
+use locus::Opaque;
 use std::net::{SocketAddr, TcpListener};
 
 struct Server {
-    #[opaque]
-    listener: TcpListener,
-    #[opaque]
-    local: SocketAddr,
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
     port: u16,
 }
 

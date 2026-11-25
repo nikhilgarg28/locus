@@ -1,7 +1,7 @@
-//~ question: May the contract of a trait method read `self` when the trait does not have `Model` as a supertrait?
+//~ question: May the contract of a trait method read `self` when the trait does not have `Snapshot` as a supertrait?
 //~ spec: traits.model-bounds, models.capture.bound
 //~ rfc: 0006
 
 trait Stable {
-    fn touch(&mut self) -> @(snap(final!(self)) === snap(self)); //~ error: `Self` cannot be read in logical code: no `Model` bound is in scope, and none is implied; write `trait Stable: Model`
+    fn touch(&mut self) -> @(snap(final!(self)) === snap(self)); //~ error: `Self` cannot be read in logical code: no `Snapshot` bound is in scope, and none is implied; write `trait Stable: Snapshot`
 }

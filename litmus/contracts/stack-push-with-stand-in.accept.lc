@@ -8,12 +8,12 @@ use locus::std::vec::Vec;
 struct Stack {
     items: Vec<u32>,
     cap: usize,
-    fits: @(items.len() <= cap),
+    fits: @(items.elements().len() <= cap),
 }
 
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
         stack.items.elements()
     }
 }
@@ -21,24 +21,23 @@ impl Model for Stack {
 impl Stack {
     fn new(cap: usize) -> Stack {
         // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
-        // `fits` is stated on the model of `items`, and the library's lemma gives the model
-        // the length of the contents.
+        // `fits` speaks directly of element snapshots; the empty proof suffices.
         let (items, empty) = Vec::empty();
-        let same = logic! { Vec::<u32>::model_len(snap(items)) };
+
         Stack { items, cap, fits: _ }
     }
 
     // Whether `x` was pushed, with a proof that the stack then grew by one.
-    fn push(&mut self, x: u32) -> (pushed: bool, @(pushed ==> final!(self).len() == self.len() + 1)) {
+    fn push(&mut self, x: u32) -> (pushed: bool, @(pushed ==> Stack::view(snap(final!(self))).len() == Stack::view(snap(self)).len() + 1)) {
         // An empty stack stands in for `*self`. If the `push` below panicked, the caller
         // would be left with that one: a valid stack, with the wrong contents.
         // `replace` is Locus's library's, and `was` proves that `taken` is what was there.
         let (taken, was) = mem::replace(self, Stack::new(0));
         let Stack { mut items, cap, fits } = taken;
-        let (n, counted) = items.len();
+        let (n, counted) = items.len_checked();
         if n < cap {
-            let grew = items.push(x);
-            let same = logic! { Vec::<u32>::model_len(snap(items)) };
+            let grew = items.push_checked(x);
+
             *self = Stack { items, cap, fits: _ };
             (true, _)
         } else {

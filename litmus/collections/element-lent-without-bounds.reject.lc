@@ -5,6 +5,6 @@
 use locus::std::vec::Vec;
 
 fn replace_first(v: &mut Vec<u32>, x: u32) {
-    let (first, lent) = v.get_mut(0, _); //~ error: cannot prove `0 < snap(v).elements().len()`: nothing says that `v` has an element
+    let (first, lent) = v.get_mut_checked(0, _); //~ error: cannot prove `0 < snap(v).elements().len()`: nothing says that `v` has an element
     *first = x;
 }

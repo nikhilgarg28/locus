@@ -11,7 +11,7 @@ struct Holder<F: Family> {
     item: F::Out,
 }
 
-fn kept<F: Family>(h: Holder<F>) -> Holder<F> where F::Out: Model {
+fn kept<F: Family>(h: Holder<F>) -> Holder<F> where F::Out: Snapshot {
     let before = logic! { snap(h) };
     let moved = h;
     let same: @(snap(moved) === before) = _;

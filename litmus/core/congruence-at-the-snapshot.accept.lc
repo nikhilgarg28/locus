@@ -6,14 +6,13 @@ struct Inner {
     x: u32,
 }
 
-impl Model for Inner {
-    type Logic = Nat;
-    logic fn model(inner: Snap<Inner>) -> Nat {
+impl View for Inner {
+    type V = Nat;
+    logic fn view(inner: Snap<Inner>) -> Nat {
         0
     }
 }
 
-#[derive(Model)]
 struct Outer {
     inner: Inner,
 }
@@ -23,6 +22,6 @@ logic fn x_of(o: Snap<Outer>) -> Nat {
 }
 
 // `snap(a) === snap(b)` is an equality of the two snapshots, and a snapshot is what `x_of` takes.
-fn read(a: &Outer, b: &Outer, same: @(snap(a) === snap(b))) -> @(x_of(snap(a)) === x_of(snap(b))) {
+fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(x_of(snap(a)) === x_of(snap(b))) {
     eq::congr(x_of, same)
 }

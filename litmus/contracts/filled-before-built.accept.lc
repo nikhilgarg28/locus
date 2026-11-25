@@ -8,19 +8,17 @@ use locus::std::vec;
 struct Filled {
     items: Vec<u32>,
     len: usize,
-    full: @(items.len() == len),
+    full: @(items.elements().len() == len),
 }
 
 // `make` may panic. Until `Filled` is built there is only a plain vector,
 // which unwinding drops as one.
 fn filled(len: usize, make: fn() -> u32) -> Option<Filled> {
     let items: Vec<u32> = vec![make(); len];
-    // `len` on Locus's `Vec` returns the length, with a proof that it is the length of the
-    // contents. `full` is stated on the model of `items`, and the library's lemma gives the
-    // model the length of the contents.
-    let (n, counted) = items.len();
+    // `len_checked` ties the result directly to the contents length used by `full`.
+    let (n, counted) = items.len_checked();
     if n == len {
-        let same = logic! { Vec::<u32>::model_len(snap(items)) };
+
         Some(Filled { items, len, full: _ })
     } else {
         None

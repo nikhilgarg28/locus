@@ -7,6 +7,6 @@ use locus::std::vec::Vec;
 fn overwrite(v: &mut Vec<u32>, x: u32) -> @(snap(final!(v)).elements().len() == snap(v).elements().len()) {
     // `written` proves that 0 was inside the vector, that the contents are the old ones
     // with `x` at 0, and that their length is what it was.
-    let written = v.set(0, x);
+    let written = v.set_checked(0, x);
     _
 }

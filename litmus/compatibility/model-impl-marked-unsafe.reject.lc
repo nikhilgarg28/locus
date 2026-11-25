@@ -1,14 +1,6 @@
-//~ question: May a program write `unsafe impl Model` for a type of its own, as the implementation that rustc is given is written?
+//~ question: May source code manually implement the compiler-controlled Snapshot trait?
 //~ spec: compat.names.model-impls
-//~ rfc: 0001
+//~ rfc: 0008
 
-struct Celsius {
-    tenths: i32,
-}
-
-unsafe impl Model for Celsius { //~ error: only Locus writes an implementation of `Model`: a model is declared as `impl Model for Celsius`, with no `unsafe`
-    type Logic = Int;
-    logic fn model(c: Snap<Celsius>) -> Int {
-        c.tenths
-    }
-}
+struct Celsius { tenths: i32 }
+unsafe impl Snapshot for Celsius {} //~ error: only compiler lowering or designated library support implements Snapshot

@@ -14,4 +14,4 @@ fn in_bounds(items: &[u32], wanted: &[usize]) -> Vec<(i: usize, @(i < items.len(
     checked
 }
 
-//~ run: in_bounds(&[1, 2, 3], &[0, 5, 2]).len().0 => 2
+//~ run: in_bounds(&[1, 2, 3], &[0, 5, 2]).len() => 2

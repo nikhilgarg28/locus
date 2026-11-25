@@ -9,7 +9,7 @@ fn without_first(mut items: Vec<u32>) -> usize {
     // Locus's `Vec` dereferences to the standard library's by shared reference only,
     // so the standard library's own `swap_remove` is not reached.
     items.swap_remove(0); //~ error: cannot borrow the standard library's `Vec` inside `items` as mutable: Locus's `Vec` implements `Deref` and not `DerefMut`, so `swap_remove`, which takes `&mut self`, is not reached; go out with `into_std` and back with `from_std`
-    items.len().0
+    items.len()
 }
 
 fn two_left() -> usize {

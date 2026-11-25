@@ -28,7 +28,7 @@ The design in brief:
   - Locus believes what a value holds only through code it verified, and through its own library. No other code is believed about a proof or a logical value, and none writes or returns one in the open: the most it is given is a loan of one by shared reference, which it cannot change (`logic.boundary.loans`). So no Rust code can forge or convert one.
   - Contracts are visible only to code that Locus verifies. In build mode, every crate that uses a Locus crate is verified. In export mode, what other crates can reach is plain Rust, with no logical values and no contracts.
 - **Logical code is pure and total.** This covers logic functions, `logic!` blocks, propositions, and proofs. It computes only with logical values, reads runtime values through their **models**, and never calls runtime code.
-- **Snapshots and models.** The language gives every type that it can see a **snapshot**, `Snap<T>`, which is what a value is, field by field, and no program writes one. A machine integer's snapshot is a `Nat` or an `Int`. Every such type has a **model**, which is what a value means: its snapshot, unless one is declared by hand, derived with `#[derive(Model)]` from its fields' models, or declared by Locus's library. A runtime place that logical code reads is **captured**: it stands for the model of its snapshot, and `snap(x)` gives the snapshot with no model applied. A logic function takes logical types only. A value of a type parameter is read only under a bound that the program writes, `T: Model`, and a type that Locus cannot see has neither a snapshot nor a model until a field of it is marked `#[opaque]`. Equal declared models never imply equal snapshots.
+- **Snapshots and explicit views.** Capture always yields the compiler-generated `Snap<T>`, where supported. Explicit library `View` functions may abstract it, but never change capture, equality, or field projection. `Opaque<T>` and `UnsafeCell<T>` have `Unit` snapshots. RFC 0008 reconciles the earlier model design.
 - **A proposition is about versions.** Every write to a place makes a new version of it, as in SSA. A proposition is about the versions it read, so a proof never silently carries over to a later value.
 - **A runtime function states its contract in its signature.** Proof parameters are preconditions, and proofs in the result are postconditions.
   - In a signature, every parameter means its value at entry.
@@ -67,6 +67,8 @@ At run time both proof types would be the same Rust type, so the downcast would 
 
 ## Design
 
+**Snapshot reconciliation:** [RFC 0008](0008-snapshot-capture-and-views.md) replaces implicit models with snapshot capture and ordinary explicit `View`, uses type-based `Unit` barriers, and updates collection APIs. The current design below incorporates it; numbered historical decisions retain their original rationale and are superseded where the RFC 0008 inventory says so.
+
 ### What a verified program means
 
 Every rule in this RFC follows from one reading of a verified program. The RFC for the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)) will define it precisely; this section fixes its shape, so that each rule can be held against it.
@@ -103,7 +105,7 @@ fn bump(counter: &mut u32, room: @(counter < 100)) -> @(final!(counter) == count
 }
 ```
 
-- `sorted` is a logic function that defines a proposition about a sequence of naturals. A `&[u32]` passed to it is seen through its model, a `Seq<Nat>`. A sequence is indexed by a `Nat` ([Logical code](#logical-code)).
+- `sorted` is a logic function that defines a proposition about a sequence of naturals. A `&[u32]` passed to it is seen through its snapshot, a `Seq<Nat>`. A sequence is indexed by a `Nat` ([Logical code](#logical-code)).
 - `binary_search` needs a proof that `xs` is sorted. Calling it on unsorted data is a compile-time error.
 - `find` takes a proof that may be absent. At run time it still knows whether one was passed.
 - `bump` promises that the counter's final value is one more than its value at entry, given room below 100. `_` asks proof search for the proof, and the kernel checks it.
@@ -149,10 +151,10 @@ Inside logical code, which Locus parses itself, it also uses `===`, `!==`, `==>`
 
 It adds these names to Locus's prelude, which programs shadow as they do std's (`compat.names.shadowable`):
 - the attributes `#[verified]` and `#[unverified]`, which say which kind a function is ([Unverified functions and unsafe code](#unverified-functions-and-unsafe-code));
-- the attribute `#[opaque]`, which marks a field of a type that Locus cannot see ([Snapshots and models](#snapshots-and-models));
-- the logic function `model`;
-- the logical types `Int`, `Nat`, `Bool`, `Seq`, `Snap`, and the others of Locus's library, and the logic functions `snap` and `model`;
-- the derive `Model`, beside the trait of that name;
+- the type-based barrier `Opaque<T>`; no field erasure attribute;
+- the explicit snapshot operation `snap`; optional `View` is an ordinary library trait;
+- the logical types `Int`, `Nat`, `Bool`, `Seq`, `Snap`, and the others of Locus's library;
+- the compiler-controlled `Snapshot` bound, separate from ordinary explicit views;
 - the propositions `True`, `False`, `And`, `Or`, and `Exists`.
 
 **Naming.** By convention, logic functions are named in snake_case, as Rust's functions are, and `prop` declarations in CamelCase, as Rust's enums are. So a reader can tell how a proposition is used: a logic function by its definition, and a declared proposition by matching its arms.
@@ -175,7 +177,7 @@ Every type is either a runtime type or a logical type.
 - tuples with at least one component, all of them logical. The unit type `()` is a runtime type;
 - structs and enums declared with `#[derive(Logical)]`, which may be recursive without `Box` and describe finite values;
 - `Snap<T>`, for each runtime type `T` that has a snapshot: the type of `T`'s snapshots, each of which holds what a value of `T` is, field by field ([Snapshots and models](#snapshots-and-models));
-- the model types that `#[derive(Model)]` generates, one for each type it is derived for;
+- the logical snapshot types generated for supported runtime types;
 - the logical types of Locus's library, which it builds from these: `Nat`, `Bool`, `Seq<T>`, `Set<T>`, `Map<K, V>`, `Maybe<T>`, and others. This RFC uses them in examples, and assumes only what it says about them; their definitions and operations are for the RFC for Locus's standard library ([standard-library](../../issues/standard-library.md)).
 
 `Nat` is an `Int` with a proof that it is not negative:
@@ -188,10 +190,10 @@ struct Nat {
 }
 ```
 
-**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [model](#snapshots-and-models) or its snapshot. The one exception is `Snap<T>`, whose argument names the runtime type whose values it holds.
+**A logical type contains only logical types.** Its fields, payloads, and type arguments are logical. `Seq<Nat>` is a logical type, and `Seq<u32>` is an error. A runtime value enters logical data through its [snapshot](#snapshots-and-models). The one exception is `Snap<T>`, whose argument names the runtime type whose values it holds.
 
 **A logical type refers to itself only positively.** A recursive `#[derive(Logical)]` type, or group of types, may contain itself as a field, a payload, a type argument of a positive logical type, or the result of a logical function type, but never as the parameter of a logical function type. Otherwise `struct Bad { f: logic fn(Bad) -> @False }` would prove `False` without recursion. This is Lean's strict positivity, the same rule as for [inductive propositions](#inductive-propositions).
-- It counts the types a logical type reaches through snapshots and derived models. With `#[derive(Model)] struct Holder { b: Bad }`, the field `f: logic fn(Holder::Logic) -> @False` mentions `Bad` in a parameter, and is rejected, and so is `logic fn(Snap<Holder>) -> @False`.
+- It counts types reached through generated snapshots too. A negative occurrence hidden behind an associated snapshot alias is still negative; a view cannot make an invalid logical datatype positive.
 - The parameters and results of a logical function type are logical types. So are the parameters of a logic function ([Logic functions](#logical-code)), so no runtime type's fields hide a negative occurrence.
 - The domain of `forall` or `exists` counts as a parameter of a logical function type. So `struct Bad { h: @(forall |b: Bad| False) }` is rejected too.
 - Through a library type, a logical type may refer to itself only in the arguments that the library declares positive. `Seq`, `Maybe`, and tuples are positive in their arguments. A set, which is a predicate on its elements, is not ([standard-library](../../issues/standard-library.md)).
@@ -258,20 +260,20 @@ No other code is given one in the open ([The boundary with unverified code](#the
 Further rules:
 1. **Never a runtime decision.** Runtime `if`, `match`, `while`, and the other control flow never depend on a logical value. A match on an `Option<@P>` tests its runtime tag, not the proof.
 2. **Arguments of ghost parameters are ghost values written as such.** An argument for a proof parameter, or for a parameter of logical type, is a binding that holds a ghost value, or logical code: a hole, a `logic!` block, a proof constructor, or a call of a logic function. The binding need not be [shown to be ghost](#logical-code): `let even = checked_even(n); halve(n, even)` passes `even` as it is.
-   - A runtime value is passed there as logical code, which takes it to its model: `grow(n, logic! { x })`, not `grow(n, x)`. Lowering never looks up a callee's signature, which for a method would need the receiver's type, so the source says it ([Logical code](#logical-code)).
-   - The same holds wherever a ghost value is expected outside logical code. A runtime value is never taken to its model implicitly: a logical field is initialized as `Tally { hits: 0, count: logic! { 0 } }`, not `count: 0`, because knowing that `count` is logical needs `Tally`'s definition, and a ghost local as `let k: Nat = logic! { n };`.
+   - A runtime value is passed there as logical code, which takes it to its snapshot: `grow(n, logic! { x })`, not `grow(n, x)`. Lowering never looks up a callee's signature, which for a method would need the receiver's type, so the source says it ([Logical code](#logical-code)).
+   - The same holds wherever a ghost value is expected outside logical code. A runtime value is never captured implicitly: a logical field is initialized as `Tally { hits: 0, count: logic! { 0 } }`, not `count: 0`, because knowing that `count` is logical needs `Tally`'s definition, and a ghost local as `let k: Nat = logic! { n };`.
    - A runtime function that returns a proof is called in a statement or `let` of its own first: `let even = checked_even(n); halve(n, even)`, not `halve(n, checked_even(n))`. An exported program removes the argument with its parameter, so the call could not stay where it was.
    - Everywhere else a ghost value has a runtime slot, its marker, and a runtime call that produces it stays where it is: as a logical field's initializer, a logical tuple component, a payload such as the `h` of `Some(h)`, or an argument instantiating a generic parameter with a logical type. `Interval { lo, hi, ordered: checked_order(lo, hi) }` keeps the call. In build mode the call returns the marker itself, and an exported program writes `ordered: match checked_order(lo, hi) { _ => Proof }`, so its order and its temporaries are as in the source.
    - Moving a call out of an argument list instead would change when its temporaries are dropped, or conflict with a borrow of the receiver, so erasure never does that.
 3. **A call is kept even when its result is ghost.** A call to a runtime function whose whole result is ghost stays in the runtime program, as a statement.
 4. **No logical values in trait implementations, for now.**
-   - Apart from `impl Model`, no logical type appears in an `impl`'s self type, in its trait's arguments, or in its associated types, and no trait method's signature holds logical values.
+   - Logical trait members and implementations follow RFC 0006; there is no special `impl Model` exception.
    - Otherwise unverified generic code could call such a method. With `impl From<Option<@P>> for Absurd`, generic code bounded by `From` could build an `Absurd` from any `Some(Proof)`.
    - Traits with logical values are [traits-on-logical-types](../../issues/traits-on-logical-types.md).
    - The rule applies to `impl`s as written. A runtime type that holds logical data, such as one with a proof field, may implement a trait whose signatures hold none: its methods take `Self`, so they are verified. When the type is sealed, unverified code that holds a value of it may call them, as the standard library's formatting code calls a `Display` implementation ([The boundary with unverified code](#the-boundary-with-unverified-code)). A generic `impl` of the program's own, used at an instantiation with logical types, is checked there ([What follows a value](#ghost-values)).
 5. **No logical types in unions.** No field of a union has a type that holds a logical type, at any depth ([Unverified functions and unsafe code](#unverified-functions-and-unsafe-code)). Reading a union's field reinterprets what another field wrote, as `transmute` does: with `union Pun { yes: Option<@(1 == 1)>, no: Option<@(0 != 0)> }`, writing `yes` and reading `no` would turn a proof of a true proposition into one of a false one, and a field of type `ManuallyDrop<Interval>`, or `ManuallyDrop<Vec<Interval>>`, would make intervals from whatever bytes another field wrote. `union Tagged { bits: u64, count: Nat }` is rejected too: reading a union needs `unsafe`, and an unverified function takes no type that holds logical data, so no code could ever read `Tagged`.
 
-**Deciding what is logical.** Before rustc runs, Locus decides only what the source shows ([RFC 0001](0001-compiler-pipeline.md#the-lowered-program)): Locus syntax, the names of Locus's macros and their aliases, `derive(Logical)`, `derive(Model)`, `impl Model`, and paths to Locus's logical types such as `Nat`, and which bindings are shown to be ghost ([Logical code](#logical-code)). It never needs an expression's type or a callee's signature.
+**Deciding what is logical.** Lowering decides only what source syntax establishes: logical declarations, macros, and bindings. rustc types the skeletons; the logical pass validates their meaning. Views are ordinary traits, and `Snapshot` implementations are compiler-controlled. RFC 0001 specifies deferred storage and checks after rustc.
 - Ghost values reach rustc as markers, so rustc infers and resolves the program as written: which method a call selects, which generic arguments it instantiates, and where markers flow.
 - After rustc, Locus learns from its facts where each marker went, and works out which logical type it stands for, forward from signatures and annotations.
 - Every assumption made before rustc is confirmed against the facts, by the identity of the item each name resolved to. A wrong one is an error or a second run, never a program with another meaning.
@@ -524,17 +526,17 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 **Reading runtime values.**
 - **Place expressions keep their Rust meaning.** A place is a local or parameter, a field or tuple field visible at that point, or the target of a reference or `Box`. Indexing and overloaded `Deref` do not form places in logical code.
 - **Runtime values cross into logical code only where it reads a place,** and become logical values there, so logical code computes only with logical values.
-- **A place that is read is captured.** A runtime place that logical code reads stands for the model of the place's snapshot: as an operand, as an argument, as a method's receiver, and on either side of `===` or `==`. Nothing chooses between the snapshot and the model at any of these. A place is always its capture, and `snap(x)` is the one way to the snapshot, with no model applied ([Snapshots and models](#snapshots-and-models)). Every type that has a snapshot has a model, which is the snapshot unless one is declared, so for a type that declares none the two are one value. A place of a type that Locus cannot see, such as a closure, cannot be read at all.
+- **A place that is read is captured as its snapshot.** This applies to operands, arguments, receivers and equality. `snap(x)` is the explicit spelling of the same observation. No view is tried implicitly.
 - **Logical code never reads data that changes without a write it sees.** A snapshot holds no contents of an `UnsafeCell`, on which `Cell`, `RefCell`, `Mutex`, and the atomics are built, and no target of a raw pointer, which is not a place in logical code. And a raw pointer exists only in an unverified function, which is given a place only by a borrow, after which the place has a new version ([Unverified functions and unsafe code](#unverified-functions-and-unsafe-code)). So no logical value depends on a write that Locus does not see. No snapshot looks through a raw pointer. Locus's own `Vec` keeps the snapshots of its elements in a logical field beside the standard library's vector, and the standard library's `Vec` has no snapshot ([Assumptions and the standard library](#assumptions-and-the-standard-library)). An earlier revision had a trusted snapshot of `Vec` that did look through them.
-- **Methods and indexing work on the capture.** A method call or an index on a runtime place captures the place, and resolves on the type of the captured value, never on a runtime method, as RFC 0001 requires. For `v: &Vec<u32>`, with Locus's `Vec`, `v.len()` is `Seq::len` of `v`'s model, and `v[i]` indexes that model. Nothing else is tried: there is no order of lookup, and a logic function that the runtime type declares is not found this way. It is called by its path, on what it takes: `Stack::room(snap(s))` ([Logic functions](#logical-code)). On a snapshot, a method or an index works on the snapshot: for a slice `xs`, `snap(xs).len()` is the length of a `Seq` of the elements' snapshots. The snapshot of a `Vec` is not a sequence, and `snap(v).elements()` gives that `Seq` (decision 113).
+- **Methods and indexing work on the snapshot type.** A Locus vector exposes its sequence through `v.elements()`, so logical length is `v.elements().len()` and logical indexing is `v.elements()[i]`. Runtime methods and explicit views are not fallback candidates.
 - **Indexing a sequence,** as in `xs[i]`, is a placeholder until the RFC for Locus's standard library ([standard-library](../../issues/standard-library.md)) decides the index type and what an index outside the sequence means. Whatever it decides, indexing a sequence whose elements might have no values, such as a `Seq<@False>`, needs a proof that the index is in bounds, or indexing an empty one would prove `False`. [RFC 0005](0005-core-terms.md#sequences) proposes the answer: `xs[i]` with no proof only where the element type has a default. A sequence is indexed by a `Nat`, and only by a `Nat` (decision 109), so `xs[i]` for a `usize` or a `Nat` needs nothing written. An `Int`, such as `i - 1` or `xs.len() - 1`, is not an index until it is turned into a `Nat`, which needs a proof that it is not negative; how that is spelled is the library's, and is open (item 31). So a negative index cannot be written, and the proof that an index is inside a sequence is one comparison, `i < xs.len()`. A property of every element is quantified over a `Nat`: `forall |i: Nat| i < xs.len() ==> xs[i] < cap`.
-- **Constants and const generic parameters** may appear in logical code, through their models. A constant of logical type is logical code ([Ghost values](#ghost-values)).
+- **Constants and const generic parameters** may appear in logical code, through their snapshots. A constant of logical type is logical code ([Ghost values](#ghost-values)).
 - **Statics** may appear only when they are immutable. No `static mut`, and no static that is `extern`, `#[no_mangle]`, or `#[export_name]`, or that a `sym` operand names (decision 96), holds logical data, because code outside the program can write it.
 - **References are transparent.** A `&T`, `&mut T`, or `Box<T>` used as a value is the current value of its target. For a `&mut` parameter in a signature, "current" means at entry; see [Contracts](#contracts).
 
 **Logical expressions.**
 - **Arithmetic is exact:** it never overflows.
-  - `Int` has `+`, `-`, and `*`. Division and remainder truncate toward zero, as Rust's do, so a machine integer's division agrees with its model's. Dividing by zero gives zero, and the remainder of a division by zero is the dividend, as in Lean, so `a === (a / b) * b + a % b` always holds.
+  - `Int` has `+`, `-`, and `*`. Division and remainder truncate toward zero, as Rust's do, so a non-overflowing machine integer division agrees with logical division. Dividing by zero gives zero, and the remainder of a division by zero is the dividend, as in Lean, so `a === (a / b) * b + a % b` always holds.
   - Lean's own `/` on integers is Euclidean instead: its remainder is never negative, so `-7 / 2` is `-4` there and `-3` in Rust. Locus's library provides that as `div_euclid` and `rem_euclid`, the names Rust gives it ([standard-library](../../issues/standard-library.md)).
   - **A `Nat` is used as an `Int` only where the program writes it as one,** `n as Int` (decision 98). An operator takes two `Int`s or two `Nat`s. So for `i: Int` and `n: Nat`, each of `i + n`, `i < n`, and `i === n` is an error, and the program writes `i + n as Int`. The same holds wherever an `Int` is expected, as it is for an argument for a parameter of type `Int`. An index is a `Nat`, and a measure is a `Nat` or an `Int` (decision 109), so neither is such a place.
   - `+`, `*`, `/`, and `%` on `Nat`s give a `Nat`, and `-` gives an `Int`. So for an empty `v`, `v.len() - 1` is `-1`.
@@ -544,8 +546,8 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
   - `as` in logical code converts between logical types, such as a `Nat` to an `Int`; a cast between machine integers is runtime code.
   - A machine integer is captured as a `Nat` or an `Int`, and a value captured from a place of a machine integer type lies in that type's range, which proofs may use: for `x: u8`, `x <= 255`. For `usize` and `isize`, the range is that of the configuration being checked. A `Nat` that no place gave has no such bound ([Valid snapshots](#snapshots-and-models)).
 - **`===` is equality.** `a === b` is the proposition that `a` and `b` are equal: Lean's `Eq`, on two values of the same logical type. `a !== b` is its negation. It is built in, every logical type has it, and it cannot be overloaded.
-  - On runtime places, `===` compares their captures, which are their models, and nothing else. Two values of a type with a declared model may have equal models and not be equal values, and their fields need not be equal: a hand-written model may forget fields entirely. So equality of declared models never gives equality of snapshots, or of fields read as places. For a type that declares no model, the model is the snapshot, and `p === q` is `snap(p) === snap(q)`.
-  - On snapshots, `===` is equality of values: two snapshots are equal exactly when they are the same variant with equal fields. Their opaque parts, such as a `Cell`'s, are values that Locus knows nothing about, except that a move or a copy keeps them: after `let before = logic! { snap(c) }; let d = c;`, `snap(d) === before` holds.
+  - On runtime places, `===` compares snapshots. Equality of explicitly called views may forget fields and does not imply snapshot equality. Adding a view never changes `p === q`.
+  - On snapshots, `===` is structural logical equality, including variants and included fields. The payload barriers contribute the one `Unit` value. A designated abstract external observation is separate and not a singleton.
   - Any two proofs of one proposition are equal, so `h === k` always holds for them.
   - A type declared with `#[derive(Logical)]` gets the facts that its constructors are injective and distinct, as Lean's inductive types do.
 - **`==`, `!=`, `<`, `<=`, `>`, and `>=` are comparisons, which give a proposition,** as Lean's `<` does (decision 97). In runtime code a comparison computes a `bool`. In logical code `a < b` is a claim, of type `Prop`.
@@ -553,8 +555,8 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
   - A comparison is never a `Bool`. A logic function whose body is a comparison is declared `-> Prop`, and declared `-> Bool` it is an error: `logic fn small(n: Nat) -> Prop { n < 10 }`.
   - In the core nothing changes. A comparison is still a `Bool` term there, and `a < b` is the proposition that it is `true` ([RFC 0005](0005-core-terms.md)). So what the rules say of a `Bool` used as a proposition, they say of a comparison: `compute()` proves one by evaluating it, and an `if` on one is an `if` on its `Bool`. `a == b` and `a === b` stay two propositions that hold together, and `rewrite` takes a proof of the second only.
   - On other logical types, `==` waits for programmable comparisons, which are [traits-on-logical-types](../../issues/traits-on-logical-types.md), together with the laws that tie a comparison to `===` (Lean's `LawfulBEq`) and decidable equality.
-  - On runtime values they compare models, like every operator in logical code. Runtime `PartialEq` and `PartialOrd` are never called in logical code; how they relate to models is a contract on the trait's methods ([traits-on-logical-types](../../issues/traits-on-logical-types.md)).
-- **A `Bool` is the model of a runtime `bool`,** and the type of `true` and `false`. A comparison never gives one; an `if` on it does, below.
+  - On runtime values comparisons operate on snapshots, like other logical operators. Runtime `PartialEq` and `PartialOrd` are never invoked by logical capture; a checked trait contract relates them to an explicit specification.
+- **A `Bool` is the snapshot of a runtime `bool`,** and the type of `true` and `false`. A comparison never gives one; an `if` on it does, below.
 - **A `Bool` is used as a proposition, with nothing written, where the form of the code asks for a proposition** (decision 97). There `b` stands for `b === true`. The positions are:
   - the proposition of a proof type, `@( .. )`, and of `prop!( .. )` and `prove!( .. )`;
   - the body of a `forall` or an `exists`;
@@ -578,250 +580,120 @@ Logical code is pure, total, and deterministic. It never calls runtime functions
 
 **Logic functions** are declared as `logic fn name(parameters) -> T { body }`.
 - **Every logical computation produces a logical value.** A logic function's result type is logical, and so is the value of every `logic!`, `prop!`, and `prove!`, every proposition, and every proof. So erasing logical code never removes a value that runtime code uses.
-- **Each parameter has a logical type** (decision 105), which `Snap<X>` and the type of a model are: `logic fn sorted(xs: Seq<Int>) -> Prop`, and `logic fn model(s: Snap<Stack>) -> Seq<Nat>`. A parameter written with a runtime type, such as `xs: &[u32]`, is an error that says what to write: `Snap<[u32]>`, or the type of its model. So inside a logic function nothing is captured: every name there is already a logical value.
-  - **A runtime place given as an argument is its capture,** always, whatever the type of the parameter. A snapshot is passed by writing `snap(x)`. So `sorted(xs)`, for `xs: &[u32]`, gives `xs`'s model, and `room(snap(s))` gives a `Stack`'s snapshot to `logic fn room(s: Snap<Stack>) -> Int`. Given `room(s)`, the function would receive the model, a `Seq<Nat>`, which is a type error.
+- **Each parameter has a logical type** (decision 105), which `Snap<X>` and the result type of an explicit view are: `logic fn sorted(xs: Seq<Int>) -> Prop`, and `logic fn view(s: Snap<Stack>) -> Seq<Nat>`. A parameter written with a runtime type, such as `xs: &[u32]`, is an error that says what to write: `Snap<[u32]>`, or an explicitly selected view type. So inside a logic function nothing is captured: every name there is already a logical value.
+  - **A runtime argument is always its snapshot.** `room(s)` and `room(snap(s))` therefore pass the same logical type and observation. An abstraction is written explicitly, for example `consume(Stack::view(snap(s)))`.
   - An earlier revision let a parameter be written with a runtime type, to be read as places inside the body and taken to its model where the body used it as a value. The second round of [the skeleton spike](../../spikes/skeleton-typing-2/README.md) found that two ambiguities came from it: whether an argument is the value or its model, and which type's method a call means. The [third round](../../spikes/skeleton-typing-3/README.md) removed it, and both choices went with it: a place given to a type parameter needs nothing written, where the second round had asked for `model(x)`.
 - The body is logical code. Logic functions never run, so they need not be computable.
 - **They are total.** Every recursive call is on a structurally smaller part of a parameter, exposed by a `match`, or decreases a measure declared with `#[decreases(e)]`, where `e` is a `Nat` or an `Int` (decision 109). At each recursive call, the measure at the call's arguments must be nonnegative, which a `Nat` is by its type, and smaller than at the parameters, which is a proof obligation. For now, no logic function calls itself through another; mutual recursion is [mutual-recursion](../../issues/mutual-recursion.md). A body that proof search completes is held to the same rule, so search never fills a hole in `f` with a call of `f` that is not smaller.
-- **Their type parameters range over logical types,** unless bounded by `Model`. A parameter so bounded stands for a runtime type, of which the function names `Snap<T>` and `T::Logic`. It still takes no value of type `T` itself. A call may have to name the parameter, as in `alike::<T>(snap(x), snap(y))`: a snapshot's type does not say which type it is a snapshot of, since `Snap<u32>` and `Snap<u64>` are both `Nat`.
+- **Their type parameters range over logical types,** unless bounded by `Snapshot`. A parameter with that bound may denote a runtime or logical type; a value parameter still needs a logical type such as `Snap<T>`. Type arguments may need to be written because distinct source types can share a snapshot type.
 - **They can belong to the program's own types,** in inherent `impl` blocks. One in an `impl` of a logical type may take `self`, and is called as a method on a value of that type. One in an `impl` of a runtime type takes the type's snapshot, or its model, as an ordinary parameter, since `self` there would be a runtime value, and is called by its path: `Stack::room(snap(s))`. Whether it may also be called as a method on the snapshot, `snap(s).room()`, is not decided. That form did not work in the third round of the spike, whose lowering can write the method only where it sees the type declared (item 30).
 - **A logic function that returns a proof is a lemma:** `logic fn add_zero(n: Int) -> @(n + 0 === n)`.
 
-**Logic blocks.** `logic! { e }` in a runtime body evaluates logical code at that point and gives a ghost value, usually bound to a name: `let before = logic! { v.len() };`.
+**Logic blocks.** `logic! { e }` in a runtime body evaluates logical code at that point and gives a ghost value, usually bound to a name: `let before = logic! { v.elements().len() };`.
 
 ### Snapshots and models
 
-Logical code sees a runtime value in two ways: as what it is, its **snapshot**, and as what it means, its **model**.
+Capture yields the language-generated snapshot. A model, when wanted, is an explicitly called ordinary library view. This section reconciles decisions 99–108 with [RFC 0008](0008-snapshot-capture-and-views.md); it never applies a view implicitly.
 
 ```rust
 use locus::std::vec::Vec;
-
-struct Stack {
-    items: Vec<u32>,
+struct Stack { items: Vec<u32> }
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(s: Snap<Self>) -> Seq<Nat> { s.items.elements() }
 }
-
-impl Model for Stack {
-    type Logic = Seq<Nat>;
-    logic fn model(stack: Snap<Stack>) -> Seq<Nat> {
-        stack.items.elements()
-    }
-}
-
-fn top(s: &Stack, nonempty: @(s.len() > 0)) -> u32 { ... }
+fn top(s: &Stack, nonempty: @(Stack::view(snap(s)).len() > 0)) -> u32 { ... }
 ```
 
-Here `s.len()` reads the place `s`, which is *captured*: it stands for the model of `s`'s snapshot, a `Seq<Nat>`, so `s.len()` is `Seq::len` of that. `model` takes the snapshot of a `Stack`. Its field `items` there is the snapshot of a `Vec<u32>`, a vector of Locus's library, and `elements()` gives the snapshots of that vector's elements, a `Seq<Nat>` ([Assumptions and the standard library](#assumptions-and-the-standard-library)).
+`Stack::view` is called explicitly. `s.items.elements()` reads the vector snapshot directly; adding or changing a view never changes capture or equality. Machine integers still snapshot to mathematical `Nat` or `Int`. There are no fixed-width logical integer types: wrapping is explicit with `u32::wrap`, and actual capture supplies range validity. Capture of a field agrees with projection from its enclosing snapshot except at declaration-fixed reference cuts.
 
-**Six constraints fix the shape** (decision 99):
-1. The language supplies snapshots, and no program writes or replaces one.
-2. A runtime value used as a logical value is the model of its snapshot. This is *capture*.
-3. With no model declared, the model is the snapshot.
-4. A model may be declared, as a total logic function of the snapshot. It may forget information.
-5. `snap(x)` gives the snapshot, and applies no model.
-6. A snapshot never depends on a model. So changing the model of a field's type does not change the snapshot of a type that holds the field.
+## Snapshots
 
-**Snapshots.** Every runtime type `T` that Locus can see has a snapshot type `Snap<T>`, a logical type that holds what a value of `T` is, field by field. Locus derives it from `T`'s definition, and no program declares one. The table gives each kind of type its snapshot, and its model:
+**Rule `models.snapshots`.**
+Every supported type `T` has a compiler-defined logical snapshot type `Snap<T>`. Structs, tuples, and enums compose field snapshots and preserve variant tags and proof fields. Unsigned machine integers snapshot to `Nat`, signed ones to `Int`, `bool` to `Bool`, and `()` to logical `Unit`; range facts belong to captures, not to all values of those logical types. References and `Box` observe readable referents, except at declared reference cuts. Arrays and slices snapshot to `Seq<Snap<T>>`. A logical type `L` snapshots to itself. A library view is never applied recursively or implicitly. No user implementation or field attribute can replace these rules.
 
-| `T` | `Snap<T>` | Model |
-|---|---|---|
-| a struct or enum that Locus lowers | a logical struct or enum with the same fields and variants, each field of its field type's snapshot type, proof fields included | as declared or derived; by default the snapshot |
-| `u8` … `u128`, `usize` | `Nat` | the same |
-| `i8` … `i128`, `isize` | `Int` | the same |
-| `bool`; `()` | `Bool`; the logical `Unit` | the same |
-| a tuple | the tuple of its components' snapshots | the tuple of its components' models |
-| `Box<T>`, `&T`, `&mut T` | `Snap<T>` itself: a `Box` and a reference are transparent, and a `&mut`'s final value is `final!` ([Contracts](#contracts)). In a field that closes a cycle of references among types, a reference holds only its address, as a raw pointer does (below) | `T`'s |
-| `[T; N]`, `[T]` | `Seq<Snap<T>>` | a `Seq` of `T`'s model |
-| `Vec<T>` of Locus's library, and its other collections | the snapshot of the struct that it is (decision 113): the standard library's collection inside is an opaque part, and a logical field holds the elements' snapshots, which `snap(v).elements()` gives as a `Seq<Snap<T>>` | a `Seq` of `T`'s model, declared by Locus's library with the type |
-| `Option<T>`, `Result<T, E>` | an enum with the same variants, over the payloads' snapshots, declared by Locus's library | built from the payloads' models: for an `Option`, a `Maybe` of `T`'s |
-| `UnsafeCell<T>`, and so `Cell`, `RefCell`, `Mutex`, and the atomics | an opaque type: a snapshot never holds what is inside | the snapshot |
-| a raw pointer | its address, not its target | the snapshot |
-| a type parameter `T`, or an associated type of one | `Snap<T>`, where the program writes `T: Model`: the same type in generic code as at each instantiation | `T::Logic`, under the same bound |
-| a union, `MaybeUninit<T>` included | opaque: which field it holds is not part of its value | the snapshot |
-| a field marked `#[opaque]` | an opaque value, of a type of its own for each field type | none: the field's type has none |
-| a closure, a function item, a function pointer, a trait object, a type that an `impl Trait` hides, and any other type that Locus does not lower and for which its library declares nothing, the standard library's own `Vec` and its other collections among them | none | none |
+**Rule `models.snapshots.cut`.**
+A field is cut when its type reaches its declaring aggregate again through a reference, stopping at observation barriers. Its component has type `CutSnap<F>`, which follows no reference inside that component: reference edges become address observations without a logical dereference operation. It is distinct from `Snap<F>`. Cut positions are fixed by the declaration, consistently in generic and concrete code. A cut or barrier cannot discard information needed to interpret a retained proof field; such a capture is rejected. Owned-only recursive data may have a finite nominal recursive snapshot. A fresh authorized capture of a referent place is separate from projection out of a cut snapshot.
 
-- **A snapshot holds every field, private ones included,** so that two values whose fields differ have different snapshots, apart from what the table leaves out, such as an `UnsafeCell`'s contents, and what it holds as an opaque part, such as the standard library's vector inside a `Vec` of Locus's. Rust's privacy decides who may name a field: logical code reads `s.f` only where Rust code could read `f`. Outside the crate that defines a type with private fields, its snapshots can be held, passed on, and compared, but not looked into; what they mean is known through the type's model and its contracts.
-- **A snapshot never depends on a model.** The snapshot of a type that holds a field is built from the snapshot of the field's type, whatever model that type declares. So declaring a model for `Inner`, or changing it, changes nothing in `Snap<Outer>` for an `Outer` that holds one.
-- **There is one integer system** (decision 100). The snapshot of an unsigned machine integer is a `Nat`, and that of a signed one an `Int`, so the model of an integer is the identity and an integer needs no model of its own. There are no logical integer types of a fixed width, such as a `Nat32`. Word arithmetic is written with `wrap`, which [RFC 0005](0005-core-terms.md#wrapping) defines: `u32::wrap(a + b)`.
-  - **Why not finite types with operators.** With the default model, the fields of a captured struct would be finite values, and arithmetic on them would read as ordinary arithmetic and wrap:
+**Rule `models.snapshots.seen`.**
+Capture is available for language-supported types, types Locus lowers whose included fields have snapshots, and types with designated library support. A parameter or associated type requires the written `Snapshot` bound. This is not universal support for arbitrary foreign types, closures, function items, or trait objects. In particular, a downstream crate cannot implement Locus's `Snapshot` for an uninstrumented foreign type it does not own. Standard-library types may have designated support where the library can legally supply it; native collections have no contents observation by default. A declaration containing an unsupported field remains ordinary Rust but has no whole-object snapshot. Direct capture of a supported, available sibling place remains possible. Uniform associated-type recursion that cannot be represented rejects capture, not ordinary runtime use.
 
-    ```rust prose with finite integer types, which this RFC does not have
-    let before = logic! { *r };                 // fields would be `Nat32`s
-    r.mid = (r.lo + r.hi) / 2;                  // wraps on overflow
-    let after = logic! { *r };
-    let ok: @(after.mid === (before.lo + before.hi) / 2) = _;
-    ```
+**Rule `models.snapshots.opaque`.**
+The library's `Opaque<T>` is an owning runtime wrapper whose language-defined snapshot is `Unit`, for any supported runtime payload `T`, without a `T: Snapshot` bound. It preserves ordinary ownership, borrowing, destruction, auto-trait obligations, and logical-data boundary checks. Its runtime `new`, `get_ref`, `get_mut`, and `into_inner` operations do not run during capture. A payload reference obtained by an authorized runtime operation can be captured separately if its type supports capture; the payload cannot be projected from `Unit`. There is no language `#[opaque]` or `#[snapshot_erased]` field attribute. Unsupported fields must be wrapped explicitly or leave their enclosing type without a snapshot. A designated abstract external snapshot is a different, non-singleton observation; it is not automatically available for every foreign type.
 
-    That proposition reads as "`mid` is the midpoint", and with wrapping operators it would be provable for a midpoint that overflowed. Taking the operators away would fix that, and leave a conversion at every use of an old value's integer field.
-  - **What it costs.** `Snap<u32>` and `Snap<u64>` are one type, so nothing tells them apart, and a snapshot's type does not say which type it is a snapshot of. A statement about every `u8` writes its range: `forall |b: Nat| b <= 255 ==> ..`. And the range of an integer is no longer a fact about a type: it is a fact about a captured value ([Valid snapshots](#snapshots-and-models), below).
-- **Snapshots never change unseen.** A snapshot belongs to a version ([Versions](#versions)). It holds no contents of an `UnsafeCell`, which change without a write, and no target of a raw pointer, only its address. So interior mutation leaves every snapshot as it was. A write through a raw pointer happens only in an unverified function, which changes only what it is lent mutably, and what was lent has a new version when the borrow ends ([Unverified functions and unsafe code](#unverified-functions-and-unsafe-code)).
-- **`UnsafeCell` is special because Rust makes it so.** It is a language item, and the only way Rust lets a value change through `&`. Every other type's snapshot is built from its fields, however much `unsafe` code the type uses. A type of the program's own built on raw pointers therefore has a snapshot that holds only addresses. Locus's library gives its `Vec` a meaningful one by keeping the elements' snapshots in a logical field, and is trusted to keep that field in step with the vector (`trusted.library`). A program's own type will get one from ghost permissions, which are for later.
-- **Every snapshot is finite.** `Snap<T>` is a logical type, and so an inductive type in Lean, whose values are finite. A `Box` owns what it holds, so a chain of `Box`es ends. A chain of references need not: `static A: Node = Node { next: &A }` compiles, for `struct Node { next: &'static Node }` (tested), and a transparent `next` would make `Snap<Node>` a type with no values, of which `A` would give one, proving `False`. So a snapshot is cut at the field that closes such a cycle. A field is *cut* when its type reaches the type that declares it again through a reference, following type arguments, and a cut field's snapshot follows no reference: each reference in it holds only its address.
-  - **The cut belongs to the type that closes the cycle, not to a generic type it uses.** With `struct Wrap<'a, T> { inner: &'a T }` and `struct Node<'a> { w: Wrap<'a, Node<'a>> }`, a self-referential `static N` compiles too (tested). `Wrap`'s own definition reaches nothing again, so `Snap<Wrap<T>>` holds `Snap<T>` for every `T`, and a fact proven about it in generic code holds at every instantiation, `Node` included. `Node`'s field `w` is cut instead: in `Snap<Node>`, `w.inner` is an address. So a type's snapshot is the same wherever it appears, a generic type's has one shape for every type argument, and borrowed views such as `Wrap<u32>`, or a slice view, keep their contents, so that their models can read them. [RFC 0005](0005-core-terms.md#where-a-snapshot-is-cut) gives a cut field's snapshot a type of its own, `CutSnap`: a `w` whose references are addresses is not a `Snap<Wrap<Node>>`, so "the same wherever it appears" holds only outside cut fields.
-  - With `struct A<'a> { next: &'a B<'a> }` and `struct B<'a> { value: u32, prev: Option<&'a A<'a>> }`, `A`'s `next` reaches `A` again through `B`'s `prev`, and `B`'s `prev` reaches `B` again through `A`'s `next`, so both are cut, in `Snap<A>`, in `Snap<B>`, and inside any other snapshot. Only the types that close a cycle lose anything, and only in the fields that close it.
-  - **A cycle can close where no field shows it.** With `trait Family { type Out; }`, `struct Node<F: Family> { next: F::Out }`, and `impl Family for K { type Out = &'static Node<K>; }`, the static `A: Node<K> = Node { next: &A }` compiles too (tested). `Node`'s declaration reaches nothing again, so no field is cut, and cutting at `K` alone would give `Node<F>`'s snapshot a shape that depends on `F`. An earlier revision made every such field opaque, whatever the type arguments. Now the field is read as a value of a type parameter is, under a bound that the program writes, `F::Out: Model`, and its snapshot is `Snap<F::Out>` (decision 106). At `K` that bound cannot hold: the snapshot of a `K::Out` is the snapshot of a `Node<K>`, which is the type being asked about. So `Node<K>` has no snapshot, a place of that type cannot be read in logical code, and a function that asks for `F::Out: Model` cannot be called at `K`. `Node<F>`'s snapshot keeps one shape for every `F` at which it has one. No spike tested this case (item 30).
-  - Logical code that reads through a cut field's references as places still observes their targets: `a.next.value` in a proposition about `a: &A` reads the place `(*a.next).value`. Only a snapshot value, such as the argument of a logic function on `Snap<A>`, stops at the cut.
-- **A type that Locus cannot see has neither a snapshot nor a model** (decision 107). An earlier revision said that every runtime type has a snapshot, opaque where nothing is known (decisions 8 and 48). That is restated: every type that Locus lowers, or that its library declares, has a snapshot and a model; a type parameter is read under its bound; any other type has neither until it is given one. **This is a deliberate step back from universal capture.**
-  - **Which types Locus sees.** The language's own: the machine integers, `bool`, `()`, references, `Box`, tuples, arrays, slices, and raw pointers. Each struct, enum, and union that Locus lowers: one declared in a `.lc` file or in a `locus!` block ([RFC 0001](0001-compiler-pipeline.md)). And the types of the standard library for which Locus's library declares one: this RFC's examples need `Option`, `Result`, and the types with interior mutability. It declares none for a collection. The standard library's `Vec` has neither a snapshot nor a model, and Locus's own `Vec` is a struct of Locus's library, which Locus lowers as it lowers a program's (decision 113). Which others it declares, such as `char`, `str`, and the floating-point types, and which it provides a type of its own around, as it does for `String`, the maps, `Rc`, and `Arc`, is for the library's RFC ([standard-library](../../issues/standard-library.md)).
-  - **Which it does not.** A closure, a function item, a function pointer, a trait object, a type that an `impl Trait` hides, and a type of a crate that Locus does not lower for which its library declares nothing, a struct declared in a plain `.rs` file among them. A place of such a type cannot be captured, `snap` cannot be applied to it, and `Snap<T>` cannot be written of it. A trait cannot be implemented for a closure or a function item except by an implementation for every type, which would overlap every other ([capture-family](../../spikes/capture-family/README.md), `c05`).
-  - **A field of such a type is marked `#[opaque]`.** Its snapshot is then an unknown value that moves and copies keep (decision 22), of a type of its own for each field type: the opaque snapshots of a `TcpListener` and of a `SocketAddr` are two types, and comparing one with the other is a type error (`a06e` in [the third round](../../spikes/skeleton-typing-3/README.md)). Logical code can hold such a value, pass it on, and compare it with another of its type, and nothing looks into it.
+**Rule `models.snapshot-privacy`.**
+Generated snapshots preserve the source fields' visibility. Clients may hold and compare whole snapshots without access to private fields. Owners may expose ordinary logical observers of those fields. Hypothetical snapshot constructors obey source visibility and require proofs for proof fields; they create neither runtime objects nor access permissions.
 
-    ```rust
-    struct Server {
-        #[opaque]
-        listener: std::net::TcpListener,
-        port: u16,
-    }
-    ```
+**Rule `models.frozen-data`.**
+`Snap<UnsafeCell<T>> = Unit`, without observing its payload or requiring its snapshot. Together with `Opaque<T>`, these are the two special constructors that erase arbitrary payloads; ordinary unit and structural compositions follow their ordinary rules. Raw pointers observe only pointer values, not targets or access rights. Interior mutation behind a barrier does not change that barrier's observation. Observing a cell result, guarded referent, or atomic load requires the actual runtime access first. Neither a view nor snapshot equality recovers omitted state. No fresh identifier is generated by capture.
 
-  - **The mark changes the field's snapshot, and not its type.** `server.listener`, read as a place, is still a place of a type with no model, and cannot be captured. The opaque value is reached through the snapshot of the value that holds it: `snap(server).listener` (`a06f`).
-  - **Without the mark, the struct is still a struct.** It is declared, built, and used in runtime code as it is in Rust, so a Rust program is still a Locus program, as commitment 1 of the vision and `compat.superset.same-meaning` say. It has no snapshot and no model, and the error comes where logical code first needs one: where a place of it is captured, where `snap` is applied to it, where `Snap<T>` is written of it, where a model is declared or derived for it, and where a `Model` bound is asked of it. The error names the field's type, and says to mark the field: "`Server` has no snapshot: its field `listener` is a `TcpListener`, which Locus cannot see; mark the field `#[opaque]`".
-    - **This is the rule that the owner approved,** and an earlier text of this RFC had an error at the declaration instead. The third round of the spike had built the approved form with one trait for the snapshot and the model, and found that it refused every declared model that reads a field. [capture-family](../../spikes/capture-family/README.md) shows the way out, in its cases `c14` to `c16`: with the snapshot and the model as two traits, only what lowering generates is deferred, the snapshot and the default model, and a model that the program declares is an implementation of its own. A struct with an unmarked field then compiles (`c14`), and the error is at the capture (`c15`) or at the declared model (`c16`).
-    - **What the evidence is.** Those three cases are hand-written Rust. The toy lowering of the third round has one trait, and does not generate this form. And the form rests on rustc not checking a `where` clause behind a higher-ranked lifetime at a declaration, which holds on rustc 1.97.0 and which nobody has established as intended (item 30).
-    - **Marks are rare either way.** Under the stricter form, the third round of the spike found that no declaration in its earlier sets needed a mark, and that the three that did were cases written for it; its library declared a model for `PhantomData`, which six of those declarations hold.
-  - **As a type argument** to a generic that asks for the bound, such a type is wrapped in a struct of the program's own, with the field marked. This is the newtype that Rust's orphan rule already teaches.
-  - **A union's snapshot is opaque as a whole,** so its fields need no mark, and so are the contents of a type with interior mutability.
-  - **A library collection's snapshot is strictly positive in its element types:** the logical field of a set or a map holds the sequence of its entries, and its model may be a `Set` or a `Map`. Otherwise `struct Group { subgroups: BTreeSet<Group> }`, which rustc accepts (tested), would have no snapshot type.
-- **Two snapshots are equal exactly when they are the same variant with equal fields.** Their opaque parts are values that Locus knows nothing about, except that a move or a copy keeps them. So two `Cell`s built with the same contents need not have equal snapshots.
-- **`snap(x)`** is a logic function in Locus's library that gives `x`'s snapshot, of type `Snap<T>`, and applies no model.
-- **A snapshot value is written with its type's own constructor.** In logical code, a struct or enum expression of a runtime type builds a value of its snapshot type, where Rust code could build a value of the type, as a pattern of the type matches a snapshot: `Inner { n: 0 }` is a `Snap<Inner>`, and `Some(s)` matches a `Snap<Option<T>>`. Its proof fields are proved, as they are anywhere. A value built this way need not be one that any runtime value has.
-- **References and `Box` stay transparent** (decision 102). Equal snapshots support substitution in logical observers of those snapshots: where `snap(a) === snap(b)`, a logic function gives the same result for both. They say nothing about addresses: two references to two places that hold equal values have equal snapshots. An operation that is sensitive to an address, such as `ptr::eq`, is a call that tells Locus nothing, or needs a contract of its own. Identity belongs to a raw pointer's value and nowhere else in a snapshot. If references or boxes kept the identity of their location, a tree through `Box`, and any struct that holds a reference, would carry allocation identity in its default model: two equal trees in two allocations would not be `===`, and every such type would need a declared model to be useful. The rules on cuts and cycles above stand.
+**Rule `models.capture.available`.**
+A runtime place is captured only while initialized and readable through a legal temporary shared borrow, including a shared reborrow. Capture cannot read moved-out storage, conflict with an outstanding mutable loan, or bypass a guard. The resulting logical value retains no runtime borrow or source lifetime. Capture uses supported primitive place projections; it executes no arbitrary `Deref`, `Index`, or getter. Bind such an executable operation's result first. An unavailable parent does not prevent capture of a readable disjoint sibling.
 
-**Valid snapshots** (decision 101). A snapshot type holds more values than its runtime type does: a `Snap<u8>` is a `Nat`, so 300 is one. For each type `T` that has a snapshot, the language defines a proposition on its snapshots from the type's structure, written as a logic function of the type, as `wrap` is: `T::valid(s)`.
+**Rule `models.capture.footprint`.**
+A snapshot depends only on its specified observation footprint: included scalar and field state, discriminants, lengths, and supported referent observations. The footprints of `Opaque` and `UnsafeCell` are empty; a raw pointer's is its value, not its target. While a place remains available, an unchanged interpretation and no change to its footprint imply equal captures. Calls, loans, callbacks, drops, and external effects must be accounted for. Abstract external observations without a justified frame are not preserved across potentially affecting calls merely because the receiver is shared. Historical snapshots and proofs about them never change.
 
-| `T` | `T::valid(s)` holds when |
-|---|---|
-| a machine integer | `s` lies in the type's range: `u8::valid(n)` is `n <= 255` |
-| `&T`, `&mut T`, `Box<T>` | the target's snapshot is valid |
-| a tuple, a struct, an enum | every field's is, for an enum the fields of the variant it is |
-| `[T; N]` | the length is `N`, and every element's is |
-| a slice, an `Option`, a `Result`, a collection of Locus's library | every element's or payload's is |
-| `bool`, a raw pointer, an opaque part, a cut field, a proof field, a logical value | always |
+#### Valid snapshots
 
-- **Every value captured from a runtime place is valid.** Where logical code reads a place `x` of type `T`, `T::valid(snap(x))` holds, and proofs may use it. So a captured `u8` is at most 255, and the captured length of a `[u8; 4]` is 4. It reaches the fields of a captured struct, because a field of a snapshot is the snapshot of that field. This is a fact that the language infers, and it generalizes one that it already inferred, the range of a machine integer.
-- **Nothing of the kind is assumed of a snapshot that no place gave.** A `Snap<T>` that is a parameter of a logic function, that a quantifier binds, or that logical code builds may be one that no value of `T` has. A logic function that needs validity takes a proof of it:
+**Rule `models.valid`.**
+For each supported `T`, the compiler supplies `T::valid(s)` as necessary structural validity conditions, not a proof that a corresponding live runtime object exists. Machine integers require their source ranges; references and `Box` require referent validity; products and sums require included component validity; arrays additionally require their fixed length. Proof fields are already proofs, and logical values, `Unit` barriers, and supported abstract or address observations add no payload validity. Programs cannot redefine this predicate.
 
-  ```rust
-  logic fn fits(n: Snap<u8>, valid: @u8::valid(n)) -> @(n <= 255) {
-      _
-  }
-  ```
+**Rule `models.valid.captured`.**
+An actual legal capture establishes `T::valid(snap(x))` and the applicable included field validity facts. This gives byte ranges and fixed array lengths without applying a view.
 
-  Without `valid`, the hole has nothing to prove `n <= 255` from, and the function is rejected.
-- **A model is total over all of `Snap<T>`,** including values that no runtime `T` produces. It takes the snapshot and no proof, so it cannot ask for a valid one. A model of `struct Word { bytes: [u8; 4] }` that reads `w.bytes[3]` is defined for a snapshot with two bytes too, where that index gives a value of which nothing is known ([RFC 0005](0005-core-terms.md#sequences)).
-- **No program declares `valid`,** and none changes it. It types for every shape the third round of the spike tried (`v1`).
+**Rule `models.valid.not-assumed`.**
+A quantified, computed, or parameter value of type `Snap<T>` is not automatically valid. `Snap<u8>` is `Nat`, so `1000` is an allowed hypothetical snapshot value without byte validity. A function needing validity takes its proof explicitly.
 
-**Models.** A type's model is a logic function from its snapshots to a logical type, `T::Logic`. Every type that has a snapshot has one (decision 99):
-- **by default, the snapshot itself:** the model is the identity, and `T::Logic` is `Snap<T>`;
-- **declared by hand,** with `impl Model`, as `Stack` does;
-- **derived,** with `#[derive(Model)]`, from the models of its fields;
-- **declared by Locus's library,** for the standard library's types, and for its own.
+#### Models
 
-**The default model is the snapshot.** A value of a type that declares no model is used as a value as its snapshot is: `p === q` compares two whole values, and a `Vec<Point>` has a model for a `Point` that declares none.
-- **An earlier revision gave such a type no model,** and deferred this default for one reason: declaring a model later silently changes what `===` means in the specifications of the type's clients. That still holds. It is accepted as what it is, a change to the type's specification, as changing a function's contract is. And a model is declared with its type (decision 108), so the change is made where the type's meaning is decided.
-- **The default costs little because of decision 100.** The default model of a struct of plain data is a value whose integer fields are already `Nat`s and `Int`s, so nothing has to be converted.
-- **`#[derive(Model)]` stays,** as the way to ask for a model built from the fields' models, where a field's type declares one.
+This heading preserves existing links. A model is now an optional ordinary library view, not a language capture policy.
 
-**How logical code uses runtime values.**
-- **A place that is read is captured:** it stands for the model of the place's snapshot. `p`, `p.x`, and `*r` read places, as RFC 0001 observes, and fields are selected on the place first, so `p.x` is the capture of the field `x`.
-- **That holds at every use:** as an operand, either side of `===`, a method receiver, and an argument, whatever the type of the parameter. An earlier revision kept a snapshot where one was expected, under a parameter or an annotation of type `Snap<T>`. Nothing is chosen by what is expected now.
-- **`snap(x)` gives the snapshot,** and applies no model. A snapshot is a logical value, so it is never taken further. To a snapshot value `s`, a type's model is applied by the type's path, `Stack::model(s)`, as any logic function of the type is called. `model(x)` is the capture of a place `x`, written out. `model(s)` of a snapshot value is an error: a snapshot's type does not say which type it is a snapshot of (`m1e` in the third round of the spike).
-- So `x + 1`, for `x: u32`, adds `x`'s model, a `Nat`, and never overflows. `sorted(xs)`, for `xs: &[u32]`, receives `xs`'s model, a `Seq<Nat>`. And `snap(a) === snap(b)` compares two whole values.
+**Rule `models.observation`.**
+A runtime place read in logical code stands for its snapshot, including as an operand, argument, receiver, or side of `===`. `snap(x)` requests the same capture explicitly. Fields are selected as places first. There is no built-in `model(x)` conversion. An abstraction is invoked explicitly, for example `Stack::view(snap(s))` or a named observer of the snapshot. Logical integer arithmetic remains mathematical; capturing a runtime result does not change the runtime operation's wrapping semantics.
 
-**What each kind of type is** (decision 103). The table above has one rule in it.
-- **A type that the language or Locus's library builds from other types is modeled part by part.** The model of `&T`, `&mut T`, and `Box<T>` is `T`'s. The model of a tuple is the tuple of its components' models, that of an array, a slice, or a `Vec` of Locus's library a `Seq` of its elements' models, and that of an `Option` a `Maybe` of its payload's.
-- **A type that a program declares is modeled as its declaration says,** and by default as its snapshot, which holds its fields' *snapshots*.
+**Rule `models.default`.**
+Capture has one default, the snapshot. Implementing a library `View` trait or adding an observer changes neither that default nor the meaning of `===`. There is no automatically supplied identity view and no implicit model conversion.
 
-So for `struct Stack` with its model `Seq<Nat>`, the capture of a `(Stack, u32)` is a `(Seq<Nat>, Nat)`, and the capture of a `struct Shelf { stack: Stack }` that declares no model is a `Snap<Shelf>`, whose field is a `Snap<Stack>`.
+**Rule `models.by-parts`.**
+Structural capture composes snapshots, never views. A tuple, array, slice, or aggregate retains component snapshots; applying a view to its elements requires an explicit map or other library function. A view may intentionally omit fields or variant tags without changing the snapshot that contains them.
 
-**The field of a capture, and the capture of a field** (decision 104). For a struct with no declared model that holds a field with one, the two orders give two things. Capturing and then selecting the field gives the field's snapshot. Selecting the field and then capturing gives its model.
+**Rule `models.capture.fields`.**
+For an ordinary uncut field, `snap(p.f) === snap(p).f` whenever both captures are available. Declaring any library view leaves this law unchanged. A field of type `Opaque<T>` contributes `Unit` on both sides; the payload inside that barrier has no snapshot projection. Reference cuts retain their explicit exception.
 
-```rust
-let whole = logic! { shelf };          // a `Snap<Shelf>`
-let a = logic! { whole.stack };        // a `Snap<Stack>`: the field of the capture
-let b = logic! { shelf.stack };        // a `Seq<Nat>`: the capture of the field
-let c = logic! { Stack::model(whole.stack) };   // a `Seq<Nat>`, equal to `b`
-```
+**Rule `models.capture.methods`.**
+Logical method lookup on a captured runtime place resolves on its snapshot's type. No implicit view, runtime method, or alternative receiver is tried. An observer declared on the source type is called explicitly by path with a snapshot argument, such as `Stack::room(snap(s))`.
 
-- **Where the model's type differs from the snapshot's, confusing them is a type error.** `whole.stack.len()` is rejected, since a `Snap<Stack>` has no `len`, and one given where the other is wanted does not fit (`a03` in the third round of the spike, `c03` in capture-family).
-- **Where a declared model has the snapshot's own type, and other values, it is silent.** This is a sharp edge, and this RFC states it and does not hide it. A second reviewer's example:
+**Rule `models.capture.bound`.**
+Capturing a parameter `T` or associated type such as `F::Out` requires an explicit `Snapshot` bound in scope. The bound supplies the same normalized `Snap<T>` in generic and concrete code. No bound is inferred from a use. A proof field that actually reads a generic runtime field needs the bound at its declaration. An erased logical field containing a deferred `Snap<T>` follows `models.storage` instead. A foreign trait method cannot add a stronger bound than its trait permits.
 
-  ```rust
-  struct Inner {
-      n: u32,
-  }
+**Rule `models.total`.**
+The conventional library trait `View: Snapshot` declares `type V: Logical` and `logic fn view(s: Snap<Self>) -> Self::V`. Its function is pure and total on its stated logical domain, including hypothetical snapshots. A separate observer needing a proof parameter may declare one normally. No view guarantees correspondence to hidden runtime storage merely by being named a view.
 
-  // A model with the type of the snapshot: the snapshot with `n` replaced by 0.
-  impl Model for Inner {
-      type Logic = Snap<Inner>;
-      logic fn model(s: Snap<Inner>) -> Snap<Inner> {
-          Inner { n: 0 }
-      }
-  }
+**Rule `models.one-per-type`.**
+`View` is an ordinary trait: Rust coherence chooses its implementation. Multiple overlapping implementations of that same trait are rejected, but disjoint implementations for particular instantiations of a generic source type are permitted where Rust permits them. Other named observers and other view traits may coexist. None selects a capture policy.
 
-  // No model, so its model is its snapshot.
-  struct Outer {
-      inner: Inner,
-  }
-  ```
+**Rule `models.derived`.**
+There is no language-provided `derive(Model)` or implicit field-wise view generation. A handwritten view, or ordinary user macro that generates one, is checked as ordinary logical code. It gains neither hidden field access nor permission to traverse cut addresses or erased payloads, and cannot omit a proof obligation by erasing a marker.
 
-  For an `outer` whose inner `n` is 7, the field `inner` of the capture of `outer` has `n` 7, and the capture of `outer.inner` has `n` 0. Both are of type `Snap<Inner>`, `===` between them is well typed, and nothing is reported (`a14`). The claim that they are equal is false, and so cannot be proved.
-- **The edge is narrow.** It needs a declared model inside a type that declares none. With `Nat` and `Int` as the integers' snapshots, a struct of plain data has none: capturing it and then reading a field agrees with reading the field and then capturing it ([capture-family](../../spikes/capture-family/README.md), `c02`).
+**Rule `models.bounds-on-functions`.**
+`Snapshot` bounds may appear on functions, impls, types, and traits. Ordinary `View` bounds follow the ordinary trait rules. Export still cannot remove a logical bound from an impl or type when doing so could change executable trait selection; the initial supported removable snapshot bounds are on function parameters. Public exports expose no such logical interface.
 
-A derived model has the same fields and variants as the type, each taken to its model:
+**Rule `models.declared-by-owner`.**
+A `View` implementation follows Rust's ownership and coherence rules, with ordinary visibility. It need not be in the same file or `locus!` block as the source type. A program cannot implement the library's foreign trait for a foreign type it does not own. Compiler-controlled `Snapshot` remains separate and cannot be implemented or overridden by user code.
 
-```rust
-#[derive(Model)]
-struct Point {
-    x: u32,
-    y: u32,
-}
+**Rule `models.own-definition`.**
+Views and their helpers obey the ordinary logical totality and definition-cycle rules. Neither an implicit model application nor compiler-generated default view introduces a dependency. A helper or trait-evidence cycle cannot justify its own definition or proof.
 
-fn same(p: &Point, q: &Point, x: @(p.x === q.x), y: @(p.y === q.y)) -> @(p === q) {
-    _
-}
-```
+**Rule `models.storage`.**
+A logical field declared using `Snap<T>` may be stored in a compiler-generated nominal carrier that does not require the snapshot bound on the enclosing runtime type. Logical reads and writes require the appropriate bounds and use the normalized source type. Reads expose no `SnapOf` carrier; writes preserve the exact logical value, so reading after storing `s` yields `s`. Constructors, assignments through references, destructuring, and helper calls preserve the same place and borrow identity. The frozen logical snapshot retains no source lifetime. This is a rule for internal storage representation, not a new snapshot rule for ordinary logical types, which snapshot to themselves. Internal conversion stubs are compiler scaffolding, not arbitrary contract-free calls.
 
-- `Point::Logic` is a logical struct with fields `x: Nat` and `y: Nat`. In logical code, `model(p).x` is `model(p.x)`.
-- Two values have equal derived models exactly when they are the same variant and their fields' models are equal, as for any logical struct or enum. So `same` is accepted. Without the derive, `p === q` is `snap(p) === snap(q)`, which follows from the fields too: for a struct of integers the derived model and the snapshot hold the same values, and the derive matters where a field's type declares a model.
-- **Deriving needs a model for every field.** Every field's type has one, except the type of a field marked `#[opaque]`, which makes the derive an error. A field of type `Cell<u32>` is taken to its model, which is its snapshot and holds nothing of the cell's contents; an earlier revision gave a `Cell` no model, and rejected that derive. A bare proof field, whose type is a proof type, is left out, because it carries no information. A field that holds proofs inside a runtime type keeps its runtime structure: `indices: Vec<(i: usize, @(i < 10))>` is modeled as a `Seq` of pairs, so the model keeps the indices and the length, and an `Option<@P>` field keeps its tag.
-- **For now, only types without type parameters** derive a model. The reason this RFC gave no longer holds: a generic derive needs a `Model` bound on its `impl`, which decision 106 now allows. The restriction stays until the owner has seen it lifted (item 30).
-- **A type that contains itself through `Box`,** such as `enum List { Nil, Cons(u32, Box<List>) }`, may derive its model. `List::Logic` is then a recursive logical type, strictly positive as every logical type must be.
-- **A type that reaches itself through a reference, following type arguments as snapshots do, may not derive its model.** For `struct Node { next: &'static Node }`, the model of `&Node` is `Node`'s, so `Node::Logic` would contain itself with no base case and have no values, while `static A: Node = Node { next: &A }` would give it one, proving `False`. The snapshot's cut at such a reference does not help, since the derived model takes each field to its model, not to its snapshot. Through a generic wrapper, as in `struct Node<'a> { w: Wrap<'a, Node<'a>> }`, the field `w` is cut in `Node`'s snapshot, and a cut field has no model to be taken to. A hand-written model can recur on snapshots instead, which the cut keeps finite.
-- **A model may forget,** and a derived model forgets whatever its fields' models forget. So equal models never give equal snapshots, or equal fields: with `Inner { x }` modeled as `0` inside a derived `Outer { inner }`, two `Outer`s have equal models whatever their `x`.
+#### Contract-hidden stamps
 
-The rest:
-- **A type has exactly one model,** the same wherever the type is read: in its own module, in a module that imports only the type, through a bounded type parameter, and in another crate (`d7` and `d3` in the third round of the spike). A program that wants another interpretation of a type writes a logic function for it.
-  - **A model is declared for a type as a whole,** at all its type arguments: `impl<T: Model> Model for Wrap<T>`. One declared for `Wrap<u32>` alone would leave `Wrap<u64>` with the default, and generic code over `Wrap<T>` would read one type through two models, so it is rejected.
-- **A model is declared with its type** (decision 108): in the same `locus!` block, or the same `.lc` file, as the type's declaration, so that there is exactly one, written where the default would otherwise be. It reads the snapshot's private fields, so it belongs there anyway. Declared anywhere else it is an error: in another crate, as Rust's orphan rule would also say, and in another file or block of the type's own crate. Locus's library declares the models of the standard library's types. The model of a type with private fields is how its crate tells other crates what its values mean: they cannot look into its snapshots, so they reason through its model and the contracts its functions state in terms of it. This is data refinement in Hoare's sense, with proof fields as the representation invariant and the model as the abstraction function.
-- **`impl Model` is a real implementation** of the library's `Model` trait, with its logic function as a stub beside it, and `#[derive(Model)]` generates one.
-  - So rustc checks `T: Model` bounds, and `T: Model` holds exactly for types with a model.
-  - Its coherence errors, conflicting implementations (E0119) and the orphan rule (E0117), are reported as Locus's errors about models.
-  - In build mode both programs keep it. An exported program has no `Model`: implementations and `T: Model` bounds are removed.
-- **A value of a type parameter is read under a written bound** (decision 106). A value whose type is a type parameter `T` is captured, or its snapshot taken, only where the program writes `T: Model`. The same holds for an associated type of a parameter, with `F::Out: Model`.
-  - **No bound is implied, and none is inserted.** Where it is missing, the error says what to write: "`T` cannot be read in logical code: add the bound `T: Model`". In the spikes that message was rustc's own, with the fix in its help ([capture-family](../../spikes/capture-family/README.md), `c04`; `a08` to `a10` in [the third round](../../spikes/skeleton-typing-3/README.md)).
-  - **Under the bound, `Snap<T>` and `T::Logic` are abstract types,** the same in generic code as at each instantiation, and facts proven about them hold at every instantiation. Generic and concrete code agree on a snapshot's type: read through a bounded parameter, a `u32` is the `Nat` that it is when read directly (`d1`).
-  - **The bound may be written on an `impl`.** An earlier revision allowed it only on a function's type parameters. A generic type's methods, and its own model, are in an `impl` that needs it: `impl<T: Model> Pair<T>`, and `impl<T: Model> Model for Wrap<T>`.
-  - **It may be written on a type's own declaration,** where a proof field reads a field whose type names the parameter: `struct Shelf<T: Model> { items: Vec<T>, limit: usize, fits: @(items.len() <= limit) }`. The third round of the spike needed exactly this. Rust then asks for the bound on every `impl` of that type.
-  - **It never appears on a trait.** That stays as it was: traits are a later RFC ([traits-on-logical-types](../../issues/traits-on-logical-types.md)).
-  - **Some values cannot be captured at all.** A closure, a function item, and a type of a crate that Locus does not lower have no model, so none is accepted where the bound is asked for. A generic function that does not ask takes them, and reads its other parameters.
-  - **A stated limit.** In a generic method of a trait that another crate declares, a value of the method's own type parameter cannot be captured, since the bound cannot be added: Rust rejects an implementation with stricter requirements than its trait (`d2b`, `d2c`).
-  - **In an exported crate the bound still appears only on a function.** The earlier reason holds there. An exported program has no `Model`, and removing the bound from an `impl` could change which implementation a method call selects: with `impl<T: Model> Foo for T` beside `impl Bar for &Opq`, each with a method `go`, `o.go()` calls `Bar`'s in the verified program and `Foo`'s in the exported one. So a crate with such a bound on an `impl` or on a type builds, and does not export, until the RFC on lowering says what an exported program does with it (item 30).
-- **The models of standard types** are declared by Locus's library, and each is trusted:
-  - unsigned integers, `Nat`; signed integers, `Int`; `bool`, `Bool`; each the integer or boolean its snapshot holds;
-  - `&T`, `&mut T`, and `Box<T>`, the model of `T`;
-  - `[T; N]` and `[T]`, a `Seq` of `T`'s model, for a `T` with a model;
-  - `Option<T>`, a `Maybe` of `T`'s model, for a `T` with a model;
-  - a tuple, the tuple of its components' models, when each has one;
-  - `()`, the logical `Unit`;
-  - a logical type, itself, so `Vec<Nat>`'s model is a `Seq<Nat>`.
+**Rule `models.stamps`.**
+`mint` is an ordinary verified library function `fn mint() -> Nat`, which may return `logic! { 0 }` with no result proof. Under `contracts.calls.unrelated`, callers learn neither equality nor inequality between separate results and no equation to zero. Copying one result preserves it. Runtime calls remain forbidden in pure logical code. A struct can store this logical stamp beside `Opaque<T>`; capture observes the stored value and never calls `mint`. Such a stamp is not globally unique, a permission, or an observation of hidden mutable contents. Existing ghost erasure and boundary rules apply without a new intrinsic or axiom.
 
-  The model of a `Cell`, a `RefCell`, a `Mutex`, or an atomic is its snapshot, which holds nothing of its contents. The model of Locus's own `Vec<T>` is a `Seq` of `T`'s model as well, and is not in this list: the library declares it with the type, as a logic function of the snapshot that Locus checks, so nothing about it is trusted (decision 113). Others, such as `String`, `char`, maps, `Rc`, and `Arc`, are for the library's RFC ([standard-library](../../issues/standard-library.md)); until it has them, each is a type that Locus cannot see.
-- **A container has a model for every element type that has one.** `Vec<T>`'s model is a `Seq` of `T`'s model, which for a `Point` that declares none is a `Seq` of snapshots, and `snap(v).elements()` is a `Seq<Snap<T>>`. Generic code writes either under `T: Model`: `snap(final!(v)).elements().get(i) === snap(v).elements().get(j)` says what a `swap` did.
-- **A model is a function of the snapshot,** total over all of `Snap<T>`, so it never reads the contents of an `UnsafeCell` or the target of a raw pointer, and a call that Locus knows nothing about, taking `&x`, never changes `x`'s model, as RFC 0001 relies on.
-- **A model's definition never depends on itself,** directly or through other types' models. Inside a hand-written model, and inside every logic function it calls, the snapshot is read through its fields, and the model being defined is never applied; and the models that derived and hand-written models use form no cycle. So a model cannot reach itself through a helper, nor through another type's model: a model of `Node` that applies `Link`'s to a field, beside a model of `Link` that applies `Node`'s, is rejected. A recursive type's hand-written model recurs through a helper instead: the model calls a logic function on `Snap<List>`, which recurs structurally.
-- **`model(x)`** is the capture of a place `x`, written out. **In Rust's terms, `Model` has no methods,** as `compat.names.no-methods` requires. Its function takes the snapshot as an ordinary argument. It is applied wherever a place is captured, and in logical code it is called by the type's path, `Stack::model(s)`, which names the logic function and no member of the trait.
-- **Models are interpretations.** Declaring one proves nothing about any operation. What runtime operations do to models is the runtime semantics ([runtime-semantics](../../issues/runtime-semantics.md)), together with the contracts of Locus's library.
+
+The original cyclic-reference examples and the distinction between `Snap` and `CutSnap` remain in [RFC 0005](0005-core-terms.md#where-a-snapshot-is-cut). A cut or a `Unit` barrier cannot erase a dependency of a retained proof. The third-party-field and generated-carrier gates remain open; Rust typing experiments do not prove logical value preservation.
 
 ### Versions
 
@@ -864,8 +736,8 @@ let before = logic! { n };      // names the value of n₁, which later writes l
   - a version that no write separates from another, on every path between them, is the same version; on a later iteration of a loop, a write anywhere in the loop separates;
   - inside a branch, its condition or matched pattern holds;
   - after a call returns, its postconditions hold;
-  - machine arithmetic gives the result of the same arithmetic on the models, wrapped to the type, which is the true result when that is in range, and machine comparisons agree with the models' ([RFC 0004](0004-runtime-code.md));
-  - `len` and indexing of arrays and slices agree with their models, as the language defines them; a vector is read through the methods of Locus's `Vec` ([Assumptions and the standard library](#assumptions-and-the-standard-library));
+  - machine arithmetic gives the result of the same arithmetic on snapshots, wrapped to the type, which is the true result when that is in range, and machine comparisons agree with their snapshot values ([RFC 0004](0004-runtime-code.md));
+  - `len` and indexing of arrays and slices agree with their snapshots, as the language defines them; a vector is read through the methods of Locus's `Vec` ([Assumptions and the standard library](#assumptions-and-the-standard-library));
   - a mutable borrow's final value is what its place holds when the borrow ends.
 
 ### Propositions
@@ -1052,13 +924,13 @@ struct Interval {
         *iv = Interval { lo: 0, hi: iv.hi, ordered: _ };
     }
 
-    // For `struct NonEmpty { items: Vec<u32>, ok: @(items.len() > 0) }`, with Locus's `Vec`,
+    // For `struct NonEmpty { items: Vec<u32>, ok: @(items.elements().len() > 0) }`, with Locus's `Vec`,
     // whose `push` returns a proof that the contents grew by one. `ok` is stated on the model
     // of `items`, and the library's lemma gives the model the length of the contents.
     fn push(n: NonEmpty, x: u32) -> NonEmpty {
         let NonEmpty { mut items, .. } = n;
-        let grew = items.push(x);
-        let same = logic! { Vec::<u32>::model_len(snap(items)) };
+        let grew = items.push_checked(x);
+
         NonEmpty { items, ok: _ }
     }
     ```
@@ -1076,26 +948,26 @@ struct Interval {
   ```rust
   // 1. By value. The method takes the stack and returns it.
   let Stack { mut items, cap, .. } = self;
-  let grew = items.push(x);
-  let same = logic! { Vec::<u32>::model_len(snap(items)) };
+  let grew = items.push_checked(x);
+
   Stack { items, cap, fits: _ }
 
   // 2. A stand-in. A valid value takes the place of `*self` while the new one is built.
   let (taken, was) = mem::replace(self, Stack::new(0));
   let Stack { mut items, cap, .. } = taken;
-  let grew = items.push(x);
-  let same = logic! { Vec::<u32>::model_len(snap(items)) };
+  let grew = items.push_checked(x);
+
   *self = Stack { items, cap, fits: _ };
 
   // 3. A slot. The value is moved out of `*self`, and a new one is put back.
   let (slot, taken, was) = mem::take_out(self);
   let Stack { mut items, cap, .. } = taken;
-  let grew = items.push(x);
-  let same = logic! { Vec::<u32>::model_len(snap(items)) };
+  let grew = items.push_checked(x);
+
   slot.put(Stack { items, cap, fits: _ });
   ```
 
-  - **Each calls a lemma of the library before its hole** (decision 117). `fits` reads the place `items`, which is the vector's model, and `push`'s proof speaks of the elements' snapshots. `Vec::<u32>::model_len` gives the model the length of the contents. The check that there is room is `let (n, counted) = items.len();` and `if n < cap`, whose proof says that `n` is the length of the contents.
+  - **Invariants speak directly of element snapshots.** `push_checked` proves the contents and length update, so rebuilding the invariant no longer requires the implicit-model length lemma of former decision 117.
 
   - **By value** needs nothing more than decision 66 gives.
   - **A stand-in** needs no rule either. `Stack` is sealed, so the standard library's `mem::replace` may be given one. Locus's library has a `replace` of its own, whose result says that it returns what was there:
@@ -1145,7 +1017,7 @@ struct Interval {
 - `Vec<(i: usize, @(i < xs.len()))>` is a `Vec<(usize, Proof)>` of indices, each with a proof that it is in bounds. `Vec<Nat>` keeps its length.
 - In a tuple type, a name such as `i` binds the component for the propositions after it, as in a named result. A component that a later component's proposition reads follows the rules for invariants: it is never mutably borrowed and never assigned, and the tuple is replaced whole. So `v[0].0 += 1` is rejected, and `v[0] = (4, _)` is accepted.
 - **A tuple whose later component reads an earlier one is one type.** It instantiates a type parameter only as a whole, and never matches a generic `(A, B)`. The program's own `fn set_first<A, B>(pair: &mut (A, B), first: A)`, given `&mut v[0]`, would replace the index and keep its proof (tested: the lowered program compiles and indexes out of bounds). A pattern takes such a tuple apart, as `for (i, ok) in checked` does.
-- **A proposition written in a type is fixed where the type is written,** like any other proposition. In `let checked: Vec<(i: usize, @(i < items.len()))>`, it is about `items` as it is at the `let`. After `items.clear()`, the stored proofs still prove that, and nothing about the new `items`.
+- **A proposition written in a type is fixed where the type is written,** like any other proposition. In `let checked: Vec<(i: usize, @(i < items.elements().len()))>`, it is about `items` as it is at the `let`. After `items.clear()`, the stored proofs still prove that, and nothing about the new `items`.
 - What a value holds is known through verified code and Locus's own library, and no other code is given one.
 
 ### Unverified functions and unsafe code
@@ -1268,199 +1140,59 @@ fn small(s: &str) -> (n: u32, @(n < 100)) {
 
 | What | How Locus reaches it |
 |---|---|
-| Integers, `bool`, `char`, references, tuples, arrays, slices, `Box`, `Option`, `Result`, and ranges | They stay Rust's. The language defines what their built-in operations mean: operators and casts, the length and indexing of arrays and slices, building and matching an enum, `?` on a value that holds no proof, and `Box`'s allocation and dereference. Locus's library gives each a model |
+| Integers, `bool`, `char`, references, tuples, arrays, slices, `Box`, `Option`, `Result`, and ranges | They stay Rust's. The language defines what their built-in operations mean: operators and casts, the length and indexing of arrays and slices, building and matching an enum, `?` on a value that holds no proof, and `Box`'s allocation and dereference. The language or designated library support gives supported types snapshots; optional views are explicit |
 | `Vec`, `String`, the maps and sets, `VecDeque`, `Rc`, `Arc`, the cells, the locks, and the atomics | Locus's library provides a type of its own around the standard library's, with contracts in the signatures of its methods |
 | A method of the standard library on a type of the first row, when a program wants a fact from it: `Option::map`, `mem::swap` | A function of Locus's library, under a name of its own, since a method of a type that stays Rust's cannot be replaced. Most are a `match` or arithmetic, and so are verified, not assumed. `checked_add`, `checked_sub`, and `checked_mul` on the integer types are not in this row: the language understands those three as they are written ([RFC 0004](0004-runtime-code.md)) |
 | Everything else: I/O, time, threads, formatting, and other crates | Called as plain Rust. Its results are known by their types |
 
 - **A type is swapped only when it has private state,** so that its methods are the only way to learn about a value. An `Option` is taken apart with `match`; a `Vec` is not.
-- **Locus's own type holds the standard library's, and keeps its contents in a logical field** (decision 113).
+- **Locus's own wrapper keeps native storage and a logical contents field.** The native payload is deliberately hidden behind `Opaque<T>`, whose snapshot is `Unit`. No field attribute customizes capture.
 
-  ```rust
-  // In Locus's library.
-  #[repr(transparent)]
-  pub struct Vec<T> {
-      #[opaque]
-      inner: std::vec::Vec<T>,
-      // A logical field: the snapshots of the elements, in order.
-      contents: Contents<T>,
-  }
-  ```
+```rust
+pub struct Vec<T> {
+    raw: Opaque<std::vec::Vec<T>>,
+    contents: Seq<Snap<T>>,
+}
+```
 
-  - **The snapshot is the struct's, and no library declares it.** The language supplies snapshots (decision 99), and it supplies this one as it does for any struct. The standard library's vector is an opaque part, and the contents are the logical field's. An earlier revision had Locus's library declare `Vec`'s snapshot as a `Seq` of its elements. That declaration looked through the vector's raw pointers, and was trusted (`trusted.library-specs`).
-  - **An observer gives the contents.** Both fields are private to the library. So a program holds the snapshot of a `Vec`, passes it on, and compares it, and does not look into it. The library gives the snapshot one observer: for a `Vec<T>` whose `T` has a model, `snap(v).elements()` is a `Seq<Snap<T>>`, the elements' snapshots in order. The snapshot is not itself a sequence: `snap(v).len()` is an error, which says to write `snap(v).elements().len()`.
-  - **The model is ordinary logical code.** The library declares it with the type, as a program declares one (decision 108), and Locus checks it. `Vec<T>`'s model is a `Seq<T::Logic>`: each element's model, in order. So `v.len()` and `v[i]` in logical code, which read the place `v`, are still `Seq::len` and an index of that model, and `v === w` compares two vectors by their elements' models.
-  - **Two vectors with the same elements need not have equal snapshots.** The opaque part is whatever the standard library's vector is beyond its elements, its capacity included, and Locus knows nothing of it except that a move keeps it. So no contract says `snap(v) === snap(w)` of two vectors. A contract speaks of `snap(v).elements()`.
-  - **The field's type puts no bound on the struct.** Written `contents: Seq<Snap<T>>`, the field would need `T: Model` on the struct, and Rust then asks for that bound wherever the type is named: `fn count<T>(v: &Vec<T>)`, which reads nothing, would be an error, and no closure could be an element. The third round of [the skeleton spike](../../spikes/skeleton-typing-3/README.md) found a type that needs none, in its section C (`c1`, `c6e`, `c7e`): one that names `T` and asks nothing of it, and that is read as the sequence only under the observer's bound. `Contents<T>` is the spike's name for it.
-    - **What that costs.** Logical code cannot build a value of the field's type. The library writes the field through a constructor of its own, whose argument is the sequence.
-    - **And lowering does not yet generate this snapshot.** In the spike the library wrote the snapshot's type by hand, over `T`'s snapshot alone, so that the snapshot of a `Vec<&mut u32>` keeps no borrow (`c1`). An opaque part for a field whose type names `T` would have carried `T`, and its lifetimes, into the snapshot's type. How lowering comes to write it is [RFC 0001](0001-compiler-pipeline.md)'s (item 33).
-  - **It keeps the standard library's layout** (decision 75). The logical field is zero-sized, so the struct has the layout and the allocator of the vector inside it, and converts to and from it in constant time.
-  - **A Locus collection holds logical data.** The logical field is a field of the struct's own. So at an element type that exposes no logical data, as in `Vec<u32>`, a Locus collection is a sealed type (decision 73). A function of a Locus crate whose signature names one is verified. An unverified function of a Locus crate names none, and uses the standard library's. Other unverified code may hold one, move it, and give it back, as it may any sealed value. Before this change a `Vec<u32>` of Locus's was plain data.
-- **The trust is relocated, not reduced** (decision 114). These are the second reviewer's words, in substance.
-  - **What is trusted** is that the logical field and the standard library's vector agree: that each method of Locus's library does to the vector what its contract says of the field, and that a method with no contract keeps the two in step as well. This is `trusted.library`.
-  - **What Locus checks inside the library is the logical field.** `push` writes the field, and proves its contract from that write, with the library's own lemmas on sequences.
-  - **What it cannot check is a proof that says what the standard library's vector returned,** as `len`'s does. The library assumes such a proof with `unsafe assume!`, and each result lists it (`assumed.stated`), as each result listed the library's contracts before:
+There is no bound on the runtime struct. Lowering supplies the conditional storage carrier described above. Its generated snapshot contains the element observations and `Unit`; it does not expose native capacity or allocation identity. The intended transparent runtime layout and constant-time conversions require their ordinary Rust layout checks; logical erasure alone is not a proof of layout.
 
-    ```rust
-    impl<T: Model> Vec<T> {
-        pub fn len(&self) -> (n: usize, @(n == snap(self).elements().len())) {
-            (self.inner.len(), unsafe assume!(_))
-        }
-    }
-    ```
+## Contents
 
-  - **`trusted.library-specs` no longer covers a collection.** It had covered the snapshot and the model that the library declared for `Vec`. What it still covers is what the library declares for types of the standard library that it puts no type of its own around: the snapshots of `Option` and `Result`, which have their variants and payloads, and the models it declares for them. It also covers the opaque snapshots that the library declares for the standard library's types with interior mutability, which hold nothing.
-  - **When the type is rebuilt on permissioned pointers,** the observer and the contracts stay, and the trust in the field goes: the contents are then proved from the permissions. The representation of the snapshot need not stay. No program can tell, since none reads its fields ([permissioned-pointers](../../issues/permissioned-pointers.md)).
-- **A Locus collection gives no mutable access to the standard library's collection inside it** (decision 115).
-  - **It dereferences to the standard library's type by shared reference only.** It implements `Deref`, and not `DerefMut`, and no method of its own returns a `&mut` to the vector inside. So a method of the standard library's type that takes `&self`, such as `capacity`, can be called without being written again, with the standard library's signature and no contract. A method that the wrapper defines takes the place of the one it is named after.
-  - **A method of the standard library's type that takes `&mut self` is not reached at all.** `v.swap_remove(0)` and `v.truncate(2)` are errors. rustc reports them as it reports any mutable use of a value that dereferences by shared reference only (E0596; `c5e` in the third round of the spike). An earlier revision reached such a method through `DerefMut`, and judged it as a call of unverified code, after which the vector was known only by its type (decision 89).
-  - **Why.** That reading said what a caller could no longer prove. It did not say how the logical field catches up with the vector. `deref_mut` would hand out the vector inside, alone. The logical field beside it is another place, which a borrow of its sibling leaves as it was ([`runtime.borrows`](../../spec/runtime.md)). So after `v.truncate(2)` the field would still hold the old contents, and the next `len` would assume a length that is false. The second reviewer held the recommendation back on this point, and its author agreed.
-  - **The way out and back is written.** `v.into_std()` gives the standard library's vector, and `Vec::from_std(plain)` builds Locus's from one. Neither costs anything at run time, and neither states a contract. The standard library's vector has no snapshot (below), so no proposition could say what went in. Nothing is known of the contents of what `from_std` returns, its length included, until `len` or another method says it.
+**Rule `collections.contents`.**
+A Locus collection has private `raw: Opaque<NativeCollection<T>>` and a private logical contents field. For `Vec<T>` the source field is `contents: Seq<Snap<T>>`; the compiler-generated storage carrier lets the runtime struct be named without `T: Snapshot`. Under that bound its generated snapshot contains `raw: Unit` and the sequence. It is a struct snapshot, not itself a sequence: `v.elements()` in logical code (or `snap(v).elements()`) exposes the element snapshots; `v.len()` and `v[i]` do not implicitly select a sequence view. The library maintains correspondence to the native initialized elements whenever the wrapper is observable, including after loans and recoverable unwinding. An erased raw field alone proves no correspondence. Logical fields retain the existing sealing and unsafe-boundary rules.
 
-    ```rust
-    let mut plain = items.into_std();
-    plain.dedup();                      // the standard library's own, on its own vector
-    let items = Vec::from_std(plain);
-    let (n, counted) = items.len();     // `n` is the length of the contents, whatever they now are
-    ```
+**Rule `collections.model`.**
+A collection may supply an explicit library view. For `Vec<T>` with `T: View`, `Vec::<T>::view(s)` maps `T::view` over `s.elements()`. Its optional `view_len` lemma relates that sequence's length to `s.elements().len()`. Neither the view nor its lemma is applied automatically; ordinary collection contracts speak directly of element snapshots. Historical `model_len` and implicit collection models are superseded.
 
-  - **A forwarded method is the standard library's own** (decision 89, which stands for a method that takes `&self`). A call of it is a call of unverified code at the element type. So where that type exposes logical data the call is rejected, as every call of the standard library's `Vec` is. It is not a loan either, because the standard library's vector has no snapshot (`logic.boundary.loans`). On a `Vec<Option<@P>>`, `v.pop()` is Locus's method and is accepted, and `v.capacity()` is the standard library's and is rejected. On a `Vec<u32>` both are accepted. The standard library's type at such an element type may still be named and borrowed, as `&*v` does: what is judged is each function that is given it.
-  - **So each of Locus's types lists the methods that are its own.** The lists start from the ones that this RFC's examples call, and the standard library's RFC completes them:
+#### The standard library's collection inside
 
-    | Type | Its own |
-    |---|---|
-    | `Vec<T>` | `new`, `empty`, `len`, `push`, `pop`, `get`, `get_mut`, `set`, `view`, `clear`, `into_std`, `from_std`, `iter`, and `iter_mut`; indexing by a `usize`; iteration by value and by reference; and the macro `vec!` |
-    | `Cell<T>` | `new`, `get`, and `set` |
-    | `Rc<T>` | `new`, and `clone` |
-    | `Mutex<T>` | `new`, and `lock`, whose guard is a type of Locus's own |
+**Rule `collections.std-inside`.**
+A collection gives no unrestricted mutable access to its native collection: no `DerefMut`, mutable native-vector reference, or native mutable iterator. Shared forwarding, if provided, remains an ordinary call subject to the logical-data boundary. `into_std(self)` consumes the wrapper; `from_std(plain)` establishes a correct logical contents field whenever capture is available, through the existing trusted library boundary. It cannot initialize that field arbitrarily or to empty regardless of the input. Without a native contents observation contract, callers receive no preservation equation across this conversion. Failed inference of a snapshot bound never selects an alternate native method.
 
-    A method in the list keeps what it is given inside the library's own type, which is trusted (decision 83). A constructor, a method that takes `self` by value, a method that takes `&mut self`, and a trait's implementation are never forwarded, so each is in the list or is not there at all.
-- **The contracts of the library speak of the elements' snapshots** (decision 117). Each proof below is about `snap(..).elements()`. This answers the question that item 27 had left open. These are the signatures of `Vec`'s own methods, which replace the three that decision 87 proposed:
+#### The contracts of `Vec`
 
-  ```rust
-  impl<T> Vec<T> {
-      /// An empty vector, and no fact. `Vec::empty()` gives the proof.
-      pub fn new() -> Vec<T>
+**Rule `collections.vec.contracts`.**
+Native-shaped methods return ordinary results: `new() -> Vec<T>`, `len(&self) -> usize`, `push(&mut self, T) -> ()`, `pop(&mut self) -> Option<T>`, `get(&self, usize) -> Option<&T>`, `set(&mut self, usize, T) -> ()`, `clear(&mut self) -> ()`, and `as_slice(&self) -> &[T]`. Their signatures supply no result proofs. Checked counterparts return explicit evidence: `empty` returns an empty vector and its proof; `len_checked` returns `n` with `n == old.len()`; `push_checked` proves `new === old.push(snap(x))` and the length increment; `pop_checked` returns the option and the empty-or-last-element relation; `get_checked(i, inside)` takes `i < old.len()` and returns the indexed reference and its equality; `set_checked(i,x)` panics out of bounds and on return proves the index bound, exact element update, and unchanged length; `clear_checked` proves empty contents; `as_slice_checked` returns a slice and its equality to `old`. Checked methods returning a runtime value return that value followed by their proof. Every ordinary method still maintains private representation correspondence even though its caller receives no postcondition.
 
-      /// The standard library's vector. Locus knows nothing of it.
-      pub fn into_std(self) -> std::vec::Vec<T>
+**Rule `collections.vec.element-loan`.**
+`get_mut_checked(&mut self, i, inside)` takes `inside: @(i < old.len())` and returns one `&mut T`, its initial indexed-element equality, and the final relation `new === old.update(i, snap(final!(x))) && new.len() == old.len()`. Runtime-shaped `get_mut` returns `Option<&mut T>` without that proof. Both preserve private correspondence. Owner observation is suspended until the actual loan end, including reborrows and references retained in other arguments. The library's initial trusted protocol restores the logical sequence with the element's final snapshot before the owner is available again; it cannot store unresolved final terms in ordinary data or rely solely on a forgettable guard's destructor. Multiple-loan interfaces such as `split_at_mut` and `iter_mut` require a separate protocol.
 
-      /// A vector of Locus's, from the standard library's. Nothing is known of its contents.
-      pub fn from_std(plain: std::vec::Vec<T>) -> Vec<T>
-  }
+**Rule `collections.vec.indexing`.**
+Runtime indexing remains Rust's `Index` and `IndexMut`; their signatures carry no result proof. A read gives no element-position fact, and a mutable indexing call gives no contents or length relation to the caller. The implementation must still restore private contents correspondence. `get_checked`, `set_checked`, and `get_mut_checked` provide the respective explicit facts. Logical indexing requires the sequence observer, such as `v.elements()[i]`, and invokes no runtime indexing method.
 
-  impl<T: Model> Vec<T> {
-      /// An empty vector, with a proof that it is empty.
-      pub fn empty() -> (v: Vec<T>, @(snap(v).elements().len() == 0))
+#### Element types
 
-      /// The length, with a proof that it is the length of the contents.
-      pub fn len(&self) -> (n: usize, @(n == snap(self).elements().len()))
+**Rule `collections.element-types`.**
+Logical observation and checked methods require `T: Snapshot`; an explicit element-view mapping requires `T: View`. The runtime container declaration has no such bound. Naming, moving, `new`, `from_std`, `into_std`, and ordinary `len` need no snapshot bound. The initial mutable methods that maintain logical contents use `T: Snapshot`, including native-shaped counterparts where their implementation needs it; there is no implicit fall-through to native mutation. A runtime-only collection remains available in Rust for other elements, or those elements can deliberately be wrapped in `Opaque<T>`. General bound-free mutators need a separately validated conditional-storage initialization/update protocol.
 
-      /// The standard library's `push`, with a proof that `x` is now last and the vector one longer.
-      pub fn push(&mut self, x: T)
-          -> @(snap(final!(self)).elements() === snap(self).elements().push(snap(x))
-              && snap(final!(self)).elements().len() == snap(self).elements().len() + 1)
+**Rule `collections.clone-snapshots`.**
+For the Locus vector, native storage contributes only `Unit`. A verified clone with `T: CloneEq` can therefore prove equality of whole vector snapshots by cloning elements with their snapshot equalities and preserving the contents sequence. Plain `Clone` alone supplies no such law. An erased payload contributing equality does not imply equivalent executable behavior or deep-copy independence. Generated trait implementations must still satisfy Rust coherence; this rule does not solve overlap with a separate generic `Clone` implementation.
 
-      /// The standard library's `pop`. It gives `None` exactly when the vector was empty, and then
-      /// leaves the contents as they were. Otherwise what is left, with what it gave pushed back,
-      /// is the old contents.
-      pub fn pop(&mut self)
-          -> (last: Option<T>,
-              @(iff(snap(last) === None, snap(self).elements().len() == 0)
-                  && (snap(last) === None ==> snap(final!(self)).elements() === snap(self).elements())
-                  && forall |x: Snap<T>| snap(last) === Some(x) ==>
-                      (snap(self).elements() === snap(final!(self)).elements().push(x)
-                          && snap(self).elements().len() == snap(final!(self)).elements().len() + 1)))
 
-      /// The element at `i`, for a proof that `i` is inside the vector.
-      pub fn get(&self, i: usize, inside: @(i < snap(self).elements().len()))
-          -> (x: &T, @(snap(x) === snap(self).elements().at(i, inside)))
+The trust remains in the existing library boundary: native initialized elements and their logical sequence must agree on every observable path, including normal methods without proof results, returned mutable loans, destruction, and recoverable unwinding. A `Unit` snapshot of native storage does not establish this relation. `from_std` must establish correct contents, and no hidden bound failure may choose a different method. The future permissioned implementation replaces these assumptions with verified ownership and memory operations; this RFC adds no new primitive axiom.
 
-      /// A mutable loan of the element at `i` (decision 116). When the loan ends, the contents
-      /// are the old ones with the element's final value at `i`.
-      pub fn get_mut(&mut self, i: usize, inside: @(i < snap(self).elements().len()))
-          -> (x: &mut T,
-              @(snap(x) === snap(self).elements().at(i, inside)
-                  && snap(final!(self)).elements() === snap(self).elements().update(i, snap(final!(x)))
-                  && snap(final!(self)).elements().len() == snap(self).elements().len()))
-
-      /// Writes one element. Like `v[i] = x` it panics when `i` is outside the vector, so it takes
-      /// no proof, and its own proof says that `i` was inside.
-      pub fn set(&mut self, i: usize, x: T)
-          -> @(i < snap(self).elements().len()
-              && snap(final!(self)).elements() === snap(self).elements().update(i, snap(x))
-              && snap(final!(self)).elements().len() == snap(self).elements().len())
-
-      /// The standard library's `clear`, with a proof that the vector is empty.
-      pub fn clear(&mut self) -> @(snap(final!(self)).elements().len() == 0)
-
-      /// The vector as a slice, with a proof that the slice has the same contents.
-      pub fn view(&self) -> (items: &[T], @(snap(items) === snap(self).elements()))
-  }
-  ```
-
-  - **`s.push(x)` is the sequence `s` with `x` after its last element.** It is the one operation on sequences that these signatures use beyond the `len`, `at`, and `update` of [RFC 0005](0005-core-terms.md#sequences). Its definition is the library's RFC's ([standard-library](../../issues/standard-library.md)).
-  - **A method keeps the standard library's name, and returns its proof.** A method that returns `()` in the standard library returns its proof in that place, so no call of it changes: `v.push(x);` compiles as it did, and `let grew = v.push(x);` binds the proof. A method that returns a value returns the value and then the proof: `let (n, counted) = v.len();`, and `v.len().0` where only the number is wanted. An earlier revision kept `len` and `pop` in the standard library's shape, with no fact, and took the length as a fact from `view` (item 21). `new` still returns the vector alone: a decided example rests on its giving no fact, and `empty` gives the proof.
-  - **A fact about models is a lemma away.** A model is a function of the snapshot, so what a contract says of the elements' snapshots decides what holds of their models, and never the other way. After `v.push(p); let (q, popped) = v.pop();` the two contracts determine that what `q` holds has `p`'s snapshot. Stated on models they would determine only that the two models agree. The library has the lemma for the length:
-
-    ```rust
-    impl<T: Model> Vec<T> {
-        /// The model has the length of the contents.
-        pub logic fn model_len(s: Snap<Vec<T>>) -> @(Self::model(s).len() == s.elements().len())
-    }
-    ```
-
-    A call names the element type, `Vec::<u32>::model_len(snap(items))`, because a snapshot's type does not say which type it is a snapshot of: `Snap<u32>` and `Snap<u64>` are both `Nat`. It is called where an invariant is stated on a model. `fits: @(items.len() <= cap)` reads the place `items`, which is its model, and `push` speaks of the elements' snapshots. So each of the three ways of [Proofs in data](#proofs-in-data) calls the lemma before its hole: `let same = logic! { Vec::<u32>::model_len(snap(items)) };`. An invariant stated on the contents, `fits: @(snap(items).elements().len() <= cap)`, needs no lemma. A hole takes neither step by itself: it calls no lemma, and `linear` knows nothing about sequences ([RFC 0003](0003-proof-construction.md)).
-  - **Each contract states the length beside the contents,** for the same reason. Nothing in conversion or in `linear` takes the length of `s.push(x)` or of `s.update(i, x)` from the equation, and the lemmas on sequences that would are the library's RFC's. The recommendation had left this to be decided on the example of a stack: "Since a proof costs nothing at run time, a method may also return the corollary."
-  - **What "the elements' snapshots" covers, and what it does not.** The recommendation called the snapshot form complete. The second reviewer: it is the right default, and "complete" is too strong.
-    - Equal snapshots keep what snapshots represent. Under a transparent `Box` that is not the allocation: after a `push` and a `pop` of a `Box<u32>`, the contracts give that what came back has the snapshot of what went in, and not that it is the same allocation (decision 102).
-    - The contracts say nothing of capacity, of what a method leaves untouched outside the vector, of what happens when allocation fails, or of when a method panics, apart from `set`. Each needs a contract of its own, in the library's RFC.
-  - **No signature subtracts, so none needs `as_nat`.** `pop` says that pushing back what it gave restores the old contents. "The last element" would be `at((len - 1).as_nat(_), _)` (decision 111). The index of `get`, `get_mut`, and `set` is a `usize`, whose capture is the `Nat` that `at` and `update` take (decision 109). `iff` ties `pop`'s `None` to the empty vector (decision 110).
-  - **`view` is kept, and no example calls it now.** A slice's `len` is understood by the language, and what it gives is about the slice read as a place, which is its model ([RFC 0004](0004-runtime-code.md)). `view`'s proof is about the slice's snapshot. No rule yet takes the length of a slice's model to the length of its snapshot, so the examples that called `view` to learn a length now call `len` (item 33).
-- **A mutable loan of an element restores the contents from the element's final value** (decision 116). `get_mut` lends one element. The vector stays borrowed for as long as the loan lasts ([`runtime.borrows`](../../spec/runtime.md)). When the loan ends, the contents are the old ones with slot `i` set to the snapshot of the value the element ends with: `final!(x)`, as [RFC 0005](0005-core-terms.md) has it for any `&mut`.
-
-  ```rust
-  fn push_into_first(rows: &mut Vec<Vec<u32>>, x: u32, some: @(0 < snap(rows).elements().len()))
-      -> @(snap(final!(rows)).elements().len() == snap(rows).elements().len())
-  {
-      let (first, lent) = rows.get_mut(0, some);
-      let grew = first.push(x);
-      _
-  }
-  ```
-
-  - **The third round of the spike typed it:** the contract in the library, a caller of it, and this push into a row of a `Vec<Vec<u32>>`, which compiles and runs (`c2`). rustc typed these, and nothing was proved.
-  - **`IndexMut` cannot carry the contract.** The trait fixes the signature of `index_mut`, which returns a `&mut T` and nothing else. An implementation that returns a proof beside it is rustc's E0053 (`c3e`). The library implements `Index` and `IndexMut` with the trait's signatures, and so with no contract. In runtime code, on a Locus `Vec`:
-    - **`v[i]` is `Index::index`.** It gives the element, and no fact: not which element of the contents it is, and not that `i` was inside the vector, though the call panics when it is not.
-    - **`v[i] = x` is `IndexMut::index_mut`,** and so is every other use of `&mut v[i]`. After it `v` has a new value of which nothing is known but its type: neither its contents nor its length. The library keeps the logical field in step, on trust, as it does for `get_mut`. What is missing is a proof that says so to the caller.
-    - **`get`, `set`, and `get_mut` give the facts.** On an array or a slice, which stay Rust's, `xs[i]` and `xs[i] = x` are the language's own and keep their facts ([RFC 0004](0004-runtime-code.md)).
-    - In logical code nothing changes: `v[i]` there indexes `v`'s model, and calls no runtime method.
-- **Locus's collections are for element types that have a model** (decision 118). The methods with contracts are in `impl<T: Model> Vec<T>`, since each speaks of `Snap<T>`.
-  - **A method that asks for the bound does not reliably fall through to the standard library's.** [capture-family](../../spikes/capture-family/README.md) tried a `push` on a type that still had `DerefMut`. Where the element type was known at the call and had no model, rustc resolved the call through `Deref` to the standard library's `push` (`c08`). Where the type was still being inferred, it kept to the method that asks, and reported an error (`c07`). With no `DerefMut`, a method that takes `&mut self` has nothing to fall through to (`c4e` in the third round of the skeleton spike). A method that takes `&self`, such as `len`, still has the standard library's behind it. No spike tried that case.
-  - **So a call of one of these methods at an element type with no model is an error,** whichever way rustc resolved it. It is never the standard library's method of the same name, with that method's result and no proof.
-  - **For such elements a program uses the standard library's collection, as plain Rust.** A `std::vec::Vec` of closures is built, filled, and called as in any Rust program, and logical code does not read it.
-  - **The type itself has no bound.** A Locus `Vec<F>` of closures can be named, built with `new` and `from_std`, moved, and taken apart with `into_std`, and a generic function that only passes a `Vec<T>` on needs no bound (`c1`).
-- **The library's other types.** This RFC designs `Vec`, and says of the others only which of the two kinds each is.
-  - **A collection follows `Vec`.** `String`, `VecDeque`, and the maps and sets each hold the standard library's type and a logical field with their contents, give observers and contracts on the contents' snapshots, dereference by shared reference at most, and have `into_std` and `from_std` where the standard library lets the type be taken apart (decision 75). A map's or a set's logical field holds its entries as a sequence, so that the snapshot is strictly positive in the element types.
-  - **`Rc` and `Arc` hold one value,** which does not change while it is shared, except inside a cell. So the same arrangement fits them, with that value's snapshot as the contents. Whether they take it is the library's RFC's.
-  - **A type with interior mutability has no contents in its snapshot at all:** `Cell`, `RefCell`, `Mutex`, `RwLock`, and the atomics. What they hold changes with no write that Locus sees, so no logical field can hold it (`models.frozen-data`). Their snapshots stay opaque, as they were, and their methods stay as decision 89 lists them.
-  - **Left for the library's RFC** ([standard-library](../../issues/standard-library.md)): the observers and the contracts of each of those types; `insert`, `remove`, `truncate`, `extend`, and the rest of `Vec`'s methods, none of which is there until it is the library's own; what `iter` and `iter_mut` return, and what is known after them; which standard traits each type implements; the lemmas that tie a model to the contents beyond the length; the operations and lemmas on `Seq`, `push` among them; contracts for capacity, allocation failure, and panics; what `Rc` and `Arc` are; and whether a type with interior mutability dereferences mutably to the standard library's.
-- **`locus::std::mem` holds `replace`, `take_out`, and `Slot`** ([Proofs in data](#proofs-in-data)). The first is the standard library's function with a contract. The other two are Locus's own.
-- **A program names Locus's types with an explicit import** (decision 81): `use locus::std::prelude::*;`, or one type at a time, as in `use locus::std::cell::Cell;`. `locus::std` mirrors the standard library's modules. Without the import, `Vec` is the standard library's, as in any Rust program. No rule of Locus's decides which is meant: an import shadows the prelude, by Rust's own rule. That rule treats a macro differently from a type. A glob import shadows the standard prelude's `Vec`, and not its `vec!`: a `vec!` that only a glob brings is ambiguous with the prelude's (rustc's E0659), and when the glob brings none, `vec!` is the standard library's and builds the standard library's `Vec`. So a program that wants Locus's `vec!` imports it by name beside the glob, with `use locus::std::vec;`. A list with `self`, as in `use locus::std::vec::{self, Vec};`, imports the module and the type and not the macro (tested with rustc 1.97.0). The owner: "I'd prefer to use explicit `use locus::prelude::...` infact, maybe something even more explicitly suggesting that we are shadowing rust stdlib".
-- **The standard library's own collections are unverified code like any other, and logical code does not read them.** `Vec::<Nat>::new()` is rejected. A `Vec<u32>` that another crate returns is some vector, and a call of its `len` tells Locus nothing about it. It has no snapshot and no model (decision 113): the library declares none for a type built on raw pointers, so `logic! { v.len() }` on one is an error that says to use Locus's `Vec`, and a struct that holds one has no snapshot until the field is marked `#[opaque]`. Converting it with `Vec::from_std` costs nothing, and from then on the contracts of that type's methods apply.
-- **Until its collections are verified, Locus's library is trusted to keep what they are given** (decision 83), and to keep each logical field in step with the collection beside it (decision 114). A wrapper's `push` hands its argument to the standard library's `push`. When the element type holds a proof, that is exposed logical data in unverified code, which no verified function may do. `trusted.library` covers it for the library's own types, and for nothing else, so `Vec<(i: usize, @(i < n))>` works from the start.
-
-What this costs:
-
-- **An operator or a trait method cannot return a proof,** because the standard library's trait fixes its signature. On Locus's own types, `v[i]`, `v[i] = x`, `*rc`, `for x in &v`, and `v.clone()` run and tell Locus nothing; a named method, such as `v.get(i, p)` or `v.set(i, x)`, gives the fact. The types of the table's first row are not affected. Contracts on trait methods would lift this ([traits-on-logical-types](../../issues/traits-on-logical-types.md)).
-- **A program has two `Vec` types.** Rust crates take and return the standard library's, so a conversion is written at those edges, `into_std` and `from_std`, and a trait of another crate that is implemented for the standard library's `Vec` is not implemented for Locus's.
-- **A vector that logical code reads is Locus's.** `logic! { v.len() }` on the standard library's `Vec` was accepted while the library declared a snapshot for it, and is now an error. A program that states anything about a vector imports Locus's.
-- **A length is read as a pair.** `v.len()` on Locus's `Vec` returns the number and its proof, so a program ported from Rust writes `v.len().0` where it wants the number alone, as in `for i in 0..v.len().0`.
-- **A method of the standard library that changes a vector is not there until Locus's library has it.** `v.sort()`, `v.truncate(n)`, and `v.swap_remove(i)` are errors on Locus's `Vec`. The program goes out with `into_std` and back with `from_std`, and knows nothing of the contents afterwards.
-- **The table's third row is where porting costs most.** `found.map(f)` is how Rust writes it, and a fact about the result comes only from Locus's function. `x.checked_add(y)`, `checked_sub`, and `checked_mul` cost nothing: the language understands those three, and gives the fact from the call as it is written ([RFC 0004](0004-runtime-code.md)).
-- **What an exported crate does with Locus's own types is open** ([distribution-and-export](../../issues/distribution-and-export.md)). This RFC's export examples use none.
-
-This replaces the specifications of standard functions that Locus's library had been trusted for, and the exception that let a specified operation take logical data (decisions 34, 56, 78, and 79).
+A native-shaped method offers Rust-shaped use but no implicit postcondition. For example `v.len()` returns a number; `let (n, p) = v.len_checked()` supplies the equality proof. `IndexMut` maintains internal correspondence but supplies no caller-visible length relation. Single-element checked loans remain supported under the explicit restoration obligation; multiple simultaneous loans wait for a protocol.
 
 ### Export mode
 
@@ -1469,7 +1201,7 @@ In build mode, every crate that depends on a Locus crate is verified, so a crate
 What other crates can reach is every item and field that the source declares plain `pub` and that other crates can reach from the crate's root, together with the public fields and methods of the types among them. Items and fields declared `pub(locus)` are not part of it ([RFC 0001](0001-compiler-pipeline.md#sources-and-modes)), and neither is a `pub` item that nothing outside the crate can reach. A plain `pub` item that breaks the rules below is an error, which suggests `pub(locus)`.
 
 - **No contracts.** A function or method that other crates can reach has no proof parameters and no proofs in its result. A Rust caller cannot supply a proof for a precondition, and could not use one from a postcondition.
-- **No exposed logical data.** No parameter, result, constant, static, or type alias that other crates can reach has a type that [exposes logical data](#the-boundary-with-unverified-code), such as `Nat`, `Option<@P>`, or `Vec<(usize, @P)>`. A sealed type may appear: `pub fn new(lo: u32, hi: u32) -> Option<Interval>` is exported as it is. Nor does such a function have a `Model` bound: the exported program removes it, so a Rust caller could use a type at which the function was never checked.
+- **No exposed logical data.** No parameter, result, constant, static, or type alias that other crates can reach has a type that [exposes logical data](#the-boundary-with-unverified-code), such as `Nat`, `Option<@P>`, or `Vec<(usize, @P)>`. A sealed type may appear: `pub fn new(lo: u32, hi: u32) -> Option<Interval>` is exported as it is. Nor does such a function have a `Snapshot` bound: the exported program removes it, so a Rust caller could use a type at which the function was never checked.
 - **No public logical fields.** No field that other crates can reach exposes logical data: not a proof field, and not a field of a type such as `Nat` or `Option<@P>`. Such a field can be `pub(locus)`. Rust makes every field of an enum's variants public, so an enum that other crates can reach has no field that exposes logical data.
 - **A field of a sealed type may be public** (decision 92). The rule says "exposes" throughout, so `pub struct Pair { pub first: Interval, pub second: Interval }` and `pub enum Shape { Span(Interval), Dot }` are exported as they are, as `Option<Interval>` and `(Interval, Interval)` already were. A Rust user builds a `Pair` from two intervals that the crate's own functions returned, and has no other value to put there.
 - **Invariants stay closed.** Other crates can neither construct a struct that has a field which exposes logical data, nor reach a field that a proof field reads (decision 73).
@@ -1519,7 +1251,7 @@ In the table, the marker is `Proof` for a proof, and for other logical data its 
 | A logical type argument of a runtime type, a logical tuple component, and a ghost value where one is needed | The marker | The same |
 | A call of a runtime function whose result is entirely ghost | Kept as written; it returns the marker | The call where it was: as a statement, or `match call { _ => Proof }` where a ghost value is needed |
 | A named result `(out: T, @P)` | `(T, Proof)` | The same |
-| Logic functions, proposition declarations, `#[derive(Logical)]` types, the model types that `#[derive(Model)]` generates, and `impl Model` | Stubs that resolve names, in both | Nothing |
+| Logic functions, proposition declarations, `#[derive(Logical)]` types, generated snapshot types and ordinary `impl View` blocks | Stubs that resolve names, in both | Nothing |
 | `logic!`, `prop!`, `prove!`, `_`, `final!` | A macro of Locus's library: observations and the marker in the checking program, the marker alone in the runtime program | Removed with the ghost value they produce, or the marker where one is needed |
 | `pub(locus)` | `pub` | `pub(crate)` |
 
@@ -1562,9 +1294,9 @@ The rules below go into six new chapters of the specification: [The logical laye
 | `logic.unverified.plain-rust` | `logical-layer/foreign-result-checked-by-constructor.accept.lc`, `logical-layer/unsafe-in-plain-function.accept.lc`, `logical-layer/unverified-function-given-fields.accept.lc`, `collections/vector-in-unverified-function.reject.lc`, `logical-layer/extern-returning-invariant-type.reject.lc`, `logical-layer/marked-unverified-returns-proof.reject.lc`, `logical-layer/proof-through-raw-pointer.reject.lc`, `logical-layer/proof-through-transmute.reject.lc`, `logical-layer/raw-pointer-cast-to-proof-holder.reject.lc`, `logical-layer/transmute-into-invariant-type.reject.lc`, `logical-layer/unverified-function-calls-proof-function.reject.lc`, `logical-layer/unverified-function-takes-invariant-type.reject.lc`, `logical-layer/unverified-function-takes-logical-holder.reject.lc`, `logical-layer/zeroed-invariant-type.reject.lc`, `proofs/assumption-in-unverified-function.reject.lc` |
 | `logic.unsafe.invariant` | `logical-layer/invariant-type-through-unverified.accept.lc`, `logical-layer/unverified-function-given-fields.accept.lc`, `logical-layer/transmute-into-invariant-type.reject.lc` |
 | `logic.code.logical-values` | `logical-layer/logic-fn-model-result.accept.lc`, `logical-layer/logic-fn-runtime-result.reject.lc`, `logical-layer/logic-fn-unit-result.reject.lc` |
-| `logic.fn.parameters` | `logical-layer/logic-fn-model-result.accept.lc`, `logical-layer/logic-fn-over-bounded-parameter.accept.lc`, `models/logic-fn-of-type-called-by-path.accept.lc`, `models/snapshot-argument-written.accept.lc`, `logical-layer/logic-fn-runtime-parameter.reject.lc`, `logical-layer/logic-fn-self-of-runtime-type.reject.lc`, `logical-layer/logic-fn-takes-bounded-type-itself.reject.lc`, `models/snapshot-argument-not-written.reject.lc` |
+| `logic.fn.parameters` | `logical-layer/logic-fn-model-result.accept.lc`, `logical-layer/logic-fn-over-bounded-parameter.accept.lc`, `models/logic-fn-of-type-called-by-path.accept.lc`, `models/snapshot-argument-written.accept.lc`, `logical-layer/logic-fn-runtime-parameter.reject.lc`, `logical-layer/logic-fn-self-of-runtime-type.reject.lc`, `logical-layer/logic-fn-takes-bounded-type-itself.reject.lc`, `models/snapshot-argument-not-written.accept.lc` |
 | `logic.eq.same` | `logical-layer/same-is-a-proposition.accept.lc`, `logical-layer/sameness-on-sequences.accept.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
-| `logic.eq.runtime-values` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/default-model-is-the-snapshot.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/declared-model-is-not-the-snapshot.reject.lc` |
+| `logic.eq.runtime-values` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/default-model-is-the-snapshot.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/declared-model-is-not-the-snapshot.accept.lc` |
 | `logic.eq.snapshots` | `logical-layer/cell-snapshot-kept-by-move.accept.lc`, `models/foreign-field-marked-opaque.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshot-with-associated-type-field.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `logical-layer/cell-contents-unknown.reject.lc` |
 | `logic.eq.comparisons` | `logical-layer/comparison-decided-as-bool.accept.lc`, `logical-layer/comparison-is-a-proposition.accept.lc`, `logical-layer/bool-result-equal-to-comparison.reject.lc`, `logical-layer/comparison-is-a-bool.reject.lc`, `logical-layer/comparison-on-sequences.reject.lc`, `logical-layer/same-is-not-a-bool.reject.lc` |
 | `logic.bool.as-proposition` | `logical-layer/bool-connective-is-a-bool.accept.lc`, `logical-layer/bool-result-by-two-implications.accept.lc`, `logical-layer/bool-result-tied-by-iff.accept.lc`, `logical-layer/bool-to-prop-parameter-written.accept.lc`, `logical-layer/bool-where-proposition-wanted.accept.lc`, `traits/parameter-that-converts-to-a-proposition.accept.lc`, `logical-layer/bool-to-prop-local.reject.lc`, `logical-layer/bool-to-prop-parameter.reject.lc`, `logical-layer/connective-beside-comparison-as-bool.reject.lc`, `logical-layer/iff-of-an-integer.reject.lc` |
@@ -1574,22 +1306,22 @@ The rules below go into six new chapters of the specification: [The logical laye
 | `logic.const.well-founded` | `logical-layer/logical-constant-chain.accept.lc`, `logical-layer/logical-constant-cycle.reject.lc`, `logical-layer/static-justifies-itself.reject.lc`, `logical-layer/statics-justify-each-other.reject.lc` |
 | `logic.code.statics` | `logical-layer/immutable-static-in-logic.accept.lc`, `logical-layer/sym-static-over-plain-data.accept.lc`, `logical-layer/no-mangle-static-holding-proof.reject.lc`, `logical-layer/static-mut-in-logic.reject.lc`, `logical-layer/sym-static-holding-proof.reject.lc` |
 | `models.snapshots` | `models/captured-fields-wrap-written.accept.lc`, `models/field-of-capture-and-capture-of-field.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/integer-snapshots-are-one-type.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `collections/vector-snapshot-is-not-a-sequence.reject.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `models/equal-snapshots-say-nothing-of-addresses.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
-| `models.snapshots.seen` | `models/foreign-field-unmarked.accept.lc`, `models/foreign-type-wrapped.accept.lc`, `collections/standard-vector-in-logical-code.reject.lc`, `models/closure-not-captured.reject.lc`, `models/foreign-type-as-bounded-argument.reject.lc`, `models/opaque-field-read-as-a-place.reject.lc`, `models/snapshot-through-associated-type.reject.lc`, `models/unmarked-struct-captured.reject.lc` |
-| `models.snapshots.opaque` | `models/foreign-field-marked-opaque.accept.lc`, `models/foreign-field-unmarked.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/opaque-field-through-the-snapshot.accept.lc`, `models/opaque-field-read-as-a-place.reject.lc`, `models/opaque-fields-of-two-types.reject.lc`, `models/snapshot-of-union.reject.lc`, `models/unmarked-struct-captured.reject.lc`, `models/unmarked-struct-model-declared.reject.lc` |
+| `models.snapshots.seen` | `models/foreign-field-unmarked.accept.lc`, `models/foreign-type-wrapped.accept.lc`, `collections/standard-vector-in-logical-code.reject.lc`, `models/closure-not-captured.reject.lc`, `models/foreign-type-as-bounded-argument.reject.lc`, `models/opaque-field-read-as-a-place.accept.lc`, `models/snapshot-through-associated-type.reject.lc`, `models/unmarked-struct-captured.reject.lc` |
+| `models.snapshots.opaque` | `models/foreign-field-marked-opaque.accept.lc`, `models/foreign-field-unmarked.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/opaque-field-through-the-snapshot.accept.lc`, `models/opaque-field-read-as-a-place.accept.lc`, `models/opaque-fields-of-two-types.accept.lc`, `models/snapshot-of-union.reject.lc`, `models/unmarked-struct-captured.reject.lc`, `models/unmarked-struct-model-declared.reject.lc` |
 | `models.snapshot-privacy` | `models/private-field-in-own-module.accept.lc`, `models/private-field-of-snapshot.reject.lc` |
 | `models.frozen-data` | `logical-layer/cell-snapshot-kept-by-move.accept.lc`, `models/hand-written-model.accept.lc`, `logical-layer/cell-contents-unknown.reject.lc`, `models/model-reads-cell.reject.lc` |
 | `models.valid` | `models/snapshot-parameter-with-validity.accept.lc`, `models/valid-array-length.accept.lc`, `models/valid-field-of-captured-struct.accept.lc`, `models/integer-range-tighter.reject.lc` |
 | `models.valid.captured` | `models/integer-range.accept.lc`, `models/snapshot-parameter-with-validity.accept.lc`, `models/valid-array-length.accept.lc`, `models/valid-field-of-captured-struct.accept.lc`, `models/integer-range-tighter.reject.lc` |
 | `models.valid.not-assumed` | `models/snapshot-parameter-with-validity.accept.lc`, `models/model-needs-a-valid-snapshot.reject.lc`, `models/snapshot-parameter-not-valid.reject.lc`, `proofs/range-of-a-nat.reject.lc` |
-| `models.observation` | `models/field-of-capture-taken-to-its-model.accept.lc`, `models/integer-model-no-overflow.accept.lc`, `models/snapshot-argument-written.accept.lc`, `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `models/model-of-a-snapshot-without-its-type.reject.lc`, `models/snapshot-argument-not-written.reject.lc`, `models/wrapping-is-not-the-model.reject.lc` |
-| `models.default` | `models/default-model-is-the-snapshot.accept.lc`, `models/equal-fields-without-model.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/vector-without-element-model.accept.lc`, `models/declared-model-is-not-the-snapshot.reject.lc` |
+| `models.observation` | `models/field-of-capture-taken-to-its-model.accept.lc`, `models/integer-model-no-overflow.accept.lc`, `models/snapshot-argument-written.accept.lc`, `observation/after-mutable-borrow-ends.accept.lc`, `observation/before-move.accept.lc`, `models/model-of-a-snapshot-without-its-type.reject.lc`, `models/snapshot-argument-not-written.accept.lc`, `models/wrapping-is-not-the-model.reject.lc` |
+| `models.default` | `models/default-model-is-the-snapshot.accept.lc`, `models/equal-fields-without-model.accept.lc`, `models/marked-struct-captured.accept.lc`, `models/vector-without-element-model.accept.lc`, `models/declared-model-is-not-the-snapshot.accept.lc` |
 | `models.by-parts` | `models/tuple-modeled-by-parts.accept.lc`, `models/vector-without-element-model.accept.lc`, `models/field-of-capture-is-a-snapshot.reject.lc` |
-| `models.capture.fields` | `models/field-of-capture-and-capture-of-field.accept.lc`, `models/field-of-capture-taken-to-its-model.accept.lc`, `models/field-of-capture-confused-silently.reject.lc`, `models/field-of-capture-is-a-snapshot.reject.lc` |
+| `models.capture.fields` | `models/field-of-capture-and-capture-of-field.accept.lc`, `models/field-of-capture-taken-to-its-model.accept.lc`, `models/field-of-capture-confused-silently.accept.lc`, `models/field-of-capture-is-a-snapshot.reject.lc` |
 | `models.capture.methods` | `models/logic-fn-of-type-called-by-path.accept.lc`, `models/method-resolves-on-the-capture.accept.lc`, `models/logic-fn-of-type-called-on-place.reject.lc` |
 | `models.capture.bound` | `logical-layer/logic-fn-over-bounded-parameter.accept.lc`, `models/foreign-type-wrapped.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/model-bound-on-function.accept.lc`, `models/model-bound-on-inherent-impl.accept.lc`, `models/model-bound-on-type.accept.lc`, `models/snapshot-with-associated-type-field.accept.lc`, `models/associated-type-field-read-without-bound.reject.lc`, `models/foreign-trait-method-parameter.reject.lc`, `models/foreign-type-as-bounded-argument.reject.lc`, `models/model-bound-missing-on-impl.reject.lc`, `models/model-bound-missing-on-type.reject.lc`, `models/type-parameter-read-without-bound.reject.lc`, `traits/self-read-without-model-supertrait.reject.lc` |
 | `models.total` | `models/model-defined-for-every-snapshot.accept.lc`, `models/model-needs-a-valid-snapshot.reject.lc`, `models/model-takes-a-validity-proof.reject.lc` |
-| `models.one-per-type` | `models/declared-model-of-generic-type.accept.lc`, `models/hand-written-model.accept.lc`, `models/model-for-one-instantiation.reject.lc`, `models/two-models.reject.lc` |
-| `models.derived` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/derive-model-for-recursive-type.accept.lc`, `models/derive-model-with-cell-field.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `models/derived-model-keeps-proof-holder.accept.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/derive-model-for-generic.reject.lc`, `models/derive-model-through-generic-cycle.reject.lc`, `models/derive-model-through-reference-cycle.reject.lc`, `models/derive-model-with-opaque-field.reject.lc` |
+| `models.one-per-type` | `models/declared-model-of-generic-type.accept.lc`, `models/hand-written-model.accept.lc`, `models/model-for-one-instantiation.accept.lc`, `models/two-models.reject.lc` |
+| `models.derived` | `models/derive-model-for-generic.reject.lc`, `models/derive-model-through-generic-cycle.reject.lc`, `models/derive-model-through-reference-cycle.reject.lc`, `models/derive-model-with-opaque-field.reject.lc` |
 | `models.bounds-on-functions` | `models/declared-model-of-generic-type.accept.lc`, `models/model-bound-on-function.accept.lc`, `models/model-bound-on-impl.accept.lc`, `models/model-bound-on-inherent-impl.accept.lc`, `models/model-bound-on-trait.accept.lc`, `models/model-bound-on-type.accept.lc`, `export/model-bound-on-impl.reject.lc` |
 | `models.declared-by-owner` | `models/hand-written-model.accept.lc`, `models/model-for-foreign-type.reject.lc` |
 | `models.own-definition` | `models/hand-written-model.accept.lc`, `models/model-helper-reads-fields.accept.lc`, `models/model-of-itself.reject.lc`, `models/model-through-helper.reject.lc`, `models/models-depend-on-each-other.reject.lc` |
@@ -1616,27 +1348,27 @@ The rules below go into six new chapters of the specification: [The logical laye
 | `export.plain-interface` | `export/dropped-postcondition.accept.lc`, `export/locus-logical-field.accept.lc`, `export/private-enum-with-invariant.accept.lc`, `export/private-logical-field.accept.lc`, `export/public-enum-with-sealed-payload.accept.lc`, `export/public-field-of-sealed-type.accept.lc`, `export/public-precondition-when-built.accept.lc`, `export/wrapped-precondition.accept.lc`, `export/model-bound.reject.lc`, `export/public-enum-with-invariant.reject.lc`, `export/public-logical-field.reject.lc`, `export/public-postcondition.reject.lc`, `export/public-precondition.reject.lc`, `export/public-proof-in-option.reject.lc` |
 | `export.invariants-closed` | `export/private-invariant-fields.accept.lc`, `export/public-field-of-sealed-type.accept.lc`, `export/public-invariant-field-when-built.accept.lc`, `export/public-invariant-field.reject.lc`, `export/public-sealed-field-read-by-proof.reject.lc` |
 | `collections.contents` | `collections/vector-lent-to-unverified.accept.lc`, `collections/vector-passed-on-without-bound.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `collections/vector-in-unverified-function.reject.lc`, `collections/vector-snapshot-is-not-a-sequence.reject.lc` |
-| `collections.model` | `contracts/stack-push-by-value.accept.lc`, `models/vector-without-element-model.accept.lc`, `collections/push-without-model-lemma.reject.lc` |
+| `collections.model` | `contracts/stack-push-by-value.accept.lc`, `models/vector-without-element-model.accept.lc` |
 | `collections.std-inside` | `collections/forwarded-shared-method.accept.lc`, `collections/out-to-standard-and-back.accept.lc`, `collections/contents-after-standard-round-trip.reject.lc`, `logical-layer/forwarded-method-at-plain-data.reject.lc`, `logical-layer/forwarded-method-at-proof-holder.reject.lc` |
 | `collections.vec.contracts` | `collections/element-through-get.accept.lc`, `collections/length-after-set.accept.lc`, `collections/out-to-standard-and-back.accept.lc`, `collections/popped-nothing-from-empty.accept.lc`, `collections/push-keeps-invariant-on-contents.accept.lc`, `collections/push-without-room.reject.lc` |
 | `collections.vec.element-loan` | `collections/element-lent-mutably.accept.lc`, `collections/push-into-row.accept.lc`, `collections/element-lent-without-bounds.reject.lc` |
 | `collections.vec.indexing` | `collections/index-assignment-runs.accept.lc`, `collections/element-through-index.reject.lc`, `collections/length-after-index-assignment.reject.lc` |
-| `collections.element-types` | `collections/closure-elements-in-standard-vector.accept.lc`, `collections/vector-passed-on-without-bound.accept.lc`, `collections/closure-elements-in-own-vector.reject.lc`, `collections/length-at-element-without-model.reject.lc` |
+| `collections.element-types` | `collections/closure-elements-in-standard-vector.accept.lc`, `collections/vector-passed-on-without-bound.accept.lc`, `collections/closure-elements-in-own-vector.reject.lc`, `collections/length-at-element-without-model.accept.lc` |
 
 The examples use this RFC's syntax. Where [proposition-syntax](../../issues/proposition-syntax.md) later respells something, their outcomes stay the same.
 
-**Changed by [RFC 0006](0006-traits.md),** which is a draft. Seven rules of this table have the text that RFC 0006 proposes. Two say what the owner decided on 2026-11-22 and RFC 0006 records as its decision 14, that a logical type is its own snapshot and model: `models.snapshots.seen`, which now names logical types among the types that have one, and `logic.fn.parameters`, under which a type parameter bounded by `Model` may stand for a logical type. Five more and stay listed here with their examples: `logic.ghost.no-trait-impls`, which no longer keeps logical types out of every `impl` and logical values out of every trait method, and says where the chapter on traits allows them; `logic.ghost.marker-traits`, which names `Logical` and `CloneEq` among what a logical type implements; `logic.bool.as-proposition`, restated on the conversion to `Prop`, as decision 110 said it would be; and `models.capture.bound` and `models.bounds-on-functions`, under which a `Model` bound may now be written in a trait. So where this RFC's text says that no logical type appears in an `impl`, that a trait method's signature holds no logical value, or that a `Model` bound is never on a trait (decision 106, and items 6 and 30 of what is still for the owner), it records what was decided then, and RFC 0006 says what is proposed now. Two decided examples change for it: `models/model-bound-on-trait` was rejected and is accepted, and `logical-layer/proof-in-trait-impl` is rejected for another reason.
+**Changed by [RFC 0006](0006-traits.md),** which is a draft. Seven rules of this table have the text that RFC 0006 proposes. Two say what the owner decided on 2026-11-22 and RFC 0006 records as its decision 14, that a logical type is its own snapshot and model: `models.snapshots.seen`, which now names logical types among the types that have one, and `logic.fn.parameters`, under which a type parameter bounded by `Snapshot` may stand for a logical type. Five more and stay listed here with their examples: `logic.ghost.no-trait-impls`, which no longer keeps logical types out of every `impl` and logical values out of every trait method, and says where the chapter on traits allows them; `logic.ghost.marker-traits`, which names `Logical` and `CloneEq` among what a logical type implements; `logic.bool.as-proposition`, restated on the conversion to `Prop`, as decision 110 said it would be; and `models.capture.bound` and `models.bounds-on-functions`, under which a `Snapshot` bound may now be written in a trait. So where this RFC's text says that no logical type appears in an `impl`, that a trait method's signature holds no logical value, or that a `Snapshot` bound is never on a trait (decision 106, and items 6 and 30 of what is still for the owner), it records what was decided then, and RFC 0006 says what is proposed now. Two decided examples change for it: `models/model-bound-on-trait` was rejected and is accepted, and `logical-layer/proof-in-trait-impl` is rejected for another reason.
 
 ## Interactions
 
 | Area | Effect |
 |---|---|
 | Types | Every type is runtime or logical, by its type. Logical types contain only logical types. Runtime types may hold logical types, which are markers at run time: `Proof` for proofs, and a marker of its own for each other logical type. `Int` is built in, and `Nat` is a library type whose difference is an `Int`, and which is used as an `Int` only where it is written `as Int`. Every runtime type that Locus can see has a snapshot type `Snap<T>` and a model, which is the snapshot unless one is declared, derived, or given by the library. A machine integer's snapshot is a `Nat` or an `Int`. A place that logical code reads is captured, as the model of its snapshot, and a logic function takes logical types only. |
-| Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. `===` is Lean's equality. A comparison is a proposition, a `Bool` is the model of a runtime `bool` and is used as a proposition where one is wanted, and `iff`, of the library, says that two propositions hold together. Propositions are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
+| Propositions and proofs | Propositions are Lean's, with Rust's syntax: inductive propositions with named arms, defined predicates, connectives, and quantifiers. `===` is Lean's equality. A comparison is a proposition, a `Bool` is the snapshot of a runtime `bool` and is used as a proposition where one is wanted, and `iff`, of the library, says that two propositions hold together. Propositions are about versions. Proofs are irrelevant, ghost, and kernel-checked. |
 | Ownership and mutation | Logical code reads places under RFC 0001's observation rules. Every write makes a new version. A `&mut` reference has a current value and a final value, `final!`. How runtime code changes values in the logic is [runtime-semantics](../../issues/runtime-semantics.md). |
 | Erasure and runtime behavior | In build mode, every ghost value is a zero-sized marker in both programs, and nothing is erased. An exported program removes ghost parameters and locals, and keeps markers inside runtime types and fields. Runtime parts such as tags and lengths are kept, every call of a function with a precondition is checked, and calls of runtime functions are kept even when their results are ghost. |
 | Rust interoperability | Rust code never sees a proof. In build mode, every crate that uses a Locus crate is verified. In export mode, and in the first stage, what other crates can reach exposes no logical data: no contracts, and no reachable field that exposes logical data or that a proof reads, so Rust users can hold a value with an invariant and cannot break it. `pub(locus)` keeps the rest for Locus crates. Unverified code is given plain data and sealed values, and is never instantiated with a type that exposes logical data. Foreign code is given plain data only, and gives back plain data only. Models are declared with their types. A type of a crate that Locus does not lower has neither a snapshot nor a model until a field of it is marked `#[opaque]` or Locus's library declares one, so a struct that holds such a field with no mark is still a Rust struct, and cannot be read in logical code. |
-| Diagnostics | New errors: logical values where runtime ones are needed, runtime calls in logical code, non-terminating logic functions, proofs about other versions, logical data given to unverified code, a function that must be verified and contains `unsafe` code, a field that an invariant reads changed in place, invariants not established, contracts or logical values in an exported interface, a parameter of a logic function written with a runtime type, a value of a type parameter read with no `Model` bound, and a struct read in logical code that has a field of a type that Locus cannot see and no `#[opaque]` mark. They are written as reasons until error codes exist. |
+| Diagnostics | New errors: logical values where runtime ones are needed, runtime calls in logical code, non-terminating logic functions, proofs about other versions, logical data given to unverified code, a function that must be verified and contains `unsafe` code, a field that an invariant reads changed in place, invariants not established, contracts or logical values in an exported interface, a parameter of a logic function written with a runtime type, a value of a type parameter read with no `Snapshot` bound, and a struct read in logical code that has a field of a type that Locus cannot see and no `#[opaque]` mark. They are written as reasons until error codes exist. |
 | Trust model | New entries: the snapshots and models that Locus's library declares for the standard types that it puts no type of its own around; the propositions that a program or Locus's library states with `unsafe assume!`; that the types Locus's library provides around the standard library's keep what they are given, and that each collection among them keeps its logical field in step with the standard library's collection inside it; the consistency of Lean's axioms; that code Locus does not verify is sound Rust, which covers the standard library, the crates a project names, and each of a Locus crate's unverified functions with `unsafe` code; that `unsafe` code keeps the invariants of sealed types, an obligation Locus adds to Rust's; that foreign code keeps to the signatures the program declares for it; and that the system beneath the standard library behaves as it assumes. The earlier entry for Rust's aliasing rules is removed. The logical pass's ghost checks replace RFC 0001's checks on proofs in runtime code, and where borrows end joins rustc's borrow-checker entry. See [design/TRUST.md](../TRUST.md). |
 
 ## Alternatives

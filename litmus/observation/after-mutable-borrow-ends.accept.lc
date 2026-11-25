@@ -9,8 +9,8 @@ fn f() -> usize {
     let mut v = vec![1, 2, 3];
     let r = &mut v;
     r.push(4);
-    let n = logic! { v.len() };
-    v.len().0
+    let n = logic! { v.elements().len() };
+    v.len()
 }
 
 //~ run: f() => 4

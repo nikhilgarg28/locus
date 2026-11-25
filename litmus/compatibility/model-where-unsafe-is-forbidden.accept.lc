@@ -1,4 +1,4 @@
-//~ question: May a crate that forbids `unsafe` code declare types and a model, though the implementations of `Model` that Locus writes for rustc are `unsafe impl`s?
+//~ question: May a crate that forbids `unsafe` code declare types and a view, though the implementations of `Snapshot` that Locus writes for rustc are `unsafe impl`s?
 //~ spec: compat.names.model-impls, compat.superset.same-meaning
 //~ rfc: 0001
 
@@ -8,14 +8,14 @@ struct Celsius {
     tenths: i32,
 }
 
-impl Model for Celsius {
-    type Logic = Int;
-    logic fn model(c: Snap<Celsius>) -> Int {
+impl View for Celsius {
+    type V = Int;
+    logic fn view(c: Snap<Celsius>) -> Int {
         c.tenths
     }
 }
 
-// No model is declared for `Reading`, so Locus writes the default one.
+// No view is declared for `Reading`, so Locus writes the default one.
 struct Reading {
     at: u32,
     value: Celsius,

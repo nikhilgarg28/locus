@@ -1,0 +1,10 @@
+//~ question: Does ordinary Clone supply the snapshot equality of CloneEq?
+//~ spec: collections.clone-snapshots, contracts.calls.unrelated
+//~ rfc: 0008
+
+use locus::std::vec::Vec;
+fn copy<T: Clone + Snapshot>(v: &Vec<T>) -> (out: Vec<T>, @(snap(out) === snap(v)))
+where Vec<T>: Clone
+{
+    (v.clone(), _) //~ error: an ordinary Clone call supplies no snapshot equality proof
+}

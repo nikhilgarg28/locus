@@ -1,4 +1,4 @@
-//~ question: May a model be declared for a struct that has an unmarked field of a type that Locus cannot see?
+//~ question: May a view be declared for a struct that has an unwrapped field of a type that Locus cannot see?
 //~ spec: models.snapshots.opaque
 //~ rfc: 0002
 
@@ -9,9 +9,9 @@ struct Server {
     port: u16,
 }
 
-impl Model for Server { //~ error: `Server` has no snapshot, so no model can be declared for it: its field `listener` is a `TcpListener`, which Locus cannot see; mark the field `#[opaque]`
-    type Logic = Nat;
-    logic fn model(server: Snap<Server>) -> Nat {
+impl View for Server { //~ error: `Server` has no snapshot, so no view can be declared for it: its field `listener` is a `TcpListener`, which Locus cannot see; wrap the field in `Opaque<T>`
+    type V = Nat;
+    logic fn view(server: Snap<Server>) -> Nat {
         server.port
     }
 }

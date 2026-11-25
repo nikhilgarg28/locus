@@ -2,7 +2,7 @@
 //~ spec: traits.names, traits.operators
 //~ rfc: 0006
 
-trait SameSpec: Model {
+trait SameSpec: Snapshot {
     logic fn eq(a: Snap<Self>, b: Snap<Self>) -> Prop;
 }
 
