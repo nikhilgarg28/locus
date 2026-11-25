@@ -1,0 +1,15 @@
+//~ question: When a `while` condition writes a place, is what is known at the exit what the condition left, with its negation?
+//~ spec: runtime.loops, runtime.conditions
+//~ rfc: 0005
+
+fn count() -> (n: u32, @(n == 10)) {
+    let mut n: u32 = 0;
+    let mut small: @(n <= 9) = _;
+    while { n += 1; n < 10 } {
+        small = _;
+    }
+    // At the top `small` proves that `n` was at most 9, the condition added one, and `n < 10` failed.
+    (n, _)
+}
+
+//~ run: count().0 => 10

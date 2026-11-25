@@ -1,0 +1,12 @@
+//~ question: When a `while let` scrutinee writes a place, does a proof kept about that place at the top of the loop still fit it once the loop is left?
+//~ spec: runtime.loops, runtime.patterns
+//~ rfc: 0005
+
+fn drain() -> (n: u32, @(n <= 3)) {
+    let mut n: u32 = 0;
+    let mut small: @(n <= 3) = _;
+    while let true = { n += 1; n < 4 } {
+        small = _;
+    }
+    (n, small) //~ error: `small` proves `n <= 3` for the value `n` had at the top of the loop, and the scrutinee wrote `n` before the loop was left
+}
