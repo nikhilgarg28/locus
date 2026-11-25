@@ -1,0 +1,32 @@
+//~ question: May a type implement a trait whose supertrait binds an associated type to a false proposition, when its own associated type is a true one?
+//~ spec: traits.impls.headers, traits.evidence
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+trait Strong: Claim<P = @False> {}
+
+impl Strong for Yes {} //~ error: `Yes` does not meet `Claim<P = @False>`, the supertrait of `Strong`: its `P` is `@(1 == 1)`
+
+logic fn through_super<T: Strong>() -> @False {
+    T::get()
+}
+
+logic fn boom() -> @False {
+    through_super::<Yes>()
+}

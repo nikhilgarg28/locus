@@ -1,0 +1,34 @@
+//~ question: Is an implementation that rustc selects under a bound that binds an associated type evidence for a type whose associated type is that one?
+//~ spec: traits.impls.headers, traits.evidence
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+trait Trivial: Logical {
+    logic fn ok() -> @(1 == 1);
+}
+
+impl<T: Claim<P = @(1 == 1)>> Trivial for T {
+    logic fn ok() -> @(1 == 1) {
+        T::get()
+    }
+}
+
+logic fn fine() -> @(1 == 1) {
+    <Yes as Trivial>::ok()
+}
