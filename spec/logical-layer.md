@@ -22,6 +22,9 @@ A logical type, or a proposition declared with `prop`, refers to itself, directl
 r[logic.arith.nat-subtraction]
 Arithmetic on `Int` and `Nat` is exact. Subtracting one `Nat` from another gives an `Int`, which may be negative.
 
+r[logic.arith.division]
+On `Int`, `a / b` is the quotient of `a` by `b` truncated toward zero, and `a % b` is `a - b * (a / b)`, which is zero or has the sign of `a`, as Rust's `/` and `%` on integers are: `-7 / 2` is `-3`, and `-7 % 2` is `-1`. Dividing by zero gives zero, and the remainder of a division by zero is the dividend, as in Lean: `a / 0` is `0`, and `a % 0` is `a`. So `a === b * (a / b) + a % b` for every `a` and `b`. On two `Nat`s, `/` and `%` give a `Nat`.
+
 r[logic.arith.nat-to-int]
 A `Nat` is used as an `Int` only where the program writes it as one, `n as Int`. An arithmetic operator, a comparison, `===`, and `!==` take two `Int`s or two `Nat`s, never one of each. And a `Nat` is not accepted where an `Int` is expected: as an argument for a parameter of type `Int`, or as the value of a field, a local, or a result of that type.
 

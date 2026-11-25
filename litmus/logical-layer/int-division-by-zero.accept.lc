@@ -1,0 +1,16 @@
+//~ question: Does dividing an `Int` by zero give zero, with the dividend as the remainder?
+//~ spec: logic.arith.division
+//~ rfc: 0002
+
+logic fn quotient_by_zero() -> @(7 / 0 === 0) {
+    compute()
+}
+
+logic fn remainder_by_zero() -> @(-7 % 0 === -7) {
+    compute()
+}
+
+// So `a === b * (a / b) + a % b` holds at a zero divisor too.
+logic fn division_law_at_zero() -> @(-7 === 0 * (-7 / 0) + -7 % 0) {
+    compute()
+}

@@ -1,0 +1,11 @@
+//~ question: Is the value of a division of signed machine integers the logical division of their values, truncated toward zero?
+//~ spec: logic.arith.division, runtime.operations.returned
+//~ rfc: 0004
+
+fn half(a: i32) -> (q: i32, @(q == a / 2)) {
+    let q = a / 2;
+    (q, _)
+}
+
+//~ run: half(-7).0 => -3
+//~ run: half(7).0 => 3
