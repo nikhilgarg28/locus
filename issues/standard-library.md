@@ -325,3 +325,17 @@ The trust model gains `trusted.library-laws`: that each adapter agrees with the 
 ### 2026-11-24, snapshot/view reconciliation proposed
 
 [RFC 0008](../design/rfcs/0008-snapshot-capture-and-views.md) replaces implicit models with compiler-generated snapshot capture and ordinary explicit views. `Opaque<T>` and `UnsafeCell<T>` snapshot to `Unit`; field-erasure attributes are removed. Collection wrappers keep logical contents with generated conditional storage and offer native-shaped and checked methods. Existing unresolved lowering, loan, coherence, and bridge-fact questions remain open; [snapshot-view-reconciliation](snapshot-view-reconciliation.md) links the validation gates. This update does not rewrite the earlier log or mark an RFC accepted.
+
+### 2026-11-25, owner adopts the restricted hashing architecture; PR #26
+
+[RFC 0007](../design/rfcs/0007-provided-trait-implementations.md#adopted-i04-traces-and-the-standard-hash-bridge)
+now fixes the I04 direction: hash traces, a write-only sink, direct designated
+standard leaf adapters with shared events, and scoped checked hashing with
+designated lawful builders. It names observation, emission/equality,
+interpretation and builder facts under the existing trust categories. Runtime
+wrapper assumptions remain explicit and listed. Standard map internals must
+be connected to the certified digest route, not assumed to call Locus's helper.
+The architecture does not supply container snapshots or certify arbitrary
+Hash/BuildHasher/Borrow implementations. Borrow compatibility is required now;
+its API, container and tuple adapters, slice_trace, and user-proved hashers are
+retained in [checked-hashing-followups](checked-hashing-followups.md).

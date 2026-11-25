@@ -71,6 +71,15 @@ A captured snapshot never changes. Writes create new observations of new place v
 
 Floating-point support should use a representation that preserves IEEE distinctions, such as bits, before adding arithmetic observations. IEEE `==` is not logical equality. Until that representation and its operations are implemented, verified float operations remain unsupported or limited to an opaque observation.
 
+[RFC 0007's adopted I04 hashing design](0007-provided-trait-implementations.md#adopted-i04-traces-and-the-standard-hash-bridge)
+uses designated text observations for the `String`/`str` adapters and abstract
+builder observations sufficient to identify hashing behavior. A differently
+seeded builder is not collapsed to `Unit`; its observation need not reveal its
+seed. These are explicitly registered standard-library designations under
+`trusted.library-specs`, with runtime correspondence under the adapter's own
+contracts. They provide neither universal foreign capture nor a native contents
+snapshot for standard containers such as `Vec`.
+
 Generated snapshot types have one meaning across modules, generic instantiations, and both lowered programs. Privacy changes access to fields, never their types or the meaning of equality. Type aliases do not install new policies. Neither a type author nor a downstream library can override snapshot generation, including through field attributes. The two payload-erasing constructors are recognized by compiler-known type identity, not by their names or an attribute users can imitate.
 
 ### Type-based observation barriers
@@ -501,7 +510,7 @@ The remaining gates are the general storage-carrier translation under the specif
 
 This proposal replaces implicit model capture with snapshot capture and makes `Model`/`View` an optional ordinary library abstraction. It retains versioned values, proof-result contracts, final-value restrictions, capture validity conditions, ghost erasure, and proof-data boundaries. It fixes `UnsafeCell<T>` and Locus's `Opaque<T>` to `Unit`, rejects field-level snapshot attributes, adds optional stored stamps via `mint`, retains single-element final-value loan contracts, and supplies native-shaped methods beside checked methods.
 
-This reconciliation updates RFC 0001's protected trait and storage lowering (superseding decision 51); RFC 0002's decisions 99, 104, 107, 108 and 113–117; RFC 0005's implicit model core term; RFC 0006's capture bounds and whole-snapshot clone law; and RFC 0007's unreviewed trait inventory. Historical numbered decisions retain the reasoning at the time, but these current sections and this RFC replace the listed choices. The restricted vision wording remains and `unmarked-fields-and-the-superset` stays open.
+This reconciliation updates RFC 0001's protected trait and storage lowering (superseding decision 51); RFC 0002's decisions 99, 104, 107, 108 and 113–117; RFC 0005's implicit model core term; RFC 0006's capture bounds and whole-snapshot clone law; and RFC 0007's draft trait inventory, whose I04 hashing architecture was subsequently adopted. Historical numbered decisions retain the reasoning at the time, but these current sections and this RFC replace the listed choices. The restricted vision wording remains and `unmarked-fields-and-the-superset` stays open.
 
 The following expectation inventory is measured against PR head `f05e2d8`, not the earlier estimates. Legacy example filenames remain stable where only their spelling or explanation changed. The containing PR retains `expectation-change`; no RFC is marked accepted. The source discussion is preserved in the [draft specification Page](https://chatgpt.com/space/page_3baf0f34db548191af9258053663e21b).
 
