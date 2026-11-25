@@ -1,0 +1,17 @@
+//~ question: When a loop assigns a mutable reference another, is a write through it at the top of a later iteration known as a write to the place it first borrowed?
+//~ spec: runtime.borrows, runtime.loops
+//~ rfc: 0005
+
+fn retargeted() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut r = &mut a;
+    let mut i: u32 = 0;
+    while i < 3 {
+        *r = 10 + i;
+        r = &mut b;
+        i += 1;
+    }
+    let bad: @(a == 12) = _; //~ error: cannot prove `a == 12`: at the top of the loop `r` holds a reference from either path into it, so nothing is known of the value that the borrow of `a` ends with
+    a
+}

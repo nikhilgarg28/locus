@@ -1,0 +1,18 @@
+//~ question: When a field that holds a mutable reference is assigned another, at a point where rustc keeps the old loan alive, is the value the old borrow ends with known?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+struct Holder<'a> {
+    m: &'a mut u32,
+}
+
+fn four() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut h = Holder { m: &mut a };
+    *h.m = 4;
+    h.m = &mut b;
+    *h.m = 7;
+    let kept: @(a == 4) = _; //~ error: cannot prove `a == 4`: rustc keeps the loan of `a` alive after `h.m = &mut b`, since `h` holds one lifetime for its field, so nothing is known of the value that borrow ends with
+    a
+}

@@ -1,0 +1,14 @@
+//~ question: After two mutable references are swapped by a call, is a write through one of them known as a write to the place it first borrowed?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+fn swapped() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut r = &mut a;
+    let mut s = &mut b;
+    std::mem::swap(&mut r, &mut s);
+    *r = 7;
+    let bad: @(a == 7) = _; //~ error: cannot prove `a == 7`: `swap` was given `r` mutably and may have replaced the reference in it, so nothing is known of the value that the borrow of `a` ends with
+    a
+}

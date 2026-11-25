@@ -1,0 +1,18 @@
+//~ question: After a call that is given a mutable reference mutably and may replace it, is a write through the reference known as a write to the place it first borrowed?
+//~ spec: runtime.borrows, contracts.final
+//~ rfc: 0005
+
+// Verified: no `unsafe` and no logical data. It replaces the reference; it does not write through it.
+fn retarget<'a>(pp: &mut &'a mut u32, other: &'a mut u32) {
+    *pp = other;
+}
+
+fn seven() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut r = &mut a;
+    retarget(&mut r, &mut b);
+    *r = 7;
+    let bad: @(a == 7) = _; //~ error: cannot prove `a == 7`: `retarget` was given `r` mutably and may have replaced the reference in it, so nothing is known of the value that the borrow of `a` ends with
+    a
+}

@@ -1,0 +1,18 @@
+//~ question: After the reference that a mutable loan of an element returned is replaced by a call, are the vector's contents known from writes through it?
+//~ spec: collections.vec.element-loan, contracts.final, runtime.borrows
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn retarget<'a>(pp: &mut &'a mut u32, other: &'a mut u32) {
+    *pp = other;
+}
+
+fn poison(v: &mut Vec<u32>, b: &mut u32, some: @(0 < snap(v).elements().len()))
+    -> @(snap(final!(v)).elements()[0] == 7)
+{
+    let (mut x, was, ends) = v.get_mut_checked(0, some);
+    retarget(&mut x, b);
+    *x = 7;
+    _ //~ error: cannot prove `snap(final!(v)).elements()[0] == 7`: `ends` speaks of `final!(x)`, and `retarget` was given `x` mutably and may have replaced the reference in it, so nothing is known of `final!(x)`
+}

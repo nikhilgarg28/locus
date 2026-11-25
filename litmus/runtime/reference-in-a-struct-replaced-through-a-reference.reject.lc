@@ -1,0 +1,18 @@
+//~ question: After a mutable reference held in a struct is replaced through a reference to the struct, is a write through the field known as a write to the place it first borrowed?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+struct Holder<'a> {
+    m: &'a mut u32,
+}
+
+fn replaced() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut h = Holder { m: &mut a };
+    let hh = &mut h;
+    hh.m = &mut b;
+    *h.m = 7;
+    let bad: @(a == 7) = _; //~ error: cannot prove `a == 7`: `h.m` was written through `hh`, after which rustc keeps the loan of `a` alive, so nothing is known of the value that borrow ends with
+    a
+}
