@@ -1,0 +1,20 @@
+//~ question: After a write through a `Box` that a struct's field holds, is the struct known as its old value with that field replaced?
+//~ spec: runtime.writes
+//~ rfc: 0005
+
+struct Pair {
+    left: Box<u32>,
+    right: u32,
+}
+
+fn set_left(mut p: Pair) -> (out: Pair, @(out.left == 2 && out.right == p.right)) {
+    *p.left = 2;
+    (p, _)
+}
+
+fn five() -> u32 {
+    let (p, set) = set_left(Pair { left: Box::new(1), right: 5 });
+    p.right
+}
+
+//~ run: five() => 5
