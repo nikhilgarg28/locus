@@ -10,12 +10,12 @@ const fn never() -> @False {
     loop {}
 }
 
-struct Sized<const N: usize>;
+struct Block<const N: usize>;
 
-impl<const N: usize> Sized<N> {
+impl<const N: usize> Block<N> {
     const BAD: Certified = Certified { proof: never() }; //~ error: the proof field `proof` of `BAD` is given by a call of `never`: in a constant's initializer every proof comes from logical code, since rustc may never evaluate the call
 }
 
 fn absurd() -> @False {
-    logic! { Sized::<3>::BAD.proof }
+    logic! { Block::<3>::BAD.proof }
 }
