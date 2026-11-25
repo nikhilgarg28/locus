@@ -1,0 +1,60 @@
+use crate::permissions::Owned;
+use locus::Opaque;
+
+pub struct Box<T>{owned:Owned<T>}
+impl<T:Snapshot> Box<T>{
+    pub logic fn value(s:Snap<Self>)->Snap<T>{Owned::value(s.owned)}
+    #[verified]
+    pub fn new_checked(x:T)->(b:Self,@(Self::value(snap(b))===snap(x))){
+        let (owned,memory)=Owned::new_checked(x);(Box{owned},_)
+    }
+    #[verified]
+    pub fn new(x:T)->Self{Self::new_checked(x).0}
+    #[verified]
+    pub fn get_checked(&self)->(x:&T,@(snap(x)===Self::value(snap(self)))){
+        let (x,read)=self.owned.read_checked();(x,_)
+    }
+    #[verified]
+    pub fn get_mut_checked(&mut self)->(x:&mut T,
+        @(snap(x)===Self::value(snap(self))&&Self::value(snap(final!(self)))===snap(final!(x)))){
+        // No authored proof field locks owned; the primitive's type owns validity.
+        let (x,loan)=self.owned.borrow_mut_checked();(x,_)
+    }
+    #[verified]
+    pub fn into_inner_checked(self)->(x:T,@(snap(x)===Self::value(snap(self)))){
+        let Box{owned}=self;let (x,moved)=owned.into_inner_checked();(x,_)
+    }
+}
+// Ordinary Deref and DerefMut can forward to these methods, but their Rust
+// signatures return no proofs. Compiler special treatment of std Box moving-out
+// and unsizing does not automatically transfer to this user-defined Box.
+
+pub struct WrappedBox<T>{raw:Opaque<std::boxed::Box<T>>,model:Snap<T>}
+impl<T:Snapshot> WrappedBox<T>{
+    pub logic fn value(s:Snap<Self>)->Snap<T>{s.model}
+    #[verified]
+    pub fn new_checked(x:T)->(b:Self,@(Self::value(snap(b))===snap(x))){
+        let model=logic!{snap(x)};
+        (WrappedBox{raw:Opaque::new(std::boxed::Box::new(x)),model},_)
+    }
+    #[verified]
+    pub fn get_checked(&self)->(x:&T,@(snap(x)===self.model)){
+        let x=&**self.raw.get_ref();
+        (x,unsafe assume!(snap(x)===self.model)) // TRUST NATIVE-BOX correspondence
+    }
+    #[verified]
+    pub fn replace_checked(&mut self,x:T)->(old:T,
+        @(snap(old)===self.model&&final!(self).model===snap(x)))
+    {
+        let sx=logic!{snap(x)};let before=logic!{self.model};
+        let old=std::mem::replace(&mut **self.raw.get_mut(),x);
+        let read=unsafe assume!(snap(old)===before);self.model=sx;(old,_)
+    }
+    #[verified]
+    pub fn into_inner_checked(self)->(x:T,@(snap(x)===self.model)){
+        let WrappedBox{raw,model}=self;let x=*raw.into_inner();
+        (x,unsafe assume!(snap(x)===model))
+    }
+}
+// A returned &mut from WrappedBox has the same shadow-restoration problem as
+// wrapped Vec. A Drop-only guard is not an implementation of final-value facts.

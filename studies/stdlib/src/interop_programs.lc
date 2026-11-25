@@ -1,0 +1,98 @@
+// Locus clients. Each uses named checked methods when it needs a theorem.
+// Library OPEN obligations remain dependencies, not facts this spike has proved.
+use crate::seq::{Seq,Maybe};
+use crate::map::Map;
+use crate::native_vec;
+use crate::wrapped_vec;
+use crate::native_hash;
+use crate::wrapped_maps;
+
+#[verified]
+pub fn native_stack()->(x:u32,@(x===20)){
+    let(mut v,empty)=native_vec::Vec::empty();
+    let a=v.push_checked(10);let b=v.push_checked(20);
+    let(out,popped)=v.pop_checked();
+    match out{None=>panic!("nonempty"),Some(x)=>(x,_)}
+    // OPEN sequence lemmas connect push/get/take, not automatic sequence search.
+}
+#[verified]
+pub fn wrapped_stack()->(x:u32,@(x===20)){
+    let(mut v,empty)=wrapped_vec::Vec::empty();
+    let a=v.push_checked(10);let b=v.push_checked(20);
+    let(out,popped)=v.pop_checked();
+    match out{None=>panic!("nonempty"),Some(x)=>(x,_)}
+}
+
+pub trait MapApi:Snapshot{
+    logic fn model(s:Snap<Self>)->Map<Nat,Nat>;
+    fn new_checked()->(m:Self,@(Self::model(snap(m)).equivalent(Map::empty())));
+    fn insert_checked(&mut self,k:u32,v:u32)->(old:Option<u32>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).insert(k,v))));
+    fn get_checked(&self,k:&u32)->(v:Option<&u32>,@(match v{
+        None=>Self::model(snap(self)).get(*k)===Maybe::None,
+        Some(x)=>Self::model(snap(self)).get(*k)===Maybe::Some(*x),
+    }));
+}
+#[verified]
+fn overwrite_then_read<M:MapApi>()->(x:u32,@(x===12)){
+    let(mut m,empty)=M::new_checked();
+    let start=logic!{M::model(snap(m))};
+    let(old,first)=m.insert_checked(4,11);
+    let after_first=logic!{M::model(snap(m))};
+    let(old,second)=m.insert_checked(4,12);
+    // Explicit forall application; equality transport is not silently delegated
+    // to `_`. The insert contract is pointwise map equivalence.
+    let pointwise:@(forall |q:Nat|
+        M::model(snap(m)).get(q)===after_first.insert(4,12).get(q))=_;
+    let at_four=logic!{pointwise(4)};
+    let written=logic!{crate::map::get_insert(after_first,4,12,4)};
+    let(out,read)=m.get_checked(&4);
+    match out{Some(x)=>(*x,_),None=>panic!("present")}
+}
+// MapApi can be implemented by either backend only after its public method
+// proofs/bridges are established; no four blanket trusted impls are added here.
+
+#[verified]
+fn ordinary_native_handoff()->wrapped_vec::Vec<u32>{
+    let(mut v,empty)=wrapped_vec::Vec::empty();
+    let a=v.push_checked(3);let b=v.push_checked(1);let c=v.push_checked(3);
+    let mut raw=v.into_std();raw.sort_unstable();raw.dedup();
+    wrapped_vec::Vec::from_std(raw)
+    // Ordinary interop is expressible. This signature deliberately promises no
+    // sortedness/permutation fact; those require a checked native adapter.
+}
+
+#[derive(CloneEq,Copy)]
+struct Small{value:u32,small:@(value<100)}
+#[verified]
+fn small(n:u32)->Small{let value=n%100;Small{value,small:_}}
+#[verified]
+fn certified_native_iterator(xs:&[u32])->Option<(x:u32,@(x<100))>{
+    let values:std::vec::Vec<Small>=xs.iter().map(|x|small(*x)).collect();
+    match values.first(){None=>None,Some(x)=>Some((x.value,_))}
+}
+#[verified]
+fn certified_native_cell(n:u32)->(x:u32,@(x<100)){
+    let c=std::cell::Cell::new(small(n));let got=c.get();(got.value,_)
+}
+#[verified]
+fn certified_refcell(n:u32)->(x:u32,@(x<100)){
+    let c=std::cell::RefCell::new(small(n));
+    let guard=c.borrow();let got=&*guard; // Execute Deref first; then capture.
+    (got.value,_)
+}
+#[verified]
+fn certified_mutex(n:u32)->(x:u32,@(x<100)){
+    let c=std::sync::Mutex::new(small(n));
+    let guard=match c.lock(){Ok(g)=>g,Err(e)=>e.into_inner()};
+    let got=&*guard;(got.value,_)
+    // Poison does not invalidate a sealed proof field. These examples need
+    // boundary/lifetime lowering tests; no concurrent history is asserted.
+}
+
+// NEGATIVE CLIENTS, not accepted litmus outcomes:
+// 1. Passing Vec<(value,@P)> through native mutable APIs exposes logical data.
+// 2. Keeping an old map contents proof after an uncontracted native mutation.
+// 3. Using a bound proof for the old vector length after pop without transport.
+// 4. Inferring the last Cell write from equality of Unit snapshots.
+// 5. Equating two map key representatives from equality of KeySpec projections.

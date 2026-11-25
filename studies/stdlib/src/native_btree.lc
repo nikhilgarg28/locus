@@ -1,0 +1,304 @@
+// Full B-tree mutation algorithms in Locus syntax, using owned-child editing.
+// Proof obligations remain OPEN. No clone of K or V, no mutable element loan,
+// and no trusted B-tree algorithm is assumed. The checked Vec/Box APIs below are
+// the candidate implementations in 05 and 08, not magic standard containers.
+use crate::native_vec::Vec;
+use crate::native_box::Box;
+use crate::seq::{Seq,Maybe};
+use crate::map::Map;
+use crate::laws::TotalOrd;
+use std::cmp::Ordering;
+use locus::std::mem;
+
+struct Entry<K,V>{key:K,value:V}
+struct Node<K:TotalOrd,V:Snapshot>{keys:Vec<Entry<K,V>>,children:Vec<Box<Node<K,V>>>}
+
+// A fuelled worklist avoids forbidden mutual/nested recursive logic definitions.
+// The public representation proof must establish that fuel exhausts the forest.
+#[decreases(fuel)]
+logic fn forest_map<K:TotalOrd,V:Snapshot>(todo:Seq<Snap<Node<K,V>>>,fuel:Nat)->Map<K::Key,Snap<V>>{
+    if fuel==0 {Map::empty()} else {match todo{
+        Seq::Nil=>Map::empty(),
+        Seq::Cons(node,rest)=>{
+            let children=node.children.elements().map(|b:Snap<Box<Node<K,V>>>|Box::value(b));
+            let remaining=forest_map::<K,V>(children.concat(rest),(fuel-1).as_nat(_));
+            add_entries::<K,V>(remaining,node.keys.elements())
+        }
+    }}
+}
+logic fn add_entries<K:TotalOrd,V:Snapshot>(m:Map<K::Key,Snap<V>>,xs:Seq<Snap<Entry<K,V>>>)->Map<K::Key,Snap<V>>{
+    match xs{Seq::Nil=>m,Seq::Cons(e,rest)=>add_entries::<K,V>(m.insert(K::key(e.key),e.value),rest)}
+}
+logic fn meaning<K:TotalOrd,V:Snapshot>(n:Snap<Node<K,V>>,fuel:Nat)->Map<K::Key,Snap<V>>{
+    forest_map::<K,V>(Seq::Cons(n,Seq::Nil),fuel)
+}
+#[decreases(fuel)]
+logic fn forest_entries<K:TotalOrd,V:Snapshot>(todo:Seq<Snap<Node<K,V>>>,fuel:Nat)->Seq<Snap<Entry<K,V>>>{
+    if fuel==0{Seq::Nil}else{match todo{Seq::Nil=>Seq::Nil,Seq::Cons(n,rest)=>{
+        let children=n.children.elements().map(|b:Snap<Box<Node<K,V>>>|Box::value(b));
+        n.keys.elements().concat(forest_entries::<K,V>(children.concat(rest),(fuel-1).as_nat(_)))
+    }}}
+}
+#[decreases(fuel)]
+logic fn exhausted<K:TotalOrd,V:Snapshot>(todo:Seq<Snap<Node<K,V>>>,fuel:Nat)->Prop{
+    match todo{Seq::Nil=>True,Seq::Cons(n,rest)=>if fuel==0{False}else{
+        exhausted::<K,V>(n.children.elements().map(|b:Snap<Box<Node<K,V>>>|Box::value(b)).concat(rest),(fuel-1).as_nat(_))
+    }}
+}
+logic fn strict<K:TotalOrd>(a:K::Key,b:K::Key)->Prop{K::le(a,b)&&a!==b}
+logic fn sorted_keys<K:TotalOrd,V:Snapshot>(xs:Seq<Snap<Entry<K,V>>>)->Prop{
+    forall |i:Nat| forall |j:Nat| i<j && j<xs.len() ==> match (xs.get(i),xs.get(j)){
+        (Maybe::Some(a),Maybe::Some(b))=>strict::<K>(K::key(a.key),K::key(b.key)),_=>False,
+    }
+}
+logic fn child_between<K:TotalOrd,V:Snapshot>(parent:Snap<Node<K,V>>,child:Snap<Node<K,V>>,i:Nat,fuel:Nat)->Prop{
+    let entries=forest_entries::<K,V>(Seq::Cons(child,Seq::Nil),fuel);
+    forall |j:Nat| j<entries.len() ==> match entries.get(j){
+        Maybe::None=>False,Maybe::Some(e)=>{
+            (if i==0 {True} else {match parent.keys.elements().get((i-1).as_nat(_)){
+                Maybe::Some(low)=>strict::<K>(K::key(low.key),K::key(e.key)),_=>False}})
+            && (i==parent.keys.elements().len() || match parent.keys.elements().get(i){
+                Maybe::Some(high)=>strict::<K>(K::key(e.key),K::key(high.key)),_=>False})
+        }
+    }
+}
+#[decreases(fuel)]
+logic fn valid_node<K:TotalOrd,V:Snapshot>(n:Snap<Node<K,V>>,fuel:Nat,height:Nat,root:Bool)->Prop{
+    if fuel==0{False}else{
+        n.keys.elements().len()<=3 && (root || n.keys.elements().len()>0)
+        && sorted_keys::<K,V>(n.keys.elements())
+        && if n.children.elements().len()==0{height==0}else{
+            if height==0 {False} else {n.children.elements().len()==n.keys.elements().len()+1
+            && (forall |i:Nat| i<n.children.elements().len() ==> match n.children.elements().get(i){
+                Maybe::None=>False,Maybe::Some(b)=>{
+                    valid_node::<K,V>(Box::value(b),(fuel-1).as_nat(_),(height-1).as_nat(_),false)
+                    && child_between::<K,V>(n,Box::value(b),i,fuel)
+                }
+            })}
+        }
+    }
+}
+// Predecessors use explicit if branches. A proposition connective does not
+// automatically supply the proof required by a data-producing as_nat call.
+logic fn representation<K:TotalOrd,V:Snapshot>(n:Snap<Node<K,V>>,len:Nat,height:Nat)->Prop{
+    let todo=Seq::Cons(n,Seq::Nil);let entries=forest_entries::<K,V>(todo,len+1);
+    valid_node::<K,V>(n,len+1,height,true)&&exhausted::<K,V>(todo,len+1)
+    && entries.len()==len && entries.map(|e:Snap<Entry<K,V>>|K::key(e.key)).unique()
+}
+
+impl<K:TotalOrd,V:Snapshot> Node<K,V>{
+    #[verified]
+    fn find(&self,key:&K)->Option<&V>{
+        let(i,p)=self.locate(key);let(n,p)=self.keys.len_checked();
+        if i<n{
+            let(entry,at)=self.keys.get_checked(i,_);let(same,equal)=entry.key.eq_checked(key);
+            if same{return Some(&entry.value);}
+        }
+        let(n,p)=self.children.len_checked();if n==0{return None;}
+        let(child,at)=self.children.get_checked(i,_);let(node,at)=child.get_checked();
+        node.find(key)
+    }
+    #[verified]
+    fn empty()->Self{
+        let(keys,kempty)=Vec::empty();let(children,cempty)=Vec::empty();Node{keys,children}
+    }
+    #[verified]
+    fn locate(&self,key:&K)->(at:usize,@(at<=self.keys.elements().len())){
+        let(n,count)=self.keys.len_checked();let mut i:usize=0;
+        let mut bound:@(i<=n)=_;
+        while i<n{
+            let(entry,located)=self.keys.get_checked(i,_);
+            let(order,compared)=entry.key.cmp_checked(key);
+            match order{Ordering::Less=>{i+=1;bound=_;},_=>return(i,_)}
+        }
+        (i,_)
+        // OPEN stronger loop invariant: every earlier key is strictly smaller.
+    }
+    #[verified]
+    fn replace_value(&mut self,i:usize,value:V,inside:@(i<self.keys.elements().len()))->V{
+        let(entry,removed)=self.keys.remove_checked(i,_);
+        let Entry{key,value:old}=entry;
+        let restored=self.keys.insert_checked(i,Entry{key,value},_);old
+    }
+    #[verified]
+    fn take_child(&mut self,i:usize,inside:@(i<self.children.elements().len()))->Node<K,V>{
+        let(boxed,removed)=self.children.remove_checked(i,_);
+        let(child,unboxed)=boxed.into_inner_checked();child
+        // OPEN interface refinement: return removed/unboxed evidence with child.
+        // Current ordinary return intentionally loses it; algorithms run, but
+        // complete map proofs need this helper's checked result strengthened.
+    }
+    #[verified]
+    fn put_child(&mut self,i:usize,child:Self,inside:@(i<=self.children.elements().len())){
+        let(boxed,boxed_fact)=Box::new_checked(child);
+        let inserted=self.children.insert_checked(i,boxed,_);
+    }
+    #[verified]
+    fn split_child(&mut self,i:usize,inside:@(i<self.children.elements().len())){
+        let mut child=self.take_child(i,_);
+        let(mut right_keys,empty)=Vec::empty();
+        let(right_entry,taken)=child.keys.remove_checked(2,_);
+        let appended=right_keys.push_checked(right_entry);
+        let(middle,taken)=child.keys.remove_checked(1,_);
+        let(mut right_children,empty)=Vec::empty();
+        let(n,count)=child.children.len_checked();
+        if n!=0{
+            let(a,taken)=child.children.remove_checked(2,_);
+            let ap=right_children.push_checked(a);
+            let(b,taken)=child.children.remove_checked(2,_);
+            let bp=right_children.push_checked(b);
+        }
+        self.put_child(i,child,_);
+        self.put_child(i+1,Node{keys:right_keys,children:right_children},_);
+        let promoted=self.keys.insert_checked(i,middle,_);
+        // OPEN precondition: child has exactly 3 keys and 0 or 4 children.
+        // OPEN postcondition: map preserved, two one-key children, parent +1 key.
+    }
+    #[verified]
+    fn merge_children(&mut self,i:usize,inside:@(i<self.keys.elements().len())){
+        let(separator,removed)=self.keys.remove_checked(i,_);
+        let mut left=self.take_child(i,_);let mut right=self.take_child(i,_);
+        let promoted=left.keys.push_checked(separator);
+        let(n,count)=right.keys.len_checked();let mut j:usize=0;
+        while j<n{let(e,taken)=right.keys.remove_checked(0,_);let moved=left.keys.push_checked(e);j+=1;}
+        let(n,count)=right.children.len_checked();let mut j:usize=0;
+        while j<n{let(c,taken)=right.children.remove_checked(0,_);let moved=left.children.push_checked(c);j+=1;}
+        self.put_child(i,left,_);
+        // OPEN loop proofs preserve order; the runtime bodies move every entry.
+    }
+    #[verified]
+    fn fill_child(&mut self,i:usize)->usize{
+        let child_n={let(c,at)=self.children.get_checked(i,_);let(n,p)=c.get_checked().0.keys.len_checked();n};
+        if child_n>=2{return i;}
+        if i>0{
+            let left_n={let(c,at)=self.children.get_checked(i-1,_);let(n,p)=c.get_checked().0.keys.len_checked();n};
+            if left_n>=2{
+                let mut left=self.take_child(i-1,_);let mut child=self.take_child(i-1,_);
+                let(n,count)=left.keys.len_checked();let(replacement,taken)=left.keys.remove_checked(n-1,_);
+                let(separator,replaced)=self.keys.set_checked(i-1,replacement,_);
+                let inserted=child.keys.insert_checked(0,separator,_);
+                let(n,count)=left.children.len_checked();
+                if n>0{let(c,taken)=left.children.remove_checked(n-1,_);let inserted=child.children.insert_checked(0,c,_);}
+                self.put_child(i-1,left,_);self.put_child(i,child,_);return i;
+            }
+        }
+        let(n,count)=self.keys.len_checked();
+        if i<n{
+            let right_n={let(c,at)=self.children.get_checked(i+1,_);let(n,p)=c.get_checked().0.keys.len_checked();n};
+            if right_n>=2{
+                let mut child=self.take_child(i,_);let mut right=self.take_child(i,_);
+                let(replacement,taken)=right.keys.remove_checked(0,_);
+                let(separator,replaced)=self.keys.set_checked(i,replacement,_);
+                let appended=child.keys.push_checked(separator);
+                let(n,count)=right.children.len_checked();
+                if n>0{let(c,taken)=right.children.remove_checked(0,_);let appended=child.children.push_checked(c);}
+                self.put_child(i,child,_);self.put_child(i+1,right,_);return i;
+            }
+            self.merge_children(i,_);i
+        }else{self.merge_children(i-1,_);i-1}
+    }
+    #[verified]
+    fn insert_nonfull(&mut self,key:K,value:V)->Option<V>{
+        let(mut i,located)=self.locate(&key);let(n,count)=self.keys.len_checked();
+        if i<n{
+            let same={let(e,at)=self.keys.get_checked(i,_);let(same,eq)=e.key.eq_checked(&key);same};
+            if same{return Some(self.replace_value(i,value,_));}
+        }
+        let(children,count)=self.children.len_checked();
+        if children==0{let inserted=self.keys.insert_checked(i,Entry{key,value},_);return None;}
+        let child_n={let(c,at)=self.children.get_checked(i,_);let(n,p)=c.get_checked().0.keys.len_checked();n};
+        if child_n==3{
+            self.split_child(i,_);
+            let order={let(e,at)=self.keys.get_checked(i,_);let(c,p)=key.cmp_checked(&e.key);c};
+            match order{
+                Ordering::Equal=>return Some(self.replace_value(i,value,_)),
+                Ordering::Greater=>i+=1,Ordering::Less=>{},
+            }
+        }
+        let mut child=self.take_child(i,_);let old=child.insert_nonfull(key,value);
+        self.put_child(i,child,_);old
+    }
+    #[verified]
+    fn extreme(&mut self,last:bool)->Entry<K,V>{
+        let(children,count)=self.children.len_checked();let(n,count)=self.keys.len_checked();
+        if children==0{return self.keys.remove_checked(if last{n-1}else{0},_).0;}
+        let i=self.fill_child(if last{n}else{0});let mut child=self.take_child(i,_);
+        let entry=child.extreme(last);self.put_child(i,child,_);entry
+    }
+    #[verified]
+    fn remove(&mut self,key:&K)->Option<Entry<K,V>>{
+        let(i,located)=self.locate(key);let(n,count)=self.keys.len_checked();
+        let equal=if i<n{let(e,at)=self.keys.get_checked(i,_);e.key.eq_checked(key).0}else{false};
+        let(children,count)=self.children.len_checked();
+        if equal{
+            if children==0{return Some(self.keys.remove_checked(i,_).0);}
+            let left_n={let(c,at)=self.children.get_checked(i,_);c.get_checked().0.keys.len_checked().0};
+            if left_n>=2{
+                let mut left=self.take_child(i,_);let replacement=left.extreme(true);self.put_child(i,left,_);
+                return Some(self.keys.set_checked(i,replacement,_).0);
+            }
+            let right_n={let(c,at)=self.children.get_checked(i+1,_);c.get_checked().0.keys.len_checked().0};
+            if right_n>=2{
+                let mut right=self.take_child(i+1,_);let replacement=right.extreme(false);self.put_child(i+1,right,_);
+                return Some(self.keys.set_checked(i,replacement,_).0);
+            }
+            self.merge_children(i,_);let mut child=self.take_child(i,_);
+            let old=child.remove(key);self.put_child(i,child,_);old
+        }else if children==0{None}else{
+            let i=self.fill_child(i);let mut child=self.take_child(i,_);
+            let old=child.remove(key);self.put_child(i,child,_);old
+        }
+    }
+}
+pub struct BTreeMap<K:TotalOrd,V:Snapshot>{root:Node<K,V>,len:usize,height:Nat,
+    valid:@representation::<K,V>(snap(root),len,height)}
+impl<K:TotalOrd,V:Snapshot> BTreeMap<K,V>{
+    pub logic fn model(s:Snap<Self>)->Map<K::Key,Snap<V>>{meaning::<K,V>(s.root,s.len+1)}
+    #[verified]
+    pub fn new()->Self{BTreeMap{root:Node::empty(),len:0,height:0,valid:_}}
+    #[verified]
+    pub fn get_checked(&self,key:&K)->(out:Option<&V>,@(match out{
+        None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+        Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v)),
+    })){
+        let out=self.root.find(key);(out,_)
+        // OPEN: find's signature must carry its search proof; body alone is opaque.
+    }
+    #[verified]
+    pub fn insert_checked(&mut self,key:K,value:V)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).insert(K::key(snap(key)),snap(value)))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(slot,previous,was)=mem::take_out(self);
+        let BTreeMap{mut root,len,mut height,valid}=previous;
+        let(n,count)=root.keys.len_checked();
+        if n==3{
+            let mut next=Node::empty();next.put_child(0,root,_);next.split_child(0,_);
+            root=next;height=logic!{height+1};
+        }
+        let old=root.insert_nonfull(key,value);
+        let next_len=match old{None=>match len.checked_add(1){Some(n)=>n,None=>panic!("length overflow")},Some(_)=>len};
+        slot.put(BTreeMap{root,len:next_len,height,valid:_});
+        (old,_) // OPEN: strengthen helpers with proof results + representation invariant.
+    }
+    #[verified]
+    pub fn remove_checked(&mut self,key:&K)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).remove(K::key(snap(key))))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(slot,previous,was)=mem::take_out(self);
+        let BTreeMap{mut root,len,mut height,valid}=previous;
+        let old=root.remove(key);
+        let(n,count)=root.keys.len_checked();let(children,count)=root.children.len_checked();
+        if n==0 && children!=0{root=root.take_child(0,_);height=logic!{(height-1).as_nat(_)};}
+        let next_len=match old{None=>len,Some(_)=>len-1};
+        slot.put(BTreeMap{root,len:next_len,height,valid:_});
+        match old{None=>(None,_),Some(Entry{key,value})=>(Some(value),_)}
+    }
+}
+// This is a COMPLETE mutation algorithm candidate, not a completed verification.
+// An intentionally weak internal helper signature loses evidence in several
+// places. Rust testing cannot certify those final public holes. The final report
+// distinguishes algorithm completion from the remaining Locus proof/API work.

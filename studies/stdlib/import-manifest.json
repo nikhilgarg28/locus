@@ -1,0 +1,80 @@
+[
+  {
+    "original": "00-seq.lc",
+    "path": "studies/stdlib/src/seq.lc",
+    "sha256_at_import": "d0f18a2b3f4134c1a6c2f3cd613c8f3321ba32742bbebb8588272156539af6bd",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "01-map.lc",
+    "path": "studies/stdlib/src/map.lc",
+    "sha256_at_import": "7d86227d71c83d7bc562022a67b26cb31591f58d5b1cd3d1de886478d5be1d13",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "02-laws.lc",
+    "path": "studies/stdlib/src/laws.lc",
+    "sha256_at_import": "ddb0e9ac489105cc9df0b767cbd302d66c78ee372f124f8e52e7f124622c2ca5",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "03-permissions.lc",
+    "path": "studies/stdlib/src/permissions.lc",
+    "sha256_at_import": "d9c8d7922ef04304b35ffa76100bac7a9d70a6e73fbff906a00330208b85abc5",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "04-std-api.lc",
+    "path": "studies/stdlib/src/std_api.lc",
+    "sha256_at_import": "dfe213906e6c72e1d63accd49d12960b4224f4e359f5d92b764d51711ba7d58c",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "05-native-vec.lc",
+    "path": "studies/stdlib/src/native_vec.lc",
+    "sha256_at_import": "3f8e0cc8d265b8c69f8cbf3cb58921b5ac02b7d5b4758e5bdd85610b1ea22e23",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "06-wrapped-vec.lc",
+    "path": "studies/stdlib/src/wrapped_vec.lc",
+    "sha256_at_import": "e6a7ca1c166fb74e5055d2545acd4f46f9fe2f4345e9f6ed626129b0d7005033",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "08-boxes.lc",
+    "path": "studies/stdlib/src/native_box.lc",
+    "sha256_at_import": "1e46ac6f36cffe62f40880b2b2e82262cfc200f8330130fdf0d62dce18e6042e",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "09-btree-algorithm.lc",
+    "path": "studies/stdlib/src/native_btree.lc",
+    "sha256_at_import": "949b729da1ff642837a0e51d1355db292493f22d3b8172894d1717fa417581c5",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "10-hash-algorithm.lc",
+    "path": "studies/stdlib/src/native_hash.lc",
+    "sha256_at_import": "7cb2437a48f6936ec31c72cc6cb5a411c8d066414b289adfcf23c921c3e738d2",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "11-wrapped-maps.lc",
+    "path": "studies/stdlib/src/wrapped_maps.lc",
+    "sha256_at_import": "c38d7debe01818419d14ca066820384342c90f837430590be7711b40e52fbe93",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "12-interior-and-sharing.lc",
+    "path": "studies/stdlib/src/interior_sharing.lc",
+    "sha256_at_import": "02032f06dda5387bacb7d89e6853c46f5a3938376aaa4858834a98845f9fb722",
+    "status": "unverified; OPEN obligations retained"
+  },
+  {
+    "original": "13-interop-programs.lc",
+    "path": "studies/stdlib/src/interop_programs.lc",
+    "sha256_at_import": "a0bf7f1e71f5c0ab9b095577d4142e75ee501a8d920810a73459ba3ece851612",
+    "status": "unverified; OPEN obligations retained"
+  }
+]

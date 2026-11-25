@@ -1,0 +1,70 @@
+// TRUSTED INTERFACE FOR THIS SPIKE, not new accepted Locus syntax/axioms.
+// The declarations ending in `;` below are primitive API specifications. Their
+// executable implementations are src/permission.rs. The user authorized the
+// assumption that a permissioned allocation's snapshot observes its contents.
+// Allocation, initialized access, movement and deallocation additionally need
+// the stated primitive contracts. Their soundness is NOT proved by this spike.
+use crate::seq::{Seq, Maybe};
+
+// Runtime resources, not Logical types: affine, non-Copy, non-Clone. No public
+// constructor except allocate. Ptr is only an address/identity, not a permission.
+pub struct Ptr<T>;
+pub struct Region<T>;
+// Generated snapshot of Region<T>, when T: Snapshot:
+// { allocation: Nat, cells: Seq<Maybe<Snap<T>>> }. Allocation identities are
+// distinct even for two zero-sized allocations; they are NOT produced by mint.
+
+impl<T: Snapshot> Region<T> {
+    pub logic fn cells(s: Snap<Self>) -> Seq<Maybe<Snap<T>>> { s.cells }
+    pub logic fn capacity(s: Snap<Self>) -> Nat { s.cells.len() }
+    #[verified]
+    pub fn allocate(n: usize)
+        -> (r: Self, @(Self::capacity(snap(r)) === n
+            && (forall |i: Nat| i < n ==> Self::cells(snap(r)).get(i) === Maybe::Some(Maybe::None))));
+    #[verified]
+    pub fn capacity_checked(&self) -> (n: usize, @(n === Self::capacity(snap(self))));
+    #[verified]
+    pub fn read_checked(&self, i: usize,
+        initialized: @(exists |x: Snap<T>| Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(x))))
+        -> (x: &T, @(Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(snap(x)))));
+    #[verified]
+    pub fn take_checked(&mut self, i: usize,
+        initialized: @(exists |x: Snap<T>| Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(x))))
+        -> (x: T, @(Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(snap(x)))
+            && Self::cells(snap(final!(self))) === Self::cells(snap(self)).update(i,Maybe::None)));
+    #[verified]
+    pub fn write_checked(&mut self, i: usize, x: T,
+        vacant: @(Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::None)))
+        -> @(Self::cells(snap(final!(self))) === Self::cells(snap(self)).update(i,Maybe::Some(snap(x))));
+    #[verified]
+    pub fn borrow_mut_checked(&mut self, i: usize,
+        initialized: @(exists |x: Snap<T>| Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(x))))
+        -> (x: &mut T,
+            @(Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::Some(snap(x)))
+            && Self::cells(snap(final!(self))) === Self::cells(snap(self)).update(i,Maybe::Some(snap(final!(x))))));
+    // Only an entirely uninitialized region can be deallocated without dropping T.
+    #[verified]
+    pub fn free(self, empty: @(forall |i: Nat| i < Self::capacity(snap(self)) ==>
+        Self::cells(snap(self)).get(i) === Maybe::Some(Maybe::None)));
+}
+// Region's own Drop must drop every remaining initialized T, once, then free.
+// The Rust kernel has an unwind cleanup guard to continue after one Drop panic.
+// No safe function manufactures a resource from a hypothetical snapshot.
+
+// Single-object owning permission: its type guarantees initialization. This is
+// a separate primitive state, so ordinary library Box needs no proof-read field
+// whose mutation would be forbidden by contracts.invariants.no-mutable-borrow.
+pub struct Owned<T>;
+impl<T: Snapshot> Owned<T> {
+    pub logic fn value(s: Snap<Self>) -> Snap<T> { s.value }
+    #[verified]
+    pub fn new_checked(x:T)->(p:Self,@(Self::value(snap(p))===snap(x)));
+    #[verified]
+    pub fn read_checked(&self)->(x:&T,@(snap(x)===Self::value(snap(self))));
+    #[verified]
+    pub fn borrow_mut_checked(&mut self)->(x:&mut T,
+        @(snap(x)===Self::value(snap(self))
+          && Self::value(snap(final!(self)))===snap(final!(x))));
+    #[verified]
+    pub fn into_inner_checked(self)->(x:T,@(snap(x)===Self::value(snap(self))));
+}

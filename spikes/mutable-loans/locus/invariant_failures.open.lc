@@ -1,0 +1,37 @@
+// M03-M08. Independent fragments in Vec/owner methods; EXPECT REJECTION under
+// the candidate. These are NOT decided reject litmus or compiler test results.
+
+// M03: circular evidence. Rust's disjoint field borrowing alone allows the
+// analogous proof-marker read; Locus must suspend this dependent proof field.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+let shape = self.valid; // REJECT: evidence was not copied before acquisition.
+
+// M04: arbitrary element changes need not preserve sortedness (vc05).
+let old_sorted = self.sorted;
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+let kept: @sorted(Region::cells(final!(r))) = _; // REJECT: missing final bounds.
+
+// M05: a parent sum bound need not follow from a child's local invariant (vc11).
+// Proving the Vec's initialized prefix does not prove an Outer total bound.
+let r = &mut self.v;
+let (x,loan) = r.get_mut_checked(i,_);
+let parent_kept: @(sum(final!(r).elements()) <= self.limit) = _; // REJECT.
+
+// M06: two loans sharing one proof field, even if Rust proves disjointness.
+let left = &mut self.left;
+let (a,pa) = lend(left);
+let right = &mut self.right;
+let (b,pb) = lend(right); // REJECT under the proposed initial single-loan rule.
+// Per-loan checks against the old other field do not compose (vc12).
+
+// M07: permission for &mut T is narrower than permission for &mut Maybe<T>.
+let r = &mut self.storage;
+let (slot,loan) = r.borrow_optional_slot(i,_);
+let kept: @prefix(Region::cells(final!(r)),self.len) = _; // REJECT (vc04).
+
+// M08: the other invariant dependencies must remain unchanged (vc17).
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+self.len = 0; // REJECT: existing invariant-assignment restriction still applies.

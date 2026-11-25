@@ -1,0 +1,6 @@
+CAUGHT_AFTER_RETURN
+
+thread 'main' (22727) panicked at rust/probes.rs:215:21:
+client panics after a successful acquisition
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+OWNER_DROP_VALID=true

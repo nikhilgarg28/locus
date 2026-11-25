@@ -1,0 +1,6 @@
+
+thread 'main' (23246) panicked at rust/probes.rs:205:21:
+acquisition failure
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+CALLEE_LOCAL_DROP
+ABORT_ACQUISITION

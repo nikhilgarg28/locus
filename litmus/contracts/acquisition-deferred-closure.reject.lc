@@ -1,0 +1,25 @@
+//~ question: May a returned closure postpone the preservation obligation until it is called?
+//~ spec: contracts.invariants.acquisition, contracts.invariants.acquisition-unwind
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    data: (u32, u32),
+    valid: @(data.1 == 7),
+}
+
+fn later(pair: &mut (u32,u32)) -> impl FnOnce() + '_ {
+    move || { pair.1 = 0; }
+}
+fn bad(owner: &mut Tagged) {
+    let old = owner.valid;
+    let r = &mut owner.data;
+    let f = later(r);
+    let kept: @(final!(r).1 == 7) = _; //~ error: no preservation proof is available at acquisition return; a deferred call cannot discharge it later
+    f();
+}

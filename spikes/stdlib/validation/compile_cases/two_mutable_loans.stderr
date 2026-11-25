@@ -1,0 +1,12 @@
+error[E0499]: cannot borrow `r` as mutable more than once at a time
+ --> /workspace/locus-loans-pr/spikes/stdlib/validation/compile_cases/two_mutable_loans.rs:1:155
+  |
+1 | ...er();r.write(p,0,1);let a=r.borrow_mut(p,0);let b=r.borrow_mut(p,0);*a+=*b;}
+  |                              -                       ^                 ------ first borrow later used here
+  |                              |                       |
+  |                              |                       second mutable borrow occurs here
+  |                              first mutable borrow occurs here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0499`.

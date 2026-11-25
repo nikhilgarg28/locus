@@ -1,0 +1,14 @@
+[package]
+name = "locus-stdlib-spike"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+default = ["audit"]
+audit = []
+
+[profile.release]
+overflow-checks = true

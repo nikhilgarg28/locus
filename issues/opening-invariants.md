@@ -1,9 +1,21 @@
 # Changing a field that an invariant reads, through a borrow
 
 - **Kind:** decision
-- **Status:** open
+- **Status:** closed
+- **Closed by:** the owner
 - **Blocks:** Data structures with invariants that change in place, such as a `push` on a type whose proof field reads its vector; idea 2 of [external-review-ideas](external-review-ideas.md)
 - **Rules:** `contracts.invariants.no-mutable-borrow`, `contracts.invariants.assignment`, `contracts.invariants.observed`
+
+## Decision
+
+The owner chose the narrow named invariant-preserving acquisition in RFC 0002,
+decision 125. It uses one local `&mut` binding, frozen entry evidence, immediate
+proof of every affected final invariant, and abort on unwind out of the acquisition
+call only. It does not adopt a general `open!` block. The discussion below records
+the earlier alternatives; the appended log records the decision without rewriting
+that history. Implementation remains in
+[invariant-preserving-loans-implementation](invariant-preserving-loans-implementation.md),
+and extensions are [later](invariant-loan-extensions.md).
 
 ## Question
 
@@ -148,3 +160,12 @@ A review found that RFC 0002's decision 66, under which an assignment to a field
 > tentatively confirm the 6 open questions
 
 RFC 0002's decision 91 records it. No rule and no example changes. It stays open to revisit (RFC 0002, item 26).
+
+### 2026-11-24, owner decision after the mutable-loan spike
+
+> Sounds good - Claude's view. With this, unless you have new findings/concerns, let's lock this design
+
+The owner asked for the design, spike code and future Locus workload to be committed
+and opened as a PR. RFC 0002 decision 125 records the chosen named acquisition;
+its implementation gates stay open, and pledges, unwind contracts and primitive
+no-unwind guarantees are later. This closes the decision, not the implementation.

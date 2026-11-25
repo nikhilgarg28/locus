@@ -1,0 +1,8 @@
+// Future smoke program; requires the study's OPEN library proofs to be completed.
+use locus_stdlib_study::interop_programs::{native_stack, wrapped_stack};
+fn main() {
+    let (native, native_proof) = native_stack();
+    let (wrapped, wrapped_proof) = wrapped_stack();
+    assert!(native == 20);
+    assert!(wrapped == 20);
+}

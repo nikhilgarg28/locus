@@ -1,0 +1,14 @@
+[package]
+name = "locus-mutable-loans-study"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.lc"
+
+[package.metadata.locus-study]
+status = "unverified-workload"
+requires = ["Locus compiler and prelude", "Region contract", "prefix support lemmas"]

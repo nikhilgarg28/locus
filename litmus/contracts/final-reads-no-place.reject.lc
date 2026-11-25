@@ -7,6 +7,6 @@ fn after_borrow() -> u32 {
     let r = &mut n;
     *r = 5;
     n = n + 1;
-    let was_five: @(final!(r) == 5) = _; //~ error: `final!` appears only in the propositions of a signature's result; to keep the value a borrow ended with, name it with `logic!` when the borrow ends
+    let was_five: @(final!(r) == 5) = _; //~ error: the loan named by `r` has ended; capture the current place to name its value after the loan
     n
 }

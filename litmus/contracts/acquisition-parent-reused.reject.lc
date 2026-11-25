@@ -1,0 +1,24 @@
+//~ question: Is a named acquisition reference rejected when runtime code uses it after its call?
+//~ spec: contracts.invariants.acquisition
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    data: (u32, u32),
+    valid: @(data.1 == 7),
+}
+
+fn bad(owner: &mut Tagged) {
+    let before = logic! { snap(owner.data) };
+    let old = owner.valid;
+    let r = &mut owner.data;
+    let (x, loan) = first_mut(r);
+    let kept: @(final!(r).1 == 7) = _;
+    *x = 3;
+    r.1 = 8; //~ error: acquisition binding `r` has a runtime use after its single call
+}

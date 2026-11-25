@@ -1,0 +1,22 @@
+//~ question: Can an independent callee guarantee restore an invariant when the acquisition loan ends at return?
+//~ spec: contracts.invariants.acquisition
+//~ rfc: 0002
+//~ run: one() => 1
+
+fn reset(value: &mut u32) -> @(final!(value) == 1) {
+    *value = 1;
+    _
+}
+struct Positive { value: u32, positive: @(value > 0) }
+fn reset_positive(owner: &mut Positive) {
+    let r = &mut owner.value;
+    let one = reset(r);
+    // No retained loan: the returned final-value fact now names the current value.
+    // `positive` is still suspended; only the independent result proves this.
+    let kept: @(owner.value > 0) = _;
+}
+fn one() -> u32 {
+    let mut owner = Positive { value: 9, positive: _ };
+    reset_positive(&mut owner);
+    owner.value
+}

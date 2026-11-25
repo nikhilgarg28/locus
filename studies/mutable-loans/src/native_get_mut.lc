@@ -1,0 +1,60 @@
+// M01/M02. Owner-adopted rule; support lemmas and compiler checking remain OPEN.
+// The acquisition is now permitted when its preservation obligation is proved.
+// No Locus parser, type checker or kernel has checked this source.
+use crate::support::*;
+
+pub struct Vec<T: Snapshot> {
+    storage: Region<T>,
+    len: usize,
+    valid: @prefix(Region::cells(storage),len),
+}
+// T: Snapshot is retained here to isolate I01. Removing the declaration bound
+// requires I10's conditional proof-storage work; this is not a new API decision.
+impl<T: Snapshot> Vec<T> {
+    #[verified]
+    pub fn get_mut_checked(&mut self, i: usize, inside: @(i<self.len))
+        -> (x: &mut T,
+            @(final!(self).len === self.len
+              && Region::cells(final!(self).storage) ===
+                 Region::cells(self.storage).update(i,Maybe::Some(final!(x)))))
+    {
+        // Frozen evidence, before the invariant dependency is suspended.
+        let before = snap(self.storage);
+        let shape = self.valid;
+        let n = self.len;
+        let initialized = initialized_at(Region::cells(before),n,i,shape,inside);
+
+        // Proposed acquisition binding: immutable, one runtime use.
+        let r = &mut self.storage;
+        let (x, loan) = r.borrow_mut_checked(i, initialized);
+
+        // Proof-only final terms. No extra snap(final!(...)) or logic! needed.
+        // Lowering protects acquisition unwind; no runtime action may precede
+        // this restoration certificate. Reading self.valid here is forbidden.
+        let kept: @prefix(Region::cells(final!(r)),n) =
+            prefix_after_loan(Region::cells(before),Region::cells(final!(r)),
+                              n,i,final!(x),shape,inside,loan);
+        // OPEN elaboration detail: associate kept with this acquisition's
+        // invariant obligation; do not assign it to a still-suspended field.
+        (x, _)
+    }
+}
+
+// M02: an enclosing invariant that really follows from the inner contract.
+struct Nonempty<T: Snapshot> {
+    v: Vec<T>,
+    nonempty: @(v.len > 0),
+}
+impl<T: Snapshot> Nonempty<T> {
+    #[verified]
+    fn first_mut(&mut self) -> (x: &mut T, @(final!(self).v.len === self.v.len)) {
+        let before = snap(self.v);
+        let old_nonempty = self.nonempty;
+        let r = &mut self.v;
+        let (x, relation) = r.get_mut_checked(0, _);
+        let kept: @(final!(r).len > 0) = _;
+        // Obligation for v.valid was handled inside get_mut_checked. This
+        // boundary separately owes nonempty; a stronger parent may fail.
+        (x, _)
+    }
+}

@@ -1,0 +1,37 @@
+// DESIGN INPUT, NOT COMPILED. Imports the previous spike's Seq/Maybe model.
+// Region declarations are the same assumed permission interface, not new axioms
+// adopted by Locus. Pure lemma declarations below are obligations to implement
+// and replay in the eventual kernel, not trusted library implementations.
+pub use locus::logic::{Seq, Maybe};
+
+pub struct Region<T>;
+impl<T: Snapshot> Region<T> {
+    pub logic fn cells(s: Snap<Self>) -> Seq<Maybe<Snap<T>>>;
+    #[verified]
+    pub fn borrow_mut_checked(&mut self, i: usize,
+        initialized: @(exists |a: Snap<T>|
+            Self::cells(self).get(i) === Maybe::Some(Maybe::Some(a))))
+        -> (x: &mut T,
+            @(Self::cells(final!(self)) ===
+                Self::cells(self).update(i, Maybe::Some(final!(x)))));
+}
+
+pub logic fn prefix<A: Logical>(s: Seq<Maybe<A>>, n: Nat) -> Prop {
+    n <= s.len()
+    && (forall |i: Nat| i < n ==>
+        (exists |a: A| s.get(i) === Maybe::Some(Maybe::Some(a))))
+    && (forall |i: Nat| n <= i && i < s.len() ==>
+        s.get(i) === Maybe::Some(Maybe::None))
+}
+
+// Needed from the Seq lemma library. vc01 checks the corresponding unbounded
+// array/initialization formula, not this .lc theorem body or its translation.
+pub logic fn prefix_after_loan<A: Logical>(before: Seq<Maybe<A>>,
+    after: Seq<Maybe<A>>, n: Nat, i: Nat, value: A,
+    shape: @prefix(before,n), inside: @(i<n),
+    relation: @(after === before.update(i,Maybe::Some(value))))
+    -> @prefix(after,n);
+
+pub logic fn initialized_at<A: Logical>(before: Seq<Maybe<A>>, n: Nat, i: Nat,
+    shape: @prefix(before,n), inside: @(i<n))
+    -> @(exists |a: A| before.get(i) === Maybe::Some(Maybe::Some(a)));

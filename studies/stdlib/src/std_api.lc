@@ -1,0 +1,53 @@
+// PROPOSED TRUSTED NATIVE ADAPTER INTERFACES. They do not make std methods pure,
+// do not unfold runtime code, and do not make std Vec's raw layout observable.
+// Native::observe below is an abstract library specification, not a user-defined
+// Snapshot. These abstract observers/bridges are an explicit extra trust boundary.
+use crate::seq::{Seq,Maybe};
+use crate::map::Map;
+use crate::laws::{KeySpec,TotalOrd,HashEq};
+
+pub trait NativeVector<T: Snapshot>: Snapshot {
+    logic fn contents(s: Snap<Self>) -> Seq<Snap<T>>;
+    fn empty_checked()->(v:Self,@(Self::contents(snap(v))===Seq::Nil));
+    fn len_checked(&self)->(n:usize,@(n===Self::contents(snap(self)).len()));
+    fn push_checked(&mut self,x:T)
+        -> @(Self::contents(snap(final!(self)))===Self::contents(snap(self)).push(snap(x)));
+    fn pop_checked(&mut self)->(out:Option<T>,@(match out {
+        None=>Self::contents(snap(self)).len()==0
+            && Self::contents(snap(final!(self)))===Self::contents(snap(self)),
+        Some(x)=>Self::contents(snap(self)).get((Self::contents(snap(self)).len()-1).as_nat(_))===Maybe::Some(snap(x))
+            && Self::contents(snap(final!(self)))===Self::contents(snap(self)).take((Self::contents(snap(self)).len()-1).as_nat(_)),
+    }));
+    fn get_checked(&self,i:usize,p:@(i<Self::contents(snap(self)).len()))
+        ->(x:&T,@(Self::contents(snap(self)).get(i)===Maybe::Some(snap(x))));
+    fn set_checked(&mut self,i:usize,x:T,p:@(i<Self::contents(snap(self)).len()))
+        ->@(Self::contents(snap(final!(self)))===Self::contents(snap(self)).update(i,snap(x)));
+}
+// BLOCKER: std Vec<T> has no contents-bearing Snapshot in the baseline.
+// Thus the trait above is an interface proposal, NOT an implementable downstream
+// impl for std Vec. A library-private trusted relation over native state is one
+// option; an external-spec mechanism is another. A stored ghost Seq alone does
+// not supply these contracts. The wrapper algorithms in 06 expose this boundary.
+
+// Sealed certificates: a user must NOT be able to assert either bridge merely
+// by writing an empty impl. This spike admits u32 only, as a trusted whitelist.
+// General user-type certification is the still-open adapter/contract mechanism.
+mod bridge_authority {
+    pub trait OrdCertified {}
+    pub trait HashCertified {}
+    impl OrdCertified for u32 {}
+    impl HashCertified for u32 {}
+}
+pub trait StdOrdBridge: TotalOrd + std::cmp::Ord + bridge_authority::OrdCertified {
+    // This must relate the actual resolved std::Ord implementation, not just
+    // introduce another comparison. There is no accepted Locus member spelling
+    // for "the result of this arbitrary runtime call". An adapter identity is
+    // therefore REQUIRED metadata, left explicit here as an open interface gate.
+}
+pub trait StdHashBridge: HashEq + std::cmp::Eq + std::hash::Hash + bridge_authority::HashCertified {
+    // Requires std equality iff KeySpec equality, and equal keys write equivalent
+    // hash input for a common hasher state/seed. A single u64 hash result is not a
+    // specification of arbitrary H:Hasher. No blanket trusted implementation.
+}
+impl StdOrdBridge for u32 {} // TRUST: actual std u32 Ord agrees with KeySpec
+impl StdHashBridge for u32 {} // TRUST: actual std u32 Eq/Hash agree with KeySpec

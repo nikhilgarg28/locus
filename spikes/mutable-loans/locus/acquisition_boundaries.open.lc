@@ -1,0 +1,22 @@
+// M21-M24. Candidate rejection policy for deferred acquisition, not a blanket
+// assertion that every synchronous function returning a future is unsound.
+
+// M21 EXPECT REJECTION: acquisition itself is awaited.
+let r = &mut self.storage;
+let (x,loan) = acquire(r).await;
+
+// M22 EXPECT REJECTION under the initial scope: no preservation relation is
+// available now; later polling can invalidate state and then be cancelled.
+let r = &mut self.storage;
+let future = acquire_later(r);
+
+// M23 EXPECT REJECTION under the initial scope: the closure may mutate later.
+let r = &mut self.storage;
+let closure = acquire_on_call(r);
+
+// M24 ARGUMENT-PANIC BOUNDARY: arguments are evaluated once before the protected
+// call. Named r is active, but has not mutated storage. A panic here unwinds
+// normally; a panic escaping borrow_mut_checked aborts. After normal acquisition
+// and proof discharge, a caller panic unwinds normally with valid owner shape.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(may_panic(),_);

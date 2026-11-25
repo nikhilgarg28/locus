@@ -1,0 +1,901 @@
+[
+  {
+    "name": "rustc-version",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--version",
+      "--verbose"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-unit-debug",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "--test",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-debug"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "unit-debug",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-debug"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-probes-debug",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-success",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "success"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-forget_reference",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "forget_reference"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-forget_repair_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "forget_repair_guard"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-panic_acquire_changed",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "panic_acquire_changed"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "debug-panic_acquire_unchanged",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "panic_acquire_unchanged"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "debug-callee_cleanup",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "callee_cleanup"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "debug-panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-panic_argument_outside",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "panic_argument_outside"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-panic_argument_broad_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "panic_argument_broad_guard"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "debug-result_drop",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "result_drop"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-deferred_closure",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "deferred_closure"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-future_cancellation",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "future_cancellation"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-two_phase",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "two_phase"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-named_acquisition",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "named_acquisition"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-named_argument_panic",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "named_argument_panic"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "debug-native_panic_acquire",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "native_panic_acquire"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "debug-native_panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-debug",
+      "native_panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-unit-optimized",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "-O",
+      "--test",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-optimized"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "unit-optimized",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-optimized"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-probes-optimized",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "-O",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-success",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "success"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-forget_reference",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "forget_reference"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-forget_repair_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "forget_repair_guard"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-panic_acquire_changed",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "panic_acquire_changed"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "optimized-panic_acquire_unchanged",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "panic_acquire_unchanged"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "optimized-callee_cleanup",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "callee_cleanup"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "optimized-panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-panic_argument_outside",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "panic_argument_outside"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-panic_argument_broad_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "panic_argument_broad_guard"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "optimized-result_drop",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "result_drop"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-deferred_closure",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "deferred_closure"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-future_cancellation",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "future_cancellation"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-two_phase",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "two_phase"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-named_acquisition",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "named_acquisition"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-named_argument_panic",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "named_argument_panic"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "optimized-native_panic_acquire",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "native_panic_acquire"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "optimized-native_panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-optimized",
+      "native_panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-unit-asan",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "-Zsanitizer=address",
+      "-Cdebuginfo=1",
+      "-Copt-level=1",
+      "--test",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-asan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "unit-asan",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/unit-asan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "build-probes-asan",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "-Cpanic=unwind",
+      "-Zsanitizer=address",
+      "-Cdebuginfo=1",
+      "-Copt-level=1",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-success",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "success"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-forget_reference",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "forget_reference"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-forget_repair_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "forget_repair_guard"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-panic_acquire_changed",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "panic_acquire_changed"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "asan-panic_acquire_unchanged",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "panic_acquire_unchanged"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "asan-callee_cleanup",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "callee_cleanup"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "asan-panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-panic_argument_outside",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "panic_argument_outside"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-panic_argument_broad_guard",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "panic_argument_broad_guard"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "asan-result_drop",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "result_drop"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-deferred_closure",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "deferred_closure"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-future_cancellation",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "future_cancellation"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-two_phase",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "two_phase"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-named_acquisition",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "named_acquisition"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-named_argument_panic",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "named_argument_panic"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "asan-native_panic_acquire",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "native_panic_acquire"
+    ],
+    "code": -6,
+    "expected_code": -6,
+    "passed": true
+  },
+  {
+    "name": "asan-native_panic_after_return",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes-asan",
+      "native_panic_after_return"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "reject-owner_read_during_loan",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/owner_read_during_loan.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/owner_read_during_loan"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "reject-parent_write_with_live_child",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/parent_write_with_live_child.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/parent_write_with_live_child"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "reject-named_borrow_then_owner_argument",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/named_borrow_then_owner_argument.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_borrow_then_owner_argument"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "reject-free_function_argument_order",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/free_function_argument_order.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/free_function_argument_order"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "reject-guard_local_reference",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/guard_local_reference.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/guard_local_reference"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "reject-naive_final_reads_suspended",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/naive_final_reads_suspended.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/naive_final_reads_suspended"
+    ],
+    "code": 1,
+    "expected_code": 1,
+    "passed": true
+  },
+  {
+    "name": "accept-final_token_before_loan",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/final_token_before_loan.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/final_token_before_loan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-final_token_before_loan",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/final_token_before_loan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "accept-method_two_phase",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/method_two_phase.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/method_two_phase"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-method_two_phase",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/method_two_phase"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "accept-move_closure_returning_loan",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/move_closure_returning_loan.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/move_closure_returning_loan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-move_closure_returning_loan",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/move_closure_returning_loan"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "accept-named_precomputed_arguments",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/named_precomputed_arguments.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_precomputed_arguments"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-named_precomputed_arguments",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_precomputed_arguments"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "accept-named_receiver_read_in_argument",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/named_receiver_read_in_argument.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_receiver_read_in_argument"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-named_receiver_read_in_argument",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_receiver_read_in_argument"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "accept-named_receiver_reused",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_pass/named_receiver_reused.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_receiver_reused"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "execute-named_receiver_reused",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/named_receiver_reused"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "smt-vcs",
+    "command": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+      "logic/check_vcs.py"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "emit-mir",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "--emit=mir",
+      "rust/probes.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/probes.mir"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  },
+  {
+    "name": "emit-cost-assembly",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "--crate-type=lib",
+      "-O",
+      "--emit=asm",
+      "rust/cost.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/mutable-loans/target/cost.s"
+    ],
+    "code": 0,
+    "expected_code": 0,
+    "passed": true
+  }
+]

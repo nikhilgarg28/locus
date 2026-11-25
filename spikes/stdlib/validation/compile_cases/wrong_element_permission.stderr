@@ -1,0 +1,19 @@
+error[E0308]: mismatched types
+  --> /workspace/locus-loans-pr/spikes/stdlib/validation/compile_cases/wrong_element_permission.rs:1:133
+   |
+ 1 | ...);let b=Region::<u64>::allocate(1);a.write(b.pointer(),0,1);}
+   |                                         ----- ^^^^^^^^^^^ expected `Ptr<u32>`, found `Ptr<u64>`
+   |                                         |
+   |                                         arguments to this method are incorrect
+   |
+   = note: expected struct `Ptr<u32>`
+              found struct `Ptr<u64>`
+note: method defined here
+  --> src/permission.rs:69:12
+   |
+69 |     pub fn write(&mut self, p: Ptr<T>, i: usize, value: T) {
+   |            ^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0308`.

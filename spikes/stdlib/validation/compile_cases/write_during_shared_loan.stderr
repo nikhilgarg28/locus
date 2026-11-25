@@ -1,0 +1,12 @@
+error[E0502]: cannot borrow `r` as mutable because it is also borrowed as immutable
+ --> /workspace/locus-loans-pr/spikes/stdlib/validation/compile_cases/write_during_shared_loan.rs:1:149
+  |
+1 | ...();r.write(p,0,1);let a=r.read(p,0);let b=r.take(p,0);println!("{} {}",a,b);}
+  |                            -                 ^^^^^^^^^^^                  - immutable borrow later used here
+  |                            |                 |
+  |                            |                 mutable borrow occurs here
+  |                            immutable borrow occurs here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0502`.

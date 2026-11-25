@@ -1,0 +1,7 @@
+{
+  "name": "address_sanitizer",
+  "exit_code": 0,
+  "tests_passed": 32,
+  "target": "x86_64-unknown-linux-gnu",
+  "command": "RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Zsanitizer=address' CARGO_TARGET_DIR=/tmp/locus-stdlib-asan cargo test --offline --target x86_64-unknown-linux-gnu"
+}

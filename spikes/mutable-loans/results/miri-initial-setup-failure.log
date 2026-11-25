@@ -1,0 +1,5 @@
+I will run `"rustup" "component" "add" "rust-src"` to install the `rust-src` component for the selected toolchain. Proceed? [Y/n] info: downloading component rust-src
+Preparing a sysroot for Miri (target: x86_64-unknown-linux-gnu)... fatal error: failed to build sysroot: failed to create target directory
+
+Caused by:
+    Read-only file system (os error 30)

@@ -1,0 +1,12 @@
+error[E0382]: borrow of moved value: `r`
+ --> /workspace/locus-loans-pr/spikes/stdlib/validation/compile_cases/use_after_free.rs:1:102
+  |
+1 | use locus_stdlib_spike::permission::Region; fn main(){let r=Region::<u32>::allocate(1);drop(r);let _=r.pointer();}
+  |                                                           -                                 -        ^ value borrowed here after move
+  |                                                           |                                 |
+  |                                                           |                                 value moved here
+  |                                                           move occurs because `r` has type `Region<u32>`, which does not implement the `Copy` trait
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0382`.

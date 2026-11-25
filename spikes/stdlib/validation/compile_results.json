@@ -1,0 +1,47 @@
+[
+  {
+    "case": "copy_permission",
+    "expected": "E0382",
+    "rejected": true
+  },
+  {
+    "case": "use_after_free",
+    "expected": "E0382",
+    "rejected": true
+  },
+  {
+    "case": "two_mutable_loans",
+    "expected": "E0499",
+    "rejected": true
+  },
+  {
+    "case": "write_during_shared_loan",
+    "expected": "E0502",
+    "rejected": true
+  },
+  {
+    "case": "rc_is_not_send",
+    "expected": "E0277",
+    "rejected": true
+  },
+  {
+    "case": "arc_of_cell_is_not_send",
+    "expected": "E0277",
+    "rejected": true
+  },
+  {
+    "case": "mutex_guard_not_send",
+    "expected": "E0277",
+    "rejected": true
+  },
+  {
+    "case": "native_handoff_reference_escape",
+    "expected": "lifetime",
+    "rejected": true
+  },
+  {
+    "case": "wrong_element_permission",
+    "expected": "E0308",
+    "rejected": true
+  }
+]

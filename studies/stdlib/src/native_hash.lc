@@ -1,0 +1,209 @@
+// Native open-addressing algorithm candidate in Locus syntax.
+// Table is the temporarily open representation; public HashMap stores its proof.
+// Proof-bearing signatures are supplied; unresolved `_` are genuine obligations.
+use crate::native_vec::Vec;
+use crate::seq::{Seq,Maybe};
+use crate::map::Map;
+use crate::laws::HashEq;
+
+enum Bucket<K,V>{Empty,Deleted,Full{hash:u64,key:K,value:V}}
+logic fn table_map<K:HashEq,V:Snapshot>(s:Seq<Snap<Bucket<K,V>>>)->Map<K::Key,Snap<V>>{
+    match s{Seq::Nil=>Map::empty(),Seq::Cons(b,tail)=>{
+        let rest=table_map::<K,V>(tail);
+        match b{Bucket::Empty=>rest,Bucket::Deleted=>rest,
+            Bucket::Full{hash,key,value}=>rest.insert(K::key(key),value)}
+    }}
+}
+struct Table<K:HashEq,V:Snapshot>{buckets:Vec<Bucket<K,V>>,len:usize,used:usize}
+impl<K:HashEq,V:Snapshot> Table<K,V>{
+    pub logic fn model(s:Snap<Self>)->Map<K::Key,Snap<V>>{table_map::<K,V>(s.buckets.elements())}
+    #[verified]
+    fn vacant(cap:usize)->(b:Vec<Bucket<K,V>>,
+        @(b.elements().len()===cap && (forall |i:Nat| i<cap ==> b.elements().get(i)===Maybe::Some(Bucket::Empty))))
+    {
+        let(mut b,empty)=Vec::empty();let mut i:usize=0;
+        let mut count:@(i<=cap && b.elements().len()===i)=_;
+        while i<cap{let added=b.push_checked(Bucket::Empty);i+=1;count=_;}
+        (b,_) // OPEN: explicit forall invariant, append-read lemma and transport.
+    }
+    #[verified]
+    pub fn new()->Self{let(buckets,empty)=Self::vacant(8);Table{buckets,len:0,used:0}}
+    #[verified]
+    fn find_checked(&self,key:&K,hash:u64)->(found:bool,at:usize,
+        @(at<self.buckets.elements().len()))
+    {
+        let(cap,count)=self.buckets.len_checked();
+        let mut i=(hash as usize)%cap;let mut visited:usize=0;let mut deleted=None;
+        let mut bounds:@(i<cap && visited<=cap)=_;
+        while visited<cap{
+            let(bucket,located)=self.buckets.get_checked(i,_);
+            match bucket{
+                Bucket::Empty=>return(false,match deleted{Some(j)=>j,None=>i},_),
+                Bucket::Deleted=>{if let None=deleted{deleted=Some(i);}},
+                Bucket::Full{hash:stored,key:stored_key,value}=>{
+                    if *stored==hash{
+                        let(same,equal)=stored_key.eq_checked(key);
+                        if same{return(true,i,_);}
+                    }
+                }
+            }
+            i=if i==cap-1{0}else{i+1};visited+=1;bounds=_;
+        }
+        match deleted{Some(i)=>(false,i,_),None=>panic!("load invariant")}
+        // OPEN: strengthen result with hit/absence theorem, and loop with a
+        // no-match visited interval. Existing HashEq alone cannot fill that gap.
+    }
+    #[verified]
+    fn insert_rehashed(&mut self,hash:u64,key:K,value:V){
+        let(cap,count)=self.buckets.len_checked();let mut i=(hash as usize)%cap;
+        loop{
+            let empty={let(b,p)=self.buckets.get_checked(i,_);match b{Bucket::Empty=>true,_=>false}};
+            if empty{break;}
+            i=if i==cap-1{0}else{i+1};
+        }
+        let(old,written)=self.buckets.set_checked(i,Bucket::Full{hash,key,value},_);
+        self.len+=1;self.used+=1;
+    }
+    #[verified]
+    fn grow_checked(&mut self)->@(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)))){
+        let(cap,count)=self.buckets.len_checked();
+        let next=match cap.checked_mul(2){Some(n)=>n,None=>panic!("capacity overflow")};
+        let(fresh,vacant)=Self::vacant(next);
+        // The whole old table is owned, so no key/value Clone bound is needed.
+        let mut old=std::mem::replace(&mut self.buckets,fresh);
+        // OPEN boundary: plain mem::replace of a sealed Vec returns no equation.
+        // Use a checked replace primitive or take_out/put to preserve that fact.
+        self.len=0;self.used=0;
+        loop{
+            let(bucket,removed)=old.pop_checked();
+            match bucket{
+                None=>break,
+                Some(Bucket::Full{hash,key,value})=>self.insert_rehashed(hash,key,value),
+                _=>{},
+            }
+        }
+        _ // OPEN: fold-map union invariant over moved and remaining buckets.
+    }
+    #[verified]
+    pub fn insert_checked(&mut self,key:K,value:V)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).insert(K::key(snap(key)),snap(value)))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(hash,hashed)=key.hash_checked();let(cap,count)=self.buckets.len_checked();
+        if self.used>=cap/2{let preserved=self.grow_checked();}
+        let(found,i,located)=self.find_checked(&key,hash);
+        if found{
+            let(old,taken)=self.buckets.set_checked(i,Bucket::Empty,_);
+            match old{
+                Bucket::Full{hash:old_hash,key:old_key,value:old_value}=>{
+                    let(vacant,written)=self.buckets.set_checked(i,Bucket::Full{hash:old_hash,key:old_key,value},_);
+                    (Some(old_value),_)
+                }
+                _=>panic!("probe invariant"),
+            }
+        }else{
+            let(old,written)=self.buckets.set_checked(i,Bucket::Full{hash,key,value},_);
+            if let Bucket::Empty=old{self.used+=1;}
+            self.len+=1;(None,_)
+        }
+    }
+    #[verified]
+    pub fn get_checked(&self,key:&K)->(out:Option<&V>,@(match out{
+        None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+        Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v)),
+    })){
+        let(hash,hashed)=key.hash_checked();let(found,i,located)=self.find_checked(key,hash);
+        if !found{return(None,_);}
+        let(bucket,at)=self.buckets.get_checked(i,_);
+        match bucket{Bucket::Full{hash,key,value}=>(Some(value),_),_=>panic!("probe invariant")}
+    }
+    #[verified]
+    pub fn remove_checked(&mut self,key:&K)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).remove(K::key(snap(key))))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(hash,hashed)=key.hash_checked();let(found,i,located)=self.find_checked(key,hash);
+        if !found{return(None,_);}
+        let(bucket,removed)=self.buckets.set_checked(i,Bucket::Deleted,_);
+        self.len-=1;
+        match bucket{Bucket::Full{hash,key,value}=>(Some(value),_),_=>panic!("probe invariant")}
+    }
+    #[verified]
+    pub fn insert(&mut self,key:K,value:V)->Option<V>{self.insert_checked(key,value).0}
+    #[verified]
+    pub fn get(&self,key:&K)->Option<&V>{self.get_checked(key).0}
+    #[verified]
+    pub fn remove(&mut self,key:&K)->Option<V>{self.remove_checked(key).0}
+}
+// Model omits bucket positions, cached hashes, capacity, and tombstones. The
+// representation proof must still connect all four to lookup correctness.
+// Runtime Eq/Hash without laws can be memory-safe but cannot discharge it.
+
+// Counts and reachability are separate from the abstract finite map. Without
+// these facts the public lookup claim is false for a malformed private Table.
+logic fn occupied<K:HashEq,V:Snapshot>(s:Seq<Snap<Bucket<K,V>>>)->Nat {
+    match s{Seq::Nil=>0,Seq::Cons(h,t)=>match h{
+        Bucket::Full{hash,key,value}=>1+occupied::<K,V>(t),_=>occupied::<K,V>(t)}}
+}
+logic fn used_count<K:HashEq,V:Snapshot>(s:Seq<Snap<Bucket<K,V>>>)->Nat {
+    match s{Seq::Nil=>0,Seq::Cons(h,t)=>match h{
+        Bucket::Empty=>used_count::<K,V>(t),_=>1+used_count::<K,V>(t)}}
+}
+logic fn key_list<K:HashEq,V:Snapshot>(s:Seq<Snap<Bucket<K,V>>>)->Seq<K::Key> {
+    match s{Seq::Nil=>Seq::Nil,Seq::Cons(h,t)=>match h{
+        Bucket::Full{hash,key,value}=>Seq::Cons(K::key(key),key_list::<K,V>(t)),_=>key_list::<K,V>(t)}}
+}
+logic fn pow2(n:Nat)->Nat {if n==0{1}else{2*pow2((n-1).as_nat(_))}}
+logic fn representation<K:HashEq,V:Snapshot>(t:Snap<Table<K,V>>)->Prop {
+    let b=t.buckets.elements();let cap=b.len();
+    if cap==0 {False} else {
+        cap>=8 && occupied::<K,V>(b)==t.len && used_count::<K,V>(b)==t.used
+        && t.len<=t.used && t.used<=cap/2 && key_list::<K,V>(b).unique()
+        && (forall |i:Nat| i<cap ==> match b.get(i){
+            Maybe::Some(Bucket::Full{hash,key,value})=>{
+                let start=(hash % pow2(usize::BITS)) % cap;
+                let distance=if i>=start{(i-start).as_nat(_)}else{(cap-start+i).as_nat(_)};
+                hash===K::code(K::key(key)) && (forall |j:Nat| j<distance ==>
+                    b.get((start+j)%cap)!==Maybe::Some(Bucket::Empty))
+            },_=>True,
+        })
+    }
+}
+pub struct HashMap<K:HashEq,V:Snapshot>{table:Table<K,V>,valid:@representation::<K,V>(snap(table))}
+impl<K:HashEq,V:Snapshot> HashMap<K,V>{
+    pub logic fn model(s:Snap<Self>)->Map<K::Key,Snap<V>>{Table::model(s.table)}
+    #[verified] pub fn new()->Self{HashMap{table:Table::new(),valid:_}}
+    #[verified]
+    pub fn insert_checked(&mut self,key:K,value:V)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).insert(K::key(snap(key)),snap(value)))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(slot,previous,was)=mem::take_out(self);let HashMap{mut table,valid}=previous;
+        let(old,updated)=table.insert_checked(key,value);
+        slot.put(HashMap{table,valid:_});(old,_)
+    }
+    #[verified]
+    pub fn get_checked(&self,key:&K)->(out:Option<&V>,@(match out{
+        None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+        Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v)),
+    })){let(out,found)=self.table.get_checked(key);(out,_)}
+    #[verified]
+    pub fn remove_checked(&mut self,key:&K)->(old:Option<V>,
+        @(Self::model(snap(final!(self))).equivalent(Self::model(snap(self)).remove(K::key(snap(key))))
+            && (match old{None=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>Self::model(snap(self)).get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let(slot,previous,was)=mem::take_out(self);let HashMap{mut table,valid}=previous;
+        let(old,updated)=table.remove_checked(key);
+        slot.put(HashMap{table,valid:_});(old,_)
+    }
+}
+// OPEN PROOF INTERFACE: Table's helpers above must TAKE representation as a
+// precondition and RETURN its restoration, not merely abstract-map equations.
+// As written, their current proof holes cannot be filled for arbitrary Table
+// values; they are proof-development targets, not accepted verified functions.
+// The facade shows where a caller owns that evidence and closes the invariant.
+// No returned mutable element loan escapes this take_out/put operation.

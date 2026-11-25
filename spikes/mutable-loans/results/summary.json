@@ -1,0 +1,14 @@
+{
+  "rust_unit_tests_per_variant": 15,
+  "runtime_scenarios_per_variant": 17,
+  "variants": [
+    "debug",
+    "optimized",
+    "asan"
+  ],
+  "rust_compile_rejections": 6,
+  "rust_compile_acceptances": 6,
+  "smt_queries": 17,
+  "locus_programs_compiled": 0,
+  "all_commands_matched_expectations": true
+}

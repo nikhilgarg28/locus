@@ -1,0 +1,93 @@
+[
+  {
+    "path": "locus/00-seq.lc",
+    "bytes": 6176,
+    "sha256": "d0f18a2b3f4134c1a6c2f3cd613c8f3321ba32742bbebb8588272156539af6bd",
+    "lines": 163,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/01-map.lc",
+    "bytes": 5238,
+    "sha256": "7d86227d71c83d7bc562022a67b26cb31591f58d5b1cd3d1de886478d5be1d13",
+    "lines": 120,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/02-laws.lc",
+    "bytes": 3352,
+    "sha256": "ddb0e9ac489105cc9df0b767cbd302d66c78ee372f124f8e52e7f124622c2ca5",
+    "lines": 73,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/03-permissions.lc",
+    "bytes": 3962,
+    "sha256": "d9c8d7922ef04304b35ffa76100bac7a9d70a6e73fbff906a00330208b85abc5",
+    "lines": 70,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/04-std-api.lc",
+    "bytes": 3293,
+    "sha256": "dfe213906e6c72e1d63accd49d12960b4224f4e359f5d92b764d51711ba7d58c",
+    "lines": 53,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/05-native-vec.lc",
+    "bytes": 6889,
+    "sha256": "3f8e0cc8d265b8c69f8cbf3cb58921b5ac02b7d5b4758e5bdd85610b1ea22e23",
+    "lines": 163,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/06-wrapped-vec.lc",
+    "bytes": 4500,
+    "sha256": "e6a7ca1c166fb74e5055d2545acd4f46f9fe2f4345e9f6ed626129b0d7005033",
+    "lines": 99,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/08-boxes.lc",
+    "bytes": 2548,
+    "sha256": "1e46ac6f36cffe62f40880b2b2e82262cfc200f8330130fdf0d62dce18e6042e",
+    "lines": 60,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/09-btree-algorithm.lc",
+    "bytes": 16401,
+    "sha256": "949b729da1ff642837a0e51d1355db292493f22d3b8172894d1717fa417581c5",
+    "lines": 304,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/10-hash-algorithm.lc",
+    "bytes": 11010,
+    "sha256": "7cb2437a48f6936ec31c72cc6cb5a411c8d066414b289adfcf23c921c3e738d2",
+    "lines": 209,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/11-wrapped-maps.lc",
+    "bytes": 5132,
+    "sha256": "c38d7debe01818419d14ca066820384342c90f837430590be7711b40e52fbe93",
+    "lines": 96,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/12-interior-and-sharing.lc",
+    "bytes": 9410,
+    "sha256": "02032f06dda5387bacb7d89e6853c46f5a3938376aaa4858834a98845f9fb722",
+    "lines": 183,
+    "status": "unverified Locus candidate"
+  },
+  {
+    "path": "locus/13-interop-programs.lc",
+    "bytes": 4226,
+    "sha256": "a0bf7f1e71f5c0ab9b095577d4142e75ee501a8d920810a73459ba3ece851612",
+    "lines": 98,
+    "status": "unverified Locus candidate"
+  }
+]

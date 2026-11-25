@@ -1,0 +1,163 @@
+// PRIMARY LOCUS SOURCE. Pure, erased sequence data; no native Vec underneath.
+// `_` means an ordinary proof hole, NOT an assumed theorem. These candidates
+// have not been checked by a Locus compiler. Recursive proof calls are explicit.
+
+#[derive(Logical)]
+pub enum Maybe<A: Logical> { None, Some(A) }
+
+#[derive(Logical)]
+pub enum Seq<A: Logical> { Nil, Cons(A, Seq<A>) }
+
+impl<A: Logical> Seq<A> {
+    pub logic fn empty() -> Self { Seq::Nil }
+    pub logic fn len(self) -> Nat {
+        match self { Seq::Nil => 0, Seq::Cons(_, tail) => 1 + tail.len() }
+    }
+    pub logic fn get(self, i: Nat) -> Maybe<A> {
+        match self {
+            Seq::Nil => Maybe::None,
+            Seq::Cons(head, tail) => if i == 0 { Maybe::Some(head) }
+                else { tail.get((i - 1).as_nat(_)) },
+        }
+    }
+    pub logic fn push(self, x: A) -> Self {
+        match self {
+            Seq::Nil => Seq::Cons(x, Seq::Nil),
+            Seq::Cons(head, tail) => Seq::Cons(head, tail.push(x)),
+        }
+    }
+    pub logic fn concat(self, right: Self) -> Self {
+        match self {
+            Seq::Nil => right,
+            Seq::Cons(head, tail) => Seq::Cons(head, tail.concat(right)),
+        }
+    }
+    pub logic fn take(self, n: Nat) -> Self {
+        match self {
+            Seq::Nil => Seq::Nil,
+            Seq::Cons(head, tail) => if n == 0 { Seq::Nil }
+                else { Seq::Cons(head, tail.take((n - 1).as_nat(_))) },
+        }
+    }
+    pub logic fn skip(self, n: Nat) -> Self {
+        match self {
+            Seq::Nil => Seq::Nil,
+            Seq::Cons(head, tail) => if n == 0 { Seq::Cons(head, tail) }
+                else { tail.skip((n - 1).as_nat(_)) },
+        }
+    }
+    pub logic fn update(self, i: Nat, x: A) -> Self {
+        match self {
+            Seq::Nil => Seq::Nil,
+            Seq::Cons(head, tail) => if i == 0 { Seq::Cons(x, tail) }
+                else { Seq::Cons(head, tail.update((i - 1).as_nat(_), x)) },
+        }
+    }
+    pub logic fn insert(self, i: Nat, x: A) -> Self {
+        // Out-of-range insert appends. Collection contracts require i <= len.
+        match self {
+            Seq::Nil => Seq::Cons(x, Seq::Nil),
+            Seq::Cons(head, tail) => if i == 0 { Seq::Cons(x, self) }
+                else { Seq::Cons(head, tail.insert((i - 1).as_nat(_), x)) },
+        }
+    }
+    pub logic fn remove(self, i: Nat) -> Self {
+        match self {
+            Seq::Nil => Seq::Nil,
+            Seq::Cons(head, tail) => if i == 0 { tail }
+                else { Seq::Cons(head, tail.remove((i - 1).as_nat(_))) },
+        }
+    }
+    pub logic fn map<B: Logical>(self, f: logic fn(A) -> B) -> Seq<B> {
+        match self {
+            Seq::Nil => Seq::Nil,
+            Seq::Cons(head, tail) => Seq::Cons(f(head), tail.map(f)),
+        }
+    }
+    pub logic fn contains(self, x: A) -> Prop {
+        match self { Seq::Nil => False,
+            Seq::Cons(head, tail) => head === x || tail.contains(x) }
+    }
+    pub logic fn unique(self) -> Prop {
+        match self { Seq::Nil => True,
+            Seq::Cons(head, tail) => !tail.contains(head) && tail.unique() }
+    }
+}
+
+// Examples of proof-library development, not extra solver axioms.
+pub logic fn len_push<A: Logical>(s: Seq<A>, x: A)
+    -> @(s.push(x).len() == s.len() + 1)
+{
+    match s {
+        Seq::Nil => _,
+        Seq::Cons(head, tail) => {
+            let ih = len_push(tail, x);
+            let push_step = eq::unfold(Seq::push)(s, x);
+            let len_step = eq::unfold(Seq::len)(s);
+            _
+        }
+    }
+}
+pub logic fn len_update<A: Logical>(s: Seq<A>, i: Nat, x: A)
+    -> @(s.update(i, x).len() == s.len())
+{
+    match s {
+        Seq::Nil => _,
+        Seq::Cons(head, tail) => if i == 0 { _ } else {
+            let ih = len_update(tail, (i - 1).as_nat(_), x);
+            let step = eq::unfold(Seq::update)(s, i, x);
+            _
+        },
+    }
+}
+pub logic fn get_update_at<A: Logical>(s: Seq<A>, i: Nat, x: A,
+    inside: @(i < s.len())) -> @(s.update(i, x).get(i) === Maybe::Some(x))
+{
+    match s {
+        Seq::Nil => { let impossible: @False = _; _ }
+        Seq::Cons(head, tail) => if i == 0 { _ } else {
+            let j = (i - 1).as_nat(_);
+            let ih = get_update_at(tail, j, x, _);
+            let step = eq::unfold(Seq::update)(s, i, x);
+            let read = eq::unfold(Seq::get)(s.update(i, x), i);
+            _
+        },
+    }
+}
+pub logic fn get_update_away<A: Logical>(s: Seq<A>, i: Nat, j: Nat, x: A,
+    apart: @(i !== j)) -> @(s.update(i, x).get(j) === s.get(j))
+{
+    match s {
+        Seq::Nil => _,
+        Seq::Cons(head, tail) => if i == 0 || j == 0 { _ } else {
+            let ih = get_update_away(tail, (i - 1).as_nat(_), (j - 1).as_nat(_), x, _);
+            let step = eq::unfold(Seq::update)(s, i, x);
+            let left = eq::unfold(Seq::get)(s.update(i, x), j);
+            let right = eq::unfold(Seq::get)(s, j);
+            _
+        },
+    }
+}
+// IMPORTANT OPEN ELABORATION WORK: some final `_` terms need explicit rewrites
+// from the match equation and IH. They are not counted as completed proofs.
+// A generic get returns Maybe<A>. A direct proof-indexed at -> A needs a way to
+// type its impossible Nil branch. This is an ELABORATION QUESTION, not evidence
+// that generic indexing is impossible. Existing well-founded recursion may be
+// sufficient: the same-argument call below is under an inconsistent precondition,
+// so its otherwise false descent obligation follows from that precondition.
+// The termination checker must validate this; ordinary runtime divergence would
+// NOT be an acceptable implementation of a total logical function.
+#[decreases(s.len())]
+pub logic fn at_candidate<A:Logical>(s:Seq<A>,i:Nat,inside:@(i<s.len()))->A {
+    match s {
+        Seq::Nil => at_candidate(s,i,inside), // OPEN: discharge impossible descent
+        Seq::Cons(head,tail) => if i==0 {head}
+            else {at_candidate(tail,(i-1).as_nat(_),_)},
+    }
+}
+pub logic fn contains_positive<A:Logical>(s:Seq<A>,x:A,p:@s.contains(x))
+    -> @(s.len()>0)
+{
+    match s {Seq::Nil=>_,Seq::Cons(head,tail)=>_}
+    // OPEN: explicit unfold of contains/len and match equalities as required.
+}
