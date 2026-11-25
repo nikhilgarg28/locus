@@ -1,0 +1,22 @@
+//~ question: May a closure's proof parameter mention a variable that the closure captures and does not write, when the closure writes another one?
+//~ spec: contracts.entry-values, logic.boundary.calls
+//~ rfc: 0002
+
+fn counted(n: u32, pos: @(n > 0)) -> u32 {
+    let m = n;
+    let ok: @(m > 0) = _;
+    let mut calls: u32 = 0;
+    let mut step = |p: @(m > 0)| {
+        calls += 1;
+        100 / m
+    };
+    let a = step(ok);
+    let b = step(ok);
+    a + b + calls
+}
+
+fn forty_two() -> u32 {
+    counted(5, _)
+}
+
+//~ run: forty_two() => 42

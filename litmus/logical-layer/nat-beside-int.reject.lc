@@ -1,0 +1,7 @@
+//~ question: May a `Nat` stand beside an `Int` in one operator, with nothing written?
+//~ spec: logic.arith.nat-to-int
+//~ rfc: 0002
+
+logic fn shifted(i: Int, n: Nat) -> Int {
+    i + n //~ error: `i` is an `Int` and `n` is a `Nat`: a `Nat` is not used as an `Int` unless it is written as one; write `i + n as Int`
+}

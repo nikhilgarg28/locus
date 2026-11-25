@@ -1,0 +1,11 @@
+//~ question: May a logic function be generic over a runtime type, and take its snapshots?
+//~ spec: logic.fn.parameters, models.capture.bound
+//~ rfc: 0002
+
+logic fn alike<T: Snapshot>(a: Snap<T>, b: Snap<T>) -> Prop {
+    a === b
+}
+
+fn same<T: Snapshot>(x: &T, y: &T, equal: @alike::<T>(snap(x), snap(y))) -> @(snap(x) === snap(y)) {
+    _
+}

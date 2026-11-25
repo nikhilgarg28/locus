@@ -1,0 +1,15 @@
+//~ question: May logical code capture a struct that has an unwrapped field of a type that Locus cannot see?
+//~ spec: models.snapshots.opaque, models.snapshots.seen
+//~ rfc: 0002
+
+use std::net::TcpListener;
+
+struct Server {
+    listener: TcpListener,
+    port: u16,
+}
+
+fn port_of(server: &Server) -> u16 {
+    let whole = logic! { server }; //~ error: `Server` has no snapshot, so `server` cannot be captured: its field `listener` is a `TcpListener`, which Locus cannot see; wrap the field in `Opaque<T>`
+    server.port
+}

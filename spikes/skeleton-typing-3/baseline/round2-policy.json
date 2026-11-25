@@ -1,0 +1,4884 @@
+{
+ "config": "sk",
+ "features": null,
+ "env": {},
+ "packages": {
+  "policy": {
+   "bins": {
+    "d1-field-proposition": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        43
+       ],
+       "to": [
+        7,
+        111
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        12,
+        19
+       ],
+       "to": [
+        12,
+        29
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        13,
+        30
+       ],
+       "to": [
+        13,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        15,
+        21
+       ],
+       "to": [
+        15,
+        69
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (2, 7)"
+      ],
+      [
+       "expansion: checking",
+       "run() => (2, 7)"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "d1e-field-proposition-error": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277,E0425",
+      "E0277,E0425"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        9,
+        17
+       ],
+       "to": [
+        9,
+        30
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "a `Seq<Nat>` and a `_` have no order in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "a `Seq<Nat>` and a `_` have no order in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        10,
+        19
+       ],
+       "to": [
+        10,
+        31
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0425",
+         "cannot find value `high` in this scope"
+        ],
+        [
+         "check",
+         "E0425",
+         "cannot find value `high` in this scope"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0425",
+        "message": "cannot find value `high` in this scope",
+        "place": [
+         "policy/src/bin/d1e-field-proposition-error.rs",
+         10,
+         20,
+         10,
+         24
+        ],
+        "rendered": "error[E0425]: cannot find value `high` in this scope\n  --> policy/src/bin/d1e-field-proposition-error.rs:10:20\n   |\n10 |         unknown: @(high >= lo),\n   |                    ^^^^ not found in this scope\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Seq<Nat>` and a `_` have no order in logical code",
+        "place": [
+         "policy/src/bin/d1e-field-proposition-error.rs",
+         9,
+         18,
+         9,
+         23
+        ],
+        "rendered": "error[E0277]: a `Seq<Nat>` and a `_` have no order in logical code\n   --> policy/src/bin/d1e-field-proposition-error.rs:9:18\n    |\n  9 |         wrong: @(items <= lo),\n    |                  ^^^^^ - required by a bound introduced by this call\n    |                  |\n    |                  this is a `Seq<Nat>`, and the other side is a `_`\n    |\n    = help: the trait `Ordered<_>` is not implemented for `Seq<Nat>`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: the following other types implement trait `Ordered<Rhs>`\n   --> locus/src/lib.rs:617:5\n    |\n617 |     impl Ordered for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered`\n618 |     impl Ordered for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered`\n...\n624 |     impl Ordered<NoSuchOperand> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered<locus::NoSuchOperand>`\n625 |     #[cfg(not(feature = \"mixed-ops\"))]\n626 |     impl Ordered<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::le`\n   --> locus/src/lib.rs:645:18\n    |\n645 |     pub fn le<A: Ordered<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^ required by this bound in `le`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0425",
+        "message": "cannot find value `high` in this scope",
+        "place": [
+         "policy/src/bin/d1e-field-proposition-error.rs",
+         10,
+         20,
+         10,
+         24
+        ],
+        "rendered": "error[E0425]: cannot find value `high` in this scope\n  --> policy/src/bin/d1e-field-proposition-error.rs:10:20\n   |\n10 |         unknown: @(high >= lo),\n   |                    ^^^^ not found in this scope\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Seq<Nat>` and a `_` have no order in logical code",
+        "place": [
+         "policy/src/bin/d1e-field-proposition-error.rs",
+         9,
+         18,
+         9,
+         23
+        ],
+        "rendered": "error[E0277]: a `Seq<Nat>` and a `_` have no order in logical code\n   --> policy/src/bin/d1e-field-proposition-error.rs:9:18\n    |\n  9 |         wrong: @(items <= lo),\n    |                  ^^^^^ - required by a bound introduced by this call\n    |                  |\n    |                  this is a `Seq<Nat>`, and the other side is a `_`\n    |\n    = help: the trait `Ordered<_>` is not implemented for `Seq<Nat>`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: the following other types implement trait `Ordered<Rhs>`\n   --> locus/src/lib.rs:617:5\n    |\n617 |     impl Ordered for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered`\n618 |     impl Ordered for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered`\n...\n624 |     impl Ordered<NoSuchOperand> for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered<locus::NoSuchOperand>`\n625 |     #[cfg(not(feature = \"mixed-ops\"))]\n626 |     impl Ordered<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::le`\n   --> locus/src/lib.rs:645:18\n    |\n645 |     pub fn le<A: Ordered<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^ required by this bound in `le`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "d2-trait-method-contract": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        10,
+        60
+       ],
+       "to": [
+        10,
+        89
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        10,
+        95
+       ],
+       "to": [
+        10,
+        127
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        11,
+        35
+       ],
+       "to": [
+        11,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        11,
+        77
+       ],
+       "to": [
+        11,
+        105
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        45
+       ],
+       "to": [
+        12,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        12,
+        68
+       ],
+       "to": [
+        12,
+        112
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        17,
+        48
+       ],
+       "to": [
+        17,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        18,
+        60
+       ],
+       "to": [
+        18,
+        89
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        18,
+        95
+       ],
+       "to": [
+        18,
+        127
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        18,
+        128
+       ],
+       "to": [
+        18,
+        133
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        19,
+        35
+       ],
+       "to": [
+        19,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        19,
+        77
+       ],
+       "to": [
+        19,
+        105
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        22,
+        45
+       ],
+       "to": [
+        22,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        22,
+        68
+       ],
+       "to": [
+        22,
+        112
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (6, 4)"
+      ],
+      [
+       "expansion: checking",
+       "run() => (6, 4)"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "d2e-trait-method-contract-error": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        37
+       ],
+       "to": [
+        9,
+        61
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        10,
+        38
+       ],
+       "to": [
+        10,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        10,
+        68
+       ],
+       "to": [
+        10,
+        74
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         9,
+         38,
+         9,
+         39
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:9:38\n    |\n  9 |         fn area(&self) -> (a: u32, @(a == Self::sides(self)));\n    |                                      ^ - required by a bound introduced by this call\n    |                                      |\n    |                                      this is a `locus::Nat`, and the other side is a `locus::Seq<locus::Nat>`\n    |\n    = help: the trait `Equality<locus::Seq<locus::Nat>>` is not implemented for `locus::Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Nat` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:616:5\n    |\n616 |     impl Equality for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n622 |     impl Equality<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         10,
+         56,
+         10,
+         57
+        ],
+        "rendered": "error[E0277]: an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:10:56\n    |\n 10 |         logic fn lemma(s: &Self, h: @(Self::sides(s) + 1 > 0)) -> @(True);\n    |                                                        ^ this literal\n    |\n    = help: the trait `IntegerLiteral` is not implemented for `locus::Seq<locus::Nat>`\nhelp: the following other types implement trait `IntegerLiteral`\n   --> locus/src/lib.rs:448:5\n    |\n448 |     impl IntegerLiteral for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int`\n449 |     impl IntegerLiteral for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Nat`\nnote: required by a bound in `literal_like`\n   --> locus/src/lib.rs:454:28\n    |\n454 |     pub fn literal_like<L: IntegerLiteral>(_: &L, _: u128) -> L {\n    |                            ^^^^^^^^^^^^^^ required by this bound in `literal_like`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         10,
+         54,
+         10,
+         55
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:10:54\n    |\n 10 |         logic fn lemma(s: &Self, h: @(Self::sides(s) + 1 > 0)) -> @(True);\n    |                                                      ^ this is a `locus::Seq<locus::Nat>`, and the other side is a `_`\n    |\n    = help: the trait `AddLogic<_>` is not implemented for `locus::Seq<locus::Nat>`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Nat` implements `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<locus::NoSuchOperand>`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Nat` implements `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         9,
+         38,
+         9,
+         39
+        ],
+        "rendered": "error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:9:38\n    |\n  9 |         fn area(&self) -> (a: u32, @(a == Self::sides(self)));\n    |                                      ^ - required by a bound introduced by this call\n    |                                      |\n    |                                      this is a `locus::Nat`, and the other side is a `locus::Seq<locus::Nat>`\n    |\n    = help: the trait `Equality<locus::Seq<locus::Nat>>` is not implemented for `locus::Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\n    = note: `===` compares two values of any one logical type\nhelp: `locus::Nat` implements trait `Equality<Rhs>`\n   --> locus/src/lib.rs:616:5\n    |\n616 |     impl Equality for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`\n...\n622 |     impl Equality<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::eq`\n   --> locus/src/lib.rs:636:18\n    |\n636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^^ required by this bound in `eq`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         10,
+         56,
+         10,
+         57
+        ],
+        "rendered": "error[E0277]: an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:10:56\n    |\n 10 |         logic fn lemma(s: &Self, h: @(Self::sides(s) + 1 > 0)) -> @(True);\n    |                                                        ^ this literal\n    |\n    = help: the trait `IntegerLiteral` is not implemented for `locus::Seq<locus::Nat>`\nhelp: the following other types implement trait `IntegerLiteral`\n   --> locus/src/lib.rs:448:5\n    |\n448 |     impl IntegerLiteral for Int {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int`\n449 |     impl IntegerLiteral for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Nat`\nnote: required by a bound in `literal_like`\n   --> locus/src/lib.rs:454:28\n    |\n454 |     pub fn literal_like<L: IntegerLiteral>(_: &L, _: u128) -> L {\n    |                            ^^^^^^^^^^^^^^ required by this bound in `literal_like`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code",
+        "place": [
+         "policy/src/bin/d2e-trait-method-contract-error.rs",
+         10,
+         54,
+         10,
+         55
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Seq<locus::Nat>` and a `_` in logical code\n   --> policy/src/bin/d2e-trait-method-contract-error.rs:10:54\n    |\n 10 |         logic fn lemma(s: &Self, h: @(Self::sides(s) + 1 > 0)) -> @(True);\n    |                                                      ^ this is a `locus::Seq<locus::Nat>`, and the other side is a `_`\n    |\n    = help: the trait `AddLogic<_>` is not implemented for `locus::Seq<locus::Nat>`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: the following other types implement trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`\n...\n903 |         impl AddLogic for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Nat` implements `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<locus::NoSuchOperand>`\n...\n976 |         impl AddLogic<NoSuchOperand> for Nat {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Nat` implements `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "d3-nested-pattern": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        11,
+        41
+       ],
+       "to": [
+        19,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        22,
+        17
+       ],
+       "to": [
+        22,
+        72
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        22,
+        17
+       ],
+       "to": [
+        22,
+        72
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        17
+       ],
+       "to": [
+        23,
+        41
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        24,
+        17
+       ],
+       "to": [
+        24,
+        93
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        24,
+        17
+       ],
+       "to": [
+        24,
+        93
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        25,
+        22
+       ],
+       "to": [
+        25,
+        98
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        25,
+        22
+       ],
+       "to": [
+        25,
+        98
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "d3e-nested-pattern-error": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0023,E0308,E0599",
+      "E0023,E0308,E0599"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        32
+       ],
+       "to": [
+        8,
+        96
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0599",
+         "no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope"
+        ],
+        [
+         "check",
+         "E0599",
+         "no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope"
+        ]
+       ]
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        32
+       ],
+       "to": [
+        9,
+        102
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0023",
+         "this pattern has 2 fields, but the corresponding tuple variant has 3 fields"
+        ],
+        [
+         "check",
+         "E0023",
+         "this pattern has 2 fields, but the corresponding tuple variant has 3 fields"
+        ]
+       ]
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        32
+       ],
+       "to": [
+        10,
+        105
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "`match` arms have incompatible types"
+        ],
+        [
+         "check",
+         "E0308",
+         "`match` arms have incompatible types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0599",
+        "message": "no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         8,
+         61,
+         8,
+         65
+        ],
+        "rendered": "error[E0599]: no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope\n --> policy/src/bin/d3e-nested-pattern-error.rs:8:61\n  |\n7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n  |          ---- variant, associated function, or constant `Twig` not found for this enum\n8 |     logic fn a(t: Tree) -> Nat { match t { Tree::Node(Tree::Twig, n, _) => n, _ => 0 as Nat } }\n  |                                                             ^^^^ variant, associated function, or constant not found in `_::Tree`\n\n"
+       },
+       {
+        "code": "E0023",
+        "message": "this pattern has 2 fields, but the corresponding tuple variant has 3 fields",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         9,
+         69,
+         9,
+         70
+        ],
+        "rendered": "error[E0023]: this pattern has 2 fields, but the corresponding tuple variant has 3 fields\n --> policy/src/bin/d3e-nested-pattern-error.rs:9:66\n  |\n7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n  |          ----\n  |          |\n  |          tuple variant has 3 fields\n8 |     logic fn a(t: Tree) -> Nat { match t { Tree::Node(Tree::Twig, n, _) => n, _ => 0 as Nat } }\n9 |     logic fn b(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(n, _), _, _) => n, _ => 0 as Nat } }\n  |                                                                  ^  ^ expected 3 fields, found 2\n  |\nhelp: use `_` to explicitly ignore each field\n  |\n9 |     logic fn b(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(n, _, _), _, _) => n, _ => 0 as Nat } }\n  |                                                                      +++\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "`match` arms have incompatible types",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         10,
+         93,
+         10,
+         94
+        ],
+        "rendered": "error[E0308]: `match` arms have incompatible types\n  --> policy/src/bin/d3e-nested-pattern-error.rs:10:93\n   |\n10 |     logic fn c(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(l, _, _), _, _) => l, _ => 0 as Nat } }\n   |                                  -------                                            -       ^ expected `Tree`, found `Nat`\n   |                                  |                                                  |\n   |                                  `match` arms have incompatible types               this is found to be of type `Tree`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0599",
+        "message": "no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         8,
+         61,
+         8,
+         65
+        ],
+        "rendered": "error[E0599]: no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope\n --> policy/src/bin/d3e-nested-pattern-error.rs:8:61\n  |\n7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n  |          ---- variant, associated function, or constant `Twig` not found for this enum\n8 |     logic fn a(t: Tree) -> Nat { match t { Tree::Node(Tree::Twig, n, _) => n, _ => 0 as Nat } }\n  |                                                             ^^^^ variant, associated function, or constant not found in `_::Tree`\n\n"
+       },
+       {
+        "code": "E0023",
+        "message": "this pattern has 2 fields, but the corresponding tuple variant has 3 fields",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         9,
+         69,
+         9,
+         70
+        ],
+        "rendered": "error[E0023]: this pattern has 2 fields, but the corresponding tuple variant has 3 fields\n --> policy/src/bin/d3e-nested-pattern-error.rs:9:66\n  |\n7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n  |          ----\n  |          |\n  |          tuple variant has 3 fields\n8 |     logic fn a(t: Tree) -> Nat { match t { Tree::Node(Tree::Twig, n, _) => n, _ => 0 as Nat } }\n9 |     logic fn b(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(n, _), _, _) => n, _ => 0 as Nat } }\n  |                                                                  ^  ^ expected 3 fields, found 2\n  |\nhelp: use `_` to explicitly ignore each field\n  |\n9 |     logic fn b(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(n, _, _), _, _) => n, _ => 0 as Nat } }\n  |                                                                      +++\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "`match` arms have incompatible types",
+        "place": [
+         "policy/src/bin/d3e-nested-pattern-error.rs",
+         10,
+         93,
+         10,
+         94
+        ],
+        "rendered": "error[E0308]: `match` arms have incompatible types\n  --> policy/src/bin/d3e-nested-pattern-error.rs:10:93\n   |\n10 |     logic fn c(t: Tree) -> Nat { match t { Tree::Node(Tree::Node(l, _, _), _, _) => l, _ => 0 as Nat } }\n   |                                  -------                                            -       ^ expected `Tree`, found `Nat`\n   |                                  |                                                  |\n   |                                  `match` arms have incompatible types               this is found to be of type `Tree`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "d4-imported-enum": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        18,
+        43
+       ],
+       "to": [
+        20,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        52
+       ],
+       "to": [
+        23,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        24,
+        56
+       ],
+       "to": [
+        26,
+        10
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        30,
+        17
+       ],
+       "to": [
+        30,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        30,
+        17
+       ],
+       "to": [
+        30,
+        46
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        31,
+        19
+       ],
+       "to": [
+        31,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        31,
+        55
+       ],
+       "to": [
+        31,
+        110
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        32,
+        19
+       ],
+       "to": [
+        32,
+        53
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "d5-models": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        11,
+        51
+       ],
+       "to": [
+        11,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a field's type",
+       "from": [
+        14,
+        47
+       ],
+       "to": [
+        14,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        20,
+        42
+       ],
+       "to": [
+        20,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        21,
+        43
+       ],
+       "to": [
+        23,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        28,
+        21
+       ],
+       "to": [
+        28,
+        46
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        39,
+        19
+       ],
+       "to": [
+        39,
+        38
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        39,
+        50
+       ],
+       "to": [
+        39,
+        69
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        39,
+        81
+       ],
+       "to": [
+        39,
+        112
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        40,
+        19
+       ],
+       "to": [
+        40,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        40,
+        53
+       ],
+       "to": [
+        40,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        41,
+        19
+       ],
+       "to": [
+        41,
+        38
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        41,
+        50
+       ],
+       "to": [
+        41,
+        70
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Seq<locus::Nat>\", \"d5_models::Point_Logic\", \"locus::Nat\", \"d5_models::Pair_Logic<locus::Nat, locus::Seq<locus::Int>>\", \"locus::Seq<locus::Int>\", \"d5_models::List_Logic\", \"locus::Nat\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Seq<locus::Nat>\", \"d5_models::Point_Logic\", \"locus::Nat\", \"d5_models::Pair_Logic<locus::Nat, locus::Seq<locus::Int>>\", \"locus::Seq<locus::Int>\", \"d5_models::List_Logic\", \"locus::Nat\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "e04-bool-for-prop-parameter": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0271,E0308",
+      "E0271,E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        6,
+        37
+       ],
+       "to": [
+        6,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        8,
+        28
+       ],
+       "to": [
+        8,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        8,
+        28
+       ],
+       "to": [
+        8,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        28
+       ],
+       "to": [
+        9,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        9,
+        28
+       ],
+       "to": [
+        9,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as Model>::Logic == Prop`",
+        "place": [
+         "policy/src/bin/e04-bool-for-prop-parameter.rs",
+         8,
+         43,
+         8,
+         47
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`\n   --> policy/src/bin/e04-bool-for-prop-parameter.rs:8:43\n    |\n  8 |         let from_a_place = logic! { twice(flag) };\n    |                                           ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/e04-bool-for-prop-parameter.rs",
+         9,
+         43,
+         9,
+         47
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/e04-bool-for-prop-parameter.rs:9:43\n  |\n9 |         let from_a_value = logic! { twice(true) };\n  |                                     ----- ^^^^ expected `Prop`, found `Bool`\n  |                                     |\n  |                                     arguments to this function are incorrect\n  |\nnote: function defined here\n --> policy/src/bin/e04-bool-for-prop-parameter.rs:6:14\n  |\n6 |     logic fn twice(p: Prop) -> Prop { p && p }\n  |              ^^^^^ -------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as Model>::Logic == Prop`",
+        "place": [
+         "policy/src/bin/e04-bool-for-prop-parameter.rs",
+         8,
+         43,
+         8,
+         47
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`\n   --> policy/src/bin/e04-bool-for-prop-parameter.rs:8:43\n    |\n  8 |         let from_a_place = logic! { twice(flag) };\n    |                                           ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/e04-bool-for-prop-parameter.rs",
+         9,
+         43,
+         9,
+         47
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/e04-bool-for-prop-parameter.rs:9:43\n  |\n9 |         let from_a_value = logic! { twice(true) };\n  |                                     ----- ^^^^ expected `Prop`, found `Bool`\n  |                                     |\n  |                                     arguments to this function are incorrect\n  |\nnote: function defined here\n --> policy/src/bin/e04-bool-for-prop-parameter.rs:6:14\n  |\n6 |     logic fn twice(p: Prop) -> Prop { p && p }\n  |              ^^^^^ -------\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "e05-missing-arm": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0004",
+      "E0004"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        36
+       ],
+       "to": [
+        12,
+        6
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0004",
+         "non-exhaustive patterns: `_::Tree::Leaf` not covered"
+        ],
+        [
+         "check",
+         "E0004",
+         "non-exhaustive patterns: `_::Tree::Leaf` not covered"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0004",
+        "message": "non-exhaustive patterns: `_::Tree::Leaf` not covered",
+        "place": [
+         "policy/src/bin/e05-missing-arm.rs",
+         9,
+         15,
+         9,
+         16
+        ],
+        "rendered": "error[E0004]: non-exhaustive patterns: `_::Tree::Leaf` not covered\n  --> policy/src/bin/e05-missing-arm.rs:9:15\n   |\n 9 |         match t {\n   |               ^ pattern `_::Tree::Leaf` not covered\n   |\nnote: `_::Tree` defined here\n  --> policy/src/bin/e05-missing-arm.rs:7:10\n   |\n 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n   |          ^^^^\n   |          |\n   |          not covered\n   = note: the matched value is of type `_::Tree`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n   |\n10 |             Tree::Node(l, _, _) => depth(l) +, _::Tree::Leaf => todo!() 1,\n   |                                              ++++++++++++++++++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0004",
+        "message": "non-exhaustive patterns: `_::Tree::Leaf` not covered",
+        "place": [
+         "policy/src/bin/e05-missing-arm.rs",
+         9,
+         15,
+         9,
+         16
+        ],
+        "rendered": "error[E0004]: non-exhaustive patterns: `_::Tree::Leaf` not covered\n  --> policy/src/bin/e05-missing-arm.rs:9:15\n   |\n 9 |         match t {\n   |               ^ pattern `_::Tree::Leaf` not covered\n   |\nnote: `_::Tree` defined here\n  --> policy/src/bin/e05-missing-arm.rs:7:10\n   |\n 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }\n   |          ^^^^\n   |          |\n   |          not covered\n   = note: the matched value is of type `_::Tree`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n   |\n10 |             Tree::Node(l, _, _) => depth(l) +, _::Tree::Leaf => todo!() 1,\n   |                                              ++++++++++++++++++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "n1-snapshot-bounds-inserted": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "snapshot bound",
+       "from": [
+        10,
+        8
+       ],
+       "to": [
+        10,
+        22
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        11,
+        8
+       ],
+       "to": [
+        11,
+        17
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        54
+       ],
+       "to": [
+        11,
+        72
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        12,
+        8
+       ],
+       "to": [
+        12,
+        17
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        13,
+        12
+       ],
+       "to": [
+        13,
+        16
+       ],
+       "status": "inserted",
+       "detail": "on a type",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        14,
+        5
+       ],
+       "to": [
+        14,
+        9
+       ],
+       "status": "inserted",
+       "detail": "on an impl",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        53
+       ],
+       "to": [
+        15,
+        75
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        18,
+        43
+       ],
+       "to": [
+        18,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        19,
+        31
+       ],
+       "to": [
+        19,
+        52
+       ],
+       "status": "not translated",
+       "detail": "the literal `1u32`",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::BoundedU32\", \"locus::Seq<locus::BoundedU8>\", \"n1_snapshot_bounds_inserted::__locus_snap_Keep<locus::Bool>\", 1)"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::BoundedU32\", \"locus::Seq<locus::BoundedU8>\", \"n1_snapshot_bounds_inserted::__locus_snap_Keep<locus::Bool>\", 1)"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "n2-snapshot-in-trait-impl": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "snapshot bound",
+       "from": [
+        12,
+        12
+       ],
+       "to": [
+        12,
+        16
+       ],
+       "status": "cannot insert",
+       "detail": "a method of a trait's impl",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        60
+       ],
+       "to": [
+        12,
+        78
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => \"locus::Opaque\""
+      ],
+      [
+       "expansion: checking",
+       "run() => \"locus::Opaque\""
+      ]
+     ],
+     "verdict": "as expected; PRINTS ['run() => \"locus::Opaque\"'], EXPECTED ['run() => \"locus::BoundedU32\"']"
+    },
+    "n3-snapshot-unlowered-caller": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "snapshot bound",
+       "from": [
+        9,
+        12
+       ],
+       "to": [
+        9,
+        16
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        58
+       ],
+       "to": [
+        9,
+        76
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n3-snapshot-unlowered-caller.rs",
+         11,
+         52,
+         11,
+         53
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n3-snapshot-unlowered-caller.rs:11:52\n   |\n11 | fn plain_rust<T>(x: Vec<T>) -> &'static str { kept(x) }\n   |                                               ---- ^ its snapshot is taken here\n   |                                               |\n   |                                               required by a bound introduced by this call\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `kept`\n  --> policy/src/bin/n3-snapshot-unlowered-caller.rs:9:17\n   |\n 9 |     pub fn kept<T>(x: Vec<T>) -> &'static str { type_of(&logic! { snap(x) }) }\n   |                 ^ required by this bound in `kept`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n11 | fn plain_rust<T: locus::Snapshot>(x: Vec<T>) -> &'static str { kept(x) }\n   |                +++++++++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n3-snapshot-unlowered-caller.rs",
+         11,
+         52,
+         11,
+         53
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n3-snapshot-unlowered-caller.rs:11:52\n   |\n11 | fn plain_rust<T>(x: Vec<T>) -> &'static str { kept(x) }\n   |                                               ---- ^ its snapshot is taken here\n   |                                               |\n   |                                               required by a bound introduced by this call\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `kept`\n  --> policy/src/bin/n3-snapshot-unlowered-caller.rs:9:17\n   |\n 9 |     pub fn kept<T>(x: Vec<T>) -> &'static str { type_of(&logic! { snap(x) }) }\n   |                 ^ required by this bound in `kept`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n11 | fn plain_rust<T: locus::Snapshot>(x: Vec<T>) -> &'static str { kept(x) }\n   |                +++++++++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "DIFFERS"
+    },
+    "n4-snapshot-other-invocation": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "snapshot bound",
+       "from": [
+        11,
+        16
+       ],
+       "to": [
+        11,
+        20
+       ],
+       "status": "inserted",
+       "detail": "on a function",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        62
+       ],
+       "to": [
+        11,
+        80
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "snapshot bound",
+       "from": [
+        12,
+        20
+       ],
+       "to": [
+        12,
+        24
+       ],
+       "status": "inserted",
+       "detail": "on a type",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        19,
+        74
+       ],
+       "to": [
+        19,
+        94
+       ],
+       "status": "not translated",
+       "detail": "the literal `1u8`",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n4-snapshot-other-invocation.rs",
+         17,
+         21,
+         17,
+         37
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:17:21\n   |\n17 |     fn holds<T>(k: &library::Keep<T>) -> u32 { 1 }\n   |                     ^^^^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `Keep`\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:12:25\n   |\n12 |         pub struct Keep<T> { pub now: T, pub before: Snap<T> }\n   |                         ^ required by this bound in `Keep`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n17 |     fn holds<T: locus::Snapshot>(k: &library::Keep<T>) -> u32 { 1 }\n   |               +++++++++++++++++\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n4-snapshot-other-invocation.rs",
+         16,
+         64,
+         16,
+         65
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:16:64\n   |\n16 |     fn passes_on<T>(x: Vec<T>) -> &'static str { library::kept(x) }\n   |                                                  ------------- ^ its snapshot is taken here\n   |                                                  |\n   |                                                  required by a bound introduced by this call\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `kept`\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:11:21\n   |\n11 |         pub fn kept<T>(x: Vec<T>) -> &'static str { type_of(&logic! { snap(x) }) }\n   |                     ^ required by this bound in `kept`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n16 |     fn passes_on<T: locus::Snapshot>(x: Vec<T>) -> &'static str { library::kept(x) }\n   |                   +++++++++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n4-snapshot-other-invocation.rs",
+         17,
+         21,
+         17,
+         37
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:17:21\n   |\n17 |     fn holds<T>(k: &library::Keep<T>) -> u32 { 1 }\n   |                     ^^^^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `Keep`\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:12:25\n   |\n12 |         pub struct Keep<T> { pub now: T, pub before: Snap<T> }\n   |                         ^ required by this bound in `Keep`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n17 |     fn holds<T: locus::Snapshot>(k: &library::Keep<T>) -> u32 { 1 }\n   |               +++++++++++++++++\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`T` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n4-snapshot-other-invocation.rs",
+         16,
+         64,
+         16,
+         65
+        ],
+        "rendered": "error[E0277]: `T` has no snapshot type that rustc can name\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:16:64\n   |\n16 |     fn passes_on<T>(x: Vec<T>) -> &'static str { library::kept(x) }\n   |                                                  ------------- ^ its snapshot is taken here\n   |                                                  |\n   |                                                  required by a bound introduced by this call\n   |\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\nnote: required by a bound in `kept`\n  --> policy/src/bin/n4-snapshot-other-invocation.rs:11:21\n   |\n11 |         pub fn kept<T>(x: Vec<T>) -> &'static str { type_of(&logic! { snap(x) }) }\n   |                     ^ required by this bound in `kept`\nhelp: consider restricting type parameter `T` with trait `Snapshot`\n   |\n16 |     fn passes_on<T: locus::Snapshot>(x: Vec<T>) -> &'static str { library::kept(x) }\n   |                   +++++++++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "DIFFERS"
+    },
+    "n5-snapshot-foreign-type": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "E0277",
+      "E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        22
+       ],
+       "to": [
+        16,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        22
+       ],
+       "to": [
+        16,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        37
+       ],
+       "to": [
+        17,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         12,
+         17,
+         12,
+         36
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:12:17\n   |\n12 |     fn named(s: Snap<BTreeSet<u32>>) -> u32 { 1 }\n   |                 ^^^^^^^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         17,
+         58,
+         17,
+         71
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:17:58\n   |\n17 |         (type_of(&before), type_of(&logic! { snap(d) }), named(before))\n   |                                                          ^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         17,
+         64,
+         17,
+         70
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:17:64\n   |\n17 |         (type_of(&before), type_of(&logic! { snap(d) }), named(before))\n   |                                                                ^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         12,
+         17,
+         12,
+         36
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:12:17\n   |\n12 |     fn named(s: Snap<BTreeSet<u32>>) -> u32 { 1 }\n   |                 ^^^^^^^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         17,
+         58,
+         17,
+         71
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:17:58\n   |\n17 |         (type_of(&before), type_of(&logic! { snap(d) }), named(before))\n   |                                                          ^^^^^^^^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`BTreeSet<u32>` has no snapshot type that rustc can name",
+        "place": [
+         "policy/src/bin/n5-snapshot-foreign-type.rs",
+         17,
+         64,
+         17,
+         70
+        ],
+        "rendered": "error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name\n  --> policy/src/bin/n5-snapshot-foreign-type.rs:17:64\n   |\n17 |         (type_of(&before), type_of(&logic! { snap(d) }), named(before))\n   |                                                                ^^^^^^ its snapshot is taken here\n   |\n   = help: the trait `Snapshot` is not implemented for `BTreeSet<u32>`\n   = note: a type parameter needs the bound `Snapshot`, and a type of another crate needs the library to declare its snapshot\n   = help: the following other types implement trait `Snapshot`:\n             &T\n             &mut T\n             (A, B)\n             (A, B, C)\n             *const T\n             *mut T\n             Address\n             BoundedI128\n           and 45 others\n\n"
+       }
+      ]
+     },
+     "verdict": "DIFFERS"
+    },
+    "n6-snapshot-opaque-mixes": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        26
+       ],
+       "to": [
+        12,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        26
+       ],
+       "to": [
+        12,
+        46
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        18
+       ],
+       "to": [
+        13,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => 1"
+      ],
+      [
+       "expansion: checking",
+       "run() => 1"
+      ]
+     ],
+     "verdict": "DIFFERS"
+    },
+    "p1a-literal-forward": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        20
+       ],
+       "to": [
+        9,
+        32
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        9,
+        20
+       ],
+       "to": [
+        9,
+        32
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/p1a-literal-forward.rs",
+         10,
+         19,
+         10,
+         23
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/p1a-literal-forward.rs:10:19\n   |\n10 |         takes_nat(zero)\n   |         --------- ^^^^ expected `Nat`, found `Int`\n   |         |\n   |         arguments to this function are incorrect\n   |\nnote: function defined here\n  --> policy/src/bin/p1a-literal-forward.rs:7:8\n   |\n 7 |     fn takes_nat(n: Nat) -> u32 { 1 }\n   |        ^^^^^^^^^  -----\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/p1a-literal-forward.rs",
+         10,
+         19,
+         10,
+         23
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/p1a-literal-forward.rs:10:19\n   |\n10 |         takes_nat(zero)\n   |         --------- ^^^^ expected `Nat`, found `Int`\n   |         |\n   |         arguments to this function are incorrect\n   |\nnote: function defined here\n  --> policy/src/bin/p1a-literal-forward.rs:7:8\n   |\n 7 |     fn takes_nat(n: Nat) -> u32 { 1 }\n   |        ^^^^^^^^^  -----\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "p1b-literal-beside": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        42
+       ],
+       "to": [
+        8,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        21
+       ],
+       "to": [
+        13,
+        33
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        21
+       ],
+       "to": [
+        13,
+        33
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        22
+       ],
+       "to": [
+        14,
+        38
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        22
+       ],
+       "to": [
+        14,
+        38
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        23
+       ],
+       "to": [
+        15,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        23
+       ],
+       "to": [
+        15,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        23
+       ],
+       "to": [
+        16,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        23
+       ],
+       "to": [
+        16,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        17,
+        23
+       ],
+       "to": [
+        17,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        17,
+        23
+       ],
+       "to": [
+        17,
+        41
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        18,
+        24
+       ],
+       "to": [
+        18,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        18,
+        24
+       ],
+       "to": [
+        18,
+        62
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Int\", \"locus::Nat\", \"locus::Nat\", \"locus::Nat\", \"locus::Int\", \"locus::Int\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Int\", \"locus::Nat\", \"locus::Nat\", \"locus::Nat\", \"locus::Int\", \"locus::Int\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "p1c-literal-argument": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        36
+       ],
+       "to": [
+        7,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        17
+       ],
+       "to": [
+        9,
+        37
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        9,
+        17
+       ],
+       "to": [
+        9,
+        37
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/p1c-literal-argument.rs",
+         9,
+         33,
+         9,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/p1c-literal-argument.rs:9:33\n  |\n9 |         let d = logic! { double(3) };\n  |                          ------ ^ expected `Nat`, found `Int`\n  |                          |\n  |                          arguments to this function are incorrect\n  |\nnote: function defined here\n --> policy/src/bin/p1c-literal-argument.rs:7:14\n  |\n7 |     logic fn double(n: Nat) -> Nat { n + n }\n  |              ^^^^^^ ------\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/p1c-literal-argument.rs",
+         9,
+         33,
+         9,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/p1c-literal-argument.rs:9:33\n  |\n9 |         let d = logic! { double(3) };\n  |                          ------ ^ expected `Nat`, found `Int`\n  |                          |\n  |                          arguments to this function are incorrect\n  |\nnote: function defined here\n --> policy/src/bin/p1c-literal-argument.rs:7:14\n  |\n7 |     logic fn double(n: Nat) -> Nat { n + n }\n  |              ^^^^^^ ------\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "p2a-omitted-as-int": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0271,E0277",
+      "E0271,E0277"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        36
+       ],
+       "to": [
+        7,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        9,
+        19
+       ],
+       "to": [
+        9,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        9,
+        19
+       ],
+       "to": [
+        9,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "runtime",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "`+` is not defined on a `locus::Int` and a `Nat` in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "prove!",
+       "from": [
+        10,
+        20
+       ],
+       "to": [
+        10,
+        33
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0277",
+         "a `Nat` and a `locus::Int` have no order in logical code"
+        ],
+        [
+         "check",
+         "E0277",
+         "a `Nat` and a `locus::Int` have no order in logical code"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        23
+       ],
+       "to": [
+        11,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<u32 as Model>::Logic == Int`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<u32 as Model>::Logic == Int`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        23
+       ],
+       "to": [
+        11,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<u32 as Model>::Logic == Int`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<u32 as Model>::Logic == Int`"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         9,
+         28,
+         9,
+         29
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:9:28\n    |\n  9 |         let sum = logic! { i + n };\n    |                            ^ - required by a bound introduced by this call\n    |                            |\n    |                            this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Nat` and a `locus::Int` have no order in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         10,
+         27,
+         10,
+         28
+        ],
+        "rendered": "error[E0277]: a `Nat` and a `locus::Int` have no order in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:10:27\n    |\n 10 |         let less = prove!(n < i);\n    |                           ^ - required by a bound introduced by this call\n    |                           |\n    |                           this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `Ordered<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `Ordered<Rhs>`\n   --> locus/src/lib.rs:618:5\n    |\n618 |     impl Ordered for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `Ordered`\n...\n626 |     impl Ordered<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Ordered<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::lt`\n   --> locus/src/lib.rs:642:18\n    |\n642 |     pub fn lt<A: Ordered<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^ required by this bound in `lt`\n\n"
+       },
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<u32 as Model>::Logic == Int`",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         11,
+         39,
+         11,
+         40
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<u32 as Model>::Logic == Int`\n   --> policy/src/bin/p2a-omitted-as-int.rs:11:39\n    |\n 11 |         let negated = logic! { negate(n) };\n    |                                       ^ expected `Int`, found `Nat`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         9,
+         30,
+         9,
+         31
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:9:30\n    |\n  9 |         let sum = logic! { i + n };\n    |                              ^ this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         9,
+         28,
+         9,
+         29
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:9:28\n    |\n  9 |         let sum = logic! { i + n };\n    |                            ^ - required by a bound introduced by this call\n    |                            |\n    |                            this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::add`\n   --> locus/src/lib.rs:657:19\n    |\n657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {\n    |                   ^^^^^^^^^^^ required by this bound in `add`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "a `Nat` and a `locus::Int` have no order in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         10,
+         27,
+         10,
+         28
+        ],
+        "rendered": "error[E0277]: a `Nat` and a `locus::Int` have no order in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:10:27\n    |\n 10 |         let less = prove!(n < i);\n    |                           ^ - required by a bound introduced by this call\n    |                           |\n    |                           this is a `Nat`, and the other side is a `locus::Int`\n    |\n    = help: the trait `Ordered<locus::Int>` is not implemented for `Nat`\n    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `Nat` implements trait `Ordered<Rhs>`\n   --> locus/src/lib.rs:618:5\n    |\n618 |     impl Ordered for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^ `Ordered`\n...\n626 |     impl Ordered<NoSuchOperand> for Nat {}\n    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Ordered<locus::NoSuchOperand>`\nnote: required by a bound in `locus::logic::lt`\n   --> locus/src/lib.rs:642:18\n    |\n642 |     pub fn lt<A: Ordered<B>, B>(_: A, _: B) -> Comparison {\n    |                  ^^^^^^^^^^ required by this bound in `lt`\n\n"
+       },
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<u32 as Model>::Logic == Int`",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         11,
+         39,
+         11,
+         40
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<u32 as Model>::Logic == Int`\n   --> policy/src/bin/p2a-omitted-as-int.rs:11:39\n    |\n 11 |         let negated = logic! { negate(n) };\n    |                                       ^ expected `Int`, found `Nat`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0277",
+        "message": "`+` is not defined on a `locus::Int` and a `Nat` in logical code",
+        "place": [
+         "policy/src/bin/p2a-omitted-as-int.rs",
+         9,
+         30,
+         9,
+         31
+        ],
+        "rendered": "error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code\n   --> policy/src/bin/p2a-omitted-as-int.rs:9:30\n    |\n  9 |         let sum = logic! { i + n };\n    |                              ^ this is a `locus::Int`, and the other side is a `Nat`\n    |\n    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`\n    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`\nhelp: `locus::Int` implements trait `AddLogic<Rhs>`\n   --> locus/src/lib.rs:899:9\n    |\n899 |         impl AddLogic for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`\n...\n972 |         impl AddLogic<NoSuchOperand> for Int {\n    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "p2b-written-as-int": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        36
+       ],
+       "to": [
+        8,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        19
+       ],
+       "to": [
+        11,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        19
+       ],
+       "to": [
+        11,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "prove!",
+       "from": [
+        12,
+        20
+       ],
+       "to": [
+        12,
+        40
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        23
+       ],
+       "to": [
+        13,
+        50
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        23
+       ],
+       "to": [
+        13,
+        50
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        54
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        26
+       ],
+       "to": [
+        15,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        26
+       ],
+       "to": [
+        15,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Int\", \"locus::Int\", \"locus::Int\", \"locus::Int\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Int\", \"locus::Int\", \"locus::Int\", \"locus::Int\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "p4a-place-arguments": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        11,
+        42
+       ],
+       "to": [
+        11,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        36
+       ],
+       "to": [
+        12,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        13,
+        42
+       ],
+       "to": [
+        13,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        20,
+        22
+       ],
+       "to": [
+        20,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        20,
+        22
+       ],
+       "to": [
+        20,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        21,
+        25
+       ],
+       "to": [
+        21,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        21,
+        25
+       ],
+       "to": [
+        21,
+        45
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        22,
+        29
+       ],
+       "to": [
+        22,
+        54
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        22,
+        29
+       ],
+       "to": [
+        22,
+        54
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        23,
+        28
+       ],
+       "to": [
+        23,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        23,
+        28
+       ],
+       "to": [
+        23,
+        52
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\", \"locus::Seq<locus::BoundedU32>\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Nat\", \"locus::Seq<locus::BoundedU32>\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "p4b-type-parameter-omitted": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0283",
+      "E0283"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        42
+       ],
+       "to": [
+        7,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        10,
+        25
+       ],
+       "to": [
+        10,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        10,
+        25
+       ],
+       "to": [
+        10,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0283",
+         "type annotations needed"
+        ],
+        [
+         "runtime",
+         "E0283",
+         "type annotations needed"
+        ],
+        [
+         "check",
+         "E0283",
+         "type annotations needed"
+        ],
+        [
+         "check",
+         "E0283",
+         "type annotations needed"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0283",
+        "message": "type annotations needed",
+        "place": [
+         "policy/src/bin/p4b-type-parameter-omitted.rs",
+         10,
+         13,
+         10,
+         22
+        ],
+        "rendered": "error[E0283]: type annotations needed\n   --> policy/src/bin/p4b-type-parameter-omitted.rs:10:13\n    |\n 10 |         let ambiguous = logic! { same(n) };\n    |             ^^^^^^^^^   ----- type must be known at this point\n    |\n    = note: the type must implement `locus::Logical`\n    = help: the following types implement trait `locus::Logical`:\n              (A, B)\n              (A, B, C)\n              Address\n              BoundedI128\n              BoundedI16\n              BoundedI32\n              BoundedI64\n              BoundedI8\n            and 19 others\nnote: required by a bound in `logic`\n   --> locus/src/lib.rs:380:21\n    |\n380 |     pub fn logic<G: Logical>(_: impl FnOnce() -> G) -> G {\n    |                     ^^^^^^^ required by this bound in `logic`\nhelp: consider giving `ambiguous` an explicit type\n    |\n 10 |         let ambiguous: /* Type */ = logic! { same(n) };\n    |                      ++++++++++++\n\n"
+       },
+       {
+        "code": "E0283",
+        "message": "type annotations needed",
+        "place": [
+         "policy/src/bin/p4b-type-parameter-omitted.rs",
+         10,
+         13,
+         10,
+         22
+        ],
+        "rendered": "error[E0283]: type annotations needed\n   --> policy/src/bin/p4b-type-parameter-omitted.rs:10:13\n    |\n 10 |         let ambiguous = logic! { same(n) };\n    |             ^^^^^^^^^                 -\n    |                                       |\n    |                                       type must be known at this point\n    |                                       required by a bound introduced by this call\n    |\n    = note: multiple `impl`s satisfying `u32: GivenAs<_, _>` found in the `locus` crate:\n            - impl<T> GivenAs<<T as Model>::Logic, ItsModel> for T\n              where T: Runtime, T: ?Sized;\n            - impl<T> GivenAs<T, Itself> for T;\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\nhelp: consider giving `ambiguous` an explicit type\n    |\n 10 |         let ambiguous: /* Type */ = logic! { same(n) };\n    |                      ++++++++++++\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0283",
+        "message": "type annotations needed",
+        "place": [
+         "policy/src/bin/p4b-type-parameter-omitted.rs",
+         10,
+         13,
+         10,
+         22
+        ],
+        "rendered": "error[E0283]: type annotations needed\n   --> policy/src/bin/p4b-type-parameter-omitted.rs:10:13\n    |\n 10 |         let ambiguous = logic! { same(n) };\n    |             ^^^^^^^^^   ----- type must be known at this point\n    |\n    = note: the type must implement `locus::Logical`\n    = help: the following types implement trait `locus::Logical`:\n              (A, B)\n              (A, B, C)\n              Address\n              BoundedI128\n              BoundedI16\n              BoundedI32\n              BoundedI64\n              BoundedI8\n            and 19 others\nnote: required by a bound in `logic`\n   --> locus/src/lib.rs:380:21\n    |\n380 |     pub fn logic<G: Logical>(_: impl FnOnce() -> G) -> G {\n    |                     ^^^^^^^ required by this bound in `logic`\nhelp: consider giving `ambiguous` an explicit type\n    |\n 10 |         let ambiguous: /* Type */ = logic! { same(n) };\n    |                      ++++++++++++\n\n"
+       },
+       {
+        "code": "E0283",
+        "message": "type annotations needed",
+        "place": [
+         "policy/src/bin/p4b-type-parameter-omitted.rs",
+         10,
+         13,
+         10,
+         22
+        ],
+        "rendered": "error[E0283]: type annotations needed\n   --> policy/src/bin/p4b-type-parameter-omitted.rs:10:13\n    |\n 10 |         let ambiguous = logic! { same(n) };\n    |             ^^^^^^^^^                 -\n    |                                       |\n    |                                       type must be known at this point\n    |                                       required by a bound introduced by this call\n    |\n    = note: multiple `impl`s satisfying `u32: GivenAs<_, _>` found in the `locus` crate:\n            - impl<T> GivenAs<<T as Model>::Logic, ItsModel> for T\n              where T: Runtime, T: ?Sized;\n            - impl<T> GivenAs<T, Itself> for T;\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\nhelp: consider giving `ambiguous` an explicit type\n    |\n 10 |         let ambiguous: /* Type */ = logic! { same(n) };\n    |                      ++++++++++++\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "p5-method-order": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        12,
+        47
+       ],
+       "to": [
+        12,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        15,
+        36
+       ],
+       "to": [
+        15,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        16,
+        35
+       ],
+       "to": [
+        16,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        20,
+        37
+       ],
+       "to": [
+        20,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        28,
+        27
+       ],
+       "to": [
+        28,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        28,
+        27
+       ],
+       "to": [
+        28,
+        46
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        29,
+        28
+       ],
+       "to": [
+        29,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        29,
+        28
+       ],
+       "to": [
+        29,
+        47
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        30,
+        29
+       ],
+       "to": [
+        30,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        30,
+        29
+       ],
+       "to": [
+        30,
+        47
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        31,
+        35
+       ],
+       "to": [
+        31,
+        73
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        31,
+        35
+       ],
+       "to": [
+        31,
+        73
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        32,
+        30
+       ],
+       "to": [
+        32,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        32,
+        30
+       ],
+       "to": [
+        32,
+        55
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        33,
+        24
+       ],
+       "to": [
+        33,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        33,
+        24
+       ],
+       "to": [
+        33,
+        44
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Int\", \"locus::Nat\", \"locus::Int\", \"locus::Int\", \"locus::Nat\", \"locus::Nat\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Int\", \"locus::Nat\", \"locus::Int\", \"locus::Int\", \"locus::Nat\", \"locus::Nat\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v1-bool-result": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        42
+       ],
+       "to": [
+        9,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        10,
+        51
+       ],
+       "to": [
+        10,
+        85
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        11,
+        45
+       ],
+       "to": [
+        11,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (true, false, true)"
+      ],
+      [
+       "expansion: checking",
+       "run() => (true, false, true)"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v1w-bool-result-written": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        7,
+        42
+       ],
+       "to": [
+        7,
+        66
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        8,
+        51
+       ],
+       "to": [
+        8,
+        103
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        45
+       ],
+       "to": [
+        9,
+        67
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (true, false, true)"
+      ],
+      [
+       "expansion: checking",
+       "run() => (true, false, true)"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v2-bool-field-and-local": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        41
+       ],
+       "to": [
+        9,
+        49
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "proposition in a signature",
+       "from": [
+        9,
+        58
+       ],
+       "to": [
+        9,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        13,
+        23
+       ],
+       "to": [
+        13,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => 7"
+      ],
+      [
+       "expansion: checking",
+       "run() => 7"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v3-if-conditions": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        54
+       ],
+       "to": [
+        7,
+        82
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        45
+       ],
+       "to": [
+        8,
+        74
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        56
+       ],
+       "to": [
+        9,
+        114
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        56
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        17
+       ],
+       "to": [
+        14,
+        56
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        17
+       ],
+       "to": [
+        15,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        17
+       ],
+       "to": [
+        15,
+        45
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        44
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        17
+       ],
+       "to": [
+        16,
+        44
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Seq<locus::Nat>\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Nat\", \"locus::Nat\", \"locus::Seq<locus::Nat>\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v4a-returns-prop": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        36
+       ],
+       "to": [
+        8,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        9,
+        44
+       ],
+       "to": [
+        9,
+        62
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        10,
+        41
+       ],
+       "to": [
+        10,
+        61
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        19
+       ],
+       "to": [
+        14,
+        38
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        50
+       ],
+       "to": [
+        14,
+        77
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        89
+       ],
+       "to": [
+        14,
+        113
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Prop\", \"locus::Bool\", \"locus::Bool\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Prop\", \"locus::Bool\", \"locus::Bool\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v4b-returns-bool": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0308",
+      "E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        6,
+        36
+       ],
+       "to": [
+        6,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v4b-returns-bool.rs",
+         6,
+         36,
+         6,
+         46
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/v4b-returns-bool.rs:6:36\n  |\n6 |     logic fn small(n: Nat) -> Bool { n < 10 }\n  |                               ---- ^^^^^^^^^^ expected `Bool`, found `Prop`\n  |                               |\n  |                               expected `locus::Bool` because of return type\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v4b-returns-bool.rs",
+         6,
+         36,
+         6,
+         46
+        ],
+        "rendered": "error[E0308]: mismatched types\n --> policy/src/bin/v4b-returns-bool.rs:6:36\n  |\n6 |     logic fn small(n: Nat) -> Bool { n < 10 }\n  |                               ---- ^^^^^^^^^^ expected `Bool`, found `Prop`\n  |                               |\n  |                               expected `locus::Bool` because of return type\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "v5-comparison-in-ghost-local": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        10,
+        21
+       ],
+       "to": [
+        10,
+        38
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        10,
+        21
+       ],
+       "to": [
+        10,
+        38
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        11,
+        21
+       ],
+       "to": [
+        11,
+        28
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        22
+       ],
+       "to": [
+        12,
+        58
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        22
+       ],
+       "to": [
+        12,
+        58
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Prop\", \"locus::Int\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Prop\", \"locus::Int\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v6-bool-equality": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        19
+       ],
+       "to": [
+        12,
+        36
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        19
+       ],
+       "to": [
+        12,
+        36
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        25
+       ],
+       "to": [
+        13,
+        45
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        25
+       ],
+       "to": [
+        13,
+        45
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        41
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        20
+       ],
+       "to": [
+        14,
+        41
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        15,
+        20
+       ],
+       "to": [
+        15,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        16,
+        21
+       ],
+       "to": [
+        16,
+        39
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        16,
+        21
+       ],
+       "to": [
+        16,
+        39
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Prop\", \"locus::Prop\", \"locus::Prop\", \"locus::Bool\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Prop\", \"locus::Prop\", \"locus::Prop\", \"locus::Bool\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v7-mixed-connective": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        19
+       ],
+       "to": [
+        13,
+        43
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        19
+       ],
+       "to": [
+        13,
+        43
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        42
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        14,
+        18
+       ],
+       "to": [
+        14,
+        42
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        15,
+        19
+       ],
+       "to": [
+        15,
+        35
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        15,
+        19
+       ],
+       "to": [
+        15,
+        35
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "let annotation",
+       "from": [
+        16,
+        22
+       ],
+       "to": [
+        16,
+        39
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => (\"locus::Prop\", \"locus::Prop\", \"locus::Bool\")"
+      ],
+      [
+       "expansion: checking",
+       "run() => (\"locus::Prop\", \"locus::Prop\", \"locus::Bool\")"
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    },
+    "v8-bool-still-written": {
+     "expect": [
+      "reject",
+      "reject"
+     ],
+     "got": [
+      "E0271,E0308",
+      "E0271,E0308"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        37
+       ],
+       "to": [
+        7,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        8,
+        42
+       ],
+       "to": [
+        8,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        30
+       ],
+       "to": [
+        11,
+        52
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        30
+       ],
+       "to": [
+        11,
+        52
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ],
+        [
+         "check",
+         "E0271",
+         "type mismatch resolving `<bool as Model>::Logic == Prop`"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        31
+       ],
+       "to": [
+        12,
+        46
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        31
+       ],
+       "to": [
+        12,
+        46
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        29
+       ],
+       "to": [
+        13,
+        57
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        29
+       ],
+       "to": [
+        13,
+        57
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": [
+        [
+         "runtime",
+         "E0308",
+         "mismatched types"
+        ],
+        [
+         "check",
+         "E0308",
+         "mismatched types"
+        ]
+       ]
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as Model>::Logic == Prop`",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         11,
+         45,
+         11,
+         49
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`\n   --> policy/src/bin/v8-bool-still-written.rs:11:45\n    |\n 11 |         let to_a_parameter = logic! { twice(flag) };\n    |                                             ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         12,
+         31,
+         12,
+         36
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/v8-bool-still-written.rs:12:31\n   |\n12 |         let annotated: Prop = logic! { flag };\n   |                        ----   ^^^^^ expected `Prop`, found `Bool`\n   |                        |\n   |                        expected due to this\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         13,
+         29,
+         13,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/v8-bool-still-written.rs:13:29\n   |\n13 |         let generic: Prop = logic! { same(model(flag)) };\n   |                      ----   ^^^^^ expected `Prop`, found `Bool`\n   |                      |\n   |                      expected due to this\n\n"
+       }
+      ],
+      "check": [
+       {
+        "code": "E0271",
+        "message": "type mismatch resolving `<bool as Model>::Logic == Prop`",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         11,
+         45,
+         11,
+         49
+        ],
+        "rendered": "error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`\n   --> policy/src/bin/v8-bool-still-written.rs:11:45\n    |\n 11 |         let to_a_parameter = logic! { twice(flag) };\n    |                                             ^^^^ expected `Prop`, found `Bool`\n    |\nnote: required by a bound in `argument`\n   --> locus/src/lib.rs:416:24\n    |\n416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {\n    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         12,
+         31,
+         12,
+         36
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/v8-bool-still-written.rs:12:31\n   |\n12 |         let annotated: Prop = logic! { flag };\n   |                        ----   ^^^^^ expected `Prop`, found `Bool`\n   |                        |\n   |                        expected due to this\n\n"
+       },
+       {
+        "code": "E0308",
+        "message": "mismatched types",
+        "place": [
+         "policy/src/bin/v8-bool-still-written.rs",
+         13,
+         29,
+         13,
+         34
+        ],
+        "rendered": "error[E0308]: mismatched types\n  --> policy/src/bin/v8-bool-still-written.rs:13:29\n   |\n13 |         let generic: Prop = logic! { same(model(flag)) };\n   |                      ----   ^^^^^ expected `Prop`, found `Bool`\n   |                      |\n   |                      expected due to this\n\n"
+       }
+      ]
+     },
+     "verdict": "as expected"
+    },
+    "v8w-bool-written": {
+     "expect": [
+      "ok",
+      "ok"
+     ],
+     "got": [
+      "ok",
+      "ok"
+     ],
+     "pieces": [
+      {
+       "kind": "logic fn",
+       "from": [
+        6,
+        37
+       ],
+       "to": [
+        6,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic fn",
+       "from": [
+        7,
+        42
+       ],
+       "to": [
+        7,
+        47
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        11,
+        30
+       ],
+       "to": [
+        11,
+        61
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        11,
+        30
+       ],
+       "to": [
+        11,
+        61
+       ],
+       "status": "its skeleton",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        12,
+        31
+       ],
+       "to": [
+        12,
+        55
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        12,
+        31
+       ],
+       "to": [
+        12,
+        55
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      },
+      {
+       "kind": "logic!",
+       "from": [
+        13,
+        29
+       ],
+       "to": [
+        13,
+        59
+       ],
+       "status": "translated",
+       "detail": "",
+       "errors": []
+      },
+      {
+       "kind": "ghost let",
+       "from": [
+        13,
+        29
+       ],
+       "to": [
+        13,
+        59
+       ],
+       "status": "its skeleton",
+       "detail": "annotated",
+       "errors": []
+      }
+     ],
+     "same_pieces": true,
+     "errors": {
+      "runtime": [],
+      "check": []
+     },
+     "prints": [
+      [
+       "expansion: runtime",
+       "run() => \"locus::Prop\""
+      ],
+      [
+       "expansion: checking",
+       "run() => \"locus::Prop\""
+      ]
+     ],
+     "verdict": "as expected; prints as expected"
+    }
+   },
+   "seconds": {
+    "runtime": 0.8130514621734619,
+    "check": 0.8317761421203613
+   }
+  }
+ }
+}

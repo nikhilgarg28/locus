@@ -1,0 +1,17 @@
+//~ question: May a view be declared for a struct that has an unwrapped field of a type that Locus cannot see?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+use std::net::TcpListener;
+
+struct Server {
+    listener: TcpListener,
+    port: u16,
+}
+
+impl View for Server { //~ error: `Server` has no snapshot, so no view can be declared for it: its field `listener` is a `TcpListener`, which Locus cannot see; wrap the field in `Opaque<T>`
+    type V = Nat;
+    logic fn view(server: Snap<Server>) -> Nat {
+        server.port
+    }
+}

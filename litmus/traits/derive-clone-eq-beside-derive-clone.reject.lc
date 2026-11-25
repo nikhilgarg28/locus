@@ -1,0 +1,12 @@
+//~ question: May `#[derive(CloneEq)]` be written beside `#[derive(Clone)]`?
+//~ spec: traits.laws.derive
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+#[derive(Clone, CloneEq)] //~ error: `#[derive(CloneEq)]` generates `Clone for Interval`, which conflicts with the derived one: remove `Clone`
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}

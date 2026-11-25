@@ -1,0 +1,21 @@
+//~ question: Does `checked_add` give the true sum when it gives a sum at all?
+//~ spec: runtime.operations.conditions, runtime.operations
+//~ rfc: 0004
+
+fn add(a: u32, b: u32) -> Option<(s: u32, @(s == a + b))> {
+    match a.checked_add(b) {
+        Some(s) => Some((s, _)),
+        None => None,
+    }
+}
+
+fn fits() -> bool {
+    add(2, 3).is_some()
+}
+
+fn too_big() -> bool {
+    add(4_000_000_000, 4_000_000_000).is_some()
+}
+
+//~ run: fits() => true
+//~ run: too_big() => false

@@ -1,0 +1,13 @@
+//~ question: After a condition whose `&&` writes a place in its right operand, is the place known as one of the values the two paths leave?
+//~ spec: runtime.conditions, runtime.joins
+//~ rfc: 0005
+
+fn maybe(c: bool) -> u32 {
+    let mut n: u32 = 0;
+    if c && { n = 5; true } {}
+    let either: @(n == 5 || n == 0) = _;
+    n
+}
+
+//~ run: maybe(true) => 5
+//~ run: maybe(false) => 0

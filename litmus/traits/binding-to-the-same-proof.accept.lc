@@ -1,0 +1,28 @@
+//~ question: Does an implementation meet a bound that binds its associated type to the proposition it gives?
+//~ spec: traits.impls.headers, logic.ghost.type-identity
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+logic fn trivially<T: Claim<P = @(1 == 1)>>() -> @(1 == 1) {
+    T::get()
+}
+
+logic fn fine() -> @(1 == 1) {
+    trivially::<Yes>()
+}

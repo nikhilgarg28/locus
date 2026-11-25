@@ -1,0 +1,14 @@
+//~ question: May a program implement the conversion to `Prop` for a logical type of its own?
+//~ spec: traits.conversions
+//~ rfc: 0006
+
+#[derive(Logical)]
+struct Flag {
+    raised: Bool,
+}
+
+impl FromLogic<Flag> for Prop { //~ error: a program does not implement a conversion to `Prop`: only `Bool` converts, by Locus's library
+    logic fn from(f: Flag) -> Prop {
+        f.raised === true
+    }
+}

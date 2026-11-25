@@ -1,0 +1,25 @@
+//~ question: May an exported crate use a bound on a Locus trait in what only Locus crates see?
+//~ spec: export.traits
+//~ rfc: 0006
+//~ mode: export
+
+pub(locus) trait Capped {
+    logic fn cap() -> Nat;
+}
+
+pub struct Small;
+
+impl Capped for Small {
+    logic fn cap() -> Nat { 10 }
+}
+
+pub(locus) fn capped<T: Capped>(n: u32, fits: @(n <= T::cap())) -> u32 {
+    n
+}
+
+pub fn small(n: u32) -> u32 {
+    if fits: n <= 10 { capped::<Small>(n, fits) } else { 10 }
+}
+
+//~ run: small(7) => 7
+//~ run: small(70) => 10

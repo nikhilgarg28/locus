@@ -1,0 +1,32 @@
+//~ question: May an implementation give an associated type that is its own type, when the trait bounds that associated type by itself?
+//~ spec: traits.impls.acyclic, traits.evidence
+//~ rfc: 0006
+
+trait Chain: Logical {
+    type Next: Chain;
+    logic fn weight() -> Int;
+}
+
+// The evidence for `Int: Chain` names itself for the bound on `Next`, as Rust's
+// `type IntoIter = Self` does for an iterator, and no logic function depends on itself.
+impl Chain for Int {
+    type Next = Int;
+    logic fn weight() -> Int {
+        0
+    }
+}
+
+impl Chain for Bool {
+    type Next = Self;
+    logic fn weight() -> Int {
+        3
+    }
+}
+
+logic fn three_steps<T: Chain>() -> Int {
+    T::weight() + <T::Next as Chain>::weight() + <<T::Next as Chain>::Next as Chain>::weight()
+}
+
+logic fn nine() -> @(three_steps::<Bool>() === 9) {
+    compute()
+}

@@ -1,0 +1,15 @@
+//~ question: Is a proof variable that holds on the way into a loop, and that the body establishes again, known at the top of the loop and after it?
+//~ spec: runtime.loops, runtime.proofs.assigned
+//~ rfc: 0005
+
+fn count_up() -> (n: u32, @(n <= 10)) {
+    let mut n = 0;
+    let mut bounded: @(n <= 10) = _;
+    while n < 10 {
+        n += 1;
+        bounded = _;
+    }
+    (n, bounded)
+}
+
+//~ run: count_up().0 => 10

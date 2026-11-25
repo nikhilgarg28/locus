@@ -1,0 +1,12 @@
+[package]
+name = "locus-stub-oracle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+# A workspace of its own: it is built against the compiler's own crates
+# (`rustup component add rustc-dev llvm-tools`), with RUSTC_BOOTSTRAP=1.
+[workspace]

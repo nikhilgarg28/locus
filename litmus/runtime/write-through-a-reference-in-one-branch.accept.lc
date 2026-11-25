@@ -1,0 +1,16 @@
+//~ question: Where a write through one mutable reference happens in one branch, is the borrowed place known afterwards as one of the two values?
+//~ spec: runtime.borrows, runtime.joins
+//~ rfc: 0005
+
+fn maybe_written(c: bool) -> u32 {
+    let mut a: u32 = 1;
+    let r = &mut a;
+    if c {
+        *r = 7;
+    }
+    let either: @(a == 7 || a == 1) = _;
+    a
+}
+
+//~ run: maybe_written(true) => 7
+//~ run: maybe_written(false) => 1

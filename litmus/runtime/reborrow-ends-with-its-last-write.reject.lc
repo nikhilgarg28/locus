@@ -1,0 +1,14 @@
+//~ question: Is the value a reborrow ends with anything but the value of its last write?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn bump(p: &mut Pair, room: @(p.a < 100)) -> @(final!(p).a == p.a + 2) {
+    let r = &mut p.a;
+    *r += 1;
+    _ //~ error: cannot prove `final!(p).a == p.a + 2`: the borrow of `p.a` ended with `p.a + 1`, the value of its last write
+}

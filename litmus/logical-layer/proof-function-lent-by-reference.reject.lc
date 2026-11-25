@@ -1,0 +1,11 @@
+//~ question: May a shared reference to a function that takes a proof be lent to code Locus does not verify?
+//~ spec: logic.boundary.loans, logic.boundary.calls
+//~ rfc: 0002
+
+fn halve(n: u32, even: @(n % 2 == 0)) -> u32 {
+    n / 2
+}
+
+fn size() -> usize {
+    std::mem::size_of_val(&halve) //~ error: `halve` needs a proof, and whoever holds a reference to it could call it, so `&halve` cannot be lent to `size_of_val`, which Locus does not verify
+}

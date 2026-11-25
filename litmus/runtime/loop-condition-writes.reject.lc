@@ -1,0 +1,12 @@
+//~ question: When a `while` condition writes a place, does a proof kept about that place at the top of the loop still fit it once the loop is left?
+//~ spec: runtime.loops, runtime.proofs.assigned
+//~ rfc: 0005
+
+fn count() -> (n: u32, @(n <= 9)) {
+    let mut n: u32 = 0;
+    let mut small: @(n <= 9) = _;
+    while { n += 1; n < 10 } {
+        small = _;
+    }
+    (n, small) //~ error: `small` proves `n <= 9` for the value `n` had at the top of the loop, and the condition wrote `n` before the loop was left
+}

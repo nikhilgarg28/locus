@@ -1,0 +1,14 @@
+//~ question: May a method read a value of its `impl`'s type parameter when the `impl` writes no `Snapshot` bound?
+//~ spec: models.capture.bound
+//~ rfc: 0002
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T> Pair<T> {
+    fn swap(self) -> (out: Pair<T>, @(out.first === self.second && out.second === self.first)) { //~ error: `T` cannot be read in logical code: add the bound `T: Snapshot` to the `impl`
+        (Pair { first: self.second, second: self.first }, _)
+    }
+}

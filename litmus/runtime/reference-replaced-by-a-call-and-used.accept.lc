@@ -1,0 +1,19 @@
+//~ question: Is a program accepted that writes through a mutable reference after a call may have replaced it, when it claims nothing about the places it borrowed?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+fn retarget<'a>(pp: &mut &'a mut u32, other: &'a mut u32) {
+    *pp = other;
+}
+
+fn first_and_second() -> (u32, u32) {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut r = &mut a;
+    retarget(&mut r, &mut b);
+    *r = 7;
+    (a, b)
+}
+
+//~ run: first_and_second().0 => 1
+//~ run: first_and_second().1 => 7

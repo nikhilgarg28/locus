@@ -1,0 +1,18 @@
+//~ question: May a generic function pass a vector of Locus's library on with no `Snapshot` bound on the element type?
+//~ spec: collections.element-types, collections.contents
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+// The struct has no bound, so naming `Vec<T>` asks nothing of `T`. This function reads nothing.
+fn pass_on<T>(v: Vec<T>) -> Vec<T> {
+    v
+}
+
+fn kept() -> usize {
+    let mut v: Vec<u32> = Vec::new();
+    v.push(7);
+    pass_on(v).len()
+}
+
+//~ run: kept() => 1

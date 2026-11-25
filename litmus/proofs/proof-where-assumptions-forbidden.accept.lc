@@ -1,0 +1,21 @@
+//~ question: May a crate that forbids assumptions state a fact that Locus proves?
+//~ spec: proofs.assume.lint
+//~ rfc: 0002
+
+#![forbid(locus::assumptions)]
+
+fn small(n: u32) -> (m: u32, @(m < 100)) {
+    if n < 100 {
+        (n, _)
+    } else {
+        (99, _)
+    }
+}
+
+fn capped(n: u32) -> u32 {
+    let (m, below) = small(n);
+    m
+}
+
+//~ run: capped(250) => 99
+//~ run: capped(7) => 7

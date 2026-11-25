@@ -1,0 +1,9 @@
+//~ question: May an unverified function assume a fact?
+//~ spec: proofs.assume, logic.unverified.plain-rust
+//~ rfc: 0002
+
+#[unverified]
+fn first(xs: &[u32]) -> u32 {
+    let nonempty: @(xs.len() > 0) = unsafe assume!(_); //~ error: `first` is unverified, so it holds no logical code: no proposition, no proof, and no assumption
+    xs[0]
+}

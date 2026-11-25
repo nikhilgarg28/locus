@@ -1,0 +1,12 @@
+//~ question: May a logic function return the `Bool` of a comparison, with an `if`?
+//~ spec: logic.bool.iff, logic.eq.comparisons
+//~ rfc: 0002
+
+logic fn small(n: Nat) -> Bool {
+    if n < 10 { true } else { false }
+}
+
+// The `if` does not convert to its condition. `linear`, which a hole tries, splits on it, and gets the comparison from `s`.
+logic fn below_ten(n: Nat, s: @small(n)) -> @(n < 10) {
+    _
+}

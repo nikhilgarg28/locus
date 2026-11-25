@@ -1,0 +1,11 @@
+//~ question: Is a number accepted for a parameter that converts to `Prop`?
+//~ spec: traits.conversions
+//~ rfc: 0006
+
+logic fn both<P: IntoLogic<Prop>, Q: IntoLogic<Prop>>(p: P, q: Q) -> Prop {
+    p.into() && q.into()
+}
+
+fn checked(n: u32) -> @both(n, n < 10) { //~ error: `n` is a `Nat`, which does not convert to `Prop`: only a `Bool` and a proposition do
+    _
+}

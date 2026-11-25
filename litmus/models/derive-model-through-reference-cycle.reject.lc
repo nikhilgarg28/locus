@@ -2,7 +2,7 @@
 //~ spec: models.derived
 //~ rfc: 0002
 
-#[derive(Model)] //~ error: cannot derive `Model` for `Node`: it reaches itself through the reference in `next`, so its model type would have no values
+#[derive(Model)] //~ error: Locus supplies no Model derive; write an explicit library view
 struct Node {
     next: &'static Node,
 }

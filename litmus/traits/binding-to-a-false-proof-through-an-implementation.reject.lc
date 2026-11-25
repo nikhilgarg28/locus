@@ -1,0 +1,34 @@
+//~ question: Is an implementation that rustc selects under a bound that binds an associated type to a false proposition evidence for a type whose associated type is a true one?
+//~ spec: traits.impls.headers, traits.evidence
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+trait Absurd: Logical {
+    logic fn bad() -> @False;
+}
+
+impl<T: Claim<P = @False>> Absurd for T {
+    logic fn bad() -> @False {
+        T::get()
+    }
+}
+
+logic fn boom() -> @False {
+    <Yes as Absurd>::bad() //~ error: `Yes` does not implement `Absurd`: rustc selects the implementation for `T: Claim<P = @False>`, and the `P` of `Yes` is `@(1 == 1)`, so that implementation has no evidence for `Yes`
+}

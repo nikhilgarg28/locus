@@ -1,0 +1,19 @@
+//~ question: Is generic logical code rejected at a logical type that does not implement its bound?
+//~ spec: traits.rust
+//~ rfc: 0006
+
+trait Monoid: Logical {
+    logic fn unit() -> Self;
+}
+
+impl Monoid for Int {
+    logic fn unit() -> Int { 0 }
+}
+
+logic fn start<M: Monoid>() -> M {
+    M::unit()
+}
+
+logic fn wrong() -> Bool {
+    start::<Bool>() //~ error: `Bool` does not implement `Monoid`: rustc decides which types implement a trait, for logical types as for runtime ones
+}

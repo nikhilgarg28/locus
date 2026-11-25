@@ -1,0 +1,15 @@
+//~ question: After a write through a `Box`, is the `Box` known to hold the new value?
+//~ spec: runtime.writes
+//~ rfc: 0005
+
+fn boxed(mut b: Box<u32>) -> (out: Box<u32>, @(out == 2)) {
+    *b = 2;
+    (b, _)
+}
+
+fn two() -> u32 {
+    let (b, two) = boxed(Box::new(1));
+    *b
+}
+
+//~ run: two() => 2

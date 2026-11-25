@@ -1,0 +1,9 @@
+//~ question: Is a `bool` cast to an integer known to be 0 or 1?
+//~ spec: runtime.operations.conditions, runtime.operations
+//~ rfc: 0004
+
+fn flag(b: bool) -> (n: u32, @(n <= 1)) {
+    (b as u32, _)
+}
+
+//~ run: flag(true).0 => 1

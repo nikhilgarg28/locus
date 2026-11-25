@@ -1,0 +1,17 @@
+//~ question: Is a program accepted that lends two elements of an array by a pattern and writes both, when it claims nothing about the elements afterwards?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+fn set(xs: &mut [u32; 2]) {
+    let [a, b] = xs;
+    *a = 1;
+    *b = 2;
+}
+
+fn three() -> u32 {
+    let mut xs = [0, 0];
+    set(&mut xs);
+    xs[0] + xs[1]
+}
+
+//~ run: three() => 3

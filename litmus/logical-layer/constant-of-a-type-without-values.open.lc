@@ -1,0 +1,20 @@
+//~ question: May logical code read an associated constant of a generic `impl`, of a type with no values, whose initializer is a runtime call that never returns?
+//~ issue: constants-rustc-may-not-evaluate
+
+enum Void {}
+
+const fn nothing() -> Void {
+    loop {}
+}
+
+struct Holder<T>(T);
+
+impl<T> Holder<T> {
+    // No proof is in this initializer, so `logic.const.well-founded` does not reject it.
+    const NONE: Void = nothing();
+}
+
+// The snapshot of a `Void` is a sum with no variants: a value of it proves anything.
+logic fn absurd() -> @False {
+    match Holder::<u32>::NONE {}
+}

@@ -1,0 +1,15 @@
+//~ question: Is a field held at the value it had when its sibling was mutably borrowed, though it was written since?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn both(p: &mut Pair) -> @(final!(p).b == p.b) {
+    let r = &mut p.a;
+    p.b = 5;
+    *r = 1;
+    _ //~ error: cannot prove `final!(p).b == p.b`: `p.b` was written while `p.a` was lent, and ends as 5
+}

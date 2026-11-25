@@ -1,0 +1,15 @@
+//~ question: May a struct hold a field of a type that Locus cannot see, with no mark, when no logical code reads the struct?
+//~ spec: models.snapshots.opaque, models.snapshots.seen
+//~ rfc: 0002
+
+use std::net::TcpListener;
+
+struct Server {
+    listener: TcpListener,
+    port: u16,
+}
+
+// Runtime code declares, builds, and uses the struct as in Rust. It has no snapshot, and nothing here asks for one.
+fn port_of(server: &Server) -> u16 {
+    server.port
+}

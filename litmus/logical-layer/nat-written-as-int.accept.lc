@@ -1,0 +1,20 @@
+//~ question: Is a `Nat` used as an `Int` when it is written `n as Int`, beside an `Int` in an operator, in a comparison, and as an argument?
+//~ spec: logic.arith.nat-to-int
+//~ rfc: 0002
+
+logic fn negate(i: Int) -> Int {
+    0 - i
+}
+
+logic fn shifted(i: Int, n: Nat) -> Int {
+    i + n as Int
+}
+
+logic fn below_zero(n: Nat) -> Int {
+    negate(n as Int)
+}
+
+// `x` and `y` are a `Nat` and an `Int` in logical code.
+fn above(x: u32, y: i32, positive: @(y > 0)) -> @(x as Int + y > 0) {
+    _
+}

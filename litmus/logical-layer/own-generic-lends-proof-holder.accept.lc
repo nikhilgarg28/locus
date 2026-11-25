@@ -1,0 +1,25 @@
+//~ question: May the program's own generic function lend its argument to unverified code, when it is instantiated with a proof holder that may be lent?
+//~ spec: logic.ghost.generic-instantiations, logic.boundary.loans
+//~ rfc: 0002
+
+// With `u32` for `T` nothing logical is in sight. What reaches the formatting code,
+// which Locus does not verify, is a `&T`: a loan.
+fn show<T: std::fmt::Debug>(x: &T) -> String {
+    format!("{:?}", x)
+}
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn shown(n: u32) -> String {
+    let found: Option<@(n > 0)> = check(n);
+    show(&found)
+}
+
+//~ run: shown(4) => "Some(Proof)"
+//~ run: shown(0) => "None"

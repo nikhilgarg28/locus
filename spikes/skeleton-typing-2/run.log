@@ -1,0 +1,3153 @@
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo: cargo 1.97.0 (c980f4866 2026-06-30)
+
+## Hand probes of the encodings (probes2/)
+### q1: a logical enum's variants reached through the type alone
+q1 ok
+error[E0004]: non-exhaustive patterns: `shapes::_::Tree::Leaf` not covered
+  --> probes2/q1.rs:42:15
+42 |         match variants(t) { Variants::<Tree>::Node(..) => 1 }
+   |               ^^^^^^^^^^^ pattern `shapes::_::Tree::Leaf` not covered
+### q2 (P4): the callee takes each argument through a bound; the model wins for a type parameter
+q2 ok
+error[E0308]: mismatched types
+  --> probes2/q2.rs:71:36
+71 |         #[cfg(backward)] takes_nat(x);
+   |                          --------- ^ expected `Nat`, found `Int`
+   |                          |
+error[E0271]: type mismatch resolving `<&Vec<u32> as Model>::Logic == Nat`
+  --> probes2/q2.rs:72:43
+72 |         #[cfg(mismatch)] takes_nat(double(place(&v)));
+   |                                    ------ ^^^^^^^^^ type mismatch resolving `<&Vec<u32> as Model>::Logic == Nat`
+   |                                    |
+error[E0308]: mismatched types
+  --> probes2/q2.rs:73:33
+73 |         #[cfg(widen)] takes_int(first(place(&v)));
+   |                       --------- ^^^^^^^^^^^^^^^^ expected `Int`, found `Nat`
+   |                       |
+### q3 (P5): a logic function on the runtime type is found first, then one on its model
+q3 ok
+error[E0599]: no method named `__logic_top` found for struct `Seq<T>` in the current scope
+  --> probes2/q3.rs:65:104
+10 | pub struct Seq<T>(PhantomData<fn() -> T>);
+### q5: making the message for an omitted conversion say what to write
+-- --cfg op
+error[E0308]: mismatched types
+  --> probes2/q5.rs:34:35
+34 |         #[cfg(op)] let s = add(i, n);
+   |                            ---    ^ expected `Int`, found `Nat`
+   |                            |
+-- --cfg op --cfg dummy
+error[E0277]: `+` is not defined on a `Int` and a `Nat` in logical code
+  --> probes2/q5.rs:34:32
+34 |         #[cfg(op)] let s = add(i, n);
+   |                            --- ^ this is a `Int`, and the other side is a `Nat`
+   |                            |
+-- --cfg lit
+error[E0308]: mismatched types
+  --> probes2/q5.rs:35:36
+35 |         #[cfg(lit)] let d = double(literal_argument(3));
+   |                             ------ ^^^^^^^^^^^^^^^^^^^ expected `Nat`, found `Int`
+   |                             |
+### s1 to s5: an opaque snapshot for a type that nothing declares one for
+-- s1
+error[E0119]: conflicting implementations of trait `Snapshot` for type `u32`
+   | --------------------- first implementation here
+error: aborting due to 1 previous error
+-- s2
+error[E0658]: specialization is experimental
+error[E0119]: conflicting implementations of trait `SnapOr`
+   | -------------------- first implementation here
+error: aborting due to 2 previous errors
+-- s3
+s3: the fallback alone compiles
+error[E0283]: type annotations needed
+  --> probes2/s3.rs:24:26
+24 |         let both_apply = snap(&1u32);               // two candidates
+   |                          ^^^^ ----- type must be known at this point
+   |                          |
+error: aborting due to 1 previous error
+-- s4
+s4 ok: 2
+error[E0503]: cannot use `n` because it was mutably borrowed
+  --> probes2/s4.rs:16:5
+13 |     let f = Foreign(&mut n);
+   |                     ------ `n` is borrowed here
+...
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0503`.
+-- s5
+s5: a u32 through an unbounded parameter: s5::Opaque; through a bounded one: s5::BoundedU32
+
+## The conversion policy
+### The four specifications under each policy, in both expansions (tools/spec-matrix.py)
+
+What the source writes that RFC 0002's implicit rules do not, in each specification:
+`as Int` / a literal's type / `=== true` / a Bool-and-Prop bridge / `model(x)` = total
+                             p2x-v3           p2x-v2           p2x-v0           p2i-v3           p2i-v2           p2i-v0              rfc
+s1-stack                1/0/0/1/0=2      1/0/1/1/0=3      1/0/0/0/0=1      0/0/0/1/0=1      0/0/1/1/0=2      0/0/0/0/0=0      0/0/0/0/0=0
+s2-sorted-vec           0/4/0/0/0=4      0/4/0/0/0=4      0/4/0/0/0=4      0/4/0/0/0=4      0/4/0/0/0=4      0/4/0/0/0=4      0/2/0/0/0=2
+s3-binary-search        6/0/0/0/0=6      6/0/3/0/0=9      6/0/0/0/0=6      0/0/0/0/0=0      0/0/3/0/0=3      0/0/0/0/0=0      0/0/0/0/0=0
+s4-container            0/3/0/0/2=5      0/3/0/0/2=5      0/3/0/0/2=5      0/3/0/0/2=5      0/3/0/0/2=5      0/3/0/0/2=5      0/0/0/0/2=2
+all four               7/7/0/1/2=17     7/7/4/1/2=21     7/7/0/0/2=16     0/7/0/1/2=10     0/7/4/1/2=14      0/7/0/0/2=9      0/2/0/0/2=4
+
+s1-stack, p2x-v3: as Int: lines [34]; Bool and Prop bridge: lines [42]
+s1-stack, p2x-v2: as Int: lines [34]; === true: lines [42]; Bool and Prop bridge: lines [42]
+s2-sorted-vec, p2x-v3: a literal's type: lines [17, 19]
+s2-sorted-vec, p2x-v2: a literal's type: lines [17, 19]
+s3-binary-search, p2x-v3: as Int: lines [28, 43]
+s3-binary-search, p2x-v2: as Int: lines [28, 43]; === true: lines [32, 33, 65]
+s4-container, p2x-v3: a literal's type: lines [36, 89]; model(x): lines [78, 82]
+s4-container, p2x-v2: a literal's type: lines [36, 89]; model(x): lines [78, 82]
+
+### The litmus corpus: lines changed for the default policy (tools/make-explicit.py)
+corpus: 26 files; 5 files and 5 lines changed for the default policy
+  as Int: 1 lines, 4 places
+  a literal's type: 4 lines, 4 places
+  === true: 0 lines, 0 places
+  Bool and Prop bridge: 0 lines, 0 places
+## corpus (sk): 26 files, 18 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 17
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  all                          pieces  52  translated  52  no error in either expansion  45  with an error   7
+## corpus-explicit (sk): 26 files, 23 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 20
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  all                          pieces  52  translated  52  no error in either expansion  50  with an error   2
+## ghost-lets (sk): 17 files, 12 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 8
+  rejected litmus examples: 7; rustc rejects them in both expansions: 3; in the checking expansion alone: 0
+  all                          pieces  32  translated  30  no error in either expansion  27  with an error   3
+the changed corpus and the ghost-let examples under the strict variant (p3-v2), against the default:
+corpus-explicit: 26 files; compile in both expansions: default 23, strict-v2 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: default 12, strict-v2 12; outcome or output differs in 0
+corpus/ and ghost-lets/ as written (RFC 0002's text) under the default, against the switches nearest to RFC 0002:
+== logical-closure-in-body: rfc-like: ok prints commutes(3) => 3; default: E0277
+  default, runtime: 13:76: error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+== logical-fields: rfc-like: ok; default: E0308
+  default, runtime: 27:54: error[E0308]: `match` arms have incompatible types
+== match-every-arm: rfc-like: ok; default: E0308
+  default, runtime: 17:35: error[E0308]: mismatched types
+== x-joined-logical-type: rfc-like: ok prints use_them() => 1; default: E0308
+  default, runtime: 23:33: error[E0308]: mismatched types
+== x-split-logical-type: rfc-like: ok prints use_them() => 1; default: E0308
+  default, runtime: 29:33: error[E0308]: mismatched types
+corpus: 26 files; compile in both expansions: rfc-like 23, default 18; outcome or output differs in 5
+== gl-snapshot-with-associated-type-field: rfc-like: E0277; default: ok
+  rfc-like, runtime: 21:32: error[E0277]: `F` has no snapshot type that rustc can name
+ghost-lets: 17 files; compile in both expansions: rfc-like 11, default 12; outcome or output differs in 1
+
+### The policy's cases (policy/src/bin/p*, v*), default
+== p1a-literal-forward: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== p1b-literal-beside: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== p1c-literal-argument: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== p2a-omitted-as-int: expect runtime=reject check=reject; got runtime=E0271,E0277 check=E0271,E0277; as expected
+== p2b-written-as-int: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== p4a-place-arguments: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== p4b-type-parameter-omitted: expect runtime=reject check=reject; got runtime=E0283 check=E0283; as expected
+== p5-method-order: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v1-bool-result: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v1w-bool-result-written: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v2-bool-field-and-local: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v3-if-conditions: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v4a-returns-prop: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v4b-returns-bool: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== v5-comparison-in-ghost-local: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v6-bool-equality: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v7-mixed-connective: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== v8-bool-still-written: expect runtime=reject check=reject; got runtime=E0271,E0308 check=E0271,E0308; as expected
+== v8w-bool-written: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+policy: built in 0.9s (runtime) and 0.9s (checking)
+
+### The same cases under each other policy, against the default
+-- p3-v2
+== v1-bool-result: default: ok prints run() => (true, false, true); p3-v2: E0277
+  p3-v2, runtime: 9:43: error[E0277]: a `locus::Bool` is not a proposition
+== v2-bool-field-and-local: default: ok prints run() => 7; p3-v2: E0277
+  p3-v2, runtime: 9:41: error[E0277]: a `locus::Bool` is not a proposition
+== v7-mixed-connective: default: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Bool"); p3-v2: E0277
+  p3-v2, runtime: 13:28: error[E0277]: `&&` and `||` take two `Bool`s or two propositions, not a `locus::Bool` and a `Prop`
+policy: 35 files; compile in both expansions: default 21, p3-v2 18; outcome or output differs in 3
+-- p3-v0
+== v1-bool-result: default: ok prints run() => (true, false, true); p3-v0: E0308
+  p3-v0, runtime: 11:61: error[E0308]: mismatched types
+== v1w-bool-result-written: default: ok prints run() => (true, false, true); p3-v0: E0308
+  p3-v0, runtime: 9:61: error[E0308]: mismatched types
+== v3-if-conditions: default: ok prints run() => ("locus::Nat", "locus::Nat", "locus::Seq<locus::Nat>"); p3-v0: E0308
+  p3-v0, runtime: 16:35: error[E0308]: mismatched types
+== v4a-returns-prop: default: ok prints run() => ("locus::Prop", "locus::Bool", "locus::Bool"); p3-v0: E0308
+  p3-v0, runtime: 9:55: error[E0308]: mismatched types
+== v4b-returns-bool: default: E0308; p3-v0: ok prints run() => 1
+  default, runtime: 6:36: error[E0308]: mismatched types
+== v5-comparison-in-ghost-local: default: ok prints run() => ("locus::Prop", "locus::Int"); p3-v0: ok prints run() => ("locus::Bool", "locus::Int")
+== v6-bool-equality: default: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Prop", "locus::Bool"); p3-v0: ok prints run() => ("locus::Bool", "locus::Bool", "locus::Prop", "locus::Bool")
+== v7-mixed-connective: default: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Bool"); p3-v0: ok prints run() => ("locus::Bool", "locus::Bool", "locus::Bool")
+policy: 35 files; compile in both expansions: default 21, p3-v0 18; outcome or output differs in 8
+-- p3-v1
+  p3-v1, runtime: 7:75: error[E0277]: a `locus::Bool` is not a proposition
+  p3-v1, runtime: 10:60: error[E0277]: a `locus::Bool` is not a proposition
+  p3-v1, runtime: 14:47: error[E0277]: a `locus::Bool` is not a proposition
+== p2b-written-as-int: default: ok prints run() => ("locus::Int", "locus::Int", "locus::Int", "locus::Int"); p3-v1: E0277
+  p3-v1, runtime: 12:20: error[E0277]: a `locus::Bool` is not a proposition
+== v1-bool-result: default: ok prints run() => (true, false, true); p3-v1: E0277,E0308
+  p3-v1, runtime: 9:43: error[E0277]: a `locus::Bool` is not a proposition
+== v1w-bool-result-written: default: ok prints run() => (true, false, true); p3-v1: E0277,E0308
+  p3-v1, runtime: 7:61: error[E0277]: a `locus::Bool` is not a proposition
+== v2-bool-field-and-local: default: ok prints run() => 7; p3-v1: E0277
+  p3-v1, runtime: 9:41: error[E0277]: a `locus::Bool` is not a proposition
+== v3-if-conditions: default: ok prints run() => ("locus::Nat", "locus::Nat", "locus::Seq<locus::Nat>"); p3-v1: E0277,E0308
+  p3-v1, runtime: 9:61: error[E0277]: `&&` and `||` take two `Bool`s or two propositions, not a `locus::Prop` and a `locus::Bool`
+== v4a-returns-prop: default: ok prints run() => ("locus::Prop", "locus::Bool", "locus::Bool"); p3-v1: E0277,E0308
+  p3-v1, runtime: 8:36: error[E0277]: a `locus::Bool` is not a proposition
+== v4b-returns-bool: default: E0308; p3-v1: ok prints run() => 1
+  default, runtime: 6:36: error[E0308]: mismatched types
+== v5-comparison-in-ghost-local: default: ok prints run() => ("locus::Prop", "locus::Int"); p3-v1: E0277
+  p3-v1, runtime: 11:9: error[E0277]: a `locus::Bool` is not a proposition
+== v6-bool-equality: default: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Prop", "locus::Bool"); p3-v1: E0277
+  p3-v1, runtime: 15:23: error[E0277]: `&&` and `||` take two `Bool`s or two propositions, not a `locus::Bool` and a `Prop`
+== v7-mixed-connective: default: ok prints run() => ("locus::Prop", "locus::Prop", "locus::Bool"); p3-v1: E0277
+  p3-v1, runtime: 16:23: error[E0277]: a `locus::Bool` is not a proposition
+policy: 35 files; compile in both expansions: default 21, p3-v1 10; outcome or output differs in 13
+-- mixed-ops
+== p2a-omitted-as-int: default: E0271,E0277; mixed-ops: E0271
+  default, runtime: 9:28: error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+  mixed-ops, runtime: 11:39: error[E0271]: type mismatch resolving `<u32 as Model>::Logic == Int`
+policy: 35 files; compile in both expansions: default 21, mixed-ops 21; outcome or output differs in 1
+-- literals-expected
+== p1b-literal-beside: default: ok prints run() => ("locus::Int", "locus::Nat", "locus::Nat", "locus::Nat", "locus::Int", "locus::Int"); literals-expected: E0283
+  literals-expected, runtime: 17:13: error[E0283]: type annotations needed
+== p1c-literal-argument: default: E0308; literals-expected: ok prints run() => 1
+  default, runtime: 9:33: error[E0308]: mismatched types
+policy: 35 files; compile in both expansions: default 21, literals-expected 21; outcome or output differs in 2
+
+### rustc's messages where a conversion is left out
+### p2a-omitted-as-int, the runtime expansion: 4 errors
+error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+   --> policy/src/bin/p2a-omitted-as-int.rs:9:28
+    |
+  9 |         let sum = logic! { i + n };
+    |                            ^ - required by a bound introduced by this call
+    |                            |
+    |                            this is a `locus::Int`, and the other side is a `Nat`
+    |
+    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`
+    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`
+help: `locus::Int` implements trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:899:9
+    |
+899 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`
+...
+972 |         impl AddLogic<NoSuchOperand> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::add`
+   --> locus/src/lib.rs:657:19
+    |
+657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+
+error[E0277]: a `Nat` and a `locus::Int` have no order in logical code
+   --> policy/src/bin/p2a-omitted-as-int.rs:10:27
+    |
+ 10 |         let less = prove!(n < i);
+    |                           ^ - required by a bound introduced by this call
+    |                           |
+    |                           this is a `Nat`, and the other side is a `locus::Int`
+    |
+    = help: the trait `Ordered<locus::Int>` is not implemented for `Nat`
+    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`
+help: `Nat` implements trait `Ordered<Rhs>`
+   --> locus/src/lib.rs:618:5
+    |
+618 |     impl Ordered for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^ `Ordered`
+...
+626 |     impl Ordered<NoSuchOperand> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Ordered<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::lt`
+   --> locus/src/lib.rs:642:18
+    |
+642 |     pub fn lt<A: Ordered<B>, B>(_: A, _: B) -> Comparison {
+    |                  ^^^^^^^^^^ required by this bound in `lt`
+
+error[E0271]: type mismatch resolving `<u32 as Model>::Logic == Int`
+   --> policy/src/bin/p2a-omitted-as-int.rs:11:39
+    |
+ 11 |         let negated = logic! { negate(n) };
+    |                                       ^ expected `Int`, found `Nat`
+    |
+note: required by a bound in `argument`
+   --> locus/src/lib.rs:416:24
+    |
+416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {
+    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`
+
+error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+   --> policy/src/bin/p2a-omitted-as-int.rs:9:30
+    |
+  9 |         let sum = logic! { i + n };
+    |                              ^ this is a `locus::Int`, and the other side is a `Nat`
+    |
+    = help: the trait `AddLogic<Nat>` is not implemented for `locus::Int`
+    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`
+help: `locus::Int` implements trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:899:9
+    |
+899 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`
+...
+972 |         impl AddLogic<NoSuchOperand> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`
+
+(under p3-v2:)
+### v7-mixed-connective, the runtime expansion: 5 errors
+error[E0277]: `&&` and `||` take two `Bool`s or two propositions, not a `locus::Bool` and a `Prop`
+   --> policy/src/bin/v7-mixed-connective.rs:13:28
+    |
+ 13 |         let and = logic! { flag && a < b };
+    |                            ^^^^ - required by a bound introduced by this call
+    |                            |
+    |                            this is a `locus::Bool`, and the other side is a `Prop`
+    |
+    = help: the trait `Connective<Prop>` is not implemented for `locus::Bool`
+    = note: a `Bool` is made a proposition by writing `=== true` after it: `b === true`
+help: `locus::Bool` implements trait `Connective<Rhs>`
+   --> locus/src/lib.rs:507:5
+    |
+507 |     impl Connective<Bool> for Bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Connective<locus::Bool>`
+...
+517 |     impl Connective<NoSuchOperand> for Bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Connective<locus::NoSuchOperand>`
+note: required by a bound in `and`
+   --> locus/src/lib.rs:532:19
+    |
+532 |     pub fn and<A: Connective<B>, B>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^^^ required by this bound in `and`
+
+error[E0277]: `&&` and `||` take two `Bool`s or two propositions, not a `Prop` and a `locus::Bool`
+   --> policy/src/bin/v7-mixed-connective.rs:14:29
+    |
+ 14 |         let or = logic! { a < b || flag };
+    |                             ^   - required by a bound introduced by this call
+    |                             |
+    |                             this is a `Prop`, and the other side is a `locus::Bool`
+    |
+    = help: the trait `Connective<locus::Bool>` is not implemented for `Prop`
+    = note: a `Bool` is made a proposition by writing `=== true` after it: `b === true`
+help: `Prop` implements trait `Connective<Rhs>`
+   --> locus/src/lib.rs:510:5
+    |
+510 |     impl Connective<Prop> for Prop {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Connective<Prop>`
+...
+521 |     impl Connective<NoSuchOperand> for Prop {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Connective<locus::NoSuchOperand>`
+note: required by a bound in `or`
+   --> locus/src/lib.rs:535:18
+    |
+535 |     pub fn or<A: Connective<B>, B>(_: A, _: B) -> A::Output {
+    |                  ^^^^^^^^^^^^^ required by this bound in `or`
+
+### v2-bool-field-and-local, the runtime expansion: 7 errors
+error[E0277]: a `locus::Bool` is not a proposition
+   --> policy/src/bin/v2-bool-field-and-local.rs:9:41
+    |
+  9 |     fn pass(g: &Gate, n: u32, allowed: @(g.open), fits: @(g.open && n <= g.width)) -> u32 { n }
+    |                                         ^^^^^^^^ a proposition is wanted here, and this is a `locus::Bool`
+    |
+    = help: the trait `Proposition` is not implemented for `locus::Bool`
+    = note: a `Bool` is made a proposition by writing `=== true` after it: `b === true`
+help: the trait `Proposition` is implemented for `Prop`
+   --> locus/src/lib.rs:494:5
+    |
+494 |     impl Proposition for Prop {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `proposition`
+   --> locus/src/lib.rs:392:27
+    |
+392 |     pub fn proposition<P: Proposition>(_: impl FnOnce() -> P) {}
+    |                           ^^^^^^^^^^^ required by this bound in `proposition`
+
+(under the default:)
+### v8-bool-still-written, the runtime expansion: 3 errors
+error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`
+   --> policy/src/bin/v8-bool-still-written.rs:11:45
+    |
+ 11 |         let to_a_parameter = logic! { twice(flag) };
+    |                                             ^^^^ expected `Prop`, found `Bool`
+    |
+note: required by a bound in `argument`
+   --> locus/src/lib.rs:416:24
+    |
+416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {
+    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`
+
+error[E0308]: mismatched types
+  --> policy/src/bin/v8-bool-still-written.rs:12:31
+   |
+12 |         let annotated: Prop = logic! { flag };
+   |                        ----   ^^^^^ expected `Prop`, found `Bool`
+   |                        |
+   |                        expected due to this
+
+error[E0308]: mismatched types
+  --> policy/src/bin/v8-bool-still-written.rs:13:29
+   |
+13 |         let generic: Prop = logic! { same(model(flag)) };
+   |                      ----   ^^^^^ expected `Prop`, found `Bool`
+   |                      |
+   |                      expected due to this
+
+### v4b-returns-bool, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+ --> policy/src/bin/v4b-returns-bool.rs:6:36
+  |
+6 |     logic fn small(n: Nat) -> Bool { n < 10 }
+  |                               ---- ^^^^^^^^^^ expected `Bool`, found `Prop`
+  |                               |
+  |                               expected `locus::Bool` because of return type
+
+### p4b-type-parameter-omitted, the runtime expansion: 2 errors
+error[E0283]: type annotations needed
+   --> policy/src/bin/p4b-type-parameter-omitted.rs:10:13
+    |
+ 10 |         let ambiguous = logic! { same(n) };
+    |             ^^^^^^^^^   ----- type must be known at this point
+    |
+    = note: the type must implement `locus::Logical`
+    = help: the following types implement trait `locus::Logical`:
+              (A, B)
+              (A, B, C)
+              Address
+              BoundedI128
+              BoundedI16
+              BoundedI32
+              BoundedI64
+              BoundedI8
+            and 19 others
+note: required by a bound in `logic`
+   --> locus/src/lib.rs:380:21
+    |
+380 |     pub fn logic<G: Logical>(_: impl FnOnce() -> G) -> G {
+    |                     ^^^^^^^ required by this bound in `logic`
+help: consider giving `ambiguous` an explicit type
+    |
+ 10 |         let ambiguous: /* Type */ = logic! { same(n) };
+    |                      ++++++++++++
+
+### p1a-literal-forward, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+  --> policy/src/bin/p1a-literal-forward.rs:10:19
+   |
+10 |         takes_nat(zero)
+   |         --------- ^^^^ expected `Nat`, found `Int`
+   |         |
+   |         arguments to this function are incorrect
+   |
+note: function defined here
+  --> policy/src/bin/p1a-literal-forward.rs:7:8
+   |
+ 7 |     fn takes_nat(n: Nat) -> u32 { 1 }
+   |        ^^^^^^^^^  -----
+
+### p1c-literal-argument, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+ --> policy/src/bin/p1c-literal-argument.rs:9:33
+  |
+9 |         let d = logic! { double(3) };
+  |                          ------ ^ expected `Nat`, found `Int`
+  |                          |
+  |                          arguments to this function are incorrect
+  |
+note: function defined here
+ --> policy/src/bin/p1c-literal-argument.rs:7:14
+  |
+7 |     logic fn double(n: Nat) -> Nat { n + n }
+  |              ^^^^^^ ------
+
+
+### Two omissions in each specification (spec-omit/, from tools/gen-omissions.py)
+== o1a-stack: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+== o1b-stack: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== o2a-sorted-vec: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== o2b-sorted-vec: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== o3a-binary-search: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+== o3b-binary-search: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+== o4a-container: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+== o4b-container: expect runtime=reject check=reject; got runtime=E0308 check=E0308; as expected
+### o1a-stack, the runtime expansion: 1 errors
+error[E0277]: `==` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+   --> spec-omit/src/bin/o1a-stack.rs:34:64
+    |
+ 34 |         pub fn new(cap: usize) -> (s: Stack, @(s.len() == 0 && s.room() == cap)) {
+    |                                                                ^^^^^^^^ - required by a bound introduced by this call
+    |                                                                |
+    |                                                                this is a `locus::Int`, and the other side is a `locus::Nat`
+    |
+    = help: the trait `Equality<locus::Nat>` is not implemented for `locus::Int`
+    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`
+    = note: `===` compares two values of any one logical type
+help: `locus::Int` implements trait `Equality<Rhs>`
+   --> locus/src/lib.rs:615:5
+    |
+615 |     impl Equality for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`
+...
+620 |     impl Equality<NoSuchOperand> for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::eq`
+   --> locus/src/lib.rs:636:18
+    |
+636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {
+### o1b-stack, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+  --> spec-omit/src/bin/o1b-stack.rs:42:64
+   |
+42 |         pub fn is_empty(&self) -> (r: bool, @(r == (self.len() == 0))) {
+   |                                                                ^ expected `Bool`, found `Prop`
+### o2a-sorted-vec, the runtime expansion: 1 errors
+error[E0308]: `if` and `else` have incompatible types
+  --> spec-omit/src/bin/o2a-sorted-vec.rs:19:59
+   |
+16 | /         if xs.len() == 0 {
+17 | |             0
+   | |             - expected because of this
+18 | |         } else {
+19 | |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1 as Nat), x)
+   | |                                                           ^ expected `Int`, found `Nat`
+20 | |         }
+   | |_________- `if` and `else` have incompatible types
+### o2b-sorted-vec, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+   --> spec-omit/src/bin/o2b-sorted-vec.rs:19:75
+    |
+ 19 |             (if xs[0] < x { 1 as Nat } else { 0 as Nat }) + below(xs.skip(1), x)
+    |                                                                      ---- ^ expected `Nat`, found `Int`
+    |                                                                      |
+    |                                                                      arguments to this method are incorrect
+    |
+note: method defined here
+   --> locus/src/lib.rs:948:26
+    |
+948 |             pub logic fn skip(self, n: Nat) -> Seq<T> { builtin }
+    |                          ^^^^
+### o3a-binary-search, the runtime expansion: 1 errors
+error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Int` in logical code
+   --> spec-omit/src/bin/o3a-binary-search.rs:43:27
+    |
+ 43 |             let middle: @(mid == lo as Int + (hi - lo) / 2) = _;
+    |                           ^^^ - required by a bound introduced by this call
+    |                           |
+    |                           this is a `locus::Nat`, and the other side is a `locus::Int`
+    |
+    = help: the trait `Equality<locus::Int>` is not implemented for `locus::Nat`
+    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`
+    = note: `===` compares two values of any one logical type
+help: `locus::Nat` implements trait `Equality<Rhs>`
+   --> locus/src/lib.rs:616:5
+    |
+616 |     impl Equality for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^ `Equality`
+...
+622 |     impl Equality<NoSuchOperand> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Equality<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::eq`
+   --> locus/src/lib.rs:636:18
+    |
+636 |     pub fn eq<A: Equality<B>, B>(_: A, _: B) -> Comparison {
+### o3b-binary-search, the runtime expansion: 2 errors
+error[E0277]: `+` is not defined on a `locus::Nat` and a `locus::Int` in logical code
+   --> spec-omit/src/bin/o3b-binary-search.rs:28:14
+    |
+ 28 |         -> @(lo + (hi - lo) / 2 >= lo as Int && lo as Int + (hi - lo) / 2 < hi as Int) { _ }
+    |              ^^ - required by a bound introduced by this call
+    |              |
+    |              this is a `locus::Nat`, and the other side is a `locus::Int`
+    |
+    = help: the trait `AddLogic<locus::Int>` is not implemented for `locus::Nat`
+    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`
+help: `locus::Nat` implements trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:903:9
+    |
+903 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `AddLogic`
+...
+976 |         impl AddLogic<NoSuchOperand> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `AddLogic<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::add`
+   --> locus/src/lib.rs:657:19
+    |
+657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+### o4a-container, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+  --> spec-omit/src/bin/o4a-container.rs:82:54
+   |
+76 |     pub fn put_weighed<T: Model>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))
+   |                        - found this type parameter
+...
+82 |         let added = logic! { total_of_pushed(before, x) };
+   |                              ---------------         ^ expected associated type, found type parameter `T`
+   |                              |
+   |                              arguments to this function are incorrect
+   |
+   = note: expected associated type `<T as locus::Model>::Logic`
+               found type parameter `T`
+note: function defined here
+  --> spec-omit/src/bin/o4a-container.rs:39:14
+   |
+39 |     logic fn total_of_pushed<W: Weighed>(xs: Seq<W>, x: W) -> @(total(xs.push(x)) == total(xs) + x.weight()) { _ }
+   |              ^^^^^^^^^^^^^^^                         ----
+help: consider further restricting this bound
+   |
+76 |     pub fn put_weighed<T: Model<Logic = T>>(shelf: &mut Shelf<T>, x: T, room: @(snap(shelf.items).len() < shelf.limit))
+   |                                +++++++++++
+### o4b-container, the runtime expansion: 1 errors
+error[E0308]: mismatched types
+   --> spec-omit/src/bin/o4b-container.rs:89:55
+    |
+ 89 |         let mut so_far: @(w == total(shelf.items.take(0))) = _;
+    |                                                  ---- ^ expected `Nat`, found `Int`
+    |                                                  |
+    |                                                  arguments to this method are incorrect
+    |
+note: method defined here
+   --> locus/src/lib.rs:949:26
+    |
+949 |             pub logic fn take(self, n: Nat) -> Seq<T> { builtin }
+    |                          ^^^^
+
+## Positions and shapes (policy/src/bin/d*, two-lib/, two-app/)
+== d1-field-proposition: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (2, 7)
+== d1e-field-proposition-error: expect runtime=reject check=reject; got runtime=E0277,E0425 check=E0277,E0425; as expected
+  runtime: 10:20: error[E0425]: cannot find value `high` in this scope
+  runtime: 9:18: error[E0277]: a `Seq<Nat>` and a `_` have no order in logical code
+== d2-trait-method-contract: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (6, 4)
+== d2e-trait-method-contract-error: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+  runtime: 9:38: error[E0277]: `==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code
+  runtime: 10:56: error[E0277]: an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`
+== d3-nested-pattern: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Nat", "locus::Nat")
+== d3e-nested-pattern-error: expect runtime=reject check=reject; got runtime=E0023,E0308,E0599 check=E0023,E0308,E0599; as expected
+  runtime: 8:61: error[E0599]: no variant, associated function, or constant named `Twig` found for enum `_::Tree` in the current scope
+  runtime: 9:69: error[E0023]: this pattern has 2 fields, but the corresponding tuple variant has 3 fields
+== d4-imported-enum: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Nat", "locus::Nat", "locus::Nat")
+== d5-models: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::Seq<locus::Nat>", "d5_models::Point_Logic", "locus::Nat", "d5_models::Pair_Logic<locus::Nat, locus::Seq<locus::Int>>", "locus::Seq<locus::Int>", "d5_models::List_Logic", "locus::Nat")
+== e04-bool-for-prop-parameter: expect runtime=reject check=reject; got runtime=E0271,E0308 check=E0271,E0308; as expected
+  runtime: 8:43: error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`
+  runtime: 9:43: error[E0308]: mismatched types
+  proposition in a field's type pieces   6  translated   6  no error in either expansion   4  with an error   2
+  proposition in a signature   pieces  23  translated  23  no error in either expansion  21  with an error   2
+  all                          pieces 159  translated 148  no error in either expansion 130  with an error  18
+    d1e-field-proposition-error:9:17 (proposition in a field's type; check+runtime): E0277: a `Seq<Nat>` and a `_` have no order in logical code
+    d1e-field-proposition-error:10:19 (proposition in a field's type; check+runtime): E0425: cannot find value `high` in this scope
+    d2e-trait-method-contract-error:9:37 (proposition in a signature; check+runtime): E0277: `==` is not defined on a `locus::Nat` and a `locus::Seq<locus::Nat>` in logical code
+    d2e-trait-method-contract-error:10:38 (proposition in a signature; check+runtime): E0277: an integer literal is an `Int` or a `Nat`, not a `locus::Seq<locus::Nat>`
+== app: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => (13, 57, "two_lib::Rational", "two_lib::Sign", "app::Weight", "locus::Nat", "locus::Nat")
+two-app: built in 0.3s (runtime) and 0.3s (checking)
+the two crates with the first round's hidden trait (LOCUS_SPIKE_HIDDEN_TRAIT=1):
+== app: default: ok prints run() => (13, 57, "two_lib::Rational", "two_lib::Sign", "app::Weight", "locus::Nat", "locus::Nat"); hidden-trait: E0277,E0405
+  hidden-trait, runtime: 14:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+two-app: 1 files; compile in both expansions: default 1, hidden-trait 0; outcome or output differs in 1
+
+## Snapshots for every type
+### Where lowering adds the bound `Snapshot`, in the first round's five sets and in this round's
+with no bound added (off): 11 files, 43 places where rustc reports that a type has no snapshot type:
+  cases/h05-hand-lifetime-marker: 1 places; with the bounds added (calls): still no snapshot type
+  ghost-lets/gl-snapshot-with-associated-type-field: 3 places; with the bounds added (calls): compiles
+  policy/n1-snapshot-bounds-inserted: 6 places; with the bounds added (calls): compiles (not with `mentions` alone)
+  policy/n2-snapshot-in-trait-impl: 2 places; with the bounds added (calls): still no snapshot type
+  policy/n3-snapshot-unlowered-caller: 2 places; with the bounds added (calls): still no snapshot type
+  policy/n4-snapshot-other-invocation: 3 places; with the bounds added (calls): still no snapshot type
+  policy/n5-snapshot-foreign-type: 6 places; with the bounds added (calls): still no snapshot type
+  policy/n6-snapshot-opaque-mixes: 4 places; with the bounds added (calls): still no snapshot type
+  skel/c05-no-snapshot: 3 places; with the bounds added (calls): still no snapshot type
+  skel/c06-unbounded-parameter: 4 places; with the bounds added (calls): compiles
+  spec/s4-container: 9 places; with the bounds added (calls): compiles
+mentions: bounds added in 17 places (12 on a function, 3 on a type, 2 on an impl); by set: ghost-lets 1, policy 7, skel 6, spec 3
+  where lowering sees the need and cannot add the bound: ["policy/n2-snapshot-in-trait-impl:12 (a method of a trait's impl)"]
+  files where rustc still reports a missing snapshot type: ['cases/h05-hand-lifetime-marker', 'policy/n1-snapshot-bounds-inserted', 'policy/n2-snapshot-in-trait-impl', 'policy/n3-snapshot-unlowered-caller', 'policy/n4-snapshot-other-invocation', 'policy/n5-snapshot-foreign-type', 'policy/n6-snapshot-opaque-mixes', 'skel/c05-no-snapshot']
+calls: bounds added in 18 places (13 on a function, 3 on a type, 2 on an impl); by set: ghost-lets 1, policy 8, skel 6, spec 3
+  where lowering sees the need and cannot add the bound: ["policy/n2-snapshot-in-trait-impl:12 (a method of a trait's impl)"]
+  files where rustc still reports a missing snapshot type: ['cases/h05-hand-lifetime-marker', 'policy/n2-snapshot-in-trait-impl', 'policy/n3-snapshot-unlowered-caller', 'policy/n4-snapshot-other-invocation', 'policy/n5-snapshot-foreign-type', 'policy/n6-snapshot-opaque-mixes', 'skel/c05-no-snapshot']
+
+### The opaque fallback of `snap(x)`: the default against LOCUS_SPIKE_SNAP_FALLBACK=off
+corpus: 26 files; compile in both expansions: no-fallback 18, default 18; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: no-fallback 12, default 12; outcome or output differs in 0
+cases: 58 files; compile in both expansions: no-fallback 18, default 18; outcome or output differs in 0
+== c05-no-snapshot: no-fallback: E0277; default: ok prints run() => 1
+  no-fallback, runtime: 12:36: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+skel: 38 files; compile in both expansions: no-fallback 13, default 14; outcome or output differs in 1
+more: 39 files; compile in both expansions: no-fallback 15, default 15; outcome or output differs in 0
+== n2-snapshot-in-trait-impl: no-fallback: E0277; default: ok prints run() => "locus::Opaque"
+  no-fallback, runtime: 12:74: error[E0277]: `T` has no snapshot type that rustc can name
+== n6-snapshot-opaque-mixes: no-fallback: E0277; default: ok prints run() => 1
+  no-fallback, runtime: 12:40: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+policy: 35 files; compile in both expansions: no-fallback 19, default 21; outcome or output differs in 2
+spec: 4 files; compile in both expansions: no-fallback 4, default 4; outcome or output differs in 0
+
+### The cases (policy/src/bin/n*), default
+== n1-snapshot-bounds-inserted: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+  both print: run() => ("locus::BoundedU32", "locus::Seq<locus::BoundedU8>", "n1_snapshot_bounds_inserted::__locus_snap_Keep<locus::Bool>", 1)
+== n2-snapshot-in-trait-impl: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; PRINTS ['run() => "locus::Opaque"'], EXPECTED ['run() => "locus::BoundedU32"']
+  both print: run() => "locus::Opaque"
+== n3-snapshot-unlowered-caller: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 11:52: error[E0277]: `T` has no snapshot type that rustc can name
+== n4-snapshot-other-invocation: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 17:21: error[E0277]: `T` has no snapshot type that rustc can name
+  runtime: 16:64: error[E0277]: `T` has no snapshot type that rustc can name
+== n5-snapshot-foreign-type: expect runtime=ok check=ok; got runtime=E0277 check=E0277; DIFFERS
+  runtime: 12:17: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+  runtime: 17:58: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+== n6-snapshot-opaque-mixes: expect runtime=reject check=reject; got runtime=ok check=ok; DIFFERS
+  both print: run() => 1
+
+### The first round's snapshot cases, and the litmus example that regressed
+== c01-no-borrow: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== c02-vec-as-seq: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== c03-snap-in-header: expect runtime=reject check=reject; got runtime=E0277 check=E0277; as expected
+== c04-snap-header-selected: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== c05-no-snapshot: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== c06-unbounded-parameter: expect runtime=ok check=ok; got runtime=ok check=ok; as expected; prints as expected
+== c07-two-snap-headers: expect runtime=ok check=ok; got runtime=E0119 check=E0119; DIFFERS
+== gl-snapshot-survives-assignment: expect litmus accept; got runtime=ok check=ok; compiles both ways
+== gl-snapshot-unchanged: expect litmus accept; got runtime=ok check=ok; compiles both ways
+== gl-snapshot-with-associated-type-field: expect litmus accept; got runtime=ok check=ok; compiles both ways
+
+## The first round's suite
+### With the switches nearest to the first round's defaults: what the new lowering changed
+corpus: 26 files; compile in both expansions: round1 23, r1like 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: round1 11, r1like 11; outcome or output differs in 0
+== t13a-imported-impl: round1: E0277,E0405; r1like: ok
+  round1, runtime: 20:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t13c-imported-type: round1: E0599; r1like: ok
+  round1, runtime: 25:33: error[E0599]: no associated function or constant named `__logic_le` found for struct `Rational` in the current scope
+== t13d-imported-qualified: round1: E0405; r1like: ok
+  round1, runtime: 25:29: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+== t15-names-trait-path: round1: E0782; r1like: ok
+  round1, runtime: 20:23: error[E0782]: expected a type, found a trait
+== t17-default-member-split: round1: E0277,E0599; r1like: ok prints run() => 1
+  round1, runtime: 17:20: error[E0277]: the trait bound `Thing: __locus_logic_Named` is not satisfied
+cases: 58 files; compile in both expansions: round1 29, r1like 34; outcome or output differs in 5
+== a05-operators: round1: ok prints run() => ("locus::Bool", "locus::Prop", "locus::Int", "locus::Erased"); r1like: ok prints run() => ("locus::Bool", "locus::Prop", "locus::Int", "locus::Proof")
+== a08-quantifiers: round1: ok prints run() => ("locus::Prop", "locus::Erased"); r1like: ok prints run() => ("locus::Prop", "locus::Proof")
+== a09-holes-proofs: round1: ok prints run() => ("locus::Erased", "locus::Nat", "locus::Erased"); r1like: ok prints run() => ("locus::Proof", "locus::Nat", "locus::Proof")
+== f13-copied: round1: E0283; r1like: ok prints run(&vec![4, 5, 6]) => 3
+  round1, runtime: 12:33: error[E0283]: type annotations needed
+== f14-tuple-component: round1: E0282,E0283; r1like: ok prints run(&vec![4, 5, 6]) => 3
+  round1, runtime: 10:13: error[E0282]: type annotations needed for `(usize, _)`
+== f15-format-capture: round1: ok prints run(&vec![4, 5, 6]) => "Untyped"; r1like: ok prints run(&vec![4, 5, 6]) => "Int"
+== f16-only-logical: round1: E0277; r1like: ok prints run(&vec![4, 5, 6]) => 3
+  round1, runtime: 13:30: error[E0277]: `Untyped` has no model, so a value of it cannot be used as a value in logical code
+== f17-tuple-copied: round1: E0282,E0283; r1like: ok prints run(&vec![4, 5, 6]) => 3
+  round1, runtime: 9:13: error[E0282]: type annotations needed for `(usize, _)`
+== x11-method-on-runtime-type: round1: E0277; r1like: ok prints run() => "locus::Nat"
+  round1, runtime: 17:34: error[E0277]: `Stack` has no model, so a value of it cannot be used as a value in logical code
+== x13-inferred-forward: round1: ok prints run() => ("locus::Nat", "locus::Erased", "locus::Seq<locus::Nat>"); r1like: ok prints run() => ("locus::Nat", "locus::Proof", "locus::Seq<locus::Nat>")
+== x14-view-imported: round1: E0433; r1like: ok prints run() => ("locus::Nat", "locus::Nat")
+  round1, runtime: 25:17: error[E0433]: cannot find module or crate `__locus_view_Tree` in this scope
+skel: 38 files; compile in both expansions: round1 16, r1like 22; outcome or output differs in 11
+== r07-reserved-name-allowed: round1: E0034; r1like: E0308,E0428
+  round1, runtime: 21:31: error[E0034]: multiple applicable items in scope
+  r1like, runtime: 13:9: error[E0428]: the name `__logic_answer` is defined multiple times
+== s16-names: round1: E0277,E0405; r1like: ok prints run() => 15
+  round1, runtime: 25:10: error[E0405]: cannot find trait `__locus_logic_OrderSpec` in this scope
+more: 39 files; compile in both expansions: round1 21, r1like 22; outcome or output differs in 2
+
+### From there, one change of policy at a time: P1, a literal that nothing stands beside is an Int
+== logical-fields: r1like: ok; step-p1: E0308
+  step-p1, runtime: 27:54: error[E0308]: `match` arms have incompatible types
+== match-every-arm: r1like: ok; step-p1: E0308
+  step-p1, runtime: 17:35: error[E0308]: mismatched types
+== x-joined-logical-type: r1like: ok prints use_them() => 1; step-p1: E0308
+  step-p1, runtime: 23:33: error[E0308]: mismatched types
+== x-split-logical-type: r1like: ok prints use_them() => 1; step-p1: E0308
+  step-p1, runtime: 29:33: error[E0308]: mismatched types
+corpus: 26 files; compile in both expansions: r1like 23, step-p1 19; outcome or output differs in 4
+ghost-lets: 17 files; compile in both expansions: r1like 11, step-p1 11; outcome or output differs in 0
+== d01-derive: r1like: ok prints sizes: Rational 0, Tree 0, Pair<Tree> 0, List<Rational> 0, Tagged 4 | debug: Rational Tree Pair List | build() => 7; step-p1: E0308
+  step-p1, runtime: 32:58: error[E0308]: `match` arms have incompatible types
+== g05-mutable-borrow: r1like: ok prints run(&vec![4, 5, 6]) => 3; step-p1: E0308
+  step-p1, runtime: 18:30: error[E0308]: mismatched types
+== g11-loop-assignment: r1like: E0283; step-p1: E0308
+  r1like, runtime: 13:13: error[E0283]: type annotations needed
+  step-p1, runtime: 30:27: error[E0308]: mismatched types
+== h04-snap-header-alias: r1like: ok; step-p1: E0308
+  step-p1, runtime: 14:33: error[E0308]: mismatched types
+== t09-monoid: r1like: E0283; step-p1: E0283,E0308
+  r1like, runtime: 48:40: error[E0283]: type annotations needed
+  step-p1, runtime: 36:73: error[E0308]: mismatched types
+== t11-kind-logic-for-fn: r1like: E0046,E0407; step-p1: E0046,E0308,E0407
+  r1like, runtime: 14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`
+  step-p1, runtime: 14:15: error[E0407]: method `__logic_byte` is not a member of trait `OneByte`
+== t17-default-member-split: r1like: ok prints run() => 1; step-p1: E0308
+  step-p1, runtime: 10:31: error[E0308]: mismatched types
+== t18-default-member-split-in-trait: r1like: ok prints run() => 1; step-p1: E0308
+  step-p1, runtime: 9:31: error[E0308]: mismatched types
+cases: 58 files; compile in both expansions: r1like 34, step-p1 29; outcome or output differs in 8
+== a01-calls: r1like: ok prints run() => ("locus::Nat", "locus::Nat", "locus::Nat", "locus::Int"); step-p1: E0308
+  step-p1, runtime: 19:39: error[E0308]: mismatched types
+== a04-match: r1like: ok prints run() => ("a04_match::Tree", "locus::Nat", "locus::Nat", "locus::Nat", 0, 4); step-p1: E0308
+  step-p1, runtime: 17:58: error[E0308]: `match` arms have incompatible types
+== a07-literals: r1like: ok prints run() => ["locus::Nat", "locus::Int", "locus::Nat", "locus::Nat", "locus::Int", "locus::Int", "locus::Int"]; step-p1: E0308
+  step-p1, runtime: 14:36: error[E0308]: mismatched types
+== a09-holes-proofs: r1like: ok prints run() => ("locus::Proof", "locus::Nat", "locus::Proof"); step-p1: E0308
+  step-p1, runtime: 17:63: error[E0308]: `match` arms have incompatible types
+== x01-literal-alone: r1like: E0283; step-p1: ok prints run() => "locus::Int"
+  r1like, runtime: 13:13: error[E0283]: type annotations needed
+== x02-literal-backward: r1like: ok prints run() => ("locus::Nat", 1); step-p1: E0308
+  step-p1, runtime: 14:36: error[E0308]: mismatched types
+== x08-nested-pattern: r1like: ok prints run() => "locus::Nat"; step-p1: E0308
+  step-p1, runtime: 14:45: error[E0308]: `match` arms have incompatible types
+== x14-view-imported: r1like: ok prints run() => ("locus::Nat", "locus::Nat"); step-p1: E0308
+  step-p1, runtime: 17:55: error[E0308]: `match` arms have incompatible types
+skel: 38 files; compile in both expansions: r1like 22, step-p1 16; outcome or output differs in 8
+== s08-blanket-collision: r1like: ok prints run() => 1; step-p1: E0308
+  step-p1, runtime: 15:32: error[E0308]: mismatched types
+== s09-blanket-serves-marker: r1like: ok prints run() => 1; step-p1: E0308
+  step-p1, runtime: 18:32: error[E0308]: mismatched types
+== s10-blanket-logical-argument: r1like: ok prints run() => 1; step-p1: E0308
+  step-p1, runtime: 16:31: error[E0308]: mismatched types
+== s21-logic-argument-generic: r1like: E0283; step-p1: ok prints run() => 1
+  r1like, runtime: 11:37: error[E0283]: type annotations needed
+more: 39 files; compile in both expansions: r1like 22, step-p1 20; outcome or output differs in 4
+
+### From there, one change of policy at a time: P2, Nat to Int is written
+== logical-closure-in-body: r1like: ok prints commutes(3) => 3; step-p2: E0277
+  step-p2, runtime: 13:76: error[E0277]: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+corpus: 26 files; compile in both expansions: r1like 23, step-p2 22; outcome or output differs in 1
+ghost-lets: 17 files; compile in both expansions: r1like 11, step-p2 11; outcome or output differs in 0
+cases: 58 files; compile in both expansions: r1like 34, step-p2 34; outcome or output differs in 0
+== a08-quantifiers: r1like: ok prints run() => ("locus::Prop", "locus::Proof"); step-p2: E0277
+  step-p2, runtime: 14:39: error[E0277]: `+` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+== f14-tuple-component: r1like: ok prints run(&vec![4, 5, 6]) => 3; step-p2: E0277
+  step-p2, runtime: 11:27: error[E0277]: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+== f16-only-logical: r1like: ok prints run(&vec![4, 5, 6]) => 3; step-p2: E0277
+  step-p2, runtime: 12:27: error[E0277]: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+== f17-tuple-copied: r1like: ok prints run(&vec![4, 5, 6]) => 3; step-p2: E0277
+  step-p2, runtime: 10:27: error[E0277]: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+skel: 38 files; compile in both expansions: r1like 22, step-p2 18; outcome or output differs in 4
+more: 39 files; compile in both expansions: r1like 22, step-p2 22; outcome or output differs in 0
+
+### From there, one change of policy at a time: P3, a comparison is a Prop (V3)
+corpus: 26 files; compile in both expansions: r1like 23, step-p3 23; outcome or output differs in 0
+ghost-lets: 17 files; compile in both expansions: r1like 11, step-p3 11; outcome or output differs in 0
+== d06-bounded-impl-probe: r1like: ok prints run() => 1; step-p3: E0308
+  step-p3, runtime: 14:45: error[E0308]: mismatched types
+== t01-two-traits: r1like: ok prints newest() => (2, 5) | spec_only() => 3; step-p3: E0308
+  step-p3, runtime: 28:55: error[E0308]: mismatched types
+== t02-max-rational: r1like: E0277; step-p3: E0277,E0308
+  r1like, runtime: 61:35: error[E0277]: the trait bound `Rational: CheckedOrder` is not satisfied
+  step-p3, runtime: 24:55: error[E0308]: mismatched types
+== t03-logical-impl-runs: r1like: error; step-p3: E0308,error
+  r1like, runtime: 61:12: error[error]: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checke
+  step-p3, runtime: 61:12: error[error]: locus: a logical type implements only traits with no method that runs, and this implementation of `CheckedOrder` gives the method `le_checke
+== t12-names-same-module: r1like: ok prints run() => 15; step-p3: E0308
+  step-p3, runtime: 16:55: error[E0308]: mismatched types
+== t13a-imported-impl: r1like: ok; step-p3: E0308
+  step-p3, runtime: 21:55: error[E0308]: mismatched types
+== t13b-imported-parameter: r1like: ok; step-p3: E0308
+  step-p3, runtime: 21:55: error[E0308]: mismatched types
+== t13c-imported-type: r1like: ok; step-p3: E0308
+  step-p3, runtime: 21:55: error[E0308]: mismatched types
+== t13d-imported-qualified: r1like: ok; step-p3: E0308
+  step-p3, runtime: 21:55: error[E0308]: mismatched types
+== t14-imported-in-trait: r1like: ok; step-p3: E0308
+  step-p3, runtime: 20:55: error[E0308]: mismatched types
+== t15-names-trait-path: r1like: ok; step-p3: E0308
+  step-p3, runtime: 16:55: error[E0308]: mismatched types
+== t16-names-trait-path-in-trait: r1like: ok; step-p3: E0308
+  step-p3, runtime: 15:55: error[E0308]: mismatched types
+== t19-runtime-name-clash: r1like: ok prints same() => true; step-p3: E0308
+  step-p3, runtime: 17:53: error[E0308]: mismatched types
+cases: 58 files; compile in both expansions: r1like 34, step-p3 23; outcome or output differs in 13
+== a05-operators: r1like: ok prints run() => ("locus::Bool", "locus::Prop", "locus::Int", "locus::Proof"); step-p3: E0308
+  step-p3, runtime: 13:45: error[E0308]: mismatched types
+== x10-bool-for-prop: r1like: E0308; step-p3: ok prints run() => "locus::Prop"
+  r1like, runtime: 15:31: error[E0308]: mismatched types
+skel: 38 files; compile in both expansions: r1like 22, step-p3 22; outcome or output differs in 2
+== r06-snapshot-identity: r1like: E0119,E0277; step-p3: E0119,E0277,E0308
+  r1like, runtime: 30:5: error[E0119]: conflicting implementations of trait `OrderSpec` for type `locus::Nat`
+  step-p3, runtime: 30:5: error[E0119]: conflicting implementations of trait `OrderSpec` for type `locus::Nat`
+== s01-two-impls: r1like: E0277; step-p3: E0277,E0308
+  r1like, runtime: 34:55: error[E0277]: the trait bound `locus::Nat: OrderSpec` is not satisfied
+  step-p3, runtime: 23:45: error[E0308]: mismatched types
+== s02-generic-self: r1like: ok prints run() => 3; step-p3: E0308
+  step-p3, runtime: 35:45: error[E0308]: mismatched types
+== s03-bound-not-met: r1like: E0277; step-p3: E0277,E0308
+  r1like, runtime: 25:20: error[E0277]: the trait bound `locus::Bool: OrderSpec` is not satisfied
+  step-p3, runtime: 16:45: error[E0308]: mismatched types
+== s16-names: r1like: ok prints run() => 15; step-p3: E0308
+  step-p3, runtime: 26:55: error[E0308]: mismatched types
+== s17-other-invocation: r1like: ok prints run() => 1; step-p3: E0308
+  step-p3, runtime: 20:55: error[E0308]: mismatched types
+== s18-other-invocation-told: r1like: ok prints run() => 1; step-p3: E0308
+  step-p3, runtime: 20:55: error[E0308]: mismatched types
+== s20-runtime-type-over-logical: r1like: ok prints run() => 2; step-p3: E0308
+  step-p3, runtime: 25:57: error[E0308]: mismatched types
+more: 39 files; compile in both expansions: r1like 22, step-p3 17; outcome or output differs in 8
+
+### From there, one change of policy at a time: snapshot bounds and the opaque fallback
+corpus: 26 files; compile in both expansions: r1like 23, step-snap 23; outcome or output differs in 0
+== gl-snapshot-with-associated-type-field: r1like: E0277; step-snap: ok
+  r1like, runtime: 21:32: error[E0277]: `F` has no snapshot type that rustc can name
+ghost-lets: 17 files; compile in both expansions: r1like 11, step-snap 12; outcome or output differs in 1
+cases: 58 files; compile in both expansions: r1like 34, step-snap 34; outcome or output differs in 0
+== c05-no-snapshot: r1like: E0277; step-snap: ok prints run() => 1
+  r1like, runtime: 12:36: error[E0277]: `BTreeSet<u32>` has no snapshot type that rustc can name
+== c06-unbounded-parameter: r1like: E0277; step-snap: ok prints run() => (1, 1)
+  r1like, runtime: 14:20: error[E0277]: `T` has no snapshot type that rustc can name
+skel: 38 files; compile in both expansions: r1like 22, step-snap 24; outcome or output differs in 2
+more: 39 files; compile in both expansions: r1like 22, step-snap 22; outcome or output differs in 0
+
+### The new defaults, all together, against the first round
+## corpus (sk): 26 files, 18 compile in both expansions
+  accepted litmus examples: 20; compile in both expansions: 17
+  rejected litmus examples: 2; rustc rejects them in both expansions: 2; in the checking expansion alone: 0
+  all                          pieces  52  translated  52  no error in either expansion  45  with an error   7
+    after-move:19:13 (logic!; check+runtime): E0382: borrow of moved value: `v`
+    during-mutable-borrow:15:13 (logic!; check+runtime): E0502: cannot borrow `v` as immutable because it is also borrowed as mutable
+    logical-closure-in-body:13:51 (logic!; check+runtime): E0277: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+    logical-closure-in-body:13:15 (let annotation; check+runtime): E0277: `+` is not defined on a `locus::Int` and a `Nat` in logical code
+    logical-fields:24:31 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    x-joined-logical-type:23:17 (logic!; check+runtime): E0308: mismatched types
+    x-split-logical-type:29:17 (logic!; check+runtime): E0308: mismatched types
+## ghost-lets (sk): 17 files, 12 compile in both expansions
+  accepted litmus examples: 10; compile in both expansions: 8
+  rejected litmus examples: 7; rustc rejects them in both expansions: 3; in the checking expansion alone: 0
+  all                          pieces  32  translated  30  no error in either expansion  27  with an error   3
+  not translated:
+    gl-logic-calls-runtime-function:16:13 (logic!): a borrow `&`
+    gl-after-move:18:13 (logic!; check+runtime): E0382: borrow of moved value: `v`
+    gl-during-mutable-borrow:14:13 (logic!; check+runtime): E0502: cannot borrow `v` as immutable because it is also borrowed as mutable
+    gl-hole-written-out-with-an-earlier-value:13:41 (proposition in a signature; check+runtime): E0599: no associated function or constant named `wrap` found for type `u32` in the current scope
+## cases (sk): 58 files, 18 compile in both expansions
+  all                          pieces 184  translated 184  no error in either expansion 153  with an error  31
+    d01-derive:29:35 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    d01-derive:36:44 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    d01-derive:67:20 (logic!; check+runtime): E0308: mismatched types
+    d01-derive:79:28 (logic!; check+runtime): E0308: mismatched types
+    d06-bounded-impl-probe:14:45 (logic fn; check+runtime): E0308: mismatched types
+    g05-mutable-borrow:20:19 (prove!; check+runtime): E0277: `==` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+    g11-loop-assignment:19:19 (prove!; check+runtime): E0277: `==` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+    g20-logic-where-runtime:9:9 (logic!; check+runtime): E0308: mismatched types
+    h04-snap-header-alias:14:33 (logic fn; check+runtime): E0308: mismatched types
+    t01-two-traits:28:55 (logic fn; check+runtime): E0308: mismatched types
+    t01-two-traits:34:53 (logic fn; check+runtime): E0308: mismatched types
+    t02-max-rational:24:55 (logic fn; check+runtime): E0308: mismatched types
+    t02-max-rational:30:53 (logic fn; check+runtime): E0308: mismatched types
+    t03-logical-impl-runs:24:55 (logic fn; check+runtime): E0308: mismatched types
+    t03-logical-impl-runs:30:53 (logic fn; check+runtime): E0308: mismatched types
+    t04-library-traits:24:43 (logic fn; check+runtime): E0308: mismatched types
+    t09-monoid:35:47 (logic fn; check+runtime): E0308: mismatched types
+    t09-monoid:48:26 (logic!; check+runtime): E0283: type annotations needed
+    t11-kind-logic-for-fn:14:41 (logic fn; check+runtime): E0308: mismatched types
+    t12-names-same-module:16:55 (logic fn; check+runtime): E0308: mismatched types
+    t12-names-same-module:23:53 (logic fn; check+runtime): E0308: mismatched types
+    t13a-imported-impl:21:55 (logic fn; check+runtime): E0308: mismatched types
+    t13b-imported-parameter:21:55 (logic fn; check+runtime): E0308: mismatched types
+    t13c-imported-type:21:55 (logic fn; check+runtime): E0308: mismatched types
+    t13d-imported-qualified:21:55 (logic fn; check+runtime): E0308: mismatched types
+    t14-imported-in-trait:20:55 (logic fn; check+runtime): E0308: mismatched types
+    t15-names-trait-path:16:55 (logic fn; check+runtime): E0308: mismatched types
+    t16-names-trait-path-in-trait:15:55 (logic fn; check+runtime): E0308: mismatched types
+    t17-default-member-split:10:31 (logic fn; check+runtime): E0308: mismatched types
+    t18-default-member-split-in-trait:9:31 (logic fn; check+runtime): E0308: mismatched types
+    t19-runtime-name-clash:17:53 (logic fn; check+runtime): E0308: mismatched types
+    t09-monoid:48:26 (its skeleton (the `let` has an annotation)): E0283: type annotations needed
+## skel (sk): 38 files, 14 compile in both expansions
+  all                          pieces 141  translated 135  no error in either expansion 102  with an error  33
+    a01-calls:19:17 (logic!; check+runtime): E0308: mismatched types
+    a04-match:14:35 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    a04-match:20:44 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    a04-match:36:17 (logic!; check+runtime): E0308: mismatched types
+    a04-match:38:17 (logic!; check+runtime): E0308: `match` arms have incompatible types
+    a05-operators:13:45 (logic fn; check+runtime): E0308: mismatched types
+    a07-literals:14:17 (logic!; check+runtime): E0308: mismatched types
+    a07-literals:16:22 (logic!; check+runtime): E0308: mismatched types
+    a08-quantifiers:14:17 (prop!; check+runtime): E0277: `+` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+    a08-quantifiers:15:55 (logic!; check+runtime): E0277: `+` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+    a08-quantifiers:15:19 (let annotation; check+runtime): E0277: `+` is not defined on a `locus::Int` and a `locus::Nat` in logical code
+    a09-holes-proofs:14:50 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    a09-holes-proofs:25:20 (logic!; check+runtime): E0308: mismatched types
+    e01-nat-for-seq:11:28 (logic!; check+runtime): E0308: mismatched types
+    e01-nat-for-seq:12:27 (logic!; check+runtime): E0308: mismatched types
+    e02-unknown-field:12:26 (logic!; check+runtime): E0609: no field `nom` on type `Rational`
+    e02-unknown-field:13:25 (logic!; check+runtime): E0609: no field `denominator` on type `Rational`
+    e03-missing-operator:11:19 (logic!; check+runtime): E0277: `+` is not defined on a `Rational` and a `_` in logical code
+    e03-missing-operator:12:20 (prove!; check+runtime): E0277: a `Rational` and a `_` have no order in logical code
+    f14-tuple-component:11:20 (prove!; check+runtime): E0277: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+    f16-only-logical:12:20 (prove!; check+runtime): E0277: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+    f16-only-logical:13:30 (prove! (expanded by rustc); check+runtime): E0277: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+    f17-tuple-copied:10:20 (prove!; check+runtime): E0277: `==` is not defined on a `locus::Int` and a `Nat` in logical code
+    x03-nat-as-int-place:15:17 (logic!; check+runtime): E0308: mismatched types
+    x03-nat-as-int-place:16:17 (logic!; check+runtime): E0308: mismatched types
+    x04-nat-as-int-value:12:17 (logic!; check+runtime): E0308: mismatched types
+    x06-snapshot-expected:13:17 (logic!; check+runtime): E0271: type mismatch resolving `<Vec<u32> as Model>::Logic == Seq<BoundedU32>`
+    x06-snapshot-expected:14:27 (logic!; check+runtime): E0308: mismatched types
+    x08-nested-pattern:11:40 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    x09-missing-arm:9:35 (logic fn; check+runtime): E0004: non-exhaustive patterns: `_::Tree::Leaf` not covered
+    x12-no-model:13:22 (prove!; check+runtime): E0277: `Token` has no model, so a value of it cannot be used as a value in logical code
+    x14-view-imported:14:58 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    x14-view-imported:23:43 (logic fn; check+runtime): E0308: `match` arms have incompatible types
+    x05-generic-parameter:14:17 (its skeleton (no annotation)): E0283: type annotations needed
+    x05-generic-parameter:15:17 (its skeleton (no annotation)): E0283: type annotations needed
+    x07-operand-unknown:20:21 (its skeleton (no annotation)): E0283: type annotations needed
+## more (sk): 39 files, 15 compile in both expansions
+  all                          pieces  53  translated  53  no error in either expansion  32  with an error  21
+    r02-outside-self:17:38 (logic fn; check+runtime): E0271: type mismatch resolving `<u32 as Model>::Logic == Int`
+    r04-blanket-conversions:29:39 (logic fn; check+runtime): E0308: mismatched types
+    r05-blanket-conversions-marker:23:39 (logic fn; check+runtime): E0308: mismatched types
+    r06-snapshot-identity:28:45 (logic fn; check+runtime): E0308: mismatched types
+    r06-snapshot-identity:31:57 (logic fn; check+runtime): E0277: a `BoundedU32` and a `_` have no order in logical code
+    r06-snapshot-identity:34:51 (logic fn; check+runtime): E0308: mismatched types
+    r07-reserved-name-allowed:18:34 (logic fn; check+runtime): E0308: mismatched types
+    s01-two-impls:23:45 (logic fn; check+runtime): E0308: mismatched types
+    s01-two-impls:26:55 (logic fn; check+runtime): E0308: mismatched types
+    s02-generic-self:35:45 (logic fn; check+runtime): E0308: mismatched types
+    s02-generic-self:38:55 (logic fn; check+runtime): E0308: mismatched types
+    s02-generic-self:41:51 (logic fn; check+runtime): E0308: mismatched types
+    s03-bound-not-met:16:45 (logic fn; check+runtime): E0308: mismatched types
+    s03-bound-not-met:25:19 (let annotation; check+runtime): E0277: the trait bound `locus::Bool: OrderSpec` is not satisfied
+    s08-blanket-collision:15:32 (logic fn; check+runtime): E0308: mismatched types
+    s09-blanket-serves-marker:18:32 (logic fn; check+runtime): E0308: mismatched types
+    s10-blanket-logical-argument:16:31 (logic fn; check+runtime): E0308: mismatched types
+    s16-names:26:55 (logic fn; check+runtime): E0308: mismatched types
+    s17-other-invocation:20:55 (logic fn; check+runtime): E0308: mismatched types
+    s18-other-invocation-told:20:55 (logic fn; check+runtime): E0308: mismatched types
+    s20-runtime-type-over-logical:25:57 (logic fn; check+runtime): E0308: mismatched types
+corpus: 26 files; compile in both expansions: round1 23, default 18; outcome or output differs in 5
+ghost-lets: 17 files; compile in both expansions: round1 11, default 12; outcome or output differs in 1
+cases: 58 files; compile in both expansions: round1 29, default 18; outcome or output differs in 21
+skel: 38 files; compile in both expansions: round1 16, default 14; outcome or output differs in 19
+more: 39 files; compile in both expansions: round1 21, default 15; outcome or output differs in 13
+
+## Both programs agree: the call listings of the two expansions, every accepted binary
+corpus: binaries that both expansions accept: 18; calls, method calls and constants listed in each: 44; binaries with one resolved differently: 0
+corpus: built in 0.7s (runtime) and 0.6s (checking)
+ghost-lets: binaries that both expansions accept: 12; calls, method calls and constants listed in each: 16; binaries with one resolved differently: 0
+ghost-lets: built in 0.4s (runtime) and 0.4s (checking)
+cases: binaries that both expansions accept: 18; calls, method calls and constants listed in each: 71; binaries with one resolved differently: 0
+cases: built in 1.1s (runtime) and 1.2s (checking)
+skel: binaries that both expansions accept: 14; calls, method calls and constants listed in each: 72; binaries with one resolved differently: 0
+skel: built in 0.9s (runtime) and 0.8s (checking)
+more: binaries that both expansions accept: 15; calls, method calls and constants listed in each: 52; binaries with one resolved differently: 0
+more: built in 0.8s (runtime) and 0.9s (checking)
+spec: binaries that both expansions accept: 4; calls, method calls and constants listed in each: 93; binaries with one resolved differently: 0
+spec: built in 0.2s (runtime) and 0.2s (checking)
+policy: binaries that both expansions accept: 21; calls, method calls and constants listed in each: 149; binaries with one resolved differently: 0
+policy: built in 0.8s (runtime) and 0.9s (checking)
+two-app: binaries that both expansions accept: 1; calls, method calls and constants listed in each: 25; binaries with one resolved differently: 0
+two-app: built in 0.2s (runtime) and 0.3s (checking)
+corpus-explicit: binaries that both expansions accept: 23; calls, method calls and constants listed in each: 55; binaries with one resolved differently: 0
+corpus-explicit: built in 0.8s (runtime) and 0.7s (checking)
+all sets: binaries that both expansions accept: 126; lines in each listing: 577; binaries with a difference: 0
+### The two crates: the library's listing and the application's
+two_lib: 11 lines in each expansion's listing, identical
+app: 25 lines in each expansion's listing, identical
+<Scale as two_lib::Bounded>::add::{closure#0}:024:051 => the definition at 22:15 | two_lib::Bounded::__logic_limit_spec -> <Scale as two_lib::Bounded>::__logic_limit_spec with [Scale]
+<Scale as two_lib::Bounded>::limit::{closure#0}:023:051 => the definition at 22:15 | two_lib::Bounded::__logic_limit_spec -> <Scale as two_lib::Bounded>::__logic_limit_spec with [Scale]
+<Weight as two_lib::OrderSpec>::__logic_le_refl::{closure#0}:016:050 => the definition at 15:15 | two_lib::OrderSpec::__logic_le -> <Weight as two_lib::OrderSpec>::__logic_le with [Weight]
+run::{closure#1}:040:037 => two_lib::Rational::__logic_scaled | two_lib::Rational::__logic_scaled with []
+run::{closure#3}:042:041 => two_lib::max_of | two_lib::max_of with [Weight]
+run::{closure#5}:044:034 => <two_lib::Rational as two_lib::OrderSpec>::__logic_le | two_lib::OrderSpec::__logic_le -> <two_lib::Rational as two_lib::OrderSpec>::__logic_le with [two_lib::Rational]
+run::{closure#5}:044:052 => two_lib::max_of | two_lib::max_of with [two_lib::Rational]
+run::{closure#5}:044:086 => the definition at 15:15 | two_lib::OrderSpec::__logic_le -> <Weight as two_lib::OrderSpec>::__logic_le with [Weight]
+### The stack: where its method calls resolve (runtime expansion; the checking one is the same)
+Stack::new::{closure#0}:034:066 => the definition at 23:15 | Stack::__logic_room with []
+Stack::push::{closure#0}:046:053 => the definition at 23:15 | Stack::__logic_room with []
+Stack::push::{closure#1}:047:068 => the definition at 23:15 | Stack::__logic_room with []
+Stack::push::{closure#1}:047:083 => the definition at 23:15 | Stack::__logic_room with []
+Stack::push_then_top::{closure#0}:067:062 => the definition at 23:15 | Stack::__logic_room with []
+Stack::push_then_top::{closure#2}:069:033 => the definition at 31:11 | pushed_then_last with []
+
+## Diagnostics: five deliberate errors in logical code, rustc's whole messages, before and after
+#### BEFORE (the first round): e01-nat-for-seq
+### e01-nat-for-seq, the runtime expansion: 2 errors
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:11:43
+   |
+11 |         let from_a_place = logic! { count(n) };
+   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`
+   |                                     |
+   |                                     arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:12:42
+   |
+12 |         let from_a_call = logic! { count(v.len()) };
+   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`
+   |                                    |
+   |                                    arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+#### AFTER: e01-nat-for-seq
+### e01-nat-for-seq, the runtime expansion: 2 errors
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:11:43
+   |
+11 |         let from_a_place = logic! { count(n) };
+   |                                     ----- ^ expected `Seq<Nat>`, found `Nat`
+   |                                     |
+   |                                     arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+error[E0308]: mismatched types
+  --> skel/src/bin/e01-nat-for-seq.rs:12:42
+   |
+12 |         let from_a_call = logic! { count(v.len()) };
+   |                                    ----- ^^^^^^^ expected `Seq<Nat>`, found `Nat`
+   |                                    |
+   |                                    arguments to this function are incorrect
+   |
+   = note: expected struct `locus::Seq<locus::Nat>`
+              found struct `locus::Nat`
+note: function defined here
+  --> skel/src/bin/e01-nat-for-seq.rs:7:14
+   |
+ 7 |     logic fn count(xs: Seq<Nat>) -> Nat { xs.len() }
+   |              ^^^^^ ------------
+
+#### BEFORE (the first round): e02-unknown-field
+### e02-unknown-field, the runtime expansion: 2 errors
+error[E0609]: no field `nom` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:12:37
+   |
+12 |         let on_a_local = logic! { r.nom };
+   |                                     ^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+12 -         let on_a_local = logic! { r.nom };
+12 +         let on_a_local = logic! { r.num };
+   |
+
+error[E0609]: no field `denominator` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:13:43
+   |
+13 |         let on_a_call = logic! { twice(r).denominator };
+   |                                           ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `num`, `den`
+
+#### AFTER: e02-unknown-field
+### e02-unknown-field, the runtime expansion: 2 errors
+error[E0609]: no field `nom` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:12:37
+   |
+12 |         let on_a_local = logic! { r.nom };
+   |                                     ^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+12 -         let on_a_local = logic! { r.nom };
+12 +         let on_a_local = logic! { r.num };
+   |
+
+error[E0609]: no field `denominator` on type `Rational`
+  --> skel/src/bin/e02-unknown-field.rs:13:43
+   |
+13 |         let on_a_call = logic! { twice(r).denominator };
+   |                                           ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `num`, `den`
+
+#### BEFORE (the first round): e03-missing-operator
+### e03-missing-operator, the runtime expansion: 3 errors
+error[E0277]: the trait bound `Rational: AddLogic<_>` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:28
+    |
+ 11 |         let sum = logic! { r + r };
+    |                            ^ - required by a bound introduced by this call
+    |                            |
+    |                            unsatisfied trait bound
+    |
+help: the trait `AddLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+note: required by a bound in `locus::sk::add`
+   --> locus/src/lib.rs:550:19
+    |
+550 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+
+error[E0277]: a `Rational` and a `_` have no order in logical code
+   --> skel/src/bin/e03-missing-operator.rs:12:27
+    |
+ 12 |         let less = prove!(r < r);
+    |                           ^ - required by a bound introduced by this call
+    |                           |
+    |                           no order for these
+    |
+help: the trait `locus::sk::OrdLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `locus::sk::OrdLogic<Rhs>`
+   --> locus/src/lib.rs:524:13
+    |
+524 |             impl OrdLogic<$b> for $a {}
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^
+    |             |
+    |             `Nat` implements `locus::sk::OrdLogic`
+    |             `locus::Int` implements `locus::sk::OrdLogic`
+...
+527 |     comparable!(Int Int, Nat Nat);
+    |     ----------------------------- in this macro invocation
+...
+755 |     impl sk::OrdLogic<Nat> for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `locus::sk::OrdLogic<Nat>`
+756 |     impl sk::OrdLogic<Int> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `locus::sk::OrdLogic<locus::Int>`
+note: required by a bound in `locus::sk::lt`
+   --> locus/src/lib.rs:535:18
+    |
+535 |     pub fn lt<A: OrdLogic<B>, B>(_: A, _: B) -> Bool {
+    |                  ^^^^^^^^^^^ required by this bound in `lt`
+    = note: this error originates in the macro `comparable` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Rational: AddLogic` is not satisfied
+   --> skel/src/bin/e03-missing-operator.rs:11:30
+    |
+ 11 |         let sum = logic! { r + r };
+    |                              ^ unsatisfied trait bound
+    |
+help: the trait `AddLogic` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:656:9
+    |
+656 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+660 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+728 |         impl AddLogic<Nat> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<Nat>`
+...
+732 |         impl AddLogic<Int> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::Int>`
+
+#### AFTER: e03-missing-operator
+### e03-missing-operator, the runtime expansion: 3 errors
+error[E0277]: `+` is not defined on a `Rational` and a `_` in logical code
+   --> skel/src/bin/e03-missing-operator.rs:11:28
+    |
+ 11 |         let sum = logic! { r + r };
+    |                            ^ - required by a bound introduced by this call
+    |                            |
+    |                            this is a `Rational`, and the other side is a `_`
+    |
+help: the trait `AddLogic<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:899:9
+    |
+899 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+903 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+972 |         impl AddLogic<NoSuchOperand> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<locus::NoSuchOperand>`
+...
+976 |         impl AddLogic<NoSuchOperand> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::add`
+   --> locus/src/lib.rs:657:19
+    |
+657 |     pub fn add<A: AddLogic<B>, B: Logical>(_: A, _: B) -> A::Output {
+    |                   ^^^^^^^^^^^ required by this bound in `add`
+
+error[E0277]: a `Rational` and a `_` have no order in logical code
+   --> skel/src/bin/e03-missing-operator.rs:12:27
+    |
+ 12 |         let less = prove!(r < r);
+    |                           ^ - required by a bound introduced by this call
+    |                           |
+    |                           this is a `Rational`, and the other side is a `_`
+    |
+help: the trait `Ordered<_>` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+    = note: a `Nat` is compared with an `Int` after it is made one: write `as Int` after the `Nat`
+help: the following other types implement trait `Ordered<Rhs>`
+   --> locus/src/lib.rs:617:5
+    |
+617 |     impl Ordered for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered`
+618 |     impl Ordered for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered`
+...
+624 |     impl Ordered<NoSuchOperand> for Int {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `Ordered<locus::NoSuchOperand>`
+625 |     #[cfg(not(feature = "mixed-ops"))]
+626 |     impl Ordered<NoSuchOperand> for Nat {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `Ordered<locus::NoSuchOperand>`
+note: required by a bound in `locus::logic::lt`
+   --> locus/src/lib.rs:642:18
+    |
+642 |     pub fn lt<A: Ordered<B>, B>(_: A, _: B) -> Comparison {
+    |                  ^^^^^^^^^^ required by this bound in `lt`
+
+error[E0277]: `+` is not defined on a `Rational` and a `Rational` in logical code
+   --> skel/src/bin/e03-missing-operator.rs:11:30
+    |
+ 11 |         let sum = logic! { r + r };
+    |                              ^ this is a `Rational`, and the other side is a `Rational`
+    |
+help: the trait `AddLogic` is not implemented for `Rational`
+   --> skel/src/bin/e03-missing-operator.rs:8:12
+    |
+  8 |     struct Rational { num: Int, den: Int }
+    |            ^^^^^^^^
+    = note: a `Nat` is added to an `Int` after it is made one: write `as Int` after the `Nat`
+help: the following other types implement trait `AddLogic<Rhs>`
+   --> locus/src/lib.rs:899:9
+    |
+899 |         impl AddLogic for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic`
+...
+903 |         impl AddLogic for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic`
+...
+972 |         impl AddLogic<NoSuchOperand> for Int {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `locus::Int` implements `AddLogic<locus::NoSuchOperand>`
+...
+976 |         impl AddLogic<NoSuchOperand> for Nat {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Nat` implements `AddLogic<locus::NoSuchOperand>`
+
+#### BEFORE (the first round's code, built in a copy of it): e04-bool-for-prop-parameter
+### e04-bool-for-prop-parameter, the runtime expansion: 2 errors
+error[E0271]: type mismatch resolving `<bool as ModelOf>::Logic == Prop`
+   --> skel/src/bin/e04-bool-for-prop-parameter.rs:8:43
+    |
+  8 |         let from_a_place = logic! { twice(flag) };
+    |                                           ^^^^ expected `Prop`, found `Bool`
+    |
+note: required by a bound in `locus::sk::arg`
+   --> locus/src/lib.rs:379:19
+    |
+379 |     pub fn arg<T: ArgAs<P, Via> + ?Sized, P, Via>(_: &T) -> P {
+    |                   ^^^^^^^^^^^^^ required by this bound in `arg`
+
+error[E0308]: mismatched types
+ --> skel/src/bin/e04-bool-for-prop-parameter.rs:9:43
+  |
+9 |         let from_a_value = logic! { twice(true) };
+  |                                     ----- ^^^^ expected `Prop`, found `Bool`
+  |                                     |
+  |                                     arguments to this function are incorrect
+  |
+note: function defined here
+ --> skel/src/bin/e04-bool-for-prop-parameter.rs:6:14
+  |
+6 |     logic fn twice(p: Prop) -> Prop { p && p }
+  |              ^^^^^ -------
+
+#### AFTER: e04-bool-for-prop-parameter
+### e04-bool-for-prop-parameter, the runtime expansion: 2 errors
+error[E0271]: type mismatch resolving `<bool as Model>::Logic == Prop`
+   --> policy/src/bin/e04-bool-for-prop-parameter.rs:8:43
+    |
+  8 |         let from_a_place = logic! { twice(flag) };
+    |                                           ^^^^ expected `Prop`, found `Bool`
+    |
+note: required by a bound in `argument`
+   --> locus/src/lib.rs:416:24
+    |
+416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {
+    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`
+
+error[E0308]: mismatched types
+ --> policy/src/bin/e04-bool-for-prop-parameter.rs:9:43
+  |
+9 |         let from_a_value = logic! { twice(true) };
+  |                                     ----- ^^^^ expected `Prop`, found `Bool`
+  |                                     |
+  |                                     arguments to this function are incorrect
+  |
+note: function defined here
+ --> policy/src/bin/e04-bool-for-prop-parameter.rs:6:14
+  |
+6 |     logic fn twice(p: Prop) -> Prop { p && p }
+  |              ^^^^^ -------
+
+#### BEFORE (the first round's code, built in a copy of it): e05-missing-arm
+### e05-missing-arm, the runtime expansion: 1 errors
+error[E0004]: non-exhaustive patterns: `__locus_view_Tree::Leaf` not covered
+  --> skel/src/bin/e05-missing-arm.rs:9:15
+   |
+ 9 |         match t {
+   |               ^ pattern `__locus_view_Tree::Leaf` not covered
+   |
+note: `__locus_view_Tree` defined here
+  --> skel/src/bin/e05-missing-arm.rs:7:10
+   |
+ 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }
+   |          ^^^^
+   |          |
+   |          not covered
+   = note: the matched value is of type `__locus_view_Tree`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+   |
+10 |             Tree::Node(l, _, _) => depth(l) +, __locus_view_Tree::Leaf => todo!() 1,
+   |                                              ++++++++++++++++++++++++++++++++++++
+
+#### AFTER: e05-missing-arm
+### e05-missing-arm, the runtime expansion: 1 errors
+error[E0004]: non-exhaustive patterns: `_::Tree::Leaf` not covered
+  --> policy/src/bin/e05-missing-arm.rs:9:15
+   |
+ 9 |         match t {
+   |               ^ pattern `_::Tree::Leaf` not covered
+   |
+note: `_::Tree` defined here
+  --> policy/src/bin/e05-missing-arm.rs:7:10
+   |
+ 7 |     enum Tree { Leaf, Node(Tree, Nat, Tree) }
+   |          ^^^^
+   |          |
+   |          not covered
+   = note: the matched value is of type `_::Tree`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+   |
+10 |             Tree::Node(l, _, _) => depth(l) +, _::Tree::Leaf => todo!() 1,
+   |                                              ++++++++++++++++++++++++++
+
+## Some of the others, after
+### x05-generic-parameter, the runtime expansion: 3 errors
+error[E0283]: type annotations needed
+   --> skel/src/bin/x05-generic-parameter.rs:14:13
+    |
+ 14 |         let a = logic! { same(n) };
+    |             ^   ----- type must be known at this point
+    |
+    = note: the type must implement `Logical`
+    = help: the following types implement trait `Logical`:
+              (A, B)
+              (A, B, C)
+              Address
+              BoundedI128
+              BoundedI16
+              BoundedI32
+              BoundedI64
+              BoundedI8
+            and 19 others
+note: required by a bound in `logic`
+   --> locus/src/lib.rs:380:21
+    |
+380 |     pub fn logic<G: Logical>(_: impl FnOnce() -> G) -> G {
+    |                     ^^^^^^^ required by this bound in `logic`
+help: consider giving `a` an explicit type
+    |
+ 14 |         let a: /* Type */ = logic! { same(n) };
+    |              ++++++++++++
+
+### x06-snapshot-expected, the runtime expansion: 2 errors
+error[E0271]: type mismatch resolving `<Vec<u32> as Model>::Logic == Seq<BoundedU32>`
+   --> skel/src/bin/x06-snapshot-expected.rs:13:33
+    |
+ 13 |         let n = logic! { length(*v) };
+    |                                 ^-
+    |                                 ||
+    |                                 |required by a bound introduced by this call
+    |                                 expected `Seq<BoundedU32>`, found `Seq<Nat>`
+    |
+    = note: expected struct `Seq<BoundedU32>`
+               found struct `Seq<locus::Nat>`
+note: required by a bound in `argument`
+   --> locus/src/lib.rs:416:24
+    |
+416 |     pub fn argument<T: GivenAs<P, How> + ?Sized, P, How>(_: &T) -> P {
+    |                        ^^^^^^^^^^^^^^^ required by this bound in `argument`
+
+### x12-no-model, the runtime expansion: 2 errors
+error[E0277]: `Token` has no model, so a value of it cannot be used as a value in logical code
+   --> skel/src/bin/x12-no-model.rs:13:29
+    |
+ 13 |         let values = prove!(t === u);
+    |                             ^ this is read as a value
+    |
+help: the trait `Model` is not implemented for `Token`
+   --> skel/src/bin/x12-no-model.rs:8:5
+    |
+  8 |     struct Token { id: u32 }
+    |     ^^^^^^^^^^^^
+    = note: declare a model for `Token`, or write `snap(..)` to use its snapshot
+    = help: the following other types implement trait `Model`:
+              &T
+              &mut T
+              (A, B)
+              (A, B, C)
+              Address
+              BoundedI128
+              BoundedI16
+              BoundedI32
+            and 39 others
+    = note: required for `&Token` to implement `Model`
+note: required by a bound in `model`
+   --> locus/src/lib.rs:410:21
+    |
+410 |     pub fn model<T: Model + ?Sized>(_: &T) -> T::Logic {
+    |                     ^^^^^ required by this bound in `model`
+
+### after-move, the runtime expansion: 1 errors
+error[E0382]: borrow of moved value: `v`
+  --> corpus/src/bin/after-move.rs:19:13
+   |
+17 |     let v = vec![1, 2, 3];
+   |         - move occurs because `v` has type `Vec<u32>`, which does not implement the `Copy` trait
+18 |     let count = consume(v);
+   |                         - value moved here
+19 |     let n = logic! { v.len() }; //~ error: logical code reads `v` after `v` was moved
+   |             ^^^^^    - borrow occurs due to use in closure
+   |             |
+   |             value borrowed here after move
+   |
+note: consider changing this parameter type in function `consume` to borrow instead if owning the value isn't necessary
+  --> corpus/src/bin/after-move.rs:12:15
+   |
+12 | fn consume(v: Vec<u32>) -> usize {
+   |    -------    ^^^^^^^^ this parameter takes ownership of the value
+   |    |
+   |    in this function
+help: consider cloning the value if the performance cost is acceptable
+   |
+18 |     let count = consume(v.clone());
+   |                          ++++++++
+
+
+## What locus! writes
+### p5-method-order
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+struct __locus_snap_Stack {}
+impl Clone for __locus_snap_Stack {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Stack {}
+impl Debug for __locus_snap_Stack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Stack>")
+    }
+}
+impl Model for __locus_snap_Stack {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Stack {
+    type S = Self;
+}
+impl Logical for __locus_snap_Stack {
+    fn __locus_marker() -> Self {
+        __locus_snap_Stack {}
+    }
+}
+impl Snapshot for Stack {
+    type S = __locus_snap_Stack;
+}
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+}
+impl Runtime for Stack {}
+const _: () = {
+    fn model(s: &Stack) -> Seq<Nat> {
+        logic::logic_fn(|| logic::argument(&s.items))
+    }
+};
+impl
+    logic::Declares<
+        logic::N<
+            'r',
+            logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+        >,
+    > for Stack
+{
+    type Owner = Self;
+}
+impl
+    logic::Declares<
+        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+    > for Stack
+{
+    type Owner = Self;
+}
+impl Stack {
+    fn __logic_room(self) -> Int {
+        logic::logic_fn(|| {
+            logic::sub(
+                logic::model(&self.cap),
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&self.items))
+                        .__locus_receiver()
+                })
+                .__logic_len(),
+            )
+        })
+    }
+    fn __logic_len(self) -> Int {
+        logic::logic_fn(|| {
+            logic::cast::<_, Int>(
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&self.items))
+                        .__locus_receiver()
+                })
+                .__logic_len(),
+            )
+        })
+    }
+}
+struct Plain {
+    n: u32,
+}
+struct __locus_snap_Plain {}
+impl Clone for __locus_snap_Plain {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Plain {}
+impl Debug for __locus_snap_Plain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Plain>")
+    }
+}
+impl Model for __locus_snap_Plain {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Plain {
+    type S = Self;
+}
+impl Logical for __locus_snap_Plain {
+    fn __locus_marker() -> Self {
+        __locus_snap_Plain {}
+    }
+}
+impl Snapshot for Plain {
+    type S = __locus_snap_Plain;
+}
+impl
+    logic::Declares<
+        logic::N<
+            't',
+            logic::N<
+                'w',
+                logic::N<'i', logic::N<'c', logic::N<'e', ()>>>,
+            >,
+        >,
+    > for Plain
+{
+    type Owner = Self;
+}
+impl Plain {
+    fn __logic_twice(self) -> Nat {
+        logic::logic_fn(|| {
+            logic::add(
+                logic::model(&self.n),
+                logic::model(&self.n),
+            )
+        })
+    }
+}
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+fn run() -> (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+) {
+    let s = Stack {
+        items: vec![1, 2],
+        cap: 4,
+    };
+    let by_ref = &s;
+    let boxed = Box::new(Stack {
+        items: vec![],
+        cap: 1,
+    });
+    let p = Plain { n: 2 };
+    let on_the_type = logic::logic(|| {
+        ({
+            use logic::{OnTheModel as _, OnTheType as _};
+            (&logic::receiver::<
+                logic::N<
+                    'r',
+                    logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+                >,
+                _,
+            >(&s))
+                .__locus_receiver()
+        })
+        .__logic_room()
+    });
+    let on_the_model = logic::logic(|| {
+        ({
+            use logic::{OnTheModel as _, OnTheType as _};
+            (&logic::receiver::<
+                logic::N<
+                    'l',
+                    logic::N<'a', logic::N<'s', logic::N<'t', ()>>>,
+                >,
+                _,
+            >(&s))
+                .__locus_receiver()
+        })
+        .__logic_last()
+    });
+    let the_types_len = logic::logic(|| {
+        ({
+            use logic::{OnTheModel as _, OnTheType as _};
+            (&logic::receiver::<
+                logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                _,
+            >(&s))
+                .__locus_receiver()
+        })
+        .__logic_len()
+    });
+    let through_a_reference = logic::logic(|| {
+        logic::add(
+            ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<
+                        'r',
+                        logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+                    >,
+                    _,
+                >(&by_ref))
+                    .__locus_receiver()
+            })
+            .__logic_room(),
+            ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                    _,
+                >(&boxed))
+                    .__locus_receiver()
+            })
+            .__logic_len(),
+        )
+    });
+    let the_models_len = logic::logic(|| logic::model(&s).__logic_len());
+    let no_model = logic::logic(|| {
+        ({
+            use logic::{OnTheModel as _, OnTheType as _};
+            (&logic::receiver::<
+                logic::N<
+                    't',
+                    logic::N<
+                        'w',
+                        logic::N<'i', logic::N<'c', logic::N<'e', ()>>>,
+                    >,
+                >,
+                _,
+            >(&p))
+                .__locus_receiver()
+        })
+        .__logic_twice()
+    });
+    (
+        type_of(&on_the_type),
+        type_of(&on_the_model),
+        type_of(&the_types_len),
+        type_of(&through_a_reference),
+        type_of(&the_models_len),
+        type_of(&no_model),
+    )
+}
+use prelude::*;
+### d3-nested-pattern
+struct Maybe<T> {
+    __locus: PhantomData<fn() -> (T,)>,
+}
+impl<T> Clone for Maybe<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Maybe<T> {}
+impl<T> Debug for Maybe<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Maybe")
+    }
+}
+impl<T> Model for Maybe<T> {
+    type Logic = Self;
+}
+impl<T: Logical> Snapshot for Maybe<T> {
+    type S = Self;
+}
+impl<T: Logical> Logical for Maybe<T> {
+    fn __locus_marker() -> Self {
+        Maybe {
+            __locus: PhantomData,
+        }
+    }
+}
+impl<T> Maybe<T> {
+    const Nothing: Maybe<T> = Maybe {
+        __locus: PhantomData,
+    };
+    fn Just(_: T) -> Maybe<T> {
+        stub()
+    }
+}
+const _: () = {
+    pub enum Maybe<T> {
+        Nothing,
+        Just(T),
+        __locus(
+            PhantomData<fn() -> (T,)>,
+            Infallible,
+        ),
+    }
+    impl<T> logic::Matchable for self::Maybe<T> {
+        type Variants = Maybe<T>;
+    }
+};
+struct Tree {}
+impl Clone for Tree {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Tree {}
+impl Debug for Tree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Tree")
+    }
+}
+impl Model for Tree {
+    type Logic = Self;
+}
+impl Snapshot for Tree {
+    type S = Self;
+}
+impl Logical for Tree {
+    fn __locus_marker() -> Self {
+        Tree {}
+    }
+}
+impl Tree {
+    const Leaf: Tree = Tree {};
+    fn Node(_: Tree, _: Nat, _: Tree) -> Tree {
+        stub()
+    }
+    fn Tagged(_: Maybe<Nat>, _: Tree) -> Tree {
+        stub()
+    }
+}
+const _: () = {
+    pub enum Tree {
+        Leaf,
+        Node(self::Tree, Nat, self::Tree),
+        Tagged(Maybe<Nat>, self::Tree),
+    }
+    impl logic::Matchable for self::Tree {
+        type Variants = Tree;
+    }
+};
+fn left_value(t: Tree) -> Nat {
+    logic::logic_fn(|| {
+        let __locus_m = match logic::matched(logic::model(&t)) {
+            logic::Variants::<Tree>::Node(__locus_p1, _, _) => {
+                let (n,) = match logic::matched(__locus_p1) {
+                    logic::Variants::<Tree>::Node(_, n, _) => (n,),
+                    _ => logic::hole(),
+                };
+                logic::argument(&n)
+            }
+            logic::Variants::<Tree>::Node(__locus_p2, n, _) => {
+                let () = match logic::matched(__locus_p2) {
+                    logic::Variants::<Tree>::Leaf => (),
+                    _ => logic::hole(),
+                };
+                logic::argument(&n)
+            }
+            logic::Variants::<Tree>::Node(__locus_p3, n, __locus_p4) => {
+                let (__locus_p6,) = match logic::matched(__locus_p3) {
+                    logic::Variants::<Tree>::Tagged(__locus_p6, _) => (__locus_p6,),
+                    _ => logic::hole(),
+                };
+                let (tag,) = match logic::matched(__locus_p6) {
+                    logic::Variants::<Maybe<_>>::Just(tag) => (tag,),
+                    _ => logic::hole(),
+                };
+                let () = match logic::matched(__locus_p4) {
+                    logic::Variants::<Tree>::Leaf => (),
+                    _ => logic::hole(),
+                };
+                logic::add(logic::model(&tag), logic::model(&n))
+            }
+            logic::Variants::<Tree>::Tagged(__locus_p5, _) => {
+                let (tag,) = match logic::matched(__locus_p5) {
+                    logic::Variants::<Maybe<_>>::Just(tag) => (tag,),
+                    _ => logic::hole(),
+                };
+                logic::argument(&tag)
+            }
+            _ => logic::literal::<Nat>(0),
+        };
+        __locus_m
+    })
+}
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+fn run() -> (&'static str, &'static str, &'static str) {
+    let t = logic::logic(|| {
+        Tree::Node(Tree::Leaf, logic::literal::<Nat>(3), Tree::Leaf)
+    });
+    let v = logic::logic(|| left_value(logic::argument(&t)));
+    let m = logic::logic(|| {
+        match logic::matched(Maybe::Just(logic::argument(&v))) {
+            logic::Variants::<Maybe<_>>::Just(x) => logic::model(&x),
+            logic::Variants::<Maybe<_>>::Nothing => logic::model(&v),
+        }
+    });
+    let direct = logic::logic(|| {
+        let __locus_m = match logic::matched(logic::model(&t)) {
+            logic::Variants::<Tree>::Tagged(__locus_p7, __locus_p8) => {
+                let () = match logic::matched(__locus_p7) {
+                    logic::Variants::<Maybe<_>>::Nothing => (),
+                    _ => logic::hole(),
+                };
+                let () = match logic::matched(__locus_p8) {
+                    logic::Variants::<Tree>::Leaf => (),
+                    _ => logic::hole(),
+                };
+                logic::model(&v)
+            }
+            _ => logic::model(&m),
+        };
+        __locus_m
+    });
+    (type_of(&v), type_of(&m), type_of(&direct))
+}
+use prelude::*;
+### d2-trait-method-contract
+trait Shape {
+    fn __logic_area_spec(self: &Self) -> Nat
+    where
+        Self: Sized;
+    fn __logic_area_is_bounded(
+        s: &Self,
+        limit: Nat,
+        h: Proof![Self::area_spec(s) <= limit],
+    ) -> Proof![Self::area_spec(s) < limit + 1]
+    where
+        Self: Sized;
+    fn __locus_contract_logic_area_is_bounded(
+        s: &Self,
+        limit: Nat,
+        h: Proof![Self::area_spec(s) <= limit],
+    ) where
+        Self: Sized,
+        Self: Sized,
+    {
+        logic::proposition(|| {
+            logic::le(
+                Self::__logic_area_spec(logic::argument(&s)),
+                logic::model(&limit),
+            )
+        });
+        logic::proposition(|| {
+            logic::lt(Self::__logic_area_spec(logic::argument(&s)), {
+                let __locus_l = logic::model(&limit);
+                let __locus_r = logic::literal_like(&__locus_l, 1);
+                logic::add(__locus_l, __locus_r)
+            })
+        });
+    }
+    fn area(
+        &self,
+    ) -> (u32, Proof![a == Self::area_spec(self)]);
+    fn __locus_contract_area(
+        &self,
+    ) where
+        Self: Sized,
+    {
+        logic::proposition(|| {
+            let __locus_l = Self::__logic_area_spec(logic::argument(&self));
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|a: u32| {
+            logic::eq(
+                logic::model(&a),
+                Self::__logic_area_spec(logic::argument(&self)),
+            )
+        });
+    }
+    fn scaled(
+        &self,
+        by: u32,
+    ) -> (
+        u32,
+        Proof![a == Self::area_spec(self) * by && a >= by],
+    )
+    where
+        Self: Sized;
+    fn __locus_contract_scaled(
+        &self,
+        by: u32,
+    ) where
+        Self: Sized,
+        Self: Sized,
+    {
+        logic::proposition(|| {
+            let __locus_l = logic::model(&by);
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|a: u32| {
+            logic::and(
+                logic::eq(
+                    logic::model(&a),
+                    logic::mul(
+                        Self::__logic_area_spec(logic::argument(&self)),
+                        logic::model(&by),
+                    ),
+                ),
+                logic::ge(logic::model(&a), logic::model(&by)),
+            )
+        });
+    }
+}
+struct Rect {
+    w: u32,
+    h: u32,
+}
+struct __locus_snap_Rect {}
+impl Clone for __locus_snap_Rect {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Rect {}
+impl Debug for __locus_snap_Rect {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Rect>")
+    }
+}
+impl Model for __locus_snap_Rect {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Rect {
+    type S = Self;
+}
+impl Logical for __locus_snap_Rect {
+    fn __locus_marker() -> Self {
+        __locus_snap_Rect {}
+    }
+}
+impl Snapshot for Rect {
+    type S = __locus_snap_Rect;
+}
+impl Shape for Rect {
+    fn __logic_area_spec(self: &Rect) -> Nat {
+        logic::logic_fn(|| {
+            logic::mul(
+                logic::model(&self.w),
+                logic::model(&self.h),
+            )
+        })
+    }
+    fn __logic_area_is_bounded(
+        s: &Rect,
+        limit: Nat,
+        h: Proof![Rect::area_spec(s) <= limit],
+    ) -> Proof![Rect::area_spec(s) < limit + 1] {
+        logic::proposition(|| {
+            logic::le(
+                Rect::__logic_area_spec(logic::argument(&s)),
+                logic::model(&limit),
+            )
+        });
+        logic::proposition(|| {
+            logic::lt(Rect::__logic_area_spec(logic::argument(&s)), {
+                let __locus_l = logic::model(&limit);
+                let __locus_r = logic::literal_like(&__locus_l, 1);
+                logic::add(__locus_l, __locus_r)
+            })
+        });
+        logic::logic_fn(|| logic::hole())
+    }
+    fn area(
+        &self,
+    ) -> (u32, Proof![a == Rect::area_spec(self)]) {
+        logic::proposition(|| {
+            let __locus_l = Rect::__logic_area_spec(logic::argument(&self));
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|a: u32| {
+            logic::eq(
+                logic::model(&a),
+                Rect::__logic_area_spec(logic::argument(&self)),
+            )
+        });
+        (self.w * self.h, proof! ([] [] []))
+    }
+    fn scaled(
+        &self,
+        by: u32,
+    ) -> (
+        u32,
+        Proof![a == Rect::area_spec(self) * by && a >= by],
+    ) {
+        logic::proposition(|| {
+            let __locus_l = logic::model(&by);
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|a: u32| {
+            logic::and(
+                logic::eq(
+                    logic::model(&a),
+                    logic::mul(
+                        Rect::__logic_area_spec(logic::argument(&self)),
+                        logic::model(&by),
+                    ),
+                ),
+                logic::ge(logic::model(&a), logic::model(&by)),
+            )
+        });
+        (self.w * self.h * by, proof! ([] [] []))
+    }
+}
+fn total<S: Shape>(s: &S) -> u32 {
+    s.area(proof! ([] [] [])).0
+}
+fn run() -> (u32, u32) {
+    let r = Rect { w: 2, h: 3 };
+    (
+        total(&r),
+        Rect { w: 1, h: 2 }
+            .scaled(2, proof! ([] [] []))
+            .0,
+    )
+}
+use prelude::*;
+### d1-field-proposition
+fn sorted(xs: Seq<Nat>) -> Prop {
+    logic::logic_fn_prop(|| {
+        logic::forall2(|i: Nat, j: Nat| {
+            logic::implies(
+                logic::and(
+                    logic::lt(logic::model(&i), logic::model(&j)),
+                    logic::lt(
+                        logic::model(&j),
+                        ({
+                            use logic::{OnTheModel as _, OnTheType as _};
+                            (&logic::receiver::<
+                                logic::N<
+                                    'l',
+                                    logic::N<'e', logic::N<'n', ()>>,
+                                >,
+                                _,
+                            >(&xs))
+                                .__locus_receiver()
+                        })
+                        .__logic_len(),
+                    ),
+                ),
+                logic::le(
+                    logic::index(logic::model(&xs), logic::argument(&i)),
+                    logic::index(logic::model(&xs), logic::argument(&j)),
+                ),
+            )
+        })
+    })
+}
+struct Interval<T> {
+    lo: u32,
+    hi: u32,
+    tag: T,
+    ordered: Proof![lo <= hi],
+    marks: Vec<(u32, Proof![lo <= m && m <= hi])>,
+    steps: Vec<u32>,
+    ascending: Proof![sorted(steps) && steps.len() as Int <= hi - lo],
+}
+const _: () = {
+    fn __locus_fields<T>(__locus_self: &Interval<T>) {
+        let Interval {
+            lo,
+            hi,
+            tag,
+            marks,
+            steps,
+            ..
+        } = __locus_self;
+        logic::proposition(|| {
+            logic::le(logic::model(&lo), logic::model(&hi))
+        });
+        logic::proposition1(|m: u32| {
+            logic::and(
+                logic::le(logic::model(&lo), logic::model(&m)),
+                logic::le(logic::model(&m), logic::model(&hi)),
+            )
+        });
+        logic::proposition(|| {
+            logic::and(
+                sorted(logic::argument(&steps)),
+                logic::le(
+                    logic::cast::<_, Int>(
+                        ({
+                            use logic::{OnTheModel as _, OnTheType as _};
+                            (&logic::receiver::<
+                                logic::N<
+                                    'l',
+                                    logic::N<'e', logic::N<'n', ()>>,
+                                >,
+                                _,
+                            >(&steps))
+                                .__locus_receiver()
+                        })
+                        .__logic_len(),
+                    ),
+                    logic::sub(logic::model(&hi), logic::model(&lo)),
+                ),
+            )
+        });
+    }
+};
+struct __locus_snap_Interval<T> {
+    __locus: PhantomData<fn() -> (T,)>,
+}
+impl<T> Clone for __locus_snap_Interval<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for __locus_snap_Interval<T> {}
+impl<T> Debug for __locus_snap_Interval<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Interval>")
+    }
+}
+impl<T> Model for __locus_snap_Interval<T> {
+    type Logic = Self;
+}
+impl<T: Logical> Snapshot for __locus_snap_Interval<T> {
+    type S = Self;
+}
+impl<T: Logical> Logical for __locus_snap_Interval<T> {
+    fn __locus_marker() -> Self {
+        __locus_snap_Interval {
+            __locus: PhantomData,
+        }
+    }
+}
+impl<T: Snapshot> Snapshot for Interval<T> {
+    type S = __locus_snap_Interval<<T as Snapshot>::S>;
+}
+fn run() -> (u32, u32) {
+    let i = Interval {
+        lo: 2,
+        hi: 7,
+        tag: "x",
+        ordered: proof! ([] [] []),
+        marks: Vec::new(),
+        steps: vec![],
+        ascending: proof!
+        ([] [] []),
+    };
+    (i.lo, i.hi)
+}
+use prelude::*;
+### d5-models
+struct Stack {
+    items: Vec<u32>,
+}
+struct __locus_snap_Stack {}
+impl Clone for __locus_snap_Stack {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Stack {}
+impl Debug for __locus_snap_Stack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Stack>")
+    }
+}
+impl Model for __locus_snap_Stack {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Stack {
+    type S = Self;
+}
+impl Logical for __locus_snap_Stack {
+    fn __locus_marker() -> Self {
+        __locus_snap_Stack {}
+    }
+}
+impl Snapshot for Stack {
+    type S = __locus_snap_Stack;
+}
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+}
+impl Runtime for Stack {}
+const _: () = {
+    fn model(stack: &Stack) -> Seq<Nat> {
+        logic::logic_fn(|| logic::argument(&stack.items))
+    }
+};
+struct Point {
+    x: u32,
+    y: u32,
+    positive: Proof![x > 0],
+}
+const _: () = {
+    fn __locus_fields(__locus_self: &Point) {
+        let Point { x, y, .. } = __locus_self;
+        logic::proposition(|| {
+            let __locus_l = logic::model(&x);
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+    }
+};
+struct __locus_snap_Point {}
+impl Clone for __locus_snap_Point {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Point {}
+impl Debug for __locus_snap_Point {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Point>")
+    }
+}
+impl Model for __locus_snap_Point {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Point {
+    type S = Self;
+}
+impl Logical for __locus_snap_Point {
+    fn __locus_marker() -> Self {
+        __locus_snap_Point {}
+    }
+}
+impl Snapshot for Point {
+    type S = __locus_snap_Point;
+}
+struct Point_Logic {
+    pub x: <u32 as Model>::Logic,
+    pub y: <u32 as Model>::Logic,
+}
+impl Clone for Point_Logic {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for Point_Logic {}
+impl Debug for Point_Logic {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Point_Logic")
+    }
+}
+impl Model for Point_Logic {
+    type Logic = Self;
+}
+impl Snapshot for Point_Logic {
+    type S = Self;
+}
+impl Logical for Point_Logic {
+    fn __locus_marker() -> Self {
+        Point_Logic {
+            x: Logical::__locus_marker(),
+            y: Logical::__locus_marker(),
+        }
+    }
+}
+impl logic::Matchable for Point_Logic {
+    type Variants = Self;
+}
+impl Model for Point {
+    type Logic = Point_Logic;
+}
+impl Runtime for Point {}
+struct Pair<'a, A, B> {
+    first: A,
+    second: &'a B,
+}
+struct __locus_snap_Pair<A, B> {
+    __locus: PhantomData<fn() -> (A, B)>,
+}
+impl<A, B> Clone for __locus_snap_Pair<A, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<A, B> Copy for __locus_snap_Pair<A, B> {}
+impl<A, B> Debug for __locus_snap_Pair<A, B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Pair>")
+    }
+}
+impl<A, B> Model for __locus_snap_Pair<A, B> {
+    type Logic = Self;
+}
+impl<A: Logical, B: Logical> Snapshot for __locus_snap_Pair<A, B> {
+    type S = Self;
+}
+impl<A: Logical, B: Logical> Logical for __locus_snap_Pair<A, B> {
+    fn __locus_marker() -> Self {
+        __locus_snap_Pair {
+            __locus: PhantomData,
+        }
+    }
+}
+impl<'a, A: Snapshot, B: Snapshot> Snapshot for Pair<'a, A, B> {
+    type S = __locus_snap_Pair<<A as Snapshot>::S, <B as Snapshot>::S>;
+}
+struct Pair_Logic<A: Logical, B: Logical> {
+    pub first: <A as Model>::Logic,
+    pub second: <&'static B as Model>::Logic,
+}
+impl<A: Logical + Logical, B: Logical + Logical>
+    Clone for Pair_Logic<A, B>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<A: Logical + Logical, B: Logical + Logical>
+    Copy for Pair_Logic<A, B>
+{
+}
+impl<A: Logical, B: Logical> Debug for Pair_Logic<A, B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Pair_Logic")
+    }
+}
+impl<A: Logical, B: Logical> Model for Pair_Logic<A, B> {
+    type Logic = Self;
+}
+impl<A: Logical + Logical, B: Logical + Logical>
+    Snapshot for Pair_Logic<A, B>
+{
+    type S = Self;
+}
+impl<A: Logical + Logical, B: Logical + Logical>
+    Logical for Pair_Logic<A, B>
+{
+    fn __locus_marker() -> Self {
+        Pair_Logic {
+            first: Logical::__locus_marker(),
+            second: Logical::__locus_marker(),
+        }
+    }
+}
+impl<A: Logical, B: Logical> logic::Matchable for Pair_Logic<A, B> {
+    type Variants = Self;
+}
+impl<'a, A: Model, B: Model> Model for Pair<'a, A, B>
+where
+    <A as Model>::Logic: Logical,
+    <B as Model>::Logic: Logical,
+{
+    type Logic = Pair_Logic<<A as Model>::Logic, <B as Model>::Logic>;
+}
+impl<'a, A: Model, B: Model> Runtime for Pair<'a, A, B>
+where
+    <A as Model>::Logic: Logical,
+    <B as Model>::Logic: Logical,
+{
+}
+enum List {
+    Nil,
+    Cons(u32, Box<List>),
+}
+struct __locus_snap_List {}
+impl Clone for __locus_snap_List {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_List {}
+impl Debug for __locus_snap_List {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<List>")
+    }
+}
+impl Model for __locus_snap_List {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_List {
+    type S = Self;
+}
+impl Logical for __locus_snap_List {
+    fn __locus_marker() -> Self {
+        __locus_snap_List {}
+    }
+}
+impl Snapshot for List {
+    type S = __locus_snap_List;
+}
+struct List_Logic {}
+impl Clone for List_Logic {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for List_Logic {}
+impl Debug for List_Logic {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("List_Logic")
+    }
+}
+impl Model for List_Logic {
+    type Logic = Self;
+}
+impl Snapshot for List_Logic {
+    type S = Self;
+}
+impl Logical for List_Logic {
+    fn __locus_marker() -> Self {
+        List_Logic {}
+    }
+}
+impl List_Logic {
+    const Nil: List_Logic = List_Logic {};
+    fn Cons(
+        _: <u32 as Model>::Logic,
+        _: <Box<List> as Model>::Logic,
+    ) -> List_Logic {
+        stub()
+    }
+}
+const _: () = {
+    pub enum List_Logic {
+        Nil,
+        Cons(
+            <u32 as Model>::Logic,
+            <Box<List> as Model>::Logic,
+        ),
+    }
+    impl logic::Matchable for self::List_Logic {
+        type Variants = List_Logic;
+    }
+};
+impl Model for List {
+    type Logic = List_Logic;
+}
+impl Runtime for List {}
+fn norm(p: Point_Logic) -> Nat {
+    logic::logic_fn(|| {
+        logic::add(logic::model(&p.x), logic::model(&p.y))
+    })
+}
+fn length(l: List_Logic) -> Nat {
+    logic::logic_fn(
+        || match logic::matched(logic::model(&l)) {
+            logic::Variants::<List_Logic>::Nil => logic::literal::<Nat>(0),
+            logic::Variants::<List_Logic>::Cons(_, rest) => {
+                let __locus_l = length(logic::argument(&rest));
+                let __locus_r = logic::literal_like(&__locus_l, 1);
+                logic::add(__locus_l, __locus_r)
+            }
+        },
+    )
+}
+fn first_of<A: Model, B: Model>(p: &Pair<'_, A, B>) -> u32
+where
+    A::Logic: Logical,
+    B::Logic: Logical,
+{
+    let first = logic::logic(|| logic::model(&p).first);
+    1
+}
+fn type_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+fn run() -> (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+) {
+    let s = Stack { items: vec![1] };
+    let p = Point {
+        x: 1,
+        y: 2,
+        positive: proof! ([] [] []),
+    };
+    let ints = vec![1i32];
+    let pair = Pair {
+        first: 3u8,
+        second: &ints,
+    };
+    let l = List::Cons(1, Box::new(List::Nil));
+    let _ = first_of(&pair);
+    (
+        type_of(&logic::logic(|| logic::model(&s))),
+        type_of(&logic::logic(|| logic::model(&p))),
+        type_of(&logic::logic(|| {
+            logic::add(
+                logic::model(&p).x,
+                norm(logic::argument(&p)),
+            )
+        })),
+        type_of(&logic::logic(|| logic::model(&pair))),
+        type_of(&logic::logic(|| {
+            logic::model(&pair).second
+        })),
+        type_of(&logic::logic(|| logic::model(&l))),
+        type_of(&logic::logic(|| {
+            length(logic::argument(&l))
+        })),
+    )
+}
+use prelude::*;
+### s1-stack
+pub struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    bounded: Proof![items.len() <= cap],
+}
+const _: () = {
+    fn __locus_fields(__locus_self: &Stack) {
+        let Stack { items, cap, .. } = __locus_self;
+        logic::proposition(|| {
+            logic::le(
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&items))
+                        .__locus_receiver()
+                })
+                .__logic_len(),
+                logic::model(&cap),
+            )
+        });
+    }
+};
+pub struct __locus_snap_Stack {}
+impl Clone for __locus_snap_Stack {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for __locus_snap_Stack {}
+impl Debug for __locus_snap_Stack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str("Snap<Stack>")
+    }
+}
+impl Model for __locus_snap_Stack {
+    type Logic = Self;
+}
+impl Snapshot for __locus_snap_Stack {
+    type S = Self;
+}
+impl Logical for __locus_snap_Stack {
+    fn __locus_marker() -> Self {
+        __locus_snap_Stack {}
+    }
+}
+impl Snapshot for Stack {
+    type S = __locus_snap_Stack;
+}
+impl Model for Stack {
+    type Logic = Seq<Nat>;
+}
+impl Runtime for Stack {}
+const _: () = {
+    fn model(stack: &Stack) -> Seq<Nat> {
+        logic::logic_fn(|| logic::argument(&stack.items))
+    }
+};
+impl
+    logic::Declares<
+        logic::N<
+            'r',
+            logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+        >,
+    > for Stack
+{
+    type Owner = Self;
+}
+impl Stack {
+    fn __logic_room(self) -> Int {
+        logic::logic_fn(|| {
+            logic::sub(
+                logic::model(&self.cap),
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&self.items))
+                        .__locus_receiver()
+                })
+                .__logic_len(),
+            )
+        })
+    }
+}
+fn pushed(before: Seq<Nat>, x: Nat) -> Seq<Nat> {
+    logic::logic_fn(|| {
+        ({
+            use logic::{OnTheModel as _, OnTheType as _};
+            (&logic::receiver::<
+                logic::N<
+                    'p',
+                    logic::N<'u', logic::N<'s', logic::N<'h', ()>>>,
+                >,
+                _,
+            >(&before))
+                .__locus_receiver()
+        })
+        .__logic_push(logic::argument(&x))
+    })
+}
+fn pushed_is_longer(xs: Seq<Nat>, x: Nat) -> Proof![pushed(xs, x).len() == xs.len() + 1] {
+    logic::proposition(|| {
+        logic::eq(
+            pushed(logic::argument(&xs), logic::argument(&x)).__logic_len(),
+            {
+                let __locus_l = ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&xs))
+                        .__locus_receiver()
+                })
+                .__logic_len();
+                let __locus_r = logic::literal_like(&__locus_l, 1);
+                logic::add(__locus_l, __locus_r)
+            },
+        )
+    });
+    logic::logic_fn(|| logic::hole())
+}
+fn pushed_then_last(xs: Seq<Nat>, x: Nat) -> Proof![pushed(xs, x).last() == x] {
+    logic::proposition(|| {
+        logic::eq(
+            pushed(logic::argument(&xs), logic::argument(&x)).__logic_last(),
+            logic::model(&x),
+        )
+    });
+    logic::logic_fn(|| logic::hole())
+}
+impl Stack {
+    pub fn new(
+        cap: usize,
+    ) -> (
+        Stack,
+        Proof![s.len() == 0 && s.room() == cap as Int],
+    ) {
+        logic::proposition1(|s: Stack| {
+            logic::and(
+                {
+                    let __locus_l = ({
+                        use logic::{OnTheModel as _, OnTheType as _};
+                        (&logic::receiver::<
+                            logic::N<
+                                'l',
+                                logic::N<'e', logic::N<'n', ()>>,
+                            >,
+                            _,
+                        >(&s))
+                            .__locus_receiver()
+                    })
+                    .__logic_len();
+                    let __locus_r = logic::literal_like(&__locus_l, 0);
+                    logic::eq(__locus_l, __locus_r)
+                },
+                logic::eq(
+                    ({
+                        use logic::{OnTheModel as _, OnTheType as _};
+                        (&logic::receiver::<
+                            logic::N<
+                                'r',
+                                logic::N<
+                                    'o',
+                                    logic::N<'o', logic::N<'m', ()>>,
+                                >,
+                            >,
+                            _,
+                        >(&s))
+                            .__locus_receiver()
+                    })
+                    .__logic_room(),
+                    logic::cast::<_, Int>(logic::model(&cap)),
+                ),
+            )
+        });
+        (
+            Stack {
+                items: Vec::new(),
+                cap,
+                bounded: proof! ([] [] []),
+            },
+            proof! ([] [] []),
+        )
+    }
+    pub fn len(&self) -> (usize, Proof![n == self.len()]) {
+        logic::proposition1(|n: usize| {
+            logic::eq(
+                logic::model(&n),
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&self))
+                        .__locus_receiver()
+                })
+                .__logic_len(),
+            )
+        });
+        (self.items.len(), proof! ([] [] []))
+    }
+    pub fn is_empty(&self) -> (bool, Proof! [r <==> self.len() == 0]) {
+        logic::proposition1(|r: bool| {
+            logic::iff(logic::model(&r), {
+                let __locus_l = ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                        _,
+                    >(&self))
+                        .__locus_receiver()
+                })
+                .__logic_len();
+                let __locus_r = logic::literal_like(&__locus_l, 0);
+                logic::eq(__locus_l, __locus_r)
+            })
+        });
+        (self.items.is_empty(), proof! ([] [] []))
+    }
+    pub fn push(
+        &mut self,
+        x: u32,
+    ) -> Proof!
+    [final ! (self) === pushed(*self, x) && final ! (self).room() ==
+    self.room() - 1] {
+        logic::proposition(|| {
+            let __locus_l = ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<
+                        'r',
+                        logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+                    >,
+                    _,
+                >(&self))
+                    .__locus_receiver()
+            })
+            .__logic_room();
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition(|| {
+            logic::and(
+                logic::same(
+                    logic::model(&(*logic::final_value(&self))),
+                    pushed(
+                        logic::argument(&(*self)),
+                        logic::argument(&x),
+                    ),
+                ),
+                logic::eq(
+                    ({
+                        use logic::{OnTheModel as _, OnTheType as _};
+                        (&logic::receiver::<
+                            logic::N<
+                                'r',
+                                logic::N<
+                                    'o',
+                                    logic::N<'o', logic::N<'m', ()>>,
+                                >,
+                            >,
+                            _,
+                        >(&(*logic::final_value(&self))))
+                            .__locus_receiver()
+                    })
+                    .__logic_room(),
+                    {
+                        let __locus_l = ({
+                            use logic::{OnTheModel as _, OnTheType as _};
+                            (&logic::receiver::<
+                                logic::N<
+                                    'r',
+                                    logic::N<
+                                        'o',
+                                        logic::N<'o', logic::N<'m', ()>>,
+                                    >,
+                                >,
+                                _,
+                            >(&self))
+                                .__locus_receiver()
+                        })
+                        .__logic_room();
+                        let __locus_r = logic::literal_like(&__locus_l, 1);
+                        logic::sub(__locus_l, __locus_r)
+                    },
+                ),
+            )
+        });
+        let before = logic::logic(|| logic::model(&self));
+        let longer = logic::logic(|| {
+            pushed_is_longer(
+                logic::argument(&before),
+                logic::argument(&x),
+            )
+        });
+        self.items.push(x);
+        proof! ([] [] [])
+    }
+    pub fn pop(
+        &mut self,
+    ) -> (
+        u32,
+        Proof!
+    [final ! (self).push(x) === * self && final ! (self).len() + 1 ==
+    self.len()],
+    ) {
+        logic::proposition(|| {
+            let __locus_l = ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                    _,
+                >(&self))
+                    .__locus_receiver()
+            })
+            .__logic_len();
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|x: u32| {
+            logic::and(
+                logic::same(
+                    ({
+                        use logic::{OnTheModel as _, OnTheType as _};
+                        (&logic::receiver::<
+                            logic::N<
+                                'p',
+                                logic::N<
+                                    'u',
+                                    logic::N<'s', logic::N<'h', ()>>,
+                                >,
+                            >,
+                            _,
+                        >(&(*logic::final_value(&self))))
+                            .__locus_receiver()
+                    })
+                    .__logic_push(logic::argument(&x)),
+                    logic::model(&(*self)),
+                ),
+                logic::eq(
+                    {
+                        let __locus_l = ({
+                            use logic::{OnTheModel as _, OnTheType as _};
+                            (&logic::receiver::<
+                                logic::N<
+                                    'l',
+                                    logic::N<'e', logic::N<'n', ()>>,
+                                >,
+                                _,
+                            >(&(*logic::final_value(&self))))
+                                .__locus_receiver()
+                        })
+                        .__logic_len();
+                        let __locus_r = logic::literal_like(&__locus_l, 1);
+                        logic::add(__locus_l, __locus_r)
+                    },
+                    ({
+                        use logic::{OnTheModel as _, OnTheType as _};
+                        (&logic::receiver::<
+                            logic::N<
+                                'l',
+                                logic::N<'e', logic::N<'n', ()>>,
+                            >,
+                            _,
+                        >(&self))
+                            .__locus_receiver()
+                    })
+                    .__logic_len(),
+                ),
+            )
+        });
+        let top = self.items.pop().unwrap();
+        (top, proof! ([] [] []))
+    }
+    pub fn top(
+        &self,
+    ) -> (u32, Proof![x == self.last()]) {
+        logic::proposition(|| {
+            let __locus_l = ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<'l', logic::N<'e', logic::N<'n', ()>>>,
+                    _,
+                >(&self))
+                    .__locus_receiver()
+            })
+            .__logic_len();
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|x: u32| {
+            logic::eq(
+                logic::model(&x),
+                ({
+                    use logic::{OnTheModel as _, OnTheType as _};
+                    (&logic::receiver::<
+                        logic::N<
+                            'l',
+                            logic::N<
+                                'a',
+                                logic::N<'s', logic::N<'t', ()>>,
+                            >,
+                        >,
+                        _,
+                    >(&self))
+                        .__locus_receiver()
+                })
+                .__logic_last(),
+            )
+        });
+        (
+            self.items[self.items.len() - 1],
+            proof! ([] [] []),
+        )
+    }
+    pub fn push_then_top(
+        &mut self,
+        x: u32,
+    ) -> (u32, Proof![y == x]) {
+        logic::proposition(|| {
+            let __locus_l = ({
+                use logic::{OnTheModel as _, OnTheType as _};
+                (&logic::receiver::<
+                    logic::N<
+                        'r',
+                        logic::N<'o', logic::N<'o', logic::N<'m', ()>>>,
+                    >,
+                    _,
+                >(&self))
+                    .__locus_receiver()
+            })
+            .__logic_room();
+            let __locus_r = logic::literal_like(&__locus_l, 0);
+            logic::gt(__locus_l, __locus_r)
+        });
+        logic::proposition1(|y: u32| {
+            logic::eq(logic::model(&y), logic::model(&x))
+        });
+        let pushed_it = self.push(x, fits);
+        let last = logic::logic(|| {
+            pushed_then_last(
+                logic::argument(&(*self)),
+                logic::argument(&x),
+            )
+        });
+        let (y, is_last) = self.top(proof! ([] [] []));
+        (y, proof! ([] [] []))
+    }
+}
+fn run() -> (usize, u32, u32, bool) {
+    let (mut s, fresh) = Stack::new(4);
+    let _ = s.push(1, proof! ([] [] []));
+    let _ = s.push(2, proof! ([] [] []));
+    let (three, _) = s.push_then_top(3, proof! ([] [] []));
+    let (n, _) = s.len();
+    let (popped, _) = s.pop(proof! ([] [] []));
+    let (two, _) = s.top(proof! ([] [] []));
+    let (empty, _) = s.is_empty();
+    (n, two, popped, empty)
+}
+use prelude::*;
+
+run.sh all: 155 seconds
+exit 0

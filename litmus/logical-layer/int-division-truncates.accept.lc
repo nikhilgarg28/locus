@@ -1,0 +1,19 @@
+//~ question: Do `/` and `%` on `Int` truncate toward zero, as Rust's do?
+//~ spec: logic.arith.division
+//~ rfc: 0002
+
+logic fn quotient_of_negative() -> @(-7 / 2 === -3) {
+    compute()
+}
+
+logic fn remainder_of_negative() -> @(-7 % 2 === -1) {
+    compute()
+}
+
+logic fn quotient_by_negative() -> @(7 / -2 === -3) {
+    compute()
+}
+
+logic fn remainder_by_negative() -> @(7 % -2 === 1) {
+    compute()
+}

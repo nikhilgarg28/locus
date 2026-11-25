@@ -1,0 +1,25 @@
+//~ question: Does an implementation of `CloneEq` give its type the standard `Clone`, running the same code?
+//~ spec: traits.laws.provided
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+struct Meters(u32);
+
+impl CloneEq for Meters {
+    fn clone_eq(&self) -> (copy: Meters, @(snap(copy) === snap(self))) {
+        (Meters(self.0), _)
+    }
+}
+
+// The generated `Clone`: it runs `clone_eq`, and states nothing.
+fn copied(m: &Meters) -> u32 {
+    m.clone().0
+}
+
+fn proved(m: &Meters) -> (copy: Meters, @(snap(copy) === snap(m))) {
+    m.clone_eq()
+}
+
+//~ run: copied(&Meters(7)) => 7
+//~ run: proved(&Meters(7)).0.0 => 7

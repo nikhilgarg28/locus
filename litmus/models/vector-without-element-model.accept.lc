@@ -1,0 +1,14 @@
+//~ question: Does a vector whose elements have no declared model have a model?
+//~ spec: models.default, models.by-parts, collections.model
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+fn first(points: &Vec<Point>, nonempty: @(points.elements().len() > 0)) -> u32 {
+    points[0].x
+}

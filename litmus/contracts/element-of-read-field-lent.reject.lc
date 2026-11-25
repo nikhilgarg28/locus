@@ -1,0 +1,17 @@
+//~ question: May a method lend out an item of a field that a proof reads, when the proof reads only the field's length?
+//~ spec: contracts.invariants.no-mutable-borrow
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(items.elements().len() <= cap),
+}
+
+impl Stack {
+    fn top_mut(&mut self) -> Option<&mut u32> {
+        self.items.iter_mut().last() //~ error: `items` is read by the proof field `fits`, so it cannot be mutably borrowed, though `fits` reads only its length
+    }
+}

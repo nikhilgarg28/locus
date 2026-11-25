@@ -1,0 +1,10 @@
+//~ question: May one element of a vector be lent mutably with no proof that the index is inside the vector?
+//~ spec: collections.vec.element-loan
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn replace_first(v: &mut Vec<u32>, x: u32) {
+    let (first, was, lent) = v.get_mut_checked(0, _); //~ error: cannot prove `0 < snap(v).elements().len()`: nothing says that `v` has an element
+    *first = x;
+}

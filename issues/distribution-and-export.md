@@ -64,3 +64,52 @@ RFC 0002's decision 52 adds a question for this issue: how a project names the u
 ### 2026-11-09, conversation with the owner about PR #24
 
 RFC 0002's decision 54 changes what the list of trusted crates does. A crate with `unsafe` code that is not on it is no longer handled by tracking what it was given: a function that calls into it is unverified, and is itself what a result lists. That reading of decision 52 is the reviewer's proposal and still for the owner. A manifest also lists each unverified function with `unsafe` code, and each `unsafe impl`, of a Locus crate that a result passes through.
+
+### 2026-11-16, proposal made at the owner's request
+
+The owner asked for an audit of the decisions that are still open, with a proposal for each. This is the proposal for this issue. Nothing in it is decided.
+
+**New with RFC 0002's decision 81:** what an exported crate does with the types of `locus::std`, and what a program does that already has a crate named `locus`.
+
+Options for exported crates:
+1. **Depend on Locus's library as an ordinary Rust crate.** Its runtime part is small, has no proofs after erasure, and is itself exported Rust. The exported crate names `locus::std::vec::Vec` as it names any dependency's type.
+2. **Rewrite Locus's types to the standard library's when exporting,** with each wrapper method written out as the standard calls it makes.
+3. **Forbid them in exported crates.**
+
+Proposal: option 1, with one rule: what an exported crate shows to other crates uses the standard library's types, converting at the edge, which costs nothing. So a Rust user sees `Vec<u32>` in every signature, and the vision's "no runtime support" still holds in the sense that matters: the dependency is plain Rust with no Locus toolchain. The strongest argument against is that the exported source reads less like what a Rust programmer would write inside function bodies; option 2 fixes that at the price of a rewriting pass that would have to be validated.
+
+For the name: `locus` is reserved in a Locus crate's dependencies, as `std` and `core` are.
+
+For the rest of this issue, the proposal is to decide only what the first build needs, and leave publishing until build mode works: configurations under `[package.metadata.locus]`, the list of trusted crates per workspace, and each published crate carrying the list of assumptions its results rest on.
+
+### 2026-11-22, a public field of a sealed type
+
+`export.plain-interface` said in its lead that nothing other crates can reach exposes logical data, and in its clauses that no reachable field holds any. So `pub struct Pair { pub first: Interval, pub second: Interval }` was refused while a function that returns an `Option<Interval>` was accepted. Shown this among six rules that a review had left unsettled, with the proposal to say "exposes" throughout, the owner answered:
+
+> tentatively confirm the 6 open questions
+
+RFC 0002's decision 92 records it. A field that other crates can reach may have a sealed type, in a struct and in a variant of an enum; it may not expose logical data or be read by a proof field. `export.invariants-closed` and `contracts.invariants.observed` change with it, and the first stage follows. Three examples are added: `export/public-field-of-sealed-type.accept.lc`, `export/public-enum-with-sealed-payload.accept.lc`, and `export/public-sealed-field-read-by-proof.reject.lc`. It stays open to revisit (RFC 0002, item 26).
+
+### 2026-11-22, a `Model` bound in an exported crate
+
+RFC 0002's decision 106 lets a `Model` bound be written on an `impl` and on a type's own declaration. The rule had kept it to a function's type parameters for a reason about export: an exported program has no `Model`, and removing the bound from an `impl` could change which implementation a call selects. That reason still holds in export mode, so `models.bounds-on-functions` keeps the old rule there. A crate whose type needs the bound, such as one with a proof field that reads a field of a generic type, builds and does not export. What an exported program does with such a bound is for the RFC on lowering.
+
+### 2026-11-23, export mode's markers
+
+[RFC 0001](../design/rfcs/0001-compiler-pipeline.md)'s decision 49 gives each logical type a Rust type of its own, and has rustc type logical code against the stubs of Locus's library. That leaves a question for export mode, which RFC 0001 lists under what is still for the owner (item 10) and does not settle.
+
+An exported program cannot depend on Locus's library, so its ghost values are the crate's own markers: `Proof`, and one for each logical type that its runtime types hold. Before, the checking program of export mode used those same two private markers, so the two programs had the same types. Now the checking program types logical code against the library's logical types. The two programs then have corresponding types, not the same ones, and RFC 0001's reason for build mode, that the same types give the same resolution in both programs, has to be made again for export mode: by validation, which already compares every typed body, or by another arrangement. No spike looked at export mode.
+
+### 2026-11-23, Locus's own collections hold logical data
+
+What an exported crate does with Locus's own types is still open here. RFC 0002's decision 113 adds one fact to it: a collection of Locus's library now holds logical data, the snapshots of its elements in a logical field, and at an element type of plain data it is a sealed type. So an exported signature that names a `Vec<u32>` of Locus's names a sealed type of another crate, which decision 92 allows where it exposes no logical data. Rewriting such a type to the standard library's, the other way this issue lists, would now also drop the logical field. The contracts of its methods, each of which returns a proof, are not part of what an exported crate shows either way.
+
+### 2026-11-23, a bound on a Locus trait in an exported crate
+
+[RFC 0006](../design/rfcs/0006-traits.md), a draft, adds one rule to the chapter on exporting. `export.traits`: no item or implementation that other crates can reach has a bound on a Locus trait, an implementation that a law implementation generates included. Code that uses an exported crate is built without Locus, so nothing checks an implementation of a Locus trait that it writes.
+
+Three things are left to this issue:
+
+- **Evidence that an exported program cannot forge.** Lifting the rule needs it. It makes the question whether an exported crate depends on Locus's library or carries its own copies a question of soundness.
+- **A `Model` bound in a trait.** RFC 0006 allows it when a crate is built. In an exported crate the bound still appears only on a function (`models.bounds-on-functions`), so a crate with such a trait builds and does not export.
+- **Two implementations that differ only in a logical type argument,** such as `impl Tag for Vec<Int>` and `impl Tag for Vec<Nat>` for a trait with a method that runs. They are two Rust types in both programs of a build. What an exported program does with them is not written.

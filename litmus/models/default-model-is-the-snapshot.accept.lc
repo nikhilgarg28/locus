@@ -1,0 +1,12 @@
+//~ question: Is equality of two values of a type with no declared model the equality of their snapshots?
+//~ spec: models.default, logic.eq.runtime-values
+//~ rfc: 0002
+
+struct Token {
+    id: u32,
+    owner: u32,
+}
+
+fn same(a: &Token, b: &Token, equal: @(a === b)) -> @(snap(a) === snap(b)) {
+    _
+}

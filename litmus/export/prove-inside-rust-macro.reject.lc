@@ -3,7 +3,13 @@
 //~ rfc: 0001
 //~ mode: export
 
+macro_rules! one {
+    ($e:expr) => {
+        [$e]
+    };
+}
+
 pub fn check(x: u32) -> usize {
-    let proofs: Vec<@(x == x)> = vec![prove!(x == x)]; //~ error: in an exported crate, Locus's `prove!` cannot be invoked inside another macro's input, because erasure could not remove it
+    let proofs: [@(x == x); 1] = one![prove!(x == x)]; //~ error: in an exported crate, Locus's `prove!` cannot be invoked inside another macro's input, because erasure could not remove it
     proofs.len()
 }

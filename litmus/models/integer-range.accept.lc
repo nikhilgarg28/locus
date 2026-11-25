@@ -1,5 +1,5 @@
-//~ question: Does the model of a machine integer lie within its type's range?
-//~ spec: models.integer-range
+//~ question: Does a value captured from a place of a machine integer type lie within the type's range?
+//~ spec: models.valid.captured
 //~ rfc: 0002
 
 fn fits(x: u8) -> @(x <= 255) {

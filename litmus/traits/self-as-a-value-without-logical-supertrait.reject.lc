@@ -1,0 +1,7 @@
+//~ question: May a logic function of a trait return `Self` when the trait does not have `Logical` as a supertrait?
+//~ spec: traits.logical
+//~ rfc: 0006
+
+trait Monoid {
+    logic fn unit() -> Self; //~ error: the result of a logic function is a logical type, and `Self` may be a runtime type here: write `trait Monoid: Logical`
+}

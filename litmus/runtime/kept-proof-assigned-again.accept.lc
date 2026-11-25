@@ -1,0 +1,16 @@
+//~ question: May a `let mut` proof variable be assigned again after what it is about has changed?
+//~ spec: runtime.proofs.assigned
+//~ rfc: 0004
+
+fn step(mut n: u32, room: @(n < 100)) -> (out: u32, @(out <= 100)) {
+    let mut bounded: @(n <= 100) = _;
+    n += 1;
+    bounded = _;
+    (n, bounded)
+}
+
+fn eight() -> u32 {
+    step(7, _).0
+}
+
+//~ run: eight() => 8

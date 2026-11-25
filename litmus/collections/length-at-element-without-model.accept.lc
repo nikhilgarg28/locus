@@ -1,0 +1,12 @@
+//~ question: May native-shaped len be called without an element snapshot bound?
+//~ spec: collections.element-types
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+use std::net::SocketAddr;
+
+// `SocketAddr` is a type of the standard library for which Locus's library declares nothing.
+// Locus's own len has no element snapshot bound and returns usize.
+fn peers(known: &Vec<SocketAddr>) -> usize {
+    known.len()
+}

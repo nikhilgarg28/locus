@@ -2,6 +2,8 @@
 //~ spec: logic.ghost.types-forward
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn logical_payloads() -> Vec<Nat> {
     let mut values = Vec::new(); //~ error: the type of `values` holds logical values, so it must be written
     values.push(logic! { 3 });

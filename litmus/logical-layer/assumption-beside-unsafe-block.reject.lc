@@ -1,0 +1,8 @@
+//~ question: Does assuming a fact let a function with a proof in its signature use `unsafe` code?
+//~ spec: proofs.assume, logic.verified.restrictions
+//~ rfc: 0002
+
+fn get(xs: &[u32], i: usize, in_bounds: @(i < xs.len())) -> (x: u32, @(x === xs[i])) {
+    let x = unsafe { *xs.get_unchecked(i) }; //~ error: `get` takes a proof, so it is verified, and a verified function contains no `unsafe` block; an assumption does not change that
+    (x, unsafe assume!(_))
+}

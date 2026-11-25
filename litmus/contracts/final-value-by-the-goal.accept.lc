@@ -1,0 +1,18 @@
+//~ question: May a proof about the value a borrow will end with be written with a `_` that the required proposition determines, though the body cannot spell that value?
+//~ spec: proofs.values.inferred, contracts.final.pending, proofs.procedures.expand
+//~ rfc: 0005
+
+// What a hole in place of `eq::refl(_)` expands to. The value is `final!(r)`,
+// which a body does not write and may not bind before the borrow ends.
+fn lend(x: &mut u32) -> (r: &mut u32, @(final!(r) === final!(r))) {
+    (x, eq::refl(_))
+}
+
+fn seven() -> u32 {
+    let mut n: u32 = 0;
+    let (r, same) = lend(&mut n);
+    *r = 7;
+    n
+}
+
+//~ run: seven() => 7

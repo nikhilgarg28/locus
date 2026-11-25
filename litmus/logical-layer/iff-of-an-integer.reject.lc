@@ -1,0 +1,7 @@
+//~ question: May `iff` be given an argument that is neither a proposition nor a `Bool`?
+//~ spec: logic.bool.iff, logic.bool.as-proposition
+//~ rfc: 0002
+
+logic fn set_when_nonzero(flag: Bool, n: Int) -> Prop {
+    iff(flag, n) //~ error: `n` is an `Int`, and `iff` takes a proposition or a `Bool`: nothing converts an `Int` to a `Prop`; write a comparison, such as `n != 0`
+}

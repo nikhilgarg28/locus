@@ -1,0 +1,7 @@
+//~ question: Do `&&` and `!` give a `Bool` when every operand is a `Bool`?
+//~ spec: logic.bool.as-proposition, proofs.connectives
+//~ rfc: 0002
+
+logic fn neither(a: Bool, b: Bool) -> Bool {
+    !a && !b
+}

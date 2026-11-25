@@ -1,0 +1,7 @@
+//~ question: May a program implement `Logical` for a type?
+//~ spec: traits.logical
+//~ rfc: 0006
+
+struct Meters(u32);
+
+impl Logical for Meters {} //~ error: no program implements `Logical`: it holds for exactly the logical types, which are declared with `#[derive(Logical)]`

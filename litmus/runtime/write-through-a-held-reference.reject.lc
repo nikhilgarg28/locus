@@ -1,0 +1,12 @@
+//~ question: After a write through a mutable reference that a struct holds, is the struct known to have the value it had?
+//~ spec: runtime.writes, contracts.final
+//~ rfc: 0005
+
+struct Holder<'a> {
+    m: &'a mut u32,
+}
+
+fn poke(h: &mut Holder<'_>, was: @(h.m == 1)) -> @(final!(h).m == 1) {
+    *h.m = 2;
+    _ //~ error: cannot prove `final!(h).m == 1`: the write through `h.m` gives `h.m`, and the `Holder` that holds it, new values, in which `m` is 2
+}

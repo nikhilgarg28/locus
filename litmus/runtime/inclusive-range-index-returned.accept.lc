@@ -1,0 +1,9 @@
+//~ question: After `xs[a..=b]` has returned, is `b` known to be less than the length?
+//~ spec: runtime.operations.conditions, runtime.operations.returned
+//~ rfc: 0004
+
+fn part(xs: &[u32], a: usize, b: usize) -> (p: &[u32], @(b < xs.len())) {
+    (&xs[a..=b], _)
+}
+
+//~ run: part(&[1, 2, 3], 0, 1).0.len() => 2

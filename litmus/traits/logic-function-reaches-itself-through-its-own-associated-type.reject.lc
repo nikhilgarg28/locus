@@ -1,0 +1,15 @@
+//~ question: May a logic function of an implementation call itself through an associated type that is its own type?
+//~ spec: traits.impls.acyclic
+//~ rfc: 0006
+
+trait Chain: Logical {
+    type Next: Chain;
+    logic fn holds() -> @False;
+}
+
+impl Chain for Int {
+    type Next = Int;
+    logic fn holds() -> @False {
+        <Self::Next as Chain>::holds() //~ error: `holds` at `Int` depends on itself: `Self::Next` is `Int`
+    }
+}

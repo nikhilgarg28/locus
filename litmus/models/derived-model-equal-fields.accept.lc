@@ -1,8 +1,7 @@
-//~ question: Are two values equal when their type derives its model and all their fields are equal?
-//~ spec: models.derived, logic.eq.runtime-values
+//~ question: Are two values equal when their type has a structural snapshot and all their fields are equal?
+//~ spec: models.snapshots, logic.eq.runtime-values
 //~ rfc: 0002
 
-#[derive(Model)]
 struct Point {
     x: u32,
     y: u32,

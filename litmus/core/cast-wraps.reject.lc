@@ -1,0 +1,8 @@
+//~ question: Does a cast to an unsigned type show that its operand is not negative?
+//~ spec: core.wrap, runtime.arith.wrapping
+//~ rfc: 0005
+
+fn forged(x: i32) -> @(x >= 0) {
+    let y = x as u32;
+    _ //~ error: cannot prove `x >= 0`: `y` is `u32::wrap(x)`, which is in range whatever `x` is
+}

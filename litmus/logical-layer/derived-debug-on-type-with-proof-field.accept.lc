@@ -1,0 +1,19 @@
+//~ question: May the standard library's derived `Debug` be used on a type with a proof field?
+//~ spec: logic.boundary.loans, logic.boundary.logical-data
+//~ rfc: 0002
+
+// The derived code lends each field to the formatter by shared reference, the
+// proof field included. The formatter reads the marker, and can neither change
+// it nor give one back.
+#[derive(Debug)]
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn shown() -> String {
+    format!("{:?}", Interval { lo: 1, hi: 4, ordered: _ })
+}
+
+//~ run: shown() => "Interval { lo: 1, hi: 4, ordered: Proof }"

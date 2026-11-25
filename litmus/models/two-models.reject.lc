@@ -6,16 +6,16 @@ struct Celsius {
     degrees: i32,
 }
 
-impl Model for Celsius {
-    type Logic = Int;
-    logic fn model(c: &Celsius) -> Int {
+impl View for Celsius {
+    type V = Int;
+    logic fn view(c: Snap<Celsius>) -> Int {
         c.degrees
     }
 }
 
-impl Model for Celsius { //~ error: `Celsius` already has a model
-    type Logic = Int;
-    logic fn model(c: &Celsius) -> Int {
+impl View for Celsius { //~ error: `Celsius` already has a view
+    type V = Int;
+    logic fn view(c: Snap<Celsius>) -> Int {
         c.degrees + 273
     }
 }

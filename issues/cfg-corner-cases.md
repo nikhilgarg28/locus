@@ -55,7 +55,7 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 
 **Interactions with erasure, the guard, and validation**
 17. **`cfg!()` in expressions.** Both branches are compiled and type-checked, but the value is fixed per configuration. The runtime semantics must know it, and erasure keeps it.
-18. **`cfg_attr`** on types that carry proofs or logical fields, for example `#[cfg_attr(feature = "serde", derive(Serialize))]`. The derive sees logical fields as markers: `ErasedData` implements only `Clone`, `Copy`, and `Debug`, so serde's derive fails on a logical data field unless told to skip it.
+18. **`cfg_attr`** on types that carry proofs or logical fields, for example `#[cfg_attr(feature = "serde", derive(Serialize))]`. The derive sees logical fields as markers: a logical type's marker implements only `Clone`, `Copy`, and `Debug`, so serde's derive fails on a logical data field unless told to skip it.
 19. **Removing code no checked configuration enables.** This changes what an unchecked configuration would see. The guard fires there anyway, but rustc may also report errors caused by the removed code, which makes the guard's message harder to find. Can the guard's error be made to come first, or alone?
 20. **The guard's key set must come from the source, not the output.** Once erasure removes a branch, the output no longer mentions its `cfg` name.
 21. **Doctests in build mode.** rustdoc compiles doctests outside Cargo's `RUSTC_WRAPPER`, so build mode's rule that every crate depending on a Locus crate is checked does not reach them. Options: run rustdoc's compilations through Locus's driver, or do not run the doctests of Locus crates.
@@ -71,3 +71,13 @@ This issue collects the corner cases that outline does not settle. Each needs ei
 ### 2026-10-25, opened on GitHub as #9
 
 Moved into the repository from [GitHub issue #9](https://github.com/nikhilgarg28/locus/issues/9) on 2026-10-27. The text above is the issue's as it was then.
+
+### 2026-11-21, `debug_assert!` is not special
+
+RFC 0004's decision 9. It was first decided that `debug_assert!` gives no fact in any build, so that a program would not pass in the build it is written in and fail at release. A review showed that such a rule does not deliver that: a constant with one value under `cfg(debug_assertions)` and another under its negation still makes a proof true in one build and false in the other. Told so, the owner chose the reading that RFC 0001 already has:
+
+> I prefer codex's preferred reading more now.
+
+So `debug_assertions` is a `cfg` like any other. `debug_assert!` gives its fact in a configuration with debug assertions and none in one without, and a proof holds in the configurations it was checked in.
+
+One thing this leaves for tooling: a litmus example cannot state the configuration it is checked in, so no example can pin that a proof resting on a `debug_assert!` is accepted in a debug build and rejected in a release build. The one example that tried, `runtime/debug-assert-gives-nothing.reject.lc`, is removed, because its outcome now depends on the configuration.

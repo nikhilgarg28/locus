@@ -1,0 +1,21 @@
+[package]
+name = "locus-macros"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+
+[features]
+# The spike's second mode: program text keeps one marker, and a distinct
+# type stands only where an `impl` names a logical type. Only the library of
+# stub-self/ turns it on.
+stub-self = []
+# The spike's third variant: the two expansions differ. The checking
+# expansion is the first mode's, and the runtime expansion keeps one marker.
+# Only the library of split/ turns it on.
+split = []

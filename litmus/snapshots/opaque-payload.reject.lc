@@ -1,0 +1,8 @@
+//~ question: Can a view recover a payload from its unit observation?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0008
+
+use locus::Opaque;
+logic fn contents(s: Snap<Opaque<u32>>) -> Nat {
+    s.value //~ error: Unit has no payload field
+}

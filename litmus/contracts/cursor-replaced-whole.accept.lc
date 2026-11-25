@@ -1,0 +1,52 @@
+//~ question: May a method that takes `&mut self` change a value with an invariant by replacing it whole, when its fields are `Copy`?
+//~ spec: contracts.invariants.assignment, runtime.arith.wrapping
+//~ rfc: 0002
+
+// A reader of messages, each one a length byte and then that many bytes.
+struct Cursor<'a> {
+    buf: &'a [u8],
+    pos: usize,
+    inside: @(pos <= buf.len()),
+}
+
+impl<'a> Cursor<'a> {
+    fn new(buf: &'a [u8]) -> Cursor<'a> {
+        Cursor { buf, pos: 0, inside: _ }
+    }
+
+    fn read_u8(&mut self) -> Option<u8> {
+        if self.pos < self.buf.len() {
+            let byte = self.buf[self.pos];
+            // Every field is `Copy`, so the new value is built from the old one's fields.
+            // `self.pos + 1` is below the buffer's length, so it is the true sum.
+            *self = Cursor { buf: self.buf, pos: self.pos + 1, inside: _ };
+            Some(byte)
+        } else {
+            None
+        }
+    }
+
+    fn read_message(&mut self) -> Option<&'a [u8]> {
+        let len = self.read_u8()? as usize;
+        let buf = self.buf;
+        let end = self.pos.checked_add(len)?;
+        if end <= buf.len() {
+            let body = &buf[self.pos..end];
+            *self = Cursor { buf, pos: end, inside: _ };
+            Some(body)
+        } else {
+            None
+        }
+    }
+}
+
+fn second_length() -> usize {
+    let mut cursor = Cursor::new(&[2, 10, 11, 1, 12]);
+    let first = cursor.read_message();
+    match cursor.read_message() {
+        Some(body) => body.len(),
+        None => 0,
+    }
+}
+
+//~ run: second_length() => 1

@@ -2,6 +2,8 @@
 //~ spec: logic.ghost.dependent-tuples
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn set_first<A, B>(pair: &mut (A, B), first: A) {
     pair.0 = first;
 }

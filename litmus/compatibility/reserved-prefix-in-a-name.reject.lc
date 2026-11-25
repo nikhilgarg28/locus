@@ -1,0 +1,18 @@
+//~ question: May a program name a method with a prefix that Locus reserves for the names it writes for rustc?
+//~ spec: compat.names.reserved, compat.superset.same-meaning
+//~ rfc: 0001
+
+trait Quiz {
+    fn __logic_answer(&self) -> u32; //~ error: `__logic_answer` begins with `__logic_`, a prefix that Locus reserves for the names it writes, so a program may not write it
+}
+
+impl Quiz for u32 {
+    fn __logic_answer(&self) -> u32 { //~ error: `__logic_answer` begins with `__logic_`, a prefix that Locus reserves for the names it writes, so a program may not write it
+        *self
+    }
+}
+
+fn answer() -> u32 {
+    let __locus_seen = 7; //~ error: `__locus_seen` begins with `__locus_`, a prefix that Locus reserves for the names it writes, so a program may not write it
+    __locus_seen
+}

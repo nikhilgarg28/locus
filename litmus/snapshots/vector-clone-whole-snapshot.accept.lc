@@ -1,0 +1,9 @@
+//~ question: Can element clone laws establish whole vector snapshot equality when native storage contributes Unit?
+//~ spec: collections.clone-snapshots, traits.laws.provided
+//~ rfc: 0008
+
+use locus::std::vec::Vec;
+use locus::std::clone::CloneEq;
+fn copy<T: CloneEq>(v: &Vec<T>) -> (out: Vec<T>, @(snap(out) === snap(v))) {
+    v.clone_eq()
+}

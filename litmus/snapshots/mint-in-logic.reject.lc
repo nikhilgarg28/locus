@@ -1,0 +1,8 @@
+//~ question: Can a runtime function returning a ghost result be called in pure logic?
+//~ spec: models.stamps, logic.code.no-runtime-calls
+//~ rfc: 0008
+
+fn mint() -> Nat { logic! { 0 } }
+logic fn stamp() -> Nat {
+    mint() //~ error: logical code cannot call a runtime function
+}

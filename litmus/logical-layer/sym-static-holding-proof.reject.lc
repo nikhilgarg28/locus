@@ -1,0 +1,16 @@
+//~ question: May a static that a `sym` operand names hold a proof?
+//~ spec: logic.code.statics
+//~ rfc: 0002
+
+use std::arch::global_asm;
+
+static READY: Option<@(1 == 2)> = None;
+
+// x86-64 assembly: a symbol that returns the address of `READY`, so that foreign code can write it.
+global_asm!(
+    ".globl ready_address",
+    "ready_address:",
+    "lea rax, [rip + {ready}]",
+    "ret",
+    ready = sym READY, //~ error: a `sym` operand gives `READY` to assembly, which can write it, and it holds a proof
+);

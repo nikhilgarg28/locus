@@ -1,0 +1,13 @@
+//~ question: Is the fact of `for i in a..b` about the current value of a place that `b` read, after the loop has written that place?
+//~ spec: runtime.loops.for-range
+//~ rfc: 0005
+
+fn steps(mut xs: &[u32]) -> usize {
+    let mut last = 0;
+    for i in 0..xs.len() {
+        let inside: @(i < xs.len()) = _; //~ error: cannot prove `i < xs.len()`: the range was built from the length `xs` had before the loop, and the loop writes `xs`
+        xs = &xs[1..];
+        last = i;
+    }
+    last
+}

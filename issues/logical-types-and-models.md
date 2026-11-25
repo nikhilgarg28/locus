@@ -24,7 +24,7 @@ What logical types and models Locus has, and what logical code may read from run
 - **Equality.** On runtime values, `===` compares models, and never implies equal fields. This fixes a contradiction found in review, where field-wise equality of values without a model passed through a field whose model forgets something.
 - **Fields are read as places.** Logical code reads a value's visible fields this way whatever its model is. It never reads inside an `UnsafeCell` or through a raw pointer, so no model reads data that changes while the value is shared.
 - **Method calls in logical code.** Method calls, indexing and dereferences in logical code work on models, never on runtime methods or overloaded `Deref` and `Index`.
-- **Logical and proof fields** stay in types, as zero-sized markers (`ErasedData` and `Erased`). Reading one is observed as a shared borrow of that field alone.
+- **Logical and proof fields** stay in types, as zero-sized markers (`Proof` for a proof, and a marker of its own for each logical type). Reading one is observed as a shared borrow of that field alone.
 
 The examples that this issue used to list as open are decided in [#10](https://github.com/nikhilgarg28/locus/pull/10): `litmus/observation/before-move.accept.lc`, `after-mutable-borrow-ends.accept.lc`, and `proof-before-move.accept.lc`. They also depend on the minimum facts that RFC 0002 requires of the runtime semantics ([#6](runtime-semantics.md)).
 
@@ -54,3 +54,40 @@ Moved into the repository from [GitHub issue #4](https://github.com/nikhilgarg28
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-22, snapshots, models, and capture are in RFC 0002
+
+The owner's decisions on snapshots, models, and capture are RFC 0002's decisions 99 to 108. The owner settled six constraints with a second reviewer, asked for a recommendation on the whole design, had the reviewer amend it, and on the amended recommendation said:
+
+> Good - assuming spike succeeds, I think we should begin to now update PR with all the decisions that have been made across all RFCs but not yet persisted in github.
+
+The third round of the skeleton spike then succeeded ([skeleton-typing-3](../spikes/skeleton-typing-3/README.md)). What is written:
+
+- **A place that logical code reads is captured:** it stands for the model of the place's snapshot. With no model declared, the model is the snapshot. `models.no-default` is removed, and `models.default` replaces it.
+- **The snapshot of a machine integer is a `Nat` or an `Int`.** A captured value is valid for its type (`models.valid`, `models.valid.captured`, `models.valid.not-assumed`), which replaces `models.integer-range`.
+- **A logic function takes logical types only** (`logic.fn.parameters`), and a method call on a place resolves on the type of its capture (`models.capture.methods`).
+- **A type parameter is read under a written bound** (`models.capture.bound`), which may now be on an `impl` and on a type's declaration (`models.bounds-on-functions`).
+- **A type that Locus cannot see has neither a snapshot nor a model** until a field of it is marked `#[opaque]` (`models.snapshots.seen`, `models.snapshots.opaque`).
+- **A model is declared with its type,** for the type at all its type arguments (`models.declared-by-owner`, `models.one-per-type`), and takes its snapshot and no proof (`models.total`).
+
+Four decided examples change their outcome, and 26 logic functions in 19 examples no longer declare a parameter with a runtime type. The pull request lists each.
+
+The owner saw the recommendations and the amendments, and not the rule texts. What the writing chose is item 30 of what is still for the owner in RFC 0002. Two of its points need the owner's word before anything else: that a captured value is valid is a fact that the language infers, and a struct that Rust accepts is now rejected when it has a field of a type that Locus cannot see and no mark ([unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md)).
+
+One example is open and linked here: `litmus/models/method-on-a-snapshot.open.lc`, on whether `snap(s).room()` means `Stack::room(snap(s))`.
+
+The summary under "Status" above predates this, and several of its lines no longer hold. RFC 0002 is the current text.
+
+### 2026-11-23, an unmarked field does not reject its struct
+
+The entry above says that a struct that Rust accepts is rejected when it has a field of a type that Locus cannot see and no mark. That was this change's first text of `models.snapshots.opaque`, and it is corrected: such a struct is declared and used as in Rust, and has no snapshot and no model until the field is marked, which is what the recommendation that the owner approved had. [unmarked-fields-and-the-superset](unmarked-fields-and-the-superset.md) has the record, and what is still open there.
+
+### 2026-11-23, the snapshot of a vector is no longer one that a library declares
+
+RFC 0002's decision 113 removes the one snapshot that Locus's library declared for a type built on raw pointers. `Snap<Vec<T>>` was a `Seq<Snap<T>>`, trusted. Now the standard library's `Vec` has neither a snapshot nor a model, and the `Vec` of Locus's library is a struct whose snapshot is the struct's: the standard library's vector as an opaque part, and a logical field with the elements' snapshots, which `snap(v).elements()` gives. Its model is still a `Seq` of the elements' models, declared by the library with the type and checked. `models.snapshots`, `models.snapshots.seen`, and `models.by-parts` change for it.
+
+In the examples, a model that read `stack.items` as a sequence now reads `stack.items.elements()`, and a vector that logical code reads is imported from `locus::std`. `models/method-on-a-snapshot.open.lc` is still open, and is changed the same way.
+
+### 2026-11-23, a logical type under a `Model` bound
+
+[RFC 0006](../design/rfcs/0006-traits.md), a draft, lets a trait have `Model` as a supertrait, and says that a logical type meets a `Model` bound as its own snapshot and model (`traits.model-bounds`). A specification trait written over `Snap<Self>` is then implemented by a logical type and by a runtime type alike. RFC 0002's rules do not say this of a logical type, though its text and its examples rely on it. The disagreement has an issue of its own: [logical-types-under-a-model-bound](logical-types-under-a-model-bound.md).

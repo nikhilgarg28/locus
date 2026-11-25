@@ -1,0 +1,34 @@
+//~ question: May an implementation with a bound use the lemmas of that bound, and its own other members?
+//~ spec: traits.evidence, traits.impls.acyclic, traits.bounds
+//~ rfc: 0006
+
+trait Bounded: Logical {
+    logic fn floor() -> Int;
+    logic fn weight(x: Self) -> Int;
+    logic fn above(x: Self) -> @(Self::weight(x) >= Self::floor());
+}
+
+#[derive(Logical)]
+struct Tally {
+    n: Int,
+}
+
+impl Bounded for Tally {
+    logic fn floor() -> Int { 0 }
+    logic fn weight(t: Tally) -> Int { if t.n < 0 { 0 } else { t.n } }
+    logic fn above(t: Tally) -> @(Tally::weight(t) >= Tally::floor()) { _ }
+}
+
+// The evidence for a pair is a function of the evidence for `T`, which it uses through `T`'s lemma.
+impl<T: Bounded> Bounded for (T, T) {
+    logic fn floor() -> Int { T::floor() + T::floor() }
+    logic fn weight(p: (T, T)) -> Int { T::weight(p.0) + T::weight(p.1) }
+    logic fn above(p: (T, T)) -> @(<(T, T)>::weight(p) >= <(T, T)>::floor()) {
+        linear((T::above(p.0), T::above(p.1)))
+    }
+}
+
+// At a concrete type rustc selects the implementation for pairs, with `Tally`'s evidence.
+logic fn pair_of_tallies(p: (Tally, Tally)) -> @(<(Tally, Tally)>::weight(p) >= <(Tally, Tally)>::floor()) {
+    <(Tally, Tally)>::above(p)
+}

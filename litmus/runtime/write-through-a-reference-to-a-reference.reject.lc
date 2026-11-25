@@ -1,0 +1,8 @@
+//~ question: After a write through a reference that a `&mut &mut` points to, is the outer reference's target known to have the value it had?
+//~ spec: runtime.writes, contracts.final
+//~ rfc: 0005
+
+fn deep(pp: &mut &mut u32, was: @(pp == 1)) -> @(final!(pp) == 1) {
+    **pp = 2;
+    _ //~ error: cannot prove `final!(pp) == 1`: the write through `*pp` gives `*pp`, which holds that reference, a new value, which is 2
+}

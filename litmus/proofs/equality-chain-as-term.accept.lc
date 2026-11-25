@@ -1,0 +1,8 @@
+//~ question: Is the term that a procedure finds accepted in its place?
+//~ spec: proofs.procedures.expand, proofs.equality
+//~ rfc: 0003
+
+// What `linear((ab, cb))` finds, written out: no procedure and no hole.
+logic fn chain(a: Int, b: Int, c: Int, ab: @(a === b), cb: @(c === b)) -> @(a === c) {
+    ab.then(cb.symm())
+}

@@ -1,0 +1,7 @@
+//~ question: Is a snapshot that a logic function is given known to lie in its type's range?
+//~ spec: models.valid.not-assumed
+//~ rfc: 0002
+
+logic fn fits(n: Snap<u8>) -> @(n <= 255) {
+    _ //~ error: cannot prove `n <= 255`: `n` is a `Snap<u8>` that no place gave, so it is any `Nat`; take a proof of `u8::valid(n)`
+}

@@ -2,7 +2,9 @@
 //~ spec: observe.let.after-initializer, observe.place.readable
 //~ rfc: 0001
 
-fn f(v: Vec<u32>, nonempty: @(v.len() > 0)) -> usize {
-    let (count, again): (usize, @(v.len() > 0)) = (v.len(), nonempty);
+use locus::std::vec::Vec;
+
+fn f(v: Vec<u32>, nonempty: @(v.elements().len() > 0)) -> usize {
+    let (count, again): (usize, @(v.elements().len() > 0)) = (v.len(), nonempty);
     count
 }

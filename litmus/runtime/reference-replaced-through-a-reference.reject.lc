@@ -1,0 +1,14 @@
+//~ question: After a mutable reference is replaced through another reference to it, is a write through it known as a write to the place it first borrowed?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+fn seven() -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let mut r = &mut a;
+    let pp = &mut r;
+    *pp = &mut b;
+    *r = 7;
+    let bad: @(a == 7) = _; //~ error: cannot prove `a == 7`: `r` was written through `pp`, after which rustc keeps the loan of `a` alive, so nothing is known of the value that borrow ends with
+    a
+}

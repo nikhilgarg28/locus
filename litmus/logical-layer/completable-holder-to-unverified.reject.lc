@@ -1,0 +1,12 @@
+//~ question: May a vector of naturals be lent mutably to code Locus does not verify?
+//~ spec: logic.boundary.plain-data
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn lend(n: Nat) -> usize {
+    let mut counts: Vec<Nat> = Vec::new();
+    counts.push(n);
+    std::hint::black_box(&mut counts); //~ error: `counts` is a `Vec<Nat>`, which holds logical data, so it cannot be lent to `black_box`, which Locus does not verify
+    counts.len()
+}

@@ -2,6 +2,9 @@
 //~ spec: compat.names.macros-expand
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 fn check(x: u32) -> usize {
     let proofs: Vec<@(x > 0)> = vec![prove!(x > 0)]; //~ error: cannot prove `x > 0`
     proofs.len()

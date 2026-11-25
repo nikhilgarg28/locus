@@ -1,0 +1,7 @@
+//~ question: May a sequence of any element type be indexed with a proof that the index is inside it?
+//~ spec: core.sequences
+//~ rfc: 0005
+
+logic fn head(proofs: Seq<@True>, nonempty: @(proofs.len() > 0)) -> @True {
+    proofs.at(0, linear((nonempty,)))
+}

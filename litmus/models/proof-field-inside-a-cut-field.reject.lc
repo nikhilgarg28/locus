@@ -1,0 +1,18 @@
+//~ question: May a type whose proof field reads through a reference be held in a field that closes a cycle of references?
+//~ spec: models.snapshots.cut, contracts.invariants.reads
+//~ rfc: 0005
+
+// Legal by itself: no cycle, and the proof field reads through a shared reference.
+struct Checked<'a> {
+    r: &'a u32,
+    positive: @(*r > 0),
+}
+
+struct Payload<'a> {
+    checked: Checked<'a>,
+    back: Option<&'a Node<'a>>,
+}
+
+struct Node<'a> {
+    payload: Payload<'a>, //~ error: `payload` closes a cycle of references, so the snapshot of a `Node` holds every reference in it as an address, and `Checked::positive` reads through `r`: a proof field that reads through a reference cannot be held in a cut field
+}

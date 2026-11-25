@@ -1,0 +1,22 @@
+//~ question: May a shared reference to a proof holder become a `&dyn Debug`?
+//~ spec: logic.boundary.loans, logic.boundary.logical-data
+//~ rfc: 0002
+
+use std::fmt::Debug;
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+// Whoever holds `hidden` can only read `found` through it.
+fn shown(n: u32) -> String {
+    let found: Option<@(n > 0)> = check(n);
+    let hidden: &dyn Debug = &found;
+    format!("{:?}", hidden)
+}
+
+//~ run: shown(4) => "Some(Proof)"

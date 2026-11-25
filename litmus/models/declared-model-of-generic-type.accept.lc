@@ -1,0 +1,18 @@
+//~ question: May a view be declared for a generic type at all its type arguments, under a `Snapshot` bound on its `impl`?
+//~ spec: models.one-per-type, models.bounds-on-functions
+//~ rfc: 0002
+
+struct Wrap<T> {
+    inner: T,
+}
+
+impl<T: Snapshot> View for Wrap<T> {
+    type V = Snap<T>;
+    logic fn view(w: Snap<Wrap<T>>) -> Snap<T> {
+        w.inner
+    }
+}
+
+fn unwrapped(w: &Wrap<u32>) -> @(Wrap::<u32>::view(snap(w)) === snap(w.inner)) {
+    _
+}

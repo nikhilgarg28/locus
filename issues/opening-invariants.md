@@ -90,11 +90,7 @@ Option 1 can be followed by option 2 for single specified calls, as a way to lea
 
 ## Example
 
-Decided as option 1 gives them, citing `contracts.invariants.open`:
-- [`contracts/invariant-opened-for-push.accept.lc`](../litmus/contracts/invariant-opened-for-push.accept.lc): the `push` above.
-- [`contracts/invariant-opened-two-fields.accept.lc`](../litmus/contracts/invariant-opened-two-fields.accept.lc): a count and a vector that an invariant relates.
-- [`contracts/invariant-opened-not-restored.reject.lc`](../litmus/contracts/invariant-opened-not-restored.reject.lc): a block that ends with the invariant broken.
-- [`contracts/invariant-opened-used-whole.reject.lc`](../litmus/contracts/invariant-opened-used-whole.reject.lc), [`invariant-opened-proof-read.reject.lc`](../litmus/contracts/invariant-opened-proof-read.reject.lc), and [`invariant-opened-left-early.reject.lc`](../litmus/contracts/invariant-opened-left-early.reject.lc): what a block may not do.
+RFC 0002's decision 67 withdrew the `open!` block, and with it the six examples that option 1 had decided. What stands today is option 3: [`contracts/invariant-field-borrowed.reject.lc`](../litmus/contracts/invariant-field-borrowed.reject.lc) and [`contracts/invariant-field-assigned.reject.lc`](../litmus/contracts/invariant-field-assigned.reject.lc) reject a change in place, and [`contracts/invariant-replaced-whole.accept.lc`](../litmus/contracts/invariant-replaced-whole.accept.lc) replaces the value.
 
 ## Log
 
@@ -109,3 +105,46 @@ Asked whether a panic inside the block may abort, the owner answered:
 > Open block is fine
 
 RFC 0002 proposes option 1 as its decision 51, with the rule `contracts.invariants.open`, and the vision's commitment 2 names the abort. The three open examples are decided, and three rejected ones are added. The litmus format cannot yet expect an abort, so no example shows that a panic in a block aborts. This issue stays open until RFC 0002 is accepted. Left for later, and recorded in the RFC: leaving the guard out where a block cannot unwind, and option 2 for single specified calls.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The owner withdrew option 1 for now, and went further than option 3 as it stood:
+
+> No `open!` initially. We will not support temporarily breaking an invariant while retaining the object's certified identity.
+
+RFC 0002's decisions 66 and 67 record it. A field that a proof reads is never assigned and never mutably borrowed; a value changes by being replaced whole, or by being taken apart and built again. So a value with an invariant is valid at every point of the program, no rule about unwinding is needed, and the vision's commitment 2 loses the exception that option 1 had added. The rule `contracts.invariants.open` and its six examples are removed.
+
+What this costs is the reason the issue stays open: a method that takes `&mut self` cannot change a field that a proof reads, when the field is not `Copy`, without cloning it or putting a placeholder in its place, because Rust does not let a field be moved out of `*self`. Such types offer methods that take the value and return it.
+
+One shape for bringing changes in place back, noted in the same conversation: a block that takes the value out of a `&mut`, builds it again, and puts it back, aborting if a panic would unwind in between. It is option 1's guard with a different reading: nothing is ever in a broken state, because inside the block the function owns the parts by value.
+
+### 2026-11-17, conversation with the owner on changing a value with an invariant
+
+Shown four ways for a method that takes `&mut self` to change a field that a proof reads, the owner answered:
+
+> I like options 1-3.Maybe someday we will do option 4 too with no panic but not needed now
+
+The four were:
+
+1. a method that takes the value and returns it;
+2. a valid value that stands in for `*self` while the new one is built, with `mem::replace`;
+3. a guard that moves the value out of the `&mut` and has a new one put back, aborting if a panic would unwind in between;
+4. assigning the field in place and then the proof field again, as a loop assigns its proof variable.
+
+The third had been presented as a library type that needs nothing from the language. That was wrong: a guard that can leak is unsound, which is why Rust's scoped threads take a closure. Offered a closure, the guard with a rule that it stays a local, or a block, and asked about a `replace` with a contract and about signatures for `Vec`, the owner answered:
+
+> yes to all
+
+RFC 0002 records these as decisions 84 to 87, with the rules `contracts.slots` and `contracts.slots.local` and nine examples. It also says what the three ways do not cover: a `&mut` returned into a field that a proof reads, and a type with both an invariant and a destructor.
+
+Five programs were worked through by hand, and each could be written in these three ways. Three are examples now: a cursor over a buffer, a bounded stack in each of the three ways, and a ring buffer. A sorted vector's `insert` is not written. Its proof uses the old vector's order at the index before a moved item, and how a `Nat` is made from `j - 1` is not decided ([standard-library](standard-library.md)). A version of it that moves the new item down by swaps is not written either.
+
+This issue stays open for the fourth way, which waits for [no-panic-claims](no-panic-claims.md), and for lending out a `&mut`.
+
+### 2026-11-22, decision 66 confirmed tentatively
+
+A review found that RFC 0002's decision 66, under which an assignment to a field that a proof reads is rejected even when the proof could be proved again, was not in the owner's recorded words. Those words, quoted in the entry of 2026-11-16 above, were about not leaving an invariant broken for a time, and an assignment that proves the invariant for the new value never breaks it. Two examples had gone from accepted to rejected on the decision, and the three ways of 2026-11-17 build on it without stating it. Shown this among six rules that the review had left unsettled, the owner answered:
+
+> tentatively confirm the 6 open questions
+
+RFC 0002's decision 91 records it. No rule and no example changes. It stays open to revisit (RFC 0002, item 26).

@@ -2,24 +2,28 @@
 //~ spec: models.own-definition
 //~ rfc: 0002
 
-struct Wrap<'a, T> {
-    inner: &'a T,
+struct Node {
+    value: u32,
+    next: Option<Box<Link>>,
 }
 
-struct Node<'a> {
-    w: Wrap<'a, Node<'a>>,
+struct Link {
+    to: Node,
 }
 
-impl<'a> Model for Node<'a> {
-    type Logic = Nat;
-    logic fn model(n: &Node<'a>) -> Nat {
-        model(n.w) //~ error: the model of `Node` depends on itself, through the model of `Wrap<Node>`
+impl View for Node {
+    type V = Nat;
+    logic fn view(n: Snap<Node>) -> Nat {
+        match n.next {
+            Some(link) => Link::view(link), //~ error: these view implementations form unsupported mutual logical recursion
+            None => n.value,
+        }
     }
 }
 
-impl<'a> Model for Wrap<'a, Node<'a>> {
-    type Logic = Nat;
-    logic fn model(w: &Wrap<'a, Node<'a>>) -> Nat {
-        model(w.inner)
+impl View for Link {
+    type V = Nat;
+    logic fn view(l: Snap<Link>) -> Nat {
+        Node::view(l.to)
     }
 }

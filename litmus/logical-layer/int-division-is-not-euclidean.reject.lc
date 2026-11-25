@@ -1,0 +1,7 @@
+//~ question: Is `/` on `Int` Euclidean division, as Lean's `/` is?
+//~ spec: logic.arith.division
+//~ rfc: 0002
+
+logic fn floored() -> @(-7 / 2 === -4) {
+    compute() //~ error: `-7 / 2` is `-3`, since `/` truncates toward zero, and `-3` and `-4` do not convert; Euclidean division is `div_euclid`
+}

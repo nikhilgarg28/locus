@@ -1,0 +1,11 @@
+//~ question: Is a runtime value accepted for a type parameter bounded by `Logical`?
+//~ spec: traits.logical
+//~ rfc: 0006
+
+fn keep<G: Logical>(g: G) -> G {
+    g
+}
+
+fn kept(n: u32) -> u32 {
+    keep(n) //~ error: `u32` is not a logical type, and `Logical` holds for exactly the logical types; write `keep(logic! { n })` for the ghost value
+}

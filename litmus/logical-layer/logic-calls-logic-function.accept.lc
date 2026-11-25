@@ -2,11 +2,13 @@
 //~ spec: logic.code.no-runtime-calls
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 logic fn double(n: Nat) -> Nat {
     n + n
 }
 
 fn f(v: Vec<u32>) -> usize {
-    let twice = logic! { double(v.len()) };
+    let twice = logic! { double(v.elements().len()) };
     v.len()
 }

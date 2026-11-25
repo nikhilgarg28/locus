@@ -1,0 +1,26 @@
+//~ question: Does `rewrite` with an equality of models replace a value where a proof reads one of its fields?
+//~ spec: proofs.equality, core.elaboration
+//~ rfc: 0005
+
+struct Inner {
+    x: u32,
+}
+
+impl View for Inner {
+    type V = Nat;
+    logic fn view(inner: Snap<Inner>) -> Nat {
+        0
+    }
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+logic fn x_of(o: Snap<Outer>) -> Nat {
+    o.inner.x
+}
+
+fn read(a: &Outer, b: &Outer, big: @(a.inner.x > 5), same: @(Inner::view(snap(a.inner)) === Inner::view(snap(b.inner)))) -> @(b.inner.x > 5) {
+    big.rewrite(same) //~ error: `rewrite` finds nothing to replace: `same` is about the view of `a`, and `big` reads the field `a.inner.x`, which is no part of that view
+}

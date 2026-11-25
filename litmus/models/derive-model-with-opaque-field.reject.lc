@@ -1,0 +1,12 @@
+//~ question: May a type derive its model when one of its fields is wrapped in `Opaque<T>`?
+//~ spec: models.derived
+//~ rfc: 0002
+
+use locus::Opaque;
+use std::net::TcpListener;
+
+#[derive(Model)] //~ error: Locus supplies no Model derive; write an explicit library view
+struct Server {
+    listener: Opaque<TcpListener>,
+    port: u16,
+}

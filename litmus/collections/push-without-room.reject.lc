@@ -1,0 +1,19 @@
+//~ question: Does the proof that `push` of Locus's `Vec` returns re-establish an invariant on the length of the contents when nothing says that there was room?
+//~ spec: collections.vec.contracts
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(snap(items).elements().len() <= cap),
+}
+
+impl Stack {
+    fn push(self, x: u32) -> Stack {
+        let Stack { mut items, cap, fits } = self;
+        let grew = items.push_checked(x);
+        Stack { items, cap, fits: _ } //~ error: cannot prove `snap(items).elements().len() <= cap`: `grew` proves that the contents are one longer than they were, and they may have had length `cap`
+    }
+}

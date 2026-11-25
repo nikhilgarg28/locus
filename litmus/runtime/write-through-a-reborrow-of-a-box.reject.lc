@@ -1,0 +1,9 @@
+//~ question: When a write goes through a reborrow of what a `Box` holds, does a proof about the `Box` still fit it when the reborrow ends?
+//~ spec: runtime.writes, runtime.borrows
+//~ rfc: 0005
+
+fn reborrowed(mut b: Box<u32>, was: @(b == 1)) -> (out: Box<u32>, @(out == 1)) {
+    let q = &mut *b;
+    *q = 2;
+    (b, was) //~ error: `was` proves `b == 1` about the value `b` had before `q` was lent: when the borrow of `*b` ends, the `Box` has a new value
+}

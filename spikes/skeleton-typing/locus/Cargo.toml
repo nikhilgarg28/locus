@@ -1,0 +1,19 @@
+[package]
+name = "locus"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+locus-macros = { path = "../locus-macros" }
+
+[features]
+# "A `Nat` is used as an `Int` wherever an `Int` is expected", as more
+# implementations: see `widen_ops` in src/lib.rs. Both off by default.
+# `homogeneous-ops` takes away the operators on an `Int` and a `Nat`, and
+# `widen-args` lets a `Nat` place be given where an `Int` is wanted.
+homogeneous-ops = []
+widen-args = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

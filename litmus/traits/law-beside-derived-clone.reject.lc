@@ -1,0 +1,14 @@
+//~ question: May a type derive `Clone` and implement `CloneEq` too?
+//~ spec: traits.laws.provided
+//~ rfc: 0006
+
+use locus::std::clone::CloneEq;
+
+#[derive(Clone)]
+struct Meters(u32);
+
+impl CloneEq for Meters { //~ error: this implementation generates `Clone for Meters`, which conflicts with the derived one: remove `#[derive(Clone)]`
+    fn clone_eq(&self) -> (copy: Meters, @(snap(copy) === snap(self))) {
+        (Meters(self.0), _)
+    }
+}

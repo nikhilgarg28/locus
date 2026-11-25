@@ -1,0 +1,12 @@
+//~ question: Is a write through a mutable reference that an `if` takes from one of two places known as a write to that place?
+//~ spec: runtime.borrows, runtime.joins
+//~ rfc: 0005
+
+fn chosen(c: bool) -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 2;
+    let r = if c { &mut a } else { &mut b };
+    *r = 7;
+    let bad: @(c ==> a == 7) = _; //~ error: cannot prove `c ==> a == 7`: `r` is a reference that the branches take from different places, so nothing is known of the values the borrows of `a` and `b` end with
+    a
+}

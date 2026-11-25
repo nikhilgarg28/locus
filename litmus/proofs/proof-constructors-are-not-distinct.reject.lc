@@ -1,0 +1,15 @@
+//~ question: Does `linear` treat the two constructors of a disjunction's proofs as building different proofs?
+//~ spec: proofs.procedures.linear
+//~ rfc: 0005
+
+// Any two proofs of one proposition are equal, so `left === right` is no contradiction.
+logic fn absurd(
+    left: @(True || True),
+    right: @(True || True),
+    t: @True,
+    from_left: @(left === Or::Left @ t),
+    from_right: @(right === Or::Right @ t),
+    same: @(left === right),
+) -> @False {
+    linear((from_left, from_right, same)) //~ error: cannot prove `False` from the facts given: `Or::Left` and `Or::Right` build proofs, and the constructors of a proposition are neither injective nor distinct
+}

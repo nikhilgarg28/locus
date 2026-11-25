@@ -1,0 +1,12 @@
+//~ question: Is the loop variable of a `for` over an iterator adapter known to lie in the range it steps through?
+//~ spec: runtime.loops.for-range, runtime.operations
+//~ rfc: 0004
+
+fn last_seen(k: usize) -> usize {
+    let mut last = 0;
+    for i in (0..k).step_by(2) {
+        let below: @(i < k) = _; //~ error: cannot prove `i < k`: `step_by` is a call, so `i` is known only to be a `usize`; write the loop as a `while`
+        last = i;
+    }
+    last
+}

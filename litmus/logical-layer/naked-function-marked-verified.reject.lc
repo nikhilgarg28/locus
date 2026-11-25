@@ -1,0 +1,12 @@
+//~ question: May a naked function be marked `#[verified]`?
+//~ spec: logic.verified.restrictions, logic.unverified.functions
+//~ rfc: 0002
+
+use std::arch::naked_asm;
+
+// The body is assembly, here x86-64's, and Locus verifies no assembly.
+#[verified]
+#[unsafe(naked)] //~ error: `halve` is marked `#[verified]`, and a verified function is not a naked function
+pub extern "C" fn halve(n: u32) -> u32 {
+    naked_asm!("mov eax, edi", "shr eax, 1", "ret")
+}

@@ -1,0 +1,17 @@
+//~ question: May a place holding a proof be lent mutably to a method of the standard library?
+//~ spec: logic.boundary.unverified, logic.boundary.plain-data
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+fn take(x: u32) -> bool {
+    let mut found: Option<@(x > 0)> = check(x);
+    let taken = found.take(); //~ error: `Option::take` is the standard library's, which Locus does not verify, so `found`, which holds a proof, cannot be lent to it mutably; take the value apart with `match`
+    taken.is_some()
+}

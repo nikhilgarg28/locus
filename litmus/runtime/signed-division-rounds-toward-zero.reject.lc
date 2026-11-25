@@ -1,0 +1,8 @@
+//~ question: Does a division of a negative machine integer round down, as Euclidean division does?
+//~ spec: logic.arith.division, runtime.operations.returned
+//~ rfc: 0004
+
+fn half_of_minus_seven(a: i32, is: @(a == -7)) -> (q: i32, @(q == -4)) {
+    let q = a / 2;
+    (q, _) //~ error: cannot prove `q == -4`: `q` is `a / 2`, which truncates toward zero, so it is -3
+}

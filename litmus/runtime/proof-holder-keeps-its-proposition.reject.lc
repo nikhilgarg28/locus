@@ -1,0 +1,10 @@
+//~ question: Is a `let mut` local that holds a proof inside another type assigned a proof at the current values, as one of type `@P` is?
+//~ spec: runtime.proofs.assigned, logic.ghost.type-identity
+//~ rfc: 0005
+
+fn track(mut n: u32) -> u32 {
+    let mut seen: Option<@(n < 100)> = None;
+    n = 5;
+    seen = Some(_); //~ error: cannot prove `n < 100` for the value `n` had where `seen` was declared: only a variable of type `@P` is assigned a proof at the current values, and `seen` is an `Option`
+    n
+}

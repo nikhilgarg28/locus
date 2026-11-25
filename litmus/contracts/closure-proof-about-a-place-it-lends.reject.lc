@@ -1,0 +1,22 @@
+//~ question: May a closure's proof parameter mention a variable that the closure lends mutably to a call?
+//~ spec: contracts.entry-values
+//~ rfc: 0002
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn reset(m: &mut u32) {
+    *m = 0;
+}
+
+fn once(n: u32, pos: @(n > 0)) -> u32 {
+    let mut m = n;
+    let ok: @(m > 0) = _;
+    let mut step = |p: @(m > 0)| { //~ error: the proof parameter `p` of this closure mentions `m`, which the closure lends mutably to `reset`: a closure's signature is not a contract yet
+        let q = divide(100, m, p);
+        reset(&mut m);
+        q
+    };
+    step(ok)
+}

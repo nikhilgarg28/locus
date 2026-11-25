@@ -1,0 +1,8 @@
+//~ question: May logical code read a vector of the standard library?
+//~ spec: models.snapshots.seen
+//~ rfc: 0002
+
+// No `use locus::std::vec::Vec;`, so `Vec` is the standard library's.
+fn first(v: &Vec<u32>, nonempty: @(v.len() > 0)) -> u32 { //~ error: `v` is a `std::vec::Vec<u32>`, which has no snapshot, so logical code cannot read it; `use locus::std::vec::Vec;` for a vector that it can
+    v[0]
+}

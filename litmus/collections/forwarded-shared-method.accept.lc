@@ -1,0 +1,19 @@
+//~ question: May a method of the standard library's `Vec` that takes `&self`, and that Locus's `Vec` does not define, be called on a vector of plain data?
+//~ spec: collections.std-inside, logic.boundary.plain-data
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn nothing_in(items: &Vec<u32>) -> bool {
+    // `is_empty` is not among the methods of Locus's `Vec`. Through `Deref` this is the
+    // standard library's own `is_empty`. It runs, and tells Locus nothing about `items`.
+    items.is_empty()
+}
+
+fn after_one_push() -> bool {
+    let mut items = Vec::new();
+    items.push(4);
+    nothing_in(&items)
+}
+
+//~ run: after_one_push() => false

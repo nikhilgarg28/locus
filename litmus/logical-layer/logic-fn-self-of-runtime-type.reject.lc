@@ -1,0 +1,16 @@
+//~ question: May a logic function in an `impl` of a runtime type take `self`?
+//~ spec: logic.fn.parameters
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl Stack {
+    logic fn room(self) -> Int { //~ error: a logic function's parameters are logical types, and `self` here is a `Stack`, a runtime type: write `stack: Snap<Stack>`
+        self.cap - self.items.elements().len()
+    }
+}

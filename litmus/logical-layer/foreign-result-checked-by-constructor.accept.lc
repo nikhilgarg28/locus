@@ -1,0 +1,27 @@
+//~ question: May a plain value that a foreign function returns be checked and made a value of a sealed type?
+//~ spec: logic.boundary.foreign, logic.unverified.plain-rust
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+impl Positive {
+    fn new(value: u32) -> Option<Positive> {
+        if value > 0 { Some(Positive { value, nonzero: _ }) } else { None }
+    }
+}
+
+unsafe extern "C" {
+    fn read_sensor() -> u32;
+}
+
+// Unverified: it contains `unsafe`. Its signature is plain.
+fn sensor() -> u32 {
+    unsafe { read_sensor() }
+}
+
+fn reading() -> Option<Positive> {
+    Positive::new(sensor())
+}

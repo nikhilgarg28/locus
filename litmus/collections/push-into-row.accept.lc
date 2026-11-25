@@ -1,0 +1,13 @@
+//~ question: May a row of a vector of vectors be changed through a mutable loan of it, with the outer vector's length known afterwards?
+//~ spec: collections.vec.element-loan
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn push_into_first(rows: &mut Vec<Vec<u32>>, x: u32, some: @(0 < snap(rows).elements().len()))
+    -> @(snap(final!(rows)).elements().len() == snap(rows).elements().len())
+{
+    let (first, was, lent) = rows.get_mut_checked(0, some);
+    let grew = first.push_checked(x);
+    _
+}

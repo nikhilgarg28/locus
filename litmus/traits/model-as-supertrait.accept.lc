@@ -1,0 +1,17 @@
+//~ question: May a trait have `Snapshot` as a supertrait, so that the contract of its method reads `self`?
+//~ spec: traits.model-bounds
+//~ rfc: 0006
+
+trait Stable: Snapshot {
+    fn touch(&mut self) -> @(snap(final!(self)) === snap(self));
+}
+
+struct Counter {
+    n: u32,
+}
+
+impl Stable for Counter {
+    fn touch(&mut self) -> @(snap(final!(self)) === snap(self)) {
+        _
+    }
+}

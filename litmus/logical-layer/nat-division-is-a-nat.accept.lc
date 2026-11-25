@@ -1,0 +1,11 @@
+//~ question: Do `/` and `%` on two `Nat`s give a `Nat`?
+//~ spec: logic.arith.division, logic.arith.nat-to-int
+//~ rfc: 0002
+
+logic fn half(n: Nat) -> Nat {
+    n / 2
+}
+
+logic fn parity(n: Nat) -> Nat {
+    n % 2
+}

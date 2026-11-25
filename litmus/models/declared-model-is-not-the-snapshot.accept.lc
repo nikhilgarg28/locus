@@ -1,0 +1,19 @@
+//~ question: Is equality of two values of a type with a declared view the equality of their snapshots?
+//~ spec: models.default, logic.eq.runtime-values
+//~ rfc: 0002
+
+struct Reading {
+    degrees: i32,
+    station: u32,
+}
+
+impl View for Reading {
+    type V = Int;
+    logic fn view(r: Snap<Reading>) -> Int {
+        r.degrees
+    }
+}
+
+fn same(a: &Reading, b: &Reading, equal: @(a === b)) -> @(snap(a) === snap(b)) {
+    _
+}

@@ -1,0 +1,25 @@
+//~ question: Does a call given a shared reference to a struct, which can write only inside its cell, leave the struct's snapshot as it was?
+//~ spec: models.capture.footprint, models.frozen-data
+//~ rfc: 0008
+
+use std::cell::Cell;
+
+struct Counter {
+    id: u32,
+    hits: Cell<u32>,
+}
+
+fn touch(c: &Counter) {
+    c.hits.set(c.hits.get() + 1);
+}
+
+fn kept(c: &Counter) -> u32 {
+    let before = logic! { snap(c) };
+    touch(c);
+    // `touch` may write inside `hits`, whose footprint is empty, and nothing else of `*c`,
+    // which it reaches by a shared reference: so the footprint of `c`'s snapshot is unchanged.
+    let same: @(snap(c) === before && c.id == before.id) = _;
+    c.id
+}
+
+//~ run: kept(&Counter { id: 4, hits: Cell::new(0) }) => 4

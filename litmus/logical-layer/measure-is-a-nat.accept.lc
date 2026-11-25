@@ -1,0 +1,12 @@
+//~ question: May a logic function's measure be a `Nat`, with nothing written?
+//~ spec: logic.fn.total
+//~ rfc: 0002
+
+#[decreases(n)]
+logic fn halvings(n: Nat) -> Nat {
+    if n < 2 {
+        0
+    } else {
+        halvings(n / 2) + 1
+    }
+}

@@ -1,0 +1,19 @@
+//~ question: Does `eq::unfold` give the equation of a logic function whose body names something that could not be written at the call?
+//~ spec: proofs.unfold, core.conversion
+//~ rfc: 0005
+
+mod m {
+    logic fn base() -> Int {
+        2
+    }
+
+    pub logic fn scaled(n: Int) -> Int {
+        n * base()
+    }
+}
+
+// The call is bound with no annotation, so nothing but the unfolding can be the error.
+logic fn same(n: Int) -> @(n === n) {
+    let equation = eq::unfold(m::scaled)(n); //~ error: `m::scaled` is not unfolded here: its body names `base`, which is private to `m`, so outside `m` it is known by what `m` proves of it
+    eq::refl(n)
+}

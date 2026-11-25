@@ -1,0 +1,11 @@
+//~ question: May a proposition speak of what a trait method returns, by calling the method?
+//~ spec: traits.evidence, logic.code.no-runtime-calls
+//~ rfc: 0006
+
+trait OneByte {
+    fn byte(&self) -> (b: u8, @(b < 128));
+}
+
+fn small<P: OneByte>(p: &P) -> @(p.byte().0 < 128) { //~ error: `byte` is a method that runs, and logical code does not call it: its contract says what holds of a value that a call returned, and gives no term for the result
+    _
+}

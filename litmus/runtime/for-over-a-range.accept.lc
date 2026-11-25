@@ -1,0 +1,14 @@
+//~ question: Is the loop variable of `for i in a..b` known to lie in the range?
+//~ spec: runtime.loops.for-range
+//~ rfc: 0004
+
+fn last_seen(k: usize) -> usize {
+    let mut last = 0;
+    for i in 0..k {
+        let below: @(i < k) = _;
+        last = i;
+    }
+    last
+}
+
+//~ run: last_seen(4) => 3

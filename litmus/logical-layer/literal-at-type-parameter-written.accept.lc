@@ -1,0 +1,15 @@
+//~ question: May an integer literal be given to a parameter whose type is a type parameter when its type is written?
+//~ spec: logic.arith.literals
+//~ rfc: 0002
+
+logic fn same<T>(t: T) -> T {
+    t
+}
+
+logic fn four() -> Int {
+    same(4 as Int)
+}
+
+logic fn five() -> Nat {
+    same(5 as Nat)
+}

@@ -1,0 +1,27 @@
+//~ question: Is the field of a capture its type's view, when the struct that holds it declares no view?
+//~ spec: models.capture.fields, models.by-parts, models.default
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items.elements()
+    }
+}
+
+// Capture of `Shelf` holds `Stack`'s snapshot; views are explicit.
+struct Shelf {
+    stack: Stack,
+}
+
+fn same_length(shelf: &Shelf) -> u32 {
+    let whole = logic! { shelf };
+    let same: @(whole.stack.len() == Stack::view(snap(shelf.stack)).len()) = _; //~ error: `whole.stack` is the snapshot of a `Stack`, which has no `len`: a snapshot holds its fields' snapshots, not their models; write `Stack::view(whole.stack)`
+    0
+}

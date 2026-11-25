@@ -1,0 +1,11 @@
+//~ question: May a logic function take a proof that a snapshot is valid, and is the snapshot of a place valid?
+//~ spec: models.valid.not-assumed, models.valid.captured, models.valid
+//~ rfc: 0002
+
+logic fn fits(n: Snap<u8>, valid: @u8::valid(n)) -> @(n <= 255) {
+    _
+}
+
+fn small(x: u8) -> @(x <= 255) {
+    fits(snap(x), _)
+}

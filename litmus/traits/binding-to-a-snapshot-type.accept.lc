@@ -1,0 +1,28 @@
+//~ question: Does an implementation whose associated type is `Snap<u64>` meet a bound that binds it to `Snap<u32>`, both being `Nat`?
+//~ spec: traits.impls.headers, logic.ghost.type-identity, models.snapshots
+//~ rfc: 0006
+
+trait Reading: Logical {
+    type Out: Logical;
+    logic fn read() -> Self::Out;
+}
+
+#[derive(Logical)]
+struct Wide {
+    n: Int,
+}
+
+impl Reading for Wide {
+    type Out = Snap<u64>;
+    logic fn read() -> Snap<u64> {
+        7
+    }
+}
+
+logic fn narrow<T: Reading<Out = Snap<u32>>>() -> Snap<u32> {
+    T::read()
+}
+
+logic fn seven() -> @(narrow::<Wide>() === 7) {
+    compute()
+}

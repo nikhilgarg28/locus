@@ -1,0 +1,19 @@
+//~ question: May a closure's proof parameter mention the target of a mutable reference that the closure captures and writes through?
+//~ spec: contracts.entry-values
+//~ rfc: 0002
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn once(n: u32, pos: @(n > 0)) -> u32 {
+    let mut a = n;
+    let r = &mut a;
+    let ok: @(*r > 0) = _;
+    let mut step = |p: @(*r > 0)| { //~ error: the proof parameter `p` of this closure mentions `*r`, which the closure writes through `r`: a closure's signature is not a contract yet
+        let q = divide(100, *r, p);
+        *r = 0;
+        q
+    };
+    step(ok)
+}

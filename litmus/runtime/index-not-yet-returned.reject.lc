@@ -1,0 +1,8 @@
+//~ question: Does Locus know that an index is in bounds before the operation that checks it?
+//~ spec: runtime.operations.returned
+//~ rfc: 0004
+
+fn at(xs: &[u32], i: usize) -> u32 {
+    let inside: @(i < xs.len()) = _; //~ error: cannot prove `i < xs.len()`: nothing here bounds `i`; the index below proves it only once it has returned
+    xs[i]
+}

@@ -1,0 +1,7 @@
+//~ question: Does a procedure prove a goal from the proofs it is given?
+//~ spec: proofs.procedures, proofs.procedures.linear
+//~ rfc: 0003
+
+logic fn weaker(n: Int, big: @(n > 5)) -> @(n > 4) {
+    linear((big,))
+}

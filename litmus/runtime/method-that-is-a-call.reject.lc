@@ -1,0 +1,8 @@
+//~ question: Does Locus know what a method of the standard library that is not on its list returns?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn empty(xs: &[u32]) -> (e: bool, @(iff(e, xs.len() == 0))) {
+    let e = xs.is_empty();
+    (e, _) //~ error: cannot prove `iff(e, xs.len() == 0)`: `is_empty` is a call, so `e` is known only to be a `bool`; compare `xs.len()` with zero
+}

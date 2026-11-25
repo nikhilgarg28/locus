@@ -1,0 +1,27 @@
+//~ question: May verified code call a naked function over plain data, and check what it returns?
+//~ spec: logic.unverified.functions
+//~ rfc: 0002
+
+use std::arch::naked_asm;
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+impl Positive {
+    fn new(value: u32) -> Option<Positive> {
+        if value > 0 { Some(Positive { value, nonzero: _ }) } else { None }
+    }
+}
+
+// Unverified: its body is assembly, here x86-64's. Its signature is plain.
+#[unsafe(naked)]
+pub extern "C" fn halve(n: u32) -> u32 {
+    naked_asm!("mov eax, edi", "shr eax, 1", "ret")
+}
+
+// What `halve` returns is known only by its type, so the constructor checks it.
+fn positive_half(n: u32) -> Option<Positive> {
+    Positive::new(halve(n))
+}

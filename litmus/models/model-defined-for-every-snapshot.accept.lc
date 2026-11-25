@@ -1,0 +1,15 @@
+//~ question: Is a view that reads an element with no proof defined for every snapshot, including one that no value has?
+//~ spec: models.total, core.sequences.default
+//~ rfc: 0002
+
+struct Word {
+    bytes: [u8; 4],
+}
+
+// Outside the sequence, `w.bytes[3]` is a value of which nothing is known.
+impl View for Word {
+    type V = Nat;
+    logic fn view(w: Snap<Word>) -> Nat {
+        w.bytes[3]
+    }
+}

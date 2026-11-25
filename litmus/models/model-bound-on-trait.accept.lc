@@ -1,0 +1,7 @@
+//~ question: May a `Snapshot` bound appear on a trait?
+//~ spec: models.bounds-on-functions, traits.model-bounds
+//~ rfc: 0002
+
+trait Holds<T: Snapshot> {
+    fn count(&self) -> usize;
+}

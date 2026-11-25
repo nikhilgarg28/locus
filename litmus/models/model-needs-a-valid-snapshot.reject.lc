@@ -1,0 +1,14 @@
+//~ question: May a declared view rely on its snapshot being one that a value has?
+//~ spec: models.total, models.valid.not-assumed
+//~ rfc: 0002
+
+struct Word {
+    bytes: [u8; 4],
+}
+
+impl View for Word {
+    type V = Nat;
+    logic fn view(w: Snap<Word>) -> Nat {
+        w.bytes.at(3, _) //~ error: cannot prove that 3 is inside `w.bytes`: a view is given every `Snap<Word>`, and only one captured from a place is known to hold four bytes
+    }
+}

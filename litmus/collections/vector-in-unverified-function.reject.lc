@@ -1,0 +1,11 @@
+//~ question: May an unverified function of a Locus crate name a vector of Locus's library?
+//~ spec: collections.contents, logic.unverified.plain-rust
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+// A `Vec<u32>` of Locus's holds logical data: the snapshots of its elements, in a logical field.
+#[unverified]
+fn is_long(v: &Vec<u32>) -> bool { //~ error: `Vec<u32>` of Locus's library holds logical data, so `#[unverified]` is rejected on a function whose signature names it; take the standard library's `Vec`, or a slice
+    false
+}

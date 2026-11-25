@@ -1,0 +1,13 @@
+//~ question: Is the fact of `for i in a..b` about the current value of a place that `a` read, when evaluating `b` wrote that place?
+//~ spec: runtime.loops.for-range
+//~ rfc: 0005
+
+fn first() -> usize {
+    let mut low = 0;
+    let mut seen = 0;
+    for i in low..({ low = 100; 1 }) {
+        let above: @(low <= i) = _; //~ error: cannot prove `low <= i`: the range starts at the value `low` had when it was read, 0, and `low` has been written since
+        seen = i;
+    }
+    seen
+}

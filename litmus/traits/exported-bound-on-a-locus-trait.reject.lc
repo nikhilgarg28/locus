@@ -1,0 +1,12 @@
+//~ question: May an exported crate have a public function with a bound on a Locus trait?
+//~ spec: export.traits
+//~ rfc: 0006
+//~ mode: export
+
+pub trait Capped {
+    logic fn cap() -> Nat;
+}
+
+pub fn capped<T: Capped>(n: u32) -> u32 { //~ error: `capped` has a bound on the Locus trait `Capped`, and other crates can reach it: a Rust crate could implement `Capped` with nothing checked; declare it `pub(locus)`
+    n
+}

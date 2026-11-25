@@ -1,0 +1,7 @@
+//~ question: Does `&&` give a `Bool` when one operand is a `Bool` and the other a comparison?
+//~ spec: logic.bool.as-proposition, proofs.connectives
+//~ rfc: 0002
+
+logic fn open_and_small(open: Bool, n: Nat) -> Bool {
+    open && n < 10 //~ error: `n < 10` is a proposition, so `open && n < 10` is one, not a `Bool`; declare the result `Prop`, or write `if open && n < 10 { true } else { false }`
+}

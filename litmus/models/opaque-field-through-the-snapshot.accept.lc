@@ -1,0 +1,19 @@
+//~ question: Is the opaque value of a wrapped field reached through the snapshot of the value that holds it?
+//~ spec: models.snapshots.opaque
+//~ rfc: 0002
+
+use locus::Opaque;
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
+    port: u16,
+}
+
+fn held(server: &Server) -> u32 {
+    let first = logic! { snap(server).listener };
+    let second = logic! { snap(server).listener };
+    let same: @(first === second) = _;
+    0
+}

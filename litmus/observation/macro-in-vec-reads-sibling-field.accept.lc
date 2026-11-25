@@ -2,6 +2,9 @@
 //~ spec: observe.place.readable, compat.names.macros-expand
 //~ rfc: 0001
 
+use locus::std::prelude::*;
+use locus::std::vec;
+
 struct Pair {
     a: u32,
     b: u32,

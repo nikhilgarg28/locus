@@ -1,0 +1,27 @@
+//~ question: Is a type's view applied to a snapshot by the type's path?
+//~ spec: models.capture.fields, models.observation
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items.elements()
+    }
+}
+
+// Capture of `Shelf` holds `Stack`'s snapshot; views are explicit.
+struct Shelf {
+    stack: Stack,
+}
+
+fn same_stack(shelf: &Shelf) -> u32 {
+    let whole = logic! { shelf };
+    let same: @(Stack::view(whole.stack) === Stack::view(snap(shelf.stack))) = _;
+    0
+}

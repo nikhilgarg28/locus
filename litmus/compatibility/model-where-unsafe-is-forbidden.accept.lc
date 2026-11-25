@@ -1,0 +1,29 @@
+//~ question: May a crate that forbids `unsafe` code declare types and a view, though the implementations of `Snapshot` that Locus writes for rustc are `unsafe impl`s?
+//~ spec: compat.names.model-impls, compat.superset.same-meaning
+//~ rfc: 0001
+
+#![forbid(unsafe_code)]
+
+struct Celsius {
+    tenths: i32,
+}
+
+impl View for Celsius {
+    type V = Int;
+    logic fn view(c: Snap<Celsius>) -> Int {
+        c.tenths
+    }
+}
+
+// No view is declared for `Reading`, so Locus writes the default one.
+struct Reading {
+    at: u32,
+    value: Celsius,
+}
+
+fn tenths() -> i32 {
+    let reading = Reading { at: 3, value: Celsius { tenths: 215 } };
+    reading.value.tenths
+}
+
+//~ run: tenths() => 215

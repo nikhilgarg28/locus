@@ -1,0 +1,19 @@
+//~ question: May a proof about the value a borrow will end with be bound and kept before the borrow ends?
+//~ spec: contracts.final.pending, contracts.final
+//~ rfc: 0005
+
+fn first_mut(pair: &mut (u32, u32)) -> (r: &mut u32, @(final!(pair) === (final!(r), pair.1))) {
+    (&mut pair.0, _)
+}
+
+fn second_kept() -> u32 {
+    let mut pair: (u32, u32) = (1, 2);
+    let (first, related) = first_mut(&mut pair);
+    // `related` is about what `first` will end with. It is a proof, so it may be held before then.
+    let also = related;
+    *first = 9;
+    let kept: @(pair.1 == 2 && pair.0 == 9) = _;
+    pair.1
+}
+
+//~ run: second_kept() => 2

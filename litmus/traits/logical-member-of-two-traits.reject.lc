@@ -1,0 +1,29 @@
+//~ question: Is a logic function that two traits of one type both declare named through the type alone?
+//~ spec: traits.names
+//~ rfc: 0006
+
+trait Wide: Logical {
+    logic fn size(x: Self) -> Nat;
+}
+
+trait Deep: Logical {
+    logic fn size(x: Self) -> Nat;
+}
+
+#[derive(Logical)]
+struct Grid {
+    w: Nat,
+    d: Nat,
+}
+
+impl Wide for Grid {
+    logic fn size(g: Grid) -> Nat { g.w }
+}
+
+impl Deep for Grid {
+    logic fn size(g: Grid) -> Nat { g.d }
+}
+
+logic fn extent(g: Grid) -> Nat {
+    Grid::size(g) //~ error: `size` is a logic function of `Wide` and of `Deep`, as rustc resolves it: write `<Grid as Wide>::size(g)`
+}

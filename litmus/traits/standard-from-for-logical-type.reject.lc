@@ -1,0 +1,15 @@
+//~ question: May a program implement the standard library's `From` for a logical type of its own?
+//~ spec: traits.impls.logical-types
+//~ rfc: 0006
+
+#[derive(Logical)]
+struct Ratio {
+    num: Int,
+    den: Int,
+}
+
+impl From<Nat> for Ratio { //~ error: `From` has a method that runs, `from`, and `Ratio` is a logical type: implement `FromLogic<Nat>`, whose `from` is a logic function
+    fn from(n: Nat) -> Ratio {
+        logic! { Ratio { num: n as Int, den: 1 } }
+    }
+}

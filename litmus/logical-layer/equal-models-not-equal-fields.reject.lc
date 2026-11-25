@@ -1,23 +1,22 @@
 //~ question: Does equality of two values' derived models give equality of fields that their fields' models forget?
-//~ spec: logic.eq.runtime-values, models.derived
+//~ spec: logic.eq.runtime-values, models.snapshots
 //~ rfc: 0002
 
 struct Inner {
     x: u32,
 }
 
-impl Model for Inner {
-    type Logic = Nat;
-    logic fn model(inner: &Inner) -> Nat {
+impl View for Inner {
+    type V = Nat;
+    logic fn view(inner: Snap<Inner>) -> Nat {
         0
     }
 }
 
-#[derive(Model)]
 struct Outer {
     inner: Inner,
 }
 
-fn read(a: &Outer, b: &Outer, same: @(a === b)) -> @(a.inner.x === b.inner.x) {
-    _ //~ error: cannot prove `a.inner.x === b.inner.x`: `a === b` compares models, and `Inner`'s model forgets `x`
+fn read(a: &Outer, b: &Outer, same: @(Inner::view(snap(a.inner)) === Inner::view(snap(b.inner)))) -> @(a.inner.x === b.inner.x) {
+    _ //~ error: cannot prove `a.inner.x === b.inner.x`: `a === b` compares models, and `Inner`'s view forgets `x`
 }

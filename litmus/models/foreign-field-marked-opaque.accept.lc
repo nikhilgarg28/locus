@@ -1,0 +1,19 @@
+//~ question: May a struct hold a field of a type that Locus cannot see, when the field is wrapped in `Opaque<T>`, and does a move keep its snapshot?
+//~ spec: models.snapshots.opaque, logic.eq.snapshots
+//~ rfc: 0002
+
+use locus::Opaque;
+use std::net::{SocketAddr, TcpListener};
+
+struct Server {
+    listener: Opaque<TcpListener>,
+    local: Opaque<SocketAddr>,
+    port: u16,
+}
+
+fn kept(server: Server) -> Server {
+    let before = logic! { snap(server) };
+    let moved = server;
+    let same: @(snap(moved) === before) = _;
+    moved
+}

@@ -1,0 +1,18 @@
+//~ question: Does a borrow given to a call end when the call returns, when another parameter lets the callee keep it?
+//~ spec: runtime.borrows, contracts.final
+//~ rfc: 0005
+
+fn stash<'a>(x: &'a mut u32, out: &mut Option<&'a mut u32>) {
+    *out = Some(x);
+}
+
+fn seven() -> u32 {
+    let mut x = 0;
+    let mut out = None;
+    stash(&mut x, &mut out);
+    if let Some(r) = out {
+        *r = 7;
+    }
+    let unchanged: @(x == 0) = _; //~ error: cannot prove `x == 0`: the borrow of `x` did not end when `stash` returned, since `out` can hold it, and it was written through afterwards
+    x
+}

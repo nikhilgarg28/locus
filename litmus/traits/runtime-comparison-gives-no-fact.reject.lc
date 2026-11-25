@@ -1,0 +1,32 @@
+//~ question: Does `<=` in runtime code give the fact that the law of a trait states, on a type that implements both?
+//~ spec: traits.operators
+//~ rfc: 0006
+
+trait OrderSpec: Snapshot {
+    logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
+    logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
+}
+
+trait CheckedOrder: OrderSpec {
+    fn le_checked(&self, other: &Self) -> (r: bool, @(iff(r, Self::le(snap(self), snap(other)))));
+}
+
+#[derive(PartialEq, PartialOrd)]
+struct Height {
+    cm: u32,
+}
+
+impl OrderSpec for Height {
+    logic fn le(a: Snap<Height>, b: Snap<Height>) -> Prop { a.cm <= b.cm }
+    logic fn le_total(a: Snap<Height>, b: Snap<Height>) -> @(Height::le(a, b) || Height::le(b, a)) { _ }
+}
+
+impl CheckedOrder for Height {
+    fn le_checked(&self, other: &Height) -> (r: bool, @(iff(r, Height::le(snap(self), snap(other))))) {
+        (self.cm <= other.cm, _)
+    }
+}
+
+fn lower(a: &Height, b: &Height) -> (first: bool, @(iff(first, Height::le(snap(a), snap(b))))) {
+    (a <= b, _) //~ error: cannot prove `iff(first, Height::le(snap(a), snap(b)))`: `a <= b` is Rust's `PartialOrd::le`, which states no contract; call `a.le_checked(b)`
+}

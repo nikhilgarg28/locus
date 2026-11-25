@@ -1,0 +1,13 @@
+//~ question: May the proof in a static's initializer be read from the static itself?
+//~ spec: logic.const.well-founded
+//~ rfc: 0005
+
+struct Certified {
+    proof: @False,
+}
+
+static BAD: Certified = Certified { proof: logic! { BAD.proof } }; //~ error: the proof in `BAD`'s initializer depends on `BAD` itself: while an initializer is checked, the item's own proof fields are not available
+
+fn absurd() -> @False {
+    logic! { BAD.proof }
+}

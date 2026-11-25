@@ -1,5 +1,5 @@
 //~ question: Are two snapshots equal when all their fields are?
-//~ spec: logic.eq.snapshots, models.no-default, models.snapshots
+//~ spec: logic.eq.snapshots, models.snapshots
 //~ rfc: 0002
 
 struct Point {

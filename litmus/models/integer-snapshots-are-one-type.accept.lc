@@ -1,0 +1,11 @@
+//~ question: Is the snapshot of an unsigned machine integer a `Nat`, whatever the integer's width?
+//~ spec: models.snapshots
+//~ rfc: 0002
+
+logic fn double(n: Nat) -> Nat {
+    n + n
+}
+
+fn same(x: u8, y: u64, equal: @(snap(x) === snap(y))) -> @(double(snap(x)) === double(snap(y))) {
+    _
+}

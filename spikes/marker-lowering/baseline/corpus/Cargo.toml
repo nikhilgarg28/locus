@@ -1,0 +1,12 @@
+[package]
+name = "corpus"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+autobins = true
+
+[dependencies]
+locus = { path = "../locus" }
+
+[lints]
+workspace = true

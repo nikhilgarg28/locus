@@ -1,0 +1,12 @@
+//~ question: May a function whose ghost parameter is a logical value, not a proof, be given to code Locus does not verify?
+//~ spec: logic.boundary.calls, logic.boundary.logical-data
+//~ rfc: 0002
+
+fn grow(n: u32, by: Nat) -> u32 {
+    n + 1
+}
+
+fn lend() -> u32 {
+    let f = std::hint::black_box(grow); //~ error: `grow` takes a logical value, so it cannot be given to `black_box`, which Locus does not verify
+    0
+}

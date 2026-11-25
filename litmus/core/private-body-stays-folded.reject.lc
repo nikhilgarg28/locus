@@ -1,0 +1,17 @@
+//~ question: Does a logic function unfold where its body names something that could not be written there?
+//~ spec: core.conversion
+//~ rfc: 0005
+
+mod m {
+    logic fn base() -> Int {
+        2
+    }
+
+    pub logic fn doubled() -> Int {
+        base() + base()
+    }
+}
+
+logic fn four() -> @(m::doubled() === 4) {
+    eq::refl(4) //~ error: `m::doubled()` and `4` do not convert: the body of `doubled` names `base`, which is private to `m`, so it is not unfolded here
+}

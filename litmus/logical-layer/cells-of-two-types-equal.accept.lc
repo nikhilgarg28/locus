@@ -1,0 +1,9 @@
+//~ question: Are the snapshots of cells of different payload types, and of a `Cell` and a `RefCell`, values of one type, and equal?
+//~ spec: models.frozen-data, logic.eq.snapshots
+//~ rfc: 0008
+
+use std::cell::{Cell, RefCell};
+
+fn three(a: &Cell<u32>, b: &Cell<bool>, c: &RefCell<u32>) -> @(snap(a) === snap(b) && snap(a) === snap(c)) {
+    _
+}

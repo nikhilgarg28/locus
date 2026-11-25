@@ -1,0 +1,8 @@
+//~ question: Does a collection view require its elements to implement View explicitly?
+//~ spec: collections.model, models.default, models.capture.bound
+//~ rfc: 0008
+
+use locus::std::vec::Vec;
+logic fn abstract_elements<T: Snapshot>(s: Snap<Vec<T>>) -> Nat {
+    Vec::<T>::view(s).len() //~ error: T: Snapshot supplies no T: View bound or implicit identity view
+}

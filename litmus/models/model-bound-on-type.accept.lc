@@ -1,0 +1,18 @@
+//~ question: May a `Snapshot` bound appear on a type's declaration, where a proof field reads a field that names the parameter?
+//~ spec: models.bounds-on-functions, models.capture.bound
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Shelf<T: Snapshot> {
+    items: Vec<T>,
+    limit: usize,
+    fits: @(items.elements().len() <= limit),
+}
+
+// Rust asks for the bound on every `impl` of a type that declares it.
+impl<T: Snapshot> Shelf<T> {
+    fn limit(&self) -> usize {
+        self.limit
+    }
+}

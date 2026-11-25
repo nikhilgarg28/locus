@@ -1,0 +1,7 @@
+//~ question: May `as` turn an `Int` that is not a literal into a `Nat`?
+//~ spec: logic.arith.int-to-nat, logic.arith.literals
+//~ rfc: 0002
+
+logic fn shrink(i: Int) -> Nat {
+    i as Nat //~ error: `as` does not turn an `Int` into a `Nat`, since `i` may be negative: write `i.as_nat(p)` with a proof `p` of `i >= 0`
+}

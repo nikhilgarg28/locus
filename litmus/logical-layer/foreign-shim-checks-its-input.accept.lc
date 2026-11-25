@@ -1,0 +1,30 @@
+//~ question: May a function that foreign code can call take plain data and build a value of a sealed type inside?
+//~ spec: logic.boundary.foreign, logic.unverified.functions
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+impl Positive {
+    fn new(value: u32) -> Option<Positive> {
+        if value > 0 { Some(Positive { value, nonzero: _ }) } else { None }
+    }
+}
+
+fn divide(n: u32, d: u32, nonzero: @(d > 0)) -> u32 {
+    n / d
+}
+
+// Verified: the `unsafe` belongs to the attribute, and the body has none.
+#[unsafe(no_mangle)]
+pub extern "C" fn reciprocal(value: u32) -> u32 {
+    match Positive::new(value) {
+        Some(p) => divide(100, p.value, p.nonzero),
+        None => 0,
+    }
+}
+
+//~ run: reciprocal(4) => 25
+//~ run: reciprocal(0) => 0

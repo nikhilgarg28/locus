@@ -1,0 +1,45 @@
+//~ question: May a method that takes a value with an invariant take it apart, change a field that a proof reads, and build it again?
+//~ spec: contracts.invariants, contracts.invariants.assignment, collections.model
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(items.elements().len() <= cap),
+}
+
+impl Stack {
+    fn new(cap: usize) -> Stack {
+        // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
+        // The empty proof establishes the contents length used by `fits`.
+        let (items, empty) = Vec::empty();
+
+        Stack { items, cap, fits: _ }
+    }
+
+    // The stack with `x` on it when there was room, and the stack as it was when there was none.
+    fn push(self, x: u32) -> (Stack, bool) {
+        let Stack { mut items, cap, fits } = self;
+        // `len_checked` on Locus's `Vec` returns the length, with a proof that it is the length of the contents.
+        let (n, counted) = items.len_checked();
+        if n < cap {
+            // `push_checked` on Locus's `Vec` returns a proof that the contents grew by one.
+            let grew = items.push_checked(x);
+
+            (Stack { items, cap, fits: _ }, true)
+        } else {
+            (Stack { items, cap, fits }, false)
+        }
+    }
+}
+
+fn third_fits() -> bool {
+    let (stack, first) = Stack::new(2).push(7);
+    let (stack, second) = stack.push(8);
+    let (stack, third) = stack.push(9);
+    third
+}
+
+//~ run: third_fits() => false

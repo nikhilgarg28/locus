@@ -1,0 +1,12 @@
+//~ question: Does equal cell observation prove equality of executable reads?
+//~ spec: models.capture.footprint, contracts.calls.unrelated
+//~ rfc: 0008
+
+use std::cell::Cell;
+fn read(cell: &Cell<u32>) -> u32 {
+    let a = cell.get();
+    cell.set(9);
+    let b = cell.get();
+    let same: @(a === b) = _; //~ error: equal cell snapshots supply no relation between executable read results
+    b
+}

@@ -1,0 +1,28 @@
+//~ question: Does an implementation whose associated type is a true proposition meet a bound that binds it to a false one, which rustc sees as the same type?
+//~ spec: traits.impls.headers, logic.ghost.type-identity
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+logic fn absurd<T: Claim<P = @False>>() -> @False {
+    T::get()
+}
+
+logic fn boom() -> @False {
+    absurd::<Yes>() //~ error: `Yes` does not meet the bound `Claim<P = @False>` of `absurd`: its `P` is `@(1 == 1)`, and rustc sees both as `Proof`, so Locus compares the propositions
+}

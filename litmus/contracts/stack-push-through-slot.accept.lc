@@ -1,0 +1,58 @@
+//~ question: May a method that takes `&mut self` move a value with an invariant out of its place, and put a new one back?
+//~ spec: contracts.slots, contracts.slots.local
+//~ rfc: 0002
+
+use locus::std::mem;
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+    fits: @(items.elements().len() <= cap),
+}
+
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items.elements()
+    }
+}
+
+impl Stack {
+    fn new(cap: usize) -> Stack {
+        // `empty` is a method of Locus's `Vec`: an empty vector, with a proof that it is empty.
+        // `fits` speaks directly of element snapshots; the empty proof suffices.
+        let (items, empty) = Vec::empty();
+
+        Stack { items, cap, fits: _ }
+    }
+
+    // Whether `x` was pushed, with a proof that the stack then grew by one.
+    fn push(&mut self, x: u32) -> (pushed: bool, @(pushed ==> Stack::view(snap(final!(self))).len() == Stack::view(snap(self)).len() + 1)) {
+        // From here until `put`, `*self` holds nothing, and a panic aborts the process.
+        // `was` proves that `taken` is what was there.
+        let (slot, taken, was) = mem::take_out(self);
+        let Stack { mut items, cap, fits } = taken;
+        let (n, counted) = items.len_checked();
+        if n < cap {
+            let grew = items.push_checked(x);
+
+            // After `put`, `*self` holds the stack that `put` was given.
+            slot.put(Stack { items, cap, fits: _ });
+            (true, _)
+        } else {
+            slot.put(Stack { items, cap, fits });
+            (false, _)
+        }
+    }
+}
+
+fn third_fits() -> bool {
+    let mut stack = Stack::new(2);
+    let (first, _) = stack.push(7);
+    let (second, _) = stack.push(8);
+    let (third, _) = stack.push(9);
+    third
+}
+
+//~ run: third_fits() => false

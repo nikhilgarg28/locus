@@ -1,0 +1,26 @@
+//~ question: May a place holding a proof be emptied by verified code, with no help from the standard library?
+//~ spec: logic.boundary.unverified, logic.boundary.plain-data
+//~ rfc: 0002
+
+fn check(n: u32) -> Option<@(n > 0)> {
+    if n > 0 {
+        Some(_)
+    } else {
+        None
+    }
+}
+
+// An `Option` is Rust's own enum, so building one and matching on one need no
+// library. A proof is `Copy`, and so is an `Option` of one.
+fn take(x: u32) -> bool {
+    let mut found: Option<@(x > 0)> = check(x);
+    let taken = found;
+    found = None;
+    match taken {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+//~ run: take(3) => true
+//~ run: take(0) => false

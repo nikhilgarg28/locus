@@ -1,0 +1,9 @@
+//~ question: Does native-shaped push establish a contents postcondition without a returned proof?
+//~ spec: collections.vec.contracts, contracts.calls.unrelated
+//~ rfc: 0008
+
+use locus::std::vec::Vec;
+fn pushed(v: &mut Vec<u32>, x: u32) -> @(snap(final!(v)).elements().len() == snap(v).elements().len() + 1) {
+    v.push(x);
+    _ //~ error: ordinary push returns no proof relating the new contents to the old contents; use push_checked
+}

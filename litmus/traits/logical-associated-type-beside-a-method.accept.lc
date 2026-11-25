@@ -1,0 +1,27 @@
+//~ question: May a runtime type give a logical associated type in a trait that also has a method that runs?
+//~ spec: traits.impls.headers, traits.members
+//~ rfc: 0006
+
+trait Gauge {
+    type Unit: Logical;
+    logic fn zero() -> Self::Unit;
+    fn raw(&self) -> u32;
+}
+
+struct Thermometer {
+    tenths: u32,
+}
+
+impl Gauge for Thermometer {
+    type Unit = Int;
+    logic fn zero() -> Int { -2731 }
+    fn raw(&self) -> u32 {
+        self.tenths
+    }
+}
+
+fn read<G: Gauge>(g: &G) -> u32 {
+    g.raw()
+}
+
+//~ run: read(&Thermometer { tenths: 215 }) => 215

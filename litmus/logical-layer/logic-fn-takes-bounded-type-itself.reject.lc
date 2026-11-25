@@ -1,0 +1,7 @@
+//~ question: May a logic function take a value of a type parameter that is bounded by `Snapshot`?
+//~ spec: logic.fn.parameters
+//~ rfc: 0002
+
+logic fn alike<T: Snapshot>(a: T, b: T) -> Prop { //~ error: Snapshot alone does not prove that T is logical: write a parameter of type Snap<T>, or require T: Logical
+    a === b
+}

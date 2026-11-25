@@ -1,0 +1,7 @@
+//~ question: May a sequence be indexed by a `Nat`, with nothing written?
+//~ spec: core.sequences
+//~ rfc: 0002
+
+logic fn item(xs: Seq<Nat>, i: Nat) -> Nat {
+    xs[i]
+}

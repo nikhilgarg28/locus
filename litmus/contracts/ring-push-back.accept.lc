@@ -1,0 +1,65 @@
+//~ question: May two fields that one proof reads both change, one of them by writing an item, between taking a value out of its place and putting it back?
+//~ spec: contracts.slots, contracts.invariants.assignment
+//~ rfc: 0002
+
+use locus::std::mem;
+use locus::std::vec::Vec;
+
+// A queue in a buffer of fixed length: `len` items, the oldest at `head`.
+// The buffer is never empty, so no value of this type is cheap enough to stand in for another.
+struct Ring {
+    buf: Vec<u32>,
+    head: usize,
+    len: usize,
+    inside: @(head < buf.elements().len() && len <= buf.elements().len()),
+}
+
+impl Ring {
+    // A queue in the buffer given, whose length is its capacity.
+    fn new(buf: Vec<u32>) -> Option<Ring> {
+        // The checked length is tied directly to the snapshot's contents.
+        let (n, counted) = buf.len_checked();
+        if n > 0 {
+
+            Some(Ring { buf, head: 0, len: 0, inside: _ })
+        } else {
+            None
+        }
+    }
+
+    fn push_back(&mut self, x: u32) -> bool {
+        let (slot, taken, was) = mem::take_out(self);
+        let Ring { mut buf, head, len, inside } = taken;
+        let (cap, counted) = buf.len_checked();
+        // What `inside` says of the buffer as it was, in terms of its contents.
+
+        if len == cap {
+            slot.put(Ring { buf, head, len, inside });
+            return false;
+        }
+        // The first free place, found without a sum that could wrap.
+        let room = cap - head;
+        let at = if len < room { head + len } else { len - room };
+        // `set_checked` on Locus's `Vec` returns a proof that the length of the contents is as it was.
+        let written = buf.set_checked(at, x);
+
+        slot.put(Ring { buf, head, len: len + 1, inside: _ });
+        true
+    }
+}
+
+fn third_fits() -> bool {
+    let (mut buf, empty) = Vec::empty();
+    buf.push(0);
+    buf.push(0);
+    match Ring::new(buf) {
+        Some(mut ring) => {
+            ring.push_back(1);
+            ring.push_back(2);
+            ring.push_back(3)
+        }
+        None => true,
+    }
+}
+
+//~ run: third_fits() => false

@@ -1,0 +1,26 @@
+//~ question: May a program implement one trait of its own for two logical types of Locus's library, with a different logic function at each?
+//~ spec: traits.rust, traits.members, traits.bounds
+//~ rfc: 0006
+
+trait Monoid: Logical {
+    logic fn unit() -> Self;
+    logic fn op(a: Self, b: Self) -> Self;
+    logic fn unit_left(a: Self) -> @(Self::op(Self::unit(), a) === a);
+}
+
+impl Monoid for Int {
+    logic fn unit() -> Int { 0 }
+    logic fn op(a: Int, b: Int) -> Int { a + b }
+    logic fn unit_left(a: Int) -> @(Int::op(Int::unit(), a) === a) { _ }
+}
+
+impl Monoid for Nat {
+    logic fn unit() -> Nat { 1 }
+    logic fn op(a: Nat, b: Nat) -> Nat { a * b }
+    logic fn unit_left(a: Nat) -> @(Nat::op(Nat::unit(), a) === a) { _ }
+}
+
+// rustc selects an implementation for each type, and a logic function is then that implementation's.
+logic fn units() -> @(Int::unit() === 0 && Nat::unit() === 1) {
+    _
+}

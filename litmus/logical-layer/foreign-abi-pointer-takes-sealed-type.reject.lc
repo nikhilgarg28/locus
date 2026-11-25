@@ -1,0 +1,13 @@
+//~ question: May a function pointer type whose ABI is not Rust's take a value of a sealed type?
+//~ spec: logic.boundary.foreign
+//~ rfc: 0002
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// Whatever `f` points to is foreign code, which would be given `p`'s fields to write.
+fn apply(f: extern "C" fn(Positive) -> u32, p: Positive) -> u32 { //~ error: the function pointer type `extern "C" fn(Positive) -> u32` has the ABI "C", and its parameter has the type `Positive`, which holds a proof
+    f(p)
+}

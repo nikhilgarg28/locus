@@ -1,0 +1,9 @@
+//~ question: Is the name of a branch's condition in scope after the `if`?
+//~ spec: proofs.facts.named
+//~ rfc: 0003
+
+fn clamp(n: u32) -> u32 {
+    let out = if small: n <= 100 { n } else { 100 };
+    let kept: @(n <= 100) = small; //~ error: `small` is in scope only in the two branches of its `if`
+    out
+}

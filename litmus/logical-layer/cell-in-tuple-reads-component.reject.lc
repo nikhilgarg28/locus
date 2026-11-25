@@ -2,7 +2,7 @@
 //~ spec: logic.ghost.interior-mutability
 //~ rfc: 0002
 
-use std::cell::Cell;
+use locus::std::cell::Cell;
 
 fn entry() -> usize {
     let pair: (i: usize, Cell<Option<@(i < 10)>>) = (3, Cell::new(None)); //~ error: the second component is under interior mutability and its proposition reads the first component: a `Cell`'s type cannot follow a value that an assignment can change

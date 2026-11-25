@@ -1,0 +1,12 @@
+//~ question: May a value be left out when no proof beside it determines it?
+//~ spec: proofs.values.inferred
+//~ rfc: 0003
+
+logic fn add_zero(n: Int) -> @(n + 0 === n) {
+    linear(())
+}
+
+logic fn anything() -> @True {
+    let fact = add_zero(_); //~ error: nothing determines the value of this `_`: `add_zero` takes no proof that mentions it; write the value
+    True::Intro
+}

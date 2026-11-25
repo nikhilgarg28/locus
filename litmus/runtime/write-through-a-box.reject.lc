@@ -1,0 +1,8 @@
+//~ question: Does a proof about a `Box` still fit it after a write through the `Box`?
+//~ spec: runtime.writes, proofs.versions
+//~ rfc: 0005
+
+fn boxed(mut b: Box<u32>, was: @(b == 1)) -> (out: Box<u32>, @(out == 1)) {
+    *b = 2;
+    (b, was) //~ error: `was` proves `b == 1` about the value `b` had before `*b = 2`: a write through a `Box` gives the `Box` a new value
+}

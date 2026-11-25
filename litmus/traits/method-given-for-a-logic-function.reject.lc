@@ -1,0 +1,18 @@
+//~ question: May an implementation give a method that runs where its trait declares a logic function?
+//~ spec: traits.members.kind
+//~ rfc: 0006
+
+trait OrderSpec: Logical {
+    logic fn le(a: Self, b: Self) -> Prop;
+}
+
+#[derive(Logical)]
+struct Level {
+    rank: Int,
+}
+
+impl OrderSpec for Level {
+    fn le(a: Level, b: Level) -> Prop { //~ error: `OrderSpec` declares `le` a logic function, and every implementation gives it as one: write `logic fn le`
+        logic! { a.rank <= b.rank }
+    }
+}

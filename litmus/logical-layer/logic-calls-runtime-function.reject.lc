@@ -2,6 +2,8 @@
 //~ spec: logic.code.no-runtime-calls
 //~ rfc: 0002
 
+use locus::std::vec::Vec;
+
 fn count(v: &Vec<u32>) -> usize {
     v.len()
 }

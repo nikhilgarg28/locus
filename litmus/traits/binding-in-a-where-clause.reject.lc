@@ -1,0 +1,32 @@
+//~ question: Does a type whose associated type is a true proposition meet a `where` clause of a runtime function that binds it to a false one?
+//~ spec: traits.impls.headers, logic.ghost.type-identity
+//~ rfc: 0006
+
+trait Claim: Logical {
+    type P: Logical;
+    logic fn get() -> Self::P;
+}
+
+#[derive(Logical)]
+struct Yes {
+    n: Int,
+}
+
+impl Claim for Yes {
+    type P = @(1 == 1);
+    logic fn get() -> @(1 == 1) {
+        _
+    }
+}
+
+fn falsum<T>() -> @False
+where
+    T: Claim<P = @False>,
+{
+    logic! { T::get() }
+}
+
+fn zero() -> u32 {
+    let f = falsum::<Yes>(); //~ error: `Yes` does not meet `T: Claim<P = @False>` in the `where` clause of `falsum`: its `P` is `@(1 == 1)`
+    0
+}

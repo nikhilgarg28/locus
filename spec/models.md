@@ -1,45 +1,88 @@
-# Snapshots and models
+# Snapshots and explicit views
 
-Logical code sees a runtime value in two ways: as what it is, its *snapshot*, and as what it means, its *model*. Every runtime type has a snapshot type, which Locus derives from the type's definition. A type has a model only when it is declared with `impl Model for T`, derived with `#[derive(Model)]`, or declared by Locus's library for the standard library's types. [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the design.
-
-Logical code reaches runtime data only through places: locals, fields, and the targets of references and `Box`. Reading a place gives a snapshot. Using a runtime value as a value, as an operand, either side of `===`, a method receiver, or an argument of a logical parameter, takes it to its model. `snap(x)` gives `x`'s snapshot, of type `Snap<T>`.
+Capture always yields the language-generated snapshot. Library views are explicit logical functions; they never change capture, equality, field projection, or method lookup. [RFC 0008](../design/rfcs/0008-snapshot-capture-and-views.md) reconciles the earlier model rules. The `models.*` rule IDs remain stable for their existing citations.
 
 ## Snapshots
 
 r[models.snapshots]
-Every runtime type `T` has a snapshot type `Snap<T>`, whose values are exactly the values that `T` can have. For a struct or enum it has the same fields and variants, each of its field type's snapshot type, proof fields included. A machine integer's snapshot is an integer within its type's range, and a `bool`'s a `Bool`. `Box` and references are transparent: `Snap<&T>` is `Snap<T>`. The snapshots of arrays, slices, and `Vec<T>` are `Seq<Snap<T>>`. So that every snapshot is finite, a field is *cut* when its type reaches the type that declares the field again through a reference, following type arguments, and a cut field's snapshot follows no reference: each reference in it holds only its address. The cut belongs to the type that closes the cycle, so a type's snapshot is the same wherever it appears, and a generic type's has the same shape for every type argument. Logical code that reads through a cut field's references as places still observes their targets.
+Every supported type `T` has a compiler-defined logical snapshot type `Snap<T>`. Structs, tuples, and enums compose field snapshots and preserve variant tags and proof fields. Unsigned machine integers snapshot to `Nat`, signed ones to `Int`, `bool` to `Bool`, and `()` to logical `Unit`; range facts belong to captures, not to all values of those logical types. References and `Box` observe readable referents, except at declared reference cuts. Arrays and slices snapshot to `Seq<Snap<T>>`. A logical type `L` snapshots to itself. A library view is never applied recursively or implicitly. No user implementation or field attribute can replace these rules.
+
+r[models.snapshots.cut]
+A field is cut when its type reaches its declaring aggregate again through a reference, stopping at observation barriers. Its component has type `CutSnap<F>`, which follows no reference inside that component: reference edges become address observations without a logical dereference operation. It is distinct from `Snap<F>`. Cut positions are fixed by the declaration, consistently in generic and concrete code. A cut or barrier cannot discard information needed to interpret a retained proof field; such a capture is rejected. Owned-only recursive data may have a finite nominal recursive snapshot. A fresh authorized capture of a referent place is separate from projection out of a cut snapshot.
+
+r[models.snapshots.seen]
+Capture is available for language-supported types, types Locus lowers whose included fields have snapshots, and types with designated library support. A parameter or associated type requires the written `Snapshot` bound. This is not universal support for arbitrary foreign types, closures, function items, or trait objects. In particular, a downstream crate cannot implement Locus's `Snapshot` for an uninstrumented foreign type it does not own. Standard-library types may have designated support where the library can legally supply it; native collections have no contents observation by default. A declaration containing an unsupported field remains ordinary Rust but has no whole-object snapshot. Direct capture of a supported, available sibling place remains possible. Uniform associated-type recursion that cannot be represented rejects capture, not ordinary runtime use.
 
 r[models.snapshots.opaque]
-A snapshot is structural only where this chapter or Locus's library says how, and where the type's declaration shows the result to be finite and strictly positive. Everywhere else it is opaque: for a union; for a field whose declared type names an associated type of one of its type's parameters, or an opaque type, whatever the type arguments are, since the declaration does not show what the field will hold; and for any type that neither this chapter nor Locus's library gives a snapshot. Logical code can hold, pass on, and compare an opaque snapshot, which a move or a copy keeps, and cannot look into it. No runtime type is rejected because its snapshot would be ill-formed.
+The library's `Opaque<T>` is an owning runtime wrapper whose language-defined snapshot is `Unit`, for any supported runtime payload `T`, without a `T: Snapshot` bound. It preserves ordinary ownership, borrowing, destruction, auto-trait obligations, and logical-data boundary checks. Its runtime `new`, `get_ref`, `get_mut`, and `into_inner` operations do not run during capture. A payload reference obtained by an authorized runtime operation can be captured separately if its type supports capture; the payload cannot be projected from `Unit`. There is no language `#[opaque]` or `#[snapshot_erased]` field attribute. Unsupported fields must be wrapped explicitly or leave their enclosing type without a snapshot. A designated abstract external snapshot is a different, non-singleton observation; it is not automatically available for every foreign type.
 
 r[models.snapshot-privacy]
-A snapshot holds every field of its value, private ones included, but logical code reads a field of a snapshot only where Rust code could read that field.
+Generated snapshots preserve the source fields' visibility. Clients may hold and compare whole snapshots without access to private fields. Owners may expose ordinary logical observers of those fields. Hypothetical snapshot constructors obey source visibility and require proofs for proof fields; they create neither runtime objects nor access permissions.
 
 r[models.frozen-data]
-A snapshot holds nothing that can change without a write that Locus sees: not the contents of an `UnsafeCell`, which are opaque, and not the target of a raw pointer, only its address. A model, being a function of the snapshot, reads neither.
+`Snap<UnsafeCell<T>> = Unit`, without observing its payload or requiring its snapshot. Together with `Opaque<T>`, these are the two special constructors that erase arbitrary payloads; ordinary unit and structural compositions follow their ordinary rules. Raw pointers observe only pointer values, not targets or access rights. Interior mutation behind a barrier does not change that barrier's observation. Observing a cell result, guarded referent, or atomic load requires the actual runtime access first. Neither a view nor snapshot equality recovers omitted state. No fresh identifier is generated by capture. The standard library's `Cell<T>` and `RefCell<T>` have designated snapshots, each `Unit` for every `T` and without a payload bound, since everything either holds is behind an `UnsafeCell`: so any two of their snapshots are equal, and that equality says nothing of what a read of either returns.
+
+r[models.capture.available]
+A runtime place is captured only while initialized and readable through a legal temporary shared borrow, including a shared reborrow. Capture cannot read moved-out storage, conflict with an outstanding mutable loan, or bypass a guard. The resulting logical value retains no runtime borrow or source lifetime. Capture uses supported primitive place projections; it executes no arbitrary `Deref`, `Index`, or getter. Bind such an executable operation's result first. An unavailable parent does not prevent capture of a readable disjoint sibling.
+
+r[models.capture.footprint]
+A snapshot depends only on its specified observation footprint: included scalar and field state, discriminants, lengths, and supported referent observations. The footprints of `Opaque` and `UnsafeCell` are empty; a raw pointer's is its value, not its target. While a place remains available, an unchanged interpretation and no change to its footprint imply equal captures. Calls, loans, callbacks, drops, and external effects must be accounted for. Abstract external observations without a justified frame are not preserved across potentially affecting calls merely because the receiver is shared. Historical snapshots and proofs about them never change.
+
+## Valid snapshots
+
+r[models.valid]
+For each supported `T`, the compiler supplies `T::valid(s)` as necessary structural validity conditions, not a proof that a corresponding live runtime object exists. Machine integers require their source ranges; references and `Box` require referent validity; products and sums require included component validity; arrays additionally require their fixed length. Proof fields are already proofs, and logical values, `Unit` barriers, and supported abstract or address observations add no payload validity. Programs cannot redefine this predicate.
+
+r[models.valid.captured]
+An actual legal capture establishes `T::valid(snap(x))` and the applicable included field validity facts. This gives byte ranges and fixed array lengths without applying a view.
+
+r[models.valid.not-assumed]
+A quantified, computed, or parameter value of type `Snap<T>` is not automatically valid. `Snap<u8>` is `Nat`, so `1000` is an allowed hypothetical snapshot value without byte validity. A function needing validity takes its proof explicitly.
 
 ## Models
 
+This heading preserves existing links. A model is now an optional ordinary library view, not a language capture policy.
+
 r[models.observation]
-In logical code, a runtime value used as a value is its type's model. The model of an unsigned integer is a `Nat`, and that of a signed integer an `Int`, so arithmetic on them in logical code never overflows.
+A runtime place read in logical code stands for its snapshot, including as an operand, argument, receiver, or side of `===`. `snap(x)` requests the same capture explicitly. Fields are selected as places first. There is no built-in `model(x)` conversion. An abstraction is invoked explicitly, for example `Stack::view(snap(s))` or a named observer of the snapshot. Logical integer arithmetic remains mathematical; capturing a runtime result does not change the runtime operation's wrapping semantics.
 
-r[models.no-default]
-A type has a model only when its model is declared, derived, or given by Locus's library. A value of a type without a model cannot be used as a value in logical code; its snapshot can.
+r[models.default]
+Capture has one default, the snapshot. Implementing a library `View` trait or adding an observer changes neither that default nor the meaning of `===`. There is no automatically supplied identity view and no implicit model conversion.
 
-r[models.integer-range]
-A machine integer's snapshot, and so its model, lies within the range of its type.
+r[models.by-parts]
+Structural capture composes snapshots, never views. A tuple, array, slice, or aggregate retains component snapshots; applying a view to its elements requires an explicit map or other library function. A view may intentionally omit fields or variant tags without changing the snapshot that contains them.
+
+r[models.capture.fields]
+For an ordinary uncut field, `snap(p.f) === snap(p).f` whenever both captures are available. Declaring any library view leaves this law unchanged. A field of type `Opaque<T>` contributes `Unit` on both sides; the payload inside that barrier has no snapshot projection. Reference cuts retain their explicit exception.
+
+r[models.capture.methods]
+Logical method lookup on a captured runtime place resolves on its snapshot's type. No implicit view, runtime method, or alternative receiver is tried. An observer declared on the source type is called explicitly by path with a snapshot argument, such as `Stack::room(snap(s))`.
+
+r[models.capture.bound]
+Capturing a parameter `T` or associated type such as `F::Out` requires an explicit `Snapshot` bound in scope. The bound supplies the same normalized `Snap<T>` in generic and concrete code. No bound is inferred from a use. A proof field that actually reads a generic runtime field needs the bound at its declaration. An erased logical field containing a deferred `Snap<T>` follows `models.storage` instead. A foreign trait method cannot add a stronger bound than its trait permits.
+
+r[models.total]
+The conventional library trait `View: Snapshot` declares `type V: Logical` and `logic fn view(s: Snap<Self>) -> Self::V`. Its function is pure and total on its stated logical domain, including hypothetical snapshots. A separate observer needing a proof parameter may declare one normally. No view guarantees correspondence to hidden runtime storage merely by being named a view.
 
 r[models.one-per-type]
-A type has at most one model.
+`View` is an ordinary trait: Rust coherence chooses its implementation. Multiple overlapping implementations of that same trait are rejected, but disjoint implementations for particular instantiations of a generic source type are permitted where Rust permits them. Other named observers and other view traits may coexist. None selects a capture policy.
 
 r[models.derived]
-`#[derive(Model)]` on a struct or enum that its crate defines, with no type parameters, gives it a model with the same fields and variants, each field taken to its own model, and its bare proof fields, whose type is a proof type, left out. A field that holds a proof inside a runtime type, such as `Option<@P>` or `Vec<(usize, @(i < n))>`, keeps its runtime structure, taken to that type's model. It is rejected unless every field's type has a model, and rejected when the type reaches itself through a reference, following type arguments, since the model type would then have no values; a type that reaches itself only through `Box` may derive its model, whose type is then recursive. Two values have equal derived models exactly when they are the same variant and their fields' models are equal.
+There is no language-provided `derive(Model)` or implicit field-wise view generation. A handwritten view, or ordinary user macro that generates one, is checked as ordinary logical code. It gains neither hidden field access nor permission to traverse cut addresses or erased payloads, and cannot omit a proof obligation by erasing a marker.
 
 r[models.bounds-on-functions]
-A `Model` bound appears only on a function's type parameters, never on an `impl` or a trait.
+`Snapshot` bounds may appear on functions, impls, types, and traits. Ordinary `View` bounds follow the ordinary trait rules. Export still cannot remove a logical bound from an impl or type when doing so could change executable trait selection; the initial supported removable snapshot bounds are on function parameters. Public exports expose no such logical interface.
 
 r[models.declared-by-owner]
-A type's model is declared or derived by the crate that defines the type, or, for the standard library's types, declared by Locus's library.
+A `View` implementation follows Rust's ownership and coherence rules, with ordinary visibility. It need not be in the same file or `locus!` block as the source type. A program cannot implement the library's foreign trait for a foreign type it does not own. Compiler-controlled `Snapshot` remains separate and cannot be implemented or overridden by user code.
 
 r[models.own-definition]
-A model's definition never depends on the model itself, directly or through other types' models: inside a hand-written model, and inside every logic function it calls, a value of the type is read through its fields and never taken to the model being defined, and the models that derived and hand-written models use form no cycle.
+Views and their helpers obey the ordinary logical totality and definition-cycle rules. Neither an implicit model application nor compiler-generated default view introduces a dependency. A helper or trait-evidence cycle cannot justify its own definition or proof.
+
+r[models.storage]
+A logical field declared using `Snap<T>` may be stored in a compiler-generated nominal carrier that does not require the snapshot bound on the enclosing runtime type. Logical reads and writes require the appropriate bounds and use the normalized source type. Reads expose no `SnapOf` carrier; writes preserve the exact logical value, so reading after storing `s` yields `s`. Constructors, assignments through references, destructuring, and helper calls preserve the same place and borrow identity. The frozen logical snapshot retains no source lifetime. This is a rule for internal storage representation, not a new snapshot rule for ordinary logical types, which snapshot to themselves. Internal conversion stubs are compiler scaffolding, not arbitrary contract-free calls.
+
+## Contract-hidden stamps
+
+r[models.stamps]
+`mint` is an ordinary verified library function `fn mint() -> Nat`, which may return `logic! { 0 }` with no result proof. Under `contracts.calls.unrelated`, callers learn neither equality nor inequality between separate results and no equation to zero. Copying one result preserves it. Runtime calls remain forbidden in pure logical code. A struct can store this logical stamp beside `Opaque<T>`; capture observes the stored value and never calls `mint`. Such a stamp is not globally unique, a permission, or an observation of hidden mutable contents. Existing ghost erasure and boundary rules apply without a new intrinsic or axiom.

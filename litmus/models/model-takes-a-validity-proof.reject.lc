@@ -1,0 +1,14 @@
+//~ question: May a declared view take a proof that its snapshot is valid?
+//~ spec: models.total
+//~ rfc: 0002
+
+struct Word {
+    bytes: [u8; 4],
+}
+
+impl View for Word {
+    type V = Nat;
+    logic fn view(w: Snap<Word>, valid: @Word::valid(w)) -> Nat { //~ error: View::view has one snapshot parameter; this implementation adds a proof parameter
+        w.bytes[3]
+    }
+}

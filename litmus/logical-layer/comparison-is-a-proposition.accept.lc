@@ -1,0 +1,11 @@
+//~ question: Does `==` on integers give a proposition, which holds exactly when `===` does?
+//~ spec: logic.eq.comparisons
+//~ rfc: 0002
+
+logic fn is_zero(n: Int) -> Prop {
+    n == 0
+}
+
+logic fn zero(n: Int, z: @is_zero(n)) -> @(n === 0) {
+    _
+}

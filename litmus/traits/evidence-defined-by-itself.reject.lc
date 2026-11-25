@@ -1,0 +1,17 @@
+//~ question: May a logic function of an implementation reach itself through generic code at the type it is implemented for?
+//~ spec: traits.impls.acyclic
+//~ rfc: 0006
+
+trait Truth: Logical {
+    logic fn holds() -> @False;
+}
+
+logic fn pull<T: Truth>() -> @False {
+    T::holds()
+}
+
+impl Truth for Int {
+    logic fn holds() -> @False {
+        pull::<Int>() //~ error: `holds` at `Int` depends on itself: `pull::<Int>` is given the implementation that `holds` belongs to, and calls `holds`
+    }
+}

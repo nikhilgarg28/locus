@@ -1,0 +1,31 @@
+//~ question: May two implementations give associated types that name each other's type, when the trait bounds that associated type by itself?
+//~ spec: traits.impls.acyclic, traits.evidence
+//~ rfc: 0006
+
+trait Chain: Logical {
+    type Next: Chain;
+    logic fn weight() -> Int;
+}
+
+// The evidence for `Nat: Chain` names the evidence for `Bool: Chain`, which names it back.
+impl Chain for Nat {
+    type Next = Bool;
+    logic fn weight() -> Int {
+        1
+    }
+}
+
+impl Chain for Bool {
+    type Next = Nat;
+    logic fn weight() -> Int {
+        2
+    }
+}
+
+logic fn three_steps<T: Chain>() -> Int {
+    T::weight() + <T::Next as Chain>::weight() + <<T::Next as Chain>::Next as Chain>::weight()
+}
+
+logic fn four() -> @(three_steps::<Nat>() === 4) {
+    compute()
+}

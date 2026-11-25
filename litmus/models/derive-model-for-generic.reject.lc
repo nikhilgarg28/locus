@@ -2,7 +2,7 @@
 //~ spec: models.derived
 //~ rfc: 0002
 
-#[derive(Model)] //~ error: `Model` can be derived only for a type without type parameters, for now
+#[derive(Model)] //~ error: Locus supplies no Model derive; write an explicit library view
 struct Pair<T> {
     first: T,
     second: T,

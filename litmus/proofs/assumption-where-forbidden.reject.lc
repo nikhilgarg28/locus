@@ -1,0 +1,18 @@
+//~ question: May a crate that forbids assumptions state one?
+//~ spec: proofs.assume.lint
+//~ rfc: 0002
+
+#![forbid(locus::assumptions)]
+
+mod dep {
+    // Stands for a function of another crate.
+    #[unverified]
+    pub fn parse(s: &str) -> u32 {
+        s.len() as u32 % 100
+    }
+}
+
+fn small(s: &str) -> (n: u32, @(n < 100)) {
+    let n = dep::parse(s);
+    (n, unsafe assume!(_)) //~ error: this crate forbids assumptions with `#![forbid(locus::assumptions)]`
+}

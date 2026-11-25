@@ -1,0 +1,12 @@
+//~ question: May a method of Locus's `Vec` that states a contract be called at an element type that has no model?
+//~ spec: collections.element-types
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+fn one_step(k: u32) -> u32 {
+    let mut steps = Vec::new();
+    // A closure has no model, and `push` of Locus's `Vec` is declared for element types that have one.
+    steps.push(move |x: u32| x + k); //~ error: `push` of Locus's `Vec` asks for an element type that has a model, and a closure has none; use the standard library's `Vec` for these elements
+    steps[0](1)
+}

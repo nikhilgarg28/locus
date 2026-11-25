@@ -1,0 +1,22 @@
+//~ question: Does a method call on a runtime place resolve on the type of its capture?
+//~ spec: models.capture.methods
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+    cap: usize,
+}
+
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items.elements()
+    }
+}
+
+// `s.items` captures the vector snapshot; `elements()` exposes its sequence.
+fn nonempty(s: &Stack, some: @(s.items.elements().len() > 0)) -> u32 {
+    1
+}

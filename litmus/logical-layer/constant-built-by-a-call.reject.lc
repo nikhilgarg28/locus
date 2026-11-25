@@ -1,0 +1,13 @@
+//~ question: May a constant hold a proof that is part of the value a call of a `const fn` returns, when the call does return?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+struct Checked {
+    proof: @(1 == 1),
+}
+
+const fn make() -> Checked {
+    Checked { proof: _ }
+}
+
+const GOOD: Checked = make(); //~ error: the proof field `proof` of `GOOD` is part of what `make` returns, a runtime call: in a constant's initializer every proof comes from logical code

@@ -1,0 +1,28 @@
+//~ question: May a logical type implement the trait that holds the method that runs?
+//~ spec: traits.impls.logical-types
+//~ rfc: 0006
+
+trait OrderSpec: Snapshot {
+    logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
+    logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
+}
+
+trait CheckedOrder: OrderSpec {
+    fn le_checked(&self, other: &Self) -> (r: bool, @(iff(r, Self::le(snap(self), snap(other)))));
+}
+
+#[derive(Logical)]
+struct Level {
+    rank: Int,
+}
+
+impl OrderSpec for Level {
+    logic fn le(a: Level, b: Level) -> Prop { a.rank <= b.rank }
+    logic fn le_total(a: Level, b: Level) -> @(Level::le(a, b) || Level::le(b, a)) { _ }
+}
+
+impl CheckedOrder for Level { //~ error: `CheckedOrder` has a method that runs, `le_checked`, and `Level` is a logical type: a logical type implements only traits with no method that runs
+    fn le_checked(&self, other: &Level) -> (r: bool, @(iff(r, Level::le(snap(self), snap(other))))) {
+        (true, _)
+    }
+}

@@ -1,0 +1,13 @@
+//~ question: May the proposition required of a lemma's call determine a value that the proofs passed to it do not?
+//~ spec: proofs.values.inferred
+//~ rfc: 0005
+
+logic fn lt_trans(a: Int, b: Int, c: Int, ab: @(a < b), bc: @(b < c)) -> @(a < c) {
+    linear((ab, bc))
+}
+
+// `yz` gives the second and the third value, and the required `x < z` gives the first.
+// The procedure call then has a proposition required of it, `x < y`.
+logic fn chain(x: Int, y: Int, z: Int, below: @(x + 1 <= y), yz: @(y < z)) -> @(x < z) {
+    lt_trans(_, _, _, linear((below,)), yz)
+}

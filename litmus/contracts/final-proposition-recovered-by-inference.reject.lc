@@ -1,0 +1,22 @@
+//~ question: May a proposition that a borrow will end with be recovered by inference and stored through that borrow?
+//~ spec: contracts.final.pending
+//~ rfc: 0005
+
+struct Claim {
+    proposition: Prop,
+}
+
+fn lend(x: &mut Claim) -> (r: &mut Claim, @(final!(r).proposition === final!(r).proposition)) {
+    (x, _)
+}
+
+logic fn recover(p: Prop, same: @(p === p)) -> Prop {
+    p
+}
+
+// If this were accepted, the proposition that `r` ends with would be its own negation.
+fn liar(x: &mut Claim) {
+    let (r, future) = lend(x);
+    let predicted: Prop = logic! { recover(_, future) }; //~ error: this proposition would be the one that `r` ends with, and `r`'s borrow has not ended: until it does, that value occurs only inside proofs and what they prove, and a `Prop` bound to a name is neither
+    r.proposition = prop!(!predicted);
+}

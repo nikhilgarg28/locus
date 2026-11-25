@@ -1,0 +1,14 @@
+//~ question: May an implementation take a default logic function that reaches itself through the implementation's associated type?
+//~ spec: traits.impls.acyclic
+//~ rfc: 0006
+
+trait Deep: Logical {
+    type Next: Deep;
+    logic fn depth() -> Int {
+        1 + <Self::Next as Deep>::depth()
+    }
+}
+
+impl Deep for Int { //~ error: `depth` at `Int`, which is the trait's default, depends on itself: it calls `depth` at `Self::Next`, which is `Int`
+    type Next = Int;
+}

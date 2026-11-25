@@ -1,0 +1,15 @@
+//~ question: May a branch's condition be named, and does the name prove its negation in the `else` branch?
+//~ spec: proofs.facts.named, proofs.procedures
+//~ rfc: 0003
+
+fn at_least(n: u32, floor: u32) -> (out: u32, @(out >= floor)) {
+    if low: n < floor {
+        (floor, linear(()))
+    } else {
+        // Here `low` proves `!(n < floor)`.
+        (n, linear((low,)))
+    }
+}
+
+//~ run: at_least(3, 5).0 => 5
+//~ run: at_least(8, 5).0 => 8

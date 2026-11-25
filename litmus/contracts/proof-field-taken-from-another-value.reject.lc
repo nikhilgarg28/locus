@@ -1,0 +1,13 @@
+//~ question: May a construction take its proof field from another value of the type when its other fields hold different values?
+//~ spec: contracts.invariants
+//~ rfc: 0002
+
+struct Interval {
+    lo: u32,
+    hi: u32,
+    ordered: @(lo <= hi),
+}
+
+fn forge(valid: &Interval) -> Interval {
+    Interval { lo: 5, hi: 1, ordered: valid.ordered } //~ error: `valid.ordered` proves `valid.lo <= valid.hi`, and the field `ordered` of this value needs a proof of `5 <= 1`
+}

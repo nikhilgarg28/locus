@@ -1,0 +1,15 @@
+//~ question: May an implementation state a stronger contract on a method than its trait does?
+//~ spec: traits.impls.conform
+//~ rfc: 0006
+
+trait OneByte {
+    fn byte(&self) -> (b: u8, @(b < 128));
+}
+
+struct Digit(u8);
+
+impl OneByte for Digit {
+    fn byte(&self) -> (b: u8, @(b < 10)) { //~ error: the signature of `byte` is not its trait's: the trait says `b < 128`; put the stronger contract on an inherent method, and call it here
+        if small: self.0 < 10 { (self.0, small) } else { (0, _) }
+    }
+}

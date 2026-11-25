@@ -3,9 +3,15 @@
 //~ rfc: 0001
 //~ mode: export
 
+macro_rules! one {
+    ($e:expr) => {
+        [$e]
+    };
+}
+
 pub fn holders() -> usize {
     let h = prove!(1 == 1);
-    let v: Vec<@(1 == 1)> = vec![h];
+    let v: [@(1 == 1); 1] = one![h];
     v.len()
 }
 

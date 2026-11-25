@@ -1,12 +1,12 @@
 //~ question: May a trait implementation take a proof inside its parameter types?
-//~ spec: logic.ghost.no-trait-impls
+//~ spec: logic.ghost.no-trait-impls, traits.impls.headers
 //~ rfc: 0002
 
 struct Absurd {
     proof: @(1 == 2),
 }
 
-impl From<Option<@(1 == 2)>> for Absurd { //~ error: a trait implementation cannot hold logical values in its signature yet
+impl From<Option<@(1 == 2)>> for Absurd { //~ error: a proof type is not written in an implementation's header, here inside an argument of `From`: rustc sees every proof as `Proof`, so the implementation would be selected for a proof of any proposition
     fn from(h: Option<@(1 == 2)>) -> Absurd {
         match h {
             Some(p) => Absurd { proof: p },

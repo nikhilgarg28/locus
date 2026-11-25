@@ -1,0 +1,8 @@
+//~ question: May a procedure be called where no proposition is expected?
+//~ spec: proofs.procedures
+//~ rfc: 0003
+
+logic fn weaker(n: Int, big: @(n > 5)) -> @(n > 4) {
+    let step = linear((big,)); //~ error: `linear` proves the proposition expected where it is called, and none is expected here; write the type of `step`
+    step
+}

@@ -1,0 +1,11 @@
+//~ question: Does copying one contract-hidden stamp preserve its logical value?
+//~ spec: models.stamps, contracts.calls.unrelated
+//~ rfc: 0008
+
+fn mint() -> Nat { logic! { 0 } }
+fn copied() -> Nat {
+    let a = mint();
+    let b = a;
+    let same: @(a === b) = _;
+    b
+}

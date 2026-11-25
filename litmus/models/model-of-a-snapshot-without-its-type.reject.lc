@@ -1,0 +1,27 @@
+//~ question: May `view` be applied to a snapshot value without naming the type it is a snapshot of?
+//~ spec: models.observation
+//~ rfc: 0002
+
+use locus::std::vec::Vec;
+
+struct Stack {
+    items: Vec<u32>,
+}
+
+impl View for Stack {
+    type V = Seq<Nat>;
+    logic fn view(stack: Snap<Stack>) -> Seq<Nat> {
+        stack.items.elements()
+    }
+}
+
+// Capture of `Shelf` holds `Stack`'s snapshot; views are explicit.
+struct Shelf {
+    stack: Stack,
+}
+
+fn same_stack(shelf: &Shelf) -> u32 {
+    let whole = logic! { shelf };
+    let same: @(view(whole.stack) === shelf.stack) = _; //~ error: `view` is given a snapshot value, whose type does not say which type it is a snapshot of: write `Stack::view(whole.stack)`
+    0
+}

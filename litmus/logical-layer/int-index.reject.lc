@@ -1,0 +1,7 @@
+//~ question: May a sequence be indexed by an `Int`, such as the result of a subtraction?
+//~ spec: core.sequences, logic.arith.nat-subtraction
+//~ rfc: 0002
+
+logic fn previous(xs: Seq<Nat>, i: Nat) -> Nat {
+    xs[i - 1] //~ error: a sequence is indexed by a `Nat`, and `i - 1` is an `Int`, which may be negative: quantify over a `Nat`, or write `(i - 1).as_nat(p)` with a proof `p` that it is not negative
+}

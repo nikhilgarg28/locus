@@ -1,0 +1,12 @@
+//~ question: Is a proof of a predicate that does not recur used as a proof of its body?
+//~ spec: core.conversion, core.sequences.default
+//~ rfc: 0005
+
+logic fn below(xs: Seq<Int>, cap: Int) -> Prop {
+    forall |i: Nat| i < xs.len() ==> xs[i] < cap
+}
+
+// `below(xs, cap)` converts to its `forall`, so `all` is called as one.
+logic fn first_below(xs: Seq<Int>, cap: Int, all: @below(xs, cap), nonempty: @(xs.len() > 0)) -> @(xs[0] < cap) {
+    all(0)(linear((nonempty,)))
+}

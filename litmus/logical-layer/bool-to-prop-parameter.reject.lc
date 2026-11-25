@@ -1,0 +1,11 @@
+//~ question: Is a `Bool` used as a proposition when it is given to a parameter of type `Prop`?
+//~ spec: logic.bool.as-proposition
+//~ rfc: 0002
+
+logic fn twice(p: Prop) -> Prop {
+    p && p
+}
+
+fn both(flag: bool, h: @twice(flag)) -> u32 { //~ error: `flag` is a `Bool`, and the parameter `p` of `twice` is a `Prop`; write `twice(flag === true)`
+    0
+}

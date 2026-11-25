@@ -1,0 +1,13 @@
+//~ question: May an implementation be written for an alias of a snapshot type?
+//~ spec: traits.impls.headers
+//~ rfc: 0006
+
+trait Describe: Logical {
+    logic fn width() -> Nat;
+}
+
+type Shot = Snap<u32>;
+
+impl Describe for Shot { //~ error: `Shot` is `Snap<u32>`, and a snapshot type is not the self type of an implementation: it is `Nat`, which `Snap<u64>` is too
+    logic fn width() -> Nat { 32 }
+}

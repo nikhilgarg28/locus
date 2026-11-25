@@ -1,0 +1,7 @@
+//~ question: Does a `_` that the goal determines make `eq::refl` prove an equality of two different values?
+//~ spec: proofs.values.inferred, proofs.equality
+//~ rfc: 0005
+
+logic fn absurd() -> @(0 === 1) {
+    eq::refl(_) //~ error: the value is determined twice by the proposition required: `eq::refl(a)` proves `a === a`, and `0 === 1` gives both 0 and 1
+}

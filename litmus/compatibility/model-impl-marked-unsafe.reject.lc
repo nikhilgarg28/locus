@@ -1,0 +1,6 @@
+//~ question: May source code manually implement the compiler-controlled Snapshot trait?
+//~ spec: compat.names.model-impls
+//~ rfc: 0008
+
+struct Celsius { tenths: i32 }
+unsafe impl Snapshot for Celsius {} //~ error: only compiler lowering or designated library support implements Snapshot

@@ -1,0 +1,13 @@
+//~ question: Does `linear` know that two constructors of a logical data type build different values?
+//~ spec: proofs.procedures.linear
+//~ rfc: 0005
+
+#[derive(Logical)]
+enum Color {
+    Red,
+    Green,
+}
+
+logic fn differ() -> @(Color::Red !== Color::Green) {
+    linear(())
+}

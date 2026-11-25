@@ -1,0 +1,7 @@
+//~ question: Are two propositions the same when they differ by a law of arithmetic?
+//~ spec: core.conversion, logic.ghost.type-identity
+//~ rfc: 0005
+
+logic fn swapped(a: Int, b: Int, positive: @(a + b > 0)) -> @(b + a > 0) {
+    positive //~ error: `positive` proves `a + b > 0`, and `b + a > 0` is required: the two do not convert, since no law of arithmetic is a conversion; `linear((positive,))` proves it
+}

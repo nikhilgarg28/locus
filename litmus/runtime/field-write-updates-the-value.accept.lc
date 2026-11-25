@@ -1,0 +1,15 @@
+//~ question: After a write to a field, is the whole value known as its old value with that field replaced?
+//~ spec: runtime.writes
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn set_a(mut p: Pair) -> (out: Pair, @(out.a == 7 && out.b == p.b)) {
+    p.a = 7;
+    (p, _)
+}
+
+//~ run: set_a(Pair { a: 1, b: 2 }).0.b => 2

@@ -1,0 +1,10 @@
+//~ question: Does matching a slice pattern give a fact about the length of the slice?
+//~ spec: runtime.patterns
+//~ rfc: 0004
+
+fn first(xs: &[u32]) -> Option<(x: u32, @(xs.len() > 0))> {
+    match xs {
+        [x, ..] => Some((*x, _)), //~ error: cannot prove `xs.len() > 0`: a slice pattern is not among the patterns that give a fact about what they match
+        [] => None,
+    }
+}

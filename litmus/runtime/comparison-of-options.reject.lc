@@ -1,0 +1,11 @@
+//~ question: Is `==` between two `Option`s of integers understood?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn same(x: Option<u32>, y: Option<u32>) -> Option<@(x === y)> {
+    if x == y {
+        Some(_) //~ error: cannot prove `x === y`: `==` on an `Option` is the standard library's, not the language's, and only comparisons of two integers or of two `bool`s are understood
+    } else {
+        None
+    }
+}

@@ -1,0 +1,19 @@
+# The second mode of this spike, "stub-self", as a workspace of its own.
+# Program text keeps the one marker; a distinct type stands only where an
+# `impl` names a logical type. Its library is `locus/` here, and its macro is
+# ../locus-macros with the feature `stub-self`. The `src/bin` of `cases`,
+# `corpus` and `ghost-lets` are links to the directories of the same name
+# beside this one, so both modes compile the same files. `more/` holds the
+# cases written for this mode. `oracle/` is a workspace of its own.
+[workspace]
+resolver = "3"
+members = ["locus", "cases", "corpus", "ghost-lets", "more"]
+default-members = ["locus"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(__locus_check)'] }

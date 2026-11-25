@@ -1,0 +1,19 @@
+//~ question: Is `==` between two references understood, when the type they point to has its own `PartialEq`?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+struct Number(u32);
+
+impl PartialEq for Number {
+    fn eq(&self, other: &Number) -> bool {
+        true
+    }
+}
+
+fn same(a: &Number, b: &Number) -> Option<@(a === b)> {
+    if a == b {
+        Some(_) //~ error: cannot prove `a === b`: `==` on a `&Number` calls `Number`'s `PartialEq`, and a call gives only what its signature says
+    } else {
+        None
+    }
+}

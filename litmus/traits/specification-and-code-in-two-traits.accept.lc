@@ -1,0 +1,56 @@
+//~ question: May one specification trait be implemented by a logical type and by a runtime type, with the method that runs in a second trait?
+//~ spec: traits.members.kind, traits.model-bounds, traits.evidence, traits.impls.logical-types
+//~ rfc: 0006
+
+trait OrderSpec: Snapshot {
+    logic fn le(a: Snap<Self>, b: Snap<Self>) -> Prop;
+    logic fn le_total(a: Snap<Self>, b: Snap<Self>) -> @(Self::le(a, b) || Self::le(b, a));
+}
+
+trait CheckedOrder: OrderSpec {
+    fn le_checked(&self, other: &Self) -> (r: bool, @(iff(r, Self::le(snap(self), snap(other)))));
+}
+
+#[derive(Logical)]
+struct Level {
+    rank: Int,
+}
+
+// A logical type: the specification alone. `Snap<Level>` is `Level`.
+impl OrderSpec for Level {
+    logic fn le(a: Level, b: Level) -> Prop { a.rank <= b.rank }
+    logic fn le_total(a: Level, b: Level) -> @(Level::le(a, b) || Level::le(b, a)) { _ }
+}
+
+// A runtime type: the specification, and the code that meets it.
+struct Height {
+    cm: u32,
+}
+
+impl OrderSpec for Height {
+    logic fn le(a: Snap<Height>, b: Snap<Height>) -> Prop { a.cm <= b.cm }
+    logic fn le_total(a: Snap<Height>, b: Snap<Height>) -> @(Height::le(a, b) || Height::le(b, a)) { _ }
+}
+
+impl CheckedOrder for Height {
+    fn le_checked(&self, other: &Height) -> (r: bool, @(iff(r, Height::le(snap(self), snap(other))))) {
+        (self.cm <= other.cm, _)
+    }
+}
+
+// Generic code that runs asks for the code, and learns the fact from the method's contract.
+fn lower<'a, T: CheckedOrder>(a: &'a T, b: &'a T) -> (first: bool, @(iff(first, T::le(snap(a), snap(b))))) {
+    a.le_checked(b)
+}
+
+// Code that only reasons asks for the specification, and uses its lemma by calling it.
+fn either_way<T: OrderSpec>(a: &T, b: &T) -> @(T::le(snap(a), snap(b)) || T::le(snap(b), snap(a))) {
+    T::le_total(snap(a), snap(b))
+}
+
+fn shorter(a: &Height, b: &Height) -> bool {
+    lower(a, b).0
+}
+
+//~ run: shorter(&Height { cm: 150 }, &Height { cm: 180 }) => true
+//~ run: shorter(&Height { cm: 180 }, &Height { cm: 150 }) => false

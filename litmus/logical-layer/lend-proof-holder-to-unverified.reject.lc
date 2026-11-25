@@ -1,5 +1,5 @@
-//~ question: May a place holding a proof be lent mutably to code Locus has no specification for?
-//~ spec: logic.boundary.unverified, logic.boundary.writes, logic.boundary.payload
+//~ question: May a place holding a proof be lent mutably to code Locus does not verify?
+//~ spec: logic.boundary.unverified, logic.boundary.plain-data
 //~ rfc: 0002
 
 fn check(n: u32) -> Option<@(n > 0)> {
@@ -12,6 +12,6 @@ fn check(n: u32) -> Option<@(n > 0)> {
 
 fn lend(x: u32) -> bool {
     let mut found: Option<@(x > 0)> = check(x);
-    std::hint::black_box(&mut found); //~ error: `found` holds a proof, so it cannot be lent mutably to `black_box`, which Locus has no specification for
+    std::hint::black_box(&mut found); //~ error: `found` holds a proof, so it cannot be lent mutably to `black_box`, which Locus does not verify
     found.is_some()
 }

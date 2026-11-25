@@ -1,0 +1,19 @@
+//~ question: Is a fact about the result of one call a fact about the result of a second call with the same argument?
+//~ spec: contracts.calls.unrelated
+//~ rfc: 0002
+
+fn get(xs: &[u8], i: usize, in_bounds: @(i < xs.len())) -> u8 {
+    xs[i]
+}
+
+// A caller's `AsRef` may give a long slice the first time and an empty one the second.
+// Unsafe code that trusted it not to has read out of bounds; here the proof does not exist.
+fn byte<S: AsRef<[u8]>>(s: &S, i: usize) -> Option<u8> {
+    let first = s.as_ref();
+    if i < first.len() {
+        let second = s.as_ref();
+        Some(get(second, i, _)) //~ error: cannot prove `i < second.len()`: only `i < first.len()` is known, and two calls of `as_ref` are unrelated
+    } else {
+        None
+    }
+}

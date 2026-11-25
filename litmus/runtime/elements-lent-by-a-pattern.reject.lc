@@ -1,0 +1,12 @@
+//~ question: When a pattern lends two elements of an array at once, is the array known afterwards as its earlier value updated at one of them?
+//~ spec: runtime.borrows
+//~ rfc: 0005
+
+// If each loan rebuilt the array from its earlier value, the second element
+// would be known as unchanged, and it ends as 2.
+fn set(xs: &mut [u32; 2]) -> @(final!(xs)[0] == 1 && final!(xs)[1] == xs[1]) {
+    let [a, b] = xs;
+    *a = 1;
+    *b = 2;
+    _ //~ error: cannot prove `final!(xs)[0] == 1 && final!(xs)[1] == xs[1]`: `a` and `b` are loans of two elements made by one pattern, and no fact about the elements of `xs` is kept when such loans end
+}

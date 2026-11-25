@@ -1,0 +1,19 @@
+//~ question: May a closure's proof parameter mention a variable that the closure captures and writes, so that a proof made before the first call is passed to the second?
+//~ spec: contracts.entry-values, logic.boundary.calls
+//~ rfc: 0002
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn twice(n: u32, pos: @(n > 0)) -> u32 {
+    let mut m = n;
+    let ok: @(m > 0) = _;
+    let mut step = move |p: @(m > 0)| { //~ error: the proof parameter `p` of this closure mentions `m`, which the closure writes: a closure's signature is not a contract yet, so which value of `m` it would speak of is not decided
+        let q = divide(100, m, p);
+        m = 0;
+        q
+    };
+    step(ok);
+    step(ok)
+}

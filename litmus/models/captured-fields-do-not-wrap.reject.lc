@@ -1,0 +1,17 @@
+//~ question: Is arithmetic on the integer fields of a captured struct exact, so that it does not describe a sum that wrapped?
+//~ spec: models.snapshots, runtime.arith.wrapping
+//~ rfc: 0002
+
+struct Span {
+    lo: u32,
+    hi: u32,
+    mid: u32,
+}
+
+fn set_mid(r: &mut Span) {
+    let before = logic! { *r };
+    r.mid = (r.lo + r.hi) / 2;
+    let after = logic! { *r };
+    // The integer fields of a captured struct are `Nat`s, so the sum on the right is the true sum.
+    let midpoint: @(after.mid === (before.lo + before.hi) / 2) = _; //~ error: cannot prove `after.mid === (before.lo + before.hi) / 2`: the sum may overflow, so `r.mid` is half of the sum wrapped to a `u32`
+}

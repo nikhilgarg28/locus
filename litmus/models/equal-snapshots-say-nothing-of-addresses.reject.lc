@@ -1,0 +1,12 @@
+//~ question: Do equal snapshots of two references say that the references have one address?
+//~ spec: models.snapshots, contracts.calls.unrelated
+//~ rfc: 0002
+
+// Unverified, by inference: it gives its references to a function that takes raw pointers.
+fn same_address(a: &u32, b: &u32) -> bool {
+    std::ptr::eq(a, b)
+}
+
+fn alias(a: &u32, b: &u32, equal: @(snap(a) === snap(b))) -> (same: bool, @(same)) {
+    (same_address(a, b), _) //~ error: cannot prove `same`: `same_address` states no contract, so its result is known only to be a `bool`, and equal snapshots of two references say nothing about their addresses
+}

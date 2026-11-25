@@ -1,0 +1,10 @@
+//~ question: Is a write in the right operand of `&&` known to have happened after the condition, when the left operand may have decided it?
+//~ spec: runtime.conditions
+//~ rfc: 0005
+
+fn maybe(c: bool) -> u32 {
+    let mut n: u32 = 0;
+    if c && { n = 5; true } {}
+    let five: @(n == 5) = _; //~ error: cannot prove `n == 5`: the right operand of `&&` ran only where `c` held, so `n` is 5 or 0 after it
+    n
+}

@@ -1,0 +1,12 @@
+//~ question: May a function marked `#[verified]` contain an `unsafe` block?
+//~ spec: logic.verified.restrictions, logic.unverified.functions
+//~ rfc: 0002
+
+#[verified]
+fn first(xs: &[u32]) -> u32 {
+    if xs.is_empty() {
+        0
+    } else {
+        unsafe { *xs.get_unchecked(0) } //~ error: `first` is marked `#[verified]`, and a verified function contains no `unsafe` block
+    }
+}

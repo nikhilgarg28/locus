@@ -1,0 +1,13 @@
+//~ question: May a proof field read through a reference that its type's snapshot cuts?
+//~ spec: contracts.invariants.reads, models.snapshots.cut
+//~ rfc: 0005
+
+struct A<'a> {
+    next: &'a B<'a>,
+    positive: @(next.value > 0), //~ error: `next` closes a cycle of references, so the snapshot of an `A` holds it as an address, and a proof field reads nothing behind a cut
+}
+
+struct B<'a> {
+    value: u32,
+    back: Option<&'a A<'a>>,
+}

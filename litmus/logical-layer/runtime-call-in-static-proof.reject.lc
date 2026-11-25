@@ -1,0 +1,13 @@
+//~ question: May a proof field in the initializer of a static be given by a call of a runtime function?
+//~ spec: logic.const.well-founded
+//~ rfc: 0002
+
+struct Certified {
+    proof: @False,
+}
+
+const fn never() -> @False {
+    loop {}
+}
+
+static BAD: Certified = Certified { proof: never() }; //~ error: the proof field `proof` of `BAD` is given by a call of `never`: in a static's initializer every proof comes from logical code

@@ -2,11 +2,13 @@
 //~ spec: proofs.versions
 //~ rfc: 0002
 
-fn first(items: &mut Vec<u32>, nonempty: @(items.len() > 0)) -> u32 {
-    let mut checked: Vec<(i: usize, @(i < items.len()))> = Vec::new();
+use locus::std::vec::Vec;
+
+fn first(items: &mut Vec<u32>, nonempty: @(items.elements().len() > 0)) -> u32 {
+    let mut checked: Vec<(i: usize, @(i < items.elements().len()))> = Vec::new();
     checked.push((0, _));
     items.clear();
     let (idx, inbounds) = checked[0];
-    let still: @(idx < items.len()) = inbounds; //~ error: `inbounds` proves `idx < items.len()` about the version of `items` before `clear`, not the current one
+    let still: @(idx < items.elements().len()) = inbounds; //~ error: `inbounds` proves `idx < items.len()` about the version of `items` before `clear`, not the current one
     items[idx]
 }

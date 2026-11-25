@@ -1,0 +1,17 @@
+//~ question: May a naked function take a value of a sealed type?
+//~ spec: logic.unverified.functions, logic.verified.restrictions, logic.boundary.foreign
+//~ rfc: 0002
+
+use std::arch::naked_asm;
+
+struct Positive {
+    value: u32,
+    nonzero: @(value > 0),
+}
+
+// The body is assembly, here x86-64's, which could do anything with the bytes of `p`.
+// The foreign boundary's rule refuses the signature too, since the ABI is C's.
+#[unsafe(naked)]
+pub extern "C" fn value_of(p: Positive) -> u32 { //~ error: `value_of` takes a `Positive`, which holds a proof, so it is verified, and a verified function is not a naked function
+    naked_asm!("mov eax, edi", "ret")
+}

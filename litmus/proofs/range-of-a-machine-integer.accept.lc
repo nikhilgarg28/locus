@@ -1,0 +1,7 @@
+//~ question: Is the range of a machine integer a lemma that a proof may cite?
+//~ spec: proofs.facts.types
+//~ rfc: 0005
+
+fn fits(x: u8) -> @(x <= 255) {
+    linear((u8::range(x),))
+}

@@ -1,0 +1,23 @@
+//~ question: After a write through a reborrow of one field, is the value that was borrowed known as its old value with that field replaced?
+//~ spec: runtime.borrows, contracts.final
+//~ rfc: 0005
+
+struct Pair {
+    a: u32,
+    b: u32,
+}
+
+fn bump(p: &mut Pair, room: @(p.a < 100)) -> @(final!(p).a == p.a + 1 && final!(p).b == p.b) {
+    let r = &mut p.a;
+    *r += 1;
+    _
+}
+
+fn six() -> u32 {
+    let mut pair = Pair { a: 5, b: 9 };
+    let grew = bump(&mut pair, _);
+    let kept: @(pair.a == 6 && pair.b == 9) = _;
+    pair.a
+}
+
+//~ run: six() => 6

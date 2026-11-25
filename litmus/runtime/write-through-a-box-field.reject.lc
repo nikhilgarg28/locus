@@ -1,0 +1,13 @@
+//~ question: After a write through a `Box` that a struct's field holds, does a proof about that field still fit the struct?
+//~ spec: runtime.writes
+//~ rfc: 0005
+
+struct Pair {
+    left: Box<u32>,
+    right: u32,
+}
+
+fn set_left(mut p: Pair, was: @(p.left == 1)) -> (out: Pair, @(out.left == 1)) {
+    *p.left = 2;
+    (p, was) //~ error: `was` proves `p.left == 1` about the value `p.left` had before `*p.left = 2`: the write gives `p.left`, and `p`, new values
+}

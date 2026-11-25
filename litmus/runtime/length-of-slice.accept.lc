@@ -1,0 +1,10 @@
+//~ question: Does Locus know that `len` on a slice gives the slice's length?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn length(xs: &[u32]) -> (n: usize, @(n == xs.len())) {
+    let n = xs.len();
+    (n, _)
+}
+
+//~ run: length(&[4, 5, 6]).0 => 3

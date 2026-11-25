@@ -1,0 +1,8 @@
+//~ question: Can a conditional logical field be read without its snapshot bound?
+//~ spec: models.storage, models.capture.bound
+//~ rfc: 0008
+
+struct Holder<T> { values: Seq<Snap<T>> }
+fn read<T>(h: &Holder<T>) {
+    let s = logic! { h.values }; //~ error: logical field access requires T: Snapshot
+}

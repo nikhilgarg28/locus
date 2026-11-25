@@ -29,3 +29,7 @@ Moved into the repository from [GitHub issue #14](https://github.com/nikhilgarg2
 ### 2026-10-27, PR #10
 
 Now cites the spec rules it is about, which RFCs 0001 and 0002 add, so that `cargo xtask context` and the site show it beside them.
+
+### 2026-11-16, conversation with the owner on how to build Locus
+
+The half of this question about panics now has an issue of its own, [no-panic-claims](no-panic-claims.md): the owner added a claim that a function cannot panic to the plan, as an attribute, `#[no(panic)]`. A claim that a function terminates could take the same form, such as `#[no(diverge)]`, and stays here.

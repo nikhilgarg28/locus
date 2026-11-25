@@ -1,0 +1,26 @@
+//~ question: Does `eq::congr` carry an equality of explicit views through a logic function that reads a field the view forgets?
+//~ spec: core.elaboration, proofs.equality
+//~ rfc: 0005
+
+struct Inner {
+    x: u32,
+}
+
+impl View for Inner {
+    type V = Nat;
+    logic fn view(inner: Snap<Inner>) -> Nat {
+        0
+    }
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+logic fn x_of(o: Snap<Outer>) -> Nat {
+    o.inner.x
+}
+
+fn read(a: &Outer, b: &Outer, same: @(Inner::view(snap(a.inner)) === Inner::view(snap(b.inner)))) -> @(x_of(snap(a)) === x_of(snap(b))) {
+    eq::congr(x_of, same) //~ error: `same` equates the explicit views of the inner fields, and `x_of` takes a snapshot: `eq::congr` needs a function of what the equality is between
+}

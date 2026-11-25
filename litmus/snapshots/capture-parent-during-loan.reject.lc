@@ -1,0 +1,10 @@
+//~ question: Can a whole parent be captured while a mutable field loan is live?
+//~ spec: models.capture.available
+//~ rfc: 0008
+
+struct Pair { left: u32, right: u32 }
+fn parent(p: &mut Pair) {
+    let loan = &mut p.left;
+    let before = logic! { p }; //~ error: whole parent is unavailable while its field is mutably borrowed
+    *loan = 3;
+}

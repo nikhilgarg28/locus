@@ -1,0 +1,10 @@
+//~ question: Is a program accepted that compares two `Option`s and claims nothing from the comparison?
+//~ spec: runtime.operations
+//~ rfc: 0004
+
+fn same(x: Option<u32>, y: Option<u32>) -> bool {
+    x == y
+}
+
+//~ run: same(Some(3), Some(3)) => true
+//~ run: same(Some(3), None) => false
