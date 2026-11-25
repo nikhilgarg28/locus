@@ -1,0 +1,26 @@
+//~ question: May a logic function of an implementation call another member of the same implementation through generic code at its own type?
+//~ spec: traits.impls.acyclic, traits.evidence
+//~ rfc: 0006
+
+trait Pick: Logical {
+    logic fn a() -> Int;
+    logic fn b() -> Int;
+}
+
+logic fn b_of<T: Pick>() -> Int {
+    T::b()
+}
+
+impl Pick for Int {
+    // `b_of::<Int>` is given the evidence for `Int: Pick`, which names `a`, and uses only `b`.
+    logic fn a() -> Int {
+        b_of::<Int>() + 1
+    }
+    logic fn b() -> Int {
+        1
+    }
+}
+
+logic fn two() -> @(<Int as Pick>::a() === 2) {
+    compute()
+}

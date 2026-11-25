@@ -1,0 +1,26 @@
+//~ question: May a logic function of an implementation reach itself through generic code at another implementation's associated type?
+//~ spec: traits.impls.acyclic
+//~ rfc: 0006
+
+trait Chain: Logical {
+    type Next: Chain;
+    logic fn holds() -> @False;
+}
+
+logic fn step<T: Chain>() -> @False {
+    <T::Next as Chain>::holds()
+}
+
+impl Chain for Nat {
+    type Next = Bool;
+    logic fn holds() -> @False {
+        step::<Bool>() //~ error: `holds` at `Nat` depends on itself: `step::<Bool>` calls `holds` at the `Next` of `Bool`, which is `Nat`
+    }
+}
+
+impl Chain for Bool {
+    type Next = Nat;
+    logic fn holds() -> @False {
+        step::<Nat>() //~ error: `holds` at `Bool` depends on itself: `step::<Nat>` calls `holds` at the `Next` of `Nat`, which is `Bool`
+    }
+}
