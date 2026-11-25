@@ -193,7 +193,7 @@ This is the meaning in the core language of [RFC 0005](0005-core-terms.md). A pr
 
 1. the trait's logic functions at `X`, lemmas among them;
 2. each associated type: a logical one as a logical type, and any other as the runtime type that rustc resolved, which the core needs to give `Snap<T::Item>` and a method's result their types;
-3. the evidence for each bound on an associated type;
+3. the evidence for each bound on an associated type, by its name;
 4. the contract of each method: its signature, with the propositions of its proof parameters and of its result;
 5. the evidence for each supertrait.
 
@@ -204,6 +204,7 @@ This is the meaning in the core language of [RFC 0005](0005-core-terms.md). A pr
 - **A method's contract is not a logic function.** The evidence says what holds when a call of the method returns, and gives no term for its result. `fn explode() -> @False { loop {} }` is a valid runtime method, and its evidence proves nothing.
 - **That a method's body meets its contract is the ordinary check of that body,** for the implementation selected, with its type arguments. That the checked body is the code that runs is RFC 0001's validation of the two programs, which stays in the trust model. The kernel checking a record does not replace either.
 - **Evidence exists only where every part of it does.** There is evidence for `Wrap<Raw>: Tr` only if there is evidence for `Raw: Tr`.
+- **Evidence is a named constant** (decision 16). A record holds the evidence for a bound on an associated type, and for a supertrait, by naming it, so it may name itself: the evidence for `Int: Chain`, where `type Next = Int` and `Chain` asks `type Next: Chain`, names itself, and stays a finite term.
 
 ### Implementing a trait
 
@@ -231,6 +232,7 @@ impl OneByte for Wide {
 - **Each signature is exactly the trait's,** once `Self`, the trait's parameters, and its associated types are filled in (`traits.impls.conform`). An implementation that can promise more puts the stronger contract on an inherent method, and its trait method calls that.
 - **No proof type, dependent tuple, or snapshot type is written in a header,** in the self type or the trait's arguments (`traits.impls.headers`). rustc sees every proof as `Proof`, so an implementation written for one proposition would be selected for every other: `impl From<Option<@(1 == 2)>> for Absurd` stays rejected. A snapshot type is the type it is equal to, so `impl Describe for Snap<u32>` is an implementation for `Nat`, and applies at `Snap<u64>`.
 - **That rule too is checked after rustc.** `type Shot = Snap<u32>; impl Describe for Shot` shows lowering only the name `Shot` ([marker-lowering](../../spikes/marker-lowering/README.md), `h04`).
+- **A binding in a bound is compared after rustc** (decision 15). `T: Claim<P = @False>` may be written, and rustc sees it as `P = Proof`, so Locus compares it with the `P` of the implementation that rustc resolved, wherever the bound is met, and rejects `Yes`, whose `P` is `@(1 == 1)`.
 - **Any other logical type may be written in a header.** Two implementations may differ only in a logical type argument: `impl Scale<Int> for Meters` and `impl Scale<Nat> for Meters`. The fourth draft forbade a logical type in the arguments of a trait with a method that runs. Under the lowering now chosen the two are two Rust types in both programs, so rustc resolves them alike in both, and the cases that broke the other encodings pass ([marker-lowering](../../spikes/marker-lowering/README.md), `r01`, `r02`, `r10` to `r14`).
 - **A runtime type may give a logical associated type in a trait that also has a method that runs:** `type Unit: Logical;` beside `fn raw(&self) -> u32`. The fourth draft forbade this too, and the spike compiles it, stored in a runtime struct (`t06`).
 - **Strict positivity follows associated types:** `logic.types.positive` is checked with each associated type replaced by what an implementation chooses.
@@ -260,17 +262,16 @@ logic fn pull<T: Truth>() -> @False {
 
 impl Truth for Int {
     logic fn holds() -> @False {
-        pull::<Int>()        //~ error: the evidence for `Int: Truth` is used to define itself
+        pull::<Int>()        //~ error: `holds` at `Int` depends on itself
     }
 }
 ```
 
 **Rejected** (`traits.impls.acyclic`).
 
-- **Evidence is a definition, and no definition depends on itself** except by the recursion `logic.fn.total` allows. Stated on evidence, the rule covers every path: a supertrait, a bound on an associated type, the prerequisites of an implementation with bounds, an instantiated default, and a logic function called in a signature or a type.
-- **Passing evidence depends on all of it.** A direct call, `Self::op(a, b)` inside the implementation, depends on that one member.
-- **Evidence for a concrete type is a finite term.**
-- **A trait is split where a helper needs less.** Tracking which members generic code uses is listed as open.
+- **No logic function and no proof depends on itself** except by the recursion `logic.fn.total` allows (decision 16). One depends on each member it calls, as the implementation that rustc selected defines it, and the rule follows those calls through generic code and through the evidence it is given: a supertrait, a bound on an associated type, the prerequisites of an implementation with bounds, an instantiated default, and a logic function called in a signature or a type.
+- **Passing evidence depends on nothing until a member of it is used.** A direct call, `Self::op(a, b)` inside the implementation, depends on that one member, and so does a call through generic code. An earlier draft made passing evidence depend on all of it, which rejected `type Next = Self` under `type Next: Chain`, and a helper that uses one other member.
+- **Evidence for a concrete type is a finite term of named constants,** and may name itself.
 - **Runtime methods are not held to this.** One that never returns gives its caller no proof.
 - **Explicit views obey the same cycle rule.** `models.own-definition` applies to ordinary `View` definitions and helpers; `Snapshot` has no user-supplied model function.
 
@@ -437,6 +438,7 @@ A new chapter of the specification, [Traits](../../spec/traits.md), and one rule
 | `traits.impls.conform` | `traits/contract-on-a-trait-method.accept.lc`, `traits/stronger-contract-in-implementation.reject.lc`, `traits/weaker-contract-in-implementation.reject.lc` |
 | `traits.impls.headers` | `traits/binding-met-through-an-implementation.accept.lc`, `traits/binding-to-a-snapshot-type.accept.lc`, `traits/binding-to-the-same-proof.accept.lc`, `traits/implementations-differ-in-a-logical-argument.accept.lc`, `traits/logical-associated-type-beside-a-method.accept.lc`, `logical-layer/proof-in-trait-impl.reject.lc`, `traits/binding-in-a-supertrait.reject.lc`, `traits/binding-in-a-where-clause.reject.lc`, `traits/binding-to-a-false-proof-through-an-implementation.reject.lc`, `traits/binding-to-a-false-proof.reject.lc`, `traits/snapshot-type-in-header-through-alias.reject.lc` |
 | `traits.impls.logical-types` | `traits/conversion-between-logical-types.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/code-trait-for-logical-type.reject.lc`, `traits/provided-method-on-logical-type.reject.lc`, `traits/standard-from-for-logical-type.reject.lc` |
+| `logic.ghost.type-identity` | `core/conversion-by-evaluation.accept.lc`, `logical-layer/proof-holder-same-proposition.accept.lc`, `traits/binding-to-a-snapshot-type.accept.lc`, `traits/binding-to-the-same-proof.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/value-name-per-version.reject.lc`, `logical-layer/proof-holder-other-proposition.reject.lc`, `runtime/proof-holder-keeps-its-proposition.reject.lc`, `traits/binding-in-a-where-clause.reject.lc`, `traits/binding-to-a-false-proof.reject.lc` |
 | `traits.impls.acyclic` | `traits/associated-type-names-its-own-implementation.accept.lc`, `traits/associated-types-name-each-other.accept.lc`, `traits/implementation-under-a-bound.accept.lc`, `traits/other-member-through-generic-code.accept.lc`, `traits/default-reaches-itself-through-an-associated-type.reject.lc`, `traits/evidence-defined-by-itself.reject.lc`, `traits/logic-function-reaches-itself-through-an-associated-type.reject.lc`, `traits/logic-function-reaches-itself-through-its-own-associated-type.reject.lc` |
 | `traits.evidence` | `traits/associated-type-names-its-own-implementation.accept.lc`, `traits/associated-types-name-each-other.accept.lc`, `traits/binding-met-through-an-implementation.accept.lc`, `traits/contract-on-a-trait-method.accept.lc`, `traits/fact-from-the-method-called-by-name.accept.lc`, `traits/implementation-under-a-bound.accept.lc`, `traits/lemma-of-a-bound-called.accept.lc`, `traits/other-member-through-generic-code.accept.lc`, `traits/specification-and-code-in-two-traits.accept.lc`, `traits/binding-in-a-supertrait.reject.lc`, `traits/binding-to-a-false-proof-through-an-implementation.reject.lc`, `traits/implementation-missing-for-a-bound.reject.lc`, `traits/method-result-in-a-proposition.reject.lc` |
 | `traits.bounds` | `traits/implementation-under-a-bound.accept.lc`, `traits/lemma-of-a-bound-called.accept.lc`, `traits/two-logical-types-one-trait.accept.lc`, `traits/logic-function-opaque-under-a-bound.reject.lc` |
@@ -537,6 +539,8 @@ Written from memory, and not checked against sources for this draft.
 12. **A fact is a proof in a result, and no call is read as an expression.** "Fact is always proof in the result or small/finite list of facts language infers from some constructs (which we have already defined). Don't want to go back on that. And don't want to introduce pure functions either right now." So an operator or a standard method on a type with a law trait tells Locus nothing, and the law's method is called by name.
 13. **The conversion to `Prop` is one bound, through conversion traits for logical types.** "Do we need equivalent of From/Into for logical types? If we had one, maybe we could implement that for Bool to Prop and then require something like iff(x, y) to take Into<Prop> or something? Maybe same for <==> symbol?" And: "In that case, let's adopt this and remove <==> in favor of iff -- it's not a common enough thing to warrant its own operator." It is RFC 0002's decision 110, written here.
 14. **A logical type is its own snapshot,** and so its own model, and meets a `Model` bound. Shown three decisions on traits and snapshots, put to the owner on 2026-11-22 as "They stand as I put them: snapshots as a type family, the snapshot of a logical type being that type, and the strict rule on logical types staying.", the owner said: "The three decisions are fine." The fourth draft had left the second to RFC 0002, whose rules did not say it, and this RFC first listed it as still for the owner, with a decision issue ([logical-types-under-a-model-bound](../../issues/logical-types-under-a-model-bound.md)). The owner's answer was found in the record afterwards. `models.snapshots.seen` and `logic.fn.parameters` now say it.
+15. **Locus compares the proposition in every associated-type binding that rustc resolves** (finding F4 of an adversarial review of the specification at `c2818cd`, on 2026-11-25). Its ten findings were put to the owner with a recommendation for each, and the owner said: "I'm good with all your recommendations, yes. Also when you make changes, please include all your examples in litmus if possible so that these class of issues don't break again." The owner approved the recommendations, not these rule texts: what the writing chose is items 17 and 18 below. rustc decides `T: Claim<P = @False>` with every proof as `Proof`, so an implementation with `type P = @(1 == 1)` met the bound, and `absurd::<Yes>()` proved `False`, directly or through an implementation that rustc selects under the bound; no rule compared the binding. `traits.impls.headers` now lets a bound's binding be any logical type, a proof type among them, and says that Locus compares it with the implementation's associated type after rustc, and rejects a mismatch: for a type argument, a `where` clause, a supertrait's binding, and an implementation selected under such a bound, which then has no evidence. `logic.ghost.type-identity` lists the comparison. The review's two programs are rejected examples, with the supertrait and `where` variants, and their accepted neighbours.
+16. **Evidence names constants, and only logic functions and proofs may not depend on themselves** (finding F5 of the same review, decided with it). An associated type bounded by its own trait, as `type Next: Chain` given `type Next = Self`, which ordinary Rust writes as `type IntoIter = Self`, made the evidence for `Int: Chain` contain itself: either the evidence was not a finite term, against `traits.impls.acyclic`, or the implementation was rejected though no logic function called anything, and no example or error said which. Now the evidence for an implementation is a named constant whose record names the evidence it holds, itself included (`traits.evidence`), and `traits.impls.acyclic` holds logic functions and proofs to it, following the members they use through generic code and through evidence. The review's cycle program, in which `holds` reaches itself through `Next`, stays rejected, with two variants; its accepted shapes are accepted.
 
 ### Still for the owner
 
@@ -558,12 +562,14 @@ Written as proposed, and not things the owner said. Most pressing first. [traits
 14. **The derive copies a cut field that is `Copy` and is otherwise rejected.**
 15. **Law traits are imported by name,** as `use locus::std::clone::CloneEq;` in the examples.
 16. **Names:** "Locus trait", "law trait", "adapter", "evidence", "a method that runs", `clone_eq`, `FromLogic`, `IntoLogic`, `OrdLogic`, the `Law` suffix, and the chapter `traits`.
+17. **What decision 15 chose in writing.** A proof type may stand in a bound's binding, and is compared, where the review offered as well forbidding it there, as a header forbids it. The comparison is type identity, so `Snap<u32>` meets `Snap<u64>`, both being `Nat` (`traits/binding-to-a-snapshot-type.accept.lc`). Where the implementation that rustc selects under such a bound does not match, the use is rejected, since Locus selects no other implementation.
+18. **What decision 16 chose in writing.** Dependence follows the members that are used, so a logic function may reach another member of its own implementation through generic code (`traits/other-member-through-generic-code.accept.lc`), which the earlier rule rejected: this needs what Open item 3 calls tracking which members generic code uses. A default body that an implementation takes is checked at that implementation (`traits/default-reaches-itself-through-an-associated-type.reject.lc`). The decided `traits/evidence-defined-by-itself.reject.lc` keeps its outcome and line, and its error now says that `holds` depends on itself, since evidence that names itself is no longer the error.
 
 ### Open
 
 1. **Evidence that an exported program cannot forge.**
 2. **A generic type that is `Clone` for every `T: Clone` and `CloneEq` only for lawful `T`.**
-3. **Tracking which members generic code uses.**
+3. **Tracking which members generic code uses.** Decision 16 now needs it.
 4. **`==` on a logical type of the program's own,** with the law that ties it to `===`.
 5. **A name that is both a logic function and a method of one type, called by a path outside delimited logical code.** `Version::eq(a, b)` in a runtime body: the examples write the method call, `a.eq(b)`, which is runtime code by its operands.
 6. **Contracts on closures,** and `dyn` of a Locus trait.
