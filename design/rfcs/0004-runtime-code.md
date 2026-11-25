@@ -261,6 +261,6 @@ The rules below are a new chapter of the specification, [Runtime code](../../spe
 - A claim that a loop ends ([termination-claims](../../issues/termination-claims.md)), and that a function cannot panic ([no-panic-claims](../../issues/no-panic-claims.md)).
 - Naming the fact of a `while` condition and of a `match` arm ([naming-facts-from-control-flow](../../issues/naming-facts-from-control-flow.md)).
 
-**Said since, in [RFC 0005](0005-core-terms.md):** what a write to a field or to an element tells Locus, and what is known after a `while` ends.
+**Said since, in [RFC 0005](0005-core-terms.md):** what a write to a field or to an element tells Locus, and what is known after a `while` ends. And since, in its decisions 5 and 7, after a review on 2026-11-25: what a `while` whose condition writes a place leaves with, what a write in the right operand of `&&` or `||` leaves, and what a join or the top of a loop leaves of the places that a mutable reference in a written place borrowed.
 
 **Withdrawn.** An earlier revision of this list proposed that a slice's length is at most `isize::MAX`. That is false for an element type of size zero, which a proof is: `vec![(); usize::MAX]` gives a slice longer than that. Rust's bound is on a slice's size in bytes, so it bounds the length only for an element type known not to be zero-sized. What holds of every runtime slice is that its length fits a `usize`.
