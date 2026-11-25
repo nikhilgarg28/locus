@@ -9,7 +9,7 @@
 Whether and how logical code can appear in places that RFC 0001 (`design/rfcs/0001-compiler-pipeline.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)) rejects for now, and one mechanism it still has to settle:
 
 - **Closure bodies and async blocks.**
-- **Rules:** `observe.captures.rejected`, `compat.names.macros-expand`, `logic.boundary.calls`, `contracts.invariants.assignment`
+- **Rules:** `observe.captures.rejected`, `compat.names.macros-expand`, `logic.boundary.calls`, `contracts.invariants.assignment`, `contracts.entry-values`
   - An observation inside one would become a capture, and change what the closure or future captures.
   - Under build mode's single lowered text, a ghost local named inside a closure is also a real capture of a zero-sized marker: by reference, unless the closure is `move`. That changes the closure's borrows, though not its layout.
   - RFC 0001 rejects logical code there for now (`observe.captures.rejected`).
@@ -56,3 +56,9 @@ After the third review, the owner decided that an assignment that needs a proof,
 The point above on how Locus's macros observe places when rustc expands them asked how such an expansion observes precisely: it must not take `&before.a` when `before` is a logical snapshot, and must observe `pair.a` alone when `pair` is a runtime value. [RFC 0001](../design/rfcs/0001-compiler-pipeline.md)'s decision 49 changes the ground under it. A snapshot's type now has its fields, and each piece of logical code has a typing skeleton, a closure that is never called, which is written the same way for a ghost root and a runtime one and borrows only the fields it reads. So RFC 0001 no longer writes the record of ghost bindings that its decision 20 kept for such expansions, and lists that under what is still for the owner (item 9), since the owner has not seen it. The first round of [skeleton-typing](../spikes/skeleton-typing/README.md) typed its corpus's `prove!` inside `vec![..]` with no such record.
 
 Logical code inside a closure or an async block is still rejected (`observe.captures.rejected`): a skeleton there would add its borrows to what the closure or future captures.
+
+### 2026-11-25, review fixes
+
+The adversarial review of 2026-11-25, in its finding F8, showed a closure whose proof parameter mentions a variable that it captures and writes, called twice: in `let mut step = move |p: @(m > 0)| { let q = divide(100, m, p); m = 0; q };`, `step(ok); step(ok)` divides by zero, since `ok` is about the value `m` had where the closure was made, and the first call set the closure's own `m` to 0. Nothing said what a proposition in a closure's signature means when it reads a place that the closure captures. The review's findings were put to the owner with a recommendation for each, this one being to reject such a closure until this issue lets closures carry contracts, and the owner said: "I'm good with all your recommendations, yes." `contracts.entry-values` now says so (RFC 0002, decision 121), with `contracts/closure-proof-about-a-place-it-writes.reject.lc`, two variants that write by a call and through a captured reference, and the accepted `contracts/closure-proof-about-a-place-it-reads.accept.lc`.
+
+What stays here: which value such a proposition means when the closure does not write the place, and the place is written outside after a `move` closure copied it, as `contracts/closure-proof-about-a-copied-place-written-outside.open.lc` asks; and what a proposition in a closure's result means.

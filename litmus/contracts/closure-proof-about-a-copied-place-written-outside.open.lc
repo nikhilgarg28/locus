@@ -1,0 +1,16 @@
+//~ question: When a `move` closure's proof parameter mentions a variable that it copied, and the variable is written after the closure is made, which value does the parameter's proposition speak of?
+//~ issue: closures-async-packed-macros
+
+fn divide(x: u32, y: u32, positive: @(y > 0)) -> u32 {
+    x / y
+}
+
+fn after_write() -> u32 {
+    let mut m: u32 = 0;
+    let f = move |p: @(m > 0)| divide(100, m, p);
+    m = 1;
+    let now: @(m > 0) = _;
+    // If `m` in the parameter's type is `m` where `f` is called, this call checks, and `f`
+    // divides by its own copy, which is 0. If it is `m` where `f` was made, no proof fits.
+    f(now)
+}
