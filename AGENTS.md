@@ -8,6 +8,7 @@ Locus is a superset of Rust with explicit, kernel-checked proofs that are erased
 |---|---|---|
 | [VISION.md](VISION.md) | Goals, non-goals, the experience Locus is for | The owner's. Agents may propose edits; the owner decides. |
 | [spec/](spec/README.md) | The accepted semantics, as rules with IDs | Normative |
+| [conventions/](conventions/README.md) | Advice for library and program design | Non-normative guidance; never a compiler requirement |
 | [design/rfcs/](design/rfcs/README.md) | Proposals and the reasons for each decision | Binding once accepted |
 | [design/TRUST.md](design/TRUST.md) | What must be trusted for a checked program to mean what it claims | Normative |
 | [litmus/](litmus/README.md) | Example programs that must be accepted, must be rejected, or are open questions | Decided outcomes are normative |
