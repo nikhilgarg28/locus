@@ -1,0 +1,11 @@
+//~ question: Can a generic finite key set be enumerated without additional evidence or a chosen ordering policy?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+// keys() returning Set is decided. No to_seq API, witness extraction, canonical
+// key order or quotient representative selection has been adopted.
+use locus::logic::{Map, Seq};
+
+logic fn enumerate<K: Logical, V: Logical>(m: Map<K, V>) -> Seq<K> {
+    m.keys().to_seq()
+}

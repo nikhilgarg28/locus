@@ -7,7 +7,7 @@
 
 ## Question
 
-What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. Decisions 113 to 118 say what a collection among them is: a struct that keeps its contents in a logical field, with contracts that speak of the elements' snapshots. What the library holds is below. Everything in this list is proposed, for this issue's RFC, and nothing in it is decided beyond those decisions.
+What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. Decisions 113 to 118 say what a collection among them is: a struct that keeps its contents in a logical field, with contracts that speak of the elements' snapshots. What the library holds is below. The list remains proposed except for the decisions cited here and in the log. I06 adopts ordinary inductive `Seq`/`Maybe`; the partial I07b decision adopts logical `Set<K>` and `Map<K,V>::keys() -> Set<K>`, with representation and proofs retained in [finite-map-set-representation](finite-map-set-representation.md).
 
 ### 1. Logical types
 
@@ -17,7 +17,7 @@ These are erased, and exist only to state and prove facts. `Int` is the language
 - **Collections:** `Seq<T>`, `Set<T>`, `Map<K, V>`, and `Multiset<T>`, which is what "the same items in another order" is stated with.
 - **Sums:** `Maybe<T>`, and a two-sided one for `Result`, as the models of `Option` and `Result`.
 - **Text:** characters, and strings as sequences.
-- For each: its definition, its positivity in each type argument (`Seq` and `Maybe` are positive, and a set, as a predicate, is not), and a stated correspondence for any native acceleration.
+- For each: its definition, its positivity in each type argument (`Seq` and `Maybe` are positive; `Set`/`Map` variance depends on the still unselected representation, and a predicate representation is not positive in its argument), and a stated correspondence for any native acceleration.
 - **Fixed-width arithmetic:** what wrapping, saturating, and bitwise operations mean on `Int`, so that machine arithmetic has something to be equal to; and `div_euclid` and `rem_euclid`.
 - **Indexing of sequences:** the index type, what an index outside the sequence means, and the bounds proof needed when elements might not exist.
 
@@ -362,3 +362,18 @@ and its checking/export representation remain in
 [logical-never-lowering](logical-never-lowering.md); the existing unevaluated
 constant question is not closed. This record implements the owner's request to
 commit the decisions, not a claim that a Locus compiler or kernel accepted them.
+
+### 2026-11-26, owner adopts an unordered logical key-set API; PR #26
+
+The owner chose a logical `Set<K>` and `Map<K,V>::keys() -> Set<K>` instead of
+returning a `Seq<K>`. RFC 0005 records the membership obligation
+`iff(m.keys().contains(k), m.get(k) !== Maybe::None)` and the finite key-set scope.
+The implementation must prove it from its definitions; no axiom is added.
+
+[Finite map/set representation](finite-map-set-representation.md) retains I07b's
+unselected representation, extensionality proof and enumeration machinery.
+It does not turn private sequence storage into unordered `===`, expose a witness
+from a proof, choose an arbitrary key order, or decide general infinite sets.
+Runtime key equivalence and representative policy are still separate questions.
+The API is chosen; the linked source obligations remain `.open` until the
+representation and actual library proof interfaces are specified.

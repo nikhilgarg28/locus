@@ -1,0 +1,13 @@
+//~ question: Which Set representation proves same members imply ordinary logical sameness without a new equality axiom?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+// Future library goal; no implementation, special ===, or trusted lemma is
+// declared here. `set::ext` is a provisional name for the proof still required.
+use locus::logic::{set, Set};
+
+logic fn same_members<K: Logical>(a: Set<K>, b: Set<K>,
+    members: @(forall |k: K| iff(a.contains(k), b.contains(k))))
+    -> @(a === b) {
+    set::ext(a, b, members)
+}

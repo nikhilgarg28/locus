@@ -239,6 +239,49 @@ The existing operations below keep their meanings. In particular, an update out 
 - An unrestricted `s[i]` would be unsound: the element at 0 of an empty `Seq<@False>` would be a proof of `False`. RFC 0002 had warned of this and left the operation as a placeholder.
 - A `Nat` is made from an `Int` with a proof that it is not negative. So an `Int`, such as `i - 1`, is not an index until it is made one. How that is spelled is the library's.
 
+### Finite collection sets and map keys
+
+**Owner-adopted API (I07b, partial, 2026-11-26).** Add a logical `Set<K>` and
+make `Map<K, V>::keys()` return `Set<K>`, not `Seq<K>`. It describes the unordered
+key set of the logical map. It neither specifies insertion order nor gives a
+key at an index. For a finite collection map, its key set is finite. This
+choice does not settle whether a future general set abstraction admits infinite
+sets, or whether it would have a separate type/name.
+
+The membership condition that the implementation must realize is:
+
+```rust
+iff(m.keys().contains(k), m.get(k) !== Maybe::None)
+```
+
+This states which keys belong; `Maybe::None` is the absent result of logical
+lookup. The condition must follow from the definitions and checked lemmas. It
+is not an assumed set/map axiom and does not make a hole or `compute` apply a
+library theorem automatically. The exact generic/evidence bounds and lemma
+spellings still depend on the representation. The existing sequence API is
+unchanged.
+
+Extensional contents semantics is a goal to establish from that representation:
+sets with the same members should support a proof of the language's existing
+`===`, independent of insertion or enumeration order. `===` is not overridden.
+A record holding a private `Seq<K>` still retains its order in logical equality;
+privacy does not make permutations the same value, and no special equality
+axiom may hide a distinguishing field. A predicate representation, an explicit
+quotient construction, or suitably normalized finite data have different proof
+and API requirements; none is selected here. I07a's `eq::funext` proves equality
+of functions, not automatically of an arbitrary record containing a function
+and other data.
+
+This is a scoped API decision record, not a complete normative `Set`/`Map`
+implementation. [Finite map/set representation](../../issues/finite-map-set-representation.md)
+retains the remaining I07b choices: finiteness evidence, positivity, representation,
+extensionality proofs, and whether/how to enumerate. No proof-witness extraction,
+choice API, canonical order for arbitrary keys, or quotient interface is added.
+The runtime tables' equality relation, equivalent-key representatives, and
+`Borrow` behavior remain separate I08/bridge questions. The linked `.open`
+examples are future API/proof obligations, not compiler-checked programs or
+claims that their illustrative lemma names already exist.
+
 ### Where a snapshot is cut
 
 RFC 0002 cuts a field that closes a cycle of references, so that every snapshot is finite, and said both that a type's snapshot is the same wherever it appears and that the cut field's references hold only addresses. Those two do not fit: with `struct Wrap<'a, T> { inner: &'a T }` and `struct Node<'a> { w: Wrap<'a, Node<'a>> }`, the `w` inside `Snap<Node>` is not a `Snap<Wrap<Node>>`.
@@ -390,6 +433,8 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 6. **A write through a `Box` or a held `&mut` gives the holder a new value name** (finding F3). A snapshot follows those pointers, so the referent is a part of the holder's value: `runtime.writes` and `runtime.borrows` now say so, for a write and for the end of a borrow of the referent. Eight examples, the review's two among them.
 7. **A `while` leaves with what is known after its condition's writes** (finding F7), which this RFC had left for later. `runtime.loops` says it, and that a `while let` leaves with what is known after its scrutinee was evaluated. `runtime.conditions` says that a write in a condition takes effect where it is evaluated, and that one in the right operand of `&&` or `||` is as a write in one branch of an `if`. Five examples.
 8. **`Unit` has a default** (with finding F2): `core.sequences.default` lists it, and names an abstract external snapshot, not an opaque one, among the types with none, since [RFC 0008](0008-snapshot-capture-and-views.md) made the snapshot of `Opaque<T>` `Unit`.
+
+**Partially decided by the owner in I07b on 2026-11-26:** add logical `Set<K>` and make `Map<K,V>::keys()` return it. [The API record above](#finite-collection-sets-and-map-keys) states the membership obligation and explicitly leaves the representation, proofs, enumeration, and runtime key policy open. It adds no set axioms or new spec rule before those details are specified.
 
 **Still for the owner.** Each is written into the rules and examples as proposed.
 
