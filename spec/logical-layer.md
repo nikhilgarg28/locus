@@ -2,7 +2,7 @@
 
 Locus adds logical types, whose values exist only for checking, and logical code, which computes with them. This chapter says what is logical, where logical values may appear, and what logical code may do. [RFC 0002](../design/rfcs/0002-logical-layer.md) explains the design.
 
-Every type is a runtime type or a logical type. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the snapshot type `Snap<T>` of each runtime type `T` that has one, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative.
+Ordinary types are runtime types or logical types. Runtime types are Rust's types, including the program's own structs and enums. Logical types are `Int`, `Prop`, proof types `@P`, logical function types, tuples of logical types, types declared with `#[derive(Logical)]`, the snapshot type `Snap<T>` of each runtime type `T` that has one, and the logical types of Locus's library, such as `Nat`, which is an `Int` with a proof that it is not negative. The compiler-known empty type `!` has the explicit runtime and logical uses described by `logic.types.never` below.
 
 ## What a verified program means
 
@@ -10,8 +10,11 @@ The rules of this specification follow from one reading of a verified program, w
 
 ## Logical types
 
+r[logic.types.never]
+The empty type `!` has no constructors and is admitted as a logic function's result type. In logical code an expression of type `!` coerces to an expected logical result type by empty-type elimination. This permits the function `unreachable(p: @False) -> !` of [`proofs.elimination`](proofs.md#proofs); it does not permit a logical loop, panic, or call to runtime code as a substitute for the proof. Runtime `!` keeps Rust's meaning of no normal return, and is not replaced by an inhabited ghost marker. The logical coercion cannot produce executable data or satisfy executable control flow: erasing a call to the logical function cannot make a runtime branch diverge, initialize a runtime value, or make following runtime code unreachable. Rust's runtime `unreachable!()` macro retains its panic behavior and occupies a different namespace from the logical function. Generic `Logical` bounds, logical aggregate positions, and the exact checking/export encoding of `!` are separate gates in [logical-never-lowering](../issues/logical-never-lowering.md); no blanket trait classification follows from these direct uses. Ordinary Rust uses of `!`, including its valid type-argument positions, remain governed by rustc.
+
 r[logic.types.contents-logical]
-The fields, payloads, and type arguments of a logical type are logical types, and so are the parameters and results of a logical function type. The one exception is `Snap<T>`, whose argument names a runtime type.
+The fields, payloads, and type arguments of a logical type are logical types, and so are the parameters and ordinary results of a logical function type. The direct empty result `!` follows [`logic.types.never`](#logical-types), without deciding its use as a field or generic argument. The other exception is `Snap<T>`, whose argument names a runtime type.
 
 r[logic.types.tuples]
 A tuple type is logical when it has at least one component and all its components are logical. The unit type `()` is a runtime type.
@@ -39,7 +42,7 @@ An integer literal in logical code is an `Int`, or a `Nat` where a `Nat` is expe
 Values of logical types, proofs included, are *ghost*: they exist only for checking. They may appear in logical code, as parameters, results, locals, and fields of logical type, and inside runtime types as type arguments.
 
 r[logic.ghost.erased]
-Values of logical types have no runtime representation. At run time, a ghost value is a zero-sized marker: `Proof` for a proof, whatever it proves, and for any other logical value a marker of its logical type's own, so that a `Nat` and an `Int` are two types to rustc. A marker carries no proposition and no value. Inside a runtime type and as the type of a field, a logical type is its marker, and a tuple keeps its shape, with a marker for each logical component. Logical code is never evaluated at run time.
+Values of logical types have no runtime representation. At run time, a ghost value is a zero-sized marker: `Proof` for a proof, whatever it proves, and for any other logical value a marker of its logical type's own, so that a `Nat` and an `Int` are two types to rustc. A marker carries no proposition and no value. Inside a runtime type and as the type of a field, a logical type is its marker, and a tuple keeps its shape, with a marker for each logical component. Logical code is never evaluated at run time. The special never-type uses follow [`logic.types.never`](#logical-types): this marker rule never turns executable `!` into an inhabited type or uses an erased logical call to establish executable divergence.
 
 r[logic.ghost.marker-traits]
 `Proof`, the marker of every proof, implements `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, and `Hash`, which are right for proofs because any two proofs of a proposition are equal. Under `Debug` it prints as `Proof`. The marker of every other logical type implements only `Clone`, `Copy`, and `Debug`, of the traits of the standard library. Every marker, `Proof` among them, also implements `Logical` and `CloneEq` of Locus's library, whose method copies it ([`traits.laws.provided`](traits.md#law-traits)). These are all the traits with a method that runs that a logical type implements: a program adds none ([`traits.impls.logical-types`](traits.md#implementations)). None implements a trait that makes a value from nothing, such as `Default`.
@@ -122,7 +125,7 @@ A sealed type's proof fields are an obligation that Locus places on `unsafe` cod
 Logical code is the bodies of logic functions and proposition declarations; the contents of `logic!`, `prop!`, and `prove!`; propositions in types and proof holes; calls of logic functions and proof constructors; and operators on bindings shown to be ghost. In it, a runtime place that is read is captured: it stands for its language-generated [snapshot](models.md).
 
 r[logic.code.logical-values]
-Logical code computes only with logical values, and every logical computation produces one: the result type of a logic function is logical. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its language-generated snapshot, whether capture is implicit or written `snap` ([`models.observation`](models.md#models)).
+Logical code computes only with logical values and is total on its valid arguments. A logic function's result type is logical, or the empty result `!` admitted by `logic.types.never`; the latter gives no value on an impossible input. A runtime value enters logical code only where logical code reads a place, and is a logical value there: its language-generated snapshot, whether capture is implicit or written `snap` ([`models.observation`](models.md#models)).
 
 r[logic.fn.parameters]
 Each parameter of a logic function has a logical type, which `Snap<T>` and the result type of an explicit view are. A parameter written with a runtime type, such as `xs: &[u32]`, or `self` in an `impl` of a runtime type, is rejected. A runtime place given as an argument is its capture ([`models.observation`](models.md#models)), whatever the type of the parameter, and `snap(x)` gives its snapshot. A type parameter of a logic function ranges over logical types, unless it is bounded by `Snapshot`: it then stands for any type that has a snapshot, a runtime type or a logical one ([`models.snapshots.seen`](models.md#snapshots)), of which the function names `Snap<T>`, and takes no value of type `T` itself.

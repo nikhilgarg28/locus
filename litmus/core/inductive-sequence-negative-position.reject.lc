@@ -1,0 +1,8 @@
+//~ question: Does using Seq make a negative recursive logical definition acceptable?
+//~ spec: core.sequences.inductive, logic.types.positive
+//~ rfc: 0005
+
+#[derive(Logical)]
+struct Bad {
+    consume: logic fn(Seq<Bad>) -> @False, //~ error: Bad occurs negatively as a logical function parameter; Seq does not bypass strict positivity
+}

@@ -21,7 +21,7 @@ A match on a proof of a declared proposition covers every one of its arms, and e
 ## Proofs
 
 r[proofs.elimination]
-A match on a proof produces a proof. A witness inside a proof never becomes a logical or runtime value.
+A match on a proof produces a proof, except for an empty match on a proof of `False` in logical code. That empty match may produce logical `!`, which coerces to the expected logical result type ([`logic.types.never`](logical-layer.md#logical-types)). The library exposes this elimination as `pub logic fn unreachable(p: @False) -> ! { match p {} }`. Its argument must be a checked proof, including a checked proof hole; merely writing `unreachable` establishes no contradiction. A witness inside a proof never becomes a logical or runtime value: the exception selects no constructor or witness and gives no elimination of `exists` into data. Pending final values remain subject to [`contracts.final.pending`](contracts.md#values-in-a-signature).
 
 r[proofs.partial]
 A proof that a runtime function returns needs to hold only when the function returns. A runtime function that never returns needs no proof of its result.

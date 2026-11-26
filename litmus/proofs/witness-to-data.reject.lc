@@ -3,7 +3,7 @@
 //~ rfc: 0002
 
 logic fn witness(big: @(exists |m: Nat| m > 5)) -> Nat {
-    match big { //~ error: a match on a proof can only produce a proof, and this one produces a `Nat`
+    match big { //~ error: this match extracts an existential witness as a `Nat`; only empty elimination of `False` may produce logical data
         Exists::Witness(m) @ _ => m,
     }
 }

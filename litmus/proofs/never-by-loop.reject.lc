@@ -1,0 +1,7 @@
+//~ question: Does a runtime-style infinite loop implement a total logical never result?
+//~ spec: logic.types.never, logic.fn.total
+//~ rfc: 0002
+
+logic fn forever() -> ! {
+    loop {} //~ error: a logical function must be total; an infinite loop does not construct logical never
+}

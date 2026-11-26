@@ -1,0 +1,9 @@
+//~ question: Does naming unreachable prove that a logically reachable branch is impossible?
+//~ spec: proofs.elimination, proofs.holes
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! { match p {} }
+
+logic fn fabricated() -> Nat {
+    unreachable(prove!(False)) //~ error: cannot prove False from an empty consistent context
+}

@@ -1,0 +1,7 @@
+//~ question: Can a proof with an inhabited constructor be eliminated by an empty match?
+//~ spec: proofs.elimination, proofs.props.matching
+//~ rfc: 0002
+
+logic fn wrong(p: @True) -> ! {
+    match p {} //~ error: this proof is not False; the empty match omits True::Intro
+}

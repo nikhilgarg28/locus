@@ -1,0 +1,7 @@
+//~ question: Can the runtime unreachable macro construct a logical never result?
+//~ spec: logic.types.never, logic.code.no-runtime-calls
+//~ rfc: 0002
+
+logic fn wrong(p: @False) -> ! {
+    unreachable!() //~ error: Rust's unreachable macro panics; logical impossibility requires checked empty elimination
+}

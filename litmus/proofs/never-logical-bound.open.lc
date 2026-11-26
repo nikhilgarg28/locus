@@ -1,0 +1,12 @@
+//~ question: Does never satisfy a generic Logical bound beyond its special direct result use?
+//~ issue: logical-never-lowering
+//~ spec: logic.types.never
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! { match p {} }
+
+logic fn identity<A: Logical>(value: A) -> A { value }
+
+logic fn generic_never(p: @False) -> ! {
+    identity::<!>(unreachable(p))
+}

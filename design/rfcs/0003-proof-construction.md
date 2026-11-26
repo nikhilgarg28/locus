@@ -138,6 +138,18 @@ Whatever a procedure or a hole finds is a term built from the forms and function
 - **Polynomial identities,** `ring`, which the owner left out for now; a multiplication law is a lemma.
 - **The macros `calc!`, `rewrite!`, `fold!`, and `unfold!`,** which earlier drafts had sketched. The functions above take their place.
 
+### Empty cases in logical data definitions
+
+RFC 0002 decision 126 admits the library function
+`pub logic fn unreachable(p: @False) -> ! { match p {} }`.
+An existing `prove!(False)` or `_` may supply its argument only when the ordinary
+proof-hole rules produce a kernel-checked contradiction. There is no new search
+procedure or assumption. Logical never then eliminates into the expected logical
+result, so a total data function can type an impossible branch. Extracting a
+witness from an existential proof remains rejected, and a runtime panic or loop
+cannot replace the logical elimination. The function and Rust's `unreachable!`
+macro have separate namespaces and different meanings.
+
 ## Rules
 
 The rules below go into [Propositions and proofs](../../spec/proofs.md).

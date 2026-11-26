@@ -1,0 +1,7 @@
+//~ question: May an empty match on False implement the logical never-returning helper?
+//~ spec: proofs.elimination, logic.types.never
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! {
+    match p {}
+}

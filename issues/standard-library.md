@@ -339,3 +339,26 @@ The architecture does not supply container snapshots or certify arbitrary
 Hash/BuildHasher/Borrow implementations. Borrow compatibility is required now;
 its API, container and tuple adapters, slice_trace, and user-proved hashers are
 retained in [checked-hashing-followups](checked-hashing-followups.md).
+
+
+### 2026-11-25, owner adopts I06a and I06b; PR #26
+
+The owner chose ordinary inductive definitions for `Seq`, `Maybe` and comparable
+algebraic logical library types, with total operations and kernel-checked lemmas:
+
+> Yes I agree with seq and other such types being regular inductive types
+
+RFC 0005's sequence section and `core.sequences.inductive` record this foundation.
+The read/update/length and extensionality lemmas still need actual proofs; the
+spike is an unverified workload. Constructor visibility, a kernel backend and
+`Map` representation are not chosen by this decision. No sequence-specific axiom
+is added. Existing `get`, `at`, out-of-range update and unproved-index behavior
+are retained.
+
+RFC 0002 decision 126 records the chosen logical `unreachable(p: @False) -> !`
+interface for impossible branches. This settles the narrow proof-elimination
+exception without extracting existential witnesses. Generic never-type bounds
+and its checking/export representation remain in
+[logical-never-lowering](logical-never-lowering.md); the existing unevaluated
+constant question is not closed. This record implements the owner's request to
+commit the decisions, not a claim that a Locus compiler or kernel accepted them.
