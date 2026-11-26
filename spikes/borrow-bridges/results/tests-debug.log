@@ -1,0 +1,18 @@
+
+running 14 tests
+test canonical_projection_can_use_str_but_queries_remain_case_sensitive ... ok
+test case_insensitive_key_cannot_certify_case_sensitive_str_lookup ... ok
+test concrete_generic_wrapper_supports_unsized_targets ... ok
+test correct_operation_plus_borrow_bound_does_not_bind_actual_impl ... ok
+test equality_and_correct_projection_do_not_imply_hash_compatibility ... ok
+test generated_newtype_provider_works_with_native_maps ... ok
+test hidden_mutable_hash_state_cannot_factor_through_unit_snapshot ... ok
+test panic_produces_no_successful_borrow_result ... ok
+test preserving_only_equal_does_not_preserve_tree_search_order ... ok
+test projection_may_forget_label_and_preserve_selected_equivalence ... ok
+test queries_outside_projection_image_are_ordinary_misses ... ok
+test reflexive_adapter_reuses_existing_blanket_sized_and_unsized ... ok
+test standard_string_str_uses_actual_borrow_in_both_maps ... ok
+test vec_slice_query_needs_no_owned_query_allocation ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

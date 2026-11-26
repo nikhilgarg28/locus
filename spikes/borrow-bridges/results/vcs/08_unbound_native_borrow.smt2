@@ -1,0 +1,30 @@
+; benchmark generated from python API
+(set-info :status unknown)
+(declare-sort Q 0)
+(declare-sort K 0)
+(declare-sort Trace 0)
+(declare-fun query_equiv (Q Q) Bool)
+(declare-fun q () Q)
+(declare-fun projection (K) Q)
+(declare-fun k () K)
+(declare-fun query_trace (Q) Trace)
+(declare-fun key_trace (K) Trace)
+(declare-fun actual_borrow (K) Q)
+(assert
+ (let ((?x8 (projection k)))
+ (query_equiv ?x8 q)))
+(assert
+ (let ((?x8 (projection k)))
+ (let ((?x11 (query_trace ?x8)))
+ (= (key_trace k) ?x11))))
+(assert
+ (let ((?x8 (projection k)))
+ (let ((?x11 (query_trace ?x8)))
+ (let (($x14 (= ?x11 (query_trace q))))
+ (let (($x9 (query_equiv ?x8 q)))
+ (=> $x9 $x14))))))
+(assert
+ (let ((?x8 (projection k)))
+(let ((?x23 (actual_borrow k)))
+(and (distinct ?x23 ?x8) true))))
+(check-sat)

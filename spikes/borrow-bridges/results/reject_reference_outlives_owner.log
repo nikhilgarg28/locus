@@ -1,0 +1,12 @@
+error[E0515]: cannot return value referencing local variable `owner`
+ --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_reference_outlives_owner.rs:4:5
+  |
+4 |     native_borrow::<String, str, StdText>(&owner)
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^------^
+  |     |                                     |
+  |     |                                     `owner` is borrowed here
+  |     returns a value referencing data owned by the current function
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0515`.

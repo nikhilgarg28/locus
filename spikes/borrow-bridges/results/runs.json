@@ -1,0 +1,262 @@
+[
+  {
+    "name": "rustc-version",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--version",
+      "--verbose"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "library",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "--crate-type=rlib",
+      "--crate-name=borrow_bridge_probe",
+      "rust/lib.rs",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "build-tests-debug",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-Dwarnings",
+      "--test",
+      "rust/tests.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/tests-debug"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "tests-debug",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/tests-debug",
+      "--test-threads=1"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "build-tests-optimized",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "-O",
+      "-Dwarnings",
+      "--test",
+      "rust/tests.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/tests-optimized"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "tests-optimized",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/tests-optimized",
+      "--test-threads=1"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "accept_downstream_provider",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/accept_downstream_provider.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/accept_downstream_provider"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "accept_downstream_provider-run",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/accept_downstream_provider"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "accept_native_adapters",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/accept_native_adapters.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/accept_native_adapters"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "accept_native_adapters-run",
+    "command": [
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/accept_native_adapters"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  },
+  {
+    "name": "reject_arbitrary_forwarding",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_arbitrary_forwarding.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_arbitrary_forwarding"
+    ],
+    "expected_error": "E0119",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_duplicate_provider",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_duplicate_provider.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_duplicate_provider"
+    ],
+    "expected_error": "E0119",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_foreign_blanket",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_foreign_blanket.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_foreign_blanket"
+    ],
+    "expected_error": "E0210",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_forged_adapter",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_forged_adapter.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_forged_adapter"
+    ],
+    "expected_error": "E0277",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_generated_registration",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_generated_registration.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_generated_registration"
+    ],
+    "expected_error": "E0277",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_identity_provider",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_identity_provider.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_identity_provider"
+    ],
+    "expected_error": "E0119",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_mutation_with_live_query",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_mutation_with_live_query.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_mutation_with_live_query"
+    ],
+    "expected_error": "E0502",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "reject_reference_outlives_owner",
+    "command": [
+      "/workspace/locus-review/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_reference_outlives_owner.rs",
+      "--extern",
+      "borrow_bridge_probe=/workspace/locus-loans-pr/spikes/borrow-bridges/target/libborrow_bridge_probe.rlib",
+      "-o",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/target/reject_reference_outlives_owner"
+    ],
+    "expected_error": "E0515",
+    "returncode": 1,
+    "passed": true
+  },
+  {
+    "name": "laws",
+    "command": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+      "/workspace/locus-loans-pr/spikes/borrow-bridges/check_laws.py"
+    ],
+    "expected_error": null,
+    "returncode": 0,
+    "passed": true
+  }
+]

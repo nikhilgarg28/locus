@@ -1,0 +1,30 @@
+error[E0277]: the trait bound `Forged: borrow_bridge_probe::private::Sealed<String, str>` is not satisfied
+  --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_forged_adapter.rs:3:43
+   |
+ 3 | impl NativeBorrowBinding<String, str> for Forged {}
+   |                                           ^^^^^^ unsatisfied trait bound
+   |
+help: the trait `borrow_bridge_probe::private::Sealed<String, str>` is not implemented for `Forged`
+  --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_forged_adapter.rs:2:1
+   |
+ 2 | struct Forged;
+   | ^^^^^^^^^^^^^
+help: the trait `borrow_bridge_probe::private::Sealed<String, str>` is implemented for `StdText`
+  --> rust/lib.rs:75:1
+   |
+75 | impl private::Sealed<String, str> for StdText {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `NativeBorrowBinding`
+  --> rust/lib.rs:70:54
+   |
+70 | pub trait NativeBorrowBinding<K: ?Sized, Q: ?Sized>: private::Sealed<K, Q> {}
+   |                                                      ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `NativeBorrowBinding`
+   = note: `NativeBorrowBinding` is a "sealed trait", because to implement it you also need to implement `borrow_bridge_probe::private::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+   = help: the following types implement the trait:
+             borrow_bridge_probe::StdText
+             borrow_bridge_probe::Identity
+             borrow_bridge_probe::GeneratedName
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0277`.
