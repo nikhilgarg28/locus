@@ -14,6 +14,7 @@ library facility, say so rather than treating the advice as its implementation.
 ## Chapters
 
 1. [Snapshots, views, and stored ghost state](snapshots-and-ghost-state.md)
+2. [Map key representatives and snapshot observers](map-keys-and-observers.md)
 
 ## Writing a convention
 

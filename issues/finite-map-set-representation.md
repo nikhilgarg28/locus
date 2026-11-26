@@ -102,8 +102,13 @@ library paths and lemma spellings are not an added API:
 
 No new axioms, choice function, proof-to-data elimination, or runtime contract is
 introduced by this record. Runtime Eq/Hash/Ord bridges must align with the selected `E` without changing
-Rust dispatch. The concrete observation, retained representatives, and `Borrow`
-contracts remain I08/bridge work; this issue does not implement them. The existing stdlib study remains an
+Rust dispatch. I08a now fixes ordinary runtime insertion as preserving an
+existing equivalent key; a separate snapshot-derived observer describes the
+retained entries. Its representation must contain enough information: `Unit`
+plus only the class-to-value map cannot recover key representatives. A wrapper
+may enrich existing logical contents, without a mandated redundant field.
+Actual Eq/Hash/Ord/Borrow compatibility and complete bridge/observer contracts
+remain I08b work; this issue does not implement them. The existing stdlib study remains an
 unverified candidate, not an implementation of the adopted API.
 
 ## Log
@@ -132,3 +137,13 @@ it does not assume that the current `OrdLogic` bound supplies them. Quotient,
 choice/finite-support construction, representative normalization, policy
 conversion conflicts and exact enumeration interfaces remain open. No float
 representation, capture-default or broader trait inventory change is recorded.
+
+### 2026-11-26, owner settles I08a runtime key retention
+
+The owner approved ordinary insertion retaining the existing equivalent key and
+replacing its value. Changing the representative is explicit. Logical Map stays
+classes-to-values; actual retained keys/entries are a separate snapshot-derived
+observation used by key-returning APIs. RFC 0005 and the conventions chapter
+record the cases and snapshot-adequacy constraint. A wrapper may enrich existing
+logical contents, but no second field, representation, or restoration protocol
+is mandated. The actual I08b equality/hash/order/borrowing bridges remain open.

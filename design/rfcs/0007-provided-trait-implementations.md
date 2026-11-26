@@ -106,8 +106,11 @@ alignment for the specific policy; wrappers or explicit conversions can be
 needed when a native representation uses another policy.
 
 The observation/capture and full Verified-trait naming/API choices are not
-settled here. `Borrow` projections and equivalent-key representatives still
-need their own contracts. Sorted enumeration additionally needs the exact-key
+settled here. The later I08a library convention preserves the existing key on
+equivalent insertion and uses a separate snapshot-derived retained-entry
+observer ([RFC 0005](0005-core-terms.md#runtime-map-key-representatives)). Actual
+Eq/Hash/Ord/Borrow compatibility and complete bridge/observer contracts remain
+I08b work; the retention convention supplies no such certificate. Sorted enumeration additionally needs the exact-key
 or canonical-class conditions of RFC 0005; total ordering modulo an equivalence
 is insufficient to choose representatives. No float snapshot representation or
 float equality implementation is selected by this follow-up.

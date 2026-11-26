@@ -306,9 +306,47 @@ retains the representation, positivity, finite-support, quotient/choice and
 ordered-enumeration gates. The existing sequence API and proof elimination are
 unchanged. The native tables' equivalence and Eq/Hash/Ord bridges must agree with
 the selected `E`; this adds no runtime dispatch change or automatic bridge fact.
-Retained runtime key representatives and `Borrow` contracts still need their
-own policy. The linked `.open` examples are future API/proof obligations, not
+Runtime key retention now follows the I08a convention below; actual Eq/Hash/Ord/
+`Borrow` compatibility and complete callable contracts remain separate work. The linked `.open` examples are future API/proof obligations, not
 compiler-checked programs or promises that provisional method names exist.
+
+### Runtime map key representatives
+
+**Owner-adopted library convention (I08a, 2026-11-26).** The owner agreed to
+record ordinary runtime map insertion as preserving an existing equivalent
+concrete key and replacing only its value. If the key class was absent, the
+incoming key is retained. Representative replacement is explicit, through
+remove/reinsert or a separately specified replacement operation. The latter's
+API and any atomicity guarantee are not chosen here.
+
+The abstract `Map<K,V,E>` remains classes-to-values. A separate observer of a
+runtime map's snapshot describes its retained keys/entries. Contracts for
+`get_key_value`, removal returning the entry, and runtime key iteration must
+refer to that observation; the query key or a canonical class representative
+is not a substitute for the stored key. This describes normal returns and adds
+no new unwind or borrow-restoration protocol. Iteration ordering remains a
+separate contract, not the sorted logical-Set API.
+
+The observer must be a function of information actually in the snapshot. Native
+storage derives it from its supported memory observation. Wrapped storage's
+checked or explicitly trusted contracts establish correspondence with the
+native entries, but cannot recover a distinction discarded by `Unit` plus an
+abstract class-to-value map. A wrapper can enrich its existing logical contents
+and derive both observations from them; no redundant extra field, particular
+representation, or custom snapshot override is mandated. Any native correspondence/retention fact taken on trust must be
+listed under the existing `assumed.stated` and applicable library trust entries;
+this convention introduces no implicit assumption. Key snapshot equality
+observes only the snapshot footprint and does not establish arbitrary hidden
+payload or physical identity.
+
+[The convention chapter](../../conventions/map-keys-and-observers.md) gives the
+concrete two-label example and normal-return cases: colliding insertion retains
+the first key; lookup/removal exposes it; remove/reinsert changes it; equal
+abstract maps can expose different retained keys. These are contract targets,
+not new source signatures or compiler-checked programs. Actual Eq/Hash/Ord/Borrow
+compatibility (I08b) is not adopted by this decision; the existing requirement
+that the eventual bridge match `E` remains. Complete observer and method
+contracts stay with [the library work](../../issues/standard-library.md).
 
 ### Where a snapshot is cut
 

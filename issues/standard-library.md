@@ -393,3 +393,21 @@ arbitrary total comparison modulo an equivalence: exact-key separation for
 nontrivial `E`. The existing representation issue holds those interfaces and
 proofs open. This adds no quotient, choice API, float representation or capture
 change.
+
+### 2026-11-26, owner settles I08a retained-key convention
+
+The owner said, "Agree, let’s record it settled and move on" to ordinary map
+insertion preserving an existing equivalent key and replacing only its value.
+RFC 0005 records the convention, and
+[map keys and observers](../conventions/map-keys-and-observers.md) gives the
+collision, lookup, entry-removal, explicit replacement and abstraction cases.
+Logical Map remains classes-to-values; key-returning APIs need a separate
+snapshot-derived retained-entry observation.
+
+Native storage derives it from available storage snapshots. Wrapped contracts
+must establish native correspondence, and the snapshot must actually retain
+enough information: Unit plus a quotient-only map cannot recover a concrete
+representative. Enriching existing logical contents is one route, without a
+mandated extra field or new ghost-restoration protocol. The record adds no
+trusted observer axiom or compiler rule. Actual Eq/Hash/Ord/Borrow compatibility
+and the final observer/method contracts remain I08b/library work.
