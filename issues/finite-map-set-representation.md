@@ -7,17 +7,26 @@
 
 ## Decided API
 
-The owner chose logical `Set<K>` and `Map<K,V>::keys() -> Set<K>`, with membership
-specified by `iff(m.keys().contains(k), m.get(k) !== Maybe::None)`. RFC 0005's
-[API record](../design/rfcs/0005-core-terms.md#finite-collection-sets-and-map-keys)
-keeps this choice separate from its implementation. `keys()` is an unordered
-observation, not a sequence, iterator, or ordering policy. Keys of a finite
-collection map form a finite set.
+The owner chose logical `Set<K,E=Same>` and `Map<K,V,E=Same>`, with
+`E: Equiv<K>` and `keys() -> Set<K,E>`. The membership condition is
+`iff(m.keys().contains(k), m.get(k) !== Maybe::None)`. Membership and lookup must
+respect `E`; map values use built-in `===` for the extensional-content goal.
+RFC 0006's `PartialEquiv<T=Self>` / `Equiv<T=Self>` interface serves both the
+type's own logical `==` and an explicitly selected policy. `Same` defaults to
+`===`; `E=K` selects the type's own lawful equivalence. The separate name
+`Equivalence` is dropped. Policy arguments do not alter logical `==` dispatch.
 
-Extensional contents semantics is a library goal to prove from the selected
-representation. It is not permission to override `===` or assume a set axiom.
-The public key-set result and membership obligation are adopted; this issue
-holds only the unsettled representation and remaining API/proof choices.
+RFC 0005's [API record](../design/rfcs/0005-core-terms.md#finite-collection-sets-and-map-keys)
+keeps these choices separate from implementation. `keys()` itself is unordered;
+keys of a finite collection map form a finite set. Different nominal policies
+remain different collection types; explicit conversion can merge classes and
+requires a treatment of conflicting map values.
+
+The owner also settled the direction of methods returning a sorted `Seq` for
+appropriately ordered keys. Their exact bounds, signatures, representation and construction remain
+open under the constraints below. Extensional contents sameness must be proved
+from the selected representation, not supplied by overriding `===` or assuming
+a set axiom.
 
 ## Question
 
@@ -32,10 +41,29 @@ In particular:
 - Which functions and data are part of `===`? Function extensionality settles
   logical function fields, not unrelated retained data such as an enumeration.
 - What strict-positivity/variance obligations follow from that representation?
-- Is there an enumeration API at all, and what extra data, bounds or explicitly
-  chosen construction could implement it? `keys()` does not choose an order.
+- What data, exact-key or class-order laws, and construction implement the desired
+  sorted enumeration API? `keys()` itself does not choose an order.
 - Does a future general set abstraction admit infinite sets? This API decision
   concerns finite collection key sets and does not decide that separate policy.
+
+## Ordered enumeration constraints
+
+For `Set<K,Same>`, a unique sorted duplicate-free enumeration needs a total order
+that distinguishes exact keys: comparison is Equal iff its operands are `===`.
+A bare `OrdLogic` relation may be total only modulo the type's chosen equivalence,
+so it can tie distinct exact keys. Finiteness plus those stronger ordering laws
+makes uniqueness provable; it still does not extract an enumeration from a
+proof of existence under `proofs.elimination`.
+
+For nontrivial `E`, a raw-key order does not in general choose a canonical
+representative for each class. Even/odd classes of integers have no least
+member under the ordinary order. A `Seq<K>` result needs canonical
+representatives/normalization with appropriate laws and order; alternatively
+return a sequence of classes with a class order. Both need explicit API and
+implementation work. Retained insertion order or remembered representatives
+remain logical data if stored, even privately, and no custom `===` may erase
+them. A conversion between policies also needs explicit class merging and,
+for maps, value-conflict semantics. No mechanism is selected by this record.
 
 ## Options to examine, none selected
 
@@ -68,13 +96,14 @@ library paths and lemma spellings are not an added API:
   condition with a checked library theorem.
 - `set-extensional-contents`: determine a representation for which sameness of
   members establishes ordinary `===`, then check that theorem.
-- `map-key-set-enumeration`: decide whether generic key sets may be enumerated
-  and which evidence/order policy such a function requires.
+- `map-key-set-enumeration`: determine the evidence and construction needed for
+  generic enumeration. The additional sorted-exact and sorted-equivalence
+  cases isolate exact ordering from canonical representative selection.
 
 No new axioms, choice function, proof-to-data elimination, or runtime contract is
-introduced by this record. Runtime maps' selected key equivalence, retained
-representatives and `Borrow` compatibility remain I08/bridge work; this issue
-must not silently select those policies. The existing stdlib study remains an
+introduced by this record. Runtime Eq/Hash/Ord bridges must align with the selected `E` without changing
+Rust dispatch. The concrete observation, retained representatives, and `Borrow`
+contracts remain I08/bridge work; this issue does not implement them. The existing stdlib study remains an
 unverified candidate, not an implementation of the adopted API.
 
 ## Log
@@ -87,3 +116,19 @@ sequence. The owner accepted this unordered API, not a quotient, witness
 extraction, enumeration order or complete representation. This issue records
 the remaining choices and their proof obligations while RFC 0005 records the
 adopted API subset.
+
+### 2026-11-26, owner unifies equality domains and requests ordered enumeration
+
+The owner adopted `PartialEquiv<T: Logical = Self>` with symmetry/transitivity,
+`Equiv<T: Logical = Self>` adding reflexivity, and `Same` as the default policy
+for `Set<K,E>` / `Map<K,V,E>`. `keys()` preserves `E`. Values retain `===` in
+map content sameness; another collection `==` is independent. Logical operators
+use the key type's own relation, not the collection's policy. Native bridges
+must match the selected relation without changing Rust dispatch.
+
+The owner additionally settled sorted sequences for appropriately ordered
+sets. The record retains exact-key ordering and canonical-class requirements;
+it does not assume that the current `OrdLogic` bound supplies them. Quotient,
+choice/finite-support construction, representative normalization, policy
+conversion conflicts and exact enumeration interfaces remain open. No float
+representation, capture-default or broader trait inventory change is recorded.

@@ -1,0 +1,13 @@
+//~ question: What representative or class-value API makes sorted enumeration of equivalence classes well defined?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+use locus::logic::{Set, Seq, Equiv, OrdLogic};
+
+// E may be nontrivial. A total raw-key order alone cannot choose representatives:
+// even integers under the ordinary order have no least representative. Returning
+// Seq<K> needs a canonical representative policy, or use ordered class values.
+logic fn sorted_representatives<K: Logical + OrdLogic, E: Equiv<K>>(s: Set<K, E>)
+    -> Seq<K> {
+    s.to_sorted_seq()
+}

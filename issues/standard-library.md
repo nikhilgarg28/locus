@@ -377,3 +377,19 @@ from a proof, choose an arbitrary key order, or decide general infinite sets.
 Runtime key equivalence and representative policy are still separate questions.
 The API is chosen; the linked source obligations remain `.open` until the
 representation and actual library proof interfaces are specified.
+
+### 2026-11-26, owner adopts generalized equality policies
+
+RFC 0006 now records `PartialEquiv<T = Self>` and `Equiv<T = Self>`: the type's
+own relation supplies logical `==`, and a logical policy `E: Equiv<K>` supplies
+collection key identity. RFC 0005 generalizes the public API to
+`Set<K,E=Same>` and `Map<K,V,E=Same>`, with policy-preserving `keys()`. `Same`
+uses `===`; values in map content sameness still use `===`. The separate
+`Equivalence` trait is not adopted. Native Eq/Hash/Ord bridges must match `E`.
+
+The requested sorted enumeration methods need stronger conditions than an
+arbitrary total comparison modulo an equivalence: exact-key separation for
+`Same`, or canonical representatives/normalization or ordered class values for
+nontrivial `E`. The existing representation issue holds those interfaces and
+proofs open. This adds no quotient, choice API, float representation or capture
+change.

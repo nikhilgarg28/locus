@@ -241,46 +241,74 @@ The existing operations below keep their meanings. In particular, an update out 
 
 ### Finite collection sets and map keys
 
-**Owner-adopted API (I07b, partial, 2026-11-26).** Add a logical `Set<K>` and
-make `Map<K, V>::keys()` return `Set<K>`, not `Seq<K>`. It describes the unordered
-key set of the logical map. It neither specifies insertion order nor gives a
-key at an index. For a finite collection map, its key set is finite. This
-choice does not settle whether a future general set abstraction admits infinite
-sets, or whether it would have a separate type/name.
+**Owner-adopted API and equality policy (I07b, 2026-11-26).** Logical collections
+are `Set<K, E = Same>` and `Map<K, V, E = Same>`, with `E: Equiv<K>` from
+[RFC 0006](0006-traits.md#adopted-equality-domains-and-policies).
+`Map<K,V,E>::keys()` returns `Set<K,E>`: it preserves the key relation and
+returns an unordered set, not a sequence. `Same` uses built-in `===`; when
+`K: Equiv<K>`, `E=K` explicitly selects the type's own equivalence instead.
+Logical `a == b` still selects `K`'s own `PartialEquiv<K>`, never an ambient
+collection policy. The element/value types are logical; no representation is
+selected by these public type parameters.
 
-The membership condition that the implementation must realize is:
+For a finite collection map its key set is finite. This does not decide a
+future general infinite-set abstraction or its name. The membership condition
+that the implementation must realize is:
 
 ```rust
 iff(m.keys().contains(k), m.get(k) !== Maybe::None)
 ```
 
-This states which keys belong; `Maybe::None` is the absent result of logical
-lookup. The condition must follow from the definitions and checked lemmas. It
-is not an assumed set/map axiom and does not make a hole or `compute` apply a
-library theorem automatically. The exact generic/evidence bounds and lemma
-spellings still depend on the representation. The existing sequence API is
-unchanged.
+Membership and lookup must respect `E`: equivalent query keys have the same
+membership and `===` lookup result. A key denotes its equivalence class; a map
+cannot give conflicting values for two keys in that class. These are obligations
+on the definitions and checked lemmas, not assumed set/map axioms or new proof
+search rules. For the extensional-content sameness goal at one fixed policy,
+map values are compared by built-in `===`, not by their optional `==` or by `E`.
+A collection's own alternative `==` is separate. Two distinct nominal policy
+types give distinct collection types even if they define the same relation;
+conversion must be explicit. Changing policy can merge key classes, so a map
+conversion also needs a specified conflict treatment, which remains open.
 
-Extensional contents semantics is a goal to establish from that representation:
-sets with the same members should support a proof of the language's existing
-`===`, independent of insertion or enumeration order. `===` is not overridden.
-A record holding a private `Seq<K>` still retains its order in logical equality;
-privacy does not make permutations the same value, and no special equality
-axiom may hide a distinguishing field. A predicate representation, an explicit
-quotient construction, or suitably normalized finite data have different proof
-and API requirements; none is selected here. I07a's `eq::funext` proves equality
-of functions, not automatically of an arbitrary record containing a function
-and other data.
+Extensional contents semantics must be proved from the chosen representation.
+`===` is never overridden. A record holding a private `Seq<K>` still retains
+its order in logical equality; privacy does not make permutations or different
+representatives the same value. I07a's `eq::funext` proves equality of functions,
+not automatically of an arbitrary record containing functions and other data.
+Predicate, quotient and normalized-data representations have different proof
+requirements and remain options, not choices made by this API.
 
-This is a scoped API decision record, not a complete normative `Set`/`Map`
-implementation. [Finite map/set representation](../../issues/finite-map-set-representation.md)
-retains the remaining I07b choices: finiteness evidence, positivity, representation,
-extensionality proofs, and whether/how to enumerate. No proof-witness extraction,
-choice API, canonical order for arbitrary keys, or quotient interface is added.
-The runtime tables' equality relation, equivalent-key representatives, and
-`Borrow` behavior remain separate I08/bridge questions. The linked `.open`
-examples are future API/proof obligations, not compiler-checked programs or
-claims that their illustrative lemma names already exist.
+**Adopted sorted-enumeration direction.** The owner settled set methods returning
+`Seq` for appropriately ordered keys. The exact method/order-evidence interfaces
+remain open, subject to these requirements:
+
+- For `Set<K,Same>`, an order used for unique sorted enumeration must distinguish
+  exact keys: `compare(a,b) === Equal` iff `a === b`, together with the total-order
+  laws. Then the required result is the unique sorted, duplicate-free sequence
+  containing exactly the finite set's keys. This states the target theorem;
+  implementing it still needs suitable finite-support data or an approved
+  construction, not extraction of a witness from a proof.
+- A bare `K: OrdLogic` does not establish that condition. An order total modulo
+  a chosen equivalence can tie values that differ under `===`. A sequence still
+  exposes their order, so no uniqueness follows for exact keys without the
+  stronger compatibility proof.
+- For nontrivial `E`, ordering raw keys alone does not choose a canonical
+  representative of each class. The even integers under the ordinary order
+  have no least representative. Returning `Seq<K>` needs a suitable canonical
+  representative/normalization policy (total, class-invariant, and selecting a
+  member of each class) plus compatible ordering, or the API can instead return
+  a sequence of classes with an appropriate class order. Neither mechanism is
+  adopted. A hidden remembered representative is observable in a returned
+  sequence and cannot coexist with extensional `===` by fiat.
+
+[Finite map/set representation](../../issues/finite-map-set-representation.md)
+retains the representation, positivity, finite-support, quotient/choice and
+ordered-enumeration gates. The existing sequence API and proof elimination are
+unchanged. The native tables' equivalence and Eq/Hash/Ord bridges must agree with
+the selected `E`; this adds no runtime dispatch change or automatic bridge fact.
+Retained runtime key representatives and `Borrow` contracts still need their
+own policy. The linked `.open` examples are future API/proof obligations, not
+compiler-checked programs or promises that provisional method names exist.
 
 ### Where a snapshot is cut
 

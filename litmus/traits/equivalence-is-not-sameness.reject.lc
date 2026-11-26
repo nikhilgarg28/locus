@@ -1,0 +1,10 @@
+//~ question: Is a proof of a chosen logical equivalence usable as built-in sameness?
+//~ spec: traits.equivalence, proofs.equality
+//~ rfc: 0006
+
+use locus::logic::Equiv;
+
+logic fn no_equality_reflection<K: Equiv>(a: K, b: K, related: @(a == b))
+    -> @(a === b) {
+    related //~ error: the type's Equiv relation need not be ===; a relation proof is not a sameness proof
+}

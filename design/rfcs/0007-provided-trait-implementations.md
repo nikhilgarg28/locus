@@ -84,6 +84,34 @@ conditional lowering remains for review.
 
 **Verification.** The bridge is a required contract, not just a macro convention: Locus checks each supplied body against the checked method’s specification and binds the guarantee to the selected implementation, including across crates. Ordinary Rust trait bounds alone gain no logical laws. Target defaults must establish any guarantees claimed for them; unchecked overrides cannot bypass the bridge. Non-Self destinations remain subject to rustc’s ordinary rules. Initially, targets are safe traits; unsafe-trait obligations require a separate design.
 
+### Equality policy alignment
+
+**Owner-adopted follow-up, 2026-11-26.** RFC 0006 now uses
+`PartialEquiv<T = Self>` and `Equiv<T = Self>` both for a logical type's own
+relation and for an explicit policy `E: Equiv<K>`. The remaining signatures
+below predate that generalized interface and retain schematic `EqSpec`/checked
+names; their full inventory and capture reconciliation are separate work. They
+must not be read as selecting a second unrelated equality for a collection.
+
+For a native bridge used with `Set<K,E>` or `Map<K,V,E>`, the chosen standard
+`PartialEq`/`Eq` implementation must correspond to `E` on the keys' logical
+observations. `Hash` must emit equal traces for `E`-equivalent keys, and the
+selected `Ord` comparison must report Equal exactly for that relation, with its
+order laws. Different equivalence classes may hash to the same trace/digest;
+collision freedom is not a law. Native Rust still selects one implementation
+by its ordinary trait rules. Adding a logical policy parameter does not change
+that runtime implementation, certify it automatically, or make one body satisfy
+incompatible policies. Generated or designated adapters must prove the actual
+alignment for the specific policy; wrappers or explicit conversions can be
+needed when a native representation uses another policy.
+
+The observation/capture and full Verified-trait naming/API choices are not
+settled here. `Borrow` projections and equivalent-key representatives still
+need their own contracts. Sorted enumeration additionally needs the exact-key
+or canonical-class conditions of RFC 0005; total ordering modulo an equivalence
+is insufficient to choose representatives. No float snapshot representation or
+float equality implementation is selected by this follow-up.
+
 ### Core trait signatures
 
 Signatures below are schematic. `S` means an admissible frozen snapshot of the implementing type; `O = Snap<Ordering>`. `a0` and `b0` denote entry snapshots. `E = EqSpec::equiv`, `C = OrdSpec::compare`, and `L(x,y)` means `C(x,y) != Greater`. Every checked contract holds on normal return. These abbreviations do not introduce new source-language syntax.

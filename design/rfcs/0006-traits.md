@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Issue:** [traits-on-logical-types](../../issues/traits-on-logical-types.md)
-- **Supersedes:** none. It changes rules of [RFC 0002](0002-logical-layer.md), which is still being decided: `logic.ghost.no-trait-impls`, `logic.ghost.marker-traits`, `logic.bool.as-proposition`, `models.capture.bound`, and `models.bounds-on-functions`. It rests on the lowering of [RFC 0001](0001-compiler-pipeline.md), and changes nothing in it.
+- **Supersedes:** none. It changes rules of [RFC 0002](0002-logical-layer.md), which is still being decided: `logic.ghost.no-trait-impls`, `logic.ghost.marker-traits`, `logic.bool.as-proposition`, `models.capture.bound`, `models.bounds-on-functions`, and `logic.eq.comparisons`. It rests on the lowering of [RFC 0001](0001-compiler-pipeline.md), and changes nothing in it.
 
 This RFC is a draft. It has had three reviews outside the repository, as four drafts, and none of the text as it stands here. No compiler has run any of its examples: each is worked from the rules by hand. What it says of rustc comes from the spikes [logical-markers](../../spikes/logical-markers/README.md), [marker-lowering](../../spikes/marker-lowering/README.md), and the three rounds of [skeleton-typing](../../spikes/skeleton-typing-3/README.md). [What the reviews changed](#what-the-reviews-changed) lists the differences from the earlier drafts.
 
@@ -284,6 +284,68 @@ The original design requested logical-kind and capture bounds as traits. RFC 000
 - **A trait whose logic functions take or return `Self` as a value says `Logical`.** A logic function takes and returns logical types only, and in a trait `Self` may be any type. `Monoid: Logical` writes it. None is implied, as none is for `Snapshot`.
 - **A logic function's own type parameters are RFC 0002's.** They range over logical types unless bounded by `Snapshot` (`logic.fn.parameters`). The fourth draft had them range over every type, with `Logical` implied where the signature needed it. RFC 0002's decisions 105 and 106 came after it and replace that.
 
+### Adopted equality domains and policies
+
+**Owner decision, 2026-11-26.** One interface serves a logical type's own
+comparison and a separate equality policy. The domain parameter defaults to
+`Self`; a separate `Equivalence` trait name is dropped.
+
+```rust
+pub trait PartialEquiv<T: Logical = Self>: Logical {
+    logic fn equiv(a: T, b: T) -> Prop;
+    logic fn symm(a: T, b: T, ab: @Self::equiv(a, b))
+        -> @Self::equiv(b, a);
+    logic fn trans(a: T, b: T, c: T,
+                   ab: @Self::equiv(a, b), bc: @Self::equiv(b, c))
+        -> @Self::equiv(a, c);
+}
+pub trait Equiv<T: Logical = Self>: PartialEquiv<T> {
+    logic fn refl(a: T) -> @Self::equiv(a, a);
+}
+```
+
+The two operands have one domain type `T`. This is not Rust's heterogeneous
+`PartialEq<Rhs>` shape. Partial equivalence promises symmetry and transitivity,
+but need not relate every value to itself. A collection's key policy needs the
+additional reflexivity of `Equiv<K>`. Each implementation supplies checked
+proofs of those laws; names in a bound do not assume them.
+
+At a logical type `K`, `a == b` means
+`<K as PartialEquiv<K>>::equiv(a, b)`, and `!=` negates it. The bound
+`K: PartialEquiv` is its default-parameter spelling. An available
+`E: Equiv<K>` does not replace that relation: callers use
+`<E as PartialEquiv<K>>::equiv(a, b)` explicitly. Ordinary Rust coherence picks
+each implementation. Runtime `==` still calls Rust's `PartialEq`, and neither
+logical trait generates or certifies that implementation on its own.
+
+`===` remains the language's sameness, with full logical substitution; an
+`equiv` proof supplies no such substitution for arbitrary observers. The logical
+policy type `Same` implements `Equiv<K>` for every logical `K`, with `equiv`
+defined as `===` and its laws proved by ordinary equality. This is no blanket implementation of each domain type's own
+`PartialEquiv<K>`; `K: Logical` alone still supplies no logical `==`. The built-in
+`Int`/`Nat`/`Bool` implementations keep their current equality behavior.
+When `K: Equiv<K>`, `E = K` is already a policy choice; `ByEquiv` may be an
+optional delegating convenience, not a second relation or a required feature.
+
+[The finite collection API](0005-core-terms.md#finite-collection-sets-and-map-keys)
+uses `Set<K, E = Same>` and `Map<K, V, E = Same>`, requiring `E: Equiv<K>`.
+This affects key identity only. Map value sameness remains built-in `===` in
+its extensional-content proof obligation; a collection's own optional `==` is
+another relation, not silently the key policy. Different nominal policy types
+produce different collection types even if their relations can be proved
+extensionally equivalent. Explicit policy conversion may merge key classes;
+a map needs a specified response to conflicting values, which is still open.
+
+The adopted relation interface supplies no quotient representation, choice API,
+canonical key representative, or automatic normalization. Sorted enumeration
+needs the additional conditions recorded with the collection API. In particular,
+a total comparison modulo a chosen equivalence may tie distinct `===` values;
+no unconditional `K: OrdLogic` bound is promoted to a canonical enumeration law.
+The current hashing/order bridge requirements must match the selected `E`, as
+[RFC 0007](0007-provided-trait-implementations.md#equality-policy-alignment)
+records. This update selects no float representation and does not reconcile the
+broader proposed `Verified` trait inventory or change capture defaults.
+
 ### The implementations that are built in
 
 The strict rule is about what a program writes. These are the implementations that the language and Locus's library give, and there are no others:
@@ -296,6 +358,8 @@ The strict rule is about what a program writes. These are the implementations th
 | Every logical type `T` | `FromLogic<T>`, the identity, and `IntoLogic<U>` wherever `U: FromLogic<T>` | Locus's library, written in Locus and checked |
 | `Prop` | `FromLogic<Bool>` | Locus's library: its one conversion to `Prop` |
 | `Int`, `Nat` | The logical operator traits, with the built-in operators as their logic functions | Locus's library, so that `twice` applies at `Int` |
+| `Int`, `Nat`, `Bool` | `PartialEquiv<Self>` and `Equiv<Self>` | Locus's library, retaining their existing equality meanings |
+| `Same`, for every logical `K` | `PartialEquiv<K>` and `Equiv<K>` | Locus's library, defining the relation as `===` and checking its laws |
 
 - **`CloneEq` is built in because a derive needs it.** `#[derive(CloneEq)]` on a struct with a field of type `Vec<Nat>` calls `clone_eq` on that field, and the library's implementation for `Vec<T>` asks `T: CloneEq`. `CloneEq` has a method that runs, so no program could give it to `Nat`. Copying a marker is the whole of the method, as it is for `Clone` ([marker-lowering](../../spikes/marker-lowering/README.md), `s15`).
 - **None makes a value from nothing,** as RFC 0002 requires: no `Default`.
@@ -311,7 +375,7 @@ The owner asked: "do they continue mapping to rust traits or preferentially bind
 - **In logical code** an operator never calls code that runs. On another logical type than the three, `+`, `-`, `*`, `/`, `%`, and unary `-` are the logic functions of traits of Locus's library, `AddLogic`, `SubLogic`, and so on, and the four orderings are logic functions of `OrdLogic`, which give a `Prop`. Rust's own `Add` cannot serve here, since its method is declared `fn`. A runtime value in logical code is its capture, so the operator is the captured value's.
 - **A logical type implements the logical trait, and cannot implement Rust's,** which has a method that runs. An operator on ghost values is logical code even inside a runtime function.
 - **Which trait each logical operator means is the one thing the language fixes here.** The traits themselves are ordinary traits of the library.
-- **`==` in logical code** stays defined on `Int`, `Nat`, and `Bool`. Equality of other logical values is `===`.
+- **`==` in logical code** selects the operand type's own `PartialEquiv`, as the adopted equality-policy section specifies. No collection policy changes this dispatch, and `===` remains distinct.
 
 ### The conversion to `Prop` is one bound
 
@@ -446,6 +510,9 @@ A new chapter of the specification, [Traits](../../spec/traits.md), and one rule
 | `traits.dyn` | `traits/trait-object-of-a-plain-trait.accept.lc`, `traits/trait-object-of-a-locus-trait.reject.lc` |
 | `traits.conversions` | `traits/conversion-between-logical-types.accept.lc`, `traits/parameter-that-converts-to-a-proposition.accept.lc`, `traits/conversion-to-prop-for-own-type.reject.lc`, `traits/nat-converted-into-int.reject.lc`, `traits/number-where-a-proposition-converts.reject.lc` |
 | `traits.operators` | `traits/fact-from-the-method-called-by-name.accept.lc`, `traits/logic-function-beside-a-method-of-the-same-name.accept.lc`, `traits/operator-on-own-logical-type.accept.lc`, `traits/operator-without-its-logical-trait.reject.lc`, `traits/runtime-comparison-gives-no-fact.reject.lc`, `traits/standard-clone-gives-no-fact.reject.lc` |
+| `logic.eq.comparisons` | `traits/equivalence-default-domain.accept.lc`, `traits/equivalence-policy-is-explicit.accept.lc` |
+| `traits.equivalence` | `traits/equivalence-default-domain.accept.lc`, `traits/equivalence-policy-is-explicit.accept.lc`, `traits/equivalence-needs-self-implementation.reject.lc`, `traits/partial-equivalence-is-not-reflexive.reject.lc`, `traits/equivalence-is-not-sameness.reject.lc` |
+| `traits.equivalence.same` | `traits/same-policy.accept.lc`, `traits/equivalence-needs-self-implementation.reject.lc` |
 | `traits.laws.provided` | `snapshots/vector-clone-whole-snapshot.accept.lc`, `traits/derive-clone-eq-with-invariant.accept.lc`, `traits/law-implementation-gives-clone.accept.lc`, `traits/law-beside-derived-clone.reject.lc`, `traits/law-beside-standard-implementation.reject.lc`, `traits/standard-clone-gives-no-fact.reject.lc` |
 | `traits.laws.adapters` | `traits/adapter-for-a-standard-type.accept.lc`, `traits/law-beside-standard-implementation.reject.lc` |
 | `traits.laws.derive` | `traits/derive-clone-eq-with-invariant.accept.lc`, `traits/derive-clone-eq-beside-derive-clone.reject.lc`, `traits/derive-clone-eq-over-a-field-without-the-law.reject.lc` |
@@ -458,6 +525,8 @@ A new chapter of the specification, [Traits](../../spec/traits.md), and one rule
 - **`logic.bool.as-proposition`** is restated on the conversion to `Prop`: each position takes a value of any type that converts. The positions are the same, with one more: an argument for a parameter whose type is bounded by `IntoLogic<Prop>`, which is what an argument of `iff` was.
 - **`models.capture.bound`** names a trait among the places where the program writes the bound.
 - **`models.bounds-on-functions`** loses "and never on a trait". What it says of an exported crate stands.
+
+**Owner-adopted comparison follow-up:** `logic.eq.comparisons` now admits logical `==` through the type's own `PartialEquiv` and keeps built-in comparisons unchanged. It remains in RFC 0002's rules table; `traits.equivalence` states the selected interface.
 
 **What has no rule.** Three things need a second crate or a second file to show ([multi-file-litmus](../../issues/multi-file-litmus.md)), and are stated in the chapter without a rule: that a Locus trait is implemented only in crates that Locus verifies; that the orphan rule applies to a logical type of Locus's library and of a program as it does to any type; and that a trait of another crate is read as its crate declared it. The fourth draft had the first as a rule, `traits.impls.checked`.
 
@@ -542,6 +611,8 @@ Written from memory, and not checked against sources for this draft.
 15. **Locus compares the proposition in every associated-type binding that rustc resolves** (finding F4 of an adversarial review of the specification at `c2818cd`, on 2026-11-25). Its ten findings were put to the owner with a recommendation for each, and the owner said: "I'm good with all your recommendations, yes. Also when you make changes, please include all your examples in litmus if possible so that these class of issues don't break again." The owner approved the recommendations, not these rule texts: what the writing chose is items 17 and 18 below. rustc decides `T: Claim<P = @False>` with every proof as `Proof`, so an implementation with `type P = @(1 == 1)` met the bound, and `absurd::<Yes>()` proved `False`, directly or through an implementation that rustc selects under the bound; no rule compared the binding. `traits.impls.headers` now lets a bound's binding be any logical type, a proof type among them, and says that Locus compares it with the implementation's associated type after rustc, and rejects a mismatch: for a type argument, a `where` clause, a supertrait's binding, and an implementation selected under such a bound, which then has no evidence. `logic.ghost.type-identity` lists the comparison. The review's two programs are rejected examples, with the supertrait and `where` variants, and their accepted neighbours.
 16. **Evidence names constants, and only logic functions and proofs may not depend on themselves** (finding F5 of the same review, decided with it). An associated type bounded by its own trait, as `type Next: Chain` given `type Next = Self`, which ordinary Rust writes as `type IntoIter = Self`, made the evidence for `Int: Chain` contain itself: either the evidence was not a finite term, against `traits.impls.acyclic`, or the implementation was rejected though no logic function called anything, and no example or error said which. Now the evidence for an implementation is a named constant whose record names the evidence it holds, itself included (`traits.evidence`), and `traits.impls.acyclic` holds logic functions and proofs to it, following the members they use through generic code and through evidence. The review's cycle program, in which `holds` reaches itself through `Next`, stays rejected, with two variants; its accepted shapes are accepted.
 
+17. **Equality domain and policy share one trait family** (owner decision, 2026-11-26). `PartialEquiv<T = Self>` supplies symmetry/transitivity, `Equiv<T = Self>` adds reflexivity, logical `==` uses the type's own relation, and an explicit `E` chooses collection key equivalence. `Same` defaults to `===`; the separate `Equivalence` name is dropped. See the [adopted section](#adopted-equality-domains-and-policies) for the precise scope and remaining collection/bridge gates.
+
 ### Still for the owner
 
 Written as proposed, and not things the owner said. Most pressing first. [traits-on-logical-types](../../issues/traits-on-logical-types.md) stays open for them.
@@ -570,7 +641,7 @@ Written as proposed, and not things the owner said. Most pressing first. [traits
 1. **Evidence that an exported program cannot forge.**
 2. **A generic type that is `Clone` for every `T: Clone` and `CloneEq` only for lawful `T`.**
 3. **Tracking which members generic code uses.** Decision 16 now needs it.
-4. **`==` on a logical type of the program's own,** with the law that ties it to `===`.
+4. **Logical equality operators:** settled in the owner-adopted equality-domain/policy section. `==` selects the type's own `PartialEquiv`, and need not coincide with `===`; the remaining collection representation and bridge implementation work stays open.
 5. **A name that is both a logic function and a method of one type, called by a path outside delimited logical code.** `Version::eq(a, b)` in a runtime body: the examples write the method call, `a.eq(b)`, which is runtime code by its operands.
 6. **Contracts on closures,** and `dyn` of a Locus trait.
 7. **A field that holds a proof inside a runtime type,** in a derive.

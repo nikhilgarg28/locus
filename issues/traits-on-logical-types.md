@@ -9,7 +9,7 @@
 How logical code is generic over operations, and how operators on logical types are resolved. RFC 0002 (`design/rfcs/0002-logical-layer.md`, proposed in [#10](https://github.com/nikhilgarg28/locus/pull/10)) fixes the arithmetic of `Int` and `Nat`. It also lets logic functions be generic over logical types or over `T: Model`. It does not yet say:
 
 - **Logical traits:** whether there are any, like Lean's type classes, for arithmetic, order, and equality.
-- **Operators on user-defined logical types:** how `+`, `<`, `==`, and `[]` are resolved, together with the laws that tie a comparison to `===` (Lean's `LawfulBEq`) and decidable equality. For now `==` and the orderings are built in only on `Int`, `Nat`, and `Bool`.
+- **Operators on user-defined logical types:** RFC 0006 supplies logical operator traits. The owner-adopted equality-policy follow-up fixes `==` through `K: PartialEquiv<K>`; it need not coincide with `===` or be decidable. Remaining operator/indexing and trait-lowering questions stay with this issue.
 - **Rules:** `logic.ghost.no-trait-impls`, `models.bounds-on-functions`
 - **Runtime traits and models:** how they relate. For example, does a type's `Ord` implementation agree with an order on its model, or `PartialEq` with equality of models?
 - **Traits with logical values or contracts.** For now no trait method's signature holds logical values, and no logical type appears in an `impl` apart from `impl Model`. When such traits arrive, an implementation written in plain Rust cannot be checked, so in export mode they will not be reachable from other crates ([#7](distribution-and-export.md)).
@@ -221,3 +221,17 @@ Still for the owner, as RFC 0006 lists it. Two points are questions that this is
 One point is a disagreement between sources, and has an issue of its own: [logical-types-under-a-model-bound](logical-types-under-a-model-bound.md).
 
 Two sentences of [RFC 0001](../design/rfcs/0001-compiler-pipeline.md) speak of `logic.ghost.no-trait-impls` as it was: that lowering rejects a logical type that a header writes, and that no accepted program can show the two programs resolving every call alike. RFC 0006 does not change RFC 0001. With it such programs exist: `traits/implementations-differ-in-a-logical-argument.accept.lc` is one.
+
+### 2026-11-26, owner adopts one equivalence family and explicit policies
+
+RFC 0006's adopted equality-domain section adds `PartialEquiv<T=Self>` and
+`Equiv<T=Self>`; `Self` is the default domain, and explicit logical policy types
+can define relations on another logical domain. Logical `==` selects the
+operand type's own relation, while `E: Equiv<K>` selects collection key identity.
+`Same` uses `===` without a blanket own-relation implementation for every type.
+Symmetry/transitivity/reflexivity are checked lemmas; no runtime Rust trait or
+new axiom is supplied by these bounds. This resolves the earlier custom-logical
+`==` question without requiring chosen equivalence to be built-in sameness.
+Collection representation and sorted-enumeration gates remain in
+[finite-map-set-representation](finite-map-set-representation.md), and native
+bridges must explicitly align with the same selected policy.

@@ -1,0 +1,11 @@
+//~ question: Which finite-support construction yields the unique sorted enumeration of an exact-key set?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+use locus::logic::{Set, Seq, Same};
+
+// Nat's usual order distinguishes === values. The desired method and its
+// membership/sortedness/uniqueness proofs remain a library implementation gate.
+logic fn sorted_nats(s: Set<Nat, Same>) -> Seq<Nat> {
+    s.to_sorted_seq()
+}

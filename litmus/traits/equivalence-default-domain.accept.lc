@@ -1,0 +1,14 @@
+//~ question: Does PartialEquiv's default domain Self give logical equality its own relation?
+//~ spec: traits.equivalence, traits.operators, logic.eq.comparisons
+//~ rfc: 0006
+
+use locus::logic::{PartialEquiv, Equiv};
+
+logic fn own_relation<K: PartialEquiv>(a: K, b: K)
+    -> @iff(a == b, K::equiv(a, b)) {
+    _
+}
+
+logic fn self_equal<K: Equiv>(a: K) -> @(a == a) {
+    K::refl(a)
+}

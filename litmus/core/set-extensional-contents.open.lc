@@ -4,9 +4,9 @@
 
 // Future library goal; no implementation, special ===, or trusted lemma is
 // declared here. `set::ext` is a provisional name for the proof still required.
-use locus::logic::{set, Set};
+use locus::logic::{set, Set, Equiv};
 
-logic fn same_members<K: Logical>(a: Set<K>, b: Set<K>,
+logic fn same_members<K: Logical, E: Equiv<K>>(a: Set<K, E>, b: Set<K, E>,
     members: @(forall |k: K| iff(a.contains(k), b.contains(k))))
     -> @(a === b) {
     set::ext(a, b, members)
